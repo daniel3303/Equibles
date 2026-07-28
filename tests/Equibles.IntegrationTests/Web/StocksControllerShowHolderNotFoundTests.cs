@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Repositories;
@@ -32,7 +33,8 @@ public class StocksControllerShowHolderNotFoundTests : IDisposable
     {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
-            new HoldingsModuleConfiguration()
+            new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration()
         );
     }
 

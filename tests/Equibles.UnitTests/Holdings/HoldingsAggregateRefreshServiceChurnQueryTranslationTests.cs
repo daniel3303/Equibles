@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.HostedService.Services;
@@ -29,6 +30,7 @@ public class HoldingsAggregateRefreshServiceChurnQueryTranslationTests
             {
                 new CommonStocksModuleConfiguration(),
                 new HoldingsModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
             }
         );
 

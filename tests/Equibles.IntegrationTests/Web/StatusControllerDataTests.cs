@@ -6,6 +6,7 @@ using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Data;
 using Equibles.Congress.Repositories;
+using Equibles.CorporateActions.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data;
 using Equibles.Errors.Repositories;
@@ -57,6 +58,7 @@ public class StatusControllerDataTests : IDisposable
             new MediaModuleConfiguration(),
             new SecTestModuleConfiguration(),
             new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new FinraModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),
             new CongressModuleConfiguration(),

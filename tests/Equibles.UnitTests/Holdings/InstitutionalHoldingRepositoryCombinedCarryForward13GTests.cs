@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
@@ -36,6 +37,7 @@ public class InstitutionalHoldingRepositoryCombinedCarryForward13GTests
             {
                 new CommonStocksModuleConfiguration(),
                 new HoldingsModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
             }
         );
         ctx.Database.EnsureCreated();

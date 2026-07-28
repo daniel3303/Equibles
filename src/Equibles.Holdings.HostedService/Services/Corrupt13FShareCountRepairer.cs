@@ -13,12 +13,6 @@ namespace Equibles.Holdings.HostedService.Services;
 /// </summary>
 internal static class Corrupt13FShareCountRepairer
 {
-    /// <summary>
-    /// 13F values filed on/after this date are whole dollars (SEC's 2022 13F
-    /// modernization, effective 2023-01-03); earlier filings report thousands.
-    /// </summary>
-    internal static readonly DateOnly WholeDollarValueEffectiveDate = new(2023, 1, 3);
-
     // A filing is only suspect when nearly every comparable row duplicates the
     // value into the share count; scattered equalities (a stock trading at
     // exactly $1.00) must never flag a filing.
@@ -80,7 +74,7 @@ internal static class Corrupt13FShareCountRepairer
             }
 
             var holding = row.Holding;
-            var reportedDollars = ToDollars(row.ReportedValue, holding.FilingDate);
+            var reportedDollars = FiledValueScale.ToDollars(row.ReportedValue, holding.FilingDate);
 
             if (
                 stockPrices.TryGetValue(
@@ -145,9 +139,6 @@ internal static class Corrupt13FShareCountRepairer
         row.Holding.ShareType == ShareType.Shares
         && row.Holding.Shares > 0
         && row.Holding.Shares == row.ReportedValue;
-
-    private static decimal ToDollars(long reportedValue, DateOnly filingDate) =>
-        filingDate < WholeDollarValueEffectiveDate ? reportedValue * 1000m : reportedValue;
 
     private static void ApplyRepair(
         BufferedHoldingRow row,

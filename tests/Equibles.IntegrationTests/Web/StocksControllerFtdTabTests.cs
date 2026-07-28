@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Data;
 using Equibles.Congress.Repositories;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Finra.Data;
 using Equibles.Finra.Repositories;
@@ -48,6 +49,7 @@ public class StocksControllerFtdTabTests : IDisposable
             new SecTestModuleConfiguration(),
             new FinancialFactsModuleConfiguration(),
             new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new FinraModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),
             new CongressModuleConfiguration(),

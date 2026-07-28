@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -47,6 +49,13 @@ public class ImpossiblePositionRepairService
         // Candidates only — the coarse "more shares than the issuer has" filter, which SQL can
         // serve from the existing indexes. Whether the issuer's own figures are trustworthy enough
         // to act on is decided by the guard below, not here.
+        //
+        // The filter compares an as-filed count against today's shares outstanding, so it is a
+        // superset of the real matches only while restating the count cannot shrink it: that holds
+        // for unsplit stocks and for reverse splits, which are exactly the cases where a legitimate
+        // position would otherwise be wrongly withdrawn. A forward split moves the count the other
+        // way, so a genuinely impossible position on such a stock can slip past — a miss rather
+        // than a false accusation, and no worse than this pass has ever done.
         var candidates = await dbContext
             .Set<InstitutionalHolding>()
             .Where(h => !h.ValueUnavailable && h.Shares > 0)
@@ -70,12 +79,40 @@ public class ImpossiblePositionRepairService
             )
             .ToListAsync(cancellationToken);
 
+        // Shares outstanding is today's figure, so a position has to be restated onto today's
+        // basis before the two are comparable. Without this, a holder of a few percent of a company
+        // that later ran a 1:50 reverse split reads as owning fifty times the issuer, and its
+        // perfectly good value is withdrawn.
+        var candidateStockIds = candidates.Select(c => c.Holding.CommonStockId).Distinct().ToList();
+        var splitsByStock = (
+            await dbContext
+                .Set<StockSplit>()
+                .Where(s => candidateStockIds.Contains(s.CommonStockId))
+                .ToListAsync(cancellationToken)
+        )
+            .GroupBy(s => s.CommonStockId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var repaired = 0;
         foreach (var candidate in candidates)
         {
+            splitsByStock.TryGetValue(candidate.Holding.CommonStockId, out var splits);
+            if (
+                !HoldingValueBasis.TryResolveShareCountFactor(
+                    candidate.Holding.ReportDate,
+                    splits,
+                    out var shareCountFactor
+                )
+            )
+            {
+                // A split is captured but its price adjustment has not run, so there is no settled
+                // basis to judge the count on. Say nothing rather than accuse the position.
+                continue;
+            }
+
             if (
                 !ImpossiblePositionGuard.ExceedsTheIssuer(
-                    candidate.Holding.Shares,
+                    SplitAdjustment.AdjustShareCount(candidate.Holding.Shares, shareCountFactor),
                     candidate.SharesOutStanding,
                     candidate.MarketCapitalization
                 )

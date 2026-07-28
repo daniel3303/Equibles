@@ -32,6 +32,20 @@ public class InstitutionalHolding
     public DateOnly ReportDate { get; set; }
 
     public long Value { get; set; }
+
+    /// <summary>
+    /// The position's market value exactly as the filer reported it, normalised to dollars.
+    /// Null when the filing reports no value at all (Schedule 13D/G) or filed a non-positive one.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Value"/> stays the derived figure — it is the one comparable across filings,
+    /// since 13D/G positions have no filed value and a filer's own mark can be stale. This column
+    /// exists so the derivation can be audited against its source instead of trusted blindly: a
+    /// gross disagreement between the two is the signature of a units error (a missing split, a
+    /// depositary ratio) that is otherwise invisible once the filing has been parsed and discarded.
+    /// </remarks>
+    public long? FiledValue { get; set; }
+
     public long Shares { get; set; }
     public ShareType ShareType { get; set; }
     public OptionType? OptionType { get; set; }

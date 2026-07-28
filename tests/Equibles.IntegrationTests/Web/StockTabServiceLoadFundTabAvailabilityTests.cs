@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Data;
 using Equibles.Congress.Repositories;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Finra.Data;
 using Equibles.Finra.Repositories;
@@ -43,6 +44,7 @@ public class StockTabServiceLoadFundTabAvailabilityTests : IDisposable
             new FinancialFactsModuleConfiguration(),
             new FinraModuleConfiguration(),
             new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),
             new CongressModuleConfiguration(),
             new YahooModuleConfiguration()

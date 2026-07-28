@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
@@ -18,7 +19,8 @@ public class InstitutionalHoldingRepositoryMostHeldCombinedTests : IDisposable
     {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
-            new HoldingsModuleConfiguration()
+            new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration()
         );
         _repository = new InstitutionalHoldingRepository(_dbContext);
     }

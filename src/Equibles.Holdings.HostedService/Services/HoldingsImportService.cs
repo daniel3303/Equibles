@@ -5,6 +5,8 @@ using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
 using Equibles.Core.Extensions;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -25,6 +27,10 @@ namespace Equibles.Holdings.HostedService.Services;
 public class HoldingsImportService
 {
     private const string AccessionNumberColumn = "ACCESSION_NUMBER";
+
+    // Matches UnmappedCusip.IssuerName's column width; filers occasionally file a name longer
+    // than the column, and the name is only ever a human-facing hint.
+    private const int MaxIssuerNameLength = 256;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HoldingsImportService> _logger;
@@ -80,6 +86,7 @@ public class HoldingsImportService
             // set unprocessed so a later cycle backfills it once CUSIPs exist.
             return new ImportResult(submissionCount, IsComplete: false);
         await BuildPriceMap(context, cancellationToken);
+        await BuildSplitMap(context, cancellationToken);
         await ParseOtherManagers(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
         await HandleAmendments(context, cancellationToken);
@@ -486,6 +493,157 @@ public class HoldingsImportService
         );
     }
 
+    /// <summary>
+    /// Pre-fetches every split for the stocks in this data set. Stored prices are on today's
+    /// post-split basis, so an as-filed share count has to be restated by these before it can be
+    /// multiplied into a dollar value — see <see cref="HoldingValueBasis"/> for why, and for what
+    /// happens while a split is still awaiting its price adjustment.
+    /// </summary>
+    private async Task BuildSplitMap(ImportContext context, CancellationToken cancellationToken)
+    {
+        var stockIds = context.CusipMapping.Values.Distinct().ToList();
+
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+
+        var splits = await dbContext
+            .Set<StockSplit>()
+            .Where(s => stockIds.Contains(s.CommonStockId))
+            .ToListAsync(cancellationToken);
+
+        context.StockSplits = splits
+            .GroupBy(s => s.CommonStockId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        _logger.LogInformation(
+            "Loaded {Splits} split(s) across {Stocks} stock(s) for share-basis restatement",
+            splits.Count,
+            context.StockSplits.Count
+        );
+    }
+
+    // Reports how the values this import derived compared with the values the filers themselves
+    // reported. Advisory: a gross disagreement means a basis is wrong somewhere (a split we never
+    // captured, a depositary ratio we do not model), and naming the securities makes it something
+    // an operator can chase rather than a number that only trends.
+    private void LogValueBasisAudit(ImportContext context)
+    {
+        var audit = context.ValueBasisAudit;
+        if (audit.Disagreed == 0)
+        {
+            _logger.LogInformation(
+                "Value basis check: {Compared} position(s) compared against their filed value, none disagreeing beyond {Multiple}x",
+                audit.Compared,
+                ValueBasisAudit.DisagreementMultiple
+            );
+            return;
+        }
+
+        _logger.LogWarning(
+            "Value basis check: {Disagreed} of {Compared} position(s) disagree with their filed value by more than {Multiple}x. Samples: {Samples}",
+            audit.Disagreed,
+            audit.Compared,
+            ValueBasisAudit.DisagreementMultiple,
+            string.Join(
+                "; ",
+                audit.Samples.Select(s =>
+                    $"{s.Cusip}@{s.ReportDate:yyyy-MM-dd} {s.Shares} sh derived {s.DerivedValue} vs filed {s.FiledValue}"
+                )
+            )
+        );
+    }
+
+    // Notes one position the import could not attach to a tracked stock, so the gap is countable
+    // instead of vanishing into a skip counter. Accumulated in memory and written once per data
+    // set by FlushUnmappedCusips.
+    private static void RecordUnmappedCusip(
+        ImportContext context,
+        Dictionary<string, string> row,
+        string cusip,
+        SubmissionRow submission
+    )
+    {
+        if (string.IsNullOrWhiteSpace(cusip))
+            return;
+
+        if (!TryParseDateOnly(submission.PeriodOfReport, out var reportDate))
+            return;
+
+        TryParseDateOnly(submission.FilingDate, out var filingDate);
+        var filed = ParseLong(GetValue(row, "VALUE"));
+        var filedDollars = filed > 0 ? FiledValueScale.ToDollars(filed, filingDate) : 0m;
+
+        var key = (cusip, reportDate);
+        if (!context.UnmappedCusips.TryGetValue(key, out var tally))
+        {
+            tally = new UnmappedCusipTally();
+            context.UnmappedCusips[key] = tally;
+        }
+
+        tally.Add(GetValue(row, "NAMEOFISSUER"), filedDollars);
+    }
+
+    // Replaces the parked-CUSIP rows for every quarter this data set covers. Replacing the whole
+    // slice rather than merging into it keeps the queue honest in both directions: re-importing a
+    // data set cannot inflate a count, and an identifier that has since been mapped simply stops
+    // being written instead of lingering as a gap that no longer exists.
+    private async Task FlushUnmappedCusips(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var reportDates = new HashSet<DateOnly>();
+        foreach (var submission in context.Submissions.Values)
+        {
+            if (TryParseDateOnly(submission.PeriodOfReport, out var date))
+                reportDates.Add(date);
+        }
+
+        if (reportDates.Count == 0)
+            return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+
+        var dates = reportDates.ToList();
+        await dbContext
+            .Set<UnmappedCusip>()
+            .Where(u => dates.Contains(u.ReportDate))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        if (context.UnmappedCusips.Count == 0)
+            return;
+
+        var rows = context
+            .UnmappedCusips.Select(pair => new UnmappedCusip
+            {
+                Cusip = pair.Key.Cusip,
+                ReportDate = pair.Key.ReportDate,
+                IssuerName = Truncate(pair.Value.IssuerName, MaxIssuerNameLength),
+                Positions = pair.Value.Positions,
+                FiledValue = pair.Value.FiledValue,
+            })
+            .ToList();
+
+        dbContext.Set<UnmappedCusip>().AddRange(rows);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Parked {Count} unmapped CUSIP(s) carrying {Total:N0} filed dollars. Largest: {Largest}",
+            rows.Count,
+            rows.Sum(r => (decimal)r.FiledValue),
+            string.Join(
+                ", ",
+                rows.OrderByDescending(r => r.FiledValue)
+                    .Take(5)
+                    .Select(r => $"{r.Cusip} ({r.IssuerName}) {r.FiledValue:N0}")
+            )
+        );
+    }
+
+    private static string Truncate(string value, int maxLength) =>
+        value != null && value.Length > maxLength ? value[..maxLength] : value;
+
     private async Task UpsertInstitutionalHolders(
         ImportContext context,
         CancellationToken cancellationToken
@@ -874,6 +1032,7 @@ public class HoldingsImportService
             if (!context.CusipMapping.TryGetValue(cusip, out var commonStockId))
             {
                 totalSkipped++;
+                RecordUnmappedCusip(context, row, cusip, submission);
                 continue;
             }
 
@@ -924,6 +1083,9 @@ public class HoldingsImportService
             totalDuplicates,
             totalPending
         );
+
+        LogValueBasisAudit(context);
+        await FlushUnmappedCusips(context, cancellationToken);
 
         return totalInserted;
     }
@@ -1033,9 +1195,9 @@ public class HoldingsImportService
         long ParseLongField(string field) => ParseLong(GetValue(row, field));
 
         var shares = ParseLongField("SSHPRNAMT");
-        // The filed market value is never persisted directly (Value is always
-        // derived from shares × closing price); it is carried out solely so the
-        // per-filing repair can cross-check it against the share count.
+        // The filed market value is not what gets published (Value is always derived from
+        // shares × closing price, the only basis 13D/G positions can share), but it is kept
+        // alongside it so the derivation can be audited against its source.
         var reportedValue = ParseLongField("VALUE");
         var votingAuthSole = ParseLongField("VOTING_AUTH_SOLE");
         var votingAuthShared = ParseLongField("VOTING_AUTH_SHARED");
@@ -1045,13 +1207,25 @@ public class HoldingsImportService
             (commonStockId, reportDate),
             out var closePrice
         );
+        // The count is quoted as of the report date while the stored price is on today's
+        // post-split basis, so the count has to be restated before the two are multiplied. While a
+        // captured split is still awaiting its price adjustment the series straddles both bases and
+        // no honest value exists — the row stays pending for the repricing lane.
+        context.StockSplits.TryGetValue(commonStockId, out var splits);
+        var basisKnown = HoldingValueBasis.TryResolveShareCountFactor(
+            reportDate,
+            splits,
+            out var shareCountFactor
+        );
+        var canValue = hasPrice && basisKnown;
+
         // shares comes from filer-controlled SSHPRNAMT; an oversized count makes the decimal
         // product exceed Int64, so range-check before the cast (mirrors Filing13DGXmlParser)
         // instead of throwing OverflowException and aborting the whole filing's import.
-        var product = shares * closePrice;
+        var product = shares * shareCountFactor * closePrice;
         var value =
-            hasPrice && product >= long.MinValue && product <= long.MaxValue ? (long)product : 0L;
-        var valuePending = !hasPrice;
+            canValue && product >= long.MinValue && product <= long.MaxValue ? (long)product : 0L;
+        var valuePending = !canValue;
 
         // A count bigger than the whole issuer is not a position we can price: the shares are in
         // different units from the price (a depositary-share issuer whose filer reports the
@@ -1063,10 +1237,15 @@ public class HoldingsImportService
             && context.IssuerSizes.TryGetValue(commonStockId, out var size)
                 ? size
                 : null;
+        // Shares outstanding is today's figure, so the comparison needs today's count: an as-filed
+        // count from before a reverse split is inflated by the ratio and would read as impossible
+        // when it is only old. With the basis unknown there is nothing to compare against, and the
+        // row is already pending rather than unpriceable.
         var valueUnavailable =
             issuerSize != null
+            && basisKnown
             && ImpossiblePositionGuard.ExceedsTheIssuer(
-                shares,
+                SplitAdjustment.AdjustShareCount(shares, shareCountFactor),
                 issuerSize.SharesOutstanding,
                 issuerSize.MarketCapitalization
             );
@@ -1074,6 +1253,18 @@ public class HoldingsImportService
         {
             value = 0L;
             valuePending = false;
+        }
+
+        // Pre-2023 filings report value in thousands, so the filed figure is only comparable to
+        // the derived one after being scaled by its own era.
+        var filedDollars =
+            reportedValue > 0 ? FiledValueScale.ToDollars(reportedValue, filingDate) : 0m;
+        var filedValue =
+            filedDollars > 0 && filedDollars <= long.MaxValue ? (long?)filedDollars : null;
+
+        if (value > 0 && filedValue.HasValue)
+        {
+            context.ValueBasisAudit.Record(cusip, reportDate, shares, value, filedValue.Value);
         }
 
         var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));
@@ -1106,6 +1297,7 @@ public class HoldingsImportService
             FilingDate = filingDate,
             ReportDate = reportDate,
             Value = value,
+            FiledValue = filedValue,
             Shares = shares,
             ShareType = shareType,
             OptionType = optionType,
@@ -1158,8 +1350,14 @@ public class HoldingsImportService
                     new InstitutionalHolding
                     {
                         Value = incoming.Value,
+                        FiledValue = incoming.FiledValue,
                         Shares = incoming.Shares,
                         FilingDate = incoming.FilingDate,
+                        // A re-import re-derives the value from scratch, so the previous attempt's
+                        // backoff must not carry over: a row that had been given up on would
+                        // otherwise be abandoned again without ever being retried.
+                        ValueRetryCount = incoming.ValueRetryCount,
+                        ValueLastRetryAt = incoming.ValueLastRetryAt,
                         AccessionNumber = incoming.AccessionNumber,
                         InvestmentDiscretion = incoming.InvestmentDiscretion,
                         VotingAuthSole = incoming.VotingAuthSole,

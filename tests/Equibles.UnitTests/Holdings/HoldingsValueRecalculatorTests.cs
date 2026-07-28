@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.Core.Contracts;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
 using Equibles.Holdings.Data.Models;
@@ -250,6 +251,7 @@ public class HoldingsValueRecalculatorTests
             {
                 new CommonStocksModuleConfiguration(),
                 new HoldingsModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
             };
             var db = new EquiblesFinancialDbContext(options, modules);
             db.Database.EnsureCreated();

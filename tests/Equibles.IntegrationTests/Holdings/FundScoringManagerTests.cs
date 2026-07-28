@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data;
@@ -27,6 +28,7 @@ public class FundScoringManagerTests : IDisposable
     {
         _dbContext = TestDbContextFactory.Create(
             new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
@@ -270,21 +272,32 @@ public class FundScoringManagerTests : IDisposable
         var holder = new InstitutionalHolder { Cik = "0001234567", Name = "Doubler Capital" };
         _dbContext.Set<InstitutionalHolder>().Add(holder);
 
-        // Rebalance (ReportDate + 45 days) lands before the window start, so the portfolio is
-        // held from day one of the window through to AsOf.
-        _dbContext
-            .Set<InstitutionalHolding>()
-            .Add(
-                new InstitutionalHolding
-                {
-                    InstitutionalHolderId = holder.Id,
-                    CommonStockId = held.Id,
-                    ReportDate = new DateOnly(2022, 9, 30),
-                    FilingDate = new DateOnly(2022, 11, 10),
-                    Shares = 1000,
-                    Value = 100_000,
-                }
-            );
+        // The first report's rebalance (ReportDate + 45 days) lands before the window start, so the
+        // portfolio is held from day one of the window; the filer then keeps reporting the same
+        // position every quarter through AsOf, which is what a filer that still exists does. The
+        // repetition is load-bearing rather than decorative: the simulation stops 150 days after a
+        // filer's last rebalance, so a lone 2022 filing would be treated as a filer that
+        // deregistered and the window would end in early 2023 instead of at AsOf.
+        for (
+            var reportDate = new DateOnly(2022, 9, 30);
+            reportDate <= AsOf;
+            reportDate = reportDate.AddMonths(3)
+        )
+        {
+            _dbContext
+                .Set<InstitutionalHolding>()
+                .Add(
+                    new InstitutionalHolding
+                    {
+                        InstitutionalHolderId = holder.Id,
+                        CommonStockId = held.Id,
+                        ReportDate = reportDate,
+                        FilingDate = reportDate.AddDays(41),
+                        Shares = 1000,
+                        Value = 100_000,
+                    }
+                );
+        }
 
         _dbContext.SaveChanges();
         return holder;

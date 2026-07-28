@@ -1,5 +1,6 @@
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Contracts;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -74,7 +75,32 @@ public class HoldingsValueRecalculator
 
         var resolvedPairKeys = prices.Keys.ToHashSet();
 
-        var totalUpdated = await ResolveHoldingsWithNewPrices(prices, cancellationToken);
+        // Prices are stored on today's post-split basis, so a pending row's as-filed share count
+        // has to be restated before it is priced — the same rule the import applies, and for the
+        // same reason (see HoldingValueBasis).
+        var pendingStockIds = pendingPairs.Select(p => p.CommonStockId).Distinct().ToList();
+        var splitsByStock = (
+            await lookupContext
+                .Set<StockSplit>()
+                .Where(s => pendingStockIds.Contains(s.CommonStockId))
+                .ToListAsync(cancellationToken)
+        )
+            .GroupBy(s => s.CommonStockId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var (totalUpdated, totalDeferred) = await ResolveHoldingsWithNewPrices(
+            prices,
+            splitsByStock,
+            cancellationToken
+        );
+
+        if (totalDeferred > 0)
+        {
+            _logger.LogInformation(
+                "Left {Deferred} (stock, date) pair(s) pending: a captured split has not had its price adjustment applied, so the share basis is still ambiguous",
+                totalDeferred
+            );
+        }
 
         var unresolvedPairs = pendingPairs
             .Where(p => !resolvedPairKeys.Contains((p.CommonStockId, p.ReportDate)))
@@ -147,15 +173,33 @@ public class HoldingsValueRecalculator
         return totalGivenUp;
     }
 
-    private async Task<int> ResolveHoldingsWithNewPrices(
+    private async Task<(int Updated, int Deferred)> ResolveHoldingsWithNewPrices(
         Dictionary<(Guid CommonStockId, DateOnly Date), decimal> prices,
+        Dictionary<Guid, List<StockSplit>> splitsByStock,
         CancellationToken cancellationToken
     )
     {
         var totalUpdated = 0;
+        var totalDeferred = 0;
         foreach (var ((stockId, reportDate), closePrice) in prices)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            splitsByStock.TryGetValue(stockId, out var splits);
+            if (
+                !HoldingValueBasis.TryResolveShareCountFactor(
+                    reportDate,
+                    splits,
+                    out var shareCountFactor
+                )
+            )
+            {
+                // The stored series straddles two share bases until the split's price adjustment
+                // runs. Leave the rows pending rather than publish a value off by the split ratio;
+                // the reconciliation stamps the split and a later cycle prices them honestly.
+                totalDeferred++;
+                continue;
+            }
 
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
@@ -170,27 +214,30 @@ public class HoldingsValueRecalculator
 
             foreach (var holding in pendingHoldings)
             {
-                holding.Value = ToBoundedValue(holding.Shares, closePrice);
+                holding.Value = ToBoundedValue(holding.Shares, shareCountFactor, closePrice);
                 holding.ValuePending = false;
 
                 foreach (var entry in holding.ManagerEntries)
                 {
-                    entry.Value = ToBoundedValue(entry.Shares, closePrice);
+                    entry.Value = ToBoundedValue(entry.Shares, shareCountFactor, closePrice);
                 }
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
             totalUpdated += pendingHoldings.Count;
         }
-        return totalUpdated;
+        return (totalUpdated, totalDeferred);
     }
 
     // shares comes from filer-controlled SSHPRNAMT; an oversized count makes the decimal
     // product exceed Int64, so range-check before the cast (mirrors ParseHoldingRow and
     // Filing13DGXmlParser) instead of throwing OverflowException and aborting the batch.
-    private static long ToBoundedValue(long shares, decimal closePrice)
+    // The factor restates the as-filed count onto the price's basis and is folded into the
+    // product rather than applied to the count first, so a reverse split does not lose the
+    // fractional share that rounding the count would discard.
+    private static long ToBoundedValue(long shares, decimal shareCountFactor, decimal closePrice)
     {
-        var product = shares * closePrice;
+        var product = shares * shareCountFactor * closePrice;
         return product >= long.MinValue && product <= long.MaxValue ? (long)product : 0L;
     }
 }

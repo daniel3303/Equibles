@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data;
@@ -25,6 +26,7 @@ public class SmartMoneyIndexManagerTests : IDisposable
     {
         _dbContext = TestDbContextFactory.Create(
             new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );

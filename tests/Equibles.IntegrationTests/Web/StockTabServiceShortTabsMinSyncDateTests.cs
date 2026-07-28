@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Data;
 using Equibles.Congress.Repositories;
 using Equibles.Core.Configuration;
+using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Finra.Data;
 using Equibles.Finra.Data.Models;
@@ -46,6 +47,7 @@ public class StockTabServiceShortTabsMinSyncDateTests : IDisposable
             new FinancialFactsModuleConfiguration(),
             new FinraModuleConfiguration(),
             new HoldingsModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),
             new CongressModuleConfiguration(),
             new YahooModuleConfiguration()

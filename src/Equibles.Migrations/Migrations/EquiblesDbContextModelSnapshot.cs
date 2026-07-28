@@ -1395,6 +1395,9 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(9)
                         .HasColumnType("character varying(9)");
 
+                    b.Property<long?>("FiledValue")
+                        .HasColumnType("bigint");
+
                     b.Property<DateOnly>("FilingDate")
                         .HasColumnType("date");
 
@@ -1673,6 +1676,42 @@ namespace Equibles.Migrations.Migrations
                     b.HasIndex("ReportDate");
 
                     b.ToTable("StockQuarterlyActivityCombined");
+                });
+
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.UnmappedCusip", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Cusip")
+                        .HasMaxLength(9)
+                        .HasColumnType("character varying(9)");
+
+                    b.Property<long>("FiledValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("IssuerName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("Positions")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("ReportDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FiledValue");
+
+                    b.HasIndex("Cusip", "ReportDate")
+                        .IsUnique();
+
+                    b.ToTable("UnmappedCusip");
                 });
 
             modelBuilder.Entity("Equibles.InsiderTrading.Data.Models.Form144Filing", b =>
