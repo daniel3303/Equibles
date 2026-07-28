@@ -15,6 +15,12 @@ namespace Equibles.Sec.FinancialFacts.Data.Models;
 /// <see cref="FiledDate"/>.
 /// </summary>
 [Index(nameof(CommonStockId), nameof(FinancialConceptId), nameof(PeriodEnd))]
+// Concept-first twin of the index above, for the queries that ask about a concept across ALL
+// companies ("has this concept any fact since <date>?"). The company-first index cannot serve
+// those: with CommonStockId unconstrained Postgres restarts the search once per distinct stock,
+// which measured 42.6M index searches and 32s for a single 4,038-concept batch of the concept
+// curation lane. Leading with FinancialConceptId makes each probe one range scan.
+[Index(nameof(FinancialConceptId), nameof(PeriodEnd))]
 [Index(nameof(CommonStockId), nameof(FiscalYear), nameof(FiscalPeriod))]
 [Index(nameof(DocumentId))]
 [Index(
