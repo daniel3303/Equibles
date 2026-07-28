@@ -23,11 +23,17 @@ namespace Equibles.UnitTests.Sec;
 // - a cover-page count contradicted as a collapse by BOTH the issuer's recent cover-page history
 //   and the same filing's balance-sheet count is a filing artifact (a dropped digit or a
 //   thousands-scaled entry: Armata 36,710 vs 36.4M; FB Bancorp 161,489 vs 17.0M; PTC Therapeutics
-//   8,294,933 vs 82.9M; Air Lease a flat 200 vs 112.4M) — the provider returns the balance-sheet
-//   count that proved the artifact, instead of poisoning market cap and short-interest ratios
-//   until the filer corrects itself. The history anchor is the maximum over a recent window, not
-//   the single previous fact: Air Lease filed the artifact on two consecutive cover pages, so the
-//   previous fact WAS the artifact and a most-recent-prior check could never fire again.
+//   8,294,933 vs 82.9M; Air Lease a flat 200 vs 112.4M). The history anchor is the maximum over a
+//   recent window, not the single previous fact: Air Lease filed the artifact on two consecutive
+//   cover pages, so the previous fact WAS the artifact and a most-recent-prior check could never
+//   fire again;
+// - a proven collapse is CORRECTED to the balance-sheet count only when the evidence is
+//   overdetermined — the two corroborators agree with each other AND the cover page is too far
+//   off to be a same-unit statement at all. Otherwise the provider abstains (null): Reliability
+//   Inc's cover page says a correct 46.7M while its history and classless balance-sheet fact both
+//   carry the same 300M mis-tag — 6.4x apart, two agreeing statements, both wrong. A correction
+//   is a write where abstention wrote nothing, so it has to clear a far higher bar than the
+//   detection itself.
 public class SharesOutstandingProviderCoverPageIntegrityTests
 {
     private const string IfrsClassAxis = "ifrs-full:ClassesOfShareCapitalAxis";
@@ -244,12 +250,14 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
     }
 
     [Fact]
-    public async Task GetCurrentSharesOutstanding_DroppedDigitJustUnderTenfold_IsCorrected()
+    public async Task GetCurrentSharesOutstanding_DroppedDigitJustUnderTenfold_Abstains()
     {
         await using var db = NewDb();
         // PTC Therapeutics: the filer dropped a digit — 8,294,933 against 82,882,024 on the same
         // filing's balance sheet and 82,774,730 on the previous cover page. The discrepancy is
-        // 9.99x, so a threshold of 10 would miss it; the collapse factor must catch it.
+        // 9.99x, so a threshold of 10 would miss it; the collapse factor must catch it. But 9.99x
+        // is INSIDE the same-unit ratio, where a cover page can still be the one honest figure
+        // (the RLBY shape), so the provider abstains rather than writing the balance-sheet count.
         var stock = Stock("PTCT");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
@@ -272,7 +280,104 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
 
         var shares = await NewProvider(db).GetCurrentSharesOutstanding(stock);
 
-        shares.Should().Be(82_882_024);
+        shares.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetCurrentSharesOutstanding_MistagAgreeingAcrossStatements_AbstainsRatherThanCorrects()
+    {
+        await using var db = NewDb();
+        // Reliability Inc: the cover page says a CORRECT 46,707,790 while earlier cover pages and
+        // the same filing's classless balance-sheet fact both carry the same 300,000,000 mis-tag
+        // (the authorized count). The two corroborators agree — and both are wrong. At 6.4x the
+        // cover page is well inside a same-unit reading, so writing the "correction" would replace
+        // the one honest figure in the filing with the mistake. The provider must abstain.
+        var stock = Stock("RLBY");
+        var coverPage = CoverPageConcept();
+        var balanceSheet = BalanceSheetConcept();
+        db.AddRange(stock, coverPage, balanceSheet);
+        db.Add(
+            Fact(
+                stock,
+                coverPage,
+                300_000_000m,
+                new(2025, 11, 14),
+                new(2025, 11, 10),
+                "0001493152-25-000001"
+            )
+        );
+        const string acc = "0001493152-26-024677";
+        db.Add(Fact(stock, coverPage, 46_707_790m, new(2026, 5, 20), new(2026, 5, 11), acc));
+        db.Add(Fact(stock, balanceSheet, 300_000_000m, new(2026, 5, 20), new(2026, 3, 31), acc));
+        await db.SaveChangesAsync();
+
+        var shares = await NewProvider(db).GetCurrentSharesOutstanding(stock);
+
+        shares.Should().BeNull("two agreeing corroborators can still both carry the same mistake");
+    }
+
+    [Fact]
+    public async Task GetCurrentSharesOutstanding_PlaceholderBalanceSheetDisagreeingWithHistory_Abstains()
+    {
+        await using var db = NewDb();
+        // A garbage-small cover page (200) makes the collapse threshold trivially clearable — a
+        // nominal 1,000-share balance-sheet placeholder is five times it. The placeholder disagrees
+        // with the issuer's real history by orders of magnitude, so it must never be promoted to
+        // the corrected count; the provider abstains.
+        var stock = Stock("SHEL");
+        var coverPage = CoverPageConcept();
+        var balanceSheet = BalanceSheetConcept();
+        db.AddRange(stock, coverPage, balanceSheet);
+        db.Add(
+            Fact(
+                stock,
+                coverPage,
+                112_000_000m,
+                new(2026, 2, 12),
+                new(2026, 2, 10),
+                "0000950170-26-000021"
+            )
+        );
+        const string acc = "0000950170-26-000022";
+        db.Add(Fact(stock, coverPage, 200m, new(2026, 5, 7), new(2026, 5, 5), acc));
+        db.Add(Fact(stock, balanceSheet, 1_000m, new(2026, 5, 7), new(2026, 3, 31), acc));
+        await db.SaveChangesAsync();
+
+        var shares = await NewProvider(db).GetCurrentSharesOutstanding(stock);
+
+        shares.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetCurrentSharesOutstanding_ZeroCoverPageCount_IsCorrectedOnlyByAgreeingCorroborators()
+    {
+        await using var db = NewDb();
+        // A zero-valued cover-page fact carries no count at all, and every threshold computed from
+        // it degenerates to zero — the shape that once admitted any same-accession balance-sheet
+        // figure unchecked. With history and the balance sheet agreeing on the real figure, the
+        // correction is grounded in two independent statements and proceeds.
+        var stock = Stock("ZERO");
+        var coverPage = CoverPageConcept();
+        var balanceSheet = BalanceSheetConcept();
+        db.AddRange(stock, coverPage, balanceSheet);
+        db.Add(
+            Fact(
+                stock,
+                coverPage,
+                50_000_000m,
+                new(2026, 2, 12),
+                new(2026, 2, 10),
+                "0000950170-26-000031"
+            )
+        );
+        const string acc = "0000950170-26-000032";
+        db.Add(Fact(stock, coverPage, 0m, new(2026, 5, 7), new(2026, 5, 5), acc));
+        db.Add(Fact(stock, balanceSheet, 50_100_000m, new(2026, 5, 7), new(2026, 3, 31), acc));
+        await db.SaveChangesAsync();
+
+        var shares = await NewProvider(db).GetCurrentSharesOutstanding(stock);
+
+        shares.Should().Be(50_100_000);
     }
 
     [Fact]
@@ -282,9 +387,9 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // Air Lease: the cover page says 200 on TWO consecutive filings (a 10-K/A, then the 10-Q),
         // so the immediately-prior cover-page fact is the artifact itself and a most-recent-prior
         // anchor can never fire. The window's maximum still sees the real 112.0M from February.
-        // The filing states no consolidated balance-sheet count — only a per-class fact on the
-        // class-of-stock axis (Class A 112,415,671, an empty preferred class at 0) — so the
-        // corroboration must sum the classes, and their sum is the corrected answer.
+        // The filing states no consolidated balance-sheet count — only per-class facts on the
+        // class-of-stock axis (Class A 112,415,671, an empty Class B at 0) — so the corroboration
+        // must sum the classes, and their sum is the corrected answer.
         var stock = Stock("AL");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
@@ -333,7 +438,34 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
                 new(2026, 5, 7),
                 new(2026, 3, 31),
                 acc,
-                "us-gaap:SeriesAPreferredStockMember",
+                "us-gaap:CommonClassBMember",
+                "us-gaap:StatementClassOfStockAxis"
+            )
+        );
+        // Filers put non-class members on the same axis: the consolidated roll-up (which would
+        // double-count the classes it totals) and treasury shares (issued but not outstanding).
+        // Both must be excluded from the sum.
+        db.Add(
+            ClassFact(
+                stock,
+                balanceSheet,
+                112_415_671m,
+                new(2026, 5, 7),
+                new(2026, 3, 31),
+                acc,
+                "us-gaap:CommonStockMember",
+                "us-gaap:StatementClassOfStockAxis"
+            )
+        );
+        db.Add(
+            ClassFact(
+                stock,
+                balanceSheet,
+                9_000_000m,
+                new(2026, 5, 7),
+                new(2026, 3, 31),
+                acc,
+                "us-gaap:TreasuryStockCommonMember",
                 "us-gaap:StatementClassOfStockAxis"
             )
         );

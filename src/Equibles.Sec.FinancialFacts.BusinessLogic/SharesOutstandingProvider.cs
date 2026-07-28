@@ -44,6 +44,18 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // is replaced by the balance-sheet count that contradicted it.
     private const decimal CoverPageCollapseFactor = 5m;
 
+    // Members observed on the class-of-stock axes that are not share classes by taxonomy
+    // definition, excluded from any per-class sum: the consolidated roll-up (summing it with the
+    // classes it totals double-counts the company), treasury shares (issued but not outstanding),
+    // and the ADS listing (a different unit from the ordinary-share classes beside it).
+    private static readonly string[] NonClassMembers =
+    [
+        "us-gaap:CommonStockMember",
+        "us-gaap:TreasuryStockMember",
+        "us-gaap:TreasuryStockCommonMember",
+        "dei:AdrMember",
+    ];
+
     // How far back the collapse check's history anchor looks. The anchor asks whether the issuer
     // was RECENTLY much bigger, and it must survive the artifact being repeated (Air Lease filed
     // 200 on two consecutive cover pages, so "the previous fact" was the artifact itself) — hence
@@ -188,13 +200,16 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
 
         if (consolidated != null)
         {
-            var correction = await TryResolveCollapseCorrection(
+            var collapse = await EvaluateCoverPageCollapse(
                 stock,
                 consolidated,
                 coverPageConceptIds,
                 cancellationToken
             );
-            return correction ?? consolidated;
+            // Not collapsed → the cover page stands. Collapsed with a grounded correction → the
+            // correction. Collapsed without one → abstain, so the caller's fallback source (the
+            // price feed's listed-security count) stands and nothing propagates a contested figure.
+            return collapse.Collapsed ? collapse.Correction : consolidated;
         }
 
         // No dei cover-page fact on record — fall back to the balance-sheet consolidated count,
@@ -203,29 +218,48 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         return await GetLatestConsolidated(stock, fallbackConceptIds, cancellationToken);
     }
 
-    // The corrected share count when the latest consolidated cover-page count is contradicted as
-    // a collapse artifact by BOTH of the filer's own other statements of the same measure: the
-    // issuer's recent cover-page history and the same filing's us-gaap balance-sheet count, each
-    // at least CoverPageCollapseFactor times larger. Real filings show this exact shape when the
-    // filer drops a digit or types the count in thousands (observed: 36,710 vs 36.4M; 161,489 vs
-    // 17.0M; 8,294,933 vs 82.9M; Air Lease's flat 200 vs 112.4M) — the artifact then poisons every
-    // downstream ratio until the filer corrects it. Null when the cover-page count stands.
+    // Whether the latest consolidated cover-page count is a collapse artifact, and — separately —
+    // whether the evidence is strong enough to state the corrected figure. NotCollapsed keeps the
+    // cover page; Collapsed with a null Correction abstains (the pre-existing behavior, so the
+    // price feed's listed-security count stands); Collapsed with a Correction returns it.
+    private sealed record CollapseOutcome(bool Collapsed, SharesFact Correction)
+    {
+        public static readonly CollapseOutcome NotCollapsed = new(false, null);
+        public static readonly CollapseOutcome Abstain = new(true, null);
+    }
+
+    // A cover-page count is COLLAPSED when contradicted by BOTH of the filer's own other
+    // statements of the same measure: the issuer's recent cover-page history and the same filing's
+    // us-gaap balance-sheet count, each at least CoverPageCollapseFactor times larger. Real
+    // filings show this shape when the filer drops a digit or types the count in thousands
+    // (observed: 36,710 vs 36.4M; 161,489 vs 17.0M; 8,294,933 vs 82.9M; Air Lease's flat 200 vs
+    // 112.4M). Requiring both anchors keeps the check conservative: a genuinely tiny issuer (a
+    // wholly-owned subsidiary with 1 share) has a tiny history, so it never fires. The history
+    // anchor is the MAXIMUM over a recent window, not the single previous fact — AL filed the
+    // artifact on two consecutive cover pages, so "the previous fact" was the artifact itself and
+    // a most-recent-prior check could never fire again.
     //
-    // Requiring both anchors keeps the check one-sided and conservative: a garbage-LARGE
-    // balance-sheet figure alone (the mis-scaled inverse artifact) does not fire because history
-    // still confirms the cover-page count, and a genuinely tiny issuer (e.g. a wholly-owned
-    // subsidiary with 1 share) has a tiny history, so it does not fire either. Two subtleties,
-    // both paid for in production by Air Lease sticking at 200 shares against a $7.28B market cap:
+    // A collapse is CORRECTED — the balance-sheet count returned as the answer instead of
+    // abstaining — only when the evidence is overdetermined, because a wrong correction is a write
+    // where abstention wrote nothing:
     //
-    //   - the history anchor is the MAXIMUM over a recent window, not the single previous fact —
-    //     AL filed the artifact on two consecutive cover pages (a 10-K/A then a 10-Q), so "the
-    //     previous fact" was the artifact itself and the old check could never fire again;
-    //   - when the two anchors prove the artifact, the balance-sheet count that proved it is
-    //     RETURNED rather than abstained from. Abstention hands the decision to the price feed's
-    //     listed-security count, and an issuer the feed carries no share base for then keeps the
-    //     garbage forever. Believing the filer's two agreeing statements over its one contradicted
-    //     one is the same judgment the detection already makes.
-    private async Task<SharesFact> TryResolveCollapseCorrection(
+    //   - the two corroborators must AGREE with each other as same-unit statements (within the
+    //     collapse factor). That grounds the correction in two independent agreeing figures — and
+    //     kills the trap where a nominal balance-sheet placeholder (1/100/1000 shares) happens to
+    //     clear a threshold computed from a count that is itself garbage-small;
+    //   - the cover page must sit beyond MaxPlausibleSameUnitRatio of the correction — too far off
+    //     to be a statement of the same unit at all (a flat placeholder, a thousands-scaled
+    //     entry). Inside that ratio the cover page could be the one honest figure in the filing —
+    //     Reliability Inc's cover page says a correct 46.7M while its history AND classless
+    //     balance-sheet fact both carry the same 300M mis-tag (the authorized count): 6.4x apart,
+    //     two agreeing statements, and both wrong. In that band the collapse stands but the
+    //     correction abstains, exactly as the check behaved before corrections existed.
+    //
+    // Abstention is not free — an issuer the price feed carries no share base for keeps its
+    // garbage until the filer corrects itself — which is why the overdetermined cases correct
+    // rather than abstain. AL clears both bars (history 112.0M vs balance sheet 112.4M, cover page
+    // 562,000x away); RLBY clears neither.
+    private async Task<CollapseOutcome> EvaluateCoverPageCollapse(
         CommonStock stock,
         SharesFact latest,
         IReadOnlyCollection<Guid> coverPageConceptIds,
@@ -246,7 +280,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
             )
             .MaxAsync(f => (decimal?)f.Value, cancellationToken);
         if (priorCoverPageMax == null || priorCoverPageMax < collapseThreshold)
-            return null;
+            return CollapseOutcome.NotCollapsed;
 
         var sameFilingBalanceSheet = await GetSameFilingBalanceSheetCount(
             stock,
@@ -254,18 +288,38 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
             cancellationToken
         );
         if (sameFilingBalanceSheet == null || sameFilingBalanceSheet < collapseThreshold)
-            return null;
+            return CollapseOutcome.NotCollapsed;
 
-        // The corroborating figure becomes the answer. Same range-check as every other
-        // decimal->long cast here; an unrepresentable count degrades to "cover page stands".
+        // Corroborator agreement: history and balance sheet must be same-unit statements of the
+        // same figure, or the correction has no ground to stand on.
+        var larger = Math.Max(priorCoverPageMax.Value, sameFilingBalanceSheet.Value);
+        var smaller = Math.Min(priorCoverPageMax.Value, sameFilingBalanceSheet.Value);
+        if (larger > smaller * CoverPageCollapseFactor)
+            return CollapseOutcome.Abstain;
+
+        // The cover page must be beyond any same-unit reading of the correction. A zero-valued
+        // cover-page fact (no count at all) is trivially beyond it — without the explicit branch
+        // the threshold arithmetic above degenerates to zero and admits anything.
+        var beyondSameUnit =
+            latest.Shares <= 0
+            || sameFilingBalanceSheet
+                >= latest.Shares * (decimal)ShareBasisPlausibility.MaxPlausibleSameUnitRatio;
+        if (!beyondSameUnit)
+            return CollapseOutcome.Abstain;
+
+        // Same range-check as every other decimal->long cast here; an unrepresentable count
+        // degrades to abstention rather than a throw.
         return sameFilingBalanceSheet <= long.MaxValue
-            ? new SharesFact(
-                (long)sameFilingBalanceSheet.Value,
-                latest.Filed,
-                latest.Form,
-                latest.AccessionNumber
+            ? new CollapseOutcome(
+                true,
+                new SharesFact(
+                    (long)sameFilingBalanceSheet.Value,
+                    latest.Filed,
+                    latest.Form,
+                    latest.AccessionNumber
+                )
             )
-            : null;
+            : CollapseOutcome.Abstain;
     }
 
     // The filing's own balance-sheet share count at its most recent as-of date: the consolidated
@@ -305,15 +359,21 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // Per-class facts, pinned the way GetLatestPerClass pins the cover-page sum: one axis and
         // one as-of date within the accession, grouped by class member so a restated row never
         // double-counts a class. Zero-valued members (a class with nothing outstanding) are kept —
-        // they simply add nothing.
+        // they simply add nothing — while a negative row is excluded rather than silently
+        // subtracted. Members that are not a share class by taxonomy definition are excluded too:
+        // filers put the consolidated roll-up, treasury shares, and the ADS listing on the same
+        // axis, and summing any of those with the real classes double-counts or mixes units.
         var perClassFacts = await _financialFactRepository
             .GetByStock(stock)
             .Where(f =>
                 balanceSheetConceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit
                 && f.AccessionNumber == accessionNumber
+                && f.Value >= 0
                 && f.Dimensions.Count == 1
-                && f.Dimensions.Any(d => ClassOfStockAxes.Contains(d.Axis))
+                && f.Dimensions.Any(d =>
+                    ClassOfStockAxes.Contains(d.Axis) && !NonClassMembers.Contains(d.Member)
+                )
             )
             .Include(f => f.Dimensions)
             .ToListAsync(cancellationToken);
