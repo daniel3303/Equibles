@@ -196,8 +196,48 @@ public class CloneBacktestTools
             $"Alpha vs benchmark (total return): {FormatPercent(alpha)}. "
                 + $"{result.Points.Count} daily points simulated."
         );
+
+        // A clone is long-only, so a filer who expresses its thesis in options is only partly
+        // tracked — and the answer above then describes the leftovers rather than the manager.
+        // Stating that is not optional garnish: a model reading this tool has no other way to know,
+        // and will otherwise report the number as the manager's performance.
+        var coverage = result.Coverage;
+        if (coverage is { QuartersMeasured: > 0 })
+        {
+            output.AppendLine();
+            output.AppendLine(
+                $"Coverage: the clone tracks {FormatShare(coverage.AverageLongPercent)} of "
+                    + $"{holder.Name}'s reported 13F value on average across {coverage.QuartersMeasured} "
+                    + $"quarter(s), and as little as {FormatShare(coverage.MinimumLongPercent)} in its "
+                    + "thinnest quarter. The remainder is option positions, which a long-only clone "
+                    + "cannot replicate and excludes."
+            );
+            if (!coverage.IsRepresentative)
+            {
+                output.AppendLine(
+                    "WARNING: most of this filer's reported book is options, so the return above is "
+                        + "the performance of the residual equity positions, NOT of this manager. Do "
+                        + "not present it as their track record; a manager whose options thesis lost "
+                        + "money can still show a large positive clone return."
+                );
+            }
+        }
+
+        if (result.TruncatedAt.HasValue)
+        {
+            output.AppendLine(
+                $"Note: {holder.Name} has not filed since its portfolio of "
+                    + $"{FormatDate(result.TruncatedAt.Value)} went stale, so the simulation stops "
+                    + "there rather than marking a frozen portfolio forward."
+            );
+        }
+
         return output.ToString();
     }
+
+    // Unsigned share of a whole, one decimal — coverage is never negative, so the signed format
+    // used for returns would render a misleading leading "+".
+    private static string FormatShare(decimal value) => McpFormat.Invariant(value, "0.0") + "%";
 
     // Signed percentage with one decimal, invariant culture so MCP markdown stays locale-stable.
     private static string FormatPercent(decimal value) =>

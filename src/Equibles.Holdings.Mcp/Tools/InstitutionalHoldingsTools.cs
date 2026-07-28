@@ -205,8 +205,8 @@ public class InstitutionalHoldingsTools
         var result = MarkdownTable.Start(
             $"Top institutional holders of {stock.Name} ({ticker}) as of {FormatDate(targetDate)}:",
             subtitle,
-            "| # | Institution | Shares | Value ($M) | % of Inst. Total |",
-            "|---|------------|--------|-----------|-----------|"
+            "| # | Institution | Type | Shares | Value ($M) | % of Inst. Total |",
+            "|---|------------|------|--------|-----------|-----------|"
         );
 
         result.AppendNumberedRows(
@@ -218,6 +218,7 @@ public class InstitutionalHoldingsTools
                 var pct = Percentage.Of(h.Shares, totalSharesAll);
                 var adjustedShares = SplitAdjustment.AdjustShareCount(h.Shares, shareFactor);
                 return $"| {rank} | {h.InstitutionalHolder.Name} | "
+                    + $"{PositionType(h.OptionType)} | "
                     + $"{McpFormat.WholeNumber(adjustedShares)} | "
                     + $"{FormatMillions(h.Value)} | "
                     + $"{McpFormat.Invariant(pct, "F2")}% |";
@@ -227,6 +228,11 @@ public class InstitutionalHoldingsTools
         result.AppendLine();
         result.AppendLine(
             "_% of Inst. Total = the position's share of all institutional 13F shares in the stock, not of shares outstanding._"
+        );
+        result.AppendLine(
+            "_Type: Common = shares held outright. Put/Call = an option position reported at the "
+                + "underlying's notional value. A PUT IS A BEARISH POSITION, so a large put line is a "
+                + "holder betting against this stock, not accumulating it._"
         );
 
         return result.ToString();
@@ -442,8 +448,8 @@ public class InstitutionalHoldingsTools
         var result = MarkdownTable.Start(
             $"Portfolio of {holder.Name} (CIK: {holder.Cik}) as of {FormatDate(targetDate)}:",
             subtitle,
-            "| # | Ticker | Company | Shares | Value ($M) | % of Portfolio |",
-            "|---|--------|---------|--------|-----------|----------------|"
+            "| # | Ticker | Company | Type | Shares | Value ($M) | % of Portfolio |",
+            "|---|--------|---------|------|--------|-----------|----------------|"
         );
 
         result.AppendNumberedRows(
@@ -457,14 +463,36 @@ public class InstitutionalHoldingsTools
                 );
                 var pct = Percentage.Of(h.Value, totalValue);
                 return $"| {rank} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
+                    + $"{PositionType(h.OptionType)} | "
                     + $"{McpFormat.WholeNumber(shares)} | "
                     + $"{FormatMillions(h.Value)} | "
                     + $"{FormatPercent(pct)}% |";
             }
         );
 
+        // A 13F reports option positions beside common stock, and a put is a bet AGAINST the
+        // issuer. Without this the table reads as a long book: Scion's Q3 2025 filing shows a
+        // 5,000,000-share Palantir line at 67% of the portfolio, which is a put — Burry was short
+        // Palantir, and every surface that omitted the distinction reported the opposite.
+        result.AppendLine();
+        result.AppendLine(
+            "_Type: Common = shares held outright. Put/Call = an option position, reported at the "
+                + "notional value of the underlying shares, not the premium paid. A PUT IS A BEARISH "
+                + "POSITION — the filer profits if the stock falls. Option notional is included in the "
+                + "portfolio total and the percentages above, exactly as the filer reported it._"
+        );
+
         return result.ToString();
     }
+
+    // How a 13F line should be described to a reader: the security type, not the activity bucket.
+    private static string PositionType(OptionType? optionType) =>
+        optionType switch
+        {
+            Equibles.Holdings.Data.Models.OptionType.Put => "Put",
+            Equibles.Holdings.Data.Models.OptionType.Call => "Call",
+            _ => "Common",
+        };
 
     [McpServerTool(
         Name = "SearchInstitutions",
@@ -1254,7 +1282,7 @@ public class InstitutionalHoldingsTools
         result.AppendLine($"| Quarters tracked | {summary.QuartersReported} |");
         result.AppendLine();
         result.AppendLine(
-            "_Reported AUM = total value of 13F-reportable long U.S. positions only — it excludes cash, bonds, non-U.S. holdings, and shorts, and is NOT the firm's total assets under management._"
+            "_Reported AUM = total value of 13F-reportable U.S. positions — it excludes cash, bonds, non-U.S. holdings, and short stock, and is NOT the firm's total assets under management. It DOES include the notional value of reported put and call positions, so a filer expressing its views in options can show an AUM far larger than the equity it actually holds._"
         );
         result.AppendLine(
             "_Quarters tracked counts the 13F quarters in this database, not the filer's full filing history._"
