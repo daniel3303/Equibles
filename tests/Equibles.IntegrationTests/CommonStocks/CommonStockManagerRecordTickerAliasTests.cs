@@ -62,6 +62,59 @@ public class CommonStockManagerRecordTickerAliasTests
         alias.CommonStockId.Should().Be(stock.Id);
     }
 
+    // THE PRODUCTION ORDERING — the sync calls this MID-RENAME: the stock's row in the
+    // database still holds the retired symbol, the new ticker exists only on the in-memory
+    // entity, unflushed. The live-holder guard queries the database, so without excluding
+    // the stock itself it matches this very row and stages nothing — which shipped the
+    // feature as a silent no-op on the only path that ever calls it. The test above seeds
+    // the stock already saved under the NEW symbol, which is exactly how that was missed.
+    [Fact]
+    public async Task RecordTickerAlias_RenameStagedInMemoryOnly_StillStagesTheAlias()
+    {
+        var stock = await SeedStock("LC", "1409970");
+        stock.Ticker = "HAPN"; // in-memory only — the database row still says LC
+
+        var staged = await _sut.RecordTickerAlias(stock, "LC");
+        await _repository.SaveChanges();
+
+        staged.Should().NotBeNull();
+        var alias = await _repository.GetTickerAliases().SingleAsync();
+        alias.Ticker.Should().Be("LC");
+        alias.CommonStockId.Should().Be(stock.Id);
+    }
+
+    // Re-adoption cleanup (the deletion half of last-writer-wins): renaming BACK to a symbol
+    // that sits in the alias map deletes that alias — once the symbol is live again the row
+    // is at best shadowed, at worst a wrong redirect after the next rename.
+    [Fact]
+    public async Task RecordTickerAlias_RenamingOntoAnAliasedSymbol_DeletesTheStaleAlias()
+    {
+        var stock = await SeedStock("HAPN", "1409970");
+        await _sut.RecordTickerAlias(stock, "LC");
+        await _repository.SaveChanges();
+
+        // The round trip: HAPN → LC again (rename staged in memory, mid-sync).
+        stock.Ticker = "LC";
+        await _sut.RecordTickerAlias(stock, "HAPN");
+        await _repository.SaveChanges();
+
+        var aliases = await _repository.GetTickerAliases().ToListAsync();
+        aliases.Should().ContainSingle().Which.Ticker.Should().Be("HAPN");
+    }
+
+    // A symbol the stock keeps as a SECONDARY listing after the primary moves is not a
+    // retirement — the live lookup still resolves it, so no alias is staged.
+    [Fact]
+    public async Task RecordTickerAlias_SymbolKeptAsOwnSecondary_StagesNothing()
+    {
+        var stock = await SeedStock("ABLZF", "1091587", ["ABBNY"]);
+
+        var staged = await _sut.RecordTickerAlias(stock, "ABBNY");
+
+        staged.Should().BeNull();
+        (await _repository.GetTickerAliases().AnyAsync()).Should().BeFalse();
+    }
+
     // Lowercase input normalizes to the stored uppercase form — the unique index must never
     // hold two case-variants of one symbol.
     [Fact]

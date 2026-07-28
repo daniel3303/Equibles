@@ -112,23 +112,63 @@ public class CommonStockManager
 
         if (
             string.IsNullOrWhiteSpace(retiredTicker)
-            || string.Equals(retiredTicker, commonStock.Ticker, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                retiredTicker.Trim(),
+                commonStock.Ticker,
+                StringComparison.OrdinalIgnoreCase
+            )
         )
         {
             return null;
         }
 
-        var normalized = retiredTicker.ToUpperInvariant();
+        var normalized = retiredTicker.Trim().ToUpperInvariant();
 
-        // Never shadow a live symbol: if any stock currently lists it (primary or
+        // The stock keeping the symbol as a secondary listing isn't a retirement — the live
+        // lookup still resolves it, so an alias would never fire (and would turn into a wrong
+        // redirect the day the secondary is dropped without a rename).
+        if (
+            commonStock.SecondaryTickers != null
+            && commonStock.SecondaryTickers.Any(t =>
+                string.Equals(t, normalized, StringComparison.OrdinalIgnoreCase)
+            )
+        )
+        {
+            return null;
+        }
+
+        // Never shadow a live symbol: if any OTHER stock currently lists it (primary or
         // secondary), the live resolution wins on every lookup and the alias would only
-        // linger as a wrong redirect after that holder eventually renames.
+        // linger as a wrong redirect after that holder eventually renames. The caller is the
+        // sync MID-RENAME — this stock's own row still holds the retired symbol in the
+        // database (the new ticker is staged in memory, unflushed, and EF never flushes
+        // before a query) — so the check must exclude the stock itself or it matches its own
+        // stale row and no alias is ever recorded on the one path that matters.
         var liveHolder = await _commonStockRepository
             .GetAll()
-            .AnyAsync(cs => cs.Ticker == normalized || cs.SecondaryTickers.Contains(normalized));
+            .AnyAsync(cs =>
+                cs.Id != commonStock.Id
+                && (cs.Ticker == normalized || cs.SecondaryTickers.Contains(normalized))
+            );
         if (liveHolder)
         {
             return null;
+        }
+
+        // Re-adoption cleanup — the deletion half of last-writer-wins the redirect design
+        // depends on: the symbol this stock is renaming TO may sit in the alias map from an
+        // earlier retirement (its own A→B→A round trip, or another issuer's). Once it is live
+        // again the alias is at best shadowed and at worst a wrong redirect, so it goes.
+        var adopted = commonStock.Ticker?.ToUpperInvariant();
+        if (adopted != null)
+        {
+            var staleAdopted = await _commonStockRepository
+                .GetTickerAliases()
+                .FirstOrDefaultAsync(a => a.Ticker == adopted);
+            if (staleAdopted != null)
+            {
+                _commonStockRepository.DeleteTickerAlias(staleAdopted);
+            }
         }
 
         // Last-writer-wins: a symbol another stock retired earlier now belongs to this
