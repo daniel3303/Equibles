@@ -456,17 +456,34 @@ public class RevenueBreakdownTools
     // covering every member exactly once. Returns the cover that minimises the total deviation
     // from `total` across its subsets — so the genuine schemes (each summing to the exact
     // consolidated figure) win over a tolerance-admitted near-miss that stitches members from
-    // different schemes together. Returns null when no full cover exists (not a clean overlap).
+    // different schemes together. Returns null when no full cover exists (not a clean overlap)
+    // or when any combinatorial bound trips — the period then passes through exactly as
+    // reported, the search's existing fail-safe.
     //
-    // Bounded and deterministic: geography axes carry well under 15 members, the candidate
-    // subsets are enumerated by a bounded subset-sum walk anchored on the first uncovered
-    // member, and ties are broken toward more subsets (more schemes) for stability.
+    // The bounds are load-bearing, not defensive fluff. The walk is exhaustive (~2^n), and the
+    // product axis breaks the "well under 15 members" assumption geography axes satisfy: a
+    // pharma issuer tags one member per drug (PFE 76, JNJ 46, LLY 40 on
+    // srt:ProductOrServiceAxis). Unbounded, one such call burned a CPU core indefinitely — and
+    // past 32 members the `1 << i` bitmasks alias (the shift count wraps), which corrupted the
+    // cover search into a literal non-terminating loop.
+    private const int MaxCollapseMembers = 31;
+    private const int MaxSubsetSearchNodes = 200_000;
+    private const int MaxCoverSubsets = 4_096;
+
     private static List<List<DimensionalRevenueRow>> FindFullTotalPartition(
         List<DimensionalRevenueRow> periodRows,
         decimal total,
         decimal tolerance
     )
     {
+        // Bitmask-width guard: 31 keeps every index inside the 32 bits the masks address. It
+        // deliberately does not try to bound cost — mid-size axes are cheap to search and the
+        // collapse is load-bearing for them — the node budget below is the cost bound.
+        if (periodRows.Count > MaxCollapseMembers)
+        {
+            return null;
+        }
+
         // Order once so every subset and the final cover are produced deterministically.
         var members = periodRows
             .OrderByDescending(r => r.Value)
@@ -474,9 +491,21 @@ public class RevenueBreakdownTools
             .ToList();
 
         // All subsets summing to total within tolerance, each as a bitmask over `members`.
+        // The subset-count cap keeps the cover search's input no larger than it ever was under
+        // the original assumption; a genuine overlap yields a handful of full-total subsets.
         var fullTotalSubsets = new List<(int Mask, decimal Deviation)>();
-        EnumerateFullTotalSubsets(members, 0, 0, 0m, total, tolerance, fullTotalSubsets);
-        if (fullTotalSubsets.Count == 0)
+        var budget = MaxSubsetSearchNodes;
+        EnumerateFullTotalSubsets(
+            members,
+            0,
+            0,
+            0m,
+            total,
+            tolerance,
+            fullTotalSubsets,
+            ref budget
+        );
+        if (fullTotalSubsets.Count == 0 || budget <= 0 || fullTotalSubsets.Count > MaxCoverSubsets)
         {
             return null;
         }
@@ -500,6 +529,11 @@ public class RevenueBreakdownTools
 
     // Depth-first enumeration of every subset of members[startIndex..] whose running sum reaches
     // `total` within tolerance, recorded as a bitmask plus its absolute deviation from total.
+    //
+    // `budget` counts down the visited nodes across the whole recursion: a set of near-equal
+    // members can explore a large share of 2^n even under the member cap, so the budget stops
+    // the walk in bounded time regardless of shape. An exhausted budget means the enumeration
+    // is incomplete, so the caller must discard the result rather than act on a partial list.
     private static void EnumerateFullTotalSubsets(
         List<DimensionalRevenueRow> members,
         int startIndex,
@@ -507,9 +541,16 @@ public class RevenueBreakdownTools
         decimal sum,
         decimal total,
         decimal tolerance,
-        List<(int Mask, decimal Deviation)> output
+        List<(int Mask, decimal Deviation)> output,
+        ref int budget
     )
     {
+        if (budget <= 0)
+        {
+            return;
+        }
+        budget--;
+
         if (mask != 0 && Math.Abs(sum - total) <= tolerance)
         {
             output.Add((mask, Math.Abs(sum - total)));
@@ -530,8 +571,13 @@ public class RevenueBreakdownTools
                 sum + members[i].Value,
                 total,
                 tolerance,
-                output
+                output,
+                ref budget
             );
+            if (budget <= 0)
+            {
+                return;
+            }
         }
     }
 
