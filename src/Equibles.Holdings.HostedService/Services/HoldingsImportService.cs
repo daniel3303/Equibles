@@ -1058,7 +1058,8 @@ public class HoldingsImportService
         // underlying ordinary shares), and multiplying them together states a holding worth many
         // times the company. Keep the filer's share count, withhold the valuation, and stop the
         // repricing lane from re-deriving the same wrong figure later.
-        var issuerSize = context.IssuerSizes != null
+        var issuerSize =
+            context.IssuerSizes != null
             && context.IssuerSizes.TryGetValue(commonStockId, out var size)
                 ? size
                 : null;
