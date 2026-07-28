@@ -1,5 +1,7 @@
 # Equibles
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fdaniel3303%2FEquibles.svg)](https://mcptoplist.com/server/glama%2Fdaniel3303%2FEquibles)
+
 [![CI](https://github.com/daniel3303/Equibles/actions/workflows/ci.yml/badge.svg)](https://github.com/daniel3303/Equibles/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/daniel3303/Equibles/actions/workflows/codeql.yml/badge.svg)](https://github.com/daniel3303/Equibles/actions/workflows/codeql.yml)
 [![codecov](https://codecov.io/github/daniel3303/Equibles/graph/badge.svg?token=ggkiHVv92U)](https://codecov.io/github/daniel3303/Equibles)
