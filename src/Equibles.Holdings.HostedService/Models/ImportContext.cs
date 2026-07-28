@@ -27,4 +27,9 @@ public class ImportContext
 
     // Yahoo stock prices: (CommonStockId, ReportDate) → closing price
     public Dictionary<(Guid, DateOnly), decimal> StockPrices { get; set; } = [];
+
+    // Issuer size: CommonStockId → (shares outstanding, market capitalization). Used only to
+    // reject a position larger than the company it is in (ImpossiblePositionGuard); a stock
+    // missing here is simply not judged.
+    public Dictionary<Guid, IssuerSize> IssuerSizes { get; set; } = [];
 }

@@ -129,6 +129,27 @@ public class HoldingsScraperWorker : BaseScraperWorker
 
         // Recalculate holdings that were imported without a Yahoo price available
         await RecalculatePendingValues(stoppingToken);
+
+        // Withdraw the derived value from stored positions bigger than their issuer. Self-
+        // terminating once the back catalogue is clean, so it costs one query per cycle after that.
+        await RepairImpossiblePositions(stoppingToken);
+    }
+
+    private async Task RepairImpossiblePositions(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var repairer =
+                scope.ServiceProvider.GetRequiredService<ImpossiblePositionRepairService>();
+            await repairer.Repair(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            // A repair pass is maintenance, not ingestion: its failure must not fail the cycle
+            // that just imported this quarter's filings.
+            Logger.LogWarning(exception, "Impossible-position repair pass failed");
+        }
     }
 
     /// <summary>
