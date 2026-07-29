@@ -84,5 +84,11 @@ public class McpServerEndpointTests : IAsyncLifetime
         toolNames.Should().Contain("SearchCompanyDocuments");
         toolNames.Should().Contain("GetCongressionalTrades");
         toolNames.Should().Contain("GetStockPrices");
+        // Government contracts shipped as a module for a long time while the server never
+        // called AddGovernmentContracts(), so the worker scraped USAspending awards that no
+        // MCP client could ever read. Pin it here — this test hosts the real server, so a
+        // dropped Add*() call or a missing project reference (the assembly has to be in the
+        // output folder for PluginLoader to find its module and repositories) fails here.
+        toolNames.Should().Contain("GetGovernmentContracts");
     }
 }

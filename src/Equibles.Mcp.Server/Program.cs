@@ -14,6 +14,7 @@ using Equibles.Finra.Data.Extensions;
 using Equibles.Finra.Mcp.Extensions;
 using Equibles.Fred.Data.Extensions;
 using Equibles.Fred.Mcp.Extensions;
+using Equibles.GovernmentContracts.Mcp.Extensions;
 using Equibles.Holdings.Data.Extensions;
 using Equibles.Holdings.Mcp.Extensions;
 using Equibles.InsiderTrading.Data.Extensions;
@@ -100,6 +101,7 @@ public partial class Program
             mcp.AddCongress();
             mcp.AddShortData();
             mcp.AddStockPrices();
+            mcp.AddGovernmentContracts();
         });
 
         builder.Services.AddSingleton<IApiKeyValidator, SimpleApiKeyValidator>();
