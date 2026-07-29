@@ -226,9 +226,9 @@ public class CloneBacktestTools
         if (result.TruncatedAt.HasValue)
         {
             output.AppendLine(
-                $"Note: {holder.Name} has not filed since its portfolio of "
-                    + $"{FormatDate(result.TruncatedAt.Value)} went stale, so the simulation stops "
-                    + "there rather than marking a frozen portfolio forward."
+                $"Note: {holder.Name} has stopped filing, so the simulation ends on "
+                    + $"{FormatDate(result.TruncatedAt.Value)} — the point its last reported "
+                    + "portfolio went stale — rather than marking that portfolio forward to today."
             );
         }
 
