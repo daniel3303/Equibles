@@ -59,6 +59,21 @@ public class Filing13FXmlParser
             ),
         };
 
+        // The summary page carries the filer's own declared totals. Scoped to summaryPage —
+        // both local names are unique there today, but scoping is what keeps that true if the
+        // schema ever grows a similarly-named element elsewhere. A 13F-NT has no summary page,
+        // so both stay null.
+        var summaryPage = Descendant(root, "summaryPage");
+        if (summaryPage != null)
+        {
+            if (int.TryParse(Value(Descendant(summaryPage, "tableEntryTotal")), out var entryTotal))
+                filing.TableEntryTotal = entryTotal;
+            if (
+                long.TryParse(Value(Descendant(summaryPage, "tableValueTotal")), out var valueTotal)
+            )
+                filing.TableValueTotal = valueTotal;
+        }
+
         // otherManager2 entries live under formData/summaryPage/otherManagers2Info,
         // NOT under coverPage (which only carries the sequence-less otherManagersInfo
         // list). Scan from the root: the local name is unique to the summary page, so

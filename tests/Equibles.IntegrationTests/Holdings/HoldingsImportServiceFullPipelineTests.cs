@@ -213,6 +213,121 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         holder.City.Should().Be("Omaha");
     }
 
+    [Fact]
+    public async Task ImportDataSet_ArchiveCarriesASummaryPage_LandsTheFilersDeclaredTotalsOnTheRollup()
+    {
+        // The cover page's declared totals are the only authoritative statement of what the WHOLE
+        // filing holds — tracked positions plus the security types we skip (preferred shares,
+        // bonds, warrants). Scion's Q3 2025 filing declares 8 positions / $1.38B while we track
+        // 7 / $1.37B; without these columns every surface presents the tracked subset as the
+        // filing. Pre-2023 filings declare thousands, so the era scale must apply to the declared
+        // value exactly as it does to per-position values: this fixture files 1,381,198 (a 2022
+        // filing date) and the rollup must land 1,381,198,000 dollars.
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc",
+            Cik = "0000320193",
+            Cusip = "037833100",
+        };
+        using (var seed = FreshContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var reportDate = new DateOnly(2022, 9, 30);
+        var submission =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR\tACC-001\t2022-11-14\t2022-09-30\t0001067983\n";
+        var coverPage =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+            + "ACC-001\tN\tBerkshire Hathaway\tOmaha\tNE\t028-12345\t12345\n";
+        var infoTable =
+            "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
+            + "ACC-001\t037833100\t1000\tSH\t\tSOLE\t1000\t0\t0\tCOM\t\n";
+        var summaryPage =
+            "ACCESSION_NUMBER\tOTHERINCLUDEDMANAGERSCOUNT\tTABLEENTRYTOTAL\tTABLEVALUETOTAL\n"
+            + "ACC-001\t0\t8\t1381198\n";
+
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submission),
+            ("COVERPAGE.tsv", coverPage),
+            ("INFOTABLE.tsv", infoTable),
+            ("SUMMARYPAGE.tsv", summaryPage)
+        );
+
+        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 150m };
+        var sut = CreateImporter(PriceProviderReturning(prices));
+
+        var result = await sut.ImportDataSet(
+            archive,
+            new DateOnly(2022, 1, 1),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeTrue();
+
+        using var verify = FreshContext();
+        var filing = await verify.Set<InstitutionalFiling>().SingleAsync();
+        filing.DeclaredPositionCount.Should().Be(8);
+        filing.DeclaredTotalValue.Should().Be(1_381_198_000L);
+        // The tracked figures stay what this platform imported — the whole point of carrying both.
+        filing.PositionCount.Should().Be(1);
+        filing.TotalValue.Should().Be(150_000L);
+    }
+
+    [Fact]
+    public async Task ImportDataSet_ArchiveWithoutASummaryPage_LeavesDeclaredTotalsNull()
+    {
+        // Older archives and 13F-NT rows carry no summary page. The rollup must say "no
+        // declaration captured" (null), never zero — surfaces fall back to the generic tracked
+        // wording on null, but a zero would render as a filer declaring an empty book.
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc",
+            Cik = "0000320193",
+            Cusip = "037833100",
+        };
+        using (var seed = FreshContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var submission =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR\tACC-001\t2024-10-15\t2024-09-30\t0001067983\n";
+        var coverPage =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+            + "ACC-001\tN\tBerkshire Hathaway\tOmaha\tNE\t028-12345\t12345\n";
+        var infoTable =
+            "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
+            + "ACC-001\t037833100\t1000\tSH\t\tSOLE\t1000\t0\t0\tCOM\t\n";
+
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submission),
+            ("COVERPAGE.tsv", coverPage),
+            ("INFOTABLE.tsv", infoTable)
+        );
+
+        var prices = new Dictionary<(Guid, DateOnly), decimal>
+        {
+            [(stock.Id, new DateOnly(2024, 9, 30))] = 150m,
+        };
+        var sut = CreateImporter(PriceProviderReturning(prices));
+
+        await sut.ImportDataSet(archive, new DateOnly(2024, 1, 1), CancellationToken.None);
+
+        using var verify = FreshContext();
+        var filing = await verify.Set<InstitutionalFiling>().SingleAsync();
+        filing.DeclaredPositionCount.Should().BeNull();
+        filing.DeclaredTotalValue.Should().BeNull();
+    }
+
     // ── Duplicated share-count column repair ───────────────────────────
 
     [Fact]

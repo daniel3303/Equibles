@@ -447,6 +447,20 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // beyond the page the caller keeps and times the request out (#3474). Callers order
     // by FilingDate descending, take their page, then call MarkNewFilers to set
     // IsNewFiler for just that page's filers.
+    // The filing rollup rows behind one (holder, quarter) — usually a single filing, several
+    // when the quarter was amended. Callers wanting "what did the filer declare for this
+    // quarter" take the latest FilingDate: a restatement's declaration supersedes the
+    // original's, and for the ordinary one-filing case it is simply that filing.
+    public IQueryable<InstitutionalFiling> GetFilingsByHolder(
+        InstitutionalHolder holder,
+        DateOnly reportDate
+    )
+    {
+        return DbContext
+            .Set<InstitutionalFiling>()
+            .Where(f => f.InstitutionalHolderId == holder.Id && f.ReportDate == reportDate);
+    }
+
     public IQueryable<RecentFiling> GetRecentFilings()
     {
         return DbContext

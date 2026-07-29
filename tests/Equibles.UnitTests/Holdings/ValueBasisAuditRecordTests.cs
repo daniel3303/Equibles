@@ -12,7 +12,14 @@ public class ValueBasisAuditRecordTests
         // reads, and the one signal that matters gets ignored with it.
         var audit = new ValueBasisAudit();
 
-        audit.Record("09077B104", new DateOnly(2024, 6, 30), 633_959, 868_523, 868_524m);
+        audit.Record(
+            "09077B104",
+            new DateOnly(2024, 6, 30),
+            633_959,
+            868_523,
+            868_524m,
+            isOption: false
+        );
 
         audit.Compared.Should().Be(1);
         audit.Disagreed.Should().Be(0);
@@ -28,7 +35,14 @@ public class ValueBasisAuditRecordTests
         // diagnosis; a bare count would say something is broken without saying what.
         var audit = new ValueBasisAudit();
 
-        audit.Record("09077B104", new DateOnly(2024, 6, 30), 633_959, 43_426_191, 868_524m);
+        audit.Record(
+            "09077B104",
+            new DateOnly(2024, 6, 30),
+            633_959,
+            43_426_191,
+            868_524m,
+            isOption: false
+        );
 
         audit.Compared.Should().Be(1);
         audit.Disagreed.Should().Be(1);
@@ -46,7 +60,14 @@ public class ValueBasisAuditRecordTests
         // Testing only one direction would leave the far more common failure unreported.
         var audit = new ValueBasisAudit();
 
-        audit.Record("67066G104", new DateOnly(2023, 12, 31), 900_000, 44_568_000, 445_680_000m);
+        audit.Record(
+            "67066G104",
+            new DateOnly(2023, 12, 31),
+            900_000,
+            44_568_000,
+            445_680_000m,
+            isOption: false
+        );
 
         audit.Disagreed.Should().Be(1);
     }
@@ -59,8 +80,8 @@ public class ValueBasisAuditRecordTests
         // precisely when the pipeline had stopped producing values.
         var audit = new ValueBasisAudit();
 
-        audit.Record("09077B104", new DateOnly(2024, 6, 30), 633_959, 0, 868_524m);
-        audit.Record("09077B104", new DateOnly(2024, 6, 30), 633_959, 868_523, 0m);
+        audit.Record("09077B104", new DateOnly(2024, 6, 30), 633_959, 0, 868_524m, isOption: false);
+        audit.Record("09077B104", new DateOnly(2024, 6, 30), 633_959, 868_523, 0m, isOption: false);
 
         audit.Compared.Should().Be(0);
         audit.Disagreed.Should().Be(0);
@@ -76,7 +97,14 @@ public class ValueBasisAuditRecordTests
 
         for (var i = 0; i < 50; i++)
         {
-            audit.Record($"CUSIP{i}", new DateOnly(2024, 6, 30), 1_000, 50_000, 1_000m);
+            audit.Record(
+                $"CUSIP{i}",
+                new DateOnly(2024, 6, 30),
+                1_000,
+                50_000,
+                1_000m,
+                isOption: false
+            );
         }
 
         audit.Compared.Should().Be(50);

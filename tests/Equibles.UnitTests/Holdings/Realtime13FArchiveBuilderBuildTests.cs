@@ -13,7 +13,7 @@ public class Realtime13FArchiveBuilderBuildTests
     private readonly Realtime13FArchiveBuilder _sut = new();
 
     [Fact]
-    public void Build_SingleFilingWithHoldingAndOtherManager_ProducesFourTsvEntriesWithCorrectContent()
+    public void Build_SingleFilingWithHoldingAndOtherManager_ProducesAllTsvEntriesWithCorrectContent()
     {
         var filing = new Parsed13FFiling
         {
@@ -48,7 +48,7 @@ public class Realtime13FArchiveBuilderBuildTests
 
         using var archive = _sut.Build([filing]);
 
-        archive.Entries.Should().HaveCount(4);
+        archive.Entries.Should().HaveCount(5);
         archive
             .Entries.Select(e => e.Name)
             .Should()
@@ -57,6 +57,7 @@ public class Realtime13FArchiveBuilderBuildTests
                 "COVERPAGE.tsv",
                 "INFOTABLE.tsv",
                 "OTHERMANAGER2.tsv",
+                "SUMMARYPAGE.tsv",
             ]);
 
         var submission = ReadEntry(archive, "SUBMISSION.tsv");
