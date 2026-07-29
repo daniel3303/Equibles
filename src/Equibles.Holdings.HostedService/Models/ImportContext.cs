@@ -49,4 +49,11 @@ public class ImportContext
         (string Cusip, DateOnly ReportDate),
         UnmappedCusipTally
     > UnmappedCusips { get; } = [];
+
+    // The filing whose unmapped CUSIPs are currently being collected, and the CUSIPs already
+    // counted for it, so a position split across otherManager legs counts once (see
+    // HoldingsImportService.RecordUnmappedCusip). Reset at each accession boundary.
+    public string UnmappedCusipAccession { get; set; }
+
+    public HashSet<string> UnmappedCusipsSeenInAccession { get; } = [];
 }
