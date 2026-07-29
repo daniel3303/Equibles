@@ -19,7 +19,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-Everything marked **Self-hosted** is scraped, stored, and served by this repo — **62 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds 35 more tools, 97 in total.
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **64 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds 33 more tools, 97 in total.
 
 | Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
@@ -35,7 +35,7 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 | **Stock Prices** | Yahoo Finance | ✅ | ✅ | Daily OHLCV prices with technical indicators (SMA, RSI, MACD) |
 | **Futures Positioning** | CFTC | ✅ | ✅ | Commitments of Traders (COT) data for 30+ futures contracts |
 | **Market Indicators** | CBOE | ✅ | ✅ | VIX volatility index (1990+) and put/call ratios by category |
-| **Government Contracts** | USAspending.gov | Scraped ¹ | ✅ | Federal contract awards to public companies — amounts, awarding agencies, dates, and NAICS/PSC codes |
+| **Government Contracts** | USAspending.gov | ✅ | ✅ | Federal contract awards to public companies — amounts, awarding agencies, dates, and NAICS/PSC codes |
 | **FDA Catalysts** | FDA.gov | ✅ | ✅ | Advisory-committee (AdComm) meeting calendar — scheduled FDA panel dates, center, and title that act as regulatory catalysts for biotech/pharma stocks |
 | **Earnings Call Transcripts** | Company webcasts | — | ✅ | Full quarterly-call transcripts with speaker attribution, searchable alongside filings |
 | **Earnings Call Audio** | Company webcasts | — | ✅ | The recorded call itself, playable and aligned to the transcript |
@@ -52,8 +52,6 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 | **Smart Money** | Derived | — | ✅ | Insider sentiment scores, super-investor portfolios, and market-wide congressional activity |
 | **Risk Flags** | SEC filings | — | ✅ | Going-concern language and customer-concentration disclosures |
 | **Market Context** | Derived | — | ✅ | Correlated stocks, plus market calendar and open/closed status |
-
-¹ Collected by the worker, but not yet exposed as MCP tools in the self-hosted build.
 
 ## Why Some Data Is Cloud-Only
 
@@ -279,7 +277,7 @@ Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP trans
 
 ## Tools
 
-This self-hosted build exposes 62 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` exposes 97 — the same 62 plus [35 more](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 64 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` exposes 97 — the same 64 plus [33 more](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
@@ -378,6 +376,11 @@ This self-hosted build exposes 62 tools over MCP. The hosted server at `https://
 - GetAverageTrueRange — average true range (ATR)
 - GetOnBalanceVolume — on-balance volume (OBV)
 - GetBollingerBands — Bollinger Bands
+
+**Government contracts (USAspending)**
+
+- GetGovernmentContracts — federal contract awards for a company
+- GetTopGovernmentContractors — largest public-company contractors
 
 ## Vector Embeddings (advanced, opt-in)
 
