@@ -440,8 +440,8 @@ public class InstitutionalHoldingsTools
     )
     {
         var subtitle =
-            $"Showing top {holdings.Count} of {McpFormat.WholeNumber(totalPositions)} positions. "
-            + $"Total 13F value: ${FormatMillions(totalValue)}M";
+            $"Showing top {holdings.Count} of {McpFormat.WholeNumber(totalPositions)} tracked positions. "
+            + $"Tracked 13F value: ${FormatMillions(totalValue)}M";
         if (notes != null)
             subtitle = $"{subtitle}\n{notes}";
 
