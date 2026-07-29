@@ -706,11 +706,11 @@ public class YahooPriceImportService
 
         // Last-wins rather than ToDictionary: a feed that repeats a date must not throw here, and
         // the insert path already assumes the response holds one bar per date.
-        var fetched = new Dictionary<DateOnly, long>();
+        var fetched = new Dictionary<DateOnly, DailyStockPrice>();
         foreach (var row in freshRows)
         {
             if (row.Date >= windowStart)
-                fetched[row.Date] = row.Volume;
+                fetched[row.Date] = row;
         }
 
         if (fetched.Count == 0)
@@ -725,13 +725,18 @@ public class YahooPriceImportService
         var corrected = 0;
         foreach (var row in stored)
         {
-            if (
-                !fetched.TryGetValue(row.Date, out var volume)
-                || !IsVolumeUpgrade(row.Volume, volume)
-            )
+            if (!fetched.TryGetValue(row.Date, out var bar))
                 continue;
 
-            row.Volume = volume;
+            // Both records must describe the session on the SAME split basis before their volumes
+            // can be compared at all — see IsSameSplitBasis.
+            if (!IsSameSplitBasis(row.Close, bar.Close))
+                continue;
+
+            if (!IsVolumeUpgrade(row.Volume, bar.Volume))
+                continue;
+
+            row.Volume = bar.Volume;
             corrected++;
         }
 
@@ -749,6 +754,36 @@ public class YahooPriceImportService
     // response (a partial re-serve, a venue dropping out), never a correction. Accepting only
     // upgrades makes the repair monotone: a flaky feed can never walk a good figure back down.
     private static bool IsVolumeUpgrade(long stored, long fetched) => fetched > stored;
+
+    // Two records of the same session are only comparable when they are on the same split basis,
+    // and the close is what proves it: a split moves price and volume by the SAME ratio in opposite
+    // directions, so a basis mismatch shows up as a close that differs by that ratio.
+    //
+    // The stored series and the feed genuinely disagree here. ReconcilePendingSplits rewrites a
+    // split stock's whole history onto the post-split basis, while the feed keeps serving that same
+    // window as-traded for a while (observed on WLFC's 3:1: stored close 72.3267 / volume 168,879
+    // against a served 216.98 / 56,300 — the same session on two bases).
+    //
+    // Without this guard the upgrade-only rule turns into a corruption rule on REVERSE splits.
+    // A 1:25 reverse leaves the stored volume 25x SMALLER than the as-traded figure, so the served
+    // number always looks like an upgrade and gets written over a correctly-adjusted row — silently
+    // inflating that stock's volume history by the split ratio. (A forward split is accidentally
+    // safe, since the adjusted figure is already the larger one.) Volume basis belongs to the split
+    // reconcile, so a mismatch means skip, never rewrite.
+    private const decimal SameBasisCloseTolerance = 0.01m;
+
+    private static bool IsSameSplitBasis(decimal storedClose, decimal fetchedClose)
+    {
+        // A guard on a non-positive close would divide meaning out of the tolerance; nothing to
+        // compare, so treat it as unproven rather than same-basis.
+        if (storedClose <= 0m || fetchedClose <= 0m)
+            return false;
+
+        // 1% is far tighter than the smallest real split ratio (5:4 moves the close 25%) and far
+        // looser than the rounding gap between a stored numeric(18,4) and the feed's own value, so
+        // it separates the two cases without ever needing the split table.
+        return Math.Abs(fetchedClose - storedClose) <= storedClose * SameBasisCloseTolerance;
+    }
 
     // The oldest date whose stored volume is still re-read. Pure so the boundary is pinnable, and
     // clamped so a zero or negative setting degrades to "today only" — which the settled-bar guard
