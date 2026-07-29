@@ -23,8 +23,15 @@ public class ProcessedDataSet
     /// Version 2: scope restatement-amendment deletes to the amendment's own
     /// filing type (#3738) — re-import all 13F history so a Schedule 13D/G
     /// amendment that previously wiped a same-quarter 13F-HR portfolio is healed.
+    /// Version 3: restate as-filed share counts onto the price series' basis
+    /// before deriving Value (#4242). Every position on a stock that split after
+    /// its report date was multiplied across two share bases and is wrong by the
+    /// split ratio — 1.87M rows carrying $39.3T that should read $90.2T, mostly
+    /// understated by forward splits and a smaller set inflated up to 200x by
+    /// reverse ones. Nothing recomputes a stored value, so only a re-import
+    /// heals them.
     /// </summary>
-    public const int CurrentParserVersion = 2;
+    public const int CurrentParserVersion = 3;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
