@@ -723,6 +723,7 @@ public class YahooPriceImportService
             .ToListAsync(cancellationToken);
 
         var corrected = 0;
+        var skippedOnBasis = 0;
         foreach (var row in stored)
         {
             if (!fetched.TryGetValue(row.Date, out var bar))
@@ -731,13 +732,28 @@ public class YahooPriceImportService
             // Both records must describe the session on the SAME split basis before their volumes
             // can be compared at all — see IsSameSplitBasis.
             if (!IsSameSplitBasis(row.Close, bar.Close))
+            {
+                skippedOnBasis++;
                 continue;
+            }
 
             if (!IsVolumeUpgrade(row.Volume, bar.Volume))
                 continue;
 
             row.Volume = bar.Volume;
             corrected++;
+        }
+
+        // A basis mismatch is the only place the store's divergence from the feed's served basis
+        // is ever visible — the reconcile has already stamped the split as applied and will not
+        // revisit the stock — so surface it rather than dropping the signal silently.
+        if (skippedOnBasis > 0)
+        {
+            _logger.LogInformation(
+                "Skipped {Count} stored volumes for {Ticker}: stored close disagrees with the feed's split basis",
+                skippedOnBasis,
+                ticker
+            );
         }
 
         if (corrected == 0)
@@ -755,34 +771,50 @@ public class YahooPriceImportService
     // upgrades makes the repair monotone: a flaky feed can never walk a good figure back down.
     private static bool IsVolumeUpgrade(long stored, long fetched) => fetched > stored;
 
-    // Two records of the same session are only comparable when they are on the same split basis,
-    // and the close is what proves it: a split moves price and volume by the SAME ratio in opposite
-    // directions, so a basis mismatch shows up as a close that differs by that ratio.
-    //
-    // The stored series and the feed genuinely disagree here. ReconcilePendingSplits rewrites a
-    // split stock's whole history onto the post-split basis, while the feed keeps serving that same
-    // window as-traded for a while (observed on WLFC's 3:1: stored close 72.3267 / volume 168,879
-    // against a served 216.98 / 56,300 — the same session on two bases).
-    //
-    // Without this guard the upgrade-only rule turns into a corruption rule on REVERSE splits.
-    // A 1:25 reverse leaves the stored volume 25x SMALLER than the as-traded figure, so the served
-    // number always looks like an upgrade and gets written over a correctly-adjusted row — silently
-    // inflating that stock's volume history by the split ratio. (A forward split is accidentally
-    // safe, since the adjusted figure is already the larger one.) Volume basis belongs to the split
-    // reconcile, so a mismatch means skip, never rewrite.
+    // Relative half-width of the same-basis close comparison; full rationale on IsSameSplitBasis.
     private const decimal SameBasisCloseTolerance = 0.01m;
 
+    // One last-digit tick of absolute headroom on top of the relative tolerance. Both closes are
+    // rounded to 4 decimals at ingest, so a genuine minor revision of a sub-cent close moves it by
+    // a full 0.0001 — more than 1% of the price — and a purely relative tolerance would freeze the
+    // resettle out of the OTC tail. One tick stays orders of magnitude below any split ratio.
+    private const decimal SameBasisCloseTickHeadroom = 0.0001m;
+
+    // Two records of the same session are only comparable when they are on the same split basis,
+    // and the close is what proves it: a split moves price and volume by the SAME ratio in
+    // opposite directions, so a basis mismatch shows up as a close that differs by that ratio.
+    //
+    // The stored series and the feed genuinely disagree here, in BOTH orderings — the guard must
+    // stay direction-agnostic:
+    //  - Pre-reconcile (the window EVERY split passes through): CaptureSplits records a split at
+    //    the end of the same cycle whose ReconcilePendingSplits pass already ran, so until the
+    //    next cycle the stored pre-split rows are still as-traded while the feed already serves
+    //    them adjusted. On a forward split the adjusted volume is ratio-times LARGER, so it reads
+    //    as a settlement upgrade and would leave a row whose volume is adjusted under an as-traded
+    //    close.
+    //  - Post-reconcile (observed on WLFC's 3:1): the reconcile stored the adjusted basis and the
+    //    feed later went back to serving the window as-traded. On a reverse split the as-traded
+    //    volume is ratio-times larger than the stored adjusted one, so it reads as an upgrade and
+    //    would inflate the stock's volume history by the split ratio.
+    // Which basis each side holds varies by stock and over time (PRPL's reconciled series is
+    // as-traded while WLFC's is adjusted, minutes apart), so only this value comparison is safe —
+    // a split-table lookup would guess wrong on real data. A mismatch means skip, never rewrite:
+    // volume basis belongs to the split reconcile, which rewrites the series as a whole.
+    //
+    // Tolerance: both closes are rounded to 4 decimals at ingest, so same-basis values differ only
+    // by a genuine minor revision — well inside 1% — while the split ratios Yahoo emits for real
+    // splits (5:4 = 25%, 21:20 = 4.76%) sit far outside it. The one family inside the tolerance is
+    // a tiny stock dividend recorded as a split (101:100 = 0.99%); accepting it bounds the volume
+    // error at ~1%, negligible against the 10-29% unsettled shortfall the resettle exists to fix.
     private static bool IsSameSplitBasis(decimal storedClose, decimal fetchedClose)
     {
-        // A guard on a non-positive close would divide meaning out of the tolerance; nothing to
-        // compare, so treat it as unproven rather than same-basis.
+        // Nothing to compare against, so the basis is unproven rather than matching — and a zero
+        // stored close would collapse the relative tolerance to exact equality.
         if (storedClose <= 0m || fetchedClose <= 0m)
             return false;
 
-        // 1% is far tighter than the smallest real split ratio (5:4 moves the close 25%) and far
-        // looser than the rounding gap between a stored numeric(18,4) and the feed's own value, so
-        // it separates the two cases without ever needing the split table.
-        return Math.Abs(fetchedClose - storedClose) <= storedClose * SameBasisCloseTolerance;
+        return Math.Abs(fetchedClose - storedClose)
+            <= storedClose * SameBasisCloseTolerance + SameBasisCloseTickHeadroom;
     }
 
     // The oldest date whose stored volume is still re-read. Pure so the boundary is pinnable, and

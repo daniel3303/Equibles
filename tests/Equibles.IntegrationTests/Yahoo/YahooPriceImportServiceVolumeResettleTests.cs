@@ -199,6 +199,32 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         stored.Close.Should().Be(adjustedClose);
     }
 
+    [Fact]
+    public async Task Import_StoredAsTradedRowServedAdjusted_IsNotOverwrittenByAdjustedVolume()
+    {
+        // The PRE-reconcile ordering every split passes through: the split is captured at the end
+        // of the cycle whose reconcile pass already ran, so for one full cycle the stored
+        // pre-split rows are still as-traded while the feed already serves them adjusted. On a
+        // forward split the adjusted volume is ratio-times larger, so without the basis guard it
+        // would read as a settlement upgrade and leave a row with an adjusted volume under an
+        // as-traded close. Real WLFC 3:1 numbers.
+        var stock = SeedStock("WLFC");
+        var (newest, previous) = TwoMostRecentSettledSessions();
+        const decimal asTradedClose = 216.98m;
+        const long asTradedVolume = 56_300;
+        SeedPrice(stock, previous, asTradedVolume, asTradedClose);
+
+        _yahooClient
+            .GetChart("WLFC", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(Chart(close: 72.3267m, bars: [(previous, 168_879), (newest, 60_000)]));
+
+        await _service.Import(CancellationToken.None);
+
+        var storedRow = _priceRepo.GetAll().Single(p => p.Date == previous);
+        storedRow.Volume.Should().Be(asTradedVolume);
+        storedRow.Close.Should().Be(asTradedClose);
+    }
+
     // The two most recent settled sessions, resolved off the real calendar so the cases behave the
     // same whatever weekday the suite runs on. The service derives "today" from the clock and never
     // stores the in-progress bar, so the newest settled session is the last trading day before it.
