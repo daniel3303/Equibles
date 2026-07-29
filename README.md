@@ -11,60 +11,11 @@
 
 An open-source, self-hosted mini Bloomberg Terminal for AI agents. Scrapes, stores, and serves SEC filings, institutional holdings, insider trading, congressional trades, short data, economic indicators, and daily stock prices — and exposes it all via MCP so your AI assistant can query it directly.
 
-**This is the open-source core of [Equibles](https://equibles.com).** Everything here runs on your own hardware, for free, forever. [Equibles Cloud](https://equibles.com/mcp) runs this same core and adds the datasets that need infrastructure most people won't stand up at home — a browser fleet that captures earnings-call webcasts, GPUs that transcribe and diarize the audio, licensed real-time and options feeds, and LLM extraction lanes for KPIs and guidance.
+**This is the open-source core of [Equibles](https://equibles.com).** Everything here runs on your own hardware, for free, forever. [Equibles Cloud](https://equibles.com/mcp) runs this same core and adds earnings call transcripts and audio, live quotes, options chains, and LLM-extracted KPIs and guidance — see [what the cloud adds](#what-equibles-cloud-adds).
 
-> **Want those without running anything?** Point your AI assistant at `https://mcp.equibles.com/mcp` and get a free API key at [equibles.com/mcp](https://equibles.com/mcp) — 100 requests/day, no card. Per-client setup guides live at [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+> **Don't want to run anything?** Point your AI assistant at `https://mcp.equibles.com/mcp` and get a free API key at [equibles.com/mcp](https://equibles.com/mcp) — 100 requests/day, no card. Per-client setup guides live at [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 See [`docs/`](docs/README.md) for the user guide and technical documentation.
-
-## Self-hosted vs. Equibles Cloud
-
-Same core, same MCP protocol, same tool names. The split is not about data quality — it is about what has to be running to produce each dataset.
-
-Everything in the left column comes from public sources one box can scrape on a schedule. The cloud-only rows need a GPU transcription pipeline, a licensed real-time feed, or an LLM extraction lane behind them.
-
-| | Self-hosted (this repo) | [Equibles Cloud](https://equibles.com/mcp) |
-|---|---|---|
-| **MCP tools** | **62** | **97** |
-| SEC filings (10-K/10-Q/8-K) + full-text search | ✅ | ✅ |
-| XBRL financial statements | ✅ | ✅ |
-| 13F holdings, fund filings (NPORT / N-CEN / Form D) | ✅ | ✅ |
-| Investment advisers (Form ADV) | ✅ | ✅ |
-| Insider trading (Form 3/4/144) | ✅ | ✅ |
-| Congressional trading | ✅ | ✅ |
-| Short data — fails-to-deliver, short volume, short interest | ✅ | ✅ |
-| FRED economic indicators | ✅ | ✅ |
-| CFTC futures positioning, CBOE VIX & put/call | ✅ | ✅ |
-| Daily stock prices + technical indicators | ✅ | ✅ |
-| FDA advisory-committee calendar | ✅ | ✅ |
-| Government contract awards (USAspending) | Scraped, no MCP tools | ✅ |
-| **Earnings call transcripts** | — | ✅ |
-| **Earnings call audio** | — | ✅ |
-| **Live US market quotes** | — | ✅ |
-| **Options chains** | — | ✅ |
-| Company KPIs and non-GAAP bridges | — | ✅ |
-| Management guidance | — | ✅ |
-| Buyback and ATM programs | — | ✅ |
-| IPO feed | — | ✅ |
-| Investor-relations events and news | — | ✅ |
-| Executive changes and compensation | — | ✅ |
-| Valuation multiples, current and historical | — | ✅ |
-| Stock screener | — | ✅ |
-| Insider sentiment scores, super investors, market-wide congress activity | — | ✅ |
-| Going-concern flags, customer concentration | — | ✅ |
-| Correlated stocks, market calendar and status | — | ✅ |
-| **Data backfill** | You scrape it yourself, from scratch | Already backfilled and kept current |
-| **Operations** | You host, monitor, and maintain it | Managed |
-| **Price** | Free — AGPL-3.0 | Free tier: 100 requests/day, no card |
-
-Why those rows are cloud-only:
-
-- **Transcripts and audio** — earnings calls are webcasts, not filings. Getting them means discovering the webcast, driving a headless browser to join and record it, then running GPU speech-to-text with speaker diarization over every call, every quarter.
-- **Live quotes and options chains** — licensed real-time market data, plus an always-on streaming service to fan it out. Neither the licence nor the uptime is something a container on a laptop can provide.
-- **KPIs, non-GAAP bridges, guidance** — extracted from filings and earnings releases by LLM lanes with verification passes and a human review queue, which needs sustained inference capacity.
-- **Screener, multiples, correlations, sentiment scores** — derived, and only meaningful over a fully backfilled corpus of the whole market rather than the tickers you happen to have scraped so far.
-
-Start with [Equibles Cloud](https://equibles.com/mcp) on the free tier, and self-host this repo whenever you'd rather own the stack.
 
 ## What's Included
 
@@ -84,6 +35,24 @@ Start with [Equibles Cloud](https://equibles.com/mcp) on the free tier, and self
 | **Market Indicators** | CBOE | VIX volatility index (1990+) and put/call ratios by category |
 | **Government Contracts** | USAspending.gov | Federal contract awards to public companies — amounts, awarding agencies, dates, and NAICS/PSC codes |
 | **FDA Catalysts** | FDA.gov | Advisory-committee (AdComm) meeting calendar — scheduled FDA panel dates, center, and title that act as regulatory catalysts for biotech/pharma stocks |
+
+All of it is scraped, stored, and served by this repo, and reachable over MCP as **62 tools** — except government contracts, which the worker collects but does not yet expose as MCP tools.
+
+## What Equibles Cloud Adds
+
+[Equibles Cloud](https://equibles.com/mcp) runs this exact core — same MCP protocol, same tool names — and layers on **35 more tools** (97 in total). What it adds is not held back from this repo; it is data whose production needs infrastructure you would not stand up at home:
+
+| Added data | Why it isn't in this repo |
+|---|---|
+| Earnings call transcripts and audio | Calls are webcasts, not filings — a browser fleet has to discover and record each one, then GPU speech-to-text with speaker diarization has to run over every call, every quarter |
+| Live US market quotes, options chains | Licensed real-time feeds, plus an always-on streaming service to fan them out |
+| Company KPIs, non-GAAP bridges, guidance, buyback and ATM programs, IPO offer terms, executive changes and compensation | Pulled out of filings, proxies and earnings releases by LLM extraction lanes with verification passes and a human review queue — sustained inference capacity |
+| Investor-relations events and news | Collected from thousands of company IR sites, which needs the same stealth browser fleet as the webcasts |
+| Screener, valuation multiples, correlated stocks, insider sentiment, super investors, going-concern flags, customer concentration, market calendar | Derived, and only meaningful over a fully backfilled corpus of the whole market rather than the tickers you happen to have scraped so far |
+
+Beyond the data, the cloud is already backfilled and kept current, and it is managed — no scrapers to babysit. This repo is free forever under AGPL-3.0; the cloud has a free tier at 100 requests/day with no card.
+
+Start on [the free tier](https://equibles.com/mcp), and self-host whenever you'd rather own the stack.
 
 ## Quick Start
 
@@ -295,7 +264,7 @@ Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP trans
 
 ## Tools
 
-This self-hosted build exposes 62 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` exposes 97 — the same 62 plus 35 more covering earnings call transcripts and audio, live quotes, options chains, company KPIs, guidance, buybacks, IPOs, and screening (see the [comparison above](#self-hosted-vs-equibles-cloud)). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 62 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` exposes 97 — the same 62 plus [35 more](#what-equibles-cloud-adds). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
