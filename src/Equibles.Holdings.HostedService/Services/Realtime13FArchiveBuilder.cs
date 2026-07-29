@@ -33,6 +33,7 @@ public class Realtime13FArchiveBuilder
                 + "VOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\tINVESTMENTDISCRETION\n"
         );
         var otherManager = new StringBuilder("ACCESSION_NUMBER\tSEQUENCENUMBER\tNAME\n");
+        var summaryPage = new StringBuilder("ACCESSION_NUMBER\tTABLEENTRYTOTAL\tTABLEVALUETOTAL\n");
 
         foreach (var filing in filings)
         {
@@ -64,6 +65,16 @@ public class Realtime13FArchiveBuilder
             {
                 AppendRow(otherManager, Clean(filing.AccessionNumber), seq, Clean(name));
             }
+
+            // Emitted even when both totals are null (empty cells): the import parses the row
+            // tolerantly, and a consistently-present section keeps the synthetic archive the
+            // same shape as the SEC's quarterly one.
+            AppendRow(
+                summaryPage,
+                Clean(filing.AccessionNumber),
+                filing.TableEntryTotal?.ToString() ?? string.Empty,
+                filing.TableValueTotal?.ToString() ?? string.Empty
+            );
 
             foreach (var holding in filing.Holdings)
             {
@@ -98,6 +109,7 @@ public class Realtime13FArchiveBuilder
                 WriteEntry(writer, "COVERPAGE.tsv", coverPage);
                 WriteEntry(writer, "INFOTABLE.tsv", infoTable);
                 WriteEntry(writer, "OTHERMANAGER2.tsv", otherManager);
+                WriteEntry(writer, "SUMMARYPAGE.tsv", summaryPage);
             }
             zipBytes = buffer.ToArray();
         }

@@ -23,6 +23,14 @@ public class Parsed13FFiling
     public string CrdNumber { get; set; }
     public bool ConfidentialTreatmentRequested { get; set; }
 
+    /// <summary>Summary-page <c>tableEntryTotal</c> — the filer's own position count. Null when
+    /// the cover page carries no summary page (13F-NT).</summary>
+    public int? TableEntryTotal { get; set; }
+
+    /// <summary>Summary-page <c>tableValueTotal</c> — the filer's own total, in the unit the
+    /// filing was made in (whole dollars post-2023). Null when absent.</summary>
+    public long? TableValueTotal { get; set; }
+
     /// <summary>Other-manager table: sequence number → manager name.</summary>
     public Dictionary<int, string> OtherManagers { get; set; } = [];
 

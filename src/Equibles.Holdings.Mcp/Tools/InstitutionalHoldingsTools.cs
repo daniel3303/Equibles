@@ -400,6 +400,16 @@ public class InstitutionalHoldingsTools
                     .CountAsync();
                 var totalValue = await allHoldings.SumAsync(h => (long?)h.Value) ?? 0L;
 
+                // What the filer itself declared for the quarter, from the latest filing's cover
+                // page — so the answer can say "7 of the 8 declared positions" instead of
+                // presenting the tracked subset as the whole filing. Null on rows ingested
+                // before declared totals were captured; the renderer then says only "tracked".
+                var declaringFiling = await _holdingRepository
+                    .GetFilingsByHolder(holder, targetDate)
+                    .OrderByDescending(f => f.FilingDate)
+                    .ThenByDescending(f => f.AccessionNumber)
+                    .FirstOrDefaultAsync();
+
                 var holdings = await allHoldings
                     .OrderByDescending(h => h.Value)
                     .Take(McpLimit.Clamp(maxResults))
@@ -421,6 +431,7 @@ public class InstitutionalHoldingsTools
                     splitsByStock,
                     totalPositions,
                     totalValue,
+                    declaringFiling,
                     JoinNotes(matchNote, dateNote)
                 );
             },
@@ -436,12 +447,32 @@ public class InstitutionalHoldingsTools
         IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
         int totalPositions,
         long totalValue,
+        InstitutionalFiling declaringFiling,
         string notes
     )
     {
         var subtitle =
             $"Showing top {holdings.Count} of {McpFormat.WholeNumber(totalPositions)} tracked positions. "
             + $"Tracked 13F value: ${FormatMillions(totalValue)}M";
+
+        // The filer's own cover-page declaration, when captured, makes the coverage exact: the
+        // reader learns how many positions the filing carries in total and what they are worth,
+        // so a tracked subset can never read as the whole filing.
+        if (
+            declaringFiling
+            is { DeclaredPositionCount: not null }
+                or { DeclaredTotalValue: not null }
+        )
+        {
+            var declaredParts = new List<string>();
+            if (declaringFiling.DeclaredPositionCount is { } declaredCount)
+                declaredParts.Add($"{McpFormat.WholeNumber(declaredCount)} positions");
+            if (declaringFiling.DeclaredTotalValue is { } declaredValue)
+                declaredParts.Add($"${FormatMillions(declaredValue)}M");
+            subtitle +=
+                $" The filing itself declares {string.Join(" totalling ", declaredParts)}; "
+                + "the difference is security types outside this platform's coverage.";
+        }
         if (notes != null)
             subtitle = $"{subtitle}\n{notes}";
 

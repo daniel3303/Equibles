@@ -64,6 +64,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
             holdings.Count,
             holdings.Sum(h => h.Value),
             null,
+            null,
         ];
 
         var original = CultureInfo.CurrentCulture;

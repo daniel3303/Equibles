@@ -9,11 +9,11 @@ public class Realtime13FArchiveBuilderTests
     private readonly Realtime13FArchiveBuilder _sut = new();
 
     [Fact]
-    public void Build_EmptyCollection_ProducesArchiveWithFourEntries()
+    public void Build_EmptyCollection_ProducesArchiveWithAllSections()
     {
         using var archive = _sut.Build([]);
 
-        archive.Entries.Should().HaveCount(4);
+        archive.Entries.Should().HaveCount(5);
         archive
             .Entries.Select(e => e.Name)
             .Should()
@@ -22,6 +22,7 @@ public class Realtime13FArchiveBuilderTests
                 "COVERPAGE.tsv",
                 "INFOTABLE.tsv",
                 "OTHERMANAGER2.tsv",
+                "SUMMARYPAGE.tsv",
             ]);
     }
 
@@ -38,6 +39,7 @@ public class Realtime13FArchiveBuilderTests
                 "COVERPAGE.tsv",
                 "INFOTABLE.tsv",
                 "OTHERMANAGER2.tsv",
+                "SUMMARYPAGE.tsv",
             ]);
     }
 

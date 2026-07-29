@@ -53,5 +53,27 @@ public class InstitutionalFiling
     public int PositionCount { get; set; }
     public long TotalValue { get; set; }
 
+    /// <summary>
+    /// The position count the filer itself declared on the 13F cover page (summary page
+    /// <c>tableEntryTotal</c>). Null when the source carried no summary page — 13F-NT filings,
+    /// and rows ingested before this column existed.
+    /// </summary>
+    /// <remarks>
+    /// Kept beside the tracked figures because the two answer different questions:
+    /// <see cref="PositionCount"/>/<see cref="TotalValue"/> are what this platform imported
+    /// (common stock and its option positions), while the declared pair is what the filer
+    /// reported in total, including security types outside our coverage — preferred shares,
+    /// bonds, warrants, untracked classes. Surfaces need both to say "we track 7 of the 8
+    /// positions this filing declares" instead of presenting a filtered subset as the filing.
+    /// </remarks>
+    public int? DeclaredPositionCount { get; set; }
+
+    /// <summary>
+    /// The total value the filer declared on the cover page (<c>tableValueTotal</c>), normalised
+    /// to whole dollars — pre-2023 filings declare thousands, exactly like the per-position
+    /// value column. Null when the source carried no summary page.
+    /// </summary>
+    public long? DeclaredTotalValue { get; set; }
+
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

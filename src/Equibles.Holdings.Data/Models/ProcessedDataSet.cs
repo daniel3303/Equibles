@@ -30,8 +30,13 @@ public class ProcessedDataSet
     /// understated by forward splits and a smaller set inflated up to 200x by
     /// reverse ones. Nothing recomputes a stored value, so only a re-import
     /// heals them.
+    /// Version 4: parse the summary page's declared totals (tableEntryTotal /
+    /// tableValueTotal) onto the filing rollup (#4251) so surfaces can say "we
+    /// track 7 of the 8 positions this filing declares"; the same re-import also
+    /// rebuilds the unmapped-CUSIP queue through the per-key flush (#4249),
+    /// healing the under-counts the old slice-wipe left behind.
     /// </summary>
-    public const int CurrentParserVersion = 3;
+    public const int CurrentParserVersion = 4;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 

@@ -75,6 +75,7 @@ public class HoldingsImportService
         var submissionCount = context.Submissions.Count;
         if (!await ParseCoverPages(context, cancellationToken))
             return new ImportResult(submissionCount, IsComplete: false);
+        await ParseSummaryPages(context, cancellationToken);
         var cusipResult = await BuildCusipMapping(context, cancellationToken);
         if (cusipResult == CusipMappingOutcome.NoInfoTable)
             // Structural: a missing INFOTABLE.tsv won't appear on re-download —
@@ -259,6 +260,59 @@ public class HoldingsImportService
         {
             context.Submissions.Remove(accession);
         }
+    }
+
+    /// <summary>
+    /// Parses SUMMARYPAGE.tsv — the filer's own declared totals (<c>tableEntryTotal</c> /
+    /// <c>tableValueTotal</c>) — into <see cref="ImportContext.SummaryPages"/>, normalising the
+    /// declared value to whole dollars by the filing's era (pre-2023 filings declare thousands,
+    /// exactly like the per-position value column). Optional: an archive without the section, or
+    /// a 13F-NT row with empty cells, simply contributes nothing, and the filing rollup keeps
+    /// null declared figures — a missing declaration is honest, an invented one is not.
+    /// </summary>
+    private async Task ParseSummaryPages(ImportContext context, CancellationToken cancellationToken)
+    {
+        var entry = FindEntry(context.Archive, "SUMMARYPAGE.tsv");
+        if (entry == null)
+        {
+            _logger.LogInformation("No SUMMARYPAGE.tsv in this archive; declared totals stay null");
+            return;
+        }
+
+        var parsed = 0;
+        await foreach (var row in context.TsvParser.ParseEntry(entry))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var accession = GetValue(row, AccessionNumberColumn);
+            if (
+                string.IsNullOrEmpty(accession)
+                || !context.Submissions.TryGetValue(accession, out var submission)
+            )
+                continue;
+
+            TryParseDateOnly(submission.FilingDate, out var filingDate);
+
+            int? entryTotal = null;
+            if (int.TryParse(GetValue(row, "TABLEENTRYTOTAL"), out var entries) && entries >= 0)
+                entryTotal = entries;
+
+            long? valueTotal = null;
+            if (long.TryParse(GetValue(row, "TABLEVALUETOTAL"), out var declared) && declared > 0)
+            {
+                var dollars = FiledValueScale.ToDollars(declared, filingDate);
+                if (dollars <= long.MaxValue)
+                    valueTotal = (long)dollars;
+            }
+
+            if (entryTotal.HasValue || valueTotal.HasValue)
+            {
+                context.SummaryPages[accession] = (entryTotal, valueTotal);
+                parsed++;
+            }
+        }
+
+        _logger.LogInformation("Parsed {Count} summary pages with declared totals", parsed);
     }
 
     private async Task<bool> ParseCoverPages(
@@ -532,18 +586,22 @@ public class HoldingsImportService
         if (audit.Disagreed == 0)
         {
             _logger.LogInformation(
-                "Value basis check: {Compared} position(s) compared against their filed value, none disagreeing beyond {Multiple}x",
+                "Value basis check: {Compared} common-stock position(s) compared against their filed value, none disagreeing beyond {Multiple}x. Options (tallied apart — filers often report the premium, not the notional we derive): {OptionDisagreed} of {OptionCompared} apart",
                 audit.Compared,
-                ValueBasisAudit.DisagreementMultiple
+                ValueBasisAudit.DisagreementMultiple,
+                audit.OptionDisagreed,
+                audit.OptionCompared
             );
             return;
         }
 
         _logger.LogWarning(
-            "Value basis check: {Disagreed} of {Compared} position(s) disagree with their filed value by more than {Multiple}x. Samples: {Samples}",
+            "Value basis check: {Disagreed} of {Compared} common-stock position(s) disagree with their filed value by more than {Multiple}x. Options (tallied apart — filers often report the premium, not the notional we derive): {OptionDisagreed} of {OptionCompared} apart. Samples: {Samples}",
             audit.Disagreed,
             audit.Compared,
             ValueBasisAudit.DisagreementMultiple,
+            audit.OptionDisagreed,
+            audit.OptionCompared,
             string.Join(
                 "; ",
                 audit.Samples.Select(s =>
@@ -1338,7 +1396,14 @@ public class HoldingsImportService
 
         if (value > 0 && filedValue.HasValue)
         {
-            context.ValueBasisAudit.Record(cusip, reportDate, shares, value, filedValue.Value);
+            context.ValueBasisAudit.Record(
+                cusip,
+                reportDate,
+                shares,
+                value,
+                filedValue.Value,
+                isOption: optionType != null
+            );
         }
 
         var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));
@@ -1556,6 +1621,18 @@ public class HoldingsImportService
                 IsAmendment = r.IsAmendment,
                 PositionCount = r.PositionCount,
                 TotalValue = r.TotalValue,
+                DeclaredPositionCount = context.SummaryPages.TryGetValue(
+                    r.AccessionNumber,
+                    out var declared
+                )
+                    ? declared.EntryTotal
+                    : null,
+                DeclaredTotalValue = context.SummaryPages.TryGetValue(
+                    r.AccessionNumber,
+                    out var declaredValue
+                )
+                    ? declaredValue.ValueTotal
+                    : null,
             })
             .ToList();
 
@@ -1575,6 +1652,8 @@ public class HoldingsImportService
                             IsAmendment = incoming.IsAmendment,
                             PositionCount = incoming.PositionCount,
                             TotalValue = incoming.TotalValue,
+                            DeclaredPositionCount = incoming.DeclaredPositionCount,
+                            DeclaredTotalValue = incoming.DeclaredTotalValue,
                         }
                 )
                 .RunAsync(cancellationToken);

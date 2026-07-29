@@ -50,6 +50,12 @@ public class ImportContext
         UnmappedCusipTally
     > UnmappedCusips { get; } = [];
 
+    // The filer's own declared totals per accession (summary-page tableEntryTotal /
+    // tableValueTotal, value already era-normalised to dollars). Carried onto the filing rollup
+    // so surfaces can state what the filing declares beside what this platform tracks.
+    public Dictionary<string, (int? EntryTotal, long? ValueTotal)> SummaryPages { get; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
     // The filing whose unmapped CUSIPs are currently being collected, and the CUSIPs already
     // counted for it, so a position split across otherManager legs counts once (see
     // HoldingsImportService.RecordUnmappedCusip). Reset at each accession boundary.
