@@ -11,7 +11,7 @@
 
 An open-source, self-hosted mini Bloomberg Terminal for AI agents. Scrapes, stores, and serves SEC filings, institutional holdings, insider trading, congressional trades, short data, economic indicators, and daily stock prices — and exposes it all via MCP so your AI assistant can query it directly.
 
-**This is the open-source core of [Equibles](https://equibles.com).** Everything here runs on your own hardware, for free, forever. [Equibles Cloud](https://equibles.com/mcp) runs this same core and adds earnings call transcripts and audio, live quotes, options chains, and LLM-extracted KPIs and guidance — see [what the cloud adds](#what-equibles-cloud-adds).
+**This is the open-source core of [Equibles](https://equibles.com).** Everything here runs on your own hardware, for free, forever. [Equibles Cloud](https://equibles.com/mcp) runs this same core and adds earnings call transcripts and audio, live quotes, options chains, and LLM-extracted KPIs and guidance — see [what's included](#whats-included).
 
 > **Don't want to run anything?** Point your AI assistant at `https://mcp.equibles.com/mcp` and get a free API key at [equibles.com/mcp](https://equibles.com/mcp) — 100 requests/day, no card. Per-client setup guides live at [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
@@ -19,36 +19,51 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-| Domain | Data Source | Description |
-|--------|------------|-------------|
-| **SEC Filings** | SEC EDGAR | 10-K, 10-Q, 8-K annual/quarterly/current reports with full-text search |
-| **Financial Statements** | SEC XBRL | Parsed income statement, balance sheet, and cash flow facts per fiscal period |
-| **Holdings** | SEC 13F-HR | Institutional ownership — who owns what, how much, and trend over time |
-| **Fund Filings** | SEC NPORT / N-CEN / Form D | Fund portfolio holdings, registered-fund operations (service providers), and exempt offerings (private placements) |
-| **Investment Advisers** | SEC Form ADV | SEC-registered advisers — assets under management, main office, employee count, fee structure |
-| **Insider Trading** | SEC Form 3/4/144 | Director, officer, and 10% owner transactions, plus proposed (Form 144) sales |
-| **Congressional Trading** | House/Senate disclosures | Stock trades by members of Congress |
-| **Short Data** | SEC / FINRA | Fails-to-deliver (SEC), daily short volume and short interest (FINRA) |
-| **Economic Indicators** | FRED (Federal Reserve) | Interest rates, inflation, employment, GDP, yield spreads, and more |
-| **Stock Prices** | Yahoo Finance | Daily OHLCV prices with technical indicators (SMA, RSI, MACD) |
-| **Futures Positioning** | CFTC | Commitments of Traders (COT) data for 30+ futures contracts |
-| **Market Indicators** | CBOE | VIX volatility index (1990+) and put/call ratios by category |
-| **Government Contracts** | USAspending.gov | Federal contract awards to public companies — amounts, awarding agencies, dates, and NAICS/PSC codes |
-| **FDA Catalysts** | FDA.gov | Advisory-committee (AdComm) meeting calendar — scheduled FDA panel dates, center, and title that act as regulatory catalysts for biotech/pharma stocks |
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **62 MCP tools**, no account, no key. The **Cloud** column is [Equibles Cloud](https://equibles.com/mcp), which runs this exact core over the same protocol with the same tool names and adds 35 more tools, 97 in total.
 
-All of it is scraped, stored, and served by this repo, and reachable over MCP as **62 tools** — except government contracts, which the worker collects but does not yet expose as MCP tools.
+| Domain | Data Source | Self-hosted | Cloud | Description |
+|--------|------------|:---:|:---:|-------------|
+| **SEC Filings** | SEC EDGAR | ✅ | ✅ | 10-K, 10-Q, 8-K annual/quarterly/current reports with full-text search |
+| **Financial Statements** | SEC XBRL | ✅ | ✅ | Parsed income statement, balance sheet, and cash flow facts per fiscal period |
+| **Holdings** | SEC 13F-HR | ✅ | ✅ | Institutional ownership — who owns what, how much, and trend over time |
+| **Fund Filings** | SEC NPORT / N-CEN / Form D | ✅ | ✅ | Fund portfolio holdings, registered-fund operations (service providers), and exempt offerings (private placements) |
+| **Investment Advisers** | SEC Form ADV | ✅ | ✅ | SEC-registered advisers — assets under management, main office, employee count, fee structure |
+| **Insider Trading** | SEC Form 3/4/144 | ✅ | ✅ | Director, officer, and 10% owner transactions, plus proposed (Form 144) sales |
+| **Congressional Trading** | House/Senate disclosures | ✅ | ✅ | Stock trades by members of Congress |
+| **Short Data** | SEC / FINRA | ✅ | ✅ | Fails-to-deliver (SEC), daily short volume and short interest (FINRA) |
+| **Economic Indicators** | FRED (Federal Reserve) | ✅ | ✅ | Interest rates, inflation, employment, GDP, yield spreads, and more |
+| **Stock Prices** | Yahoo Finance | ✅ | ✅ | Daily OHLCV prices with technical indicators (SMA, RSI, MACD) |
+| **Futures Positioning** | CFTC | ✅ | ✅ | Commitments of Traders (COT) data for 30+ futures contracts |
+| **Market Indicators** | CBOE | ✅ | ✅ | VIX volatility index (1990+) and put/call ratios by category |
+| **Government Contracts** | USAspending.gov | Scraped ¹ | ✅ | Federal contract awards to public companies — amounts, awarding agencies, dates, and NAICS/PSC codes |
+| **FDA Catalysts** | FDA.gov | ✅ | ✅ | Advisory-committee (AdComm) meeting calendar — scheduled FDA panel dates, center, and title that act as regulatory catalysts for biotech/pharma stocks |
+| **Earnings Call Transcripts** | Company webcasts | — | ✅ | Full quarterly-call transcripts with speaker attribution, searchable alongside filings |
+| **Earnings Call Audio** | Company webcasts | — | ✅ | The recorded call itself, playable and aligned to the transcript |
+| **Live Quotes** | Licensed market feed | — | ✅ | Real-time US equity quotes |
+| **Options Chains** | Licensed options feed | — | ✅ | Chains by expiration and strike with bid/ask, volume, open interest, implied volatility, and delta/gamma/theta/vega |
+| **Company KPIs** | Filings + earnings releases | — | ✅ | Operating metrics a company reports but XBRL never standardised, plus GAAP-to-non-GAAP bridges |
+| **Guidance** | Earnings releases + calls | — | ✅ | Management's forward guidance, its ranges, and how it moved between quarters |
+| **Buybacks & ATM** | 8-K / 10-Q | — | ✅ | Authorised repurchase programs and at-the-market equity programs, with amounts and dates |
+| **IPO Feed** | SEC S-1 / F-1 | — | ✅ | New registrations with offer terms, underwriters, risk factors, and pre-IPO financials |
+| **Investor Relations** | Company IR sites | — | ✅ | Upcoming events, conference appearances, and IR newsroom releases |
+| **Executives** | SEC 8-K / DEF 14A | — | ✅ | Appointments and departures, plus Summary Compensation Table figures |
+| **Valuation Multiples** | Derived | — | ✅ | Current and historical P/E, P/S, P/B, EV/EBIT, EV/EBITDA and more, with the periods each was computed from |
+| **Screener** | Derived | — | ✅ | Filter the whole US market on valuation, margins, growth, ownership, short data, and dividends |
+| **Smart Money** | Derived | — | ✅ | Insider sentiment scores, super-investor portfolios, and market-wide congressional activity |
+| **Risk Flags** | SEC filings | — | ✅ | Going-concern language and customer-concentration disclosures |
+| **Market Context** | Derived | — | ✅ | Correlated stocks, plus market calendar and open/closed status |
 
-## What Equibles Cloud Adds
+¹ Collected by the worker, but not yet exposed as MCP tools in the self-hosted build.
 
-[Equibles Cloud](https://equibles.com/mcp) runs this exact core — same MCP protocol, same tool names — and layers on **35 more tools** (97 in total). What it adds is not held back from this repo; it is data whose production needs infrastructure you would not stand up at home:
+## Why Some Data Is Cloud-Only
 
-| Added data | Why it isn't in this repo |
-|---|---|
-| Earnings call transcripts and audio | Calls are webcasts, not filings — a browser fleet has to discover and record each one, then GPU speech-to-text with speaker diarization has to run over every call, every quarter |
-| Live US market quotes, options chains | Licensed real-time feeds, plus an always-on streaming service to fan them out |
-| Company KPIs, non-GAAP bridges, guidance, buyback and ATM programs, IPO offer terms, executive changes and compensation | Pulled out of filings, proxies and earnings releases by LLM extraction lanes with verification passes and a human review queue — sustained inference capacity |
-| Investor-relations events and news | Collected from thousands of company IR sites, which needs the same stealth browser fleet as the webcasts |
-| Screener, valuation multiples, correlated stocks, insider sentiment, super investors, going-concern flags, customer concentration, market calendar | Derived, and only meaningful over a fully backfilled corpus of the whole market rather than the tickers you happen to have scraped so far |
+Nothing above is held back from this repo. The cloud-only rows are data whose *production* needs infrastructure you would not stand up at home:
+
+- **Transcripts and audio** — earnings calls are webcasts, not filings. Each one has to be discovered and recorded by a browser fleet, then put through GPU speech-to-text with speaker diarization, every call, every quarter.
+- **Live quotes and options chains** — licensed real-time feeds, plus an always-on streaming service to fan them out. Neither the licence nor the uptime fits in a container on a laptop.
+- **KPIs, guidance, buybacks, IPO terms, executives, risk flags** — pulled out of filings, proxies, and earnings releases by LLM extraction lanes with verification passes and a human review queue, which needs sustained inference capacity.
+- **Investor-relations events and news** — collected from thousands of company IR sites, needing the same stealth browser fleet as the webcasts.
+- **Multiples, screener, smart money, market context** — derived, and only meaningful over a fully backfilled corpus of the whole market rather than the tickers you happen to have scraped so far.
 
 Beyond the data, the cloud is already backfilled and kept current, and it is managed — no scrapers to babysit. This repo is free forever under AGPL-3.0; the cloud has a free tier at 100 requests/day with no card.
 
@@ -264,7 +279,7 @@ Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP trans
 
 ## Tools
 
-This self-hosted build exposes 62 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` exposes 97 — the same 62 plus [35 more](#what-equibles-cloud-adds). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 62 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` exposes 97 — the same 62 plus [35 more](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
