@@ -599,10 +599,16 @@ public class HoldingsImportService
         tally.Add(GetValue(row, "NAMEOFISSUER"), filedDollars);
     }
 
-    // Replaces the parked-CUSIP rows for every quarter this data set covers. Replacing the whole
-    // slice rather than merging into it keeps the queue honest in both directions: re-importing a
-    // data set cannot inflate a count, and an identifier that has since been mapped simply stops
-    // being written instead of lingering as a gap that no longer exists.
+    // Writes this import's unmapped identifiers into the queue without destroying what other
+    // imports contributed. One report date's filings are spread across SEVERAL data sets — the
+    // filing windows straddle quarter boundaries, and amendments land months later — so deleting
+    // a whole report-date slice here let the last data set processed wipe every other one's rows:
+    // Scion's $13.1M Bruker preferred vanished behind a later data set's $3.3M sighting of the
+    // same identifier. Instead, each import replaces only the (CUSIP, quarter) keys it actually
+    // saw, and clears rows whose identifier it can now resolve — that is how a newly-added alias
+    // empties its backlog from the queue on the forced re-import, since a mapped CUSIP appears in
+    // no tally. A key seen by two data sets keeps the most recent import's figures (a floor, not a
+    // census); the queue ranks leads by materiality, so surviving with a floor beats vanishing.
     private async Task FlushUnmappedCusips(
         ImportContext context,
         CancellationToken cancellationToken
@@ -622,37 +628,80 @@ public class HoldingsImportService
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
         var dates = reportDates.ToList();
-        await dbContext
-            .Set<UnmappedCusip>()
-            .Where(u => dates.Contains(u.ReportDate))
-            .ExecuteDeleteAsync(cancellationToken);
+
+        // Identifiers this import resolved are no longer gaps anywhere in the covered window,
+        // whichever data set recorded them.
+        var mappedCusips = context.CusipMapping.Keys.ToList();
+        var cleared =
+            mappedCusips.Count == 0
+                ? 0
+                : await dbContext
+                    .Set<UnmappedCusip>()
+                    .Where(u => dates.Contains(u.ReportDate) && mappedCusips.Contains(u.Cusip))
+                    .ExecuteDeleteAsync(cancellationToken);
 
         if (context.UnmappedCusips.Count == 0)
-            return;
-
-        var rows = context
-            .UnmappedCusips.Select(pair => new UnmappedCusip
+        {
+            if (cleared > 0)
             {
-                Cusip = pair.Key.Cusip,
-                ReportDate = pair.Key.ReportDate,
-                IssuerName = Truncate(pair.Value.IssuerName, MaxIssuerNameLength),
-                Positions = pair.Value.Positions,
-                FiledValue = pair.Value.FiledValue,
-            })
-            .ToList();
+                _logger.LogInformation(
+                    "Cleared {Cleared} parked CUSIP row(s) whose identifier now resolves",
+                    cleared
+                );
+            }
+            return;
+        }
 
-        dbContext.Set<UnmappedCusip>().AddRange(rows);
+        // Update-or-insert per key the import saw; rows for keys only other data sets saw are
+        // untouched. The candidate load is bounded by this import's own distinct CUSIPs.
+        var tallyCusips = context.UnmappedCusips.Keys.Select(key => key.Cusip).Distinct().ToList();
+        var existingByKey = (
+            await dbContext
+                .Set<UnmappedCusip>()
+                .Where(u => dates.Contains(u.ReportDate) && tallyCusips.Contains(u.Cusip))
+                .ToListAsync(cancellationToken)
+        ).ToDictionary(u => (u.Cusip, u.ReportDate));
+
+        foreach (var ((cusip, reportDate), tally) in context.UnmappedCusips)
+        {
+            if (existingByKey.TryGetValue((cusip, reportDate), out var existing))
+            {
+                existing.IssuerName = Truncate(tally.IssuerName, MaxIssuerNameLength);
+                existing.Positions = tally.Positions;
+                existing.FiledValue = tally.FiledValue;
+                existing.CreationTime = DateTime.UtcNow;
+                continue;
+            }
+
+            dbContext
+                .Set<UnmappedCusip>()
+                .Add(
+                    new UnmappedCusip
+                    {
+                        Cusip = cusip,
+                        ReportDate = reportDate,
+                        IssuerName = Truncate(tally.IssuerName, MaxIssuerNameLength),
+                        Positions = tally.Positions,
+                        FiledValue = tally.FiledValue,
+                    }
+                );
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Parked {Count} unmapped CUSIP(s) carrying {Total:N0} filed dollars. Largest: {Largest}",
-            rows.Count,
-            rows.Sum(r => (decimal)r.FiledValue),
+            "Parked {Count} unmapped CUSIP(s) carrying {Total:N0} filed dollars; cleared {Cleared} now-resolved row(s). Largest: {Largest}",
+            context.UnmappedCusips.Count,
+            context.UnmappedCusips.Values.Sum(t => (decimal)t.FiledValue),
+            cleared,
             string.Join(
                 ", ",
-                rows.OrderByDescending(r => r.FiledValue)
+                context
+                    .UnmappedCusips.OrderByDescending(pair => pair.Value.FiledValue)
                     .Take(5)
-                    .Select(r => $"{r.Cusip} ({r.IssuerName}) {r.FiledValue:N0}")
+                    .Select(pair =>
+                        $"{pair.Key.Cusip} ({pair.Value.IssuerName}) {pair.Value.FiledValue:N0}"
+                    )
             )
         );
     }

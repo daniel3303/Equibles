@@ -481,6 +481,12 @@ public class InstitutionalHoldingsTools
                 + "POSITION — the filer profits if the stock falls. Option notional is included in the "
                 + "portfolio total and the percentages above, exactly as the filer reported it._"
         );
+        result.AppendLine(
+            "_Coverage: totals span the U.S.-listed common stock (and its put/call positions) "
+                + "this platform tracks. A 13F can also report security types outside that "
+                + "coverage — preferred shares, bonds, warrants, untracked share classes — so the "
+                + "filing's own declared total can exceed the figure above._"
+        );
 
         return result.ToString();
     }
