@@ -12,6 +12,7 @@ using Equibles.Integrations.Yahoo.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Worker;
 using Equibles.Yahoo.Data.Models;
+using Equibles.Yahoo.HostedService.Configuration;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +33,7 @@ public class YahooPriceImportService
     private readonly TickerMapService _tickerMapService;
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
+    private readonly YahooPriceScraperOptions _scraperOptions;
 
     public YahooPriceImportService(
         IServiceScopeFactory scopeFactory,
@@ -39,7 +41,8 @@ public class YahooPriceImportService
         IYahooFinanceClient yahooClient,
         TickerMapService tickerMapService,
         ErrorReporter errorReporter,
-        IOptions<WorkerOptions> workerOptions
+        IOptions<WorkerOptions> workerOptions,
+        IOptions<YahooPriceScraperOptions> scraperOptions
     )
     {
         _scopeFactory = scopeFactory;
@@ -48,6 +51,7 @@ public class YahooPriceImportService
         _tickerMapService = tickerMapService;
         _errorReporter = errorReporter;
         _workerOptions = workerOptions.Value;
+        _scraperOptions = scraperOptions.Value;
     }
 
     public Task Import(CancellationToken cancellationToken) =>
@@ -660,9 +664,14 @@ public class YahooPriceImportService
             cancellationToken
         );
 
-        var newPrices = MapFreshRows(commonStockId, prices, ticker, today)
-            .Where(p => !existingDates.Contains(p.Date))
-            .ToList();
+        var freshRows = MapFreshRows(commonStockId, prices, ticker, today);
+
+        // Runs before the insert path's early return: a stock whose only unsettled bar is one it
+        // ALREADY stored has nothing new to insert, and that is exactly the stock whose volume
+        // still needs correcting.
+        await ResettleVolumes(ticker, commonStockId, freshRows, today, cancellationToken);
+
+        var newPrices = freshRows.Where(p => !existingDates.Contains(p.Date)).ToList();
 
         if (newPrices.Count == 0)
             return 0;
@@ -672,6 +681,80 @@ public class YahooPriceImportService
         _logger.LogDebug("Inserted {Count} prices for {Ticker}", inserted, ticker);
         return inserted;
     }
+
+    // Corrects stored volumes that were captured before the feed settled them.
+    //
+    // A bar becomes storable the moment its date rolls over in UTC, which is only four hours after
+    // the 20:00 UTC close. The feed serves a daily bar that early with an unsettled volume — the
+    // closing cross and late-reported off-exchange prints are still landing — and revises it upward
+    // overnight. OHLC is right from the start; only volume moves, and for names whose volume
+    // settles late it moves a lot (a quarter of the day's shares is routine). PersistPrices is
+    // insert-only, so that first short figure used to be permanent.
+    //
+    // Re-reading the window off the SAME chart response the stock was already fetching costs no
+    // extra upstream call — ResolveStartDate only widens a request that was going to happen anyway.
+    // Steady state therefore corrects each session's volume when the next session syncs.
+    private async Task<int> ResettleVolumes(
+        string ticker,
+        Guid commonStockId,
+        List<DailyStockPrice> freshRows,
+        DateOnly today,
+        CancellationToken cancellationToken
+    )
+    {
+        var windowStart = ResettleWindowStart(today, _scraperOptions.VolumeResettleWindowDays);
+
+        // Last-wins rather than ToDictionary: a feed that repeats a date must not throw here, and
+        // the insert path already assumes the response holds one bar per date.
+        var fetched = new Dictionary<DateOnly, long>();
+        foreach (var row in freshRows)
+        {
+            if (row.Date >= windowStart)
+                fetched[row.Date] = row.Volume;
+        }
+
+        if (fetched.Count == 0)
+            return 0;
+
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        var stored = await repo.GetAll()
+            .Where(p => p.CommonStockId == commonStockId && p.Date >= windowStart && p.Date < today)
+            .ToListAsync(cancellationToken);
+
+        var corrected = 0;
+        foreach (var row in stored)
+        {
+            if (
+                !fetched.TryGetValue(row.Date, out var volume)
+                || !IsVolumeUpgrade(row.Volume, volume)
+            )
+                continue;
+
+            row.Volume = volume;
+            corrected++;
+        }
+
+        if (corrected == 0)
+            return 0;
+
+        // The rows are tracked, so saving the mutated Volume is enough — no repo.Update, which
+        // would mark every column dirty and clobber a concurrent split reconcile's price basis.
+        await repo.SaveChanges();
+        _logger.LogDebug("Corrected {Count} stored volumes for {Ticker}", corrected, ticker);
+        return corrected;
+    }
+
+    // Settled volume only ever accrues, so a fetched figure below the stored one is a degraded
+    // response (a partial re-serve, a venue dropping out), never a correction. Accepting only
+    // upgrades makes the repair monotone: a flaky feed can never walk a good figure back down.
+    private static bool IsVolumeUpgrade(long stored, long fetched) => fetched > stored;
+
+    // The oldest date whose stored volume is still re-read. Pure so the boundary is pinnable, and
+    // clamped so a zero or negative setting degrades to "today only" — which the settled-bar guard
+    // then empties — rather than reaching back over the whole series.
+    private static DateOnly ResettleWindowStart(DateOnly today, int windowDays) =>
+        today.AddDays(-Math.Max(windowDays, 0));
 
     // Upserts the split events Yahoo returned for this ticker into StockSplit via
     // the CorporateActions capture manager. Resolved in its own scope (mirrors
@@ -1092,11 +1175,21 @@ public class YahooPriceImportService
         if (!HasSettledTradingDay(forwardOnly, today))
             return forwardOnly;
 
+        // Past the same gate, pull the start back over the volume-resettle window so the response
+        // carries the recently-stored bars whose volume may not have settled yet (see
+        // ResettleVolumes). Same ride-along rule as the heal below: it widens a request that was
+        // already being made, never triggers one, so an up-to-date stock still costs zero calls.
+        var startDate = Min(
+            forwardOnly,
+            ResettleWindowStart(today, _scraperOptions.VolumeResettleWindowDays)
+        );
+
         var windowStart = today.AddDays(-GapHealWindowDays);
-        // Already reaching back past the window (a never-synced stock, or one mid-backfill) — it is
-        // going to re-request those sessions anyway, so there is nothing to widen.
-        if (forwardOnly <= windowStart)
-            return forwardOnly;
+        // Already reaching back past the window (a never-synced stock, one mid-backfill, or a
+        // resettle window widened past the heal window) — it is going to re-request those sessions
+        // anyway, so there is nothing to widen.
+        if (startDate <= windowStart)
+            return startDate;
 
         List<DateOnly> storedDates;
         DateOnly? earliestStored;
@@ -1123,8 +1216,10 @@ public class YahooPriceImportService
             today,
             hasHistoryBeforeWindow: earliestStored < windowStart
         );
-        return earliestGap is { } gap && gap < forwardOnly ? gap : forwardOnly;
+        return earliestGap is { } gap && gap < startDate ? gap : startDate;
     }
+
+    private static DateOnly Min(DateOnly left, DateOnly right) => left < right ? left : right;
 
     // The earliest settled trading day in [windowStart, today) with no stored bar, or null when the
     // window is complete. Pure so the rule is pinnable without a database.

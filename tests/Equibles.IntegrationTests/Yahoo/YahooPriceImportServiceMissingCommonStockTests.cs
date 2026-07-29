@@ -12,6 +12,7 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Worker;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
+using Equibles.Yahoo.HostedService.Configuration;
 using Equibles.Yahoo.HostedService.Services;
 using Equibles.Yahoo.Repositories;
 using Microsoft.Extensions.DependencyInjection;
@@ -71,7 +72,8 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
             _yahooClient,
             new TickerMapService(scopeFactory),
             errorReporter,
-            Options.Create(new WorkerOptions())
+            Options.Create(new WorkerOptions()),
+            Options.Create(new YahooPriceScraperOptions())
         );
 
         _yahooClient.GetKeyStatistics(Arg.Any<string>()).Returns((KeyStatistics)null);
