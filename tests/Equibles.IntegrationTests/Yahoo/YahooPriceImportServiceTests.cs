@@ -15,6 +15,7 @@ using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Worker;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
+using Equibles.Yahoo.HostedService.Configuration;
 using Equibles.Yahoo.HostedService.Services;
 using Equibles.Yahoo.Repositories;
 using Microsoft.Extensions.DependencyInjection;
@@ -79,7 +80,8 @@ public class YahooPriceImportServiceTests : IDisposable
             _yahooClient,
             tickerMapService,
             _errorReporter,
-            Options.Create(_workerOptions)
+            Options.Create(_workerOptions),
+            Options.Create(new YahooPriceScraperOptions())
         );
     }
 

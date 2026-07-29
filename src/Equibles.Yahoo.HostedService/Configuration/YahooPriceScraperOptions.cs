@@ -12,4 +12,17 @@ public class YahooPriceScraperOptions : ScraperOptions
     /// can be short (fresh daily closes) without multiplying the per-stock enrichment traffic.
     /// </summary>
     public int EnrichmentIntervalHours { get; set; } = 24;
+
+    /// <summary>
+    /// How many days back a stored bar's volume is still re-read from the feed and corrected
+    /// upward. A bar is stored as soon as its date rolls over in UTC — four hours after the US
+    /// close — but the feed is still serving an unsettled volume then, and revises it upward
+    /// overnight as the closing cross and late-reported off-exchange prints land. Without a
+    /// re-read the first, short figure is permanent (the importer is otherwise insert-only).
+    /// The default covers the previous session across a weekend, which is all steady-state
+    /// operation needs. Raise it temporarily to repair a longer stretch of stored volumes: the
+    /// window only ever widens a fetch that was already going to happen, so a wider setting costs
+    /// no extra upstream calls, only a larger response and more rows compared per stock.
+    /// </summary>
+    public int VolumeResettleWindowDays { get; set; } = 5;
 }
