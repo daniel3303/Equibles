@@ -19,9 +19,9 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-Everything marked **Self-hosted** is scraped, stored, and served by this repo — **62 MCP tools**, no account, no key. The **Cloud** column is [Equibles Cloud](https://equibles.com/mcp), which runs this exact core over the same protocol with the same tool names and adds 35 more tools, 97 in total.
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **62 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds 35 more tools, 97 in total.
 
-| Domain | Data Source | Self-hosted | Cloud | Description |
+| Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
 | **SEC Filings** | SEC EDGAR | ✅ | ✅ | 10-K, 10-Q, 8-K annual/quarterly/current reports with full-text search |
 | **Financial Statements** | SEC XBRL | ✅ | ✅ | Parsed income statement, balance sheet, and cash flow facts per fiscal period |
