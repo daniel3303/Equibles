@@ -11,11 +11,49 @@
 
 An open-source, self-hosted mini Bloomberg Terminal for AI agents. Scrapes, stores, and serves SEC filings, institutional holdings, insider trading, congressional trades, short data, economic indicators, and daily stock prices — and exposes it all via MCP so your AI assistant can query it directly.
 
-Powers [equibles.com](https://equibles.com).
+**This is the open-source core of [Equibles](https://equibles.com).** Everything here runs on your own hardware, for free, forever. The hosted service at [equibles.com](https://equibles.com) runs this same core and adds the datasets that need a paid pipeline behind them — earnings call transcripts and audio, live US market quotes, options chains, and LLM-extracted company KPIs and guidance.
+
+> **Want those without running anything?** Point your AI assistant at `https://mcp.equibles.com/mcp` and get a free API key at [equibles.com](https://equibles.com) — 100 requests/day, no card. Per-client setup guides live at [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
-> **Prefer not to self-host?** The MCP server also runs as a managed service at `https://mcp.equibles.com/mcp` with a free tier (100 requests/day). Per-client setup guides live at [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+## Self-hosted vs. Equibles Cloud
+
+Same core, same MCP protocol, same tool names. The cloud adds the data this repo can't scrape for free.
+
+| | Self-hosted (this repo) | Equibles Cloud |
+|---|---|---|
+| **MCP tools** | **62** | **97** |
+| SEC filings (10-K/10-Q/8-K) + full-text search | ✅ | ✅ |
+| XBRL financial statements | ✅ | ✅ |
+| 13F holdings, fund filings (NPORT / N-CEN / Form D) | ✅ | ✅ |
+| Investment advisers (Form ADV) | ✅ | ✅ |
+| Insider trading (Form 3/4/144) | ✅ | ✅ |
+| Congressional trading | ✅ | ✅ |
+| Short data — fails-to-deliver, short volume, short interest | ✅ | ✅ |
+| FRED economic indicators | ✅ | ✅ |
+| CFTC futures positioning, CBOE VIX & put/call | ✅ | ✅ |
+| Daily stock prices + technical indicators | ✅ | ✅ |
+| FDA advisory-committee calendar | ✅ | ✅ |
+| Government contract awards (USAspending) | Scraped, no MCP tools | ✅ |
+| **Earnings call transcripts** | — | ✅ |
+| **Earnings call audio** | — | ✅ |
+| **Live US market quotes** | — | ✅ |
+| **Options chains** | — | ✅ |
+| Company KPIs and non-GAAP bridges | — | ✅ |
+| Management guidance | — | ✅ |
+| Buyback and ATM programs | — | ✅ |
+| IPO feed | — | ✅ |
+| Investor-relations events and news | — | ✅ |
+| Executive changes and compensation | — | ✅ |
+| Valuation multiples, current and historical | — | ✅ |
+| Stock screener | — | ✅ |
+| Insider sentiment scores, super investors, market-wide congress activity | — | ✅ |
+| Going-concern flags, customer concentration | — | ✅ |
+| Correlated stocks, market calendar and status | — | ✅ |
+| **Data backfill** | You scrape it yourself, from scratch | Already backfilled and kept current |
+| **Operations** | You host, monitor, and maintain it | Managed |
+| **Price** | Free — AGPL-3.0 | Free tier: 100 requests/day, no card |
 
 ## What's Included
 
@@ -246,7 +284,7 @@ Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP trans
 
 ## Tools
 
-This self-hosted build exposes 62 tools over MCP; the hosted server at `https://mcp.equibles.com/mcp` adds 28 more commercial tools — see [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server) for the full catalog and client setup.
+This self-hosted build exposes 62 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` exposes 97 — the same 62 plus 35 more covering earnings call transcripts and audio, live quotes, options chains, company KPIs, guidance, buybacks, IPOs, and screening (see the [comparison above](#self-hosted-vs-equibles-cloud)). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
