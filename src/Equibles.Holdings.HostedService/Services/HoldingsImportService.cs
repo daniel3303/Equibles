@@ -560,10 +560,26 @@ public class HoldingsImportService
         ImportContext context,
         Dictionary<string, string> row,
         string cusip,
+        string accession,
         SubmissionRow submission
     )
     {
         if (string.IsNullOrWhiteSpace(cusip))
+            return;
+
+        // One filing reporting a security across several otherManager legs is ONE position we
+        // failed to map, not several. Counting raw rows inflates both the position count and the
+        // dollars the queue ranks on — the tracked lane collapses those legs in AddOrMergeHolding,
+        // so the untracked lane has to collapse them too or the two are not comparable. Rows for
+        // an accession arrive contiguously, so remembering only the current filing's CUSIPs is
+        // enough and keeps this bounded.
+        if (!string.Equals(context.UnmappedCusipAccession, accession, StringComparison.Ordinal))
+        {
+            context.UnmappedCusipAccession = accession;
+            context.UnmappedCusipsSeenInAccession.Clear();
+        }
+
+        if (!context.UnmappedCusipsSeenInAccession.Add(cusip))
             return;
 
         if (!TryParseDateOnly(submission.PeriodOfReport, out var reportDate))
@@ -1032,7 +1048,7 @@ public class HoldingsImportService
             if (!context.CusipMapping.TryGetValue(cusip, out var commonStockId))
             {
                 totalSkipped++;
-                RecordUnmappedCusip(context, row, cusip, submission);
+                RecordUnmappedCusip(context, row, cusip, accession, submission);
                 continue;
             }
 
@@ -1154,6 +1170,15 @@ public class HoldingsImportService
         {
             existing.Shares += holding.Shares;
             existing.Value += holding.Value;
+            // The filed value has to accumulate with the value it is there to audit. A filer that
+            // splits one position across otherManager codes files a value per leg, so keeping only
+            // the first leg's figure leaves the merged row claiming a fraction of what was filed —
+            // and every such position then reads as a gross derived-vs-filed disagreement that is
+            // really an artefact of this merge.
+            existing.FiledValue =
+                existing.FiledValue is null && holding.FiledValue is null
+                    ? null
+                    : (existing.FiledValue ?? 0) + (holding.FiledValue ?? 0);
             existing.VotingAuthSole += holding.VotingAuthSole;
             existing.VotingAuthShared += holding.VotingAuthShared;
             existing.VotingAuthNone += holding.VotingAuthNone;
