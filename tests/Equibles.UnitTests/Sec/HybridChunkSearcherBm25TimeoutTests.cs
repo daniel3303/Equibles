@@ -104,6 +104,58 @@ public class HybridChunkSearcherBm25TimeoutTests
     }
 
     [Fact]
+    public async Task ConjunctiveCompletesEmpty_DisjunctiveTimeout_SurfacesTheTimeout()
+    {
+        // The conjunctive pass proved nothing (its empty is a SUBSET question — the
+        // disjunctive superset might still have matched), so a timed-out fallback leaves
+        // the empty unproven and the timeout must surface.
+        var chunkRepository = new TimeoutChunkRepository(disjunctiveTimesOut: true);
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        await Assert.ThrowsAsync<ChunkSearchTimeoutException>(() =>
+            searcher.Search("query", 5, disjunctiveFallback: true)
+        );
+    }
+
+    [Fact]
+    public async Task NonTimeoutFault_EscapesUntouched()
+    {
+        // The degrade is strictly for timeouts — a real fault must not be swallowed
+        // into an empty pool.
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveError: new InvalidOperationException("index corrupt")
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            searcher.Search("query", 5, disjunctiveFallback: true)
+        );
+        Assert.Empty(chunkRepository.DisjunctiveBudgets);
+    }
+
+    [Fact]
+    public async Task ConjunctiveTimeout_FallbackRunsOnTheTightenedBudget()
+    {
+        // The pass after a timed-out pass gets a reduced statement budget so the pair
+        // stays bounded; a fallback after a HEALTHY short pass keeps the default.
+        var chunk = new Chunk { Id = Guid.NewGuid(), Content = "broadened match" };
+        var timedOut = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            disjunctiveResults: [chunk],
+            allChunks: [chunk]
+        );
+        await NewSearcher(timedOut, new StubEmbeddingRepository([]))
+            .Search("query", 5, disjunctiveFallback: true);
+
+        var healthy = new TimeoutChunkRepository(disjunctiveResults: [chunk], allChunks: [chunk]);
+        await NewSearcher(healthy, new StubEmbeddingRepository([]))
+            .Search("query", 5, disjunctiveFallback: true);
+
+        Assert.NotNull(Assert.Single(timedOut.DisjunctiveBudgets));
+        Assert.Null(Assert.Single(healthy.DisjunctiveBudgets));
+    }
+
+    [Fact]
     public async Task ConjunctiveTimeout_TickerScoped_CorpusArmEmpty_SurfacesTheTimeout()
     {
         // The vector arm ran but produced nothing to rank — the empty result is still

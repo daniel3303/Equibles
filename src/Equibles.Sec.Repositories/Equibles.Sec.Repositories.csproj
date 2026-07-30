@@ -3,4 +3,8 @@
     <ProjectReference Include="..\Equibles.Sec.Data\Equibles.Sec.Data.csproj" />
     <ProjectReference Include="..\Equibles.Search.Abstractions\Equibles.Search.Abstractions.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The statement-timeout classification rules are pinned by unit tests. -->
+    <InternalsVisibleTo Include="Equibles.UnitTests" />
+  </ItemGroup>
 </Project>
