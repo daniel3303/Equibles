@@ -19,7 +19,11 @@ namespace Equibles.Sec.BusinessLogic.Search;
 /// the searcher never throws on the vector path and never returns fewer hits than BM25 alone.
 /// A BM25 pass that blows its statement budget (<see cref="ChunkSearchTimeoutException"/>) degrades
 /// the same way — the other pass and the vector arm still run; the timeout only resurfaces when the
-/// search would otherwise return a false "no matches".
+/// search would otherwise return a false "no matches". A non-empty degraded result may therefore be
+/// semantic-only (the keyword passes timed out while the vector arm answered) — that trade is
+/// accepted deliberately: a somewhat weaker ranking beats an error, and the warning log is the
+/// trace. The pass after a timed-out pass runs on a tighter statement budget, so one search can
+/// never hold a connection for much more than a single full budget plus that reduced one.
 /// </summary>
 [Service(ServiceLifetime.Scoped)]
 public class HybridChunkSearcher
@@ -52,6 +56,13 @@ public class HybridChunkSearcher
     // discards a dominant filer's surplus hits, so the pool must hold enough distinct
     // companies to refill the requested result count.
     private const int PerCompanyOverFetchFactor = 5;
+
+    // Statement budget for a BM25 pass that runs AFTER another pass already timed out.
+    // The timed-out pass warmed the index pages it died on (measured on the production
+    // corpus: 6.2s cold vs 1.25s for the warm disjunctive pass), so a tighter budget
+    // still lets the degrade succeed while bounding what one search can pin a database
+    // connection for — the pair can never burn more than one full budget plus this.
+    private const int DegradedPassTimeoutSeconds = 3;
 
     public async Task<List<Chunk>> Search(
         string query,
@@ -129,16 +140,6 @@ public class HybridChunkSearcher
             bm25Timeout = exception;
         }
 
-        // An empty result after a timed-out BM25 pass is NOT a proven "no matches" —
-        // returning it would read as "the filings say nothing about this". Surface the
-        // timeout instead; a retry hits the index pages the failed pass just warmed.
-        List<Chunk> ThrowIfEmptyAfterTimeout(List<Chunk> results)
-        {
-            if (results.Count == 0 && bm25Timeout != null)
-                ExceptionDispatchInfo.Capture(bm25Timeout).Throw();
-            return results;
-        }
-
         // Opt-in recall fallback: BM25 ANDs every query token, so a wordy natural-language
         // query where a single token has no match ("drivers" vs the filing's "driven")
         // excludes every on-point chunk. When the conjunctive pass can't fill the request,
@@ -158,6 +159,10 @@ public class HybridChunkSearcher
                     startDate,
                     endDate,
                     conjunctive: false,
+                    // After a timed-out conjunctive pass the fallback runs on the pages
+                    // that pass just warmed — tighten its budget so the pair stays
+                    // bounded (see DegradedPassTimeoutSeconds).
+                    commandTimeoutSeconds: bm25Timeout != null ? DegradedPassTimeoutSeconds : null,
                     cancellationToken: cancellationToken
                 );
                 var seen = bm25.Select(chunk => chunk.Id).ToHashSet();
@@ -175,6 +180,18 @@ public class HybridChunkSearcher
                 );
                 bm25Timeout ??= exception;
             }
+        }
+
+        // An empty result after a timed-out BM25 pass is NOT a proven "no matches" —
+        // returning it would read as "the filings say nothing about this". Surface the
+        // timeout instead; a retry hits the index pages the failed passes just warmed.
+        // Declared below the fallback block on purpose: it reads bm25Timeout at call
+        // time, and every mutation of that variable happens above this line.
+        List<Chunk> ThrowIfEmptyAfterTimeout(List<Chunk> results)
+        {
+            if (results.Count == 0 && bm25Timeout != null)
+                ExceptionDispatchInfo.Capture(bm25Timeout).Throw();
+            return results;
         }
 
         // With only the pool re-rank available, an empty BM25 pool leaves the semantic arm

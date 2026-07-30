@@ -32,6 +32,7 @@ internal sealed class StubChunkRepository : ChunkRepository
         DateOnly? startDate = null,
         DateOnly? endDate = null,
         bool conjunctive = true,
+        int? commandTimeoutSeconds = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -41,19 +42,27 @@ internal sealed class StubChunkRepository : ChunkRepository
     public override IQueryable<Chunk> GetAll() => new TestAsyncEnumerable<Chunk>(_allChunks);
 }
 
-// BM25 stub whose passes can individually time out — models the cold-index case where the
-// per-statement budget fires. A pass that doesn't time out serves its canned results.
+// BM25 stub whose passes can individually time out (or fault with an arbitrary exception) —
+// models the cold-index case where the per-statement budget fires. A pass that doesn't fail
+// serves its canned results, and every pass records the statement budget it was handed so
+// tests can pin the tightened degrade budget.
 internal sealed class TimeoutChunkRepository : ChunkRepository
 {
     private readonly bool _conjunctiveTimesOut;
     private readonly bool _disjunctiveTimesOut;
+    private readonly Exception _conjunctiveError;
     private readonly List<Chunk> _conjunctiveResults;
     private readonly List<Chunk> _disjunctiveResults;
     private readonly List<Chunk> _allChunks;
 
+    public List<int?> ConjunctiveBudgets { get; } = [];
+
+    public List<int?> DisjunctiveBudgets { get; } = [];
+
     public TimeoutChunkRepository(
         bool conjunctiveTimesOut = false,
         bool disjunctiveTimesOut = false,
+        Exception conjunctiveError = null,
         List<Chunk> conjunctiveResults = null,
         List<Chunk> disjunctiveResults = null,
         List<Chunk> allChunks = null
@@ -62,6 +71,7 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
     {
         _conjunctiveTimesOut = conjunctiveTimesOut;
         _disjunctiveTimesOut = disjunctiveTimesOut;
+        _conjunctiveError = conjunctiveError;
         _conjunctiveResults = conjunctiveResults ?? [];
         _disjunctiveResults = disjunctiveResults ?? [];
         _allChunks = allChunks ?? [];
@@ -77,9 +87,13 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         DateOnly? startDate = null,
         DateOnly? endDate = null,
         bool conjunctive = true,
+        int? commandTimeoutSeconds = null,
         CancellationToken cancellationToken = default
     )
     {
+        (conjunctive ? ConjunctiveBudgets : DisjunctiveBudgets).Add(commandTimeoutSeconds);
+        if (conjunctive && _conjunctiveError != null)
+            throw _conjunctiveError;
         if (conjunctive ? _conjunctiveTimesOut : _disjunctiveTimesOut)
             throw new ChunkSearchTimeoutException(
                 "statement budget elapsed",

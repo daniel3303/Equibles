@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Equibles.Data;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data.Models;
@@ -20,6 +21,8 @@ public class ChunkRepository : BaseRepository<Chunk>
         : base(dbContext) { }
 
     // virtual: unit tests stub the search seam by subclassing (no BM25 index in a unit run).
+    // commandTimeoutSeconds overrides the default statement budget for this one call — the
+    // searcher tightens it on a degrade pass that follows an already timed-out pass.
     public virtual async Task<List<Chunk>> HybridSearch(
         string searchText,
         int maxResults,
@@ -30,6 +33,7 @@ public class ChunkRepository : BaseRepository<Chunk>
         DateOnly? startDate = null,
         DateOnly? endDate = null,
         bool conjunctive = true,
+        int? commandTimeoutSeconds = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -126,8 +130,10 @@ public class ChunkRepository : BaseRepository<Chunk>
         // statement independently of pdb.parse / pdb.score honouring the
         // cancellation token, then restore the prior value so other queries
         // sharing this DbContext are not affected.
+        var timeoutSeconds = commandTimeoutSeconds ?? HybridSearchCommandTimeoutSeconds;
         var originalTimeout = DbContext.Database.GetCommandTimeout();
-        DbContext.Database.SetCommandTimeout(HybridSearchCommandTimeoutSeconds);
+        DbContext.Database.SetCommandTimeout(timeoutSeconds);
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             return await query
@@ -136,7 +142,10 @@ public class ChunkRepository : BaseRepository<Chunk>
                 .ToListAsync(cancellationToken);
         }
         catch (Exception exception)
-            when (exception is not OperationCanceledException && IsStatementTimeout(exception))
+            when (exception is not OperationCanceledException
+                && !cancellationToken.IsCancellationRequested
+                && IsStatementTimeout(exception, stopwatch.Elapsed, timeoutSeconds)
+            )
         {
             // The hard CommandTimeout above fired (a cold BM25 index after a Postgres
             // restart can push a long multi-term query past the budget). Surface it as a
@@ -144,7 +153,7 @@ public class ChunkRepository : BaseRepository<Chunk>
             // answer — instead of failing the whole search, and so an empty result is
             // never conflated with "no matches".
             throw new ChunkSearchTimeoutException(
-                $"BM25 chunk search exceeded its {HybridSearchCommandTimeoutSeconds}s statement budget.",
+                $"BM25 chunk search exceeded its {timeoutSeconds}s statement budget.",
                 exception
             );
         }
@@ -154,18 +163,34 @@ public class ChunkRepository : BaseRepository<Chunk>
         }
     }
 
+    // How far past the statement budget an elapsed run may land and still be attributed to
+    // it (the cancel round-trip adds a moment). Anything slower is some other wait.
+    private const int StatementTimeoutSlackSeconds = 2;
+
     // Npgsql surfaces its CommandTimeout-triggered cancellation either as the raw backend
     // error (PostgresException 57014 "canceling statement due to user request") or wrapped
     // in an NpgsqlException with a TimeoutException inside, depending on where in the read
-    // loop the cancel lands — walk the chain and match both shapes. A caller-requested
-    // cancellation surfaces as OperationCanceledException and is excluded at the catch site.
-    private static bool IsStatementTimeout(Exception exception)
+    // loop the cancel lands — walk the chain and match both shapes. The bare-TimeoutException
+    // shape is only trusted when the run actually lasted about the statement budget: a pool
+    // exhaustion or connect timeout carries the same TimeoutException but elapses on the
+    // connection-string timeout (15s default), and relabelling THAT as the statement budget
+    // would send the caller into a doomed degrade pass against a database it cannot reach.
+    // A caller-requested cancellation surfaces as OperationCanceledException (or trips the
+    // token) and is excluded at the catch site.
+    // internal: the classification rules are pinned by unit tests.
+    internal static bool IsStatementTimeout(
+        Exception exception,
+        TimeSpan elapsed,
+        int budgetSeconds
+    )
     {
+        var withinBudgetWindow =
+            elapsed <= TimeSpan.FromSeconds(budgetSeconds + StatementTimeoutSlackSeconds);
         for (var current = exception; current != null; current = current.InnerException)
         {
             if (current is PostgresException { SqlState: PostgresErrorCodes.QueryCanceled })
                 return true;
-            if (current is TimeoutException)
+            if (current is TimeoutException && withinBudgetWindow)
                 return true;
         }
 
