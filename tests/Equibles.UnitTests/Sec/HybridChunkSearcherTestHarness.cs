@@ -41,6 +41,56 @@ internal sealed class StubChunkRepository : ChunkRepository
     public override IQueryable<Chunk> GetAll() => new TestAsyncEnumerable<Chunk>(_allChunks);
 }
 
+// BM25 stub whose passes can individually time out — models the cold-index case where the
+// per-statement budget fires. A pass that doesn't time out serves its canned results.
+internal sealed class TimeoutChunkRepository : ChunkRepository
+{
+    private readonly bool _conjunctiveTimesOut;
+    private readonly bool _disjunctiveTimesOut;
+    private readonly List<Chunk> _conjunctiveResults;
+    private readonly List<Chunk> _disjunctiveResults;
+    private readonly List<Chunk> _allChunks;
+
+    public TimeoutChunkRepository(
+        bool conjunctiveTimesOut = false,
+        bool disjunctiveTimesOut = false,
+        List<Chunk> conjunctiveResults = null,
+        List<Chunk> disjunctiveResults = null,
+        List<Chunk> allChunks = null
+    )
+        : base(null)
+    {
+        _conjunctiveTimesOut = conjunctiveTimesOut;
+        _disjunctiveTimesOut = disjunctiveTimesOut;
+        _conjunctiveResults = conjunctiveResults ?? [];
+        _disjunctiveResults = disjunctiveResults ?? [];
+        _allChunks = allChunks ?? [];
+    }
+
+    public override Task<List<Chunk>> HybridSearch(
+        string searchText,
+        int maxResults,
+        string ticker = null,
+        IReadOnlyCollection<string> excludeTickers = null,
+        Guid? documentId = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
+        DateOnly? startDate = null,
+        DateOnly? endDate = null,
+        bool conjunctive = true,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (conjunctive ? _conjunctiveTimesOut : _disjunctiveTimesOut)
+            throw new ChunkSearchTimeoutException(
+                "statement budget elapsed",
+                new TimeoutException()
+            );
+        return Task.FromResult(conjunctive ? _conjunctiveResults : _disjunctiveResults);
+    }
+
+    public override IQueryable<Chunk> GetAll() => new TestAsyncEnumerable<Chunk>(_allChunks);
+}
+
 internal sealed class StubEmbeddingRepository : EmbeddingRepository
 {
     private readonly List<Guid> _similarChunkIds;
