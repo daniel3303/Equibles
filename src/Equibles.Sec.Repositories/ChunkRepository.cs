@@ -3,6 +3,7 @@ using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Equibles.Sec.Repositories;
 
@@ -134,9 +135,40 @@ public class ChunkRepository : BaseRepository<Chunk>
                 .Take(maxResults)
                 .ToListAsync(cancellationToken);
         }
+        catch (Exception exception)
+            when (exception is not OperationCanceledException && IsStatementTimeout(exception))
+        {
+            // The hard CommandTimeout above fired (a cold BM25 index after a Postgres
+            // restart can push a long multi-term query past the budget). Surface it as a
+            // typed timeout so callers can degrade — run another pass, let the vector arm
+            // answer — instead of failing the whole search, and so an empty result is
+            // never conflated with "no matches".
+            throw new ChunkSearchTimeoutException(
+                $"BM25 chunk search exceeded its {HybridSearchCommandTimeoutSeconds}s statement budget.",
+                exception
+            );
+        }
         finally
         {
             DbContext.Database.SetCommandTimeout(originalTimeout);
         }
+    }
+
+    // Npgsql surfaces its CommandTimeout-triggered cancellation either as the raw backend
+    // error (PostgresException 57014 "canceling statement due to user request") or wrapped
+    // in an NpgsqlException with a TimeoutException inside, depending on where in the read
+    // loop the cancel lands — walk the chain and match both shapes. A caller-requested
+    // cancellation surfaces as OperationCanceledException and is excluded at the catch site.
+    private static bool IsStatementTimeout(Exception exception)
+    {
+        for (var current = exception; current != null; current = current.InnerException)
+        {
+            if (current is PostgresException { SqlState: PostgresErrorCodes.QueryCanceled })
+                return true;
+            if (current is TimeoutException)
+                return true;
+        }
+
+        return false;
     }
 }

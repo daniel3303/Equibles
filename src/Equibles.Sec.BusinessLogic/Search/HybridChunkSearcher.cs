@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Equibles.Core.AutoWiring;
 using Equibles.Sec.BusinessLogic.Embeddings;
 using Equibles.Sec.Data.Models;
@@ -16,6 +17,9 @@ namespace Equibles.Sec.BusinessLogic.Search;
 /// with Reciprocal Rank Fusion. The semantic arm is strictly additive: if embeddings are disabled,
 /// the query can't be embedded, or the vector lookup fails, the result is the plain BM25 ranking —
 /// the searcher never throws on the vector path and never returns fewer hits than BM25 alone.
+/// A BM25 pass that blows its statement budget (<see cref="ChunkSearchTimeoutException"/>) degrades
+/// the same way — the other pass and the vector arm still run; the timeout only resurfaces when the
+/// search would otherwise return a false "no matches".
 /// </summary>
 [Service(ServiceLifetime.Scoped)]
 public class HybridChunkSearcher
@@ -96,26 +100,11 @@ public class HybridChunkSearcher
         if (maxResultsPerCompany > 0)
             bm25Limit = Math.Max(bm25Limit, maxResults * PerCompanyOverFetchFactor);
 
-        var bm25 = await _chunkRepository.HybridSearch(
-            query,
-            bm25Limit,
-            ticker,
-            excludeTickers,
-            documentId,
-            documentTypes,
-            startDate,
-            endDate,
-            cancellationToken: cancellationToken
-        );
-
-        // Opt-in recall fallback: BM25 ANDs every query token, so a wordy natural-language
-        // query where a single token has no match ("drivers" vs the filing's "driven")
-        // excludes every on-point chunk. When the conjunctive pass can't fill the request,
-        // top up from a disjunctive (any-token) pass — conjunctive hits keep their rank and
-        // the broader hits only append after them, so precise matches never lose position.
-        if (disjunctiveFallback && bm25.Count < maxResults)
+        List<Chunk> bm25;
+        ChunkSearchTimeoutException bm25Timeout = null;
+        try
         {
-            var disjunctive = await _chunkRepository.HybridSearch(
+            bm25 = await _chunkRepository.HybridSearch(
                 query,
                 bm25Limit,
                 ticker,
@@ -124,20 +113,79 @@ public class HybridChunkSearcher
                 documentTypes,
                 startDate,
                 endDate,
-                conjunctive: false,
                 cancellationToken: cancellationToken
             );
-            var seen = bm25.Select(chunk => chunk.Id).ToHashSet();
-            bm25 = bm25.Concat(disjunctive.Where(chunk => !seen.Contains(chunk.Id))).ToList();
+        }
+        catch (ChunkSearchTimeoutException exception)
+        {
+            // A cold BM25 index (first touch after a Postgres restart) can push a long
+            // conjunctive query past its statement budget. Degrade to an empty pool
+            // instead of failing the whole search: the disjunctive fallback and the
+            // corpus vector arm below can still answer — and the timed-out statement
+            // itself warmed the index pages, so they usually do. The timeout is kept so
+            // an empty final result surfaces it rather than reading as "no matches".
+            _logger.LogWarning(exception, "Conjunctive BM25 pass timed out; degrading");
+            bm25 = [];
+            bm25Timeout = exception;
+        }
+
+        // An empty result after a timed-out BM25 pass is NOT a proven "no matches" —
+        // returning it would read as "the filings say nothing about this". Surface the
+        // timeout instead; a retry hits the index pages the failed pass just warmed.
+        List<Chunk> ThrowIfEmptyAfterTimeout(List<Chunk> results)
+        {
+            if (results.Count == 0 && bm25Timeout != null)
+                ExceptionDispatchInfo.Capture(bm25Timeout).Throw();
+            return results;
+        }
+
+        // Opt-in recall fallback: BM25 ANDs every query token, so a wordy natural-language
+        // query where a single token has no match ("drivers" vs the filing's "driven")
+        // excludes every on-point chunk. When the conjunctive pass can't fill the request,
+        // top up from a disjunctive (any-token) pass — conjunctive hits keep their rank and
+        // the broader hits only append after them, so precise matches never lose position.
+        if (disjunctiveFallback && bm25.Count < maxResults)
+        {
+            try
+            {
+                var disjunctive = await _chunkRepository.HybridSearch(
+                    query,
+                    bm25Limit,
+                    ticker,
+                    excludeTickers,
+                    documentId,
+                    documentTypes,
+                    startDate,
+                    endDate,
+                    conjunctive: false,
+                    cancellationToken: cancellationToken
+                );
+                var seen = bm25.Select(chunk => chunk.Id).ToHashSet();
+                bm25 = bm25.Concat(disjunctive.Where(chunk => !seen.Contains(chunk.Id))).ToList();
+                // The disjunctive pass matches a superset of the conjunctive pass, so its
+                // completed result also answers for a timed-out conjunctive pass — an
+                // empty pool now genuinely means "no matches", not "ran out of budget".
+                bm25Timeout = null;
+            }
+            catch (ChunkSearchTimeoutException exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Disjunctive BM25 fallback timed out; keeping the conjunctive results"
+                );
+                bm25Timeout ??= exception;
+            }
         }
 
         // With only the pool re-rank available, an empty BM25 pool leaves the semantic arm
         // nothing to work on; with the corpus arm safe (Table mode, any document scope, or
         // Auto + ticker scope) the vector ranking can carry the result alone.
         if (!semanticActive || (bm25.Count == 0 && !corpusArmSafe))
-            return ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
-                .Take(maxResults)
-                .ToList();
+            return ThrowIfEmptyAfterTimeout(
+                ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
+                    .Take(maxResults)
+                    .ToList()
+            );
 
         // Bound the whole semantic arm: the global search aggregator abandons a slow provider but
         // doesn't cancel it, and the embedding server is shared with the backfill — so cap the
@@ -159,9 +207,11 @@ public class HybridChunkSearcher
             semanticCts.Token
         );
         if (vectorIds.Count == 0)
-            return ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
-                .Take(maxResults)
-                .ToList();
+            return ThrowIfEmptyAfterTimeout(
+                ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
+                    .Take(maxResults)
+                    .ToList()
+            );
 
         var bm25Ids = bm25.Select(chunk => chunk.Id).ToList();
         // Fuse the full pool (not just maxResults): the pool controls below discard
@@ -169,9 +219,11 @@ public class HybridChunkSearcher
         var fusedIds = RrfFusion.Fuse([bm25Ids, vectorIds], _options.RrfK).ToList();
 
         var fused = await MaterializeInOrder(fusedIds, bm25, cancellationToken);
-        return ApplyPoolControls(fused, excludeTickers, documentTypes, maxResultsPerCompany)
-            .Take(maxResults)
-            .ToList();
+        return ThrowIfEmptyAfterTimeout(
+            ApplyPoolControls(fused, excludeTickers, documentTypes, maxResultsPerCompany)
+                .Take(maxResults)
+                .ToList()
+        );
     }
 
     // The pool controls, re-applied AFTER fusion: the BM25 arm already resolves
