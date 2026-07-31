@@ -178,7 +178,9 @@ public class Filing13FXmlParser
                     VotingAuthSole = ParseLong(Value(Child(voting, "Sole"))),
                     VotingAuthShared = ParseLong(Value(Child(voting, "Shared"))),
                     VotingAuthNone = ParseLong(Value(Child(voting, "None"))),
-                    OtherManagerNumber = ParseFirstInt(Value(Child(info, "otherManager"))),
+                    // Raw comma list, not plucked here: the one shared interpretation lives
+                    // in the bulk reader, which this value round-trips into via the archive.
+                    OtherManagers = Value(Child(info, "otherManager")),
                 }
             );
         }
@@ -257,17 +259,4 @@ public class Filing13FXmlParser
         )
             ? value
             : 0;
-
-    private static int? ParseFirstInt(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-            return null;
-
-        var first = raw.Split(
-                ',',
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-            )
-            .FirstOrDefault();
-        return int.TryParse(first, out var value) ? value : null;
-    }
 }

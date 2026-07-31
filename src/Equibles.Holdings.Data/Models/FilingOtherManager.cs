@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Data.Models;
@@ -32,10 +33,13 @@ namespace Equibles.Holdings.Data.Models;
 /// original's accession still need its manager list to resolve.
 /// </para>
 /// </remarks>
-[Index(nameof(AccessionNumber))]
+[Index(nameof(AccessionNumber), nameof(Direction), nameof(SequenceNumber), IsUnique = true)]
 [Index(nameof(Cik))]
 public class FilingOtherManager
 {
+    // Client-generated, never database-generated: the flush upserts these rows, and the upsert
+    // must be able to send the id it generated instead of expecting a database default.
+    [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>The filing that named this manager.</summary>

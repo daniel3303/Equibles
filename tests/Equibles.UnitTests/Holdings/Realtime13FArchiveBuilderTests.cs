@@ -176,7 +176,7 @@ public class Realtime13FArchiveBuilderTests
                 ShareType = "SH",
                 Shares = 1000,
                 InvestmentDiscretion = "SOLE",
-                OtherManagerNumber = 3,
+                OtherManagers = "3",
             }
         );
 
@@ -201,7 +201,7 @@ public class Realtime13FArchiveBuilderTests
                 ShareType = "SH",
                 Shares = 1000,
                 InvestmentDiscretion = "SOLE",
-                OtherManagerNumber = null,
+                OtherManagers = null,
             }
         );
 

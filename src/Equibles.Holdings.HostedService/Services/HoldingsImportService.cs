@@ -1073,9 +1073,19 @@ public class HoldingsImportService
     /// filing's managers and write nothing back.
     /// </para>
     /// <para>
-    /// No transaction wraps it, matching every other phase here: a data set is only marked
-    /// processed once the whole import returns, so a crash mid-write is healed by the re-import
-    /// rather than by a rollback.
+    /// The write is an upsert on the (accession, direction, sequence) key followed by a stale-row
+    /// delete, in that order, so a portal read never catches an accession's list empty
+    /// mid-replace. The bulk and realtime importers run in the same process and can flush the
+    /// same accession concurrently; the unique index makes that interleave converge on one copy
+    /// instead of accumulating duplicates. A crash between the two statements leaves stale rows,
+    /// not duplicates, and the re-import heals them — a data set is only marked processed once
+    /// the whole import returns.
+    /// </para>
+    /// <para>
+    /// One asymmetry is accepted: a RESTATEMENT amendment re-homes the original filing's
+    /// positions under the amendment's accession, so the original's rows here become unreachable
+    /// and are never deleted (nothing joins to them). They are small, and sweeping them would
+    /// need the very orphan scan that breaks the NEW-HOLDINGS case above.
     /// </para>
     /// </remarks>
     private async Task FlushFilingOtherManagers(
@@ -1129,22 +1139,71 @@ public class HoldingsImportService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
-        var replaced = await dbContext
-            .Set<FilingOtherManager>()
-            .Where(m => accessions.Contains(m.AccessionNumber))
-            .ExecuteDeleteAsync(cancellationToken);
+        // Dedupe within the batch on the upsert key: a malformed filing repeating a sequence
+        // would otherwise make ON CONFLICT touch the same row twice and abort the statement.
+        var deduped = rows.GroupBy(r => (r.AccessionNumber, r.Direction, r.SequenceNumber))
+            .Select(g => g.First())
+            .ToList();
 
-        if (rows.Count > 0)
+        if (deduped.Count > 0)
         {
-            dbContext.Set<FilingOtherManager>().AddRange(rows);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext
+                .Set<FilingOtherManager>()
+                .UpsertRange(deduped)
+                .On(m => new
+                {
+                    m.AccessionNumber,
+                    m.Direction,
+                    m.SequenceNumber,
+                })
+                .WhenMatched(
+                    (existing, incoming) =>
+                        new FilingOtherManager
+                        {
+                            Cik = incoming.Cik,
+                            Form13FFileNumber = incoming.Form13FFileNumber,
+                            CrdNumber = incoming.CrdNumber,
+                            SecFileNumber = incoming.SecFileNumber,
+                            Name = incoming.Name,
+                            CreationTime = incoming.CreationTime,
+                        }
+                )
+                .RunAsync(cancellationToken);
         }
 
+        // Rows a covered accession no longer declares. Compared in memory: the survivor set is
+        // this import's own rows, and the candidate load is bounded by the covered accessions.
+        var keep = deduped
+            .Select(r => (r.AccessionNumber, r.Direction, r.SequenceNumber))
+            .ToHashSet();
+        var existingRows = await dbContext
+            .Set<FilingOtherManager>()
+            .Where(m => accessions.Contains(m.AccessionNumber))
+            .Select(m => new
+            {
+                m.Id,
+                m.AccessionNumber,
+                m.Direction,
+                m.SequenceNumber,
+            })
+            .ToListAsync(cancellationToken);
+        var staleIds = existingRows
+            .Where(m => !keep.Contains((m.AccessionNumber, m.Direction, m.SequenceNumber)))
+            .Select(m => m.Id)
+            .ToList();
+        var removed =
+            staleIds.Count == 0
+                ? 0
+                : await dbContext
+                    .Set<FilingOtherManager>()
+                    .Where(m => staleIds.Contains(m.Id))
+                    .ExecuteDeleteAsync(cancellationToken);
+
         _logger.LogInformation(
-            "Stored {Count} other-manager row(s) across {Filings} filing(s), replacing {Replaced} existing row(s)",
-            rows.Count,
+            "Stored {Count} other-manager row(s) across {Filings} filing(s), removing {Removed} stale row(s)",
+            deduped.Count,
             accessions.Count,
-            replaced
+            removed
         );
     }
 
@@ -1601,7 +1660,9 @@ public class HoldingsImportService
             );
         }
 
-        var otherManagerNumber = ParseNullableInt(GetValue(row, "OTHERMANAGER"));
+        var (otherManagerNumber, sharedManagerNumbers) = ParseOtherManagerAttribution(
+            GetValue(row, "OTHERMANAGER")
+        );
         var discretion = ParseInvestmentDiscretion(GetValue(row, "INVESTMENTDISCRETION"));
 
         // The filing type follows the submission's form (13F-HR vs Schedule
@@ -1618,6 +1679,7 @@ public class HoldingsImportService
         var managerEntry = new HoldingManagerEntry
         {
             ManagerNumber = otherManagerNumber,
+            SharedManagerNumbers = sharedManagerNumbers,
             ManagerName = ResolveManagerName(context, accession, otherManagerNumber),
             Shares = shares,
             Value = value,

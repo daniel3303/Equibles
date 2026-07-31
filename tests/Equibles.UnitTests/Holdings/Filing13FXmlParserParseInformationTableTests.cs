@@ -62,7 +62,7 @@ public class Filing13FXmlParserParseInformationTableTests
         first.VotingAuthSole.Should().Be(800000);
         first.VotingAuthShared.Should().Be(100000);
         first.VotingAuthNone.Should().Be(15560);
-        first.OtherManagerNumber.Should().Be(2);
+        first.OtherManagers.Should().Be("2");
 
         var second = result[1];
         second.Cusip.Should().Be("594918104");
@@ -71,7 +71,7 @@ public class Filing13FXmlParserParseInformationTableTests
         second.PutCall.Should().BeNullOrEmpty();
         second.InvestmentDiscretion.Should().Be("DFND");
         second.VotingAuthNone.Should().Be(1234567);
-        second.OtherManagerNumber.Should().BeNull();
+        second.OtherManagers.Should().BeNullOrEmpty();
     }
 
     // The filed <value> element is the anchor the import pipeline uses to

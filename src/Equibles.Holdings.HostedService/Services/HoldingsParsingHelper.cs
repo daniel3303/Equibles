@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
+using Equibles.Core.Extensions;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 
@@ -96,6 +97,49 @@ internal static class HoldingsParsingHelper
     {
         return long.TryParse(value, out var result) ? result : null;
     }
+
+    /// <summary>
+    /// Parses a position's OTHERMANAGER attribution. The field is a comma-separated LIST of
+    /// summary-page sequence numbers ("4,8,11" = discretion shared among managers 4, 8 and 11),
+    /// so the comma is a list separator here, never a thousands separator — a plain int parse
+    /// rejects every multi-manager attribution and silently strips the very filings the manager
+    /// split exists for (Berkshire attributes nearly all of its positions this way).
+    /// </summary>
+    /// <returns>
+    /// The first referenced sequence number — the manager the leg is credited to, matching how
+    /// the realtime path has always read the field — plus the raw list when it references more
+    /// than one manager, so a shared leg stays recognizable as shared instead of being presented
+    /// as one manager's exclusive position. (null, null) when nothing parses.
+    /// </returns>
+    internal static (
+        int? FirstManagerNumber,
+        string SharedManagerNumbers
+    ) ParseOtherManagerAttribution(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return (null, null);
+
+        var parsed = raw.Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            )
+            .Select(part => int.TryParse(part, out var value) ? value : (int?)null)
+            .Where(value => value != null)
+            .Select(value => value.Value)
+            .ToList();
+
+        if (parsed.Count == 0)
+            return (null, null);
+
+        return (
+            parsed[0],
+            parsed.Count > 1 ? raw.Trim().TruncateToFit(SharedManagerNumbersMaxLength) : null
+        );
+    }
+
+    /// <summary>Bound of <c>HoldingManagerEntry.SharedManagerNumbers</c>; kept here so the parse
+    /// clamps to the column instead of aborting a batch on a pathological list.</summary>
+    internal const int SharedManagerNumbersMaxLength = 128;
 
     internal static decimal? ParseNullableDecimal(string value)
     {
