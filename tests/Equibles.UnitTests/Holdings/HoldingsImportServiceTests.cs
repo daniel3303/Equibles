@@ -253,7 +253,10 @@ public class HoldingsImportServiceTests
                 StringComparer.OrdinalIgnoreCase
             )
             {
-                ["ACC-001"] = new() { [1] = new OtherManagerIdentity("Goldman Sachs", null, null, null, null) },
+                ["ACC-001"] = new()
+                {
+                    [1] = new OtherManagerIdentity("Goldman Sachs", null, null, null, null),
+                },
             },
         };
 
@@ -283,7 +286,10 @@ public class HoldingsImportServiceTests
                 StringComparer.OrdinalIgnoreCase
             )
             {
-                ["ACC-001"] = new() { [1] = new OtherManagerIdentity("Goldman Sachs", null, null, null, null) },
+                ["ACC-001"] = new()
+                {
+                    [1] = new OtherManagerIdentity("Goldman Sachs", null, null, null, null),
+                },
             },
         };
 

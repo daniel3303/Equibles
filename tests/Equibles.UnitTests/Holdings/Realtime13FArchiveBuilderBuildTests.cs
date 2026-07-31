@@ -43,7 +43,16 @@ public class Realtime13FArchiveBuilderBuildTests
                     OtherManagerNumber = 1,
                 },
             },
-            OtherManagers = { [1] = new OtherManagerIdentity("General Re-New England Asset Mgmt", null, null, null, null) },
+            OtherManagers =
+            {
+                [1] = new OtherManagerIdentity(
+                    "General Re-New England Asset Mgmt",
+                    null,
+                    null,
+                    null,
+                    null
+                ),
+            },
         };
 
         using var archive = _sut.Build([filing]);

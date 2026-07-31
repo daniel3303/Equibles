@@ -84,8 +84,20 @@ public class HoldingsParsingHelperTests
             {
                 ["ACC-001"] = new()
                 {
-                    [1] = new OtherManagerIdentity("Capital Group Companies, Inc.", null, null, null, null),
-                    [2] = new OtherManagerIdentity("Capital Research Global Investors", null, null, null, null),
+                    [1] = new OtherManagerIdentity(
+                        "Capital Group Companies, Inc.",
+                        null,
+                        null,
+                        null,
+                        null
+                    ),
+                    [2] = new OtherManagerIdentity(
+                        "Capital Research Global Investors",
+                        null,
+                        null,
+                        null,
+                        null
+                    ),
                 },
             },
         };
