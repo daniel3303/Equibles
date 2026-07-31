@@ -33,8 +33,11 @@ public class Parsed13FHolding
     public long VotingAuthNone { get; set; }
 
     /// <summary>
-    /// Reference into the filing's other-manager table (sequence number), or
-    /// null when the holding is reported solely by the filing manager.
+    /// The raw OTHERMANAGER attribution as filed — a comma-separated list of summary-page
+    /// sequence numbers ("4,8,11"), one number, or empty when the filing manager reports the
+    /// holding alone. Kept raw so the synthetic archive round-trips the full list and the bulk
+    /// reader applies the one shared interpretation; plucking the first number here would
+    /// silently discard the shared-attribution information for realtime filings only.
     /// </summary>
-    public int? OtherManagerNumber { get; set; }
+    public string OtherManagers { get; set; }
 }

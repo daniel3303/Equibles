@@ -40,7 +40,7 @@ public class Realtime13FArchiveBuilderBuildTests
                     VotingAuthSole = 800000,
                     VotingAuthShared = 100000,
                     VotingAuthNone = 15560,
-                    OtherManagerNumber = 1,
+                    OtherManagers = "1",
                 },
             },
             OtherManagers =

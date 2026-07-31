@@ -46,7 +46,7 @@ public class Filing13FXmlParserParseInformationTableTests
         apple.Shares.Should().Be(1000);
         apple.ShareType.Should().Be("SH");
         apple.PutCall.Should().Be("Put");
-        apple.OtherManagerNumber.Should().Be(4);
+        apple.OtherManagers.Should().Be("4");
         apple.VotingAuthSole.Should().Be(100);
         apple.VotingAuthShared.Should().Be(5);
 
@@ -54,6 +54,6 @@ public class Filing13FXmlParserParseInformationTableTests
         microsoft.Cusip.Should().Be("594918104");
         microsoft.VotingAuthSole.Should().Be(200);
         microsoft.PutCall.Should().BeNullOrEmpty();
-        microsoft.OtherManagerNumber.Should().BeNull();
+        microsoft.OtherManagers.Should().BeNullOrEmpty();
     }
 }

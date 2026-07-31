@@ -125,7 +125,7 @@ public class Realtime13FArchiveBuilder
                     holding.VotingAuthShared,
                     holding.VotingAuthNone,
                     Clean(holding.TitleOfClass),
-                    holding.OtherManagerNumber?.ToString() ?? string.Empty,
+                    Clean(holding.OtherManagers),
                     Clean(holding.InvestmentDiscretion)
                 );
             }

@@ -41,8 +41,14 @@ public class ProcessedDataSet
     /// report's subsidiaries were stored as unmatched strings and the
     /// parent/subsidiary structure they describe could not be recovered. The
     /// re-import populates FilingOtherManager for all history.
+    /// Version 6: read OTHERMANAGER as the comma-separated LIST it is (#4264).
+    /// A plain int parse rejects "4,8,11", so every multi-manager attribution
+    /// became "no manager" — Berkshire's filings lost ~85% of their manager
+    /// split this way. The re-import credits each leg to the first referenced
+    /// manager and keeps the raw list on SharedManagerNumbers, healing the
+    /// sets version 5 imported with the nulled legs.
     /// </summary>
-    public const int CurrentParserVersion = 5;
+    public const int CurrentParserVersion = 6;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
