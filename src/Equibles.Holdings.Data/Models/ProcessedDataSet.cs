@@ -35,8 +35,14 @@ public class ProcessedDataSet
     /// track 7 of the 8 positions this filing declares"; the same re-import also
     /// rebuilds the unmapped-CUSIP queue through the per-key flush (#4249),
     /// healing the under-counts the old slice-wipe left behind.
+    /// Version 5: keep the identifiers filed alongside every other-manager name
+    /// (#4263). Both of a 13F's other-manager lists carry a CIK, a Form 13F file
+    /// number and a CRD, and the import read only the name — so a combination
+    /// report's subsidiaries were stored as unmatched strings and the
+    /// parent/subsidiary structure they describe could not be recovered. The
+    /// re-import populates FilingOtherManager for all history.
     /// </summary>
-    public const int CurrentParserVersion = 4;
+    public const int CurrentParserVersion = 5;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 

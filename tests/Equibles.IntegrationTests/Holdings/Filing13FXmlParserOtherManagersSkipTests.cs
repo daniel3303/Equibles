@@ -49,8 +49,9 @@ public class Filing13FXmlParserOtherManagersSkipTests
         );
 
         filing.OtherManagers.Should().HaveCount(1);
-        filing.OtherManagers.Should().ContainKey(3).WhoseValue.Should().Be("GOOD ADVISORS");
+        filing.OtherManagers.Should().ContainKey(3);
+        filing.OtherManagers[3].Name.Should().Be("GOOD ADVISORS");
         filing.OtherManagers.Should().NotContainKey(0);
-        filing.OtherManagers.Values.Should().NotContain("BAD CO");
+        filing.OtherManagers.Values.Select(m => m.Name).Should().NotContain("BAD CO");
     }
 }

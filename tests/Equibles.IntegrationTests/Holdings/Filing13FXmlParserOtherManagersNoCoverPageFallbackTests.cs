@@ -38,6 +38,13 @@ public class Filing13FXmlParserOtherManagersNoCoverPageFallbackTests
             filingDate: new DateOnly(2025, 11, 14)
         );
 
-        filing.OtherManagers.Should().ContainKey(1).WhoseValue.Should().Be("SOLE CO-MANAGER");
+        filing.OtherManagers.Should().ContainKey(1);
+        filing.OtherManagers[1].Name.Should().Be("SOLE CO-MANAGER");
+        filing.OtherManagers[1].Cik.Should().Be("9999999");
+
+        // The cover page is absent entirely, so there is no opposite edge to read. The
+        // summary-page block must not be mistaken for one just because its nested element shares
+        // the name — that would invent a parent pointing at the filer's own subsidiary.
+        filing.CoverPageOtherManagers.Should().BeEmpty();
     }
 }

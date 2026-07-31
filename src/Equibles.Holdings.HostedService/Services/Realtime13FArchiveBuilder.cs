@@ -32,7 +32,16 @@ public class Realtime13FArchiveBuilder
             "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMTTYPE\tPUTCALL\tVALUE\tSSHPRNAMT\tVOTING_AUTH_SOLE\t"
                 + "VOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\tINVESTMENTDISCRETION\n"
         );
-        var otherManager = new StringBuilder("ACCESSION_NUMBER\tSEQUENCENUMBER\tNAME\n");
+        // Both other-manager sections carry the SEC's identifier columns, in its column order, so
+        // the synthetic archive stays parseable by the same reader as the quarterly one.
+        var otherManager = new StringBuilder(
+            "ACCESSION_NUMBER\tSEQUENCENUMBER\tCIK\tFORM13FFILENUMBER\tCRDNUMBER\tSECFILENUMBER\t"
+                + "NAME\n"
+        );
+        var otherManagerCover = new StringBuilder(
+            "ACCESSION_NUMBER\tOTHERMANAGER_SK\tCIK\tFORM13FFILENUMBER\tCRDNUMBER\tSECFILENUMBER\t"
+                + "NAME\n"
+        );
         var summaryPage = new StringBuilder("ACCESSION_NUMBER\tTABLEENTRYTOTAL\tTABLEVALUETOTAL\n");
 
         foreach (var filing in filings)
@@ -61,9 +70,35 @@ public class Realtime13FArchiveBuilder
                 filing.ConfidentialTreatmentRequested ? "Y" : "N"
             );
 
-            foreach (var (seq, name) in filing.OtherManagers)
+            foreach (var (seq, identity) in filing.OtherManagers)
             {
-                AppendRow(otherManager, Clean(filing.AccessionNumber), seq, Clean(name));
+                AppendRow(
+                    otherManager,
+                    Clean(filing.AccessionNumber),
+                    seq,
+                    Clean(identity.Cik),
+                    Clean(identity.Form13FFileNumber),
+                    Clean(identity.CrdNumber),
+                    Clean(identity.SecFileNumber),
+                    Clean(identity.Name)
+                );
+            }
+
+            // The cover-page list files no sequence numbers, so the surrogate key is positional —
+            // it preserves filed order through the archive and nothing points at it.
+            for (var index = 0; index < filing.CoverPageOtherManagers.Count; index++)
+            {
+                var identity = filing.CoverPageOtherManagers[index];
+                AppendRow(
+                    otherManagerCover,
+                    Clean(filing.AccessionNumber),
+                    index + 1,
+                    Clean(identity.Cik),
+                    Clean(identity.Form13FFileNumber),
+                    Clean(identity.CrdNumber),
+                    Clean(identity.SecFileNumber),
+                    Clean(identity.Name)
+                );
             }
 
             // Emitted even when both totals are null (empty cells): the import parses the row
@@ -109,6 +144,7 @@ public class Realtime13FArchiveBuilder
                 WriteEntry(writer, "COVERPAGE.tsv", coverPage);
                 WriteEntry(writer, "INFOTABLE.tsv", infoTable);
                 WriteEntry(writer, "OTHERMANAGER2.tsv", otherManager);
+                WriteEntry(writer, "OTHERMANAGER.tsv", otherManagerCover);
                 WriteEntry(writer, "SUMMARYPAGE.tsv", summaryPage);
             }
             zipBytes = buffer.ToArray();

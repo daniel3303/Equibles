@@ -65,7 +65,7 @@ public class Filing13FXmlParserParseCoverPageTests
         result.Form13FFileNumber.Should().Be("028-00338");
         result.CrdNumber.Should().Be("314159");
         result.OtherManagers.Should().HaveCount(2);
-        result.OtherManagers[1].Should().Be("General Re-New England Asset Mgmt");
-        result.OtherManagers[3].Should().Be("New England Asset Management");
+        result.OtherManagers[1].Name.Should().Be("General Re-New England Asset Mgmt");
+        result.OtherManagers[3].Name.Should().Be("New England Asset Management");
     }
 }

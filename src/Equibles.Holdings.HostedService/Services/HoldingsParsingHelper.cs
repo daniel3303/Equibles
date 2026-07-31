@@ -88,6 +88,15 @@ internal static class HoldingsParsingHelper
         return int.TryParse(value, out var result) ? result : null;
     }
 
+    /// <summary>
+    /// Parses a surrogate key. Widened past <see cref="int"/> because the SEC declares these
+    /// columns as NUMBER(38), so a value can legitimately outrun a 32-bit parse.
+    /// </summary>
+    internal static long? ParseNullableLong(string value)
+    {
+        return long.TryParse(value, out var result) ? result : null;
+    }
+
     internal static decimal? ParseNullableDecimal(string value)
     {
         return decimal.TryParse(
@@ -110,12 +119,34 @@ internal static class HoldingsParsingHelper
             return null;
         if (
             context.OtherManagers.TryGetValue(accession, out var seqMap)
-            && seqMap.TryGetValue(managerNumber.Value, out var name)
+            && seqMap.TryGetValue(managerNumber.Value, out var identity)
         )
         {
-            return name;
+            return identity.Name;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Strips the leading zeros EDGAR pads CIKs with, so a filed identifier compares equal to the
+    /// spelling filer CIKs are stored under. Blank stays null: an absent identifier must not
+    /// become an empty string that looks like a value.
+    /// </summary>
+    internal static string NormalizeCik(string cik)
+    {
+        var trimmed = NormalizeIdentifier(cik);
+        return trimmed == null ? null : NormalizeIdentifier(trimmed.TrimStart('0'));
+    }
+
+    /// <summary>
+    /// Normalizes a filed identifier to "value or absent". A blank is absent: the SEC keeps the
+    /// column present and empty rather than omitting it, and an empty string is not a missing
+    /// identifier — it is a value that compares equal to every other blank, so joining on it
+    /// would collide every identifier-less manager into one.
+    /// </summary>
+    internal static string NormalizeIdentifier(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     internal static InvestmentDiscretion ParseInvestmentDiscretion(string value)

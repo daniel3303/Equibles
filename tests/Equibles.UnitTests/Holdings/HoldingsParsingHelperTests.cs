@@ -276,7 +276,7 @@ public class HoldingsParsingHelperTests
         // chain is the dangerous one.
         var context = new ImportContext
         {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(),
+            OtherManagers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>(),
         };
 
         var result = HoldingsParsingHelper.ResolveManagerName(

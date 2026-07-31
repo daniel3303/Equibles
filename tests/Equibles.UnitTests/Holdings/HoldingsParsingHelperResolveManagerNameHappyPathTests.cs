@@ -18,11 +18,11 @@ public class HoldingsParsingHelperResolveManagerNameHappyPathTests
         // name in every multi-manager 13F-HR filing.
         var context = new ImportContext
         {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>
+            OtherManagers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>
             {
-                ["0001234-25-000001"] = new Dictionary<int, string>
+                ["0001234-25-000001"] = new Dictionary<int, OtherManagerIdentity>
                 {
-                    [2] = "Acme Capital Advisors",
+                    [2] = new OtherManagerIdentity("Acme Capital Advisors", null, null, null, null),
                 },
             },
         };

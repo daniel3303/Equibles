@@ -13,7 +13,7 @@ public class Realtime13FArchiveBuilderTests
     {
         using var archive = _sut.Build([]);
 
-        archive.Entries.Should().HaveCount(5);
+        archive.Entries.Should().HaveCount(6);
         archive
             .Entries.Select(e => e.Name)
             .Should()
@@ -22,6 +22,7 @@ public class Realtime13FArchiveBuilderTests
                 "COVERPAGE.tsv",
                 "INFOTABLE.tsv",
                 "OTHERMANAGER2.tsv",
+                "OTHERMANAGER.tsv",
                 "SUMMARYPAGE.tsv",
             ]);
     }
@@ -39,6 +40,7 @@ public class Realtime13FArchiveBuilderTests
                 "COVERPAGE.tsv",
                 "INFOTABLE.tsv",
                 "OTHERMANAGER2.tsv",
+                "OTHERMANAGER.tsv",
                 "SUMMARYPAGE.tsv",
             ]);
     }
@@ -215,8 +217,8 @@ public class Realtime13FArchiveBuilderTests
     public void Build_WithOtherManagers_WritesManagerRows()
     {
         var filing = CreateFiling();
-        filing.OtherManagers[1] = "Manager Alpha";
-        filing.OtherManagers[2] = "Manager Beta";
+        filing.OtherManagers[1] = new OtherManagerIdentity("Manager Alpha", null, null, null, null);
+        filing.OtherManagers[2] = new OtherManagerIdentity("Manager Beta", null, null, null, null);
 
         using var archive = _sut.Build([filing]);
         var content = ReadEntry(archive, "OTHERMANAGER2.tsv");
@@ -337,7 +339,7 @@ public class Realtime13FArchiveBuilderTests
                 InvestmentDiscretion = "SOLE",
             }
         );
-        filing.OtherManagers[1] = "Test Manager";
+        filing.OtherManagers[1] = new OtherManagerIdentity("Test Manager", null, null, null, null);
 
         using var archive = _sut.Build([filing]);
 

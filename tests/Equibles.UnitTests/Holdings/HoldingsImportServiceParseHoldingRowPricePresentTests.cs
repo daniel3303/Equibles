@@ -56,7 +56,7 @@ public class HoldingsImportServiceParseHoldingRowPricePresentTests
             {
                 [(commonStockId, reportDate)] = 12.50m,
             },
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(),
+            OtherManagers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>(),
         };
 
         var result = method.Invoke(

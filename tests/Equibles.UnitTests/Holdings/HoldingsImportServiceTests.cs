@@ -238,7 +238,7 @@ public class HoldingsImportServiceTests
     {
         var context = new ImportContext
         {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(),
+            OtherManagers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>(),
         };
 
         HoldingsParsingHelper.ResolveManagerName(context, "ACC-001", null).Should().BeNull();
@@ -249,11 +249,14 @@ public class HoldingsImportServiceTests
     {
         var context = new ImportContext
         {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(
+            OtherManagers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>(
                 StringComparer.OrdinalIgnoreCase
             )
             {
-                ["ACC-001"] = new() { [1] = "Goldman Sachs" },
+                ["ACC-001"] = new()
+                {
+                    [1] = new OtherManagerIdentity("Goldman Sachs", null, null, null, null),
+                },
             },
         };
 
@@ -268,7 +271,7 @@ public class HoldingsImportServiceTests
     {
         var context = new ImportContext
         {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(),
+            OtherManagers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>(),
         };
 
         HoldingsParsingHelper.ResolveManagerName(context, "ACC-999", 1).Should().BeNull();
@@ -279,11 +282,14 @@ public class HoldingsImportServiceTests
     {
         var context = new ImportContext
         {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(
+            OtherManagers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>(
                 StringComparer.OrdinalIgnoreCase
             )
             {
-                ["ACC-001"] = new() { [1] = "Goldman Sachs" },
+                ["ACC-001"] = new()
+                {
+                    [1] = new OtherManagerIdentity("Goldman Sachs", null, null, null, null),
+                },
             },
         };
 
