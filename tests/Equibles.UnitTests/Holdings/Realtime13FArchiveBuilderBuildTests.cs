@@ -43,12 +43,12 @@ public class Realtime13FArchiveBuilderBuildTests
                     OtherManagerNumber = 1,
                 },
             },
-            OtherManagers = { [1] = "General Re-New England Asset Mgmt" },
+            OtherManagers = { [1] = new OtherManagerIdentity("General Re-New England Asset Mgmt", null, null, null, null) },
         };
 
         using var archive = _sut.Build([filing]);
 
-        archive.Entries.Should().HaveCount(5);
+        archive.Entries.Should().HaveCount(6);
         archive
             .Entries.Select(e => e.Name)
             .Should()
@@ -57,6 +57,7 @@ public class Realtime13FArchiveBuilderBuildTests
                 "COVERPAGE.tsv",
                 "INFOTABLE.tsv",
                 "OTHERMANAGER2.tsv",
+                "OTHERMANAGER.tsv",
                 "SUMMARYPAGE.tsv",
             ]);
 

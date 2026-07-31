@@ -50,7 +50,7 @@ public class HoldingsImportServiceParseHoldingRowValuePendingTests
         {
             CoverPages = new Dictionary<string, CoverPageRow>(),
             StockPrices = new Dictionary<(Guid, DateOnly), decimal>(),
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(),
+            OtherManagers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>(),
         };
 
         var result = method.Invoke(

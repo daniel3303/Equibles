@@ -87,12 +87,54 @@ public class Filing13FXmlParser
                 continue;
 
             var inner = Child(otherManager2, "otherManager");
-            var name = Value(Child(inner, "name"));
-            if (!string.IsNullOrEmpty(name))
-                filing.OtherManagers[seq] = name;
+            var identity = ReadOtherManager(inner);
+            if (identity != null)
+                filing.OtherManagers[seq] = identity;
+        }
+
+        // The cover page's own list means the opposite of the summary page's: these are the
+        // managers who report FOR this filer, not the ones it reports for. Combination reports
+        // carry both. Scoped to coverPage because otherManager is also the local name of the
+        // element nested inside each summary-page otherManager2 — an unscoped scan would fold the
+        // two lists into one and invert half the relationships.
+        var otherManagersInfo = Descendant(coverPage, "otherManagersInfo");
+        if (otherManagersInfo != null)
+        {
+            foreach (var otherManager in Children(otherManagersInfo, "otherManager"))
+            {
+                var identity = ReadOtherManager(otherManager);
+                if (identity != null)
+                    filing.CoverPageOtherManagers.Add(identity);
+            }
         }
 
         return filing;
+    }
+
+    /// <summary>
+    /// Reads one <c>otherManager</c> block. Only the name is mandatory in the SEC schema, so every
+    /// identifier is optional and a block carrying nothing but a name is still a valid entry —
+    /// displayable, if not linkable. Returns null when even the name is missing.
+    /// </summary>
+    private static OtherManagerIdentity ReadOtherManager(XElement otherManager)
+    {
+        var name = Value(Child(otherManager, "name"));
+        if (string.IsNullOrEmpty(name))
+            return null;
+
+        // A present-but-empty element is an absent identifier, not a blank value — storing "" would
+        // make every identifier-less manager compare equal to every other one.
+        return new OtherManagerIdentity(
+            name,
+            HoldingsParsingHelper.NormalizeCik(Value(Child(otherManager, "cik"))),
+            HoldingsParsingHelper.NormalizeIdentifier(
+                Value(Child(otherManager, "form13FFileNumber"))
+            ),
+            HoldingsParsingHelper.NormalizeIdentifier(Value(Child(otherManager, "crdNumber"))),
+            // Absent from every filing seen so far, but declared by the schema; the quarterly
+            // data set does carry it, and restates these rows when it lands.
+            HoldingsParsingHelper.NormalizeIdentifier(Value(Child(otherManager, "secFileNumber")))
+        );
     }
 
     /// <summary>

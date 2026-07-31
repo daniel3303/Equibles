@@ -78,14 +78,14 @@ public class HoldingsParsingHelperTests
         // exact sequence-number selection (not e.g. first-in-iteration order).
         var context = new ImportContext
         {
-            OtherManagers = new Dictionary<string, Dictionary<int, string>>(
+            OtherManagers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>(
                 StringComparer.OrdinalIgnoreCase
             )
             {
                 ["ACC-001"] = new()
                 {
-                    [1] = "Capital Group Companies, Inc.",
-                    [2] = "Capital Research Global Investors",
+                    [1] = new OtherManagerIdentity("Capital Group Companies, Inc.", null, null, null, null),
+                    [2] = new OtherManagerIdentity("Capital Research Global Investors", null, null, null, null),
                 },
             },
         };

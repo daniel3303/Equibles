@@ -113,6 +113,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             .IncludeProperties(h => new { h.Shares, h.Value });
 
         builder.Entity<UnmappedCusip>();
+        builder.Entity<FilingOtherManager>();
         builder.Entity<ProcessedDataSet>();
         builder.Entity<ProcessedFiling>();
         builder.Entity<InstitutionalFiling>();

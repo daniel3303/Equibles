@@ -89,9 +89,11 @@ public class HoldingsImportService
         await BuildPriceMap(context, cancellationToken);
         await BuildSplitMap(context, cancellationToken);
         await ParseOtherManagers(context, cancellationToken);
+        await ParseOtherManagerCoverList(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
         await HandleAmendments(context, cancellationToken);
         var insertedHoldings = await StreamAndInsertHoldings(context, cancellationToken);
+        await FlushFilingOtherManagers(context, cancellationToken);
         await SyncFilingSummaries(context, cancellationToken);
         await PublishAffectedQuartersAsync(context, cancellationToken);
         return new ImportResult(
@@ -912,7 +914,7 @@ public class HoldingsImportService
             return;
         }
 
-        var managers = new Dictionary<string, Dictionary<int, string>>(
+        var managers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>(
             StringComparer.OrdinalIgnoreCase
         );
         await foreach (var row in context.TsvParser.ParseEntry(entry))
@@ -923,7 +925,7 @@ public class HoldingsImportService
                     context.Submissions,
                     out var accession,
                     out var seq,
-                    out var name
+                    out var identity
                 )
             )
                 continue;
@@ -934,11 +936,69 @@ public class HoldingsImportService
                 managers[accession] = seqMap;
             }
 
-            seqMap[seq] = name;
+            seqMap[seq] = identity;
         }
 
         context.OtherManagers = managers;
         _logger.LogInformation("Parsed other-manager mappings for {Count} filings", managers.Count);
+    }
+
+    /// <summary>
+    /// Parses OTHERMANAGER.tsv — the cover page's list of managers who report FOR the filer, the
+    /// opposite edge to the summary page's list. Absent from archives built before this lane
+    /// existed (and from the Schedule 13D/G synthetic archive), so a missing entry is normal.
+    /// </summary>
+    private async Task ParseOtherManagerCoverList(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var entry = FindEntry(context.Archive, "OTHERMANAGER.tsv");
+        if (entry == null)
+        {
+            _logger.LogInformation(
+                "OTHERMANAGER.tsv not found, skipping cover-page other-manager parsing"
+            );
+            return;
+        }
+
+        // Ordered by the SEC's surrogate key where present so the stored ordinal follows filed
+        // order rather than however the archive happened to stream. Rows without one keep their
+        // file position, which is the same order for every archive seen so far.
+        var ordered = new Dictionary<string, List<(long Sort, OtherManagerIdentity Identity)>>(
+            StringComparer.OrdinalIgnoreCase
+        );
+        var position = 0L;
+        await foreach (var row in context.TsvParser.ParseEntry(entry))
+        {
+            position++;
+            var accession = GetValue(row, AccessionNumberColumn);
+            if (string.IsNullOrEmpty(accession) || !context.Submissions.ContainsKey(accession))
+                continue;
+
+            var name = GetValue(row, "NAME");
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var sort = ParseNullableLong(GetValue(row, "OTHERMANAGER_SK")) ?? position;
+            if (!ordered.TryGetValue(accession, out var list))
+            {
+                list = [];
+                ordered[accession] = list;
+            }
+
+            list.Add((sort, BuildOtherManagerIdentity(row, name)));
+        }
+
+        context.CoverPageOtherManagers = ordered.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.OrderBy(item => item.Sort).Select(item => item.Identity).ToList(),
+            StringComparer.OrdinalIgnoreCase
+        );
+        _logger.LogInformation(
+            "Parsed cover-page other-manager lists for {Count} filings",
+            context.CoverPageOtherManagers.Count
+        );
     }
 
     private bool TryParseOtherManagerRow(
@@ -946,11 +1006,11 @@ public class HoldingsImportService
         Dictionary<string, SubmissionRow> submissions,
         out string accession,
         out int seq,
-        out string name
+        out OtherManagerIdentity identity
     )
     {
         seq = 0;
-        name = null;
+        identity = null;
 
         accession = GetValue(row, AccessionNumberColumn);
         if (string.IsNullOrEmpty(accession) || !submissions.ContainsKey(accession))
@@ -966,11 +1026,146 @@ public class HoldingsImportService
             return false;
         }
 
-        name = GetValue(row, "NAME");
+        var name = GetValue(row, "NAME");
         if (string.IsNullOrWhiteSpace(name))
             return false;
 
+        identity = BuildOtherManagerIdentity(row, name);
         return true;
+    }
+
+    /// <summary>
+    /// Reads a manager's filed identifiers off an other-manager row. Every identifier column is
+    /// optional at the source and absent entirely from archives written before this lane existed,
+    /// so each read tolerates a missing column and yields null rather than failing the row — the
+    /// name alone still makes a usable, if unlinkable, entry.
+    /// </summary>
+    private static OtherManagerIdentity BuildOtherManagerIdentity(
+        Dictionary<string, string> row,
+        string name
+    )
+    {
+        return new OtherManagerIdentity(
+            ClampLength(name, 256),
+            NormalizeCik(GetValue(row, "CIK")),
+            ClampLength(NormalizeIdentifier(GetValue(row, "FORM13FFILENUMBER")), 32),
+            ClampLength(NormalizeIdentifier(GetValue(row, "CRDNUMBER")), 32),
+            ClampLength(NormalizeIdentifier(GetValue(row, "SECFILENUMBER")), 32)
+        );
+    }
+
+    /// <summary>
+    /// Persists both other-manager lists for every 13F accession this import covers, replacing
+    /// whatever those accessions held before.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The delete spans every 13F accession in the import, not only the ones that produced rows,
+    /// so a filing that no longer declares a manager has its stale list cleared rather than kept
+    /// forever. Accessions outside the import are left alone on purpose: a "new holdings"
+    /// amendment merges without deleting, so a holder's quarter can span several accessions and
+    /// the positions still carrying an older one need its list to resolve. Sweeping orphans the
+    /// way the filing summaries do would strand exactly those positions.
+    /// </para>
+    /// <para>
+    /// Restricted to Form 13F because the Schedule 13D/G lane shares this pipeline and ships a
+    /// header-only OTHERMANAGER2.tsv — without the filter a 13D/G import would delete a 13F
+    /// filing's managers and write nothing back.
+    /// </para>
+    /// <para>
+    /// No transaction wraps it, matching every other phase here: a data set is only marked
+    /// processed once the whole import returns, so a crash mid-write is healed by the re-import
+    /// rather than by a rollback.
+    /// </para>
+    /// </remarks>
+    private async Task FlushFilingOtherManagers(
+        ImportContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        var accessions = context
+            .Submissions.Values.Where(s => s.FormType.ToHoldingsFilingType() == FilingType.Form13F)
+            .Select(s => s.AccessionNumber)
+            .ToList();
+        if (accessions.Count == 0)
+            return;
+
+        var rows = new List<FilingOtherManager>();
+        foreach (var accession in accessions)
+        {
+            if (context.OtherManagers.TryGetValue(accession, out var seqMap))
+            {
+                foreach (var (sequence, identity) in seqMap)
+                {
+                    rows.Add(
+                        BuildFilingOtherManager(
+                            accession,
+                            OtherManagerDirection.IncludedInReport,
+                            sequence,
+                            identity
+                        )
+                    );
+                }
+            }
+
+            if (!context.CoverPageOtherManagers.TryGetValue(accession, out var coverList))
+                continue;
+
+            // The cover page files no sequence numbers, so the stored ordinal is positional. It
+            // orders the list and keeps the column non-null; nothing points at it.
+            for (var index = 0; index < coverList.Count; index++)
+            {
+                rows.Add(
+                    BuildFilingOtherManager(
+                        accession,
+                        OtherManagerDirection.ReportsForFiler,
+                        index + 1,
+                        coverList[index]
+                    )
+                );
+            }
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+
+        var replaced = await dbContext
+            .Set<FilingOtherManager>()
+            .Where(m => accessions.Contains(m.AccessionNumber))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        if (rows.Count > 0)
+        {
+            dbContext.Set<FilingOtherManager>().AddRange(rows);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Stored {Count} other-manager row(s) across {Filings} filing(s), replacing {Replaced} existing row(s)",
+            rows.Count,
+            accessions.Count,
+            replaced
+        );
+    }
+
+    private static FilingOtherManager BuildFilingOtherManager(
+        string accession,
+        OtherManagerDirection direction,
+        int sequenceNumber,
+        OtherManagerIdentity identity
+    )
+    {
+        return new FilingOtherManager
+        {
+            AccessionNumber = ClampLength(accession, 32),
+            Direction = direction,
+            SequenceNumber = sequenceNumber,
+            Cik = ClampLength(identity.Cik, 16),
+            Form13FFileNumber = identity.Form13FFileNumber,
+            CrdNumber = identity.CrdNumber,
+            SecFileNumber = identity.SecFileNumber,
+            Name = identity.Name,
+        };
     }
 
     private async Task HandleAmendments(ImportContext context, CancellationToken cancellationToken)

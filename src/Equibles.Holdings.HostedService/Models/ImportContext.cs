@@ -17,8 +17,17 @@ public class ImportContext
     public Dictionary<string, Guid> CusipMapping { get; set; }
     public Dictionary<string, Guid> CikToHolderId { get; set; }
 
-    // Other managers: AccessionNumber → (SequenceNumber → ManagerName)
-    public Dictionary<string, Dictionary<int, string>> OtherManagers { get; set; } = [];
+    // Summary-page other managers (the positions this filing reports on behalf of):
+    // AccessionNumber → (SequenceNumber → manager identity). The sequence number is what a
+    // position's OTHERMANAGER column points at.
+    public Dictionary<string, Dictionary<int, OtherManagerIdentity>> OtherManagers { get; set; } =
+        [];
+
+    // Cover-page other managers (the managers who report FOR this filer — the opposite edge):
+    // AccessionNumber → identities in filed order. The cover page carries no sequence numbers,
+    // so nothing references these; they are stored for the relationship alone.
+    public Dictionary<string, List<OtherManagerIdentity>> CoverPageOtherManagers { get; set; } =
+        [];
 
     // For Schedule 13D/13G submissions only: AccessionNumber → tracked stock ids
     // of the issuer(s) the filing reports. A 13D/G covers a single issuer, so its

@@ -61,6 +61,13 @@ public class Filing13FXmlParserParseCoverPageTests
         filing.Cik.Should().Be("1067983");
         filing.FilingManagerName.Should().Be("BERKSHIRE HATHAWAY INC");
         filing.City.Should().Be("OMAHA");
-        filing.OtherManagers.Should().ContainKey(1).WhoseValue.Should().Be("DECOY ADVISORS LLC");
+        filing.OtherManagers.Should().ContainKey(1);
+        filing.OtherManagers[1].Name.Should().Be("DECOY ADVISORS LLC");
+
+        // The decoy's own CIK belongs to the co-manager entry, never to the filer — now that the
+        // parser reads it, the two must land in different places rather than one overwriting the
+        // other.
+        filing.OtherManagers[1].Cik.Should().Be("9999999");
+        filing.Cik.Should().Be("1067983");
     }
 }

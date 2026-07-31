@@ -31,8 +31,17 @@ public class Parsed13FFiling
     /// filing was made in (whole dollars post-2023). Null when absent.</summary>
     public long? TableValueTotal { get; set; }
 
-    /// <summary>Other-manager table: sequence number → manager name.</summary>
-    public Dictionary<int, string> OtherManagers { get; set; } = [];
+    /// <summary>
+    /// Summary-page other-manager table: sequence number → manager identity. The positions this
+    /// filing reports on behalf of; a holding's <c>otherManager</c> element points at the sequence.
+    /// </summary>
+    public Dictionary<int, OtherManagerIdentity> OtherManagers { get; set; } = [];
+
+    /// <summary>
+    /// Cover-page other-manager list, in filed order: the managers who report FOR this filer. The
+    /// opposite edge to <see cref="OtherManagers"/>, and sequence-less, so nothing points at it.
+    /// </summary>
+    public List<OtherManagerIdentity> CoverPageOtherManagers { get; set; } = [];
 
     public List<Parsed13FHolding> Holdings { get; set; } = [];
 }
