@@ -1,6 +1,6 @@
 # Equibles Documentation
 
-An open-source, self-hosted mini Bloomberg Terminal for AI agents — scrapes, stores, and serves SEC filings, institutional holdings, insider trading, congressional trades, short data, economic indicators, and daily stock prices, and exposes it all via MCP.
+Equibles is a self-hosted, open-source financial data MCP server — SEC filings and XBRL financials, 13F institutional holdings, insider and congressional trades, short data, FRED economic indicators, and daily stock prices, exposed over the Model Context Protocol for Claude, ChatGPT, Cursor, and any AI agent.
 
 ## Sections
 
