@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
@@ -59,7 +60,7 @@ public class StockPriceTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await ResolveTicker(ticker);
+                var (stock, _, stockError) = await ResolveTicker(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -144,10 +145,19 @@ public class StockPriceTools
 
                 foreach (var ticker in tickerList)
                 {
-                    var (stock, _) = await ResolveTicker(ticker);
+                    var (stock, secondaryOf, _) = await ResolveTicker(ticker);
                     if (stock == null)
                     {
-                        result.AppendLine(PlaceholderRow(ticker, "Not found"));
+                        // A secondary symbol says which primary owns the series, so the
+                        // caller can re-ask instead of reading the row as no coverage.
+                        result.AppendLine(
+                            PlaceholderRow(
+                                ticker,
+                                secondaryOf == null
+                                    ? "Not found"
+                                    : $"No series — secondary symbol on {secondaryOf.Ticker}"
+                            )
+                        );
                         continue;
                     }
 
@@ -499,21 +509,48 @@ public class StockPriceTools
         return Math.Round((upper.Value - lower.Value) / middle.Value, 4);
     }
 
-    // Resolves a ticker to a stock, additionally accepting the dot class-share notation
-    // (BRK.B) for the dash form the price data stores (BRK-B). This is a mechanical
-    // format conversion between two spellings of the same symbol, not a heuristic.
-    private async Task<(CommonStock Stock, string Error)> ResolveTicker(string ticker)
+    // Resolves a ticker to the stock whose price series it names, additionally accepting
+    // the dot class-share notation (BRK.B) for the dash form the price data stores
+    // (BRK-B). This is a mechanical format conversion between two spellings of the same
+    // symbol, not a heuristic.
+    //
+    // A symbol that resolves only as a SECONDARY ticker is declined rather than served
+    // (SecondaryTickerPolicy): it is a different security sharing one filer's row, and
+    // the row's bars belong to the primary symbol alone. SecondaryOf carries that
+    // primary so the batch tool can say so in a table cell.
+    private async Task<(CommonStock Stock, CommonStock SecondaryOf, string Error)> ResolveTicker(
+        string ticker
+    )
     {
-        var (stock, error) = await _commonStockRepository.ResolveByTicker(ticker);
-        if (stock == null && ticker != null && ticker.Contains('.'))
+        var resolved = await ResolvePricedSpelling(ticker, ticker);
+        if (resolved.Stock == null && ticker != null && ticker.Contains('.'))
         {
-            var (dashed, _) = await _commonStockRepository.ResolveByTicker(
-                ticker.Replace('.', '-')
-            );
-            if (dashed != null)
-                return (dashed, null);
+            // The dashed spelling either resolves or explains itself; either beats
+            // "not found" against a symbol stored only in the dashed form. It stays the
+            // LOOKUP spelling only — the message keeps echoing what the caller wrote.
+            var dashed = await ResolvePricedSpelling(ticker.Replace('.', '-'), ticker);
+            if (dashed.Stock != null || dashed.SecondaryOf != null)
+                return dashed;
         }
-        return (stock, error);
+        return resolved;
+    }
+
+    private async Task<(
+        CommonStock Stock,
+        CommonStock SecondaryOf,
+        string Error
+    )> ResolvePricedSpelling(string lookupTicker, string requestedTicker)
+    {
+        var (stock, error) = await _commonStockRepository.ResolveByTicker(lookupTicker);
+        if (stock == null)
+            return (null, null, error);
+        if (SecondaryTickerPolicy.IsSecondarySymbol(stock, lookupTicker))
+            return (
+                null,
+                stock,
+                SecondaryTickerPolicy.NoPriceSeriesMessage(stock, requestedTicker)
+            );
+        return (stock, null, null);
     }
 
     // Strict argument parsing shared by the date-ranged price tools: a non-empty date must
@@ -569,7 +606,7 @@ public class StockPriceTools
         string Error
     )> LoadAscendingPriceWindow(string ticker, string startDate, string endDate, int warmupBars)
     {
-        var (stock, stockError) = await ResolveTicker(ticker);
+        var (stock, _, stockError) = await ResolveTicker(ticker);
         if (stockError != null)
             return (null, null, 0, stockError);
 
