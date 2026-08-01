@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.Core.Calendars;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -111,7 +112,10 @@ public class StockPriceTools
     [McpServerTool(Name = "GetLatestPrices", Title = "Latest Prices", ReadOnly = true)]
     [Description(
         "Get the most recent closing price (USD), daily change, and volume for one or more "
-            + "stocks. Useful for quick price checks across a portfolio or watchlist."
+            + "stocks. Useful for quick price checks across a portfolio or watchlist. The "
+            + "change columns are a ONE-SESSION move: they are shown only when the stored "
+            + "series holds the trading day immediately before the date on the row, and are "
+            + "\"—\" otherwise, so a change is never a multi-session move in disguise."
     )]
     public Task<string> GetLatestPrices(
         [Description(
@@ -142,6 +146,11 @@ public class StockPriceTools
                     "| Ticker | Date | Close | Change | Change % | Volume |",
                     "|--------|------|-------|--------|----------|--------|"
                 );
+
+                // Set when at least one ticker's change columns were withheld because its
+                // stored series skips the prior session, so the footnote explains the em-dash
+                // rather than leaving the caller to read it as missing coverage.
+                var gapped = false;
 
                 foreach (var ticker in tickerList)
                 {
@@ -175,10 +184,11 @@ public class StockPriceTools
                     }
 
                     var price = latestTwo[0];
-                    var previousClose = latestTwo.Count > 1 ? latestTwo[1].Close : (decimal?)null;
+                    var previous = latestTwo.Count > 1 ? latestTwo[1] : null;
+                    var previousClose = DayChangeBasis(price, previous);
                     var changeCell = "—";
                     var changePctCell = "—";
-                    if (previousClose != null && previousClose.Value > 0)
+                    if (previousClose != null)
                     {
                         var change = price.Close - previousClose.Value;
                         changeCell = McpFormat.Invariant(change, "+0.00;-0.00;0.00");
@@ -188,9 +198,27 @@ public class StockPriceTools
                                 "+0.00;-0.00;0.00"
                             ) + "%";
                     }
+                    else if (previous != null && !IsPriorSession(price, previous))
+                    {
+                        // Only a skipped session earns the footnote. A prior row with a
+                        // non-positive close is blanked too, and saying "no row for the session
+                        // before" about it would be wrong.
+                        gapped = true;
+                    }
 
                     result.AppendLine(
                         $"| {ticker} | {price.Date:yyyy-MM-dd} | {McpFormat.Invariant(price.Close, "F2")} | {changeCell} | {changePctCell} | {McpFormat.WholeNumber(price.Volume)} |"
+                    );
+                }
+
+                if (gapped)
+                {
+                    result.AppendLine();
+                    result.AppendLine(
+                        "Note: a Change of \"—\" means the stored series has no row for the session "
+                            + "before the date shown, so no one-day move can be stated. The close and "
+                            + "volume on that row are still correct. Use GetStockPrices to see which "
+                            + "sessions are present."
                     );
                 }
 
@@ -712,6 +740,28 @@ public class StockPriceTools
             emitted++;
         }
     }
+
+    // The close a day change is measured FROM, or null when there is none.
+    //
+    // "The second-newest stored row" is NOT that close. The end-of-day price lane crawls the
+    // whole common-stock universe and can finish a session or more behind, so on any given day
+    // a slice of the universe is missing its most recent bar and the row below it is two or
+    // more sessions back. Differencing that states a multi-session move as the day's move —
+    // the close is right, the percentage is inflated, and nothing says so. Thinly traded
+    // symbols make it extreme: a row 25 sessions apart from its predecessor reported a
+    // five-figure percentage as a day change.
+    //
+    // So the basis is chosen by DATE, never by position: only the row dated the trading day
+    // immediately before the latest one qualifies. Otherwise there is no day change to state,
+    // and an absent percentage is honest where a wrong one is not.
+    private static decimal? DayChangeBasis(DailyStockPrice latest, DailyStockPrice previous) =>
+        IsPriorSession(latest, previous) && previous.Close > 0 ? previous.Close : null;
+
+    // Whether the second-newest stored row is the session immediately before the newest one.
+    // Shared with the caller so the "series skips a session" footnote and the decision to blank
+    // the columns can never disagree.
+    private static bool IsPriorSession(DailyStockPrice latest, DailyStockPrice previous) =>
+        previous != null && previous.Date == UsMarketCalendar.PreviousTradingDay(latest.Date);
 
     // Placeholder row for a ticker with no price to show (unknown symbol or no data),
     // keeping the em-dash columns identical across the per-ticker fallback branches.

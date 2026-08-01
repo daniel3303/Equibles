@@ -49,6 +49,14 @@ public static class UsMarketCalendar
     }
 
     /// <summary>
+    /// The nearest trading day strictly before <paramref name="date"/> — the session a day
+    /// change is measured from. Distinct from <see cref="PreviousOrSameTradingDay"/>, which
+    /// returns the date itself when it already is a trading day.
+    /// </summary>
+    public static DateOnly PreviousTradingDay(DateOnly date) =>
+        PreviousOrSameTradingDay(date.AddDays(-1));
+
+    /// <summary>
     /// The date <paramref name="count"/> trading days after <paramref name="date"/>, skipping
     /// weekends and NYSE holidays. <paramref name="date"/> itself is not counted, so
     /// <c>AddTradingDays(friday, 1)</c> is the following Monday.

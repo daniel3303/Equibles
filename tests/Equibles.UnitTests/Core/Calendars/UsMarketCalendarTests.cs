@@ -123,6 +123,47 @@ public class UsMarketCalendarTests
         AssertNextWindow(from: Et(2025, 3, 15, 12, 0), expected: new DateOnly(2025, 3, 17));
     }
 
+    [Theory]
+    // Mid-week: the day before.
+    [InlineData(2025, 3, 12, 2025, 3, 11)] // Wed -> Tue
+    // Monday steps back over the weekend, not one calendar day.
+    [InlineData(2025, 3, 17, 2025, 3, 14)] // Mon -> Fri
+    // A trading day after a holiday steps over the holiday too. These are the cases a
+    // "within N calendar days" guard cannot express: the gap is 4 days and still adjacent.
+    [InlineData(2025, 1, 21, 2025, 1, 17)] // Tue after MLK Mon -> prior Fri
+    [InlineData(2025, 5, 27, 2025, 5, 23)] // Tue after Memorial Mon -> prior Fri
+    [InlineData(2026, 7, 6, 2026, 7, 2)] // Mon after the observed Jul 3 close -> prior Thu
+    // Good Friday and Thanksgiving: the weekday before is closed, so it is skipped.
+    [InlineData(2024, 4, 1, 2024, 3, 28)] // Easter Mon -> Thu (Good Friday closed)
+    [InlineData(2025, 11, 28, 2025, 11, 26)] // Fri after Thanksgiving -> Wed
+    // A weekend date still resolves to the last session before it.
+    [InlineData(2025, 3, 16, 2025, 3, 14)] // Sun -> Fri
+    public void PreviousTradingDay_StepsBackOverWeekendsAndHolidays(
+        int year,
+        int month,
+        int day,
+        int expectedYear,
+        int expectedMonth,
+        int expectedDay
+    )
+    {
+        UsMarketCalendar
+            .PreviousTradingDay(new DateOnly(year, month, day))
+            .Should()
+            .Be(new DateOnly(expectedYear, expectedMonth, expectedDay));
+    }
+
+    [Fact]
+    public void PreviousTradingDay_OnATradingDay_NeverReturnsTheDateItself()
+    {
+        // The distinction from PreviousOrSameTradingDay: a day change measured from the date
+        // being reported would always be zero.
+        var tradingDay = new DateOnly(2025, 3, 12);
+
+        UsMarketCalendar.PreviousOrSameTradingDay(tradingDay).Should().Be(tradingDay);
+        UsMarketCalendar.PreviousTradingDay(tradingDay).Should().BeBefore(tradingDay);
+    }
+
     private static void AssertNextWindow(DateTimeOffset from, DateOnly expected)
     {
         var windowStart = TimeSpan.FromHours(16);

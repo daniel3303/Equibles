@@ -58,7 +58,9 @@ public class CsvExportServiceFormulaInjectionTests
     {
         // The two rules compose: FormatText prefixes, EscapeField then quotes for the comma. The
         // apostrophe must still be the first character inside the quotes.
-        var cell = CsvExportService.EscapeField(CsvExportService.FormatText("=cmd|'/c calc'!A1, Inc"));
+        var cell = CsvExportService.EscapeField(
+            CsvExportService.FormatText("=cmd|'/c calc'!A1, Inc")
+        );
 
         cell.Should().StartWith("\"'=cmd");
     }
