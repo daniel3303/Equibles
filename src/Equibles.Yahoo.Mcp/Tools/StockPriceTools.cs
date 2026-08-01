@@ -522,12 +522,13 @@ public class StockPriceTools
         string ticker
     )
     {
-        var resolved = await ResolvePricedSpelling(ticker);
+        var resolved = await ResolvePricedSpelling(ticker, ticker);
         if (resolved.Stock == null && ticker != null && ticker.Contains('.'))
         {
             // The dashed spelling either resolves or explains itself; either beats
-            // "not found" against a symbol stored only in the dashed form.
-            var dashed = await ResolvePricedSpelling(ticker.Replace('.', '-'));
+            // "not found" against a symbol stored only in the dashed form. It stays the
+            // LOOKUP spelling only — the message keeps echoing what the caller wrote.
+            var dashed = await ResolvePricedSpelling(ticker.Replace('.', '-'), ticker);
             if (dashed.Stock != null || dashed.SecondaryOf != null)
                 return dashed;
         }
@@ -538,13 +539,17 @@ public class StockPriceTools
         CommonStock Stock,
         CommonStock SecondaryOf,
         string Error
-    )> ResolvePricedSpelling(string ticker)
+    )> ResolvePricedSpelling(string lookupTicker, string requestedTicker)
     {
-        var (stock, error) = await _commonStockRepository.ResolveByTicker(ticker);
+        var (stock, error) = await _commonStockRepository.ResolveByTicker(lookupTicker);
         if (stock == null)
             return (null, null, error);
-        if (SecondaryTickerPolicy.IsSecondarySymbol(stock, ticker))
-            return (null, stock, SecondaryTickerPolicy.NoPriceSeriesMessage(stock, ticker));
+        if (SecondaryTickerPolicy.IsSecondarySymbol(stock, lookupTicker))
+            return (
+                null,
+                stock,
+                SecondaryTickerPolicy.NoPriceSeriesMessage(stock, requestedTicker)
+            );
         return (stock, null, null);
     }
 
