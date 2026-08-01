@@ -76,11 +76,11 @@ public class HoldingsExportController : BaseController
         var rows = allHolders.Select(h =>
             new[]
             {
-                stock.Ticker,
-                stock.Name,
+                CsvExportService.FormatText(stock.Ticker),
+                CsvExportService.FormatText(stock.Name),
                 CsvExportService.Format(tab.SelectedDate),
-                h.InstitutionalHolder?.Name ?? string.Empty,
-                h.InstitutionalHolder?.Cik ?? string.Empty,
+                CsvExportService.FormatText(h.InstitutionalHolder?.Name),
+                CsvExportService.FormatText(h.InstitutionalHolder?.Cik),
                 h.ChangeType.ToString(),
                 CsvExportService.Format(h.CurrentShares),
                 CsvExportService.Format(h.PreviousShares),
@@ -147,11 +147,11 @@ public class HoldingsExportController : BaseController
         var rows = rowsRaw.Select(r =>
             new[]
             {
-                holder.Name,
-                holder.Cik,
+                CsvExportService.FormatText(holder.Name),
+                CsvExportService.FormatText(holder.Cik),
                 CsvExportService.Format(selectedDate),
-                r.Ticker,
-                r.Name,
+                CsvExportService.FormatText(r.Ticker),
+                CsvExportService.FormatText(r.Name),
                 CsvExportService.Format(r.Shares),
                 CsvExportService.Format(r.Value),
                 r.ShareType.ToString(),
@@ -294,7 +294,12 @@ public class HoldingsExportController : BaseController
     )
     {
         stocks.TryGetValue(stockId, out var stock);
-        return (stock?.Ticker ?? string.Empty, stock?.Name ?? string.Empty);
+        // Guarded here rather than at each call site so both the activity and churn rows are
+        // covered by one rule.
+        return (
+            CsvExportService.FormatText(stock?.Ticker),
+            CsvExportService.FormatText(stock?.Name)
+        );
     }
 
     private static string FormatNullablePercent(double? value) =>

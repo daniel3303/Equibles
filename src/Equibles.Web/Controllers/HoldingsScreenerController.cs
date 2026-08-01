@@ -148,9 +148,9 @@ public class HoldingsScreenerController : BaseController
         var csvRows = rows.Select(r =>
             new[]
             {
-                r.Ticker,
-                r.Name,
-                r.IndustryName,
+                CsvExportService.FormatText(r.Ticker),
+                CsvExportService.FormatText(r.Name),
+                CsvExportService.FormatText(r.IndustryName),
                 CsvExportService.Format(r.CurrentFilerCount),
                 CsvExportService.Format(r.PreviousFilerCount),
                 CsvExportService.Format(r.DeltaFilerCount),
