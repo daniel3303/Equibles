@@ -33,6 +33,25 @@ public static class CsvExportService
         return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
+    // Null renders as an empty CSV cell; otherwise the string is written verbatim.
+    public static string Format(string value) => value ?? string.Empty;
+
+    // Spreadsheet formula-injection lead-ins: a value beginning with one of these is treated as a
+    // formula by Excel/Sheets on open. \t and \r are control chars some apps also treat as lead-ins.
+    private static readonly char[] FormulaLeadIns = ['=', '+', '-', '@', '\t', '\r'];
+
+    // Free-text cell formatter that neutralises spreadsheet formula injection: a value starting with
+    // a formula lead-in is prefixed with a quote so crafted text (e.g. an institution name lifted
+    // straight from a 13F filing, which anyone can file) can't execute as a formula when the CSV is
+    // opened. Use for attacker-influenced text; numeric cells stay numeric and so go through the
+    // Format(...) overloads, not this. RFC-4180 quoting is still applied afterwards by EscapeField.
+    public static string FormatText(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return FormulaLeadIns.Contains(value[0]) ? "'" + value : value;
+    }
+
     public static string Format(long value) => value.ToString(CultureInfo.InvariantCulture);
 
     public static string Format(double value) =>
