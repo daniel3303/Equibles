@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.IO.Compression;
 using Equibles.CommonStocks.BusinessLogic;
+using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
@@ -130,6 +132,207 @@ public class FtdImportService
             _logger.LogInformation("Seeded or updated {Count} CUSIPs from FTD data", cusipsSeeded);
         }
     }
+
+    /// <summary>
+    /// Walks the FTD archive backwards in time recording the CUSIPs each tracked symbol
+    /// USED to trade under, as <see cref="CommonStockCusipAlias"/> rows.
+    /// <para>
+    /// <see cref="SeedCusips"/> only captures a retirement it witnesses live, so every
+    /// CUSIP change that predates this pipeline left no alias — and the 13F lines filed
+    /// under those values never map. AMC's holders for 2022-12-31 read 4 institutions /
+    /// 845 shares because its pre-reverse-split 00165C104 was unmapped; a year later the
+    /// same stock shows 274 / 102M.
+    /// </para>
+    /// <para>
+    /// The CNS fails file is the authority: the SEC itself publishes SYMBOL and CUSIP on
+    /// one row, so no name matching or guessing is involved. Two guards keep it honest —
+    /// the symbol must be a tracked stock's PRIMARY ticker (sibling securities file under
+    /// their own symbols, so AMC's preferred units at 00165C203 land on APE, not AMC),
+    /// and the CUSIP must share the stock's current ISSUER prefix, which is what stops a
+    /// recycled ticker from importing a dead issuer's identity. A merger that changes the
+    /// issuer prefix (Merck's 589331107 → 58933Y105) is deliberately NOT recovered:
+    /// coverage loss over a wrong link.
+    /// </para>
+    /// <para>
+    /// Bounded per cycle (<see cref="AliasSweepFilesPerCycle"/>) with the frontier in
+    /// <see cref="BackfillState"/>, so it never blocks the daily import; one
+    /// <see cref="StockCusipChanged"/> per cycle that recorded anything invalidates the
+    /// processed-data-set ledger, and the Holdings worker re-imports the history that can
+    /// now resolve.
+    /// </para>
+    /// </summary>
+    public async Task BackfillRetiredCusips(CancellationToken cancellationToken)
+    {
+        var fileNames = await NextAliasSweepFiles();
+        if (fileNames.Count == 0)
+        {
+            return;
+        }
+
+        var tickerMap = await BuildTickerMap(cancellationToken);
+        if (tickerMap.Count == 0)
+        {
+            return;
+        }
+
+        var strippedAliases = BuildStrippedTickerAliases(tickerMap);
+        var cusipsByTicker = new Dictionary<string, HashSet<string>>(
+            StringComparer.OrdinalIgnoreCase
+        );
+
+        foreach (var fileName in fileNames)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                var records = await DownloadAndParse(fileName, cancellationToken);
+                foreach (var record in records)
+                {
+                    if (string.IsNullOrEmpty(record.Cusip) || string.IsNullOrEmpty(record.Symbol))
+                        continue;
+                    if (
+                        !TryResolveSymbol(record.Symbol, tickerMap, strippedAliases, out var ticker)
+                    )
+                        continue;
+
+                    if (!cusipsByTicker.TryGetValue(ticker, out var cusips))
+                    {
+                        cusips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        cusipsByTicker[ticker] = cusips;
+                    }
+                    cusips.Add(record.Cusip);
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                // A missing archive file costs coverage for that fortnight only; the
+                // frontier still advances so the sweep cannot wedge on one bad file.
+                _logger.LogWarning(
+                    ex,
+                    "Retired-CUSIP sweep: failed to download {File}, skipping",
+                    fileName
+                );
+            }
+        }
+
+        var recorded = await RecordRetiredCusips(cusipsByTicker, cancellationToken);
+        await AdvanceAliasSweepFrontier(fileNames[^1]);
+
+        if (recorded > 0)
+        {
+            _logger.LogInformation(
+                "Retired-CUSIP sweep: recorded {Count} alias(es) across {Files} FTD file(s)",
+                recorded,
+                fileNames.Count
+            );
+        }
+    }
+
+    private async Task<int> RecordRetiredCusips(
+        Dictionary<string, HashSet<string>> cusipsByTicker,
+        CancellationToken cancellationToken
+    )
+    {
+        if (cusipsByTicker.Count == 0)
+        {
+            return 0;
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+
+        var stocks = await stockRepo
+            .GetByTickers(cusipsByTicker.Keys.ToList())
+            .ToListAsync(cancellationToken);
+
+        var recorded = 0;
+        foreach (var stock in stocks)
+        {
+            // Only the stock's OWN symbol may contribute: a secondary ticker names a
+            // different security sharing this filer's row, and its CUSIP is not this
+            // security's retired identity.
+            if (stock.Cusip == null || !cusipsByTicker.TryGetValue(stock.Ticker, out var seen))
+                continue;
+
+            var retired = seen.Where(c => CusipIdentity.SameIssuer(c, stock.Cusip)).ToList();
+            if (retired.Count == 0)
+                continue;
+
+            recorded += await stockManager.RecordRetiredCusipAliases(stock, retired);
+        }
+
+        return recorded;
+    }
+
+    // The sweep runs oldest-first from the start of the archive and stops once the
+    // frontier passes the newest file — the live import owns everything from there.
+    private async Task<List<string>> NextAliasSweepFiles()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var stateRepo = scope.ServiceProvider.GetRequiredService<BackfillStateRepository>();
+        var state = await stateRepo.GetByName(AliasSweepCursorName);
+
+        var all = GetFileNames(OldestAvailableDate);
+        var startIndex = 0;
+        if (state?.Floor != null)
+        {
+            // A frontier no current file name matches means the archive naming moved on;
+            // sweeping from the start again would re-download years for nothing.
+            var index = all.IndexOf(FileNameOf(state.Floor.Value));
+            if (index < 0)
+            {
+                return [];
+            }
+            startIndex = index + 1;
+        }
+
+        return all.Skip(startIndex).Take(AliasSweepFilesPerCycle).ToList();
+    }
+
+    private async Task AdvanceAliasSweepFrontier(string lastFileName)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var stateRepo = scope.ServiceProvider.GetRequiredService<BackfillStateRepository>();
+        var state = await stateRepo.GetByName(AliasSweepCursorName);
+        if (state == null)
+        {
+            state = new BackfillState { Name = AliasSweepCursorName };
+            stateRepo.Add(state);
+        }
+
+        state.Floor = FrontierOf(lastFileName);
+        await stateRepo.SaveChanges();
+    }
+
+    // The frontier is stored as the swept file's own timestamp so the cursor round-trips
+    // through BackfillState's DateTime column: the month at midnight, plus a day for the
+    // second-half ("b") file so the two halves of one month stay ordered.
+    internal static DateTime FrontierOf(string fileName)
+    {
+        var yearMonth = fileName["cnsfails".Length..];
+        var month = DateTime.ParseExact(
+            yearMonth[..6],
+            "yyyyMM",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal
+        );
+        return yearMonth[6] == 'b' ? month.AddDays(1) : month;
+    }
+
+    internal static string FileNameOf(DateTime frontier)
+    {
+        var half = frontier.Day > 1 ? "b" : "a";
+        return $"cnsfails{frontier:yyyyMM}{half}.zip";
+    }
+
+    private const string AliasSweepCursorName = "Ftd.RetiredCusipSweep";
+
+    // Twelve fortnightly files ≈ six months of archive per daily cycle, so the whole
+    // 2017→today range is swept in about a fortnight of cycles without ever making the
+    // FTD worker's run long.
+    private const int AliasSweepFilesPerCycle = 12;
 
     /// <summary>
     /// Seeds and updates CUSIP values on CommonStock records by matching FTD

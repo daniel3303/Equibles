@@ -61,5 +61,10 @@ public class FtdScraperWorker : BaseScraperWorker
 
         var ftdService = scope.ServiceProvider.GetRequiredService<FtdImportService>();
         await ftdService.Import(stoppingToken);
+
+        // Then a bounded slice of the archive sweep that recovers CUSIPs retired before
+        // this pipeline first ran — the live import above can only witness retirements
+        // that happen while it is running.
+        await ftdService.BackfillRetiredCusips(stoppingToken);
     }
 }
