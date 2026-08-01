@@ -184,10 +184,8 @@ public class StockPriceTools
                     }
 
                     var price = latestTwo[0];
-                    var previousClose = DayChangeBasis(
-                        price,
-                        latestTwo.Count > 1 ? latestTwo[1] : null
-                    );
+                    var previous = latestTwo.Count > 1 ? latestTwo[1] : null;
+                    var previousClose = DayChangeBasis(price, previous);
                     var changeCell = "—";
                     var changePctCell = "—";
                     if (previousClose != null)
@@ -200,8 +198,11 @@ public class StockPriceTools
                                 "+0.00;-0.00;0.00"
                             ) + "%";
                     }
-                    else if (latestTwo.Count > 1)
+                    else if (previous != null && !IsPriorSession(price, previous))
                     {
+                        // Only a skipped session earns the footnote. A prior row with a
+                        // non-positive close is blanked too, and saying "no row for the session
+                        // before" about it would be wrong.
                         gapped = true;
                     }
 
@@ -753,14 +754,14 @@ public class StockPriceTools
     // So the basis is chosen by DATE, never by position: only the row dated the trading day
     // immediately before the latest one qualifies. Otherwise there is no day change to state,
     // and an absent percentage is honest where a wrong one is not.
-    private static decimal? DayChangeBasis(DailyStockPrice latest, DailyStockPrice previous)
-    {
-        if (previous == null || previous.Close <= 0)
-            return null;
-        return previous.Date == UsMarketCalendar.PreviousTradingDay(latest.Date)
-            ? previous.Close
-            : null;
-    }
+    private static decimal? DayChangeBasis(DailyStockPrice latest, DailyStockPrice previous) =>
+        IsPriorSession(latest, previous) && previous.Close > 0 ? previous.Close : null;
+
+    // Whether the second-newest stored row is the session immediately before the newest one.
+    // Shared with the caller so the "series skips a session" footnote and the decision to blank
+    // the columns can never disagree.
+    private static bool IsPriorSession(DailyStockPrice latest, DailyStockPrice previous) =>
+        previous != null && previous.Date == UsMarketCalendar.PreviousTradingDay(latest.Date);
 
     // Placeholder row for a ticker with no price to show (unknown symbol or no data),
     // keeping the em-dash columns identical across the per-ticker fallback branches.
