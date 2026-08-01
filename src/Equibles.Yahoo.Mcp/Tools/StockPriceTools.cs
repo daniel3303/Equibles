@@ -518,11 +518,9 @@ public class StockPriceTools
     // (SecondaryTickerPolicy): it is a different security sharing one filer's row, and
     // the row's bars belong to the primary symbol alone. SecondaryOf carries that
     // primary so the batch tool can say so in a table cell.
-    private async Task<(
-        CommonStock Stock,
-        CommonStock SecondaryOf,
-        string Error
-    )> ResolveTicker(string ticker)
+    private async Task<(CommonStock Stock, CommonStock SecondaryOf, string Error)> ResolveTicker(
+        string ticker
+    )
     {
         var resolved = await ResolvePricedSpelling(ticker);
         if (resolved.Stock == null && ticker != null && ticker.Contains('.'))
