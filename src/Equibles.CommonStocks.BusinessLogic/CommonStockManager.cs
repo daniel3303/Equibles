@@ -21,6 +21,81 @@ public class CommonStockManager
     }
 
     /// <summary>
+    /// Records CUSIPs a stock USED to trade under, without touching its current one.
+    /// <para>
+    /// <see cref="SetCusip"/> only ever captures a retirement it witnesses live, so a
+    /// CUSIP change that happened before this pipeline first ran leaves no alias — and
+    /// every 13F line filed under the retired value stays unmappable forever. AMC's
+    /// pre-2023-reverse-split 00165C104 is the shape: `GetTopHolders(AMC, 2022-12-31)`
+    /// answered with 4 institutions holding 845 shares, against 274 holding 102M a year
+    /// later. The cliff is the CUSIP change, not an ownership event.
+    /// </para>
+    /// <para>
+    /// Callers must have established that the CUSIP belongs to this issuer. Aliases the
+    /// table has already claimed are left with their first owner (one CUSIP identifies
+    /// one security, ever), so a re-run records nothing and publishes nothing.
+    /// </para>
+    /// <para>
+    /// Recording one publishes <see cref="StockCusipChanged"/> for the same reason
+    /// <see cref="SetCusip"/> does: quarterly 13F data sets already marked processed hold
+    /// no holdings for lines filed under the newly-mapped CUSIP, and the consumer clears
+    /// that ledger so the Holdings worker re-imports them. A burst collapses to a no-op
+    /// once cleared, so a sweep recording many aliases costs one invalidation.
+    /// </para>
+    /// </summary>
+    public async Task<int> RecordRetiredCusipAliases(
+        CommonStock commonStock,
+        IEnumerable<string> retiredCusips
+    )
+    {
+        ArgumentNullException.ThrowIfNull(commonStock);
+        ArgumentNullException.ThrowIfNull(retiredCusips);
+
+        var candidates = retiredCusips
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim().ToUpperInvariant())
+            .Where(c => !string.Equals(c, commonStock.Cusip, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return 0;
+        }
+
+        var alreadyRecorded = await _commonStockRepository
+            .GetCusipAliases()
+            .Where(a => candidates.Contains(a.Cusip.ToUpper()))
+            .Select(a => a.Cusip)
+            .ToListAsync();
+        var taken = new HashSet<string>(alreadyRecorded, StringComparer.OrdinalIgnoreCase);
+
+        var recorded = 0;
+        foreach (var cusip in candidates.Where(c => !taken.Contains(c)))
+        {
+            _commonStockRepository.AddCusipAlias(
+                new CommonStockCusipAlias { CommonStockId = commonStock.Id, Cusip = cusip }
+            );
+            recorded++;
+        }
+
+        if (recorded == 0)
+        {
+            return 0;
+        }
+
+        await _commonStockRepository.SaveChanges();
+
+        // Root bus, after the write commits — same reasoning as SetCusip: this flow only
+        // saves the financial context, so a bus outbox on another context would capture
+        // the publish and never deliver it.
+        await _bus.Publish(
+            new StockCusipChanged(commonStock.Id, commonStock.Ticker, null, commonStock.Cusip)
+        );
+
+        return recorded;
+    }
+
+    /// <summary>
     /// Sets a stock's CUSIP. When the value actually changes, publishes
     /// <see cref="StockCusipChanged"/> after SaveChanges so the Holdings module can
     /// backfill quarterly 13F data sets that were processed while this stock
