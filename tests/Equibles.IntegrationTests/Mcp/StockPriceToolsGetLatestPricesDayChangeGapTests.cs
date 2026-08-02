@@ -107,6 +107,20 @@ public class StockPriceToolsGetLatestPricesDayChangeGapTests : ParadeDbMcpTestBa
     }
 
     [Fact]
+    public async Task GetLatestPrices_PriorBarOnAnNyseClosure_StillRendersTheChange()
+    {
+        // Fri 2026-07-03 is the observed Independence Day close, yet 297 securities in production
+        // carry a bar for it — foreign ordinaries quoted here trade on their home calendar. No
+        // NYSE session sits between the two bars, so this is a real one-session move.
+        await Seed("FGN", (new DateOnly(2026, 7, 3), 100m), (new DateOnly(2026, 7, 6), 110m));
+
+        var result = await Sut().GetLatestPrices("FGN");
+
+        result.Should().Contain("+10.00%");
+        result.Should().NotContain("no row for the session before");
+    }
+
+    [Fact]
     public async Task GetLatestPrices_SingleRow_BlanksTheChangeWithoutTheFootnote()
     {
         // One stored bar is not a gap — there is no prior row to have skipped a session, so the
