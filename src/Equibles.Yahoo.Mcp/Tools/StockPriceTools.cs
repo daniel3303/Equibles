@@ -760,8 +760,17 @@ public class StockPriceTools
     // Whether the second-newest stored row is the session immediately before the newest one.
     // Shared with the caller so the "series skips a session" footnote and the decision to blank
     // the columns can never disagree.
+    //
+    // The test is "no NYSE session was skipped", NOT "the prior row is exactly the NYSE previous
+    // session". Every date strictly between the previous NYSE session and the latest one is a
+    // weekend or an NYSE holiday, so a bar there belongs to a security trading on some other
+    // calendar — foreign ordinaries quoted here keep trading through Juneteenth, Good Friday and
+    // Memorial Day, and 121-297 of them carry a bar on each. Demanding an exact match blanked a
+    // correct one-session move for every one of them on the day after an NYSE holiday.
     private static bool IsPriorSession(DailyStockPrice latest, DailyStockPrice previous) =>
-        previous != null && previous.Date == UsMarketCalendar.PreviousTradingDay(latest.Date);
+        previous != null
+        && previous.Date < latest.Date
+        && previous.Date >= UsMarketCalendar.PreviousTradingDay(latest.Date);
 
     // Placeholder row for a ticker with no price to show (unknown symbol or no data),
     // keeping the em-dash columns identical across the per-ticker fallback branches.

@@ -107,4 +107,45 @@ public class StockPriceToolsDayChangeBasisTests
         // row that is not strictly the prior session.
         Basis(new DateOnly(2025, 3, 12), new DateOnly(2025, 3, 13)).Should().BeNull();
     }
+
+    [Fact]
+    public void PreviousRowSameDateAsTheLatest_YieldsNoBasis()
+    {
+        // A duplicate bar is not a prior session; differencing it would state 0.00% as a day
+        // change that was never measured.
+        Basis(new DateOnly(2025, 3, 12), new DateOnly(2025, 3, 12)).Should().BeNull();
+    }
+
+    [Theory]
+    // Bars dated on days the NYSE is shut. Every date strictly between the previous NYSE session
+    // and the latest one is a weekend or a holiday, so a bar there belongs to a security trading
+    // on another calendar — foreign ordinaries quoted here keep trading through these closures,
+    // and production carries 121-297 such bars per holiday. No NYSE session is skipped, so the
+    // move is a genuine one-session change and must render.
+    [InlineData(2026, 7, 6, 2026, 7, 3)] // observed Independence Day (Jul 4 fell on a Saturday)
+    [InlineData(2026, 6, 22, 2026, 6, 19)] // Juneteenth, a Friday in 2026
+    [InlineData(2026, 5, 26, 2026, 5, 25)] // Memorial Day
+    [InlineData(2026, 4, 6, 2026, 4, 3)] // Good Friday
+    public void PriorRowOnAnNyseClosure_StillYieldsTheBasis(
+        int year,
+        int month,
+        int day,
+        int prevYear,
+        int prevMonth,
+        int prevDay
+    )
+    {
+        Basis(new DateOnly(year, month, day), new DateOnly(prevYear, prevMonth, prevDay))
+            .Should()
+            .Be(100m);
+    }
+
+    [Fact]
+    public void PriorRowOneSessionBeforeAClosure_StillYieldsTheBasis()
+    {
+        // The security has no bar on the closure itself, so the pre-closure session IS its prior
+        // one. Both this and the case above must pass: the rule is "no NYSE session was skipped",
+        // not "the prior row is exactly the NYSE previous session".
+        Basis(new DateOnly(2026, 7, 6), new DateOnly(2026, 7, 2)).Should().Be(100m);
+    }
 }
