@@ -21,9 +21,9 @@ namespace Equibles.IntegrationTests.InsiderTrading;
 /// relational provider (it calls Database.SetCommandTimeout, unsupported by the
 /// in-memory provider). Contract: a row below the current parser version is
 /// re-parsed from its cached ownership XML — a local read, not an EDGAR fetch —
-/// SecurityKind is re-derived from the source table (authoritative over the
-/// stored value), and the row is stamped with the current parser version so it
-/// drops out of future runs.
+/// SecurityKind and corrected dates are re-derived from the source (authoritative
+/// over stored values), and the row is stamped with the current parser version so
+/// it drops out of future runs.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
@@ -32,9 +32,11 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public async Task Run_StaleRowWithCachedXml_ReclassifiesFromSourceTableAndStampsVersion()
+    public async Task Run_V5RowWithCachedXml_ReclassifiesAndCorrectsDateFromSource()
     {
-        var date = new DateOnly(2024, 6, 14);
+        var reportDate = new DateOnly(2024, 6, 14);
+        var filingDate = new DateOnly(2024, 6, 17);
+        var impossibleDate = new DateOnly(2035, 6, 14);
         var accession = "0000320193-24-000001";
 
         var stock = new CommonStock
@@ -54,10 +56,9 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
             IsDirector = true,
         };
 
-        // Stored row is mis-classified as Derivative and stuck at the legacy
-        // version; the cached XML below places it in the non-derivative table, so
-        // the run must flip it to NonDerivative — the table, never the prior value,
-        // is authoritative.
+        // This v5 row predates the parser generation for date correction. Its source
+        // date is impossible and its security type is wrong; cached XML authoritatively
+        // supplies both the table classification and the period-of-report fallback.
         var stale = new InsiderTransaction
         {
             Id = Guid.NewGuid(),
@@ -65,8 +66,8 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
             InsiderOwnerId = owner.Id,
             AccessionNumber = accession,
             TransactionOrder = 0,
-            FilingDate = date,
-            TransactionDate = date,
+            FilingDate = filingDate,
+            TransactionDate = impossibleDate,
             TransactionCode = TransactionCode.Purchase,
             Shares = 1000,
             PricePerShare = 55m,
@@ -76,16 +77,17 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
             OwnershipNature = OwnershipNature.Direct,
             SecurityTitle = "Common Stock",
             SecurityKind = InsiderSecurityKind.Derivative,
-            ParserVersion = 0,
+            ParserVersion = 5,
         };
 
         // The reprocess maps a re-parsed row onto the stored row by TransactionOrder,
         // so the cached XML's single non-derivative transaction (order 0) lines up.
         var ownershipXml =
             "<ownershipDocument>"
+            + "<periodOfReport>2024-06-14</periodOfReport>"
             + "<nonDerivativeTable><nonDerivativeTransaction>"
             + "<securityTitle><value>Common Stock</value></securityTitle>"
-            + "<transactionDate><value>2024-06-14</value></transactionDate>"
+            + "<transactionDate><value>2035-06-14</value></transactionDate>"
             + "<transactionCoding><transactionCode>P</transactionCode></transactionCoding>"
             + "<transactionAmounts>"
             + "<transactionShares><value>1000</value></transactionShares>"
@@ -114,7 +116,7 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
             new DailyStockPrice
             {
                 CommonStockId = stock.Id,
-                Date = date,
+                Date = reportDate,
                 Close = 55m,
             }
         );
@@ -144,6 +146,7 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
         result.Processed.Should().Be(1);
         result.Reclassified.Should().Be(1);
         result.Repaired.Should().Be(0);
+        result.DatesCorrected.Should().Be(1);
         result.Failed.Should().Be(0);
         // Served entirely from the cached blob — no EDGAR round-trip.
         result.Fetched.Should().Be(0);
@@ -152,6 +155,7 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var reprocessed = await verify.Set<InsiderTransaction>().FindAsync(stale.Id);
         reprocessed!.SecurityKind.Should().Be(InsiderSecurityKind.NonDerivative);
+        reprocessed.TransactionDate.Should().Be(reportDate);
         reprocessed.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
     }
 }

@@ -19,8 +19,9 @@ namespace Equibles.InsiderTrading.BusinessLogic;
 /// <see cref="InsiderTransaction.CurrentParserVersion"/>. For each such filing it
 /// replays the parse from the cached ownership XML — fetching and caching the XML
 /// from EDGAR the first time — then updates each row's authoritative
-/// <see cref="InsiderTransaction.SecurityKind"/>, re-runs price validity from the
-/// as-filed price, and stamps the current parser version.
+/// <see cref="InsiderTransaction.SecurityKind"/>, restores corrected dates from the
+/// document's period of report, re-runs price validity from the as-filed price, and
+/// stamps the current parser version.
 ///
 /// The parser version is the single selector: once a filing's rows are stamped at
 /// the current version they drop out, so the run terminates and is resumable —
@@ -176,11 +177,12 @@ public class InsiderFilingReprocessManager
             }
 
             _logger.LogInformation(
-                "Insider filing reprocess: {Processed}/{Total} filings, reclassified={Reclassified}, repaired={Repaired}, failed={Failed}",
+                "Insider filing reprocess: {Processed}/{Total} filings, reclassified={Reclassified}, repaired={Repaired}, dates corrected={DatesCorrected}, failed={Failed}",
                 result.Processed,
                 result.Total,
                 result.Reclassified,
                 result.Repaired,
+                result.DatesCorrected,
                 result.Failed
             );
 
@@ -243,7 +245,10 @@ public class InsiderFilingReprocessManager
         {
             AccessionNumber = accession,
             FilingDate = first.FilingDate,
-            ReportDate = first.TransactionDate,
+            // periodOfReport is the authoritative fallback used by the parser when a
+            // filer keyed an impossible transaction date. Falling back to the stored
+            // date preserves legacy behavior only for malformed documents that omit it.
+            ReportDate = InsiderFilingParser.ParsePeriodOfReport(root) ?? first.TransactionDate,
         };
 
         // Re-parse in the same document order the ingest used; map back onto the
@@ -274,12 +279,15 @@ public class InsiderFilingReprocessManager
             );
         }
 
-        var closes = await FetchCloses(first.CommonStockId, rows);
-
         foreach (var row in rows)
         {
             if (parsedByOrder.TryGetValue(row.TransactionOrder, out var reparsed))
             {
+                if (row.TransactionDate != reparsed.TransactionDate)
+                {
+                    row.TransactionDate = reparsed.TransactionDate;
+                    result.DatesCorrected++;
+                }
                 if (row.SecurityKind != reparsed.SecurityKind)
                 {
                     row.SecurityKind = reparsed.SecurityKind;
@@ -296,7 +304,14 @@ public class InsiderFilingReprocessManager
                 // Re-derive footnotes (added in parser v2); cheap to always copy.
                 row.Notes = reparsed.Notes;
             }
+        }
 
+        // Date corrections must land before close lookup so price validation uses the
+        // repaired trading day rather than the impossible source typo.
+        var closes = await FetchCloses(first.CommonStockId, rows);
+
+        foreach (var row in rows)
+        {
             decimal? close = closes.TryGetValue(row.TransactionDate, out var value) ? value : null;
 
             var evaluation = _validator.Evaluate(

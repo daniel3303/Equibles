@@ -33,9 +33,11 @@ public class InsiderTransaction
     /// holding-only rows (parsed from a <c>nonDerivativeHolding</c>/
     /// <c>derivativeHolding</c> element) as <see cref="TransactionCode.Holding"/>
     /// instead of <see cref="TransactionCode.Other"/>, so the reprocess re-tags
-    /// every historical holding row and transaction lists can exclude them.
+    /// every historical holding row and transaction lists can exclude them; v6
+    /// re-derives transaction dates after implausible-date validation was added,
+    /// anchoring source typos to the filing's period of report.
     /// </summary>
-    public const int CurrentParserVersion = 5;
+    public const int CurrentParserVersion = 6;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
