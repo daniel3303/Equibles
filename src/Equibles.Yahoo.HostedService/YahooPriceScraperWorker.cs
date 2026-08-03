@@ -14,6 +14,7 @@ public class YahooPriceScraperWorker : BaseScraperWorker
 {
     private readonly WorkerOptions _workerOptions;
     private readonly TimeSpan _enrichmentInterval;
+    private bool _ohlcRepairComplete;
 
     // UTC stamp of the last cycle that carried the enrichment calls. In-memory on purpose, which
     // means every process start RE-RUNS enrichment on its first cycle (default stamp = due). That
@@ -73,6 +74,13 @@ public class YahooPriceScraperWorker : BaseScraperWorker
         );
         var importService = scope.ServiceProvider.GetRequiredService<YahooPriceImportService>();
         await importService.Import(includeEnrichment, stoppingToken);
+
+        // Historical corruption is repaired in bounded batches after current prices, so cleanup
+        // never queues the time-sensitive daily pass behind old work. Once a scan finds no more
+        // rows, keep the result in memory and avoid a table scan on every quiet cycle. A restart
+        // intentionally verifies the invariant once more.
+        if (!_ohlcRepairComplete)
+            _ohlcRepairComplete = await importService.RepairInvalidOhlc(stoppingToken);
 
         // Stamp only after the sweep ran to completion — an interrupted enrichment cycle (deploy,
         // crash) leaves the stamp unset so the next cycle retries it.

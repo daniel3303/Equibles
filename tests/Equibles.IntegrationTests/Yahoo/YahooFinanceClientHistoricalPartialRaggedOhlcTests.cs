@@ -65,6 +65,31 @@ public class YahooFinanceClientHistoricalPartialRaggedOhlcTests
         prices.Should().OnlyContain(p => p.High >= p.Open && p.High >= p.Close && p.Low <= p.Close);
     }
 
+    [Fact]
+    public async Task GetHistoricalPrices_CompleteButImpossibleOhlc_SkipsTheBar()
+    {
+        var timestamp = new DateTimeOffset(2026, 7, 31, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
+        var json =
+            "{\"chart\":{\"result\":[{\"timestamp\":["
+            + timestamp
+            + "],\"indicators\":{\"quote\":[{"
+            + "\"open\":[287.54],\"high\":[310.88],\"low\":[287.76],"
+            + "\"close\":[310.23],\"volume\":[1686983]}]}}]}}";
+
+        var sut = new YahooFinanceClient(
+            new HttpClient(new StubHandler(json)),
+            Substitute.For<ILogger<YahooFinanceClient>>()
+        );
+
+        var prices = await sut.GetHistoricalPrices(
+            "CBOE",
+            new DateOnly(2026, 7, 31),
+            new DateOnly(2026, 7, 31)
+        );
+
+        prices.Should().BeEmpty();
+    }
+
     private sealed class StubHandler : HttpMessageHandler
     {
         private readonly string _body;

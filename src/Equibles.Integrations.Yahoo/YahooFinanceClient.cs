@@ -223,10 +223,9 @@ public class YahooFinanceClient : IYahooFinanceClient
     // Yahoo occasionally returns a ragged payload — a timestamp array longer than the
     // OHLC/volume columns, a column with a null hole on a holiday / early-close row, or a
     // zeroed OHLC quartet for a delisted / halted ticker. Bound every column access and
-    // require a strictly-positive OHLC quartet: an incomplete or non-positive row is
-    // skipped rather than emitted as an impossible bar (e.g. Close=0 on a day with
-    // Volume>0, which corrupts market cap and price-derived rankings) or aborting the
-    // whole import.
+    // require a coherent, strictly-positive OHLC quartet: an incomplete, non-positive,
+    // or internally impossible row is skipped rather than emitted as a corrupt bar (e.g.
+    // Close=0 with Volume>0, or Low above Open) or aborting the whole import.
     private static HistoricalPrice TryBuildPrice(
         ChartQuote quote,
         List<decimal?> adjCloseList,
@@ -244,6 +243,11 @@ public class YahooFinanceClient : IYahooFinanceClient
         // A real trading bar has every OHLC value present and strictly positive; a null
         // hole or a $0/negative price (delisted/halted ticker) is not a tradeable price.
         if (open is not > 0 || high is not > 0 || low is not > 0 || close is not > 0)
+            return null;
+
+        // Yahoo can briefly publish a complete but still-partial candle after UTC rollover.
+        // Presence alone is insufficient: High and Low must contain both endpoint prices.
+        if (high < open || high < close || low > open || low > close || high < low)
             return null;
 
         return new HistoricalPrice
