@@ -21,7 +21,7 @@
                 </thead>
                 <tbody>
                     @foreach (var sv in Model.ShortVolumes.OrderByDescending(v => v.Date)) {
-                        var shortPct = sv.TotalVolume > 0 ? (double)sv.ShortVolume / sv.TotalVolume * 100 : 0;
+                        var shortPct = sv.TotalVolume > 0 ? (double)(sv.ShortVolume / sv.TotalVolume) * 100 : 0;
                         <tr>
                             <td>@sv.Date.ToString("yyyy-MM-dd")</td>
                             <td class="text-right font-mono"><compactable-number value="@sv.ShortVolume" /></td>
@@ -44,7 +44,7 @@
         const shortVol = @Html.Json(Model.ShortVolumes.Select(v => v.ShortVolume).ToList());
         const totalVol = @Html.Json(Model.ShortVolumes.Select(v => v.TotalVolume).ToList());
         // Short volume as a percentage of total volume, per day
-        const shortPct = @Html.Json(Model.ShortVolumes.Select(v => v.TotalVolume > 0 ? Math.Round((double)v.ShortVolume / v.TotalVolume * 100, 2) : 0).ToList());
+        const shortPct = @Html.Json(Model.ShortVolumes.Select(v => v.TotalVolume > 0 ? Math.Round((double)(v.ShortVolume / v.TotalVolume) * 100, 2) : 0).ToList());
 
         new Chart(ctx, {
             type: 'bar',

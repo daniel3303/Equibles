@@ -11,13 +11,13 @@ public class ShortVolumeRecord
     public string Symbol { get; set; }
 
     [JsonProperty("shortParQuantity")]
-    public long? ShortVolume { get; set; }
+    public decimal? ShortVolume { get; set; }
 
     [JsonProperty("shortExemptParQuantity")]
-    public long? ShortExemptVolume { get; set; }
+    public decimal? ShortExemptVolume { get; set; }
 
     [JsonProperty("totalParQuantity")]
-    public long? TotalVolume { get; set; }
+    public decimal? TotalVolume { get; set; }
 
     [JsonProperty("marketCode")]
     public string MarketCode { get; set; }

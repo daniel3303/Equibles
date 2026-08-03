@@ -17,9 +17,13 @@ namespace Equibles.Finra.HostedService.Services;
 [Service]
 public class OffExchangeVolumeImportService
 {
-    // FINRA summaryTypeCode values for the per-symbol weekly aggregates.
-    private const string AtsSummaryTypeCode = "ATS_W_SMBL";
-    private const string NonAtsOtcSummaryTypeCode = "OTC_W_SMBL";
+    private const string Dataset = "off-exchange-weekly-v1";
+    private const int CorrectionLookbackWeeks = 8;
+    private static readonly TimeSpan RecentPartitionRefreshInterval = TimeSpan.FromHours(24);
+    private static readonly HashSet<string> CompletePublicationTiers = new(
+        ["T1", "T2", "OTCE"],
+        StringComparer.OrdinalIgnoreCase
+    );
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OffExchangeVolumeImportService> _logger;
@@ -27,6 +31,8 @@ public class OffExchangeVolumeImportService
     private readonly TickerMapService _tickerMapService;
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
+    private readonly FinraImportPartitionTracker _partitionTracker;
+    private readonly TimeProvider _timeProvider;
 
     public OffExchangeVolumeImportService(
         IServiceScopeFactory scopeFactory,
@@ -34,7 +40,9 @@ public class OffExchangeVolumeImportService
         IFinraClient finraClient,
         TickerMapService tickerMapService,
         ErrorReporter errorReporter,
-        IOptions<WorkerOptions> workerOptions
+        IOptions<WorkerOptions> workerOptions,
+        FinraImportPartitionTracker partitionTracker,
+        TimeProvider timeProvider
     )
     {
         _scopeFactory = scopeFactory;
@@ -43,19 +51,19 @@ public class OffExchangeVolumeImportService
         _tickerMapService = tickerMapService;
         _errorReporter = errorReporter;
         _workerOptions = workerOptions.Value;
+        _partitionTracker = partitionTracker;
+        _timeProvider = timeProvider;
     }
 
     public async Task Import(CancellationToken cancellationToken)
     {
-        // Resolve the backfill floor (Worker:MinSyncDate or 2020-01-01) by passing `default`:
-        // the loop below re-derives the forward edge from the stored span, so the full
-        // window is reconsidered every cycle rather than only moving past the latest week.
-        var floor = SyncDateResolver.Resolve(default, _workerOptions);
-
-        // FINRA partitions the OTC/ATS Transparency feed by the Monday that starts
-        // each reporting week, so iterate Monday-by-Monday rather than day-by-day.
-        var startWeek = ToWeekStart(floor);
-        var endWeek = ToWeekStart(DateOnly.FromDateTime(DateTime.UtcNow));
+        var now = _timeProvider.GetUtcNow();
+        var today = DateOnly.FromDateTime(now.UtcDateTime);
+        var configuredFloor = ToWeekStart(SyncDateResolver.Resolve(default, _workerOptions));
+        var currentDatasetFloor = ToWeekStart(today.AddYears(-1).AddDays(7));
+        var startWeek =
+            configuredFloor > currentDatasetFloor ? configuredFloor : currentDatasetFloor;
+        var endWeek = ToWeekStart(today);
 
         if (startWeek > endWeek)
         {
@@ -66,73 +74,95 @@ public class OffExchangeVolumeImportService
             return;
         }
 
-        // The weeks already stored span [earliestWeek, latestWeek]; the loop skips that span
-        // and imports the weeks outside it, backfilling history below the earliest stored
-        // week and importing forward past the latest, without re-fetching finished weeks.
-        // The previous implementation only moved forward from the latest stored week, so the
-        // pre-collection history could never load.
-        DateOnly earliestWeek;
-        DateOnly latestWeek;
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            var repo = scope.ServiceProvider.GetRequiredService<OffExchangeVolumeRepository>();
-            earliestWeek = await repo.GetEarliestWeek().FirstOrDefaultAsync(cancellationToken);
-            latestWeek = await repo.GetLatestWeek().FirstOrDefaultAsync(cancellationToken);
-        }
-
-        var hasStored = earliestWeek != default;
-
-        _logger.LogInformation(
-            "Importing off-exchange volume from week {Start} to week {End}{Skip}",
+        var scopeKey = FinraImportScope.Resolve(_workerOptions.TickersToSync);
+        var completed = await _partitionTracker.GetCompleted(
+            Dataset,
+            scopeKey,
             startWeek,
             endWeek,
-            hasStored ? $" (skipping already-stored {earliestWeek}..{latestWeek})" : null
+            cancellationToken
+        );
+        var weeks = CandidateWeeks(startWeek, endWeek, now.UtcDateTime, completed).ToList();
+
+        _logger.LogInformation(
+            "Reconciling {Attempted} FINRA off-exchange weekly partitions in {Start}..{End}; {Completed} already complete for scope {Scope}",
+            weeks.Count,
+            startWeek,
+            endWeek,
+            completed.Count,
+            scopeKey
         );
 
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
             cancellationToken
         );
-
-        var currentWeek = startWeek;
-        while (currentWeek <= endWeek)
+        foreach (var week in weeks)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            await ImportWeek(week, tickerMap, scopeKey, now.UtcDateTime, cancellationToken);
+        }
+    }
 
-            // Skip any week already inside the stored span.
-            if (hasStored && currentWeek >= earliestWeek && currentWeek <= latestWeek)
+    private static IEnumerable<DateOnly> CandidateWeeks(
+        DateOnly startWeek,
+        DateOnly endWeek,
+        DateTime now,
+        IReadOnlyDictionary<DateOnly, FinraImportPartition> completed
+    )
+    {
+        var refreshCutoff = endWeek.AddDays(-7 * CorrectionLookbackWeeks);
+        var refreshBefore = now - RecentPartitionRefreshInterval;
+
+        for (var week = endWeek; week >= startWeek; week = week.AddDays(-7))
+        {
+            if (!completed.TryGetValue(week, out var partition))
             {
-                currentWeek = currentWeek.AddDays(7);
+                yield return week;
                 continue;
             }
 
-            await ImportWeek(currentWeek, tickerMap, cancellationToken);
-            currentWeek = currentWeek.AddDays(7);
+            if (week >= refreshCutoff && partition.ImportedAt <= refreshBefore)
+                yield return week;
         }
     }
 
     private async Task ImportWeek(
         DateOnly weekStartDate,
         IReadOnlyDictionary<string, Guid> tickerMap,
+        string scopeKey,
+        DateTime importedAt,
         CancellationToken cancellationToken
     )
     {
         try
         {
             var records = await _finraClient.GetWeeklyOffExchangeVolume(weekStartDate);
-
             if (records.Count == 0)
             {
                 _logger.LogDebug(
-                    "No off-exchange volume data for week {Week}, skipping",
+                    "No off-exchange volume data for week {Week}, leaving it retryable",
                     weekStartDate
                 );
                 return;
             }
 
-            var merged = MergeRecordsByStock(records, tickerMap, weekStartDate);
+            var publishedTiers = PublishedTiers(records);
+            if (!CompletePublicationTiers.IsSubsetOf(publishedTiers))
+            {
+                LogMissingPublicationTiers(weekStartDate, publishedTiers);
+                return;
+            }
 
+            var merged = OffExchangeVolumeMerger.Merge(records, tickerMap, weekStartDate);
             await UpsertWeek(merged.Values, weekStartDate, cancellationToken);
+            await _partitionTracker.MarkImported(
+                Dataset,
+                scopeKey,
+                weekStartDate,
+                importedAt,
+                cancellationToken
+            );
 
             _logger.LogInformation(
                 "Imported {Count} off-exchange volume records for week {Week}",
@@ -144,9 +174,13 @@ public class OffExchangeVolumeImportService
         {
             _logger.LogWarning(
                 ex,
-                "Failed to fetch off-exchange volume for week {Week}, skipping",
+                "Failed to fetch off-exchange volume for week {Week}, leaving it retryable",
                 weekStartDate
             );
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -164,9 +198,30 @@ public class OffExchangeVolumeImportService
         }
     }
 
-    // Idempotent upsert: update the existing row for each (CommonStockId, WeekStartDate),
-    // otherwise insert. Re-runs of the same week overwrite rather than duplicate, so a
-    // resumed or rescheduled scrape never produces two rows for the same stock and week.
+    private static HashSet<string> PublishedTiers(List<OffExchangeWeeklyRecord> records)
+    {
+        return records
+            .Where(record => !string.IsNullOrWhiteSpace(record.TierIdentifier))
+            .Select(record => record.TierIdentifier)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void LogMissingPublicationTiers(
+        DateOnly weekStartDate,
+        IReadOnlySet<string> publishedTiers
+    )
+    {
+        var missing = CompletePublicationTiers
+            .Where(tier => !publishedTiers.Contains(tier))
+            .OrderBy(tier => tier, StringComparer.Ordinal)
+            .ToList();
+        _logger.LogInformation(
+            "Off-exchange week {Week} is still awaiting FINRA tiers {MissingTiers}",
+            weekStartDate,
+            string.Join(", ", missing)
+        );
+    }
+
     private async Task UpsertWeek(
         IEnumerable<OffExchangeVolume> volumes,
         DateOnly weekStartDate,
@@ -180,94 +235,49 @@ public class OffExchangeVolumeImportService
         var batch = volumes.ToList();
         var validBatch = await stockRepo.FilterByExistingStocks(
             batch,
-            b => b.CommonStockId,
+            volume => volume.CommonStockId,
             cancellationToken
         );
-        var dropped = batch.Count - validBatch.Count;
-        if (dropped > 0)
-        {
-            _logger.LogWarning(
-                "Dropped {Dropped} off-exchange volume rows for week {Week} referencing CommonStockIds no longer in the database",
-                dropped,
-                weekStartDate
-            );
-        }
-
-        if (validBatch.Count == 0)
-            return;
+        LogDroppedRows(batch.Count - validBatch.Count, weekStartDate);
 
         var existing = await repo.GetByWeek(weekStartDate)
-            .ToDictionaryAsync(v => v.CommonStockId, cancellationToken);
-
+            .ToDictionaryAsync(volume => volume.CommonStockId, cancellationToken);
         foreach (var volume in validBatch)
-        {
-            if (existing.TryGetValue(volume.CommonStockId, out var current))
-            {
-                current.AtsVolume = volume.AtsVolume;
-                current.AtsTradeCount = volume.AtsTradeCount;
-                current.NonAtsOtcVolume = volume.NonAtsOtcVolume;
-                current.NonAtsOtcTradeCount = volume.NonAtsOtcTradeCount;
-            }
-            else
-            {
-                repo.Add(volume);
-            }
-        }
+            UpsertVolume(repo, existing, volume);
 
         await repo.SaveChanges();
     }
 
-    // Merge FINRA's two per-symbol weekly aggregate rows into one OffExchangeVolume per
-    // (CommonStockId, week): the ATS_W_SMBL row supplies Ats* and the OTC_W_SMBL row
-    // supplies NonAtsOtc*. A symbol with only one of the two rows keeps the other pair at
-    // zero. Symbols absent from the tickerMap (untracked) and blank symbols are skipped.
-    private static Dictionary<Guid, OffExchangeVolume> MergeRecordsByStock(
-        List<OffExchangeWeeklyRecord> records,
-        IReadOnlyDictionary<string, Guid> tickerMap,
-        DateOnly weekStartDate
-    )
+    private void LogDroppedRows(int dropped, DateOnly weekStartDate)
     {
-        var merged = new Dictionary<Guid, OffExchangeVolume>();
+        if (dropped == 0)
+            return;
 
-        foreach (var record in records)
-        {
-            if (
-                string.IsNullOrEmpty(record.Symbol)
-                || !tickerMap.TryGetValue(record.Symbol, out var commonStockId)
-            )
-            {
-                continue;
-            }
-
-            if (!merged.TryGetValue(commonStockId, out var volume))
-            {
-                volume = new OffExchangeVolume
-                {
-                    CommonStockId = commonStockId,
-                    WeekStartDate = weekStartDate,
-                };
-                merged[commonStockId] = volume;
-            }
-
-            var shares = record.TotalWeeklyShareQuantity ?? 0;
-            var trades = record.TotalWeeklyTradeCount ?? 0;
-
-            if (record.SummaryTypeCode == AtsSummaryTypeCode)
-            {
-                volume.AtsVolume += shares;
-                volume.AtsTradeCount += trades;
-            }
-            else if (record.SummaryTypeCode == NonAtsOtcSummaryTypeCode)
-            {
-                volume.NonAtsOtcVolume += shares;
-                volume.NonAtsOtcTradeCount += trades;
-            }
-        }
-
-        return merged;
+        _logger.LogWarning(
+            "Dropped {Dropped} off-exchange volume rows for week {Week} referencing CommonStockIds no longer in the database",
+            dropped,
+            weekStartDate
+        );
     }
 
-    // Normalize any date to the Monday that starts its FINRA reporting week.
+    private static void UpsertVolume(
+        OffExchangeVolumeRepository repository,
+        IReadOnlyDictionary<Guid, OffExchangeVolume> existing,
+        OffExchangeVolume volume
+    )
+    {
+        if (!existing.TryGetValue(volume.CommonStockId, out var current))
+        {
+            repository.Add(volume);
+            return;
+        }
+
+        current.AtsVolume = volume.AtsVolume;
+        current.AtsTradeCount = volume.AtsTradeCount;
+        current.NonAtsOtcVolume = volume.NonAtsOtcVolume;
+        current.NonAtsOtcTradeCount = volume.NonAtsOtcTradeCount;
+    }
+
     private static DateOnly ToWeekStart(DateOnly date)
     {
         var offset = ((int)date.DayOfWeek + 6) % 7;

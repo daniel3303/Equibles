@@ -1,5 +1,3 @@
-using System.Reflection;
-using Equibles.Finra.Data.Models;
 using Equibles.Finra.HostedService.Services;
 using Equibles.Integrations.Finra.Models;
 
@@ -7,7 +5,7 @@ namespace Equibles.UnitTests.Finra;
 
 public class OffExchangeVolumeImportServiceMergeRecordsByStockMergeAtsAndOtcTests
 {
-    // OffExchangeVolumeImportService.MergeRecordsByStock is the only path between FINRA's
+    // OffExchangeVolumeMerger.Merge is the only path between FINRA's
     // weeklySummary feed and the OffExchangeVolume table. FINRA emits the per-symbol weekly
     // aggregate as TWO distinct rows for the same symbol+week: one tagged ATS_W_SMBL
     // (dark-pool) and one tagged OTC_W_SMBL (non-ATS OTC). The merge must fold both into a
@@ -22,11 +20,6 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockMergeAtsAndOtcTest
     [Fact]
     public void MergeRecordsByStock_AtsAndOtcRowsForSameSymbol_MergeIntoOneEntityWithBothPairs()
     {
-        var method = typeof(OffExchangeVolumeImportService).GetMethod(
-            "MergeRecordsByStock",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
-
         var stockId = Guid.NewGuid();
         var tickerMap = new Dictionary<string, Guid> { ["AAPL"] = stockId };
         var records = new List<OffExchangeWeeklyRecord>
@@ -47,9 +40,7 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockMergeAtsAndOtcTest
             },
         };
 
-        var result =
-            (Dictionary<Guid, OffExchangeVolume>)
-                method!.Invoke(null, [records, tickerMap, new DateOnly(2024, 3, 4)]);
+        var result = OffExchangeVolumeMerger.Merge(records, tickerMap, new DateOnly(2024, 3, 4));
 
         result.Should().HaveCount(1);
         var merged = result[stockId];

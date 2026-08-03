@@ -56,6 +56,13 @@ public static class SplitAdjustment
             : (long)Math.Round(count * shareCountFactor, MidpointRounding.AwayFromZero);
 
     /// <summary>
+    /// Restates a fractional share count without discarding FINRA's sub-share precision.
+    /// Presentation layers may still round the result when they intentionally display N0.
+    /// </summary>
+    public static decimal AdjustShareCount(decimal count, decimal shareCountFactor) =>
+        count * shareCountFactor;
+
+    /// <summary>
     /// Factor that converts a PRICE observed as-of <paramref name="asOf"/> onto
     /// today's basis — the inverse of <see cref="ShareCountFactor"/>, since a
     /// split moves price opposite to share count. Returns 1 when the share-count

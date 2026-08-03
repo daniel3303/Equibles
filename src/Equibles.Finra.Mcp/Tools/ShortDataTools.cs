@@ -418,7 +418,7 @@ public class ShortDataTools
                 else if (sortKey.Equals("shortPercent", StringComparison.OrdinalIgnoreCase))
                 {
                     ordered = query
-                        .OrderByDescending(d => (double)d.ShortVolume / d.TotalVolume)
+                        .OrderByDescending(d => d.ShortVolume / d.TotalVolume)
                         .ThenByDescending(d => d.ShortVolume)
                         .ThenBy(d => d.CommonStock.Ticker);
                 }
@@ -464,7 +464,7 @@ public class ShortDataTools
     {
         // Short % is computed from raw counts — it is a same-day ratio and split-invariant,
         // so the factor cancels; adjusting only the displayed absolute volumes.
-        var shortPct = r.TotalVolume > 0 ? (double)r.ShortVolume / r.TotalVolume * 100 : 0;
+        var shortPct = r.TotalVolume > 0 ? (double)(r.ShortVolume / r.TotalVolume) * 100 : 0;
         var shortVolume = SplitAdjustment.AdjustShareCount(r.ShortVolume, shareFactor);
         var exemptVolume = SplitAdjustment.AdjustShareCount(r.ShortExemptVolume, shareFactor);
         var totalVolume = SplitAdjustment.AdjustShareCount(r.TotalVolume, shareFactor);

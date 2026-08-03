@@ -13,7 +13,7 @@ namespace Equibles.IntegrationTests.Finra;
 /// <summary>
 /// <c>FinraClient.SendWithRetry</c>'s transient-failure arms (429 + 5xx
 /// exponential-backoff retry) were uncovered. These drive them through the
-/// public <c>GetDailyShortVolume</c>: the OAuth token is pre-seeded into the
+/// public <c>GetShortInterest</c>: the OAuth token is pre-seeded into the
 /// client's static cache (so no token round-trip), the first data response is
 /// the transient status, and the retried request returns an empty 200 body —
 /// the call must succeed, not surface the max-retries exception.
@@ -49,7 +49,7 @@ public class FinraClientRetryTests
     [Theory]
     [InlineData(HttpStatusCode.TooManyRequests)]
     [InlineData(HttpStatusCode.InternalServerError)]
-    public async Task GetDailyShortVolume_TransientThenOk_RetriesWithBackoffAndReturns(
+    public async Task GetShortInterest_TransientThenOk_RetriesWithBackoffAndReturns(
         HttpStatusCode transientStatus
     )
     {
@@ -65,7 +65,7 @@ public class FinraClientRetryTests
                 options
             );
 
-            var result = await client.GetDailyShortVolume(new DateOnly(2026, 1, 5));
+            var result = await client.GetShortInterest(new DateOnly(2026, 1, 5));
 
             result.Should().BeEmpty("the retried request returned an empty 200 body");
             handler.CallCount.Should().Be(2, "the transient failure must be retried once");

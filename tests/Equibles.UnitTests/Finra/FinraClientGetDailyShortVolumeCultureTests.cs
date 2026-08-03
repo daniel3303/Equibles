@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using Equibles.Integrations.Finra;
@@ -8,21 +9,16 @@ using Microsoft.Extensions.Options;
 namespace Equibles.UnitTests.Finra;
 
 /// <summary>
-/// Contract: GetDailyShortVolume sends date-range filters to the FINRA API
-/// using Gregorian ISO dates. ToString("yyyy-MM-dd") without InvariantCulture
-/// produces Hijri dates on ar-SA threads, causing the API to return no results.
+/// Contract: GetDailyShortVolume requests the official FINRA file names with a
+/// Gregorian yyyyMMdd stamp, regardless of the caller's current culture.
 /// </summary>
 public class FinraClientGetDailyShortVolumeCultureTests
 {
     [Fact]
-    public void GetDailyShortVolume_HijriCultureThread_SendsGregorianDateInRequest()
+    public void GetDailyShortVolume_HijriCultureThread_UsesGregorianDateInFileNames()
     {
-        string capturedBody = null;
-        var handler = new CaptureBodyHandler(body =>
-        {
-            capturedBody = body;
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]") };
-        });
+        var requestedPaths = new ConcurrentBag<string>();
+        var handler = new CaptureRequestHandler(requestedPaths.Add);
         var options = Options.Create(new FinraOptions { ClientId = "test", ClientSecret = "test" });
         var sut = new FinraClient(
             new HttpClient(handler),
@@ -45,40 +41,33 @@ public class FinraClientGetDailyShortVolumeCultureTests
         worker.Start();
         worker.Join();
 
-        capturedBody.Should().Contain("2024-03-15", "date filter must be Gregorian, not Hijri");
+        requestedPaths
+            .Should()
+            .BeEquivalentTo(
+                "/equity/regsho/daily/CNMSshvol20240315.txt",
+                "/equity/regsho/daily/FORFshvol20240315.txt"
+            );
     }
 
-    private class CaptureBodyHandler : HttpMessageHandler
+    private sealed class CaptureRequestHandler : HttpMessageHandler
     {
-        private readonly Func<string, HttpResponseMessage> _onData;
+        private const string File =
+            "Date|Symbol|ShortVolume|ShortExemptVolume|TotalVolume|Market\n"
+            + "20240315|AAPL|1.25|0|2.5|Q\n"
+            + "1\n";
+        private readonly Action<string> _capture;
 
-        public CaptureBodyHandler(Func<string, HttpResponseMessage> onData) => _onData = onData;
+        public CaptureRequestHandler(Action<string> capture) => _capture = capture;
 
-        protected override async Task<HttpResponseMessage> SendAsync(
+        protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken
         )
         {
-            // Route purely by URL, not by call order. FinraClient caches the OAuth
-            // token in static fields shared across the whole test process, so a
-            // parallel test can warm the cache and make this client skip the token
-            // request entirely — the data POST then arrives first. An order-based
-            // ("first request is the token") handler would answer that data POST
-            // with the token object, which fails to deserialize into a record list
-            // and crashes the test host. URL-based routing is order-independent.
-            if (request.RequestUri!.AbsoluteUri.Contains("oauth2/access_token"))
-            {
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent("{\"access_token\":\"test\",\"expires_in\":3600}"),
-                };
-            }
-
-            var body =
-                request.Content != null
-                    ? await request.Content.ReadAsStringAsync(cancellationToken)
-                    : string.Empty;
-            return _onData(body);
+            _capture(request.RequestUri!.AbsolutePath);
+            return Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(File) }
+            );
         }
     }
 }

@@ -7,6 +7,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Finra.Data;
 using Equibles.Finra.Data.Models;
+using Equibles.Finra.HostedService.Configuration;
 using Equibles.Finra.HostedService.Services;
 using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
@@ -23,12 +24,16 @@ namespace Equibles.IntegrationTests.Finra;
 
 public class ShortVolumeImportServiceTests : IDisposable
 {
+    private static readonly DateTimeOffset Now = new(2026, 3, 30, 20, 0, 0, TimeSpan.Zero);
+
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DailyShortVolumeRepository _volumeRepo;
+    private readonly FinraImportPartitionRepository _partitionRepo;
     private readonly CommonStockRepository _stockRepo;
     private readonly IFinraClient _finraClient;
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
+    private readonly TimeProvider _timeProvider;
     private readonly ShortVolumeImportService _service;
 
     public ShortVolumeImportServiceTests()
@@ -38,6 +43,7 @@ public class ShortVolumeImportServiceTests : IDisposable
             new FinraModuleConfiguration()
         );
         _volumeRepo = new DailyShortVolumeRepository(_dbContext);
+        _partitionRepo = new FinraImportPartitionRepository(_dbContext);
         _stockRepo = new CommonStockRepository(_dbContext);
 
         _finraClient = Substitute.For<IFinraClient>();
@@ -47,6 +53,8 @@ public class ShortVolumeImportServiceTests : IDisposable
         );
 
         _workerOptions = new WorkerOptions();
+        _timeProvider = Substitute.For<TimeProvider>();
+        _timeProvider.GetUtcNow().Returns(Now);
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyShortVolumeRepository), _volumeRepo),
@@ -61,7 +69,10 @@ public class ShortVolumeImportServiceTests : IDisposable
             _finraClient,
             tickerMapService,
             _errorReporter,
-            Options.Create(_workerOptions)
+            Options.Create(_workerOptions),
+            Options.Create(new FinraScraperOptions()),
+            new FinraImportPartitionTracker(_partitionRepo),
+            _timeProvider
         );
     }
 
@@ -104,6 +115,25 @@ public class ShortVolumeImportServiceTests : IDisposable
                 }
             );
         await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+    }
+
+    private async Task SeedCompletedPartition(
+        DateOnly date,
+        string scopeKey = "all",
+        DateTime? importedAt = null
+    )
+    {
+        _partitionRepo.Add(
+            new FinraImportPartition
+            {
+                Dataset = "daily-short-volume-files-v1",
+                PartitionDate = date,
+                ScopeKey = scopeKey,
+                ImportedAt = importedAt ?? Now.UtcDateTime,
+            }
+        );
+        await _partitionRepo.SaveChanges();
         _dbContext.ChangeTracker.Clear();
     }
 
@@ -226,19 +256,18 @@ public class ShortVolumeImportServiceTests : IDisposable
         volume[0].TotalVolume.Should().Be(2_000_000);
     }
 
-    // ── Skips stored days, backfills the rest ────────────────────────
+    // ── Reconciles partitions, not sparse row spans ─────────────────
 
     [Fact]
-    public async Task Import_StoredSpanCoversWholeWindow_SkipsWithoutCallingApi()
+    public async Task Import_CompletedPartition_SkipsWithoutCallingApi()
     {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
-        // Floor == today and today's row is already stored, so the only day in the
-        // [floor, today] window is already covered and nothing is fetched.
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = DateOnly.FromDateTime(Now.UtcDateTime);
         _workerOptions.MinSyncDate = today.ToDateTime(TimeOnly.MinValue);
         await SeedVolume(apple, today);
+        await SeedCompletedPartition(today);
 
         await _service.Import(CancellationToken.None);
 
@@ -246,42 +275,64 @@ public class ShortVolumeImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_ExistingData_BackfillsBeforeEarliestAndFetchesForward()
+    public async Task Import_SubsetPartitionMarker_DoesNotSuppressAllTickerReconciliation()
     {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
+        var today = DateOnly.FromDateTime(Now.UtcDateTime);
+        _workerOptions.MinSyncDate = today.ToDateTime(TimeOnly.MinValue);
+        await SeedCompletedPartition(today, FinraImportScope.Resolve(["AAPL"]));
+        _finraClient.GetDailyShortVolume(today).Returns(new List<ShortVolumeRecord>());
+
+        await _service.Import(CancellationToken.None);
+
+        await _finraClient.Received(1).GetDailyShortVolume(today);
+        _partitionRepo
+            .GetPartition("daily-short-volume-files-v1", "all", today)
+            .Should()
+            .ContainSingle();
+    }
+
+    [Fact]
+    public async Task Import_SparseStoredDay_ReconcilesAndMarksWholePartitionComplete()
+    {
+        var apple = CreateStock("AAPL", "Apple Inc.");
+        var microsoft = CreateStock("MSFT", "Microsoft Corp.");
+        await SeedStocks(apple, microsoft);
+
         var existingDate = new DateOnly(2026, 3, 25); // Wednesday
         await SeedVolume(apple, existingDate);
-
-        // Floor two weekdays before the stored row, so the loop must backfill the gap
-        // below the earliest stored day as well as fetch forward past the latest.
-        _workerOptions.MinSyncDate = new DateTime(2026, 3, 23); // Monday
-
-        var backfillDay = new DateOnly(2026, 3, 24); // Tuesday, below the stored row
-        var forwardDay = existingDate.AddDays(1); // Thursday, above the stored row
+        _workerOptions.MinSyncDate = existingDate.ToDateTime(TimeOnly.MinValue);
 
         _finraClient
             .GetDailyShortVolume(Arg.Any<DateOnly>())
             .Returns(new List<ShortVolumeRecord>());
         _finraClient
-            .GetDailyShortVolume(backfillDay)
-            .Returns(CreateVolumeRecords(("AAPL", 100_000, 1_000, 500_000)));
-        _finraClient
-            .GetDailyShortVolume(forwardDay)
-            .Returns(CreateVolumeRecords(("AAPL", 200_000, 2_000, 800_000)));
+            .GetDailyShortVolume(existingDate)
+            .Returns(
+                CreateVolumeRecords(
+                    ("AAPL", 200_000, 2_000, 800_000),
+                    ("MSFT", 300_000, 3_000, 900_000)
+                )
+            );
 
         await _service.Import(CancellationToken.None);
 
-        // The already-stored day is never re-fetched...
-        await _finraClient.DidNotReceive().GetDailyShortVolume(existingDate);
-        // ...but both the earlier (backfill) and later (forward) days are.
-        await _finraClient.Received().GetDailyShortVolume(backfillDay);
-        await _finraClient.Received().GetDailyShortVolume(forwardDay);
+        await _finraClient.Received(1).GetDailyShortVolume(existingDate);
 
-        var volumes = _volumeRepo.GetAll().ToList();
-        volumes.Should().Contain(v => v.Date == backfillDay && v.ShortVolume == 100_000);
-        volumes.Should().Contain(v => v.Date == forwardDay && v.ShortVolume == 200_000);
+        var volumes = _volumeRepo.GetByDate(existingDate).ToList();
+        volumes.Should().HaveCount(2);
+        volumes.Should().Contain(v => v.CommonStockId == apple.Id && v.ShortVolume == 200_000);
+        volumes.Should().Contain(v => v.CommonStockId == microsoft.Id && v.ShortVolume == 300_000);
+        _partitionRepo
+            .GetPartition("daily-short-volume-files-v1", "all", existingDate)
+            .Should()
+            .ContainSingle();
+
+        _finraClient.ClearReceivedCalls();
+        await _service.Import(CancellationToken.None);
+        await _finraClient.DidNotReceive().GetDailyShortVolume(existingDate);
     }
 
     // ── Handles empty API response ───────────────────────────────────
@@ -541,12 +592,13 @@ public class ShortVolumeImportServiceTests : IDisposable
     // ── MinSyncDate configuration ────────────────────────────────────
 
     [Fact]
-    public async Task Import_WithoutMinSyncDate_DefaultsTo2020()
+    public async Task Import_WithoutMinSyncDate_StartsAtFirstTradingDayAfterDefaultFloor()
     {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = null;
+        _timeProvider.GetUtcNow().Returns(new DateTimeOffset(2020, 1, 2, 20, 0, 0, TimeSpan.Zero));
 
         _finraClient
             .GetDailyShortVolume(Arg.Any<DateOnly>())
@@ -554,8 +606,8 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        // Should have started from 2020-01-01 (a Wednesday)
-        await _finraClient.Received().GetDailyShortVolume(new DateOnly(2020, 1, 1));
+        // January 1 is a market holiday; January 2 is the first eligible partition.
+        await _finraClient.Received().GetDailyShortVolume(new DateOnly(2020, 1, 2));
     }
 
     // ── No stocks exist ──────────────────────────────────────────────

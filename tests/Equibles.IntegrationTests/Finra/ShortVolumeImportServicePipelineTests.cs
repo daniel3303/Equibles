@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Finra.Data.Models;
+using Equibles.Finra.HostedService.Configuration;
 using Equibles.Finra.HostedService.Services;
 using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
@@ -77,7 +78,10 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
             // weekday since the default 2020 floor.
             Options.Create(
                 new WorkerOptions { TickersToSync = [], MinSyncDate = DateTime.UtcNow.AddDays(-7) }
-            )
+            ),
+            Options.Create(new FinraScraperOptions()),
+            new FinraImportPartitionTracker(new FinraImportPartitionRepository(DbContext)),
+            TimeProvider.System
         );
     }
 

@@ -12,18 +12,18 @@ namespace Equibles.IntegrationTests.Finra;
 /// 401 → InvalidateToken → re-fetch → retry branch in <c>SendWithRetry</c> is
 /// uncovered. FINRA expires bearer tokens server-side mid-scrape; that branch
 /// must transparently refresh and retry. A regression that dropped it (or moved
-/// 401 into the generic non-retry path) would fail the entire short-volume
-/// import the moment a cached token aged out.
+/// 401 into the generic non-retry path) would fail the API import the moment a
+/// cached token aged out.
 /// </summary>
 public class FinraClientTokenRefreshTests
 {
     [Fact]
-    public async Task GetDailyShortVolume_FirstDataCallUnauthorized_RefreshesTokenThenSucceeds()
+    public async Task GetShortInterest_FirstDataCallUnauthorized_RefreshesTokenThenSucceeds()
     {
         var dataResponse =
-            "[{\"tradeReportDate\":\"2024-12-31\","
-            + "\"securitiesInformationProcessorSymbolIdentifier\":\"AAPL\","
-            + "\"totalParQuantity\":1000}]";
+            "[{\"settlementDate\":\"2024-12-31\","
+            + "\"symbolCode\":\"AAPL\","
+            + "\"currentShortPositionQuantity\":1000}]";
 
         var handler = new TokenRefreshHandler(
             tokenBody: "{\"access_token\":\"tok\",\"expires_in\":3600}",
@@ -35,7 +35,7 @@ public class FinraClientTokenRefreshTests
             Options.Create(new FinraOptions { ClientId = "id", ClientSecret = "secret" })
         );
 
-        var result = await sut.GetDailyShortVolume(new DateOnly(2024, 12, 31));
+        var result = await sut.GetShortInterest(new DateOnly(2024, 12, 31));
 
         result.Should().ContainSingle();
         result[0].Symbol.Should().Be("AAPL");

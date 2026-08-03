@@ -1,10 +1,13 @@
+using System.Net;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Calendars;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Finra.Data.Models;
+using Equibles.Finra.HostedService.Configuration;
 using Equibles.Finra.Repositories;
 using Equibles.Integrations.Finra.Contracts;
 using Equibles.Integrations.Finra.Models;
@@ -17,7 +20,10 @@ namespace Equibles.Finra.HostedService.Services;
 [Service]
 public class ShortVolumeImportService
 {
-    private const int InsertBatchSize = 1000;
+    private const string Dataset = "daily-short-volume-files-v1";
+    private const int CorrectionLookbackDays = 7;
+    private static readonly DateOnly FirstConsolidatedFileDate = new(2018, 8, 1);
+    private static readonly TimeSpan RecentPartitionRefreshInterval = TimeSpan.FromHours(24);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ShortVolumeImportService> _logger;
@@ -25,6 +31,9 @@ public class ShortVolumeImportService
     private readonly TickerMapService _tickerMapService;
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
+    private readonly FinraScraperOptions _finraOptions;
+    private readonly FinraImportPartitionTracker _partitionTracker;
+    private readonly TimeProvider _timeProvider;
 
     public ShortVolumeImportService(
         IServiceScopeFactory scopeFactory,
@@ -32,7 +41,10 @@ public class ShortVolumeImportService
         IFinraClient finraClient,
         TickerMapService tickerMapService,
         ErrorReporter errorReporter,
-        IOptions<WorkerOptions> workerOptions
+        IOptions<WorkerOptions> workerOptions,
+        IOptions<FinraScraperOptions> finraOptions,
+        FinraImportPartitionTracker partitionTracker,
+        TimeProvider timeProvider
     )
     {
         _scopeFactory = scopeFactory;
@@ -41,16 +53,19 @@ public class ShortVolumeImportService
         _tickerMapService = tickerMapService;
         _errorReporter = errorReporter;
         _workerOptions = workerOptions.Value;
+        _finraOptions = finraOptions.Value;
+        _partitionTracker = partitionTracker;
+        _timeProvider = timeProvider;
     }
 
     public async Task Import(CancellationToken cancellationToken)
     {
-        // Resolve the backfill floor (Worker:MinSyncDate or 2020-01-01) by passing `default`:
-        // we want the floor itself, not "latest stored + 1". The loop below re-derives the
-        // forward edge from the stored span, so the full window is reconsidered every cycle.
         var floor = SyncDateResolver.Resolve(default, _workerOptions);
-        var endDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (floor < FirstConsolidatedFileDate)
+            floor = FirstConsolidatedFileDate;
 
+        var now = _timeProvider.GetUtcNow();
+        var endDate = DateOnly.FromDateTime(now.UtcDateTime);
         if (floor > endDate)
         {
             _logger.LogInformation(
@@ -60,115 +75,108 @@ public class ShortVolumeImportService
             return;
         }
 
-        // The span already stored is [earliest, latest]; the loop skips it and imports the
-        // days outside it. That fills the history below the earliest row (a fresh deployment
-        // starts with only recent FINRA data) AND keeps importing forward past the latest
-        // row, without ever re-fetching a finished day. The previous implementation only
-        // moved forward from the latest row, so the pre-collection history could never load.
-        DateOnly earliest;
-        DateOnly latest;
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            var repo = scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
-            earliest = await repo.GetEarliestDate().FirstOrDefaultAsync(cancellationToken);
-            latest = await repo.GetLatestDate().FirstOrDefaultAsync(cancellationToken);
-        }
-
-        var hasStored = earliest != default;
-
-        _logger.LogInformation(
-            "Importing short volume from {Start} to {End}{Skip}",
+        var scopeKey = FinraImportScope.Resolve(_workerOptions.TickersToSync);
+        var completed = await _partitionTracker.GetCompleted(
+            Dataset,
+            scopeKey,
             floor,
             endDate,
-            hasStored ? $" (skipping already-stored {earliest}..{latest})" : null
+            cancellationToken
+        );
+        var dates = CandidateDates(floor, endDate, now.UtcDateTime, completed)
+            .Take(Math.Max(1, _finraOptions.ShortVolumeBackfillDatesPerCycle))
+            .ToList();
+
+        _logger.LogInformation(
+            "Reconciling {Attempted} FINRA daily short-volume partitions in {Start}..{End}; {Completed} already complete for scope {Scope}",
+            dates.Count,
+            floor,
+            endDate,
+            completed.Count,
+            scopeKey
         );
 
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
             cancellationToken
         );
-
-        var currentDate = floor;
-        while (currentDate <= endDate)
+        foreach (var date in dates)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            // Skip weekends and any day already inside the stored span.
-            if (
-                currentDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday
-                || (hasStored && currentDate >= earliest && currentDate <= latest)
-            )
-            {
-                currentDate = currentDate.AddDays(1);
-                continue;
-            }
-
-            await ImportSingleDay(currentDate, tickerMap, cancellationToken);
-            currentDate = currentDate.AddDays(1);
+            await ImportSingleDay(date, tickerMap, scopeKey, now.UtcDateTime, cancellationToken);
         }
     }
 
-    private async Task ImportSingleDay(
+    private static IEnumerable<DateOnly> CandidateDates(
+        DateOnly floor,
+        DateOnly endDate,
+        DateTime now,
+        IReadOnlyDictionary<DateOnly, FinraImportPartition> completed
+    )
+    {
+        var refreshCutoff = endDate.AddDays(-CorrectionLookbackDays);
+        var refreshBefore = now - RecentPartitionRefreshInterval;
+
+        for (var date = endDate; date >= floor; date = date.AddDays(-1))
+        {
+            if (!UsMarketCalendar.IsTradingDay(date))
+                continue;
+
+            if (!completed.TryGetValue(date, out var partition))
+            {
+                yield return date;
+                continue;
+            }
+
+            if (date >= refreshCutoff && partition.ImportedAt <= refreshBefore)
+                yield return date;
+        }
+    }
+
+    private async Task<bool> ImportSingleDay(
         DateOnly date,
         IReadOnlyDictionary<string, Guid> tickerMap,
+        string scopeKey,
+        DateTime importedAt,
         CancellationToken cancellationToken
     )
     {
         try
         {
-            var records = await _finraClient.GetDailyShortVolume(date);
-
-            if (records.Count == 0)
-            {
-                _logger.LogDebug("No short volume data for {Date}, skipping", date);
-                return;
-            }
-
+            var records = await _finraClient.GetDailyShortVolume(date, cancellationToken);
             var aggregated = AggregateVolumesByStock(records, tickerMap, date);
-
-            var totalInserted = await BatchPersister.Persist(
-                aggregated.Values,
-                InsertBatchSize,
-                async batch =>
-                {
-                    using var scope = _scopeFactory.CreateScope();
-                    var stockRepo =
-                        scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-                    var repo =
-                        scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
-
-                    var validBatch = await stockRepo.FilterByExistingStocks(
-                        batch,
-                        b => b.CommonStockId,
-                        cancellationToken
-                    );
-                    var dropped = batch.Count - validBatch.Count;
-                    if (dropped > 0)
-                    {
-                        _logger.LogWarning(
-                            "Dropped {Dropped} short volume rows for {Date} referencing CommonStockIds no longer in the database",
-                            dropped,
-                            date
-                        );
-                    }
-
-                    if (validBatch.Count == 0)
-                        return;
-
-                    repo.AddRange(validBatch);
-                    await repo.SaveChanges();
-                }
+            var totalImported = await UpsertDay(aggregated.Values, date, cancellationToken);
+            await _partitionTracker.MarkImported(
+                Dataset,
+                scopeKey,
+                date,
+                importedAt,
+                cancellationToken
             );
 
             _logger.LogInformation(
                 "Imported {Count} short volume records for {Date}",
-                totalInserted,
+                totalImported,
                 date
             );
+            return true;
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            _logger.LogDebug(
+                "FINRA short-volume files for {Date} are not published yet; leaving the partition retryable",
+                date
+            );
+            return false;
         }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Failed to fetch short volume for {Date}, skipping", date);
+            return false;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -179,11 +187,67 @@ public class ShortVolumeImportService
                 ex,
                 $"date: {date}"
             );
+            return false;
         }
     }
 
-    // Aggregate volumes across all markets per stock so one DailyShortVolume row per
-    // (CommonStockId, currentDate) is persisted instead of one per FINRA market venue.
+    private async Task<int> UpsertDay(
+        IEnumerable<DailyShortVolume> volumes,
+        DateOnly date,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var repo = scope.ServiceProvider.GetRequiredService<DailyShortVolumeRepository>();
+
+        var batch = volumes.ToList();
+        var validBatch = await stockRepo.FilterByExistingStocks(
+            batch,
+            volume => volume.CommonStockId,
+            cancellationToken
+        );
+        LogDroppedRows(batch.Count - validBatch.Count, date);
+
+        var existing = await repo.GetByDate(date)
+            .ToDictionaryAsync(volume => volume.CommonStockId, cancellationToken);
+        foreach (var volume in validBatch)
+            UpsertVolume(repo, existing, volume);
+
+        await repo.SaveChanges();
+        return validBatch.Count;
+    }
+
+    private void LogDroppedRows(int dropped, DateOnly date)
+    {
+        if (dropped == 0)
+            return;
+
+        _logger.LogWarning(
+            "Dropped {Dropped} short volume rows for {Date} referencing CommonStockIds no longer in the database",
+            dropped,
+            date
+        );
+    }
+
+    private static void UpsertVolume(
+        DailyShortVolumeRepository repository,
+        IReadOnlyDictionary<Guid, DailyShortVolume> existing,
+        DailyShortVolume volume
+    )
+    {
+        if (!existing.TryGetValue(volume.CommonStockId, out var current))
+        {
+            repository.Add(volume);
+            return;
+        }
+
+        current.ShortVolume = volume.ShortVolume;
+        current.ShortExemptVolume = volume.ShortExemptVolume;
+        current.TotalVolume = volume.TotalVolume;
+        current.Market = volume.Market;
+    }
+
     private static Dictionary<Guid, DailyShortVolume> AggregateVolumesByStock(
         List<ShortVolumeRecord> records,
         IReadOnlyDictionary<string, Guid> tickerMap,
@@ -191,7 +255,6 @@ public class ShortVolumeImportService
     )
     {
         var aggregated = new Dictionary<Guid, DailyShortVolume>();
-
         foreach (var record in records)
         {
             if (
@@ -202,25 +265,31 @@ public class ShortVolumeImportService
                 continue;
             }
 
-            if (aggregated.TryGetValue(commonStockId, out var existing))
+            if (!aggregated.TryGetValue(commonStockId, out var volume))
             {
-                existing.ShortVolume += record.ShortVolume ?? 0;
-                existing.ShortExemptVolume += record.ShortExemptVolume ?? 0;
-                existing.TotalVolume += record.TotalVolume ?? 0;
+                volume = new DailyShortVolume { CommonStockId = commonStockId, Date = currentDate };
+                aggregated[commonStockId] = volume;
             }
-            else
-            {
-                aggregated[commonStockId] = new DailyShortVolume
-                {
-                    CommonStockId = commonStockId,
-                    Date = currentDate,
-                    ShortVolume = record.ShortVolume ?? 0,
-                    ShortExemptVolume = record.ShortExemptVolume ?? 0,
-                    TotalVolume = record.TotalVolume ?? 0,
-                };
-            }
+
+            volume.ShortVolume += record.ShortVolume ?? 0;
+            volume.ShortExemptVolume += record.ShortExemptVolume ?? 0;
+            volume.TotalVolume += record.TotalVolume ?? 0;
+            volume.Market = MergeMarketCodes(volume.Market, record.MarketCode);
         }
 
         return aggregated;
+    }
+
+    private static string MergeMarketCodes(string current, string additional)
+    {
+        var markets = new[] { current, additional }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .SelectMany(value => value.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            .Select(value => value.Trim())
+            .Where(value => value.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal);
+        var merged = string.Join(',', markets);
+        return merged.Length == 0 ? null : merged;
     }
 }

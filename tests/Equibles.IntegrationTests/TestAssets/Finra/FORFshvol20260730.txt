@@ -1,0 +1,4 @@
+Date|Symbol|ShortVolume|ShortExemptVolume|TotalVolume|Market
+20260730|AABB|1830501|0|3666596|O
+20260730|AAGAF|32317|0|353641|O
+2
