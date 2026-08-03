@@ -176,8 +176,10 @@ The web portal checks GitHub Releases on a schedule and shows a banner when a ne
 
 ```bash
 git pull
-docker compose up -d --build
+docker compose up -d --build --remove-orphans
 ```
+
+Include any optional Compose override files in the upgrade command so those services remain enabled.
 
 **From source:**
 
@@ -387,17 +389,18 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 Vector embeddings enable semantic search over SEC filings (e.g., "find revenue growth discussion in Apple's 10-K"). This requires downloading the Ollama runtime (~2GB) and the Qwen3-Embedding-0.6B model (~640MB).
 
 ```bash
-docker compose --profile embedding up
+docker compose -f docker-compose.yml -f docker-compose.embedding.yml up
 ```
 
-This adds:
+This adds Ollama and configures the existing web, MCP, and worker services to use it:
 
 | Service | Port | Description |
 |---------|------|-------------|
 | **embedding** | 11434 | Ollama server with Qwen3-Embedding-0.6B model |
-| **worker-embedding** | — | Worker with embedding generation enabled |
+| **embedding-pull** | — | One-shot model download before the worker starts |
+| **worker** | — | The existing worker, with embedding generation enabled |
 
-Without the embedding profile, BM25 full-text search via ParadeDB still works out of the box — vector search is purely additive.
+Without the embedding override, BM25 full-text search via ParadeDB still works out of the box — vector search is purely additive.
 
 **Bundled Ollama is the default** because it needs no GPU and runs anywhere. For bulk embedding at scale, point `Embedding__Provider=OpenAI` at a batched server such as [vLLM](https://docs.vllm.ai) or [Text-Embeddings-Inference](https://github.com/huggingface/text-embeddings-inference) — they continuously batch on the GPU and are far faster than Ollama for large corpora. See [docs/guide/how-to-use-external-embedding-endpoint.md](docs/guide/how-to-use-external-embedding-endpoint.md).
 

@@ -75,7 +75,7 @@ Once your chosen assistant lists Equibles tools, try one of these prompts in a n
 - **Holdings:** *"Who are the top ten institutional holders of AAPL right now? Show the position size and the most recent report date."*
 - **Prices:** *"Plot AAPL's adjusted close for the last 90 days and tell me the high, low, and median."* (Charts only render in clients that draw them; everywhere else the assistant will return numbers.)
 - **Economy:** *"Pull the latest unemployment rate from FRED and tell me how it changed over the past year."* (Only works once you've added a FRED API key — see [Add a FRED API key](how-to-set-up-fred-api-key.md).)
-- **Filings:** *"Search Apple's most recent 10-K for the section about supply-chain risk and summarise it."* (Best with the embedding profile enabled — see [Enable semantic search over SEC filings](how-to-enable-embedding-search.md).)
+- **Filings:** *"Search Apple's most recent 10-K for the section about supply-chain risk and summarise it."* (Best with semantic search enabled — see [Enable semantic search over SEC filings](how-to-enable-embedding-search.md).)
 
 The assistant will call one or more Equibles MCP tools, then summarise the result for you. If a query comes back empty, it usually means Equibles hasn't finished fetching that kind of data yet — give the worker a few more minutes and check the Status page.
 

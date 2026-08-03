@@ -17,7 +17,7 @@ Run the full stack through Docker. Fall back to local `dotnet run` only when you
 |---|---|
 | `docker compose up db` | Just ParadeDB (Postgres + pgvector + pg_search) on `localhost:5432`. Use this when you're running the .NET hosts locally for debugging. |
 | `docker compose up` | Full stack: `db` (5432), `web` (8080), `mcp` (8081), `worker`. |
-| `docker compose --profile embedding up` | Adds Ollama on `11434` and a `worker-embedding` variant with embeddings enabled. |
+| `docker compose -f docker-compose.yml -f docker-compose.embedding.yml up` | Adds Ollama on `11434` and enables embeddings on the existing worker. |
 | `docker compose up -d --build` | Rebuild images and run detached after a `git pull`. |
 
 `.env.example` → `.env`; set `SEC_CONTACT_EMAIL` before the first `docker compose up` — SEC EDGAR's fair-access policy requires it.

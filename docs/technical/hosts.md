@@ -48,9 +48,9 @@ The background-scraper host. Plain `Host.CreateApplicationBuilder` (not `WebAppl
 - `AddWorkerServices()` wires the cross-cutting worker plumbing (`SyncDateResolver`, etc.).
 - Per `Directory.Build.props`, every `.HostedService` project shares the global usings `Microsoft.Extensions.{DependencyInjection,Hosting,Logging,Options}` + `Equibles.Data` + `Equibles.Core`.
 
-## Embedding profile
+## Optional Compose overrides
 
-`docker-compose.yml` defines `worker-embedding` under the `embedding` profile alongside an `embedding` Ollama service. Activate with `docker compose --profile embedding up`. The profile substitutes the default `worker` with `worker-embedding`, which sets `Embedding__Enabled=true`, `Embedding__BaseUrl=http://embedding:11434`, `Embedding__ModelName=qwen3-embedding:0.6b`. The same `EmbeddingConfig` binding the MCP server reads is what enables SEC chunk embedding generation on this worker.
+`docker-compose.embedding.yml` adds the bundled Ollama services and merges `Embedding__Enabled=true`, `Embedding__BaseUrl=http://embedding:11434`, and `Embedding__ModelName=qwen3-embedding:0.6b` into the existing `web`, `mcp`, and `worker` services. `docker-compose.stealth.yml` similarly adds CloakBrowser and merges its settings into `worker`. Both overrides reuse the one worker service, so enabling either or both cannot start duplicate scraper hosts against the same database.
 
 ## Shared startup sequence
 

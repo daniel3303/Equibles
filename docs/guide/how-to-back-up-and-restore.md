@@ -56,7 +56,7 @@ The restore wipes the existing database and replaces it with the contents of you
 ## What you don't need to back up
 
 - The `web-keys` Docker volume. Losing it just invalidates existing auth cookies — users sign in again on the next visit.
-- The `ollama-data` Docker volume (only present if you enabled the embedding profile). The model is regenerable; `docker compose --profile embedding up -d` will re-download it.
+- The `ollama-data` Docker volume (only present if you enabled the embedding override). The model is regenerable; `docker compose -f docker-compose.yml -f docker-compose.embedding.yml up -d` will re-download it.
 - The container images themselves. `docker compose up -d --build` rebuilds them from the source you have in `git`.
 
 If you want a complete machine-level backup instead of an application-level one, snapshot the entire `db-data` Docker volume directly (`docker run --rm -v equibles_db-data:/data -v $(pwd):/backup alpine tar czf /backup/db-data.tgz -C /data .`). That captures Postgres's on-disk format including config files, but the file is larger and only restorable into the same Postgres version.
