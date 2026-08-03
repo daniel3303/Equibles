@@ -452,6 +452,23 @@ public class CboeVixDailyRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetByDateRange_ImpossibleOhlc_IsNotPublished()
+    {
+        var date = new DateOnly(1990, 1, 3);
+        _dbContext
+            .Set<CboeVixDaily>()
+            .AddRange(
+                CreateVix(date, open: 17.24m, high: 18.19m, low: 17.35m, close: 18.19m),
+                CreateVix(date.AddDays(1), open: 18m, high: 19m, low: 17m, close: 18.5m)
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.GetByDateRange(date, date.AddDays(1)).ToListAsync();
+
+        result.Should().ContainSingle().Which.Date.Should().Be(date.AddDays(1));
+    }
+
+    [Fact]
     public async Task GetByDateRange_NoMatches_ReturnsEmpty()
     {
         _dbContext.Set<CboeVixDaily>().Add(CreateVix(new DateOnly(2025, 6, 1)));
@@ -478,7 +495,7 @@ public class CboeVixDailyRepositoryTests : IDisposable
     public async Task GetByDateRange_SingleDay_ReturnsMatchingRecord()
     {
         var date = new DateOnly(2025, 3, 15);
-        _dbContext.Set<CboeVixDaily>().Add(CreateVix(date, close: 22.50m));
+        _dbContext.Set<CboeVixDaily>().Add(CreateVix(date, high: 23m, low: 14.80m, close: 22.50m));
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetByDateRange(date, date).ToListAsync();

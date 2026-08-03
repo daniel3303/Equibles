@@ -146,6 +146,24 @@ public class CboeClientTests
     }
 
     [Fact]
+    public async Task DownloadVixHistory_ImpossibleOhlcRows_ReturnsOnlyValidCandles()
+    {
+        var csv =
+            "DATE,OPEN,HIGH,LOW,CLOSE\n"
+            + "07/30/2026,14.00,15.00,13.50,14.50\n"
+            // Complete but impossible: Low is above both Open and Close.
+            + "07/31/2026,14.00,15.00,14.75,14.50\n"
+            // Complete but impossible: High is below Close.
+            + "08/03/2026,14.00,14.25,13.50,14.50\n";
+        var handler = new ScriptedHandler((HttpStatusCode.OK, csv));
+        var sut = CreateSut(handler);
+
+        var result = await sut.DownloadVixHistory();
+
+        result.Should().ContainSingle().Which.Date.Should().Be(new DateOnly(2026, 7, 30));
+    }
+
+    [Fact]
     public async Task DownloadWithRetry_TooManyRequestsThenOk_RetriesAndReturnsParsedContent()
     {
         // 429 path: the loop must back off (RateLimiter.PauseFor + Task.Delay)

@@ -338,6 +338,12 @@ public class CboeClient : ICboeClient
             if (!TryDec(4, out var close))
                 continue;
 
+            // A complete row can still be internally impossible. CBOE's current history contains
+            // legacy candles whose High/Low do not contain Open and Close; they are not valid
+            // market observations and must not cross the integration boundary.
+            if (!IsValidOhlc(open, high, low, close))
+                continue;
+
             records.Add(
                 new CboeVixRecord
                 {
@@ -351,6 +357,17 @@ public class CboeClient : ICboeClient
         }
         return records;
     }
+
+    private static bool IsValidOhlc(decimal open, decimal high, decimal low, decimal close) =>
+        open > 0
+        && high > 0
+        && low > 0
+        && close > 0
+        && high >= open
+        && high >= close
+        && low <= open
+        && low <= close
+        && high >= low;
 
     // First line is the header; subsequent blank or short rows are skipped.
     private static IEnumerable<string[]> EnumerateCsvRows(string content, int minFields)

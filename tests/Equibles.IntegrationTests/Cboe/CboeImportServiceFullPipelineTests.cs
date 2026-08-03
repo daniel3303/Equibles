@@ -248,11 +248,11 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
             .Returns([
                 new CboeVixRecord
                 {
-                    Date = new DateOnly(2026, 4, 1), // older than stored → filtered out
-                    Open = 1m,
-                    High = 1m,
-                    Low = 1m,
-                    Close = 1m,
+                    Date = new DateOnly(2026, 4, 10),
+                    Open = 14m,
+                    High = 15m,
+                    Low = 13m,
+                    Close = 14.5m,
                 },
             ]);
 
@@ -264,6 +264,111 @@ public class CboeImportServiceFullPipelineTests : IAsyncLifetime
         var rows = await verify.Set<CboeVixDaily>().ToListAsync();
         rows.Should().ContainSingle("the only row is the pre-seeded one — nothing new inserted");
         rows[0].Close.Should().Be(14.5m);
+    }
+
+    [Fact]
+    public async Task Import_InvalidHistoricalVixCorrectedBySource_ReplacesItBehindNewerRows()
+    {
+        var today = new DateOnly(2026, 4, 10);
+        await SeedAllTypesAt(today);
+        var invalidDate = new DateOnly(1990, 1, 3);
+        var newerDate = new DateOnly(2026, 4, 9);
+        using (var seed = FreshContext())
+        {
+            seed.Set<CboeVixDaily>()
+                .AddRange(
+                    new CboeVixDaily
+                    {
+                        Date = invalidDate,
+                        Open = 17.24m,
+                        High = 18.19m,
+                        Low = 17.35m,
+                        Close = 18.19m,
+                    },
+                    new CboeVixDaily
+                    {
+                        Date = newerDate,
+                        Open = 20m,
+                        High = 22m,
+                        Low = 19m,
+                        Close = 21m,
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        var client = EmptyClient();
+        client
+            .DownloadVixHistory()
+            .Returns([
+                new CboeVixRecord
+                {
+                    Date = invalidDate,
+                    Open = 17.24m,
+                    High = 18.25m,
+                    Low = 17.20m,
+                    Close = 18.19m,
+                },
+                new CboeVixRecord
+                {
+                    Date = newerDate,
+                    Open = 20m,
+                    High = 22m,
+                    Low = 19m,
+                    Close = 21m,
+                },
+            ]);
+
+        await CreateSut(CreateScopeFactory(), client, today).Import(CancellationToken.None);
+
+        using var verify = FreshContext();
+        var rows = await verify.Set<CboeVixDaily>().OrderBy(v => v.Date).ToListAsync();
+        rows.Should().HaveCount(2);
+        rows[0].Date.Should().Be(invalidDate);
+        rows[0].High.Should().Be(18.25m);
+        rows[0].Low.Should().Be(17.20m);
+    }
+
+    [Fact]
+    public async Task Import_InvalidHistoricalVixStillInvalidAtSource_RemovesIt()
+    {
+        var today = new DateOnly(2026, 4, 10);
+        await SeedAllTypesAt(today);
+        var invalidDate = new DateOnly(1990, 1, 3);
+        using (var seed = FreshContext())
+        {
+            seed.Set<CboeVixDaily>()
+                .Add(
+                    new CboeVixDaily
+                    {
+                        Date = invalidDate,
+                        Open = 17.24m,
+                        High = 18.19m,
+                        Low = 17.35m,
+                        Close = 18.19m,
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        var client = EmptyClient();
+        client
+            .DownloadVixHistory()
+            .Returns([
+                new CboeVixRecord
+                {
+                    Date = invalidDate,
+                    Open = 17.24m,
+                    High = 18.19m,
+                    Low = 17.35m,
+                    Close = 18.19m,
+                },
+            ]);
+
+        await CreateSut(CreateScopeFactory(), client, today).Import(CancellationToken.None);
+
+        using var verify = FreshContext();
+        (await verify.Set<CboeVixDaily>().CountAsync()).Should().Be(0);
     }
 
     [Fact]
