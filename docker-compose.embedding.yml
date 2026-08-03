@@ -1,0 +1,48 @@
+x-bundled-embedding-environment: &bundled-embedding-environment
+  Embedding__Enabled: "true"
+  Embedding__Provider: "Ollama"
+  Embedding__BaseUrl: "http://embedding:11434"
+  Embedding__ModelName: "qwen3-embedding:0.6b"
+  Embedding__ApiKey: ""
+  Embedding__BatchSize: "10"
+
+services:
+  web:
+    environment:
+      <<: *bundled-embedding-environment
+
+  mcp:
+    environment:
+      <<: *bundled-embedding-environment
+
+  worker:
+    environment:
+      <<: *bundled-embedding-environment
+    depends_on:
+      embedding-pull:
+        condition: service_completed_successfully
+
+  embedding:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  embedding-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      embedding:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["ollama", "pull", "qwen3-embedding:0.6b"]
+    environment:
+      OLLAMA_HOST: http://embedding:11434
+
+volumes:
+  ollama-data:

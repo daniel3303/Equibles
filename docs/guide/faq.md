@@ -8,7 +8,7 @@ The web portal checks GitHub Releases on a schedule and shows a banner when a ne
 
 ## How much disk space does Equibles need?
 
-Plan for about 5 GB to start, growing over time as scrapers backfill more history. The database (held in the `db-data` Docker volume) is by far the largest consumer; the cached SEC filings are smaller. Pulling the full default range (2020 onwards) for every U.S. ticker is the baseline — restricting to a [chosen list of tickers](how-to-restrict-ticker-sync.md) or [a later sync start date](how-to-change-sync-start-date.md) keeps it much smaller, while extending back to 2000 makes it substantially larger. Enabling the [embedding profile](how-to-enable-embedding-search.md) adds roughly 2.6 GB more (~2 GB Ollama image, ~640 MB Qwen3-Embedding-0.6B model, plus per-chunk vectors).
+Plan for about 5 GB to start, growing over time as scrapers backfill more history. The database (held in the `db-data` Docker volume) is by far the largest consumer; the cached SEC filings are smaller. Pulling the full default range (2020 onwards) for every U.S. ticker is the baseline — restricting to a [chosen list of tickers](how-to-restrict-ticker-sync.md) or [a later sync start date](how-to-change-sync-start-date.md) keeps it much smaller, while extending back to 2000 makes it substantially larger. Enabling the [embedding stack](how-to-enable-embedding-search.md) adds roughly 2.6 GB more (~2 GB Ollama image, ~640 MB Qwen3-Embedding-0.6B model, plus per-chunk vectors).
 
 ## How do I wipe the database and start over?
 
@@ -71,7 +71,7 @@ Edit the port mappings in `docker-compose.yml`. Each service has a `ports:` entr
 | `db` | 5432 | PostgreSQL (ParadeDB) |
 | `web` | 8080 | Web portal |
 | `mcp` | 8081 | MCP server |
-| `embedding` | 11434 | Ollama (only with the embedding profile) |
+| `embedding` | 11434 | Ollama (only with the embedding override) |
 
 For example, to move the web portal to port 9090, change `"8080:8080"` to `"9090:8080"` under the `web` service, then run `docker compose up -d`. If you change the MCP port, remember to update your AI assistant's config to match (see [Connect an AI assistant](tutorial-connect-ai-assistant.md)).
 
@@ -80,7 +80,7 @@ For example, to move the web portal to port 9090, change `"8080:8080"` to `"9090
 | Requirement | Minimum | Recommended |
 |-------------|---------|-------------|
 | **Docker** | Engine 20.10+ or Docker Desktop (with `docker compose` v2) | Latest stable |
-| **RAM** | 2 GB free | 4 GB free (8 GB if enabling the [embedding profile](how-to-enable-embedding-search.md)) |
+| **RAM** | 2 GB free | 4 GB free (8 GB if enabling the [embedding stack](how-to-enable-embedding-search.md)) |
 | **Disk** | 5 GB free | 10 GB+ (grows as scrapers backfill history) |
 | **CPU** | Any modern x86-64 or ARM64 | 2+ cores for comfortable scraping speed |
 | **OS** | Linux, macOS, or Windows (via Docker Desktop / WSL 2) | Any that runs Docker |

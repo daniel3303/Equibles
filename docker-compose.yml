@@ -1,3 +1,11 @@
+x-embedding-environment: &embedding-environment
+  Embedding__Enabled: ${Embedding__Enabled:-false}
+  Embedding__Provider: ${Embedding__Provider:-Ollama}
+  Embedding__BaseUrl: ${Embedding__BaseUrl:-http://localhost:11434}
+  Embedding__ModelName: ${Embedding__ModelName:-qwen3-embedding:0.6b}
+  Embedding__ApiKey: ${Embedding__ApiKey:-}
+  Embedding__BatchSize: ${Embedding__BatchSize:-10}
+
 services:
   db:
     image: paradedb/paradedb:latest
@@ -27,6 +35,7 @@ services:
     ports:
       - "8081:8080"
     environment:
+      <<: *embedding-environment
       ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
       McpApiKey: ${MCP_API_KEY:-}
       MinimumLogLevel: ${MINIMUM_LOG_LEVEL:-Warning}
@@ -41,6 +50,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      <<: *embedding-environment
       ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
       ConnectionStrings__TransportConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
       # Web boots before worker (worker depends on web). Without this flag the
@@ -72,109 +82,16 @@ services:
       - path: .env
         required: false
     environment:
+      <<: *embedding-environment
       ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
       ConnectionStrings__TransportConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
       MassTransit__RunMigration: "true"
       Sec__ContactEmail: ${SEC_CONTACT_EMAIL}
-      Embedding__Enabled: "false"
       MinimumLogLevel: ${MINIMUM_LOG_LEVEL:-Warning}
     depends_on:
       web:
         condition: service_healthy
-
-  # Embedding server (opt-in): docker compose --profile embedding up
-  embedding:
-    image: ollama/ollama:latest
-    profiles: ["embedding"]
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  embedding-pull:
-    image: ollama/ollama:latest
-    profiles: ["embedding"]
-    depends_on:
-      embedding:
-        condition: service_healthy
-    restart: "no"
-    entrypoint: ["ollama", "pull", "qwen3-embedding:0.6b"]
-    environment:
-      OLLAMA_HOST: http://embedding:11434
-
-  # Worker with embeddings enabled (use --profile embedding)
-  worker-embedding:
-    build:
-      context: .
-      dockerfile: src/Equibles.Worker.Host/Dockerfile
-    profiles: ["embedding"]
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
-      Sec__ContactEmail: ${SEC_CONTACT_EMAIL}
-      Embedding__Enabled: "true"
-      Embedding__BaseUrl: "http://embedding:11434"
-      Embedding__ModelName: "qwen3-embedding:0.6b"
-      Embedding__BatchSize: "10"
-      MinimumLogLevel: ${MINIMUM_LOG_LEVEL:-Warning}
-    depends_on:
-      web:
-        condition: service_healthy
-      embedding:
-        condition: service_healthy
-
-  # Stealth browser (opt-in): docker compose --profile stealth up
-  #
-  # Third-party stealth Chromium (CloakBrowser, https://github.com/CloakHQ/CloakBrowser)
-  # used only to render investor-relations sites that answer a plain request with an
-  # Incapsula/Akamai bot challenge. The compiled binary is an opaque, anonymous
-  # third party under its own BINARY-LICENSE.md ("free to use, no redistribution").
-  # Supply-chain caution: keep it isolated to this container, pinned by digest, with
-  # no host secrets and no volume mounts; its CDP port is never published to the host.
-  # Review the binary licence for your own use before enabling in production. Default
-  # off, so the stock stack never pulls it.
-  cloakbrowser:
-    image: cloakhq/cloakbrowser:0.3.31@sha256:61dee1b490ee8f74b040bc02c3d5384c7f64420b87ccaa26a33f213d07df3f73
-    profiles: ["stealth"]
-    command: ["cloakserve", "--idle-timeout=300"]
-    # Internal-only: the worker reaches it at http://cloakbrowser:9222 over the
-    # compose network. Never map this to the host — it is a remote browser endpoint.
-    expose:
-      - "9222"
-    restart: unless-stopped
-
-  # Worker with the stealth fetch fallback enabled (use --profile stealth)
-  worker-stealth:
-    build:
-      context: .
-      dockerfile: src/Equibles.Worker.Host/Dockerfile
-    profiles: ["stealth"]
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      ConnectionStrings__DefaultConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
-      ConnectionStrings__TransportConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
-      MassTransit__RunMigration: "true"
-      Sec__ContactEmail: ${SEC_CONTACT_EMAIL}
-      Embedding__Enabled: "false"
-      InvestorRelationsDiscovery__StealthFetch__Enabled: "true"
-      InvestorRelationsDiscovery__StealthFetch__SidecarUrl: "http://cloakbrowser:9222"
-      MinimumLogLevel: ${MINIMUM_LOG_LEVEL:-Warning}
-    depends_on:
-      web:
-        condition: service_healthy
-      cloakbrowser:
-        condition: service_started
 
 volumes:
   db-data:
   web-keys:
-  ollama-data:

@@ -6,7 +6,7 @@ Equibles indexes the full text of every SEC filing it scrapes — annual reports
 
 - Connect an AI assistant to the MCP server first — see [Connect an AI assistant](tutorial-connect-ai-assistant.md).
 - Let the worker run for a while after first startup so the SEC scraper has imported and converted the filings. It needs no API key — the data comes from SEC EDGAR.
-- Full-text keyword search works out of the box. The embedding profile adds meaning-based (semantic) matching on top, which helps when your wording differs from the filing's — see [Enable semantic search over SEC filings](how-to-enable-embedding-search.md).
+- Full-text keyword search works out of the box. The embedding setup adds meaning-based (semantic) matching on top, which helps when your wording differs from the filing's — see [Enable semantic search over SEC filings](how-to-enable-embedding-search.md).
 
 ## Ask about a company's filings
 

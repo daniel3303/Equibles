@@ -12,4 +12,4 @@ Reference for developers working inside the Equibles codebase. Pairs with [`../g
 - [Web portal](web-portal.md) — `StocksController` tab pattern, `StockTabService`, DaisyUI v5 + Tailwind v4 + Vite, Razor partial conventions.
 - [Migrations and database](migrations.md) — `Equibles.Migrations` design-time factory, ParadeDB extensions (`pgvector`, `pg_search`), `MigrateAsync` on host startup.
 - [Development](development.md) — Docker-first workflow, `dotnet csharpier` formatting, pre-commit hooks, single-test commands, CI gates (`ci.yml` / `functional.yml` / `smoke.yml`).
-- [Operations](operations.md) — environment-variable catalog, `--profile embedding` opt-in, `CHECK_FOR_UPDATES`, auth modes, upgrading.
+- [Operations](operations.md) — environment-variable catalog, embedding override, `CHECK_FOR_UPDATES`, auth modes, upgrading.

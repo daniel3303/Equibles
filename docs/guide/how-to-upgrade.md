@@ -15,10 +15,12 @@ Pull the latest Equibles code, rebuild your containers, and let database migrati
 3. Rebuild and restart the stack in the background:
 
    ```bash
-   docker compose up -d --build
+   docker compose up -d --build --remove-orphans
    ```
 
-   The `--build` flag tells Compose to rebuild the `web`, `mcp`, and `worker` images from the new source. The `db` image is pulled in step 4 only if its tag changed.
+   The `--build` flag tells Compose to rebuild the `web`, `mcp`, and `worker` images from the new source. `--remove-orphans` retires services removed by an upgrade, including old optional worker variants. The `db` image is pulled in step 4 only if its tag changed.
+
+   If you use an optional Compose file, include it in the upgrade command. For bundled embeddings, use `docker compose -f docker-compose.yml -f docker-compose.embedding.yml up -d --build --remove-orphans`; append `-f docker-compose.stealth.yml` too when both capabilities are enabled.
 
 4. Watch the `web` container's startup log:
 
@@ -32,11 +34,11 @@ Pull the latest Equibles code, rebuild your containers, and let database migrati
 
 6. Verify in your browser. Open `http://localhost:8080` and look at the footer or the **Status** page — the version banner should match the latest release tag. If the web portal had been showing an update-available banner before, it now disappears.
 
-If a migration fails or a container crashes after the upgrade, roll back by checking out the previous tag and running the same `docker compose up -d --build` command. Example:
+If a migration fails or a container crashes after the upgrade, roll back by checking out the previous tag and running the same `docker compose up -d --build --remove-orphans` command. Example:
 
 ```bash
 git checkout v0.4.2     # whatever tag you were on
-docker compose up -d --build
+docker compose up -d --build --remove-orphans
 ```
 
 The database stays compatible with older versions as long as you don't re-apply incompatible migrations manually.

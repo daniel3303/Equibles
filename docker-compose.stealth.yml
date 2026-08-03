@@ -1,0 +1,18 @@
+services:
+  worker:
+    environment:
+      InvestorRelationsDiscovery__StealthFetch__Enabled: "true"
+      InvestorRelationsDiscovery__StealthFetch__SidecarUrl: "http://cloakbrowser:9222"
+    depends_on:
+      cloakbrowser:
+        condition: service_started
+
+  # Third-party stealth Chromium (CloakBrowser, https://github.com/CloakHQ/CloakBrowser)
+  # renders investor-relations sites that answer plain requests with bot challenges.
+  # Keep its CDP endpoint internal: this container receives no secrets or volume mounts.
+  cloakbrowser:
+    image: cloakhq/cloakbrowser:0.3.31@sha256:61dee1b490ee8f74b040bc02c3d5384c7f64420b87ccaa26a33f213d07df3f73
+    command: ["cloakserve", "--idle-timeout=300"]
+    expose:
+      - "9222"
+    restart: unless-stopped

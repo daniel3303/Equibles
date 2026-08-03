@@ -131,8 +131,7 @@ builder.Services.Configure<GovernmentContractsScraperOptions>(
 );
 
 // Without this bind, IOptions<EmbeddingConfig> is always default (Enabled=false),
-// so GenerateEmbeddingBatch short-circuits and no embeddings are ever produced —
-// the entire worker-embedding profile is inert.
+// so GenerateEmbeddingBatch short-circuits and no embeddings are ever produced.
 builder.Services.Configure<Equibles.Sec.BusinessLogic.Embeddings.EmbeddingConfig>(
     builder.Configuration.GetSection("Embedding")
 );
