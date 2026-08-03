@@ -1,4 +1,5 @@
 using System.Globalization;
+using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Messaging.Contracts.Activity;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Equibles.Worker;
 
@@ -20,6 +22,7 @@ public abstract class BaseScraperWorker : BackgroundService
     private bool _continuationRequested;
     private int _consecutiveFailures;
     private bool _errorReportedForStreak;
+    private bool? _laneLeaseEnabled;
 
     protected abstract string WorkerName { get; }
     protected abstract TimeSpan SleepInterval { get; }
@@ -149,6 +152,60 @@ public abstract class BaseScraperWorker : BackgroundService
         ErrorReporter = errorReporter;
     }
 
+    protected virtual bool LaneLeaseEnabled
+    {
+        get
+        {
+            if (_laneLeaseEnabled.HasValue)
+                return _laneLeaseEnabled.Value;
+
+            try
+            {
+                using var scope = ScopeFactory.CreateScope();
+                var options = scope.ServiceProvider.GetService<IOptions<WorkerOptions>>();
+
+                // No registration means no database wiring to take a lock on either, so this runs
+                // unleased — that is the only thing a bare host CAN do. It must not be silent
+                // though: unleased is the pre-lease behaviour, and a host that reaches production
+                // this way would race its cursors with nothing in the log to explain why. The
+                // worker host registers WorkerOptions, so this warns only for custom/minimal hosts.
+                if (options is null)
+                {
+                    Logger.LogWarning(
+                        "{Worker} found no WorkerOptions registration, so the lane lease is OFF and "
+                            + "concurrent instances will NOT be serialized. Register WorkerOptions "
+                            + "to enable it.",
+                        WorkerName
+                    );
+                }
+
+                _laneLeaseEnabled = options?.Value.LaneLeaseEnabled ?? false;
+            }
+            catch (ObjectDisposedException)
+            {
+                // Host teardown can dispose the root provider before a final cycle checks options.
+                // Nothing more will run, so skipping the lease here cannot overlap another instance.
+                _laneLeaseEnabled = false;
+            }
+
+            return _laneLeaseEnabled.Value;
+        }
+    }
+
+    /// <summary>
+    /// Identity of the lane this worker serializes on. Deliberately the concrete worker TYPE, not
+    /// <see cref="WorkerName"/>: that is a display string for logs and the activity feed, and
+    /// editing it — a rewording, a typo fix — would silently move this worker to a different lock.
+    /// Mid-rollout the old and new pods would then hold two different locks for one logical lane
+    /// and run it concurrently, which is the exact overlap the lease exists to prevent. A type name
+    /// changes only through a deliberate, reviewable refactor.
+    /// </summary>
+    protected virtual string LaneId => GetType().FullName;
+
+    protected virtual async ValueTask<IAsyncDisposable> TryAcquireLaneLease(
+        CancellationToken stoppingToken
+    ) => await ScraperLease.TryAcquire(ScopeFactory, LaneId, WorkerName, Logger, stoppingToken);
+
     protected async Task RunImport<TImporter>(CancellationToken stoppingToken)
         where TImporter : IImporter
     {
@@ -188,12 +245,11 @@ public abstract class BaseScraperWorker : BackgroundService
             _retrySoonRequested = false;
             _continuationRequested = false;
             var faulted = false;
-
-            await PublishActivity(ScraperActivitySeverity.Info, "cycle started", stoppingToken);
+            var cycleRan = false;
 
             try
             {
-                await DoWork(stoppingToken);
+                cycleRan = await RunCycle(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -245,6 +301,17 @@ public abstract class BaseScraperWorker : BackgroundService
                         ErrorReportThreshold
                     );
                 }
+            }
+
+            if (!cycleRan && !faulted)
+            {
+                Logger.LogInformation(
+                    "{Worker} lane lease is held by another instance; skipping cycle and sleeping for {Interval}",
+                    WorkerName,
+                    SleepInterval
+                );
+                await WaitForNextCycle(SleepInterval, stoppingToken);
+                continue;
             }
 
             TimeSpan interval;
@@ -314,6 +381,25 @@ public abstract class BaseScraperWorker : BackgroundService
             }
             await WaitForNextCycle(interval, stoppingToken);
         }
+    }
+
+    private async Task<bool> RunCycle(CancellationToken stoppingToken)
+    {
+        IAsyncDisposable lease = null;
+        if (LaneLeaseEnabled)
+        {
+            lease = await TryAcquireLaneLease(stoppingToken);
+            if (lease is null)
+                return false;
+        }
+
+        await using (lease)
+        {
+            await PublishActivity(ScraperActivitySeverity.Info, "cycle started", stoppingToken);
+            await DoWork(stoppingToken);
+        }
+
+        return true;
     }
 
     private static string FormatInterval(TimeSpan interval)
