@@ -1,4 +1,5 @@
 using System.Globalization;
+using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Messaging.Contracts.Activity;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Equibles.Worker;
 
@@ -20,6 +22,7 @@ public abstract class BaseScraperWorker : BackgroundService
     private bool _continuationRequested;
     private int _consecutiveFailures;
     private bool _errorReportedForStreak;
+    private bool? _laneLeaseEnabled;
 
     protected abstract string WorkerName { get; }
     protected abstract TimeSpan SleepInterval { get; }
@@ -149,6 +152,36 @@ public abstract class BaseScraperWorker : BackgroundService
         ErrorReporter = errorReporter;
     }
 
+    protected virtual bool LaneLeaseEnabled
+    {
+        get
+        {
+            if (_laneLeaseEnabled.HasValue)
+                return _laneLeaseEnabled.Value;
+
+            try
+            {
+                using var scope = ScopeFactory.CreateScope();
+                var options = scope.ServiceProvider.GetService<IOptions<WorkerOptions>>();
+
+                // The worker host always registers WorkerOptions. A missing registration is kept
+                // as the legacy behavior for minimal test or custom hosts that only wire the base.
+                _laneLeaseEnabled = options?.Value.LaneLeaseEnabled ?? false;
+            }
+            catch (ObjectDisposedException)
+            {
+                // Host teardown can dispose the root provider before a final cycle checks options.
+                _laneLeaseEnabled = false;
+            }
+
+            return _laneLeaseEnabled.Value;
+        }
+    }
+
+    protected virtual async ValueTask<IAsyncDisposable> TryAcquireLaneLease(
+        CancellationToken stoppingToken
+    ) => await ScraperLease.TryAcquire(ScopeFactory, WorkerName, Logger, stoppingToken);
+
     protected async Task RunImport<TImporter>(CancellationToken stoppingToken)
         where TImporter : IImporter
     {
@@ -188,12 +221,11 @@ public abstract class BaseScraperWorker : BackgroundService
             _retrySoonRequested = false;
             _continuationRequested = false;
             var faulted = false;
-
-            await PublishActivity(ScraperActivitySeverity.Info, "cycle started", stoppingToken);
+            var cycleRan = false;
 
             try
             {
-                await DoWork(stoppingToken);
+                cycleRan = await RunCycle(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -245,6 +277,17 @@ public abstract class BaseScraperWorker : BackgroundService
                         ErrorReportThreshold
                     );
                 }
+            }
+
+            if (!cycleRan && !faulted)
+            {
+                Logger.LogInformation(
+                    "{Worker} lane lease is held by another instance; skipping cycle and sleeping for {Interval}",
+                    WorkerName,
+                    SleepInterval
+                );
+                await WaitForNextCycle(SleepInterval, stoppingToken);
+                continue;
             }
 
             TimeSpan interval;
@@ -314,6 +357,25 @@ public abstract class BaseScraperWorker : BackgroundService
             }
             await WaitForNextCycle(interval, stoppingToken);
         }
+    }
+
+    private async Task<bool> RunCycle(CancellationToken stoppingToken)
+    {
+        IAsyncDisposable lease = null;
+        if (LaneLeaseEnabled)
+        {
+            lease = await TryAcquireLaneLease(stoppingToken);
+            if (lease is null)
+                return false;
+        }
+
+        await using (lease)
+        {
+            await PublishActivity(ScraperActivitySeverity.Info, "cycle started", stoppingToken);
+            await DoWork(stoppingToken);
+        }
+
+        return true;
     }
 
     private static string FormatInterval(TimeSpan interval)
