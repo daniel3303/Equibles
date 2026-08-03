@@ -128,9 +128,15 @@ public class FinraScraperWorkerPollingTests : IDisposable
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ILogger<ErrorReporter>>()
         );
+        var timeProvider = Substitute.For<TimeProvider>();
+        timeProvider.GetUtcNow().Returns(now);
+        var finraOptions = Options.Create(options ?? new FinraScraperOptions());
         // Bound the short-volume backfill scan to a few days so the loop stays tiny.
         var workerOptions = Options.Create(
-            new WorkerOptions { TickersToSync = [], MinSyncDate = DateTime.UtcNow.AddDays(-3) }
+            new WorkerOptions { TickersToSync = [], MinSyncDate = now.UtcDateTime.AddDays(-3) }
+        );
+        var partitionTracker = new FinraImportPartitionTracker(
+            new FinraImportPartitionRepository(_dbContext)
         );
 
         var shortVolume = new ShortVolumeImportService(
@@ -139,7 +145,10 @@ public class FinraScraperWorkerPollingTests : IDisposable
             _finraClient,
             tickerMapService,
             errorReporter,
-            workerOptions
+            workerOptions,
+            finraOptions,
+            partitionTracker,
+            timeProvider
         );
         var shortInterest = new ShortInterestImportService(
             importScopeFactory,
@@ -155,7 +164,9 @@ public class FinraScraperWorkerPollingTests : IDisposable
             _finraClient,
             tickerMapService,
             errorReporter,
-            workerOptions
+            workerOptions,
+            partitionTracker,
+            timeProvider
         );
 
         // The worker resolves the three import services + the two repos its poll gates read.
@@ -167,12 +178,7 @@ public class FinraScraperWorkerPollingTests : IDisposable
             (typeof(ShortInterestRepository), new ShortInterestRepository(_dbContext))
         );
 
-        return new TestableFinraScraperWorker(
-            workerScopeFactory,
-            errorReporter,
-            Options.Create(options ?? new FinraScraperOptions()),
-            now
-        );
+        return new TestableFinraScraperWorker(workerScopeFactory, errorReporter, finraOptions, now);
     }
 
     [Fact]

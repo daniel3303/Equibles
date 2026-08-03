@@ -12,18 +12,18 @@ namespace Equibles.IntegrationTests.Finra;
 /// branch of SendWithRetry. This pins the 5xx branch (lines 362-373, zero-hit):
 /// FINRA's data API intermittently 500s under load; that response must trigger
 /// a transparent retry, not abort the whole short-volume import. A regression
-/// moving 5xx into the EnsureSuccessStatusCode path would fail every nightly
-/// scrape the moment FINRA hiccups once.
+/// moving 5xx into the EnsureSuccessStatusCode path would fail every nightly API
+/// import the moment FINRA hiccups once.
 /// </summary>
 public class FinraClientServerErrorRetryTests
 {
     [Fact]
-    public async Task GetDailyShortVolume_FirstDataCallServerError_RetriesThenSucceeds()
+    public async Task GetShortInterest_FirstDataCallServerError_RetriesThenSucceeds()
     {
         var dataResponse =
-            "[{\"tradeReportDate\":\"2024-12-31\","
-            + "\"securitiesInformationProcessorSymbolIdentifier\":\"AAPL\","
-            + "\"totalParQuantity\":1000}]";
+            "[{\"settlementDate\":\"2024-12-31\","
+            + "\"symbolCode\":\"AAPL\","
+            + "\"currentShortPositionQuantity\":1000}]";
 
         var handler = new ServerErrorThenOkHandler(
             tokenBody: "{\"access_token\":\"tok\",\"expires_in\":3600}",
@@ -35,7 +35,7 @@ public class FinraClientServerErrorRetryTests
             Options.Create(new FinraOptions { ClientId = "id", ClientSecret = "secret" })
         );
 
-        var result = await sut.GetDailyShortVolume(new DateOnly(2024, 12, 31));
+        var result = await sut.GetShortInterest(new DateOnly(2024, 12, 31));
 
         // Two data calls + a parsed record prove the 500 drove a retry that then
         // succeeded — a broken 5xx branch would throw on the first response.

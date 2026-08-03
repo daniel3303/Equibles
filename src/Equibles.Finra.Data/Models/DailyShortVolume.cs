@@ -15,9 +15,14 @@ public class DailyShortVolume
 
     public DateOnly Date { get; set; }
 
-    public long ShortVolume { get; set; }
-    public long ShortExemptVolume { get; set; }
-    public long TotalVolume { get; set; }
+    [Precision(28, 6)]
+    public decimal ShortVolume { get; set; }
+
+    [Precision(28, 6)]
+    public decimal ShortExemptVolume { get; set; }
+
+    [Precision(28, 6)]
+    public decimal TotalVolume { get; set; }
 
     [MaxLength(16)]
     public string Market { get; set; }

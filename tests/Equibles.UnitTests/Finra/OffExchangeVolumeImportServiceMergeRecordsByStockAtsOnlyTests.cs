@@ -1,5 +1,3 @@
-using System.Reflection;
-using Equibles.Finra.Data.Models;
 using Equibles.Finra.HostedService.Services;
 using Equibles.Integrations.Finra.Models;
 
@@ -20,11 +18,6 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockAtsOnlyTests
     [Fact]
     public void MergeRecordsByStock_AtsRowWithNoOtcRow_YieldsEntityWithNonAtsOtcZero()
     {
-        var method = typeof(OffExchangeVolumeImportService).GetMethod(
-            "MergeRecordsByStock",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
-
         var stockId = Guid.NewGuid();
         var tickerMap = new Dictionary<string, Guid> { ["AAPL"] = stockId };
         var records = new List<OffExchangeWeeklyRecord>
@@ -38,9 +31,7 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockAtsOnlyTests
             },
         };
 
-        var result =
-            (Dictionary<Guid, OffExchangeVolume>)
-                method!.Invoke(null, [records, tickerMap, new DateOnly(2024, 3, 4)]);
+        var result = OffExchangeVolumeMerger.Merge(records, tickerMap, new DateOnly(2024, 3, 4));
 
         result.Should().ContainSingle();
         var merged = result[stockId];

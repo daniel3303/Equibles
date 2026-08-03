@@ -21,6 +21,7 @@ public class FinraClient : IFinraClient
     private const string TokenEndpoint =
         "https://ews.fip.finra.org/fip/rest/ews/oauth2/access_token?grant_type=client_credentials";
     private const string ApiBaseUrl = "https://api.finra.org";
+    private const string DailyShortVolumeBaseUrl = "https://cdn.finra.org/equity/regsho/daily";
     private const int MaxPageSize = 5000;
     private const int MaxRetries = 3;
 
@@ -87,43 +88,40 @@ public class FinraClient : IFinraClient
     public bool IsConfigured =>
         !string.IsNullOrEmpty(_options.ClientId) && !string.IsNullOrEmpty(_options.ClientSecret);
 
-    public async Task<List<ShortVolumeRecord>> GetDailyShortVolume(DateOnly date)
+    public async Task<List<ShortVolumeRecord>> GetDailyShortVolume(
+        DateOnly date,
+        CancellationToken cancellationToken = default
+    )
     {
-        var dateStr = FormatDate(date);
-        _logger.LogDebug("Fetching daily short volume for {Date}", dateStr);
+        var dateStamp = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        _logger.LogDebug("Fetching FINRA daily short-volume files for {Date}", date);
 
-        var results = new List<ShortVolumeRecord>();
-        await PaginateQuery<ShortVolumeRecord>(
-            OtcMarketGroup,
-            "regShoDaily",
-            offset => new
-            {
-                fields = new[]
-                {
-                    "tradeReportDate",
-                    "securitiesInformationProcessorSymbolIdentifier",
-                    "shortParQuantity",
-                    "shortExemptParQuantity",
-                    "totalParQuantity",
-                    "marketCode",
-                },
-                dateRangeFilters = new[]
-                {
-                    new
-                    {
-                        fieldName = "tradeReportDate",
-                        startDate = dateStr,
-                        endDate = dateStr,
-                    },
-                },
-                limit = MaxPageSize,
-                offset,
-            },
-            results.AddRange
+        var files = await Task.WhenAll(
+            DownloadDailyShortVolumeFile($"CNMSshvol{dateStamp}.txt", date, cancellationToken),
+            DownloadDailyShortVolumeFile($"FORFshvol{dateStamp}.txt", date, cancellationToken)
         );
+        var results = files.SelectMany(records => records).ToList();
 
-        _logger.LogDebug("Fetched {Count} short volume records for {Date}", results.Count, dateStr);
+        _logger.LogDebug("Fetched {Count} short volume records for {Date}", results.Count, date);
         return results;
+    }
+
+    private async Task<List<ShortVolumeRecord>> DownloadDailyShortVolumeFile(
+        string fileName,
+        DateOnly date,
+        CancellationToken cancellationToken
+    )
+    {
+        var url = $"{DailyShortVolumeBaseUrl}/{fileName}";
+        using var response = await _httpClient.GetAsync(
+            url,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        return await FinraDailyShortVolumeFileParser.Parse(stream, date, cancellationToken);
     }
 
     public Task<List<ShortInterestRecord>> GetShortInterest(DateOnly settlementDate)

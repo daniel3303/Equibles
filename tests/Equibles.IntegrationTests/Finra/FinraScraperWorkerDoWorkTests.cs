@@ -53,6 +53,9 @@ public class FinraScraperWorkerDoWorkTests : ParadeDbMcpTestBase
             (typeof(OffExchangeVolumeRepository), new OffExchangeVolumeRepository(DbContext))
         );
         var tickerMapService = new TickerMapService(scopeFactory);
+        var partitionTracker = new FinraImportPartitionTracker(
+            new FinraImportPartitionRepository(DbContext)
+        );
 
         var shortVolume = new ShortVolumeImportService(
             scopeFactory,
@@ -60,7 +63,10 @@ public class FinraScraperWorkerDoWorkTests : ParadeDbMcpTestBase
             finraClient,
             tickerMapService,
             errorReporter,
-            workerOptions
+            workerOptions,
+            Options.Create(new FinraScraperOptions()),
+            partitionTracker,
+            TimeProvider.System
         );
         var shortInterest = new ShortInterestImportService(
             scopeFactory,
@@ -77,7 +83,9 @@ public class FinraScraperWorkerDoWorkTests : ParadeDbMcpTestBase
             finraClient,
             tickerMapService,
             errorReporter,
-            workerOptions
+            workerOptions,
+            partitionTracker,
+            TimeProvider.System
         );
 
         var workerScopeFactory = ServiceScopeSubstitute.Create(

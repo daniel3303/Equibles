@@ -76,7 +76,7 @@ public class ShortVolumeController : BaseController
         var ordered = sort switch
         {
             ShortVolumeSort.ShortPercentDescending => query
-                .OrderByDescending(d => (double)d.ShortVolume / d.TotalVolume)
+                .OrderByDescending(d => d.ShortVolume / d.TotalVolume)
                 .ThenBy(d => d.CommonStock.Ticker),
             ShortVolumeSort.TotalVolumeDescending => query
                 .OrderByDescending(d => d.TotalVolume)
@@ -96,7 +96,7 @@ public class ShortVolumeController : BaseController
                 ShortVolume = d.ShortVolume,
                 ShortExemptVolume = d.ShortExemptVolume,
                 TotalVolume = d.TotalVolume,
-                ShortPercent = (double)d.ShortVolume / d.TotalVolume * 100,
+                ShortPercent = (double)(d.ShortVolume / d.TotalVolume) * 100,
             })
             .ToListAsync();
 

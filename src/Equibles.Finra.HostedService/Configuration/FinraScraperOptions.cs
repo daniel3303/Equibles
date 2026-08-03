@@ -5,6 +5,12 @@ namespace Equibles.Finra.HostedService.Configuration;
 public class FinraScraperOptions : ScraperOptions
 {
     /// <summary>
+    /// Maximum previously-unfinished daily short-volume files to reconcile per worker cycle.
+    /// Recent files are visited first, so live coverage stays current while history fills in.
+    /// </summary>
+    public int ShortVolumeBackfillDatesPerCycle { get; set; } = 100;
+
+    /// <summary>
     /// When true (default), the worker minute-polls for the daily short-volume file during
     /// the post-close ET window on NYSE trading days so it syncs the moment FINRA publishes
     /// it, instead of waiting the full <see cref="ScraperOptions.SleepIntervalHours"/> cycle.
