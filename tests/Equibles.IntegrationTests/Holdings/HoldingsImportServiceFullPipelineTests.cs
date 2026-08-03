@@ -214,6 +214,84 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ImportDataSet_StockReplacedAfterCusipMapping_PersistsSurvivorsAndRetries()
+    {
+        var apple = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc",
+            Cik = "0000320193",
+            Cusip = "037833100",
+        };
+        var microsoft = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "MSFT",
+            Name = "Microsoft Corp",
+            Cik = "0000789019",
+            Cusip = "594918104",
+        };
+        using (var seed = FreshContext())
+        {
+            seed.Set<CommonStock>().AddRange(apple, microsoft);
+            await seed.SaveChangesAsync();
+        }
+
+        var reportDate = new DateOnly(2024, 9, 30);
+        var submission =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR\tACC-RACE\t2024-10-15\t2024-09-30\t0001067983\n";
+        var coverPage =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+            + "ACC-RACE\tN\tBerkshire Hathaway\tOmaha\tNE\t028-12345\t12345\n";
+        var infoTable =
+            "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
+            + "ACC-RACE\t037833100\t1000\tSH\t\tSOLE\t1000\t0\t0\tCOM\t\n"
+            + "ACC-RACE\t594918104\t2000\tSH\t\tSOLE\t2000\t0\t0\tCOM\t\n";
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submission),
+            ("COVERPAGE.tsv", coverPage),
+            ("INFOTABLE.tsv", infoTable)
+        );
+
+        var priceProvider = Substitute.For<IStockPriceProvider>();
+        priceProvider
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(_ =>
+            {
+                // BuildCusipMapping has already cached both ids. Replacing AAPL here reproduces
+                // the production window while leaving MSFT valid in the same write batch.
+                using var delete = FreshContext();
+                var staleApple = delete.Set<CommonStock>().Single(s => s.Id == apple.Id);
+                delete.Remove(staleApple);
+                delete.SaveChanges();
+                return Task.FromResult(
+                    new Dictionary<(Guid, DateOnly), decimal>
+                    {
+                        [(apple.Id, reportDate)] = 150m,
+                        [(microsoft.Id, reportDate)] = 400m,
+                    }
+                );
+            });
+
+        var result = await CreateImporter(priceProvider)
+            .ImportDataSet(archive, new DateOnly(2024, 1, 1), CancellationToken.None);
+
+        result.IsComplete.Should().BeFalse();
+        result.InsertedHoldings.Should().Be(1);
+
+        using var verify = FreshContext();
+        var holdings = await verify.Set<InstitutionalHolding>().AsNoTracking().ToListAsync();
+        holdings.Should().ContainSingle();
+        holdings[0].CommonStockId.Should().Be(microsoft.Id);
+        holdings[0].Shares.Should().Be(2000);
+    }
+
+    [Fact]
     public async Task ImportDataSet_ArchiveCarriesASummaryPage_LandsTheFilersDeclaredTotalsOnTheRollup()
     {
         // The cover page's declared totals are the only authoritative statement of what the WHOLE

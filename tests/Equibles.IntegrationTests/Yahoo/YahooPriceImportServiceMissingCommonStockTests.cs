@@ -9,6 +9,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Worker;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
@@ -36,6 +37,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
     private readonly DailyStockPriceRepository _priceRepo;
     private readonly CommonStockRepository _stockRepo;
     private readonly IYahooFinanceClient _yahooClient;
+    private readonly ISharesOutstandingProvider _sharesProvider;
     private readonly YahooPriceImportService _sut;
 
     public YahooPriceImportServiceMissingCommonStockTests()
@@ -48,6 +50,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
         _stockRepo = new CommonStockRepository(_dbContext);
 
         _yahooClient = Substitute.For<IYahooFinanceClient>();
+        _sharesProvider = Substitute.For<ISharesOutstandingProvider>();
         var errorReporter = Substitute.For<ErrorReporter>(
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ILogger<ErrorReporter>>()
@@ -59,6 +62,9 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), _priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
+            (typeof(IndustryRepository), new IndustryRepository(_dbContext)),
+            (typeof(SectorRepository), new SectorRepository(_dbContext)),
+            (typeof(ISharesOutstandingProvider), _sharesProvider),
             (
                 typeof(SplitPriceReconciliationManager),
                 new SplitPriceReconciliationManager(splitRepo)
@@ -128,5 +134,44 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
 
         var prices = _priceRepo.GetAll().ToList();
         prices.Should().BeEmpty();
+        await _sharesProvider
+            .DidNotReceiveWithAnyArgs()
+            .GetCurrentSharesOutstanding(default, default);
+    }
+
+    [Fact]
+    public async Task Import_CommonStockDeletedBeforeProfileWrite_DoesNotCreateTaxonomyRows()
+    {
+        var apple = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "CIK-AAPL",
+        };
+        _stockRepo.Add(apple);
+        await _stockRepo.SaveChanges();
+
+        _yahooClient
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient
+            .GetCompanyProfile("AAPL")
+            .Returns(_ =>
+            {
+                _dbContext.Remove(apple);
+                _dbContext.SaveChanges();
+                return new CompanyProfile
+                {
+                    Industry = "Consumer Electronics",
+                    Sector = "Technology",
+                };
+            });
+
+        await _sut.Import(CancellationToken.None);
+
+        _dbContext.Set<CommonStock>().Should().BeEmpty();
+        _dbContext.Set<Equibles.CommonStocks.Data.Models.Taxonomies.Industry>().Should().BeEmpty();
+        _dbContext.Set<Equibles.CommonStocks.Data.Models.Taxonomies.Sector>().Should().BeEmpty();
     }
 }

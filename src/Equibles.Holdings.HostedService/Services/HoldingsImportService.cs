@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
@@ -92,14 +93,26 @@ public class HoldingsImportService
         await ParseOtherManagerCoverList(context, cancellationToken);
         await UpsertInstitutionalHolders(context, cancellationToken);
         await HandleAmendments(context, cancellationToken);
-        var insertedHoldings = await StreamAndInsertHoldings(context, cancellationToken);
+        var holdingsResult = await StreamAndInsertHoldings(context, cancellationToken);
         await FlushFilingOtherManagers(context, cancellationToken);
+        if (holdingsResult.SkippedStaleParent)
+        {
+            // CompanySync replaced at least one mapped CommonStock after the CUSIP lookup. Keep
+            // the valid positions already written, but leave this data set eligible for retry so
+            // the replacement stock is resolved on the next pass. Publishing summaries here
+            // would advertise a knowingly partial portfolio before that retry completes.
+            return new ImportResult(
+                submissionCount,
+                IsComplete: false,
+                InsertedHoldings: holdingsResult.Inserted
+            );
+        }
         await SyncFilingSummaries(context, cancellationToken);
         await PublishAffectedQuartersAsync(context, cancellationToken);
         return new ImportResult(
             submissionCount,
             IsComplete: true,
-            InsertedHoldings: insertedHoldings
+            InsertedHoldings: holdingsResult.Inserted
         );
     }
 
@@ -1356,7 +1369,7 @@ public class HoldingsImportService
         return true;
     }
 
-    private async Task<int> StreamAndInsertHoldings(
+    private async Task<HoldingsStreamResult> StreamAndInsertHoldings(
         ImportContext context,
         CancellationToken cancellationToken
     )
@@ -1367,6 +1380,7 @@ public class HoldingsImportService
         var totalSkipped = 0;
         var totalDuplicates = 0;
         var totalPending = 0;
+        var skippedStaleParent = false;
         string currentAccession = null;
 
         await foreach (var row in context.TsvParser.ParseEntry(infoTableEntry))
@@ -1398,6 +1412,7 @@ public class HoldingsImportService
                 totalInserted += flushed.Inserted;
                 totalDuplicates += flushed.Duplicates;
                 totalPending += flushed.Pending;
+                skippedStaleParent |= flushed.SkippedStaleParent;
                 bufferedRows.Clear();
             }
             currentAccession = accession;
@@ -1450,6 +1465,7 @@ public class HoldingsImportService
             totalInserted += flushed.Inserted;
             totalDuplicates += flushed.Duplicates;
             totalPending += flushed.Pending;
+            skippedStaleParent |= flushed.SkippedStaleParent;
             bufferedRows.Clear();
         }
 
@@ -1464,14 +1480,21 @@ public class HoldingsImportService
         LogValueBasisAudit(context);
         await FlushUnmappedCusips(context, cancellationToken);
 
-        return totalInserted;
+        return new HoldingsStreamResult(totalInserted, skippedStaleParent);
     }
+
+    private readonly record struct HoldingsStreamResult(int Inserted, bool SkippedStaleParent);
 
     // Runs the per-filing share-count repair over one accession's buffered rows,
     // merges them by upsert key, and flushes the batch. Repair must happen here —
     // after the whole filing is buffered, before any row merges — because the
     // duplicated-column signal is a property of the filing, not of a single row.
-    private async Task<(int Inserted, int Duplicates, int Pending)> RepairMergeAndFlush(
+    private async Task<(
+        int Inserted,
+        int Duplicates,
+        int Pending,
+        bool SkippedStaleParent
+    )> RepairMergeAndFlush(
         string accession,
         List<BufferedHoldingRow> bufferedRows,
         ImportContext context,
@@ -1507,12 +1530,12 @@ public class HoldingsImportService
             }
         }
 
-        var inserted =
+        var flushResult =
             holdingsMap.Count > 0
                 ? await FlushBatch(holdingsMap.Values.ToList(), cancellationToken)
-                : 0;
+                : new HoldingsFlushResult(0, SkippedStaleParent: false);
 
-        return (inserted, duplicates, pending);
+        return (flushResult.Inserted, duplicates, pending, flushResult.SkippedStaleParent);
     }
 
     // Buffers a parsed row by its upsert key. A 13F holder can split one security
@@ -1714,16 +1737,39 @@ public class HoldingsImportService
         return (holding, managerEntry, valuePending, reportedValue);
     }
 
-    private async Task<int> FlushBatch(
+    private readonly record struct HoldingsFlushResult(int Inserted, bool SkippedStaleParent);
+
+    private async Task<HoldingsFlushResult> FlushBatch(
         List<InstitutionalHolding> holdings,
         CancellationToken cancellationToken
     )
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+
+        // CompanySync can replace a CommonStock after BuildCusipMapping cached its id. Remove
+        // those stale children immediately before the write so one dangling FK cannot roll back
+        // every valid position in the accession. The caller leaves the data set unprocessed when
+        // any row is skipped, allowing the replacement stock to resolve on the next pass.
+        var safeHoldings = await stockRepo.FilterByExistingStocks(
+            holdings,
+            h => h.CommonStockId,
+            cancellationToken
+        );
+        var skipped = holdings.Count - safeHoldings.Count;
+        if (skipped > 0)
+        {
+            _logger.LogWarning(
+                "Holdings batch: skipping {Count} rows whose parent CommonStock was removed before flush",
+                skipped
+            );
+        }
+        if (safeHoldings.Count == 0)
+            return new HoldingsFlushResult(0, SkippedStaleParent: skipped > 0);
 
         var entriesByKey = new Dictionary<string, List<HoldingManagerEntry>>();
-        foreach (var h in holdings)
+        foreach (var h in safeHoldings)
         {
             entriesByKey[BuildHoldingKey(h)] = h.ManagerEntries.ToList();
             h.ManagerEntries.Clear();
@@ -1731,7 +1777,7 @@ public class HoldingsImportService
 
         await dbContext
             .Set<InstitutionalHolding>()
-            .UpsertRange(holdings)
+            .UpsertRange(safeHoldings)
             .On(h => new
             {
                 h.CommonStockId,
@@ -1769,7 +1815,7 @@ public class HoldingsImportService
             )
             .RunAsync(cancellationToken);
 
-        var accessions = holdings.Select(h => h.AccessionNumber).Distinct().ToList();
+        var accessions = safeHoldings.Select(h => h.AccessionNumber).Distinct().ToList();
         var dbHoldings = await dbContext
             .Set<InstitutionalHolding>()
             .Include(h => h.ManagerEntries)
@@ -1787,7 +1833,7 @@ public class HoldingsImportService
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return holdings.Count;
+        return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
     }
 
     // Recomputes the InstitutionalFiling rollup for every (holder, quarter) this
