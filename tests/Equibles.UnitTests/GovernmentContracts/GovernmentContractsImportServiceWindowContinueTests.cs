@@ -197,6 +197,100 @@ public class GovernmentContractsImportServiceWindowContinueTests
     }
 
     [Fact]
+    public async Task Import_TrailingRescanWindowFails_RetractsTheCheckpointBehindIt()
+    {
+        // The steady-state hole, and the one freezing alone cannot close. Once the scan has
+        // caught up, the checkpoint LEADS the trailing lookback window, so a failure inside
+        // that window sits BEHIND the frontier: declining to advance changes nothing, and the
+        // next cycle's lookback slides one day forward and steps over the failed day for good.
+        // The checkpoint must therefore be pulled BACK behind the failure.
+        var options = NewDbOptions();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var lookbackStart = today.AddDays(-6);
+
+        using (var seed = NewContext(options))
+        {
+            seed.Add(
+                new CommonStock
+                {
+                    Ticker = "LMT",
+                    Name = "Lockheed Martin Corporation",
+                    Cik = "1",
+                }
+            );
+            // A caught-up scan: the frontier already reaches yesterday, well ahead of the
+            // trailing window about to be re-covered.
+            seed.Add(
+                new GovernmentContractsScanState
+                {
+                    Name = "award-scan",
+                    LastCompletedWindowEnd = today.AddDays(-1),
+                    UpdatedAt = DateTime.UtcNow,
+                }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = ScopeFactory(options);
+        var client = Substitute.For<IUsaSpendingClient>();
+        client
+            .GetContractAwards(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.FromResult(new List<UsaSpendingAwardRecord>()));
+        client
+            .GetContractAwards(
+                lookbackStart,
+                lookbackStart,
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(
+                new HttpRequestException(
+                    "USAspending rejected the window",
+                    inner: null,
+                    statusCode: HttpStatusCode.UnprocessableEntity
+                )
+            );
+
+        var service = new GovernmentContractsImportService(
+            scopeFactory,
+            NullLogger<GovernmentContractsImportService>.Instance,
+            client,
+            new RecipientResolver(scopeFactory),
+            Options.Create(
+                new GovernmentContractsScraperOptions
+                {
+                    WindowDays = 1,
+                    MinimumAwardAmount = 1_000_000m,
+                    RescanLookbackDays = 7,
+                }
+            ),
+            Options.Create(new WorkerOptions()),
+            new ErrorReporter(scopeFactory, NullLogger<ErrorReporter>.Instance)
+        );
+
+        await service.Import(CancellationToken.None);
+
+        using var context = NewContext(options);
+        var checkpoint = await context
+            .Set<GovernmentContractsScanState>()
+            .AsNoTracking()
+            .SingleAsync();
+
+        checkpoint
+            .LastCompletedWindowEnd.Should()
+            .Be(
+                lookbackStart.AddDays(-1),
+                "an unresolved day behind the frontier must pull the frontier back to it, or "
+                    + "the sliding lookback abandons it next cycle"
+            );
+    }
+
+    [Fact]
     public void Import_HistoricalWindowFails_NextCycleResumesAtTheFailedWindow()
     {
         // The other half of the guard: freezing the checkpoint is only useful if the next cycle
@@ -220,14 +314,15 @@ public class GovernmentContractsImportServiceWindowContinueTests
     [Fact]
     public async Task Import_WindowThrowsNonTransportException_ContinuesScanningRemainingWindows()
     {
-        // Contract (from Import's window-loop comment): only a transport failure
-        // (HttpRequestException) is systemic enough to abort the cycle. A window-specific
-        // failure — anything that is NOT an HttpRequestException — is reported but falls
-        // through so the scan continues to the remaining windows. With a two-day scan split
-        // into one-day windows where the first window throws a non-transport exception, the
-        // client must therefore still be invoked for the later window: the cycle is NOT
-        // aborted (which would leave it called exactly once).
+        // Contract (from Import's window-loop comment): a non-HTTP failure is window-specific.
+        // It is reported and falls through so the scan continues to the remaining windows, so
+        // with a two-day scan split into one-day windows the client must still be invoked for
+        // the later window — an abort would leave it called exactly once. It must ALSO freeze
+        // the frontier: the failure is a hole like any other, and a guard that only fired for
+        // HttpRequestException would pass the call-count assertion while silently banking a
+        // checkpoint past the unscanned day.
         var options = NewDbOptions();
+        var failingWindow = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
         using (var seed = NewContext(options))
         {
             seed.Add(
@@ -248,6 +343,14 @@ public class GovernmentContractsImportServiceWindowContinueTests
             .GetContractAwards(
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.FromResult(new List<UsaSpendingAwardRecord>()));
+        client
+            .GetContractAwards(
+                failingWindow,
+                failingWindow,
                 Arg.Any<decimal>(),
                 Arg.Any<CancellationToken>()
             )
@@ -286,6 +389,20 @@ public class GovernmentContractsImportServiceWindowContinueTests
             .HaveCountGreaterThan(
                 1,
                 "a window-specific (non-transport) failure must not abort the scan"
+            );
+
+        // ...and the later window that succeeded must not have banked a frontier past the hole.
+        using var context = NewContext(options);
+        var checkpoint = await context
+            .Set<GovernmentContractsScanState>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync();
+
+        checkpoint
+            .Should()
+            .BeNull(
+                "the first window failed, so nothing behind it was ever contiguously scanned "
+                    + "and no frontier may be recorded"
             );
     }
 

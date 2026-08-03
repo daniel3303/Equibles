@@ -149,7 +149,17 @@ public class GovernmentContractsImportService : IImporter
                     throw;
                 }
 
-                frontierIsContiguous = false;
+                if (frontierIsContiguous)
+                {
+                    // The first hole this cycle. Windows run oldest-first, so this is the
+                    // earliest unresolved day — pull the frontier back behind it and stop
+                    // advancing for the rest of the cycle. Freezing alone is not enough: once
+                    // the scan has caught up, the checkpoint LEADS the trailing-rescan window,
+                    // so a failure inside that window is already behind the frontier and the
+                    // next cycle would step straight over it as the lookback slid forward.
+                    frontierIsContiguous = false;
+                    await RetractCheckpoint(windowStart.AddDays(-1));
+                }
 
                 await _errorReporter.Report(
                     ErrorSource.GovernmentContractsScraper,
@@ -168,24 +178,22 @@ public class GovernmentContractsImportService : IImporter
 
     /// <summary>
     /// Does this HTTP failure condemn the whole cycle, or only the window that produced it?
-    /// Systemic on purpose (the client has already exhausted its own retry ladder by the time
-    /// any of these surface): a response-less failure or an exhausted timeout, any 5xx, an
-    /// exhausted 429/408 — continuing would restart the full backoff ladder against a source
-    /// that is rate-limiting or timing out — and the global 401/403/404 rejections, which are
-    /// about our credentials or the endpoint, not the dates we asked for. Everything else is a
-    /// request-level rejection of one window (422 out-of-range, 400 malformed).
+    ///
+    /// Systemic is the DEFAULT, and deliberately so. Stepping over a failure only makes sense
+    /// when we know it is about the dates we asked for; for anything else, continuing fans the
+    /// same failure out across every remaining window — up to ~6,900 of them from the 2007
+    /// epoch at the default one-day width — writing an Error row each time while the source is
+    /// telling us to stop. A systemic abort instead hands the outage to the worker's
+    /// consecutive-failure streak, which reports once and backs off.
+    ///
+    /// 422 is the sole request-level exit: it is USAspending's validation rejection of the
+    /// window's own filters, the failure this classifier exists for (an action-date range below
+    /// the 2007-10-01 epoch). 400 stays systemic even though it reads "malformed" — the fields
+    /// it most likely refers to (filter shape, award-type codes) are identical in every window,
+    /// so treating it as window-level would fan out a source-wide defect.
     /// </summary>
     private static bool IsSystemicHttpFailure(HttpRequestException exception) =>
-        exception.StatusCode switch
-        {
-            null => true,
-            HttpStatusCode.RequestTimeout => true,
-            HttpStatusCode.TooManyRequests => true,
-            HttpStatusCode.Unauthorized => true,
-            HttpStatusCode.Forbidden => true,
-            HttpStatusCode.NotFound => true,
-            var status => (int)status >= (int)HttpStatusCode.InternalServerError,
-        };
+        exception.StatusCode != HttpStatusCode.UnprocessableEntity;
 
     private async Task<int> ImportWindow(
         DateOnly windowStart,
@@ -379,6 +387,54 @@ public class GovernmentContractsImportService : IImporter
                 ex,
                 "Government contracts import: failed to persist scan checkpoint at {WindowEnd}; "
                     + "the window will be re-scanned next cycle",
+                windowEnd
+            );
+        }
+    }
+
+    /// <summary>
+    /// Pull the persisted checkpoint BACK to <paramref name="windowEnd"/> when it currently
+    /// leads that day, so the next cycle resumes at the window that just failed. The mirror of
+    /// <see cref="AdvanceCheckpoint"/>, and the only path allowed to lower the frontier.
+    ///
+    /// Needed because a caught-up scan re-covers a trailing lookback window that sits BEHIND
+    /// the checkpoint: a failure there is already inside the scanned region, so merely
+    /// declining to advance would leave the frontier untouched and the next cycle's lookback
+    /// would slide past the failed day, losing any award published for it late. Best-effort
+    /// like its counterpart — a persist failure only costs the retry, never the cycle.
+    /// </summary>
+    private async Task RetractCheckpoint(DateOnly windowEnd)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repository =
+                scope.ServiceProvider.GetRequiredService<GovernmentContractsScanStateRepository>();
+
+            // No row yet means nothing has been banked, so there is no frontier to pull back:
+            // the cold-start cursor already resumes at or before this window.
+            var state = await repository.GetByName(ScanStateName);
+            if (state == null || state.LastCompletedWindowEnd <= windowEnd)
+                return;
+
+            _logger.LogWarning(
+                "Government contracts import: pulling the scan checkpoint back from {From} to "
+                    + "{To} so the failed window is re-covered next cycle",
+                state.LastCompletedWindowEnd,
+                windowEnd
+            );
+
+            state.LastCompletedWindowEnd = windowEnd;
+            state.UpdatedAt = DateTime.UtcNow;
+            repository.Update(state);
+            await repository.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Government contracts import: failed to retract the scan checkpoint to "
+                    + "{WindowEnd}; the failed window may not be re-covered",
                 windowEnd
             );
         }

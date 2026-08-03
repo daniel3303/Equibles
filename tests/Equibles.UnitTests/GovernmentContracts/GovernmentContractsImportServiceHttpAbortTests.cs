@@ -57,15 +57,33 @@ public class GovernmentContractsImportServiceHttpAbortTests
     [InlineData(HttpStatusCode.Unauthorized)]
     [InlineData(HttpStatusCode.Forbidden)]
     [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.BadRequest)]
     public async Task Import_SystemicSub500Status_AbortsCycleWithoutScanningLaterWindows(
         HttpStatusCode status
     )
     {
-        // These reach the import loop only after UsaSpendingClient exhausted its own retry
-        // ladder (429/408) or hit a rejection that is about our credentials/endpoint rather
-        // than the dates asked for (401/403/404). None of them is window-specific, so
-        // continuing would restart the full backoff ladder against every remaining window —
-        // hammering a source that already said stop. They must abort like a 5xx.
+        // None of these is about the dates asked for: 429/408 mean the source is throttling or
+        // timing out, 401/403/404 are about our credentials or the endpoint, and a 400
+        // "malformed" most plausibly refers to the filter fields every window shares. Stepping
+        // over any of them would fan the same failure across the whole range.
+        await AssertSystemicFailureAborts(
+            new HttpRequestException($"USAspending returned {status}", inner: null, status)
+        );
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Gone)]
+    [InlineData(HttpStatusCode.MethodNotAllowed)]
+    [InlineData(HttpStatusCode.UnsupportedMediaType)]
+    [InlineData(HttpStatusCode.Conflict)]
+    public async Task Import_UnrecognisedSub500Status_DefaultsToAbortingTheCycle(
+        HttpStatusCode status
+    )
+    {
+        // Pins the classifier's DEFAULT rather than its listed cases. Continuing is the
+        // dangerous direction — it fans a source-wide defect across ~6,900 windows — so an
+        // status nobody has reasoned about must abort, not scan on. A classifier written as
+        // "everything under 500 continues" passes the theory above and fails here.
         await AssertSystemicFailureAborts(
             new HttpRequestException($"USAspending returned {status}", inner: null, status)
         );
@@ -73,7 +91,6 @@ public class GovernmentContractsImportServiceHttpAbortTests
 
     [Theory]
     [InlineData(HttpStatusCode.UnprocessableEntity)]
-    [InlineData(HttpStatusCode.BadRequest)]
     public async Task Import_RequestLevel4xx_ScansEveryRemainingWindowWithoutThrowing(
         HttpStatusCode status
     )
