@@ -84,11 +84,12 @@ public class GovernmentContractsImportService : IImporter
         var totalInserted = 0;
 
         // The checkpoint records the CONTIGUOUS fully-scanned frontier, so it may only advance
-        // while every window behind it has succeeded. Once a window fails this cycle the
-        // frontier freezes: later windows still run (their awards are ingested and deduplicated
-        // by AwardUniqueKey), but the resume point stays behind the hole so the next cycle
-        // re-covers it. Advancing past a failed window would silently lose its awards forever
-        // once it fell outside the trailing rescan lookback.
+        // while every window behind it has succeeded. On the first failure of a cycle the
+        // frontier is pulled back behind that window and stops advancing: later windows still
+        // run (their awards are ingested and deduplicated by AwardUniqueKey), but the resume
+        // point stays behind the hole so the next cycle re-covers it. Leaving the frontier past
+        // a failed window would silently lose its awards once it fell outside the trailing
+        // rescan lookback.
         var frontierIsContiguous = true;
 
         for (
@@ -128,14 +129,13 @@ public class GovernmentContractsImportService : IImporter
                     windowEnd
                 );
 
-                // Systemic failures — a response-less transport error, an exhausted 5xx, an
-                // exhausted 429/408, or a global auth/endpoint rejection — say nothing about this
-                // window and everything about the source: every remaining window would fail
-                // identically, and re-entering the client's retry ladder for each of them only
-                // hammers an API that already told us to stop. Rethrow so the worker's
-                // consecutive-failure streak owns reporting and backoff. A request-level 4xx
-                // (422 on an out-of-range window, 400 on a malformed one) is a rejection of THIS
-                // window only; report it, freeze the frontier, and scan the rest.
+                // Anything the classifier calls systemic says nothing about this window and
+                // everything about the source: the remaining windows would fail identically,
+                // and re-entering the client's retry ladder for each of them only hammers an
+                // API that already told us to stop. Rethrow so the worker's consecutive-failure
+                // streak owns reporting and backoff. Only a 422 — USAspending rejecting THIS
+                // window's own date filters — is stepped over: report it, pull the frontier
+                // back behind it, and scan the rest.
                 if (
                     ex is HttpRequestException httpException
                     && IsSystemicHttpFailure(httpException)
