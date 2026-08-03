@@ -223,21 +223,41 @@ public class CboeImportService : IImporter
             var records = await _cboeClient.DownloadVixHistory();
             _logger.LogDebug("CBOE VIX: downloaded {Count} records", records.Count);
 
-            if (records.Count == 0)
-                return;
+            // Keep this validation even though CboeClient enforces the same boundary: alternate
+            // ICboeClient implementations and test doubles must not be able to persist impossible
+            // candles. The official file currently contains legacy invalid rows.
+            var validRecords = records.Where(IsValidVixRecord).ToList();
+            var rejected = records.Count - validRecords.Count;
+            if (rejected > 0)
+            {
+                _logger.LogWarning(
+                    "CBOE VIX: rejected {Count} records with impossible OHLC",
+                    rejected
+                );
+            }
 
-            DateOnly latestStoredDate;
+            HashSet<DateOnly> existingDates;
             using (var scope = _scopeFactory.CreateScope())
             {
                 var repo = scope.ServiceProvider.GetRequiredService<CboeVixDailyRepository>();
-                latestStoredDate = await repo.GetLatestDate()
-                    .FirstOrDefaultAsync(cancellationToken);
+                var removed = await repo.GetInvalidOhlc().ExecuteDeleteAsync(cancellationToken);
+                if (removed > 0)
+                {
+                    _logger.LogWarning(
+                        "CBOE VIX: removed {Count} historically stored records with impossible OHLC",
+                        removed
+                    );
+                }
+
+                existingDates = await repo.GetAll()
+                    .Select(r => r.Date)
+                    .ToHashSetAsync(cancellationToken);
             }
 
-            var newRecords =
-                latestStoredDate != default
-                    ? records.Where(r => r.Date > latestStoredDate).ToList()
-                    : records;
+            // Compare the full official history by date rather than advancing only from MAX(Date).
+            // If CBOE later corrects a quarantined historical candle, that old date must be able to
+            // return even when newer valid rows already exist.
+            var newRecords = validRecords.Where(r => !existingDates.Contains(r.Date)).ToList();
 
             if (newRecords.Count == 0)
             {
@@ -270,4 +290,15 @@ public class CboeImportService : IImporter
             await _errorReporter.Report(ErrorSource.CboeScraper, "CboeImport.ImportVixHistory", ex);
         }
     }
+
+    private static bool IsValidVixRecord(CboeVixRecord record) =>
+        record.Open > 0
+        && record.High > 0
+        && record.Low > 0
+        && record.Close > 0
+        && record.High >= record.Open
+        && record.High >= record.Close
+        && record.Low <= record.Open
+        && record.Low <= record.Close
+        && record.High >= record.Low;
 }
