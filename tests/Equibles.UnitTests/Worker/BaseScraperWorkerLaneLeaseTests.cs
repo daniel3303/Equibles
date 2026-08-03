@@ -124,6 +124,36 @@ public class BaseScraperWorkerLaneLeaseTests
         interval.Should().Be(worker.NormalSleepInterval);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_LeaseLostMidOutage_DoesNotResetTheFailureStreak()
+    {
+        // A skipped cycle must not read as a CLEAN one. The clean-cycle branch clears
+        // _consecutiveFailures and _errorReportedForStreak, so a worker deep in an outage that
+        // loses the lease for a single cycle would have its streak reset and its Error report
+        // pushed further away — the report exists precisely to surface an outage that is not
+        // self-healing. With ErrorReportThreshold = 2: fault, lose the lease, fault again must
+        // still reach the threshold and report.
+        var reporterScopeFactory = Substitute.For<IServiceScopeFactory>();
+        using var services = CreateWorkerServices(new WorkerOptions());
+        using var worker = new LeaseTestWorker(
+            Substitute.For<ILogger>(),
+            services.GetRequiredService<IServiceScopeFactory>(),
+            CreateErrorReporter(reporterScopeFactory),
+            // Only the second cycle loses the lane.
+            (attempt, _) =>
+                ValueTask.FromResult<IAsyncDisposable>(attempt == 2 ? null! : new TrackingLease()),
+            _ => throw new InvalidOperationException("cycle failed"),
+            cyclesBeforeBlocking: 3
+        );
+
+        await worker.StartAsync(CancellationToken.None);
+        await worker.CyclesCompleted.WaitAsync(TimeSpan.FromSeconds(5));
+        await worker.StopAsync(CancellationToken.None);
+
+        worker.DoWorkCalls.Should().Be(2, "the middle cycle never acquired the lane");
+        reporterScopeFactory.Received().CreateScope();
+    }
+
     private static ServiceProvider CreateWorkerServices(WorkerOptions options, IBus? bus = null)
     {
         var services = new ServiceCollection();
@@ -154,23 +184,31 @@ public class BaseScraperWorkerLaneLeaseTests
         private readonly TaskCompletionSource<TimeSpan> _firstWait = new(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
+        private readonly TaskCompletionSource _cyclesCompleted = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        private readonly int _cyclesBeforeBlocking;
         private int _leaseAttempts;
         private int _doWorkCalls;
+        private int _cyclesObserved;
 
         public LeaseTestWorker(
             ILogger logger,
             IServiceScopeFactory scopeFactory,
             ErrorReporter errorReporter,
             Func<int, CancellationToken, ValueTask<IAsyncDisposable>> tryAcquire,
-            Func<CancellationToken, Task> doWork
+            Func<CancellationToken, Task> doWork,
+            int cyclesBeforeBlocking = 1
         )
             : base(logger, scopeFactory, errorReporter)
         {
             _tryAcquire = tryAcquire;
             _doWork = doWork;
+            _cyclesBeforeBlocking = cyclesBeforeBlocking;
         }
 
         public Task<TimeSpan> FirstWait => _firstWait.Task;
+        public Task CyclesCompleted => _cyclesCompleted.Task;
         public TimeSpan NormalSleepInterval => SleepInterval;
         public TimeSpan FaultBackoffInterval => ErrorBackoffInterval;
         public int LeaseAttempts => _leaseAttempts;
@@ -195,6 +233,13 @@ public class BaseScraperWorkerLaneLeaseTests
         protected override Task WaitForNextCycle(TimeSpan interval, CancellationToken stoppingToken)
         {
             _firstWait.TrySetResult(interval);
+
+            // Let the loop run the requested number of cycles back to back, then park so the
+            // test observes a settled state instead of racing an unbounded loop.
+            if (Interlocked.Increment(ref _cyclesObserved) < _cyclesBeforeBlocking)
+                return Task.CompletedTask;
+
+            _cyclesCompleted.TrySetResult();
             return Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
         }
     }
