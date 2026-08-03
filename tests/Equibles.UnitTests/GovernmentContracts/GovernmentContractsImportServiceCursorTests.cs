@@ -9,10 +9,11 @@ namespace Equibles.UnitTests.GovernmentContracts;
 // credible action date and can never point past today — a single mis-dated future row froze
 // prod ingestion for over two years when the cursor keyed on raw max(ActionDate).
 //
-// Once a scan checkpoint exists it OWNS the cursor: the scan resumes after the last
-// fully-completed window (so a transport abort no longer restarts the whole range and
-// re-floods the Errors page), never behind data already ingested, and re-covers a trailing
-// lookback window so awards USAspending publishes late are not permanently skipped.
+// Once a scan checkpoint exists it SOLELY owns the cursor: the scan resumes after the last
+// contiguously-completed window (so a transport abort no longer restarts the whole range and
+// re-floods the Errors page) and re-covers a trailing lookback window so awards USAspending
+// publishes late are not permanently skipped. max(ActionDate) deliberately cannot drag the
+// cursor past the checkpoint — that is what keeps a failed window from being skipped for good.
 public class GovernmentContractsImportServiceCursorTests
 {
     private static readonly DateOnly Today = new(2026, 7, 17);
@@ -79,6 +80,34 @@ public class GovernmentContractsImportServiceCursorTests
     }
 
     [Fact]
+    public void Clamps_a_configured_min_sync_date_before_the_usa_spending_epoch()
+    {
+        var start = GovernmentContractsImportService.ResolveStartDate(
+            null,
+            checkpointEnd: null,
+            Today,
+            Lookback,
+            new WorkerOptions { MinSyncDate = new DateTime(2000, 1, 1) }
+        );
+
+        start.Should().Be(new DateOnly(2007, 10, 1));
+    }
+
+    [Fact]
+    public void Leaves_the_exact_usa_spending_epoch_unchanged()
+    {
+        var start = GovernmentContractsImportService.ResolveStartDate(
+            null,
+            checkpointEnd: null,
+            Today,
+            Lookback,
+            new WorkerOptions { MinSyncDate = new DateTime(2007, 10, 1) }
+        );
+
+        start.Should().Be(new DateOnly(2007, 10, 1));
+    }
+
+    [Fact]
     public void Falls_back_to_the_default_floor_when_the_table_is_empty_and_unconfigured()
     {
         var start = GovernmentContractsImportService.ResolveStartDate(
@@ -126,6 +155,20 @@ public class GovernmentContractsImportServiceCursorTests
     }
 
     [Fact]
+    public void Clamps_a_checkpoint_resume_before_the_usa_spending_epoch()
+    {
+        var start = GovernmentContractsImportService.ResolveStartDate(
+            latestActionDate: null,
+            checkpointEnd: new DateOnly(2007, 9, 15),
+            Today,
+            Lookback,
+            new WorkerOptions()
+        );
+
+        start.Should().Be(new DateOnly(2007, 10, 1));
+    }
+
+    [Fact]
     public void A_checkpoint_carries_the_scan_forward_past_a_lagging_watermark()
     {
         // Even with no rows inserted past 2022-01-13 (every window since was empty or matched
@@ -142,10 +185,14 @@ public class GovernmentContractsImportServiceCursorTests
     }
 
     [Fact]
-    public void A_checkpoint_behind_ingested_data_never_resumes_behind_the_watermark()
+    public void A_checkpoint_behind_ingested_data_resumes_from_the_checkpoint_not_the_watermark()
     {
-        // Defensive: the checkpoint should always lead the watermark, but if it somehow lags,
-        // resume after the newer ingested data rather than re-scanning already-stored rows.
+        // The checkpoint marks the last CONTIGUOUSLY scanned day, so it legitimately lags the
+        // newest ingested action date: a cycle that fails one window keeps scanning the later
+        // ones, which insert rows past the frozen frontier. Letting max(ActionDate) win here
+        // would step straight over the failed window and lose its awards permanently once it
+        // aged out of the trailing lookback. Re-scanning the days in between is harmless —
+        // inserts deduplicate on AwardUniqueKey.
         var start = GovernmentContractsImportService.ResolveStartDate(
             latestActionDate: new DateOnly(2022, 1, 20),
             checkpointEnd: new DateOnly(2022, 1, 10),
@@ -154,7 +201,7 @@ public class GovernmentContractsImportServiceCursorTests
             new WorkerOptions()
         );
 
-        start.Should().Be(new DateOnly(2022, 1, 21));
+        start.Should().Be(new DateOnly(2022, 1, 11));
     }
 
     [Fact]

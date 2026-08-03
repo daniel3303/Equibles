@@ -1,3 +1,4 @@
+using System.Net;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
@@ -18,6 +19,14 @@ namespace Equibles.GovernmentContracts.HostedService.Services;
 public class GovernmentContractsImportService : IImporter
 {
     private const int InsertBatchSize = 1000;
+
+    // How many windows in a row may fail before the scan treats the failure as source-wide and
+    // aborts the cycle. Low enough that a fan-out costs a handful of Error rows instead of
+    // thousands, high enough that a short run of genuinely bad days does not stop the scan.
+    private const int MaxConsecutiveWindowFailures = 5;
+
+    // USAspending rejects action-date searches earlier than its federal-award data epoch.
+    private static readonly DateOnly UsaSpendingMinimumActionDate = new(2007, 10, 1);
 
     // Single well-known row that persists the forward award scan's resume point.
     private const string ScanStateName = "award-scan";
@@ -79,6 +88,25 @@ public class GovernmentContractsImportService : IImporter
         var windowDays = Math.Max(1, _options.WindowDays);
         var totalInserted = 0;
 
+        // The checkpoint records the CONTIGUOUS fully-scanned frontier, so it may only advance
+        // while every window behind it has succeeded. On the first failure of a cycle the
+        // frontier is pulled back behind that window and stops advancing: later windows still
+        // run (their awards are ingested and deduplicated by AwardUniqueKey), but the resume
+        // point stays behind the hole so the next cycle re-covers it. Leaving the frontier past
+        // a failed window would silently lose its awards once it fell outside the trailing
+        // rescan lookback.
+        var frontierIsContiguous = true;
+
+        // Nothing stepped over may fan out across the range. 422 is USAspending's validation
+        // rejection for the WHOLE request, not just its dates, so a bad request-invariant field
+        // (a filter shape, an award-type code, an out-of-range amount bound) 422s on every
+        // window alike — and stepping over each of ~6,900 of them would write an Error row
+        // apiece while the worker still saw a successful cycle. Past this many consecutive
+        // window failures the pattern is the source, not the window: stop and let the worker's
+        // failure streak back off. Counted consecutively so a scan pockmarked with isolated bad
+        // days still completes.
+        var consecutiveWindowFailures = 0;
+
         for (
             var windowStart = startDate;
             windowStart <= today;
@@ -104,7 +132,10 @@ public class GovernmentContractsImportService : IImporter
                 // inserted nothing, so an empty or all-non-public window (and, above all, a
                 // later transport abort in this same cycle) can't rewind the scan to here.
                 // This is decoupled from MAX(ActionDate), which only moves on an insert.
-                await AdvanceCheckpoint(windowEnd);
+                if (frontierIsContiguous)
+                    await AdvanceCheckpoint(windowEnd);
+
+                consecutiveWindowFailures = 0;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -115,20 +146,36 @@ public class GovernmentContractsImportService : IImporter
                     windowEnd
                 );
 
-                // A transport-level failure (the API is unreachable, even after the client's retries)
-                // is systemic: every remaining window would fail identically. Rethrow so the worker's
-                // consecutive-failure streak owns the reporting — it records ONE Error row per outage
-                // (once the streak reaches its threshold) and backs off, instead of this loop writing
-                // a fresh row every cycle for the same unreachable API. The next cycle resumes from
-                // the same start date. Window-specific failures are reported here and the scan
-                // continues to the remaining windows.
-                if (ex is HttpRequestException)
+                // Anything the classifier calls systemic says nothing about this window and
+                // everything about the source: the remaining windows would fail identically,
+                // and re-entering the client's retry ladder for each of them only hammers an
+                // API that already told us to stop. Rethrow so the worker's consecutive-failure
+                // streak owns reporting and backoff. Only a 422 — USAspending rejecting THIS
+                // window's own date filters — is stepped over: report it, pull the frontier
+                // back behind it, and scan the rest.
+                if (
+                    ex is HttpRequestException httpException
+                    && IsSystemicHttpFailure(httpException)
+                )
                 {
                     _logger.LogWarning(
-                        "Government contracts import: aborting this cycle after a transport failure; "
-                            + "remaining windows will be retried on the next run"
+                        "Government contracts import: aborting this cycle after a systemic failure "
+                            + "({StatusCode}); remaining windows will be retried on the next run",
+                        httpException.StatusCode?.ToString() ?? "no response"
                     );
                     throw;
+                }
+
+                if (frontierIsContiguous)
+                {
+                    // The first hole this cycle. Windows run oldest-first, so this is the
+                    // earliest unresolved day — pull the frontier back behind it and stop
+                    // advancing for the rest of the cycle. Freezing alone is not enough: once
+                    // the scan has caught up, the checkpoint LEADS the trailing-rescan window,
+                    // so a failure inside that window is already behind the frontier and the
+                    // next cycle would step straight over it as the lookback slid forward.
+                    frontierIsContiguous = false;
+                    await RetractCheckpoint(windowStart.AddDays(-1));
                 }
 
                 await _errorReporter.Report(
@@ -137,6 +184,17 @@ public class GovernmentContractsImportService : IImporter
                     ex,
                     $"window: {windowStart}..{windowEnd}"
                 );
+
+                if (++consecutiveWindowFailures >= MaxConsecutiveWindowFailures)
+                {
+                    _logger.LogWarning(
+                        "Government contracts import: aborting this cycle after {Count} "
+                            + "consecutive window failures; the failure is source-wide, not "
+                            + "window-specific",
+                        consecutiveWindowFailures
+                    );
+                    throw;
+                }
             }
         }
 
@@ -145,6 +203,25 @@ public class GovernmentContractsImportService : IImporter
             totalInserted
         );
     }
+
+    /// <summary>
+    /// Does this HTTP failure condemn the whole cycle, or only the window that produced it?
+    ///
+    /// Systemic is the DEFAULT, and deliberately so. Stepping over a failure only makes sense
+    /// when we know it is about the dates we asked for; for anything else, continuing fans the
+    /// same failure out across every remaining window — up to ~6,900 of them from the 2007
+    /// epoch at the default one-day width — writing an Error row each time while the source is
+    /// telling us to stop. A systemic abort instead hands the outage to the worker's
+    /// consecutive-failure streak, which reports once and backs off.
+    ///
+    /// 422 is the sole request-level exit: it is USAspending's validation rejection of the
+    /// window's own filters, the failure this classifier exists for (an action-date range below
+    /// the 2007-10-01 epoch). 400 stays systemic even though it reads "malformed" — the fields
+    /// it most likely refers to (filter shape, award-type codes) are identical in every window,
+    /// so treating it as window-level would fan out a source-wide defect.
+    /// </summary>
+    private static bool IsSystemicHttpFailure(HttpRequestException exception) =>
+        exception.StatusCode != HttpStatusCode.UnprocessableEntity;
 
     private async Task<int> ImportWindow(
         DateOnly windowStart,
@@ -250,12 +327,21 @@ public class GovernmentContractsImportService : IImporter
     /// cursor falls back to the data-derived watermark exactly as before: the day after the
     /// newest credible action date, or the configured floor when the table is empty.
     ///
-    /// Once a checkpoint exists it owns the cursor. The scan resumes the day after the
-    /// furthest window it has fully completed — never behind data already ingested — but
-    /// never later than a trailing <paramref name="rescanLookbackDays"/> window, so awards
-    /// USAspending publishes late (dated inside a window already passed) are still re-covered
-    /// and deduplicated by AwardUniqueKey on insert. A consequence is that once caught up the
-    /// scan no longer reports "already up to date"; it re-scans the trailing window each cycle.
+    /// Once a checkpoint exists it SOLELY owns the cursor. The scan resumes the day after the
+    /// furthest contiguous window it has fully completed, but never later than a trailing
+    /// <paramref name="rescanLookbackDays"/> window, so awards USAspending publishes late
+    /// (dated inside a window already passed) are still re-covered and deduplicated by
+    /// AwardUniqueKey on insert. A consequence is that once caught up the scan no longer
+    /// reports "already up to date"; it re-scans the trailing window each cycle.
+    ///
+    /// <paramref name="latestActionDate"/> deliberately does NOT pull the cursor forward here.
+    /// A cycle that fails one window keeps scanning the later ones, so ingested data routinely
+    /// leads the frontier — letting MAX(ActionDate) win would step straight over the failed
+    /// window and lose its awards for good. It still seeds the cold-start path below, where no
+    /// checkpoint exists to be trusted.
+    ///
+    /// Every resolution path is clamped to USAspending's 2007-10-01 action-date epoch without
+    /// lowering a later cursor.
     /// </summary>
     public static DateOnly ResolveStartDate(
         DateOnly? latestActionDate,
@@ -268,18 +354,26 @@ public class GovernmentContractsImportService : IImporter
         if (latestActionDate > today)
             latestActionDate = today;
 
+        DateOnly resolvedStartDate;
         if (checkpointEnd == null)
-            return SyncDateResolver.Resolve(latestActionDate ?? default, workerOptions);
+        {
+            resolvedStartDate = SyncDateResolver.Resolve(
+                latestActionDate ?? default,
+                workerOptions
+            );
+        }
+        else
+        {
+            // Resume after the furthest point we have CONTIGUOUSLY scanned. See the remarks
+            // above for why an ingested action date past this point must not drag it forward.
+            var afterFrontier = checkpointEnd.Value.AddDays(1);
+            var lookbackFloor = today.AddDays(-(Math.Max(1, rescanLookbackDays) - 1));
+            resolvedStartDate = afterFrontier < lookbackFloor ? afterFrontier : lookbackFloor;
+        }
 
-        // Resume after the furthest point we have fully scanned, but never behind data
-        // already ingested (defensive — the checkpoint should always lead the watermark).
-        var frontier = checkpointEnd.Value;
-        if (latestActionDate.HasValue && latestActionDate.Value > frontier)
-            frontier = latestActionDate.Value;
-
-        var afterFrontier = frontier.AddDays(1);
-        var lookbackFloor = today.AddDays(-(Math.Max(1, rescanLookbackDays) - 1));
-        return afterFrontier < lookbackFloor ? afterFrontier : lookbackFloor;
+        return resolvedStartDate < UsaSpendingMinimumActionDate
+            ? UsaSpendingMinimumActionDate
+            : resolvedStartDate;
     }
 
     /// <summary>
@@ -321,6 +415,77 @@ public class GovernmentContractsImportService : IImporter
                 ex,
                 "Government contracts import: failed to persist scan checkpoint at {WindowEnd}; "
                     + "the window will be re-scanned next cycle",
+                windowEnd
+            );
+        }
+    }
+
+    /// <summary>
+    /// Pull the persisted checkpoint BACK to <paramref name="windowEnd"/> when it currently
+    /// leads that day, so the next cycle resumes at the window that just failed. The mirror of
+    /// <see cref="AdvanceCheckpoint"/>, and the only path allowed to lower the frontier.
+    ///
+    /// Needed because a caught-up scan re-covers a trailing lookback window that sits BEHIND
+    /// the checkpoint: a failure there is already inside the scanned region, so merely
+    /// declining to advance would leave the frontier untouched and the next cycle's lookback
+    /// would slide past the failed day, losing any award published for it late. Best-effort
+    /// like its counterpart — a persist failure only costs the retry, never the cycle.
+    /// </summary>
+    private async Task RetractCheckpoint(DateOnly windowEnd)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repository =
+                scope.ServiceProvider.GetRequiredService<GovernmentContractsScanStateRepository>();
+
+            var state = await repository.GetByName(ScanStateName);
+
+            // No row yet is NOT "nothing to do". Without one the next cycle falls back to the
+            // cold-start cursor, which resolves off MAX(ActionDate) — and the later windows of
+            // this very cycle are still running and inserting rows past the failure. Leaving
+            // the row absent would let that watermark carry the scan straight over the failed
+            // window. Create it here so the hole survives to the next cycle.
+            if (state == null)
+            {
+                _logger.LogWarning(
+                    "Government contracts import: opening the scan checkpoint at {To} so the "
+                        + "failed first window is re-covered next cycle",
+                    windowEnd
+                );
+                repository.Add(
+                    new GovernmentContractsScanState
+                    {
+                        Name = ScanStateName,
+                        LastCompletedWindowEnd = windowEnd,
+                        UpdatedAt = DateTime.UtcNow,
+                    }
+                );
+                await repository.SaveChanges();
+                return;
+            }
+
+            if (state.LastCompletedWindowEnd <= windowEnd)
+                return;
+
+            _logger.LogWarning(
+                "Government contracts import: pulling the scan checkpoint back from {From} to "
+                    + "{To} so the failed window is re-covered next cycle",
+                state.LastCompletedWindowEnd,
+                windowEnd
+            );
+
+            state.LastCompletedWindowEnd = windowEnd;
+            state.UpdatedAt = DateTime.UtcNow;
+            repository.Update(state);
+            await repository.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Government contracts import: failed to retract the scan checkpoint to "
+                    + "{WindowEnd}; the failed window may not be re-covered",
                 windowEnd
             );
         }

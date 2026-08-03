@@ -1,9 +1,12 @@
+using System.Net;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data;
+using Equibles.Errors.Repositories;
 using Equibles.GovernmentContracts.Data;
 using Equibles.GovernmentContracts.HostedService.Configuration;
 using Equibles.GovernmentContracts.HostedService.Services;
@@ -25,18 +28,190 @@ namespace Equibles.UnitTests.GovernmentContracts;
 public class GovernmentContractsImportServiceHttpAbortTests
 {
     [Fact]
-    public async Task Import_FirstWindowThrowsHttpRequestException_AbortsCycleWithoutScanningLaterWindows()
+    public async Task Import_ResponseLessHttpRequestException_AbortsCycleWithoutScanningLaterWindows()
     {
-        // Contract (from Import's window-loop comment): a transport-level failure —
-        // HttpRequestException, the API unreachable even after the client's own retries —
-        // is systemic, so every remaining window would fail identically. The cycle must
-        // STOP and RETHROW rather than hammer the API once per window: the worker's
-        // consecutive-failure streak owns reporting (one Error row per outage), so the
-        // service must not write its own row per cycle — that's exactly the flood that
-        // put 13 identical rows on the Errors page in one day. With a multi-day scan
-        // split into one-day windows, the first window failing with HttpRequestException
-        // must propagate and leave every later window un-fetched: the client is called
-        // exactly once, not once per window.
+        await AssertSystemicFailureAborts(new HttpRequestException("USAspending unreachable"));
+    }
+
+    [Fact]
+    public async Task Import_Http5xxResponse_AbortsCycleWithoutScanningLaterWindows()
+    {
+        await AssertSystemicFailureAborts(
+            new HttpRequestException(
+                "USAspending unavailable",
+                inner: null,
+                statusCode: HttpStatusCode.ServiceUnavailable
+            )
+        );
+    }
+
+    [Fact]
+    public async Task Import_Timeout_AbortsCycleWithoutScanningLaterWindows()
+    {
+        await AssertSystemicFailureAborts(new TaskCanceledException("USAspending timed out"));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.RequestTimeout)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task Import_SystemicSub500Status_AbortsCycleWithoutScanningLaterWindows(
+        HttpStatusCode status
+    )
+    {
+        // None of these is about the dates asked for: 429/408 mean the source is throttling or
+        // timing out, 401/403/404 are about our credentials or the endpoint, and a 400
+        // "malformed" most plausibly refers to the filter fields every window shares. Stepping
+        // over any of them would fan the same failure across the whole range.
+        await AssertSystemicFailureAborts(
+            new HttpRequestException($"USAspending returned {status}", inner: null, status)
+        );
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Gone)]
+    [InlineData(HttpStatusCode.MethodNotAllowed)]
+    [InlineData(HttpStatusCode.UnsupportedMediaType)]
+    [InlineData(HttpStatusCode.Conflict)]
+    public async Task Import_UnrecognisedSub500Status_DefaultsToAbortingTheCycle(
+        HttpStatusCode status
+    )
+    {
+        // Pins the classifier's DEFAULT rather than its listed cases. Continuing is the
+        // dangerous direction — it fans a source-wide defect across ~6,900 windows — so an
+        // status nobody has reasoned about must abort, not scan on. A classifier written as
+        // "everything under 500 continues" passes the theory above and fails here.
+        await AssertSystemicFailureAborts(
+            new HttpRequestException($"USAspending returned {status}", inner: null, status)
+        );
+    }
+
+    [Fact]
+    public async Task Import_EveryWindowReturns422_AbortsOnceTheFailureLooksSourceWide()
+    {
+        // 422 is USAspending's validation rejection for the WHOLE request, not only its dates,
+        // so a bad request-invariant field 422s on every window alike. Stepping over each one
+        // would write an Error row per window — thousands of them from the 2007 epoch — while
+        // the worker still recorded a successful cycle and never backed off. A run of them must
+        // therefore stop the cycle even though a LONE 422 is stepped over (covered below).
+        var options = NewDbOptions();
+        using (var seed = NewContext(options))
+        {
+            seed.Add(
+                new CommonStock
+                {
+                    Ticker = "LMT",
+                    Name = "Lockheed Martin Corporation",
+                    Cik = "1",
+                }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = ScopeFactory(options);
+        var client = Substitute.For<IUsaSpendingClient>();
+        client
+            .GetContractAwards(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(
+                new HttpRequestException(
+                    "USAspending rejected the request",
+                    inner: null,
+                    HttpStatusCode.UnprocessableEntity
+                )
+            );
+
+        // Twenty days back with one-day windows yields twenty-one windows — far more than the
+        // consecutive-failure cap, so an uncapped fan-out would be plainly visible.
+        var service = NewService(scopeFactory, client, DateTime.UtcNow.Date.AddDays(-20));
+
+        var act = () => service.Import(CancellationToken.None);
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        client
+            .ReceivedCalls()
+            .Should()
+            .HaveCountLessThan(
+                10,
+                "the cycle must stop once the 422s look source-wide, not walk the whole range"
+            );
+    }
+
+    [Fact]
+    public async Task Import_SingleWindowReturns422_ScansEveryRemainingWindowWithoutThrowing()
+    {
+        // The other side of the boundary: one window rejected on its own dates — the failure
+        // this classifier exists for — says nothing about the rest of the scan, so the
+        // remaining windows must still be attempted and nothing may escape to the worker.
+        var options = NewDbOptions();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var failingWindow = today.AddDays(-3);
+        using (var seed = NewContext(options))
+        {
+            seed.Add(
+                new CommonStock
+                {
+                    Ticker = "LMT",
+                    Name = "Lockheed Martin Corporation",
+                    Cik = "1",
+                }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = ScopeFactory(options);
+        var client = Substitute.For<IUsaSpendingClient>();
+        client
+            .GetContractAwards(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.FromResult(new List<UsaSpendingAwardRecord>()));
+        client
+            .GetContractAwards(
+                failingWindow,
+                failingWindow,
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(
+                new HttpRequestException(
+                    "USAspending rejected the window",
+                    inner: null,
+                    HttpStatusCode.UnprocessableEntity
+                )
+            );
+
+        // Five days back with one-day windows yields six windows.
+        var service = NewService(scopeFactory, client, DateTime.UtcNow.Date.AddDays(-5));
+
+        var act = () => service.Import(CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        await client
+            .Received(6)
+            .GetContractAwards(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    private static async Task AssertSystemicFailureAborts(Exception failure)
+    {
+        // A response-less HTTP failure, exhausted 5xx response, or timeout is systemic:
+        // later windows would fail identically, so the first failure must propagate after
+        // one client call and let the worker own outage reporting and backoff.
         var options = NewDbOptions();
         using (var seed = NewContext(options))
         {
@@ -62,37 +237,17 @@ public class GovernmentContractsImportServiceHttpAbortTests
                 Arg.Any<decimal>(),
                 Arg.Any<CancellationToken>()
             )
-            .ThrowsAsync(new HttpRequestException("USAspending unreachable"));
+            .ThrowsAsync(failure);
 
         // Empty GovernmentContract table -> DetermineStartDate falls back to MinSyncDate.
         // Five days back with one-day windows yields six windows; an un-aborted scan would
         // call the client six times.
-        var workerOptions = Options.Create(
-            new WorkerOptions { MinSyncDate = DateTime.UtcNow.Date.AddDays(-5) }
-        );
-        var scraperOptions = Options.Create(
-            new GovernmentContractsScraperOptions
-            {
-                WindowDays = 1,
-                MinimumAwardAmount = 1_000_000m,
-            }
-        );
-
-        var service = new GovernmentContractsImportService(
-            scopeFactory,
-            NullLogger<GovernmentContractsImportService>.Instance,
-            client,
-            new RecipientResolver(scopeFactory),
-            scraperOptions,
-            workerOptions,
-            new ErrorReporter(scopeFactory, NullLogger<ErrorReporter>.Instance)
-        );
+        var service = NewService(scopeFactory, client, DateTime.UtcNow.Date.AddDays(-5));
 
         var act = () => service.Import(CancellationToken.None);
 
-        // The transport failure must propagate (the worker's streak reporting depends on
-        // seeing the throw) after exactly one client call — no later window is scanned.
-        await act.Should().ThrowAsync<HttpRequestException>();
+        var thrown = await act.Should().ThrowAsync<Exception>();
+        thrown.Which.GetType().Should().Be(failure.GetType());
         await client
             .Received(1)
             .GetContractAwards(
@@ -102,6 +257,27 @@ public class GovernmentContractsImportServiceHttpAbortTests
                 Arg.Any<CancellationToken>()
             );
     }
+
+    private static GovernmentContractsImportService NewService(
+        IServiceScopeFactory scopeFactory,
+        IUsaSpendingClient client,
+        DateTime minSyncDate
+    ) =>
+        new(
+            scopeFactory,
+            NullLogger<GovernmentContractsImportService>.Instance,
+            client,
+            new RecipientResolver(scopeFactory),
+            Options.Create(
+                new GovernmentContractsScraperOptions
+                {
+                    WindowDays = 1,
+                    MinimumAwardAmount = 1_000_000m,
+                }
+            ),
+            Options.Create(new WorkerOptions { MinSyncDate = minSyncDate }),
+            new ErrorReporter(scopeFactory, NullLogger<ErrorReporter>.Instance)
+        );
 
     private static DbContextOptions<EquiblesFinancialDbContext> NewDbOptions() =>
         new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
@@ -118,6 +294,7 @@ public class GovernmentContractsImportServiceHttpAbortTests
             new IModuleConfiguration[]
             {
                 new CommonStocksModuleConfiguration(),
+                new ErrorsModuleConfiguration(),
                 new GovernmentContractsModuleConfiguration(),
             }
         );
@@ -132,6 +309,8 @@ public class GovernmentContractsImportServiceHttpAbortTests
         var services = new ServiceCollection();
         services.AddScoped(_ => NewContext(options));
         services.AddScoped<CommonStockRepository>();
+        services.AddScoped<ErrorRepository>();
+        services.AddScoped<ErrorManager>();
         services.AddScoped<GovernmentContractRepository>();
         services.AddScoped<GovernmentContractsScanStateRepository>();
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
