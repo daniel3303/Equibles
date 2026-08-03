@@ -155,7 +155,7 @@ builder.Services.AutoWireServicesFrom<Equibles.Sec.BusinessLogic.SecDocumentHtml
 builder.Services.AutoWireServicesFrom<Equibles.InsiderTrading.BusinessLogic.InsiderTransactionPriceValidator>();
 
 // Register worker services and all scrapers
-builder.Services.AddWorkerServices();
+builder.Services.AddWorkerServices(connectionString);
 builder.Services.AddSecWorker();
 builder.Services.AddSecFinancialFactsWorker();
 builder.Services.AddFinraWorker();

@@ -58,6 +58,84 @@ public class BaseScraperWorkerLaneLeaseTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_LeasePoolUnavailable_SkipsWorkWithoutFaultOrError()
+    {
+        var bus = Substitute.For<IBus>();
+        using var services = CreateWorkerServices(new WorkerOptions(), bus);
+        var reporterScopeFactory = Substitute.For<IServiceScopeFactory>();
+        var logger = Substitute.For<ILogger>();
+        using var worker = new LeaseTestWorker(
+            logger,
+            services.GetRequiredService<IServiceScopeFactory>(),
+            CreateErrorReporter(reporterScopeFactory),
+            (_, _) => throw new ScraperLeasePoolUnavailableException(),
+            _ => Task.CompletedTask,
+            errorReportThreshold: 1
+        );
+
+        await worker.StartAsync(CancellationToken.None);
+        var interval = await worker.FirstWait.WaitAsync(TimeSpan.FromSeconds(5));
+        await worker.StopAsync(CancellationToken.None);
+
+        worker.LeaseAttempts.Should().Be(1);
+        worker.DoWorkCalls.Should().Be(0);
+        interval.Should().Be(worker.PoolUnavailableRetryInterval);
+        interval.Should().NotBe(worker.FaultBackoffInterval);
+        reporterScopeFactory.DidNotReceive().CreateScope();
+        logger
+            .DidNotReceive()
+            .Log(
+                LogLevel.Critical,
+                Arg.Any<EventId>(),
+                Arg.Any<object>(),
+                Arg.Any<Exception?>(),
+                Arg.Any<Func<object, Exception?, string>>()
+            );
+        bus.ReceivedCalls()
+            .Select(call => call.GetArguments().FirstOrDefault())
+            .OfType<ScraperActivity>()
+            .Should()
+            .NotContain(activity =>
+                activity.Severity == ScraperActivitySeverity.Warn
+                || activity.Severity == ScraperActivitySeverity.Error
+            );
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NonResourceLeaseFailure_RemainsFaultedAndReported()
+    {
+        using var services = CreateWorkerServices(new WorkerOptions());
+        var reporterScopeFactory = Substitute.For<IServiceScopeFactory>();
+        var logger = Substitute.For<ILogger>();
+        using var worker = new LeaseTestWorker(
+            logger,
+            services.GetRequiredService<IServiceScopeFactory>(),
+            CreateErrorReporter(reporterScopeFactory),
+            (_, _) => throw new InvalidOperationException("invalid lease configuration"),
+            _ => Task.CompletedTask,
+            errorReportThreshold: 1
+        );
+
+        await worker.StartAsync(CancellationToken.None);
+        var interval = await worker.FirstWait.WaitAsync(TimeSpan.FromSeconds(5));
+        await worker.StopAsync(CancellationToken.None);
+
+        worker.LeaseAttempts.Should().Be(1);
+        worker.DoWorkCalls.Should().Be(0);
+        interval.Should().Be(worker.FaultBackoffInterval);
+        reporterScopeFactory.Received().CreateScope();
+        logger
+            .Received()
+            .Log(
+                LogLevel.Critical,
+                Arg.Any<EventId>(),
+                Arg.Any<object>(),
+                Arg.Any<Exception?>(),
+                Arg.Any<Func<object, Exception?, string>>()
+            );
+    }
+
+    [Fact]
     public async Task ExecuteAsync_LeaseFree_RunsWorkNormally()
     {
         var lease = new TrackingLease();
@@ -209,6 +287,7 @@ public class BaseScraperWorkerLaneLeaseTests
             TaskCreationOptions.RunContinuationsAsynchronously
         );
         private readonly int _cyclesBeforeBlocking;
+        private readonly int _errorReportThreshold;
         private int _leaseAttempts;
         private int _doWorkCalls;
         private int _cyclesObserved;
@@ -219,13 +298,15 @@ public class BaseScraperWorkerLaneLeaseTests
             ErrorReporter errorReporter,
             Func<int, CancellationToken, ValueTask<IAsyncDisposable>> tryAcquire,
             Func<CancellationToken, Task> doWork,
-            int cyclesBeforeBlocking = 1
+            int cyclesBeforeBlocking = 1,
+            int errorReportThreshold = 2
         )
             : base(logger, scopeFactory, errorReporter)
         {
             _tryAcquire = tryAcquire;
             _doWork = doWork;
             _cyclesBeforeBlocking = cyclesBeforeBlocking;
+            _errorReportThreshold = errorReportThreshold;
         }
 
         public Task<TimeSpan> FirstWait => _firstWait.Task;
@@ -234,13 +315,14 @@ public class BaseScraperWorkerLaneLeaseTests
         public string ExposedWorkerName => WorkerName;
         public TimeSpan NormalSleepInterval => SleepInterval;
         public TimeSpan FaultBackoffInterval => ErrorBackoffInterval;
+        public TimeSpan PoolUnavailableRetryInterval => LeasePoolRetryInterval;
         public int LeaseAttempts => _leaseAttempts;
         public int DoWorkCalls => _doWorkCalls;
 
         protected override string WorkerName => "Lease test worker";
         protected override TimeSpan SleepInterval => TimeSpan.FromHours(1);
         protected override TimeSpan ErrorBackoffInterval => TimeSpan.FromSeconds(1);
-        protected override int ErrorReportThreshold => 2;
+        protected override int ErrorReportThreshold => _errorReportThreshold;
         protected override ErrorSource ErrorSource => ErrorSource.Other;
 
         protected override ValueTask<IAsyncDisposable> TryAcquireLaneLease(

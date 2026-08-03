@@ -7,6 +7,7 @@
     <PackageReference Include="Equibles.Core.AutoWiring" />
     <PackageReference Include="MassTransit" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Npgsql" />
   </ItemGroup>
 
   <ItemGroup>

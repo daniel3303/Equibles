@@ -14,6 +14,9 @@ namespace Equibles.Worker;
 
 public abstract class BaseScraperWorker : BackgroundService
 {
+    private const int LeasePoolRetryBaseSeconds = 15;
+    private const int LeasePoolRetrySpreadSeconds = 30;
+
     protected readonly ILogger Logger;
     protected readonly IServiceScopeFactory ScopeFactory;
     protected readonly ErrorReporter ErrorReporter;
@@ -23,6 +26,13 @@ public abstract class BaseScraperWorker : BackgroundService
     private int _consecutiveFailures;
     private bool _errorReportedForStreak;
     private bool? _laneLeaseEnabled;
+
+    private enum CycleRunResult
+    {
+        Ran,
+        LeaseHeldElsewhere,
+        LeasePoolUnavailable,
+    }
 
     protected abstract string WorkerName { get; }
     protected abstract TimeSpan SleepInterval { get; }
@@ -141,6 +151,21 @@ public abstract class BaseScraperWorker : BackgroundService
     /// </summary>
     protected virtual int ErrorReportThreshold => 1;
 
+    /// <summary>
+    /// Short, lane-stable stagger after the dedicated lease pool rejects an acquisition. Retrying
+    /// sooner than SleepInterval prevents a worker restart from parking skipped lanes for hours;
+    /// staggering prevents those lanes from returning as another synchronized startup wave.
+    /// </summary>
+    protected virtual TimeSpan LeasePoolRetryInterval
+    {
+        get
+        {
+            var laneHash = unchecked((ulong)ScraperLease.ComputeLockKey(LaneId));
+            var spreadSeconds = (int)(laneHash % LeasePoolRetrySpreadSeconds);
+            return TimeSpan.FromSeconds(LeasePoolRetryBaseSeconds + spreadSeconds);
+        }
+    }
+
     protected BaseScraperWorker(
         ILogger logger,
         IServiceScopeFactory scopeFactory,
@@ -245,11 +270,11 @@ public abstract class BaseScraperWorker : BackgroundService
             _retrySoonRequested = false;
             _continuationRequested = false;
             var faulted = false;
-            var cycleRan = false;
+            var cycleResult = CycleRunResult.LeaseHeldElsewhere;
 
             try
             {
-                cycleRan = await RunCycle(stoppingToken);
+                cycleResult = await RunCycle(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -303,14 +328,29 @@ public abstract class BaseScraperWorker : BackgroundService
                 }
             }
 
-            if (!cycleRan && !faulted)
+            if (cycleResult != CycleRunResult.Ran && !faulted)
             {
-                Logger.LogInformation(
-                    "{Worker} lane lease is held by another instance; skipping cycle and sleeping for {Interval}",
-                    WorkerName,
-                    SleepInterval
-                );
-                await WaitForNextCycle(SleepInterval, stoppingToken);
+                var skipInterval =
+                    cycleResult == CycleRunResult.LeasePoolUnavailable
+                        ? LeasePoolRetryInterval
+                        : SleepInterval;
+                if (cycleResult == CycleRunResult.LeasePoolUnavailable)
+                {
+                    Logger.LogInformation(
+                        "{Worker} dedicated lane lease pool is at capacity; skipping cycle and retrying in {Interval}",
+                        WorkerName,
+                        FormatInterval(skipInterval)
+                    );
+                }
+                else
+                {
+                    Logger.LogInformation(
+                        "{Worker} lane lease is held by another instance; skipping cycle and sleeping for {Interval}",
+                        WorkerName,
+                        skipInterval
+                    );
+                }
+                await WaitForNextCycle(skipInterval, stoppingToken);
                 continue;
             }
 
@@ -383,14 +423,22 @@ public abstract class BaseScraperWorker : BackgroundService
         }
     }
 
-    private async Task<bool> RunCycle(CancellationToken stoppingToken)
+    private async Task<CycleRunResult> RunCycle(CancellationToken stoppingToken)
     {
         IAsyncDisposable lease = null;
         if (LaneLeaseEnabled)
         {
-            lease = await TryAcquireLaneLease(stoppingToken);
+            try
+            {
+                lease = await TryAcquireLaneLease(stoppingToken);
+            }
+            catch (ScraperLeasePoolUnavailableException)
+            {
+                return CycleRunResult.LeasePoolUnavailable;
+            }
+
             if (lease is null)
-                return false;
+                return CycleRunResult.LeaseHeldElsewhere;
         }
 
         await using (lease)
@@ -399,7 +447,7 @@ public abstract class BaseScraperWorker : BackgroundService
             await DoWork(stoppingToken);
         }
 
-        return true;
+        return CycleRunResult.Ran;
     }
 
     private static string FormatInterval(TimeSpan interval)

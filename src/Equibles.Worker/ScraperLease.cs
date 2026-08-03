@@ -1,8 +1,6 @@
 using System.Data;
 using System.Data.Common;
 using System.Text;
-using Equibles.Data;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -17,6 +15,7 @@ internal sealed class ScraperLease : IAsyncDisposable
     private const ulong FnvPrime = 1099511628211UL;
 
     private readonly AsyncServiceScope _scope;
+    private readonly ScraperLeaseDataSource _dataSource;
     private readonly DbConnection _connection;
     private readonly long _lockKey;
     private readonly string _workerName;
@@ -25,6 +24,7 @@ internal sealed class ScraperLease : IAsyncDisposable
 
     private ScraperLease(
         AsyncServiceScope scope,
+        ScraperLeaseDataSource dataSource,
         DbConnection connection,
         long lockKey,
         string workerName,
@@ -32,6 +32,7 @@ internal sealed class ScraperLease : IAsyncDisposable
     )
     {
         _scope = scope;
+        _dataSource = dataSource;
         _connection = connection;
         _lockKey = lockKey;
         _workerName = workerName;
@@ -53,35 +54,41 @@ internal sealed class ScraperLease : IAsyncDisposable
     {
         var lockKey = ComputeLockKey(laneId);
         var scope = scopeFactory.CreateAsyncScope();
-        DbConnection connection;
-        bool acquired;
+        ScraperLeaseDataSource dataSource = null;
+        DbConnection connection = null;
+        var reservationHeld = false;
+        var retainResources = false;
 
         try
         {
-            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-
-            // PostgreSQL advisory locks belong to a database session. A dedicated DbContext scope
-            // reuses the host's provider configuration while keeping this exact connection open for
-            // the entire scraper cycle, so pooling cannot return the owning session early.
-            await dbContext.Database.OpenConnectionAsync(cancellationToken);
-            connection = dbContext.Database.GetDbConnection();
+            dataSource = scope.ServiceProvider.GetRequiredService<ScraperLeaseDataSource>();
+            dataSource.ReserveConnection();
+            reservationHeld = true;
+            connection = await dataSource.OpenConnection(cancellationToken);
 
             await using var command = CreateCommand(connection, AcquireSql, lockKey);
-            acquired = await command.ExecuteScalarAsync(cancellationToken) is true;
-        }
-        catch
-        {
-            await scope.DisposeAsync();
-            throw;
-        }
+            if (await command.ExecuteScalarAsync(cancellationToken) is not true)
+                return null;
 
-        if (!acquired)
-        {
-            await scope.DisposeAsync();
-            return null;
+            // PostgreSQL advisory locks belong to a database session. This exact connection remains
+            // open until DisposeAsync releases the lock after the whole scraper cycle completes.
+            retainResources = true;
+            return new ScraperLease(scope, dataSource, connection, lockKey, workerName, logger);
         }
-
-        return new ScraperLease(scope, connection, lockKey, workerName, logger);
+        finally
+        {
+            if (!retainResources)
+            {
+                await ReleaseAcquisitionResources(
+                    scope,
+                    dataSource,
+                    connection,
+                    reservationHeld,
+                    workerName,
+                    logger
+                );
+            }
+        }
     }
 
     internal static long ComputeLockKey(string workerName)
@@ -120,8 +127,8 @@ internal sealed class ScraperLease : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            // Cleanup must not replace a DoWork exception. Closing the dedicated session below is
-            // PostgreSQL's fail-safe release path when an explicit unlock cannot be delivered.
+            // Cleanup must not replace a DoWork exception. Disposing the connection below resets a
+            // healthy pooled session or drops a broken physical session after unlock cannot run.
             _logger.LogWarning(
                 ex,
                 "Failed to explicitly release scraper lane lease for {Worker}",
@@ -132,13 +139,26 @@ internal sealed class ScraperLease : IAsyncDisposable
         {
             try
             {
-                await _connection.CloseAsync();
+                await _connection.DisposeAsync();
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(
                     ex,
                     "Failed to close scraper lane lease connection for {Worker}",
+                    _workerName
+                );
+            }
+
+            try
+            {
+                _dataSource.ReleaseConnection();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to release scraper lane lease pool capacity for {Worker}",
                     _workerName
                 );
             }
@@ -155,6 +175,61 @@ internal sealed class ScraperLease : IAsyncDisposable
                     _workerName
                 );
             }
+        }
+    }
+
+    private static async ValueTask ReleaseAcquisitionResources(
+        AsyncServiceScope scope,
+        ScraperLeaseDataSource dataSource,
+        DbConnection connection,
+        bool reservationHeld,
+        string workerName,
+        ILogger logger
+    )
+    {
+        if (connection is not null)
+        {
+            try
+            {
+                await connection.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Failed to close unacquired scraper lane lease connection for {Worker}",
+                    workerName
+                );
+            }
+        }
+
+        if (reservationHeld)
+        {
+            try
+            {
+                dataSource.ReleaseConnection();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Failed to release unacquired scraper lane lease pool capacity for {Worker}",
+                    workerName
+                );
+            }
+        }
+
+        try
+        {
+            await scope.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Failed to dispose unacquired scraper lane lease scope for {Worker}",
+                workerName
+            );
         }
     }
 

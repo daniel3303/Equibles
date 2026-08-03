@@ -12,6 +12,12 @@ public class WorkerOptions
     public bool LaneLeaseEnabled { get; set; } = true;
 
     /// <summary>
+    /// Caps the number of scraper cycles that may hold a lease concurrently in one worker process.
+    /// Lease sessions use their own pool, separate from normal query connections.
+    /// </summary>
+    public int LaneLeasePoolSize { get; set; } = 8;
+
+    /// <summary>
     /// Caps how many stocks the split-price back-adjustment pass re-syncs per cycle, so the
     /// one-time universe backfill throttles against Yahoo's shared request limiter instead of
     /// re-pulling every stock's full history at once. Stocks beyond the cap stay pending and are
