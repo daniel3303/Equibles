@@ -147,6 +147,20 @@ public static class InsiderFilingParser
             : null;
     }
 
+    /// <summary>
+    /// The transaction-period anchor declared by the ownership document. Null when
+    /// absent or unparseable, so callers can retain existing data rather than infer a
+    /// financial date.
+    /// </summary>
+    internal static DateOnly? ParsePeriodOfReport(XElement root)
+    {
+        var raw = root.Element("periodOfReport")?.Value?.Trim();
+        if (string.IsNullOrEmpty(raw))
+            return null;
+
+        return TryParseTransactionDate(raw, out var date) ? date : null;
+    }
+
     internal static bool DeclaresNoSecuritiesOwned(XElement root) =>
         ParseBool(root.Element("noSecuritiesOwned")?.Value);
 
