@@ -4,7 +4,7 @@ using Equibles.Yahoo.HostedService.Services;
 namespace Equibles.UnitTests.Yahoo;
 
 /// <summary>
-/// Pins <c>YahooPriceImportService.IsSameSplitBasis</c>, the guard that stops the volume resettle
+/// Pins <c>YahooPriceImportService.IsSameSplitBasis</c>, the guard that stops bar resettlement
 /// from comparing two records of the same session that sit on different split bases.
 ///
 /// The stored series and the feed disagree in BOTH orderings, so the guard must be

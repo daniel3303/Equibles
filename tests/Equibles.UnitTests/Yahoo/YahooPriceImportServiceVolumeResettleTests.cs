@@ -4,7 +4,7 @@ using Equibles.Yahoo.HostedService.Services;
 namespace Equibles.UnitTests.Yahoo;
 
 /// <summary>
-/// Pins the two pure rules behind the volume resettle: which stored bars are still re-read
+/// Pins the two pure rules behind stored-bar resettlement: which stored bars are still re-read
 /// (<c>ResettleWindowStart</c>) and which fetched figure is allowed to replace a stored one
 /// (<c>IsVolumeUpgrade</c>).
 ///
@@ -73,7 +73,7 @@ public class YahooPriceImportServiceVolumeResettleTests
     [Fact]
     public void ResettleWindowStart_WidenedWindow_ReachesBackFurther()
     {
-        // Raising the setting is how a longer stretch of stored volumes gets repaired: the window
+        // Raising the setting is how a longer stretch of stored bars gets resettled: the window
         // only widens a fetch that was already happening, so a wider setting buys a longer repair
         // at no extra upstream calls.
         ResettleWindowStart(Today, 120).Should().Be(new DateOnly(2026, 3, 31));

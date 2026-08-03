@@ -25,7 +25,7 @@ using NSubstitute;
 namespace Equibles.IntegrationTests.Yahoo;
 
 /// <summary>
-/// End-to-end cover for the volume resettle. The pure rules are pinned in the unit suite; what
+/// End-to-end cover for stored-bar resettlement. The pure rules are pinned in the unit suite; what
 /// these need to prove is the WIRING, which is where the bug actually lived: the fetch window has
 /// to reach back far enough to re-request an already-stored bar, and the correction has to run
 /// before the insert path's "nothing new to insert" early return.
@@ -147,6 +147,83 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_FeedRevisesRecentOhlc_CorrectsPricesButPreservesAdjustedClose()
+    {
+        var stock = SeedStock("CBOE");
+        var (newest, previous) = TwoMostRecentSettledSessions();
+        var stored = SeedPrice(stock, previous, UnsettledVolume, 310.23m);
+        stored.Open = 287.54m;
+        stored.High = 310.88m;
+        stored.Low = 287.76m;
+        stored.AdjustedClose = 309.11m;
+        await _priceRepo.SaveChanges();
+
+        _yahooClient
+            .GetChart("CBOE", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(
+                Chart(
+                    Bar(previous, 287.54m, 311.06m, 287.54m, 310.23m, SettledVolume),
+                    Bar(newest, 310.50m, 312.00m, 309.90m, 311.40m, SettledVolume)
+                )
+            );
+
+        await _service.Import(CancellationToken.None);
+
+        var corrected = _priceRepo.GetAll().Single(p => p.Date == previous);
+        corrected.Open.Should().Be(287.54m);
+        corrected.High.Should().Be(311.06m);
+        corrected.Low.Should().Be(287.54m);
+        corrected.Close.Should().Be(310.23m);
+        corrected.AdjustedClose.Should().Be(309.11m);
+        corrected.Volume.Should().Be(SettledVolume);
+    }
+
+    [Fact]
+    public async Task RepairInvalidOhlc_AuthoritativeBarExists_ReplacesHistoricalPrices()
+    {
+        var stock = SeedStock("CBOE");
+        var date = new DateOnly(2026, 7, 31);
+        var stored = SeedPrice(stock, date, UnsettledVolume, 310.23m);
+        stored.Open = 287.54m;
+        stored.High = 310.88m;
+        stored.Low = 287.76m;
+        stored.AdjustedClose = 309.11m;
+        await _priceRepo.SaveChanges();
+
+        _yahooClient
+            .GetChart("CBOE", date, date)
+            .Returns(Chart(Bar(date, 287.54m, 311.06m, 287.54m, 310.23m, SettledVolume)));
+
+        var complete = await _service.RepairInvalidOhlc(CancellationToken.None);
+
+        complete.Should().BeTrue();
+        var repaired = _priceRepo.GetAll().Single();
+        repaired.Open.Should().Be(287.54m);
+        repaired.High.Should().Be(311.06m);
+        repaired.Low.Should().Be(287.54m);
+        repaired.Close.Should().Be(310.23m);
+        repaired.AdjustedClose.Should().Be(309.11m);
+        repaired.Volume.Should().Be(SettledVolume);
+    }
+
+    [Fact]
+    public async Task RepairInvalidOhlc_NoValidAuthoritativeBar_RemovesKnownBadRow()
+    {
+        var stock = SeedStock("CBOE");
+        var date = new DateOnly(2026, 7, 31);
+        var stored = SeedPrice(stock, date, UnsettledVolume, 310.23m);
+        stored.Low = 311m;
+        await _priceRepo.SaveChanges();
+
+        _yahooClient.GetChart("CBOE", date, date).Returns(new YahooChartData());
+
+        var complete = await _service.RepairInvalidOhlc(CancellationToken.None);
+
+        complete.Should().BeTrue();
+        _priceRepo.GetAll().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Import_BarOlderThanTheWindow_IsLeftAlone()
     {
         // The window bounds the repair. A bar from before it keeps its stored volume even when the
@@ -240,6 +317,28 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     private static YahooChartData Chart(params (DateOnly Date, long Volume)[] bars) =>
         Chart(close: 39.41m, bars);
 
+    private static YahooChartData Chart(params HistoricalPrice[] bars) =>
+        new() { Prices = bars.ToList() };
+
+    private static HistoricalPrice Bar(
+        DateOnly date,
+        decimal open,
+        decimal high,
+        decimal low,
+        decimal close,
+        long volume
+    ) =>
+        new()
+        {
+            Date = date,
+            Open = open,
+            High = high,
+            Low = low,
+            Close = close,
+            AdjustedClose = close,
+            Volume = volume,
+        };
+
     // The close is what proves the split basis, so a case about basis has to be able to set it.
     private static YahooChartData Chart(decimal close, (DateOnly Date, long Volume)[] bars) =>
         new()
@@ -271,21 +370,26 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         return stock;
     }
 
-    private void SeedPrice(CommonStock stock, DateOnly date, long volume, decimal close = 39.41m)
+    private DailyStockPrice SeedPrice(
+        CommonStock stock,
+        DateOnly date,
+        long volume,
+        decimal close = 39.41m
+    )
     {
-        _priceRepo.Add(
-            new DailyStockPrice
-            {
-                CommonStockId = stock.Id,
-                Date = date,
-                Open = close,
-                High = close,
-                Low = close,
-                Close = close,
-                AdjustedClose = close,
-                Volume = volume,
-            }
-        );
+        var price = new DailyStockPrice
+        {
+            CommonStockId = stock.Id,
+            Date = date,
+            Open = close,
+            High = close,
+            Low = close,
+            Close = close,
+            AdjustedClose = close,
+            Volume = volume,
+        };
+        _priceRepo.Add(price);
         _priceRepo.SaveChanges().GetAwaiter().GetResult();
+        return price;
     }
 }

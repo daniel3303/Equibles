@@ -549,8 +549,10 @@ public class YahooPriceImportService
     )
     {
         var overflowDates = WarnAndCollectOverflowDates(prices, ticker);
+        var invalidOhlcDates = WarnAndCollectInvalidOhlcDates(prices, ticker);
         return prices
             .Where(p => !overflowDates.Contains(p.Date))
+            .Where(p => !invalidOhlcDates.Contains(p.Date))
             .Where(p => IsSettledDailyBar(p.Date, today))
             .Select(p => new DailyStockPrice
             {
@@ -666,10 +668,10 @@ public class YahooPriceImportService
 
         var freshRows = MapFreshRows(commonStockId, prices, ticker, today);
 
-        // Runs before the insert path's early return: a stock whose only unsettled bar is one it
-        // ALREADY stored has nothing new to insert, and that is exactly the stock whose volume
-        // still needs correcting.
-        await ResettleVolumes(ticker, commonStockId, freshRows, today, cancellationToken);
+        // Runs before the insert path's early return: a stock whose only revised bar is one it
+        // ALREADY stored has nothing new to insert, and that is exactly the stock whose settled
+        // OHLC/volume still needs correcting.
+        await ResettleStoredBars(ticker, commonStockId, freshRows, today, cancellationToken);
 
         var newPrices = freshRows.Where(p => !existingDates.Contains(p.Date)).ToList();
 
@@ -682,19 +684,18 @@ public class YahooPriceImportService
         return inserted;
     }
 
-    // Corrects stored volumes that were captured before the feed settled them.
+    // Corrects stored bars that were captured before the feed settled them.
     //
     // A bar becomes storable the moment its date rolls over in UTC, which is only four hours after
     // the 20:00 UTC close. The feed serves a daily bar that early with an unsettled volume — the
-    // closing cross and late-reported off-exchange prints are still landing — and revises it upward
-    // overnight. OHLC is right from the start; only volume moves, and for names whose volume
-    // settles late it moves a lot (a quarter of the day's shares is routine). PersistPrices is
-    // insert-only, so that first short figure used to be permanent.
+    // closing cross and late-reported off-exchange prints are still landing — and can revise both
+    // OHLC and volume overnight. PersistPrices is insert-only, so that first partial figure used to
+    // be permanent.
     //
     // Re-reading the window off the SAME chart response the stock was already fetching costs no
     // extra upstream call — ResolveStartDate only widens a request that was going to happen anyway.
-    // Steady state therefore corrects each session's volume when the next session syncs.
-    private async Task<int> ResettleVolumes(
+    // Steady state therefore corrects each session when the next session syncs.
+    private async Task<int> ResettleStoredBars(
         string ticker,
         Guid commonStockId,
         List<DailyStockPrice> freshRows,
@@ -729,19 +730,37 @@ public class YahooPriceImportService
             if (!fetched.TryGetValue(row.Date, out var bar))
                 continue;
 
-            // Both records must describe the session on the SAME split basis before their volumes
-            // can be compared at all — see IsSameSplitBasis.
+            // Both records must describe the session on the SAME split basis before any price or
+            // volume field can be reconciled — see IsSameSplitBasis.
             if (!IsSameSplitBasis(row.Close, bar.Close))
             {
                 skippedOnBasis++;
                 continue;
             }
 
-            if (!IsVolumeUpgrade(row.Volume, bar.Volume))
-                continue;
+            var changed = false;
+            if (
+                row.Open != bar.Open
+                || row.High != bar.High
+                || row.Low != bar.Low
+                || row.Close != bar.Close
+            )
+            {
+                row.Open = bar.Open;
+                row.High = bar.High;
+                row.Low = bar.Low;
+                row.Close = bar.Close;
+                changed = true;
+            }
 
-            row.Volume = bar.Volume;
-            corrected++;
+            if (IsVolumeUpgrade(row.Volume, bar.Volume))
+            {
+                row.Volume = bar.Volume;
+                changed = true;
+            }
+
+            if (changed)
+                corrected++;
         }
 
         // A basis mismatch is the only place the store's divergence from the feed's served basis
@@ -750,7 +769,7 @@ public class YahooPriceImportService
         if (skippedOnBasis > 0)
         {
             _logger.LogInformation(
-                "Skipped {Count} stored volumes for {Ticker}: stored close disagrees with the feed's split basis",
+                "Skipped {Count} stored bars for {Ticker}: stored close disagrees with the feed's split basis",
                 skippedOnBasis,
                 ticker
             );
@@ -759,12 +778,153 @@ public class YahooPriceImportService
         if (corrected == 0)
             return 0;
 
-        // The rows are tracked, so saving the mutated Volume is enough — no repo.Update, which
+        // The rows are tracked, so saving the mutations is enough — no repo.Update, which
         // would mark every column dirty and clobber a concurrent split reconcile's price basis.
         await repo.SaveChanges();
-        _logger.LogDebug("Corrected {Count} stored volumes for {Ticker}", corrected, ticker);
+        _logger.LogDebug("Corrected {Count} stored bars for {Ticker}", corrected, ticker);
         return corrected;
     }
+
+    /// <summary>
+    /// Repairs a bounded batch of impossible historical OHLC rows from a fresh authoritative
+    /// response. A row with no valid same-basis replacement is removed rather than continuing to
+    /// publish data that is known to be impossible. Returns true once the corpus is clean.
+    /// </summary>
+    public async Task<bool> RepairInvalidOhlc(CancellationToken cancellationToken)
+    {
+        var batchSize = Math.Max(_scraperOptions.OhlcRepairBatchSize, 0);
+        if (batchSize == 0)
+            return true;
+
+        List<InvalidOhlcTarget> targets;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+            targets = await repo.GetAll()
+                .AsNoTracking()
+                .Where(p =>
+                    p.Open <= 0
+                    || p.High <= 0
+                    || p.Low <= 0
+                    || p.Close <= 0
+                    || p.High < p.Open
+                    || p.High < p.Close
+                    || p.Low > p.Open
+                    || p.Low > p.Close
+                    || p.High < p.Low
+                )
+                .OrderBy(p => p.CreationTime)
+                .ThenBy(p => p.Id)
+                .Take(batchSize)
+                .Select(p => new InvalidOhlcTarget(
+                    p.Id,
+                    p.CommonStockId,
+                    p.CommonStock.Ticker,
+                    p.Date
+                ))
+                .ToListAsync(cancellationToken);
+        }
+
+        if (targets.Count == 0)
+            return true;
+
+        var replacements = new Dictionary<Guid, DailyStockPrice>();
+        var deferredStockIds = new HashSet<Guid>();
+
+        foreach (var group in targets.GroupBy(t => new { t.CommonStockId, t.Ticker }))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrWhiteSpace(group.Key.Ticker))
+                continue;
+
+            try
+            {
+                var startDate = group.Min(t => t.Date);
+                var endDate = group.Max(t => t.Date);
+                var chartData = await _yahooClient.GetChart(group.Key.Ticker, startDate, endDate);
+                var fetchedByDate = MapFreshRows(
+                        group.Key.CommonStockId,
+                        chartData.Prices,
+                        group.Key.Ticker,
+                        endDate.AddDays(1)
+                    )
+                    .GroupBy(p => p.Date)
+                    .ToDictionary(g => g.Key, g => g.Last());
+
+                foreach (var target in group)
+                {
+                    if (fetchedByDate.TryGetValue(target.Date, out var replacement))
+                        replacements[target.PriceId] = replacement;
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                deferredStockIds.Add(group.Key.CommonStockId);
+                _logger.LogWarning(
+                    ex,
+                    "Failed to fetch OHLC repair data for {Ticker}; deferring its invalid rows",
+                    group.Key.Ticker
+                );
+            }
+        }
+
+        var repaired = 0;
+        var removed = 0;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+            var targetIds = targets.Select(t => t.PriceId).ToList();
+            var storedRows = await repo.GetAll()
+                .Where(p => targetIds.Contains(p.Id))
+                .ToListAsync(cancellationToken);
+
+            foreach (var row in storedRows)
+            {
+                if (deferredStockIds.Contains(row.CommonStockId))
+                    continue;
+
+                if (
+                    replacements.TryGetValue(row.Id, out var replacement)
+                    && IsSameSplitBasis(row.Close, replacement.Close)
+                )
+                {
+                    row.Open = replacement.Open;
+                    row.High = replacement.High;
+                    row.Low = replacement.Low;
+                    row.Close = replacement.Close;
+                    if (IsVolumeUpgrade(row.Volume, replacement.Volume))
+                        row.Volume = replacement.Volume;
+                    repaired++;
+                }
+                else
+                {
+                    repo.Delete(row);
+                    removed++;
+                }
+            }
+
+            if (repaired > 0 || removed > 0)
+                await repo.SaveChanges();
+        }
+
+        _logger.LogInformation(
+            "Historical OHLC repair processed {Count} rows: {Repaired} repaired, {Removed} removed, {Deferred} deferred",
+            targets.Count,
+            repaired,
+            removed,
+            deferredStockIds.Count
+        );
+
+        return targets.Count < batchSize && deferredStockIds.Count == 0;
+    }
+
+    private sealed record InvalidOhlcTarget(
+        Guid PriceId,
+        Guid CommonStockId,
+        string Ticker,
+        DateOnly Date
+    );
 
     // Settled volume only ever accrues, so a fetched figure below the stored one is a degraded
     // response (a partial re-serve, a venue dropping out), never a correction. Accepting only
@@ -1242,9 +1402,9 @@ public class YahooPriceImportService
         if (!HasSettledTradingDay(forwardOnly, today))
             return forwardOnly;
 
-        // Past the same gate, pull the start back over the volume-resettle window so the response
-        // carries the recently-stored bars whose volume may not have settled yet (see
-        // ResettleVolumes). Same ride-along rule as the heal below: it widens a request that was
+        // Past the same gate, pull the start back over the resettle window so the response carries
+        // the recently-stored bars whose OHLC/volume may not have settled yet (see
+        // ResettleStoredBars). Same ride-along rule as the heal below: it widens a request that was
         // already being made, never triggers one, so an up-to-date stock still costs zero calls.
         var startDate = Min(
             forwardOnly,
@@ -1362,6 +1522,42 @@ public class YahooPriceImportService
 
         return outOfRange.Select(p => p.Date).ToHashSet();
     }
+
+    private HashSet<DateOnly> WarnAndCollectInvalidOhlcDates(
+        List<HistoricalPrice> prices,
+        string ticker
+    )
+    {
+        var invalid = prices.Where(p => IsInvalidOhlc(p)).ToList();
+        if (invalid.Count > 0)
+        {
+            var sample = invalid[0];
+            _logger.LogWarning(
+                "Skipping {Count} prices for {Ticker} with impossible OHLC. "
+                    + "Sample: {Date} O={Open} H={High} L={Low} C={Close}",
+                invalid.Count,
+                ticker,
+                sample.Date,
+                sample.Open,
+                sample.High,
+                sample.Low,
+                sample.Close
+            );
+        }
+
+        return invalid.Select(p => p.Date).ToHashSet();
+    }
+
+    private static bool IsInvalidOhlc(HistoricalPrice price) =>
+        price.Open <= 0
+        || price.High <= 0
+        || price.Low <= 0
+        || price.Close <= 0
+        || price.High < price.Open
+        || price.High < price.Close
+        || price.Low > price.Open
+        || price.Low > price.Close
+        || price.High < price.Low;
 
     private static bool HasOverflowPrice(HistoricalPrice p) =>
         Math.Abs(p.Open) > MaxPriceValue
