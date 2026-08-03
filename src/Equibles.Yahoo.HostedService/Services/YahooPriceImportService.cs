@@ -1109,6 +1109,15 @@ public class YahooPriceImportService
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
         var stock = await stockRepo.Get(commonStockId);
+        if (stock == null)
+        {
+            _logger.LogWarning(
+                "Skipping key statistics for {Ticker}: CommonStock {Id} was removed during the sync",
+                ticker,
+                commonStockId
+            );
+            return;
+        }
 
         // The SEC cover-page count (dei:EntityCommonStockSharesOutstanding) is authoritative and
         // current; Yahoo's figure is per-share-class and lags corporate actions. Defer to EDGAR
@@ -1213,7 +1222,8 @@ public class YahooPriceImportService
 
         if (!changed)
             return;
-        await stockRepo.SaveChanges();
+        if (!await SaveStockChanges(stockRepo, commonStockId, ticker, cancellationToken))
+            return;
 
         _logger.LogDebug(
             "Updated key stats for {Ticker}: shares={Shares} marketCap={MarketCap}",
@@ -1292,6 +1302,17 @@ public class YahooPriceImportService
         var industryRepo = scope.ServiceProvider.GetRequiredService<IndustryRepository>();
         var sectorRepo = scope.ServiceProvider.GetRequiredService<SectorRepository>();
 
+        var stock = await stockRepo.Get(commonStockId);
+        if (stock == null)
+        {
+            _logger.LogWarning(
+                "Skipping company profile for {Ticker}: CommonStock {Id} was removed during the sync",
+                ticker,
+                commonStockId
+            );
+            return;
+        }
+
         // Upsert by case-insensitive name. Yahoo uses a small stable vocabulary, so
         // collisions are rare and a flat scan over Sector/Industry is fine — both tables
         // hold tens of rows at steady state. Materialize the lookup once per call.
@@ -1303,12 +1324,12 @@ public class YahooPriceImportService
             cancellationToken
         );
 
-        var stock = await stockRepo.Get(commonStockId);
         if (stock.IndustryId == industry.Id)
             return;
 
         stock.IndustryId = industry.Id;
-        await stockRepo.SaveChanges();
+        if (!await SaveStockChanges(stockRepo, commonStockId, ticker, cancellationToken))
+            return;
 
         _logger.LogDebug(
             "Updated industry for {Ticker}: {Industry} (sector {Sector})",
@@ -1316,6 +1337,36 @@ public class YahooPriceImportService
             profile.Industry,
             profile.Sector ?? "?"
         );
+    }
+
+    private async Task<bool> SaveStockChanges(
+        CommonStockRepository stockRepo,
+        Guid commonStockId,
+        string ticker,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await stockRepo.SaveChanges();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            var stillExists = await stockRepo
+                .GetAll()
+                .AsNoTracking()
+                .AnyAsync(s => s.Id == commonStockId, cancellationToken);
+            if (stillExists)
+                throw;
+
+            _logger.LogWarning(
+                "Skipping enrichment save for {Ticker}: CommonStock {Id} was removed during the write",
+                ticker,
+                commonStockId
+            );
+            return false;
+        }
     }
 
     private static async Task<Guid?> UpsertSectorIfPresent(
