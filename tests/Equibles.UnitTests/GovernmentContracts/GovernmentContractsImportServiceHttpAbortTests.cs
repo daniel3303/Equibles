@@ -89,16 +89,14 @@ public class GovernmentContractsImportServiceHttpAbortTests
         );
     }
 
-    [Theory]
-    [InlineData(HttpStatusCode.UnprocessableEntity)]
-    public async Task Import_RequestLevel4xx_ScansEveryRemainingWindowWithoutThrowing(
-        HttpStatusCode status
-    )
+    [Fact]
+    public async Task Import_EveryWindowReturns422_AbortsOnceTheFailureLooksSourceWide()
     {
-        // The counterpart to the theory above, pinning the boundary from the other side: a
-        // rejection of THIS window (422 out-of-range dates, 400 malformed) says nothing about
-        // the rest of the scan, so every remaining window must still be attempted and nothing
-        // may escape to the worker.
+        // 422 is USAspending's validation rejection for the WHOLE request, not only its dates,
+        // so a bad request-invariant field 422s on every window alike. Stepping over each one
+        // would write an Error row per window — thousands of them from the 2007 epoch — while
+        // the worker still recorded a successful cycle and never backed off. A run of them must
+        // therefore stop the cycle even though a LONE 422 is stepped over (covered below).
         var options = NewDbOptions();
         using (var seed = NewContext(options))
         {
@@ -123,7 +121,74 @@ public class GovernmentContractsImportServiceHttpAbortTests
                 Arg.Any<CancellationToken>()
             )
             .ThrowsAsync(
-                new HttpRequestException($"USAspending returned {status}", inner: null, status)
+                new HttpRequestException(
+                    "USAspending rejected the request",
+                    inner: null,
+                    HttpStatusCode.UnprocessableEntity
+                )
+            );
+
+        // Twenty days back with one-day windows yields twenty-one windows — far more than the
+        // consecutive-failure cap, so an uncapped fan-out would be plainly visible.
+        var service = NewService(scopeFactory, client, DateTime.UtcNow.Date.AddDays(-20));
+
+        var act = () => service.Import(CancellationToken.None);
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        client
+            .ReceivedCalls()
+            .Should()
+            .HaveCountLessThan(
+                10,
+                "the cycle must stop once the 422s look source-wide, not walk the whole range"
+            );
+    }
+
+    [Fact]
+    public async Task Import_SingleWindowReturns422_ScansEveryRemainingWindowWithoutThrowing()
+    {
+        // The other side of the boundary: one window rejected on its own dates — the failure
+        // this classifier exists for — says nothing about the rest of the scan, so the
+        // remaining windows must still be attempted and nothing may escape to the worker.
+        var options = NewDbOptions();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var failingWindow = today.AddDays(-3);
+        using (var seed = NewContext(options))
+        {
+            seed.Add(
+                new CommonStock
+                {
+                    Ticker = "LMT",
+                    Name = "Lockheed Martin Corporation",
+                    Cik = "1",
+                }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = ScopeFactory(options);
+        var client = Substitute.For<IUsaSpendingClient>();
+        client
+            .GetContractAwards(
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.FromResult(new List<UsaSpendingAwardRecord>()));
+        client
+            .GetContractAwards(
+                failingWindow,
+                failingWindow,
+                Arg.Any<decimal>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(
+                new HttpRequestException(
+                    "USAspending rejected the window",
+                    inner: null,
+                    HttpStatusCode.UnprocessableEntity
+                )
             );
 
         // Five days back with one-day windows yields six windows.

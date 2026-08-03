@@ -20,6 +20,11 @@ public class GovernmentContractsImportService : IImporter
 {
     private const int InsertBatchSize = 1000;
 
+    // How many windows in a row may fail before the scan treats the failure as source-wide and
+    // aborts the cycle. Low enough that a fan-out costs a handful of Error rows instead of
+    // thousands, high enough that a short run of genuinely bad days does not stop the scan.
+    private const int MaxConsecutiveWindowFailures = 5;
+
     // USAspending rejects action-date searches earlier than its federal-award data epoch.
     private static readonly DateOnly UsaSpendingMinimumActionDate = new(2007, 10, 1);
 
@@ -92,6 +97,16 @@ public class GovernmentContractsImportService : IImporter
         // rescan lookback.
         var frontierIsContiguous = true;
 
+        // Nothing stepped over may fan out across the range. 422 is USAspending's validation
+        // rejection for the WHOLE request, not just its dates, so a bad request-invariant field
+        // (a filter shape, an award-type code, an out-of-range amount bound) 422s on every
+        // window alike — and stepping over each of ~6,900 of them would write an Error row
+        // apiece while the worker still saw a successful cycle. Past this many consecutive
+        // window failures the pattern is the source, not the window: stop and let the worker's
+        // failure streak back off. Counted consecutively so a scan pockmarked with isolated bad
+        // days still completes.
+        var consecutiveWindowFailures = 0;
+
         for (
             var windowStart = startDate;
             windowStart <= today;
@@ -119,6 +134,8 @@ public class GovernmentContractsImportService : IImporter
                 // This is decoupled from MAX(ActionDate), which only moves on an insert.
                 if (frontierIsContiguous)
                     await AdvanceCheckpoint(windowEnd);
+
+                consecutiveWindowFailures = 0;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -167,6 +184,17 @@ public class GovernmentContractsImportService : IImporter
                     ex,
                     $"window: {windowStart}..{windowEnd}"
                 );
+
+                if (++consecutiveWindowFailures >= MaxConsecutiveWindowFailures)
+                {
+                    _logger.LogWarning(
+                        "Government contracts import: aborting this cycle after {Count} "
+                            + "consecutive window failures; the failure is source-wide, not "
+                            + "window-specific",
+                        consecutiveWindowFailures
+                    );
+                    throw;
+                }
             }
         }
 
@@ -411,10 +439,33 @@ public class GovernmentContractsImportService : IImporter
             var repository =
                 scope.ServiceProvider.GetRequiredService<GovernmentContractsScanStateRepository>();
 
-            // No row yet means nothing has been banked, so there is no frontier to pull back:
-            // the cold-start cursor already resumes at or before this window.
             var state = await repository.GetByName(ScanStateName);
-            if (state == null || state.LastCompletedWindowEnd <= windowEnd)
+
+            // No row yet is NOT "nothing to do". Without one the next cycle falls back to the
+            // cold-start cursor, which resolves off MAX(ActionDate) — and the later windows of
+            // this very cycle are still running and inserting rows past the failure. Leaving
+            // the row absent would let that watermark carry the scan straight over the failed
+            // window. Create it here so the hole survives to the next cycle.
+            if (state == null)
+            {
+                _logger.LogWarning(
+                    "Government contracts import: opening the scan checkpoint at {To} so the "
+                        + "failed first window is re-covered next cycle",
+                    windowEnd
+                );
+                repository.Add(
+                    new GovernmentContractsScanState
+                    {
+                        Name = ScanStateName,
+                        LastCompletedWindowEnd = windowEnd,
+                        UpdatedAt = DateTime.UtcNow,
+                    }
+                );
+                await repository.SaveChanges();
+                return;
+            }
+
+            if (state.LastCompletedWindowEnd <= windowEnd)
                 return;
 
             _logger.LogWarning(

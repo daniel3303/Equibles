@@ -391,18 +391,23 @@ public class GovernmentContractsImportServiceWindowContinueTests
                 "a window-specific (non-transport) failure must not abort the scan"
             );
 
-        // ...and the later window that succeeded must not have banked a frontier past the hole.
+        // ...and the hole must be recorded durably. There was no checkpoint row when the very
+        // first window failed, so one has to be OPENED behind it: leaving the table empty would
+        // send the next cycle down the cold-start path, which resolves off MAX(ActionDate) —
+        // and the later windows of this cycle are inserting rows past the failure. The
+        // watermark would then carry the scan straight over the day that never ran.
         using var context = NewContext(options);
         var checkpoint = await context
             .Set<GovernmentContractsScanState>()
             .AsNoTracking()
-            .SingleOrDefaultAsync();
+            .SingleAsync();
 
         checkpoint
-            .Should()
-            .BeNull(
-                "the first window failed, so nothing behind it was ever contiguously scanned "
-                    + "and no frontier may be recorded"
+            .LastCompletedWindowEnd.Should()
+            .Be(
+                failingWindow.AddDays(-1),
+                "a first-window failure must open the frontier behind itself, not leave the "
+                    + "next cycle to infer a cursor from data the later windows ingested"
             );
     }
 
