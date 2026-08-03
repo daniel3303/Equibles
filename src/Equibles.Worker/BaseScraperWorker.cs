@@ -164,13 +164,27 @@ public abstract class BaseScraperWorker : BackgroundService
                 using var scope = ScopeFactory.CreateScope();
                 var options = scope.ServiceProvider.GetService<IOptions<WorkerOptions>>();
 
-                // The worker host always registers WorkerOptions. A missing registration is kept
-                // as the legacy behavior for minimal test or custom hosts that only wire the base.
+                // No registration means no database wiring to take a lock on either, so this runs
+                // unleased — that is the only thing a bare host CAN do. It must not be silent
+                // though: unleased is the pre-lease behaviour, and a host that reaches production
+                // this way would race its cursors with nothing in the log to explain why. The
+                // worker host registers WorkerOptions, so this warns only for custom/minimal hosts.
+                if (options is null)
+                {
+                    Logger.LogWarning(
+                        "{Worker} found no WorkerOptions registration, so the lane lease is OFF and "
+                            + "concurrent instances will NOT be serialized. Register WorkerOptions "
+                            + "to enable it.",
+                        WorkerName
+                    );
+                }
+
                 _laneLeaseEnabled = options?.Value.LaneLeaseEnabled ?? false;
             }
             catch (ObjectDisposedException)
             {
                 // Host teardown can dispose the root provider before a final cycle checks options.
+                // Nothing more will run, so skipping the lease here cannot overlap another instance.
                 _laneLeaseEnabled = false;
             }
 
@@ -178,9 +192,19 @@ public abstract class BaseScraperWorker : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Identity of the lane this worker serializes on. Deliberately the concrete worker TYPE, not
+    /// <see cref="WorkerName"/>: that is a display string for logs and the activity feed, and
+    /// editing it — a rewording, a typo fix — would silently move this worker to a different lock.
+    /// Mid-rollout the old and new pods would then hold two different locks for one logical lane
+    /// and run it concurrently, which is the exact overlap the lease exists to prevent. A type name
+    /// changes only through a deliberate, reviewable refactor.
+    /// </summary>
+    protected virtual string LaneId => GetType().FullName;
+
     protected virtual async ValueTask<IAsyncDisposable> TryAcquireLaneLease(
         CancellationToken stoppingToken
-    ) => await ScraperLease.TryAcquire(ScopeFactory, WorkerName, Logger, stoppingToken);
+    ) => await ScraperLease.TryAcquire(ScopeFactory, LaneId, WorkerName, Logger, stoppingToken);
 
     protected async Task RunImport<TImporter>(CancellationToken stoppingToken)
         where TImporter : IImporter

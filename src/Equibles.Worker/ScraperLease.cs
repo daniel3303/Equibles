@@ -38,14 +38,20 @@ internal sealed class ScraperLease : IAsyncDisposable
         _logger = logger;
     }
 
+    /// <param name="laneId">
+    /// Stable identity of the lane. Two instances serialize only if this matches exactly, so it
+    /// must never track a display string — see <c>BaseScraperWorker.LaneId</c>.
+    /// </param>
+    /// <param name="workerName">Display name, used only for logging.</param>
     internal static async Task<ScraperLease> TryAcquire(
         IServiceScopeFactory scopeFactory,
+        string laneId,
         string workerName,
         ILogger logger,
         CancellationToken cancellationToken
     )
     {
-        var lockKey = ComputeLockKey(workerName);
+        var lockKey = ComputeLockKey(laneId);
         var scope = scopeFactory.CreateAsyncScope();
         DbConnection connection;
         bool acquired;

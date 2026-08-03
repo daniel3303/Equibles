@@ -154,6 +154,27 @@ public class BaseScraperWorkerLaneLeaseTests
         reporterScopeFactory.Received().CreateScope();
     }
 
+    [Fact]
+    public void LaneId_IsTheWorkerType_NotTheMutableDisplayName()
+    {
+        // WorkerName is a display string for logs and the activity feed; rewording it must not
+        // move the worker to a different advisory lock. If it did, a rolling release that renamed
+        // a worker would leave old and new pods holding two locks for ONE logical lane and running
+        // it concurrently — precisely the overlap the lease exists to prevent, reintroduced by an
+        // edit that looks cosmetic. The lane identity is therefore the concrete type.
+        using var services = CreateWorkerServices(new WorkerOptions());
+        using var worker = new LeaseTestWorker(
+            Substitute.For<ILogger>(),
+            services.GetRequiredService<IServiceScopeFactory>(),
+            CreateErrorReporter(Substitute.For<IServiceScopeFactory>()),
+            (_, _) => ValueTask.FromResult<IAsyncDisposable>(new TrackingLease()),
+            _ => Task.CompletedTask
+        );
+
+        worker.ExposedLaneId.Should().Be(typeof(LeaseTestWorker).FullName);
+        worker.ExposedLaneId.Should().NotBe(worker.ExposedWorkerName);
+    }
+
     private static ServiceProvider CreateWorkerServices(WorkerOptions options, IBus? bus = null)
     {
         var services = new ServiceCollection();
@@ -209,6 +230,8 @@ public class BaseScraperWorkerLaneLeaseTests
 
         public Task<TimeSpan> FirstWait => _firstWait.Task;
         public Task CyclesCompleted => _cyclesCompleted.Task;
+        public string ExposedLaneId => LaneId;
+        public string ExposedWorkerName => WorkerName;
         public TimeSpan NormalSleepInterval => SleepInterval;
         public TimeSpan FaultBackoffInterval => ErrorBackoffInterval;
         public int LeaseAttempts => _leaseAttempts;
