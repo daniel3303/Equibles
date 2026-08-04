@@ -46,7 +46,7 @@ public class YahooPriceImportServiceKeepExistingSectorTests : IDisposable
 
     public YahooPriceImportServiceKeepExistingSectorTests()
     {
-        _dbContext = TestDbContextFactory.Create(
+        _dbContext = TestDbContextFactory.CreateIgnoringInMemoryTransactions(
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
@@ -71,9 +71,9 @@ public class YahooPriceImportServiceKeepExistingSectorTests : IDisposable
             (typeof(SectorRepository), _sectorRepo),
             (
                 typeof(SplitPriceReconciliationManager),
-                new SplitPriceReconciliationManager(splitRepo)
+                new SplitPriceReconciliationManager(splitRepo, _stockRepo)
             ),
-            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(splitRepo))
+            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(splitRepo, _stockRepo))
         );
 
         _service = new YahooPriceImportService(

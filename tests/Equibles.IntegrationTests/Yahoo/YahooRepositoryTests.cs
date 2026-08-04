@@ -30,6 +30,7 @@ public class DailyStockPriceRepositoryTests : IDisposable
             Id = Guid.NewGuid(),
             Ticker = "AAPL",
             Name = "Apple Inc.",
+            SecondaryTickers = ["AAPL-WS"],
         };
         _microsoft = new CommonStock
         {
@@ -53,13 +54,15 @@ public class DailyStockPriceRepositoryTests : IDisposable
         decimal open = 148m,
         decimal high = 152m,
         decimal low = 147m,
-        long volume = 1_000_000
+        long volume = 1_000_000,
+        string listedTicker = null
     )
     {
         return new DailyStockPrice
         {
             Id = Guid.NewGuid(),
             CommonStockId = stock.Id,
+            ListedTicker = listedTicker ?? stock.Ticker,
             Date = date,
             Open = open,
             High = high,
@@ -77,6 +80,70 @@ public class DailyStockPriceRepositoryTests : IDisposable
     }
 
     // ── GetByStock (all prices) ────────────────────────────────────────
+
+    [Fact]
+    public async Task PrimaryQueries_DoNotMixInASecondaryListingsBars()
+    {
+        var date = new DateOnly(2026, 1, 2);
+        await SeedPrices(
+            CreatePrice(_apple, date, close: 180m),
+            CreatePrice(_apple, date, close: 12m, listedTicker: "AAPL-WS")
+        );
+
+        var primary = await _repository.GetByStock(_apple).ToListAsync();
+        var secondary = await _repository.GetByStock(_apple, "AAPL-WS").ToListAsync();
+
+        primary.Should().ContainSingle().Which.Close.Should().Be(180m);
+        secondary.Should().ContainSingle().Which.Close.Should().Be(12m);
+        _repository.GetAll().Should().ContainSingle();
+        _repository.GetAllSeries().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task ExactTickerQuery_DotFormReadsTheStoredDashSeries()
+    {
+        await SeedPrices(
+            CreatePrice(_apple, new DateOnly(2026, 1, 2), close: 12m, listedTicker: "AAPL-WS")
+        );
+
+        var result = await _repository.GetByStock(_apple, "AAPL.WS").ToListAsync();
+
+        result.Should().ContainSingle().Which.Close.Should().Be(12m);
+    }
+
+    [Fact]
+    public async Task ExplicitTickerIdentity_SurvivesPrimaryDesignationChanges()
+    {
+        var date = new DateOnly(2026, 1, 2);
+        await SeedPrices(
+            CreatePrice(_apple, date, close: 180m, listedTicker: "AAPL"),
+            CreatePrice(_apple, date, close: 12m, listedTicker: "AAPL-WS")
+        );
+
+        _apple.Ticker = "AAPL-WS";
+        _apple.SecondaryTickers = ["AAPL"];
+        await _dbContext.SaveChangesAsync();
+
+        var currentPrimary = await _repository.GetByStock(_apple).ToListAsync();
+        var originalPrimary = await _repository.GetByStock(_apple, "AAPL").ToListAsync();
+
+        currentPrimary.Should().ContainSingle().Which.Close.Should().Be(12m);
+        originalPrimary.Should().ContainSingle().Which.Close.Should().Be(180m);
+    }
+
+    [Fact]
+    public async Task UnknownListedTicker_IsNeverGuessedFromThePrimarySeries()
+    {
+        var date = new DateOnly(2026, 1, 2);
+        await SeedPrices(CreatePrice(_apple, date, close: 180m));
+
+        var primary = await _repository.GetByStock(_apple).ToListAsync();
+        var unknown = await _repository.GetByStock(_apple, "AAPL-UNKNOWN").ToListAsync();
+
+        primary.Should().ContainSingle().Which.Close.Should().Be(180m);
+        unknown.Should().BeEmpty();
+        _repository.GetAllSeries().Should().ContainSingle();
+    }
 
     [Fact]
     public async Task GetByStock_ReturnsPricesForRequestedStock()

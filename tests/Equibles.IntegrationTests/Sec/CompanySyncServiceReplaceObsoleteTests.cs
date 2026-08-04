@@ -8,6 +8,7 @@ using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.HostedService.Services;
+using Equibles.Yahoo.Data.Models;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,7 +46,23 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
             Ticker = "REUSED",
             Name = "Defunct Old Inc.",
         };
-        DbContext.Add(obsolete);
+        var exactPriceId = Guid.NewGuid();
+        DbContext.AddRange(
+            obsolete,
+            new DailyStockPrice
+            {
+                Id = exactPriceId,
+                CommonStockId = obsolete.Id,
+                ListedTicker = "REUSED",
+                Date = new DateOnly(2026, 8, 3),
+                Open = 10m,
+                High = 11m,
+                Low = 9m,
+                Close = 10m,
+                AdjustedClose = 10m,
+                Volume = 1_000,
+            }
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -96,5 +113,8 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
         stocks[0].Cik.Should().Be("0000000111");
         stocks[0].Ticker.Should().Be("REUSED");
         stocks[0].Name.Should().Be("Acquirer Inc.");
+        (await verify.Set<DailyStockPrice>().AsNoTracking().ToListAsync())
+            .Should()
+            .BeEmpty("the authorized parent cascade removes the obsolete listing's exact rows");
     }
 }

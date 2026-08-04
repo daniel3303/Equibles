@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Equibles.CommonStocks.BusinessLogic;
@@ -140,7 +141,6 @@ public class CompanySyncService : ICompanySyncService
             scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-
         var secCiks = secCompanies.Select(c => c.Cik).ToHashSet();
 
         // Load every existing stock so we can detect subsidiaries already attached
@@ -783,8 +783,43 @@ public class CompanySyncService : ICompanySyncService
 
     private static async Task DeleteAndUntrack(CommonStock stock, StockSyncState state)
     {
-        state.CommonStockRepository.Delete(stock);
-        await state.CommonStockRepository.SaveChanges();
+        if (state.DbContext.Database.IsRelational())
+        {
+            await using var transaction = await state.CommonStockRepository.CreateTransaction(
+                IsolationLevel.ReadCommitted
+            );
+
+            // BuildSyncState tracks the pre-lock snapshot. Detach it so the locking query
+            // materializes the current database values instead of returning that stale instance
+            // through EF identity resolution.
+            state.DbContext.Entry(stock).State = EntityState.Detached;
+            var lockedStock = await state.CommonStockRepository.GetForUpdate(stock.Id);
+            if (lockedStock != null)
+            {
+                if (
+                    !string.Equals(lockedStock.Cik, stock.Cik, StringComparison.Ordinal)
+                    || !string.Equals(lockedStock.Ticker, stock.Ticker, StringComparison.Ordinal)
+                )
+                {
+                    throw new DbUpdateConcurrencyException(
+                        $"CommonStock {stock.Id} changed before its obsolete-row deletion."
+                    );
+                }
+
+                // Deleting the parent cascades through both the legacy and isolated exact-price
+                // foreign keys. The row lock and revalidation keep that deletion from racing a
+                // listing importer that is about to persist fresh exact-series rows.
+                state.CommonStockRepository.Delete(lockedStock);
+                await state.CommonStockRepository.SaveChanges();
+            }
+
+            await transaction.CommitAsync();
+        }
+        else
+        {
+            state.CommonStockRepository.Delete(stock);
+            await state.CommonStockRepository.SaveChanges();
+        }
 
         state.ExistingCiks.Remove(stock.Cik);
         state.ExistingPrimaryTickers.Remove(stock.Ticker);

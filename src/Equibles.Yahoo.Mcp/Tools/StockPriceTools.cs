@@ -61,7 +61,7 @@ public class StockPriceTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, _, stockError) = await ResolveTicker(ticker);
+                var (stock, priceTicker, stockError) = await ResolveTicker(ticker);
                 if (stockError != null)
                     return stockError;
 
@@ -77,7 +77,7 @@ public class StockPriceTools
 
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var rangeQuery = _priceRepository.GetByStock(stock, start, end);
+                var rangeQuery = _priceRepository.GetByStock(stock, priceTicker, start, end);
                 var total = await rangeQuery.CountAsync();
 
                 var records = await rangeQuery
@@ -86,10 +86,10 @@ public class StockPriceTools
                     .ToListAsync();
 
                 if (records.Count == 0)
-                    return $"No price data found for {stock.Ticker} in the specified date range.";
+                    return $"No price data found for {priceTicker} in the specified date range.";
 
                 var result = StartTable(
-                    $"Daily prices for {stock.Ticker} ({stock.Name}):",
+                    $"Daily prices for {priceTicker} ({stock.Name}):",
                     "| Date | Open | High | Low | Close | Volume |",
                     "|------|------|------|-----|-------|--------|"
                 );
@@ -154,26 +154,17 @@ public class StockPriceTools
 
                 foreach (var ticker in tickerList)
                 {
-                    var (stock, secondaryOf, _) = await ResolveTicker(ticker);
+                    var (stock, priceTicker, _) = await ResolveTicker(ticker);
                     if (stock == null)
                     {
-                        // A secondary symbol says which primary owns the series, so the
-                        // caller can re-ask instead of reading the row as no coverage.
-                        result.AppendLine(
-                            PlaceholderRow(
-                                ticker,
-                                secondaryOf == null
-                                    ? "Not found"
-                                    : $"No series — secondary symbol on {secondaryOf.Ticker}"
-                            )
-                        );
+                        result.AppendLine(PlaceholderRow(ticker, "Not found"));
                         continue;
                     }
 
                     // Newest two bars in one query: the latest row plus the prior close
                     // needed for the day-over-day change columns.
                     var latestTwo = await _priceRepository
-                        .GetByStock(stock)
+                        .GetByStock(stock, priceTicker)
                         .OrderByDescending(p => p.Date)
                         .Take(2)
                         .ToListAsync();
@@ -268,12 +259,13 @@ public class StockPriceTools
 
                 // %K needs kPeriod bars and %D another dPeriod - 1 %K values, so this many
                 // extra bars before startDate make the first in-range row fully computable.
-                var (stock, records, renderFrom, error) = await LoadAscendingPriceWindow(
-                    ticker,
-                    startDate,
-                    endDate,
-                    warmupBars: kPeriod + dPeriod - 2
-                );
+                var (stock, priceTicker, records, renderFrom, error) =
+                    await LoadAscendingPriceWindow(
+                        ticker,
+                        startDate,
+                        endDate,
+                        warmupBars: kPeriod + dPeriod - 2
+                    );
                 if (error != null)
                     return error;
 
@@ -287,7 +279,7 @@ public class StockPriceTools
                 );
 
                 return RenderNewestFirst(
-                    $"Stochastic Oscillator (%K={kPeriod}, %D={dPeriod}) for {stock.Ticker} ({stock.Name}):",
+                    $"Stochastic Oscillator (%K={kPeriod}, %D={dPeriod}) for {priceTicker} ({stock.Name}):",
                     "| Date | Close | %K | %D |",
                     "|------|-------|----|----|",
                     records.Count,
@@ -347,12 +339,13 @@ public class StockPriceTools
                 // Wilder smoothing is recursive, so the seed's influence decays rather than
                 // ends: two extra periods of pre-range bars push the seed far enough back
                 // that in-range values no longer depend on where the caller put startDate.
-                var (stock, records, renderFrom, error) = await LoadAscendingPriceWindow(
-                    ticker,
-                    startDate,
-                    endDate,
-                    warmupBars: period * 2
-                );
+                var (stock, priceTicker, records, renderFrom, error) =
+                    await LoadAscendingPriceWindow(
+                        ticker,
+                        startDate,
+                        endDate,
+                        warmupBars: period * 2
+                    );
                 if (error != null)
                     return error;
 
@@ -360,7 +353,7 @@ public class StockPriceTools
                 var atr = TechnicalIndicatorService.ComputeAtr(highs, lows, closes, period);
 
                 return RenderNewestFirst(
-                    $"Average True Range (period={period}) for {stock.Ticker} ({stock.Name}):",
+                    $"Average True Range (period={period}) for {priceTicker} ({stock.Name}):",
                     "| Date | Close | ATR |",
                     "|------|-------|-----|",
                     records.Count,
@@ -410,7 +403,7 @@ public class StockPriceTools
 
                 // No warm-up: OBV is a running sum with no lookback window, and the tool
                 // contract deliberately anchors it at 0 on the range's first bar.
-                var (stock, records, _, error) = await LoadAscendingPriceWindow(
+                var (stock, priceTicker, records, _, error) = await LoadAscendingPriceWindow(
                     ticker,
                     startDate,
                     endDate,
@@ -424,7 +417,7 @@ public class StockPriceTools
                 var obv = TechnicalIndicatorService.ComputeObv(closes, volumes);
 
                 return RenderNewestFirst(
-                    $"On-Balance Volume for {stock.Ticker} ({stock.Name}):",
+                    $"On-Balance Volume for {priceTicker} ({stock.Name}):",
                     "| Date | Close | Volume | OBV |",
                     "|------|-------|--------|-----|",
                     records.Count,
@@ -480,12 +473,13 @@ public class StockPriceTools
 
                 // The SMA window is exactly period bars, so period - 1 extra bars before
                 // startDate make the first in-range row fully computable.
-                var (stock, records, renderFrom, error) = await LoadAscendingPriceWindow(
-                    ticker,
-                    startDate,
-                    endDate,
-                    warmupBars: period - 1
-                );
+                var (stock, priceTicker, records, renderFrom, error) =
+                    await LoadAscendingPriceWindow(
+                        ticker,
+                        startDate,
+                        endDate,
+                        warmupBars: period - 1
+                    );
                 if (error != null)
                     return error;
 
@@ -497,7 +491,7 @@ public class StockPriceTools
                 );
 
                 return RenderNewestFirst(
-                    $"Bollinger Bands (period={period}, stdDev={McpFormat.Invariant(stdDev, "0.#")}) for {stock.Ticker} ({stock.Name}):",
+                    $"Bollinger Bands (period={period}, stdDev={McpFormat.Invariant(stdDev, "0.#")}) for {priceTicker} ({stock.Name}):",
                     "| Date | Close | Lower | Middle | Upper | %B | Bandwidth |",
                     "|------|-------|-------|--------|-------|----|-----------|",
                     records.Count,
@@ -537,48 +531,37 @@ public class StockPriceTools
         return Math.Round((upper.Value - lower.Value) / middle.Value, 4);
     }
 
-    // Resolves a ticker to the stock whose price series it names, additionally accepting
-    // the dot class-share notation (BRK.B) for the dash form the price data stores
-    // (BRK-B). This is a mechanical format conversion between two spellings of the same
-    // symbol, not a heuristic.
-    //
-    // A symbol that resolves only as a SECONDARY ticker is declined rather than served
-    // (SecondaryTickerPolicy): it is a different security sharing one filer's row, and
-    // the row's bars belong to the primary symbol alone. SecondaryOf carries that
-    // primary so the batch tool can say so in a table cell.
-    private async Task<(CommonStock Stock, CommonStock SecondaryOf, string Error)> ResolveTicker(
+    // Resolves a ticker to its filer and exact stored listing symbol, additionally accepting
+    // the dot class-share notation (BRK.B) for the dash form the price data stores (BRK-B).
+    // This is a mechanical format conversion between two spellings of the same symbol, not a
+    // heuristic. The returned PriceTicker is load-bearing: price queries use it so a secondary
+    // listing can never fall through to the filer's primary bars.
+    private async Task<(CommonStock Stock, string PriceTicker, string Error)> ResolveTicker(
         string ticker
     )
     {
-        var resolved = await ResolvePricedSpelling(ticker, ticker);
+        var resolved = await ResolvePricedSpelling(ticker);
         if (resolved.Stock == null && ticker != null && ticker.Contains('.'))
         {
-            // The dashed spelling either resolves or explains itself; either beats
-            // "not found" against a symbol stored only in the dashed form. It stays the
-            // LOOKUP spelling only — the message keeps echoing what the caller wrote.
-            var dashed = await ResolvePricedSpelling(ticker.Replace('.', '-'), ticker);
-            if (dashed.Stock != null || dashed.SecondaryOf != null)
+            var dashed = await ResolvePricedSpelling(ticker.Replace('.', '-'));
+            if (dashed.Stock != null)
                 return dashed;
         }
         return resolved;
     }
 
-    private async Task<(
-        CommonStock Stock,
-        CommonStock SecondaryOf,
-        string Error
-    )> ResolvePricedSpelling(string lookupTicker, string requestedTicker)
+    private async Task<(CommonStock Stock, string PriceTicker, string Error)> ResolvePricedSpelling(
+        string lookupTicker
+    )
     {
         var (stock, error) = await _commonStockRepository.ResolveByTicker(lookupTicker);
         if (stock == null)
             return (null, null, error);
-        if (SecondaryTickerPolicy.IsSecondarySymbol(stock, lookupTicker))
-            return (
-                null,
-                stock,
-                SecondaryTickerPolicy.NoPriceSeriesMessage(stock, requestedTicker)
-            );
-        return (stock, null, null);
+
+        var priceTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, lookupTicker);
+        return priceTicker == null
+            ? (null, null, $"Stock '{lookupTicker}' not found.")
+            : (stock, priceTicker, null);
     }
 
     // Strict argument parsing shared by the date-ranged price tools: a non-empty date must
@@ -629,14 +612,15 @@ public class StockPriceTools
 
     private async Task<(
         CommonStock Stock,
+        string PriceTicker,
         List<DailyStockPrice> Records,
         int RenderFrom,
         string Error
     )> LoadAscendingPriceWindow(string ticker, string startDate, string endDate, int warmupBars)
     {
-        var (stock, _, stockError) = await ResolveTicker(ticker);
+        var (stock, priceTicker, stockError) = await ResolveTicker(ticker);
         if (stockError != null)
-            return (null, null, 0, stockError);
+            return (null, null, null, 0, stockError);
 
         var rangeError = ParseRangeStrict(
             startDate,
@@ -646,19 +630,20 @@ public class StockPriceTools
             out var end
         );
         if (rangeError != null)
-            return (stock, null, 0, rangeError);
+            return (stock, priceTicker, null, 0, rangeError);
 
         var records = await _priceRepository
-            .GetByStock(stock, start, end)
+            .GetByStock(stock, priceTicker, start, end)
             .OrderBy(p => p.Date)
             .ToListAsync();
 
         if (records.Count == 0)
             return (
                 stock,
+                priceTicker,
                 null,
                 0,
-                $"No price data found for {stock.Ticker} in the specified date range."
+                $"No price data found for {priceTicker} in the specified date range."
             );
 
         // Warm-up look-back: indicators with a lookback window are computed over extra
@@ -668,7 +653,7 @@ public class StockPriceTools
         if (warmupBars > 0)
         {
             var warmup = await _priceRepository
-                .GetByStock(stock)
+                .GetByStock(stock, priceTicker)
                 .Where(p => p.Date < start)
                 .OrderByDescending(p => p.Date)
                 .Take(warmupBars)
@@ -681,7 +666,7 @@ public class StockPriceTools
             }
         }
 
-        return (stock, records, renderFrom, null);
+        return (stock, priceTicker, records, renderFrom, null);
     }
 
     // Thin forwarder to the shared helper so the load-bearing title/blank/header/separator

@@ -4,6 +4,7 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Mcp.Tools;
 using Equibles.Yahoo.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Mcp;
@@ -11,12 +12,11 @@ namespace Equibles.IntegrationTests.Mcp;
 /// <summary>
 /// One CommonStock row is one SEC filer, and the filer's other listed symbols ride along
 /// in SecondaryTickers — sibling share classes, warrants, units, separate fund series.
-/// The row holds ONE price series, fetched under the primary symbol, so a lookup that
-/// accepts either spelling answered a secondary symbol with the primary's bars.
+/// The primary series remains attached to the filer while each authoritative secondary
+/// symbol has its own keyed rows.
 ///
 /// In production that made BRK-A report BRK-B's close (the two are fixed at 1500:1 by
-/// charter) and BWET, the Breakwave Tanker fund, report BDRY's — identical close, change
-/// and volume. These pin the refusal end-to-end through the real repository.
+/// charter). These pin independent resolution end-to-end through the real repository.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
@@ -46,10 +46,11 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
 
         DbContext
             .Set<DailyStockPrice>()
-            .Add(
+            .AddRange(
                 new DailyStockPrice
                 {
                     CommonStockId = stock.Id,
+                    ListedTicker = "BRK-B",
                     Date = new DateOnly(2026, 7, 31),
                     Open = 510m,
                     High = 512m,
@@ -57,6 +58,18 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
                     Close = 511.54m,
                     AdjustedClose = 511.54m,
                     Volume = 3_934_400,
+                },
+                new DailyStockPrice
+                {
+                    CommonStockId = stock.Id,
+                    ListedTicker = "BRK-A",
+                    Date = new DateOnly(2026, 7, 31),
+                    Open = 748_500m,
+                    High = 750_000m,
+                    Low = 747_000m,
+                    Close = 749_200m,
+                    AdjustedClose = 749_200m,
+                    Volume = 1_230,
                 }
             );
         await DbContext.SaveChangesAsync();
@@ -64,37 +77,51 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestPrices_ASecondarySymbol_DoesNotReportThePrimarysPrice()
+    public async Task GetLatestPrices_SecondaryAndPrimarySymbolsReportTheirOwnPrices()
     {
         await SeedBerkshire();
 
         var result = await Sut().GetLatestPrices("BRK-A,BRK-B");
 
         result.Should().Contain("| BRK-B | 2026-07-31 | 511.54 |", "the primary still answers");
-        result
-            .Should()
-            .Contain(
-                "No series — secondary symbol on BRK-B",
-                "the row must say which symbol owns the series, not carry a price"
-            );
-        result
-            .Should()
-            .NotContain(
-                "| BRK-A | 2026-07-31 | 511.54 |",
-                "Class A must never be served Class B's close"
-            );
+        result.Should().Contain("| BRK-A | 2026-07-31 | 749200.00 |", "Class A has its own series");
+        result.Should().NotContain("No series");
     }
 
     [Fact]
-    public async Task GetStockPrices_ASecondarySymbol_ExplainsInsteadOfServingTheSeries()
+    public async Task GetStockPrices_ASecondarySymbol_ServesItsOwnSeries()
     {
         await SeedBerkshire();
 
         var result = await Sut().GetStockPrices("BRK-A");
 
-        result.Should().Contain("No price series for 'BRK-A'");
-        result.Should().Contain("BRK-B", "the caller needs the symbol that does carry it");
+        result.Should().Contain("Daily prices for BRK-A");
+        result.Should().Contain("749200.00");
         result.Should().NotContain("511.54");
+    }
+
+    [Fact]
+    public async Task LegacyTableRow_CanCoexistButIsNeverPublished()
+    {
+        var stock = await SeedBerkshire();
+        var legacyId = Guid.NewGuid();
+        var date = new DateOnly(2026, 7, 31);
+        var createdAt = DateTime.UtcNow;
+        await DbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO "DailyStockPrice"
+                ("Id", "CommonStockId", "Date", "Open", "High", "Low",
+                 "Close", "AdjustedClose", "Volume", "CreationTime")
+            VALUES
+                ({legacyId}, {stock.Id}, {date}, {999m}, {999m}, {999m},
+                 {999m}, {999m}, {1L}, {createdAt})
+            """
+        );
+
+        var result = await Sut().GetStockPrices("BRK-B");
+
+        result.Should().Contain("511.54");
+        result.Should().NotContain("999.00");
     }
 
     [Fact]
@@ -106,29 +133,31 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
         var result = await Sut().GetStockPrices("BRK.B");
 
         result.Should().Contain("511.54");
-        result.Should().NotContain("No price series");
+        result.Should().NotContain("749200.00");
     }
 
     [Fact]
-    public async Task GetStockPrices_ASecondarySymbolInDotNotation_IsStillRefused()
+    public async Task GetStockPrices_ASecondarySymbolInDotNotation_UsesTheSecondarySeries()
     {
         await SeedBerkshire();
 
         var result = await Sut().GetStockPrices("BRK.A");
 
-        result.Should().Contain("No price series for 'BRK.A'");
+        result.Should().Contain("Daily prices for BRK-A");
+        result.Should().Contain("749200.00");
         result.Should().NotContain("511.54");
     }
 
     [Fact]
-    public async Task GetBollingerBands_ASecondarySymbol_IsRefusedLikeTheOtherPriceReads()
+    public async Task GetBollingerBands_ASecondarySymbol_UsesTheSecondarySeries()
     {
         await SeedBerkshire();
 
-        // Every indicator shares one resolution path, so none of them can drift back to
-        // serving the primary's bars.
+        // Every indicator shares one resolution path, so none can drift back to primary bars.
         var result = await Sut().GetBollingerBands("BRK-A");
 
-        result.Should().Contain("No price series for 'BRK-A'");
+        result.Should().Contain("for BRK-A");
+        result.Should().Contain("749200.00");
+        result.Should().NotContain("511.54");
     }
 }

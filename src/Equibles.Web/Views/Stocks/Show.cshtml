@@ -2,9 +2,10 @@
 @model StockDetailViewModel
 
 @{
-    ViewData["Title"] = $"{Model.Stock.Ticker} - {Model.Stock.Name}";
-    ViewData["Description"] = $"{Model.Stock.Ticker} - {Model.Stock.Name}. View institutional holdings, short volume, short interest, and SEC filings for {Model.Stock.Ticker}.";
     var stock = Model.Stock;
+    var listingTicker = Model.ListingTicker ?? stock.Ticker;
+    ViewData["Title"] = $"{listingTicker} - {stock.Name}";
+    ViewData["Description"] = $"{listingTicker} - {stock.Name}. View institutional holdings, short volume, short interest, and SEC filings for {listingTicker}.";
     var activeTab = Model.ActiveTab;
 }
 
@@ -14,7 +15,7 @@
         <breadcrumbs>
             <li><a asp-controller="Stocks" asp-action="Index">Stocks</a></li>
             <li>
-                <span class="font-semibold text-base-content">@stock.Ticker</span>
+                <span class="font-semibold text-base-content">@listingTicker</span>
                 <span class="text-base-content/50 ml-1">@stock.Name</span>
             </li>
         </breadcrumbs>
@@ -27,7 +28,7 @@
                 <!-- Left: Ticker, Name, Description -->
                 <div class="flex-1 min-w-0">
                     <div class="flex items-baseline gap-3 mb-1">
-                        <h1 class="text-2xl font-bold">@stock.Ticker</h1>
+                        <h1 class="text-2xl font-bold">@listingTicker</h1>
                         <span class="text-base text-base-content/70">@stock.Name</span>
                     </div>
                     @if (!string.IsNullOrEmpty(stock.Description)) {
@@ -117,13 +118,13 @@
         };
     }
     <!-- Section navbar -->
-    <nav class="flex flex-wrap gap-2 mb-6" aria-label="@(stock.Ticker) sections">
+    <nav class="flex flex-wrap gap-2 mb-6" aria-label="@(listingTicker) sections">
         @foreach (var tab in sectionTabs) {
             @* Fund-only tabs (NPORT/N-CEN) appear only for registered funds; hide them
                for operating companies, which file neither and would show empty tabs. *@
             if (tab.Key == "fund-operations" && !Model.HasFundOperations) { continue; }
             if (tab.Key == "fund-holdings" && !Model.HasFundHoldings) { continue; }
-            <a class="@TabBtnClass(tab.Key)" aria-current="@TabAriaCurrent(tab.Key)" asp-action="@tab.Action" asp-route-ticker="@stock.Ticker">@tab.Label</a>
+            <a class="@TabBtnClass(tab.Key)" aria-current="@TabAriaCurrent(tab.Key)" asp-action="@tab.Action" asp-route-ticker="@listingTicker">@tab.Label</a>
         }
     </nav>
 

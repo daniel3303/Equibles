@@ -390,6 +390,7 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
         {
             CommonStock = stock,
             CommonStockId = stock.Id,
+            ListedTicker = stock.Ticker,
             Date = date,
             Open = close - 1m,
             High = close + 1m,

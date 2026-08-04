@@ -122,6 +122,10 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `StockPriceTools`:
 
+Price functions resolve the exact authoritative listed symbol. Primary and secondary U.S.
+exchange listings keep independent series, so `GOOG` never substitutes `GOOGL` and `BRK-A`
+never substitutes `BRK-B`; dot share-class spelling such as `BRK.A` resolves to `BRK-A`.
+
 - `GetStockPrices` — daily OHLCV + `AdjustedClose` for a ticker over a date range.
 - `GetLatestPrices` — latest close for one or more tickers.
 - `GetStochasticOscillator` — Stochastic Oscillator (%K and %D) for a ticker over a date range.

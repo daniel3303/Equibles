@@ -69,6 +69,7 @@ public class StocksPriceSeededTests
                     new DailyStockPrice
                     {
                         CommonStockId = stockId,
+                        ListedTicker = "AAPL",
                         Date = startDate.AddDays(i),
                         Open = close - 0.5m,
                         High = close + 1m,

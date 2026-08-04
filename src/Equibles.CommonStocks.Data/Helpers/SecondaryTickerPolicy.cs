@@ -9,20 +9,49 @@ namespace Equibles.CommonStocks.Data.Helpers;
 /// fund series of one trust (BWET beside BDRY). Those are DIFFERENT securities and they
 /// trade at their own prices.
 /// <para>
-/// Price data is stored once per row and fetched under the PRIMARY symbol only, so a
-/// secondary symbol has no series of its own — and a lookup that accepts either
-/// spelling answers it with the primary's bars. That reported BRK-A at BRK-B's close,
-/// off by the 1500:1 the charter fixes between the two classes.
+/// Price data stores the exact listed ticker on every bar, including the filer's current
+/// primary, and keeps a separate series for each authoritative secondary ticker. A caller
+/// therefore resolves the requested spelling before reading bars; BRK-A can never fall
+/// through to BRK-B.
 /// </para>
 /// <para>
-/// Price surfaces therefore resolve through <see cref="IsSecondarySymbol"/> and decline
-/// rather than substitute. Surfaces reading FILER-level data (filings, 13F holdings,
-/// insider transactions) are unaffected: those genuinely belong to the whole company,
-/// which is why the permissive lookup exists.
+/// Surfaces reading FILER-level data (filings, 13F holdings, insider transactions) remain
+/// attached to the <see cref="CommonStock"/> row. Price surfaces use
+/// <see cref="ResolveListedTicker"/> so their identity is the traded symbol instead.
 /// </para>
 /// </summary>
 public static class SecondaryTickerPolicy
 {
+    /// <summary>
+    /// Resolves a caller's spelling to the exact canonical ticker carried by the filer.
+    /// The dot class-share notation is mechanically folded to the stored dash form
+    /// (BRK.B -&gt; BRK-B). Returns null when the ticker is not one of the filer's listings.
+    /// </summary>
+    public static string ResolveListedTicker(CommonStock stock, string requestedTicker)
+    {
+        if (stock?.Ticker == null || string.IsNullOrWhiteSpace(requestedTicker))
+            return null;
+
+        var requested = TickerNormalizer.Normalize(requestedTicker);
+        var candidates = requested.Contains('.')
+            ? new[] { requested, requested.Replace('.', '-') }
+            : new[] { requested };
+
+        foreach (var candidate in candidates)
+        {
+            if (string.Equals(stock.Ticker, candidate, StringComparison.Ordinal))
+                return stock.Ticker;
+
+            var secondary = (stock.SecondaryTickers ?? []).FirstOrDefault(ticker =>
+                string.Equals(ticker, candidate, StringComparison.OrdinalIgnoreCase)
+            );
+            if (secondary != null)
+                return secondary;
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Whether <paramref name="requestedTicker"/> named a symbol other than
     /// <paramref name="stock"/>'s primary one. Accepts the dot class-share notation for
@@ -31,28 +60,19 @@ public static class SecondaryTickerPolicy
     /// </summary>
     public static bool IsSecondarySymbol(CommonStock stock, string requestedTicker)
     {
-        if (stock?.Ticker == null || requestedTicker == null)
-            return false;
-
-        var requested = TickerNormalizer.Normalize(requestedTicker);
-        var primary = TickerNormalizer.Normalize(stock.Ticker);
-        if (requested == primary)
-            return false;
-
-        return !requested.Contains('.') || requested.Replace('.', '-') != primary;
+        var resolved = ResolveListedTicker(stock, requestedTicker);
+        return resolved != null && !string.Equals(resolved, stock.Ticker, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// Why the requested symbol has no prices, naming the primary so the caller can
-    /// retry. Says which company owns the series rather than only that the symbol
-    /// failed — a bare "not found" reads as missing coverage.
+    /// Legacy refusal text retained for binary-compatible callers. Secondary listings now have
+    /// independent price series, so callers should resolve the symbol and query that series.
     /// </summary>
+    [Obsolete("Secondary listings have independent price series; use ResolveListedTicker.")]
     public static string NoPriceSeriesMessage(CommonStock stock, string requestedTicker)
     {
-        return $"No price series for '{requestedTicker}'. It is a secondary symbol on "
-            + $"{stock.Ticker} ({stock.Name}) — a different security from the same SEC filer "
-            + "(share class, warrant, unit, preferred or fund series). Prices are stored per "
-            + $"filer under the primary symbol, so request {stock.Ticker} for that company's "
-            + "own prices.";
+        var resolved = ResolveListedTicker(stock, requestedTicker) ?? requestedTicker;
+        return $"No price data found for '{resolved}'. It is listed separately from "
+            + $"{stock.Ticker} ({stock.Name}) and its price history may still be backfilling.";
     }
 }

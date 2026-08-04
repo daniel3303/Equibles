@@ -750,6 +750,51 @@ public class StockTabServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadPriceTab_SecondaryListing_ReturnsOnlyItsExactSeries()
+    {
+        var stock = CreateStock("BRK-B", "Berkshire Hathaway Inc.");
+        stock.SecondaryTickers = ["BRK-A"];
+        var date = new DateOnly(2026, 8, 3);
+        _dbContext
+            .Set<DailyStockPrice>()
+            .AddRange(
+                new DailyStockPrice
+                {
+                    CommonStockId = stock.Id,
+                    ListedTicker = "BRK-B",
+                    Date = date,
+                    Open = 299m,
+                    High = 301m,
+                    Low = 298m,
+                    Close = 300m,
+                    AdjustedClose = 300m,
+                    Volume = 1_000,
+                },
+                new DailyStockPrice
+                {
+                    CommonStockId = stock.Id,
+                    ListedTicker = "BRK-A",
+                    Date = date,
+                    Open = 599_000m,
+                    High = 601_000m,
+                    Low = 598_000m,
+                    Close = 600_000m,
+                    AdjustedClose = 600_000m,
+                    Volume = 100,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.LoadPriceTab(stock, "BRK-A");
+        var metrics = await _service.LoadKeyMetrics(stock, "BRK-A");
+
+        result.Ticker.Should().Be("BRK-A");
+        result.Prices.Should().ContainSingle().Which.Close.Should().Be(600_000m);
+        result.Prices.Should().OnlyContain(price => price.ListedTicker == "BRK-A");
+        metrics.LatestClose.Should().Be(600_000m);
+    }
+
+    [Fact]
     public async Task LoadPriceTab_NoPrices_ReturnsEmptyListsAndEmptyIndicators()
     {
         var stock = CreateStock();

@@ -61,6 +61,6 @@ public class StockSplitBackfillManager
             })
             .ToList();
 
-        return await _captureManager.Capture(stock, captured);
+        return await _captureManager.Capture(stock.Id, stock.Ticker, captured, cancellationToken);
     }
 }

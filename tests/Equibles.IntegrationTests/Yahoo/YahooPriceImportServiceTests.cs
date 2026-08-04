@@ -40,10 +40,11 @@ public class YahooPriceImportServiceTests : IDisposable
 
     public YahooPriceImportServiceTests()
     {
-        _dbContext = TestDbContextFactory.Create(
-            new CommonStocksModuleConfiguration(),
-            new YahooModuleConfiguration()
-        );
+        _dbContext =
+            TestDbContextFactory.CreateIgnoringInMemoryTransactionsWithoutPriceSeedDefaults(
+                new CommonStocksModuleConfiguration(),
+                new YahooModuleConfiguration()
+            );
         _priceRepo = new DailyStockPriceRepository(_dbContext);
         _stockRepo = new CommonStockRepository(_dbContext);
         _splitRepo = new StockSplitRepository(_dbContext);
@@ -67,9 +68,9 @@ public class YahooPriceImportServiceTests : IDisposable
             (typeof(ISharesOutstandingProvider), _sharesProvider),
             (
                 typeof(SplitPriceReconciliationManager),
-                new SplitPriceReconciliationManager(_splitRepo)
+                new SplitPriceReconciliationManager(_splitRepo, _stockRepo)
             ),
-            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(_splitRepo))
+            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(_splitRepo, _stockRepo))
         );
 
         var tickerMapService = new TickerMapService(scopeFactory);
@@ -113,12 +114,18 @@ public class YahooPriceImportServiceTests : IDisposable
         await _priceRepo.SaveChanges();
     }
 
-    private DailyStockPrice CreatePrice(CommonStock stock, DateOnly date, decimal close = 150m)
+    private DailyStockPrice CreatePrice(
+        CommonStock stock,
+        DateOnly date,
+        decimal close = 150m,
+        string listedTicker = null
+    )
     {
         return new DailyStockPrice
         {
             Id = Guid.NewGuid(),
             CommonStockId = stock.Id,
+            ListedTicker = listedTicker ?? stock.Ticker,
             Date = date,
             Open = close - 2m,
             High = close + 2m,
@@ -216,6 +223,59 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_SecondaryListing_PersistsAnIndependentPriceSeries()
+    {
+        var alphabet = CreateStock("GOOGL", "Alphabet Inc.");
+        alphabet.SecondaryTickers = ["GOOG"];
+        await SeedStocks(alphabet);
+
+        var date = new DateOnly(2026, 3, 25);
+        _yahooClient
+            .GetChart("GOOGL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(CreateChartData((date, 190m)));
+        _yahooClient
+            .GetChart("GOOG", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(CreateChartData((date, 175m)));
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        var primary = _priceRepo.GetByStock(alphabet).Single();
+        var secondary = _priceRepo.GetByStock(alphabet, "GOOG").Single();
+        primary.Close.Should().Be(190m);
+        primary.ListedTicker.Should().Be("GOOGL");
+        secondary.Close.Should().Be(175m);
+        secondary.ListedTicker.Should().Be("GOOG");
+        _priceRepo.GetAllSeries().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Import_RefreshingPrimarySeries_DoesNotDeleteSecondaryRows()
+    {
+        var alphabet = CreateStock("GOOGL", "Alphabet Inc.");
+        alphabet.SecondaryTickers = ["GOOG"];
+        await SeedStocks(alphabet);
+
+        var existingDate = new DateOnly(2026, 3, 25);
+        var newDate = existingDate.AddDays(1);
+        await SeedPrices(
+            CreatePrice(alphabet, existingDate, close: 185m, listedTicker: "GOOGL"),
+            CreatePrice(alphabet, existingDate, close: 175m, listedTicker: "GOOG")
+        );
+
+        _yahooClient
+            .GetChart("GOOGL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(CreateChartData((newDate, 190m)));
+        _yahooClient
+            .GetChart("GOOG", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        _priceRepo.GetByStock(alphabet, "GOOGL").Max(price => price.Close).Should().Be(190m);
+        _priceRepo.GetByStock(alphabet, "GOOG").Single().Close.Should().Be(175m);
+    }
+
+    [Fact]
     public async Task Import_MapsAllPriceFieldsCorrectly()
     {
         var apple = CreateStock("AAPL", "Apple Inc.");
@@ -294,6 +354,54 @@ public class YahooPriceImportServiceTests : IDisposable
         split.Denominator.Should().Be(1m);
         split.Source.Should().Be(StockSplitSource.Yahoo);
         split.PriceAdjustmentAppliedTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Import_SecondaryListingSplit_RebasesOnlyThatListedSeries()
+    {
+        var alphabet = CreateStock("GOOGL", "Alphabet Inc.");
+        alphabet.SecondaryTickers = ["GOOG"];
+        await SeedStocks(alphabet);
+
+        var existingDate = new DateOnly(2026, 3, 20);
+        var nextDate = new DateOnly(2026, 3, 23);
+        await SeedPrices(
+            CreatePrice(alphabet, existingDate, 190m, "GOOGL"),
+            CreatePrice(alphabet, existingDate, 175m, "GOOG")
+        );
+
+        _yahooClient
+            .GetChart("GOOGL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+
+        var floor = new DateOnly(2020, 1, 1);
+        var incremental = new YahooChartData
+        {
+            Prices = CreateHistoricalPrices((nextDate, 88m)),
+            Splits =
+            [
+                new StockSplitEvent
+                {
+                    Date = nextDate,
+                    Numerator = 2m,
+                    Denominator = 1m,
+                },
+            ],
+        };
+        var fullHistory = CreateChartData((existingDate, 87.5m), (nextDate, 88m));
+        _yahooClient
+            .GetChart("GOOG", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(call => call.ArgAt<DateOnly>(1) == floor ? fullHistory : incremental);
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        var primary = _priceRepo.GetByStock(alphabet, "GOOGL").ToList();
+        var secondary = _priceRepo.GetByStock(alphabet, "GOOG").OrderBy(p => p.Date).ToList();
+        primary.Should().ContainSingle().Which.Close.Should().Be(190m);
+        secondary.Select(p => p.Close).Should().Equal(87.5m, 88m);
+        secondary.Should().AllSatisfy(p => p.ListedTicker.Should().Be("GOOG"));
+        _splitRepo.GetAll().Should().BeEmpty("a sibling class split is not issuer-wide");
+        await _yahooClient.Received(1).GetChart("GOOG", floor, Arg.Any<DateOnly>());
     }
 
     // ── Skips stocks with existing recent data ────────────────────────

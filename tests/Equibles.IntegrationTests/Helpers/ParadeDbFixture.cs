@@ -118,6 +118,7 @@ public class ParadeDbFixture : IAsyncLifetime
             }
         );
         optionsBuilder.UseLazyLoadingProxies();
+        optionsBuilder.AddInterceptors(new DailyStockPriceSeedInterceptor());
         configure?.Invoke(optionsBuilder);
 
         IModuleConfiguration[] modules =
