@@ -81,13 +81,13 @@ public class HoldingsValueRecalculatorTests
 
         harness
             .PriceProvider.GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(
-                new Dictionary<(Guid CommonStockId, DateOnly Date), decimal>
+                new Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>
                 {
-                    [(stockId, reportDate)] = 12.50m,
+                    [(stockId, null, reportDate)] = 12.50m,
                 }
             );
 
@@ -136,10 +136,10 @@ public class HoldingsValueRecalculatorTests
 
         harness
             .PriceProvider.GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid CommonStockId, DateOnly Date), decimal>());
+            .Returns(new Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>());
 
         await harness.BuildRecalculator(db).Recalculate(CancellationToken.None);
 
@@ -186,10 +186,10 @@ public class HoldingsValueRecalculatorTests
 
         harness
             .PriceProvider.GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid CommonStockId, DateOnly Date), decimal>());
+            .Returns(new Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>());
 
         await harness.BuildRecalculator(db).Recalculate(CancellationToken.None);
 

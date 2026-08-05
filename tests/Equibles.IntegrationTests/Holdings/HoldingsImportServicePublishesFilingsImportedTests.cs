@@ -89,13 +89,13 @@ public class HoldingsImportServicePublishesFilingsImportedTests : IAsyncLifetime
     }
 
     private static IStockPriceProvider PriceProviderReturning(
-        Dictionary<(Guid, DateOnly), decimal> prices
+        Dictionary<(Guid, string, DateOnly), decimal> prices
     )
     {
         var provider = Substitute.For<IStockPriceProvider>();
         provider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(Task.FromResult(prices));
@@ -145,7 +145,7 @@ public class HoldingsImportServicePublishesFilingsImportedTests : IAsyncLifetime
             NullLogger<HoldingsImportService>.Instance,
             Options.Create(new WorkerOptions()),
             PriceProviderReturning(
-                new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 150m }
+                new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150m }
             ),
             bus
         );
@@ -208,10 +208,10 @@ public class HoldingsImportServicePublishesFilingsImportedTests : IAsyncLifetime
             NullLogger<HoldingsImportService>.Instance,
             Options.Create(new WorkerOptions()),
             PriceProviderReturning(
-                new Dictionary<(Guid, DateOnly), decimal>
+                new Dictionary<(Guid, string, DateOnly), decimal>
                 {
-                    [(stock.Id, q3)] = 150m,
-                    [(stock.Id, q4)] = 160m,
+                    [(stock.Id, null, q3)] = 150m,
+                    [(stock.Id, null, q4)] = 160m,
                 }
             ),
             bus

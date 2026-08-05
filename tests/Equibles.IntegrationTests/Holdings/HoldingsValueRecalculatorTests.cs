@@ -153,11 +153,11 @@ public class HoldingsValueRecalculatorTests : IDisposable
 
         _priceProvider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(
-                new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 150.50m }
+                new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150.50m }
             );
 
         var scopeFactory = CreateScopeFactory();
@@ -220,10 +220,10 @@ public class HoldingsValueRecalculatorTests : IDisposable
 
         _priceProvider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 200m });
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 200m });
 
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);
@@ -273,10 +273,10 @@ public class HoldingsValueRecalculatorTests : IDisposable
 
         _priceProvider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid, DateOnly), decimal>());
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal>());
 
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);
@@ -331,10 +331,10 @@ public class HoldingsValueRecalculatorTests : IDisposable
 
         _priceProvider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 100m });
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 100m });
 
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);
@@ -383,10 +383,10 @@ public class HoldingsValueRecalculatorTests : IDisposable
 
         _priceProvider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid, DateOnly), decimal>());
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal>());
 
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);
@@ -446,13 +446,13 @@ public class HoldingsValueRecalculatorTests : IDisposable
 
         _priceProvider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(
-                new Dictionary<(Guid, DateOnly), decimal>
+                new Dictionary<(Guid, string, DateOnly), decimal>
                 {
-                    [(stockWithPrice.Id, reportDate)] = 175m,
+                    [(stockWithPrice.Id, null, reportDate)] = 175m,
                 }
             );
 
@@ -486,7 +486,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
         await _priceProvider
             .DidNotReceive()
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             );
     }
@@ -526,7 +526,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
         await _priceProvider
             .DidNotReceive()
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             );
     }

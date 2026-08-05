@@ -66,5 +66,9 @@ public class FtdScraperWorker : BaseScraperWorker
         // this pipeline first ran — the live import above can only witness retirements
         // that happen while it is running.
         await ftdService.BackfillRetiredCusips(stoppingToken);
+
+        // And the sibling-listing sweep: secondary tickers' CUSIPs (share classes, units)
+        // recorded against the exact listed symbol so 13F lines filed under them resolve.
+        await ftdService.BackfillListedTickerCusips(stoppingToken);
     }
 }

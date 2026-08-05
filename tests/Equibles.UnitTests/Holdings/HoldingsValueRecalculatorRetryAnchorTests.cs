@@ -36,10 +36,10 @@ public class HoldingsValueRecalculatorRetryAnchorTests
 
         harness
             .PriceProvider.GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid CommonStockId, DateOnly Date), decimal>());
+            .Returns(new Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>());
 
         await harness.BuildRecalculator(db).Recalculate(CancellationToken.None);
 

@@ -172,6 +172,22 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     }
 
     /// <summary>
+    /// CUSIPs of a filer's OTHER listed securities (sibling share classes, units),
+    /// keyed to the exact secondary ticker they identify. Same aggregate reasoning
+    /// as the CUSIP aliases: no independent lifecycle, so access lives here.
+    /// </summary>
+    public IQueryable<CommonStockListedCusip> GetListedCusips()
+    {
+        return DbContext.Set<CommonStockListedCusip>().AsQueryable();
+    }
+
+    public CommonStockListedCusip AddListedCusip(CommonStockListedCusip listedCusip)
+    {
+        DbContext.Set<CommonStockListedCusip>().Add(listedCusip);
+        return listedCusip;
+    }
+
+    /// <summary>
     /// Retired primary tickers recorded when the SEC sync renamed a stock's symbol.
     /// Same aggregate reasoning as the CUSIP aliases: no independent lifecycle, so
     /// access lives here rather than in a dedicated repository. Consulted only on

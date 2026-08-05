@@ -141,10 +141,10 @@ public class HoldingsRealtimeIngestionZeroHoldingsSkipTests : IAsyncLifetime
         var prices = Substitute.For<IStockPriceProvider>();
         prices
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(Task.FromResult(new Dictionary<(Guid, DateOnly), decimal>()));
+            .Returns(Task.FromResult(new Dictionary<(Guid, string, DateOnly), decimal>()));
 
         var importService = new HoldingsImportService(
             scopeFactory,

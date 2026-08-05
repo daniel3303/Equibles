@@ -36,9 +36,9 @@ public class HoldingsImportServiceParseHoldingRowValueOverflowTests
         var context = new ImportContext
         {
             CoverPages = new Dictionary<string, CoverPageRow>(),
-            StockPrices = new Dictionary<(Guid, DateOnly), decimal>
+            StockPrices = new Dictionary<(Guid, string, DateOnly), decimal>
             {
-                [(stockId, reportDate)] = 2m,
+                [(stockId, null, reportDate)] = 2m,
             },
         };
         var args = new object[]

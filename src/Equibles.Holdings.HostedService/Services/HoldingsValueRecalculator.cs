@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Contracts;
 using Equibles.CorporateActions.Data.Models;
@@ -49,7 +50,12 @@ public class HoldingsValueRecalculator
         var pendingPairs = await lookupContext
             .Set<InstitutionalHolding>()
             .Where(h => h.ValuePending)
-            .Select(h => new { h.CommonStockId, h.ReportDate })
+            .Select(h => new
+            {
+                h.CommonStockId,
+                h.ListedTicker,
+                h.ReportDate,
+            })
             .Distinct()
             .ToListAsync(cancellationToken);
 
@@ -60,11 +66,13 @@ public class HoldingsValueRecalculator
         }
 
         _logger.LogInformation(
-            "Found {Count} (stock, date) pairs with pending values",
+            "Found {Count} (stock, listing, date) pairs with pending values",
             pendingPairs.Count
         );
 
-        var requests = pendingPairs.Select(p => (p.CommonStockId, p.ReportDate)).ToList();
+        var requests = pendingPairs
+            .Select(p => (p.CommonStockId, p.ListedTicker, p.ReportDate))
+            .ToList();
         var prices = await _stockPriceProvider.GetClosingPrices(requests, cancellationToken);
 
         _logger.LogInformation(
@@ -87,10 +95,27 @@ public class HoldingsValueRecalculator
         )
             .GroupBy(s => s.CommonStockId)
             .ToDictionary(g => g.Key, g => g.ToList());
+        var tickerIdentities = await lookupContext
+            .Set<CommonStock>()
+            .Where(cs => pendingStockIds.Contains(cs.Id))
+            .Select(cs => new
+            {
+                cs.Id,
+                cs.Ticker,
+                cs.SecondaryTickers,
+            })
+            .ToListAsync(cancellationToken);
+        var primaryTickers = tickerIdentities.ToDictionary(cs => cs.Id, cs => cs.Ticker);
+        var secondaryTickers = tickerIdentities.ToDictionary(
+            cs => cs.Id,
+            cs => cs.SecondaryTickers ?? []
+        );
 
         var (totalUpdated, totalDeferred) = await ResolveHoldingsWithNewPrices(
             prices,
             splitsByStock,
+            primaryTickers,
+            secondaryTickers,
             cancellationToken
         );
 
@@ -103,8 +128,8 @@ public class HoldingsValueRecalculator
         }
 
         var unresolvedPairs = pendingPairs
-            .Where(p => !resolvedPairKeys.Contains((p.CommonStockId, p.ReportDate)))
-            .Select(p => (p.CommonStockId, p.ReportDate))
+            .Where(p => !resolvedPairKeys.Contains((p.CommonStockId, p.ListedTicker, p.ReportDate)))
+            .Select(p => (p.CommonStockId, p.ListedTicker, p.ReportDate))
             .ToList();
 
         var totalGivenUp = await IncrementRetryForUnresolved(
@@ -121,7 +146,11 @@ public class HoldingsValueRecalculator
     }
 
     private async Task<int> IncrementRetryForUnresolved(
-        IReadOnlyList<(Guid CommonStockId, DateOnly ReportDate)> unresolvedPairs,
+        IReadOnlyList<(
+            Guid CommonStockId,
+            string ListedTicker,
+            DateOnly ReportDate
+        )> unresolvedPairs,
         DateTime now,
         CancellationToken cancellationToken
     )
@@ -139,6 +168,7 @@ public class HoldingsValueRecalculator
                 .Where(h =>
                     h.ValuePending
                     && h.CommonStockId == pair.CommonStockId
+                    && h.ListedTicker == pair.ListedTicker
                     && h.ReportDate == pair.ReportDate
                 )
                 .ToListAsync(cancellationToken);
@@ -174,22 +204,29 @@ public class HoldingsValueRecalculator
     }
 
     private async Task<(int Updated, int Deferred)> ResolveHoldingsWithNewPrices(
-        Dictionary<(Guid CommonStockId, DateOnly Date), decimal> prices,
+        Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal> prices,
         Dictionary<Guid, List<StockSplit>> splitsByStock,
+        Dictionary<Guid, string> primaryTickers,
+        Dictionary<Guid, List<string>> secondaryTickersByStock,
         CancellationToken cancellationToken
     )
     {
         var totalUpdated = 0;
         var totalDeferred = 0;
-        foreach (var ((stockId, reportDate), closePrice) in prices)
+        foreach (var ((stockId, listedTicker, reportDate), closePrice) in prices)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             splitsByStock.TryGetValue(stockId, out var splits);
+            primaryTickers.TryGetValue(stockId, out var primaryTicker);
+            secondaryTickersByStock.TryGetValue(stockId, out var secondaryTickers);
             if (
                 !HoldingValueBasis.TryResolveShareCountFactor(
                     reportDate,
                     splits,
+                    listedTicker,
+                    primaryTicker,
+                    secondaryTickers,
                     out var shareCountFactor
                 )
             )
@@ -208,7 +245,10 @@ public class HoldingsValueRecalculator
                 .Set<InstitutionalHolding>()
                 .Include(h => h.ManagerEntries)
                 .Where(h =>
-                    h.ValuePending && h.CommonStockId == stockId && h.ReportDate == reportDate
+                    h.ValuePending
+                    && h.CommonStockId == stockId
+                    && h.ListedTicker == listedTicker
+                    && h.ReportDate == reportDate
                 )
                 .ToListAsync(cancellationToken);
 

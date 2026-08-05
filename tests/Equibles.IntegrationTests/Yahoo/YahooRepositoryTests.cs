@@ -407,10 +407,67 @@ public class YahooStockPriceProviderTests : IDisposable
         var date = new DateOnly(2026, 3, 2);
         await SeedPrices(CreatePrice(_apple, date, 180m));
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, date)]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, null, date)]);
 
         result.Should().ContainSingle();
-        result[(_apple.Id, date)].Should().Be(180m);
+        result[(_apple.Id, null, date)].Should().Be(180m);
+    }
+
+    [Fact]
+    public async Task GetClosingPrices_SecondaryListing_AnswersFromItsOwnSeriesOnly()
+    {
+        // The BRK magnitude case (#4247): the two classes trade ~1500x apart, so answering a
+        // BRK-A request with the BRK-B close is not a rounding problem — it is the exact error
+        // class the per-listing key exists to prevent, in both directions: the secondary
+        // request must get ITS series, and the primary request must never pick up the
+        // secondary's bar.
+        var date = new DateOnly(2026, 3, 2);
+        var brk = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "BRK-B",
+            Name = "Berkshire Hathaway Inc.",
+            SecondaryTickers = ["BRK-A"],
+        };
+        _dbContext.Set<CommonStock>().Add(brk);
+        await _dbContext.SaveChangesAsync();
+
+        var classA = CreatePrice(brk, date, 774_300m);
+        classA.ListedTicker = "BRK-A";
+        await SeedPrices(CreatePrice(brk, date, 515.06m), classA);
+
+        var result = await _provider.GetClosingPrices([
+            (brk.Id, null, date),
+            (brk.Id, "BRK-A", date),
+        ]);
+
+        result.Should().HaveCount(2);
+        result[(brk.Id, null, date)].Should().Be(515.06m);
+        result[(brk.Id, "BRK-A", date)].Should().Be(774_300m);
+    }
+
+    [Fact]
+    public async Task GetClosingPrices_SecondaryListingWithNoSeries_IsAbsentNeverThePrimaryClose()
+    {
+        // A secondary listing whose exact series has no bars must come back ABSENT so the
+        // holding stays honestly pending — substituting the primary's close would value the
+        // position on the wrong security.
+        var date = new DateOnly(2026, 3, 2);
+        var brk = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "BRK-B",
+            Name = "Berkshire Hathaway Inc.",
+            SecondaryTickers = ["BRK-A"],
+        };
+        _dbContext.Set<CommonStock>().Add(brk);
+        await _dbContext.SaveChangesAsync();
+
+        await SeedPrices(CreatePrice(brk, date, 515.06m));
+
+        var result = await _provider.GetClosingPrices([(brk.Id, "BRK-A", date)]);
+
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -419,11 +476,14 @@ public class YahooStockPriceProviderTests : IDisposable
         var date = new DateOnly(2026, 3, 2);
         await SeedPrices(CreatePrice(_apple, date, 180m), CreatePrice(_microsoft, date, 400m));
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, date), (_microsoft.Id, date)]);
+        var result = await _provider.GetClosingPrices([
+            (_apple.Id, null, date),
+            (_microsoft.Id, null, date),
+        ]);
 
         result.Should().HaveCount(2);
-        result[(_apple.Id, date)].Should().Be(180m);
-        result[(_microsoft.Id, date)].Should().Be(400m);
+        result[(_apple.Id, null, date)].Should().Be(180m);
+        result[(_microsoft.Id, null, date)].Should().Be(400m);
     }
 
     // ── Fallback to nearest prior date ─────────────────────────────────
@@ -437,10 +497,10 @@ public class YahooStockPriceProviderTests : IDisposable
 
         await SeedPrices(CreatePrice(_apple, priceDate, 175m));
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, requestDate)]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, null, requestDate)]);
 
         result.Should().ContainSingle();
-        result[(_apple.Id, requestDate)].Should().Be(175m);
+        result[(_apple.Id, null, requestDate)].Should().Be(175m);
     }
 
     [Fact]
@@ -454,10 +514,10 @@ public class YahooStockPriceProviderTests : IDisposable
             CreatePrice(_apple, new DateOnly(2026, 3, 10), 172m) // 5 days prior
         );
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, requestDate)]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, null, requestDate)]);
 
         result.Should().ContainSingle();
-        result[(_apple.Id, requestDate)].Should().Be(175m);
+        result[(_apple.Id, null, requestDate)].Should().Be(175m);
     }
 
     [Fact]
@@ -469,10 +529,10 @@ public class YahooStockPriceProviderTests : IDisposable
 
         await SeedPrices(CreatePrice(_apple, priceDate, 165m));
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, requestDate)]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, null, requestDate)]);
 
         result.Should().ContainSingle();
-        result[(_apple.Id, requestDate)].Should().Be(165m);
+        result[(_apple.Id, null, requestDate)].Should().Be(165m);
     }
 
     // ── No price within window ─────────────────────────────────────────
@@ -486,7 +546,7 @@ public class YahooStockPriceProviderTests : IDisposable
 
         await SeedPrices(CreatePrice(_apple, priceDate, 160m));
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, requestDate)]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, null, requestDate)]);
 
         result.Should().BeEmpty();
     }
@@ -496,7 +556,7 @@ public class YahooStockPriceProviderTests : IDisposable
     {
         var requestDate = new DateOnly(2026, 3, 15);
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, requestDate)]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, null, requestDate)]);
 
         result.Should().BeEmpty();
     }
@@ -509,7 +569,7 @@ public class YahooStockPriceProviderTests : IDisposable
 
         await SeedPrices(CreatePrice(_apple, futureDate, 190m));
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, requestDate)]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, null, requestDate)]);
 
         result.Should().BeEmpty();
     }
@@ -525,11 +585,14 @@ public class YahooStockPriceProviderTests : IDisposable
         // No price for Microsoft
         );
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, date), (_microsoft.Id, date)]);
+        var result = await _provider.GetClosingPrices([
+            (_apple.Id, null, date),
+            (_microsoft.Id, null, date),
+        ]);
 
         result.Should().ContainSingle();
-        result.Should().ContainKey((_apple.Id, date));
-        result.Should().NotContainKey((_microsoft.Id, date));
+        result.Should().ContainKey((_apple.Id, null, date));
+        result.Should().NotContainKey((_microsoft.Id, null, date));
     }
 
     [Fact]
@@ -542,15 +605,15 @@ public class YahooStockPriceProviderTests : IDisposable
         );
 
         var result = await _provider.GetClosingPrices([
-            (_apple.Id, new DateOnly(2026, 1, 10)),
-            (_apple.Id, new DateOnly(2026, 2, 10)),
-            (_apple.Id, new DateOnly(2026, 3, 10)),
+            (_apple.Id, null, new DateOnly(2026, 1, 10)),
+            (_apple.Id, null, new DateOnly(2026, 2, 10)),
+            (_apple.Id, null, new DateOnly(2026, 3, 10)),
         ]);
 
         result.Should().HaveCount(3);
-        result[(_apple.Id, new DateOnly(2026, 1, 10))].Should().Be(170m);
-        result[(_apple.Id, new DateOnly(2026, 2, 10))].Should().Be(180m);
-        result[(_apple.Id, new DateOnly(2026, 3, 10))].Should().Be(190m);
+        result[(_apple.Id, null, new DateOnly(2026, 1, 10))].Should().Be(170m);
+        result[(_apple.Id, null, new DateOnly(2026, 2, 10))].Should().Be(180m);
+        result[(_apple.Id, null, new DateOnly(2026, 3, 10))].Should().Be(190m);
     }
 
     [Fact]
@@ -563,15 +626,15 @@ public class YahooStockPriceProviderTests : IDisposable
         );
 
         var result = await _provider.GetClosingPrices([
-            (_apple.Id, new DateOnly(2026, 3, 5)),
-            (_microsoft.Id, new DateOnly(2026, 3, 10)),
-            (_google.Id, new DateOnly(2026, 3, 15)),
+            (_apple.Id, null, new DateOnly(2026, 3, 5)),
+            (_microsoft.Id, null, new DateOnly(2026, 3, 10)),
+            (_google.Id, null, new DateOnly(2026, 3, 15)),
         ]);
 
         result.Should().HaveCount(3);
-        result[(_apple.Id, new DateOnly(2026, 3, 5))].Should().Be(180m);
-        result[(_microsoft.Id, new DateOnly(2026, 3, 10))].Should().Be(400m);
-        result[(_google.Id, new DateOnly(2026, 3, 15))].Should().Be(150m);
+        result[(_apple.Id, null, new DateOnly(2026, 3, 5))].Should().Be(180m);
+        result[(_microsoft.Id, null, new DateOnly(2026, 3, 10))].Should().Be(400m);
+        result[(_google.Id, null, new DateOnly(2026, 3, 15))].Should().Be(150m);
     }
 
     // ── Edge cases ─────────────────────────────────────────────────────
@@ -590,10 +653,13 @@ public class YahooStockPriceProviderTests : IDisposable
         var date = new DateOnly(2026, 3, 10);
         await SeedPrices(CreatePrice(_apple, date, 180m));
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, date), (_apple.Id, date)]);
+        var result = await _provider.GetClosingPrices([
+            (_apple.Id, null, date),
+            (_apple.Id, null, date),
+        ]);
 
         result.Should().ContainSingle();
-        result[(_apple.Id, date)].Should().Be(180m);
+        result[(_apple.Id, null, date)].Should().Be(180m);
     }
 
     [Fact]
@@ -606,9 +672,9 @@ public class YahooStockPriceProviderTests : IDisposable
             CreatePrice(_apple, requestDate, 180m)
         );
 
-        var result = await _provider.GetClosingPrices([(_apple.Id, requestDate)]);
+        var result = await _provider.GetClosingPrices([(_apple.Id, null, requestDate)]);
 
-        result[(_apple.Id, requestDate)].Should().Be(180m);
+        result[(_apple.Id, null, requestDate)].Should().Be(180m);
     }
 
     [Fact]
@@ -618,7 +684,10 @@ public class YahooStockPriceProviderTests : IDisposable
         await cts.CancelAsync();
 
         var act = async () =>
-            await _provider.GetClosingPrices([(_apple.Id, new DateOnly(2026, 3, 10))], cts.Token);
+            await _provider.GetClosingPrices(
+                [(_apple.Id, null, new DateOnly(2026, 3, 10))],
+                cts.Token
+            );
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }

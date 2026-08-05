@@ -40,10 +40,24 @@ internal static class HoldingValueBasis
     /// move the count has not had its price adjustment applied yet, meaning the stored prices
     /// straddle two bases and no honest value can be derived; <paramref name="shareCountFactor"/>
     /// is then 1 and must not be used.
+    /// <para>
+    /// <paramref name="listedTicker"/> names the exact security being valued; null is the
+    /// filer's primary (<paramref name="primaryTicker"/>). A PRIMARY position uses every split
+    /// captured from its own series — unattributed legacy rows included, since only the primary
+    /// series could produce them. A SECONDARY position's count may only be moved by splits
+    /// attributed to that listing — and while ANY post-report split of the issuer is attributed
+    /// elsewhere (or to no listing), the class's own split history is unknowable from stored
+    /// data, so the row honestly stays pending rather than getting a value that assumes the
+    /// classes split together. Per-class split capture is the deferred follow-up that drains
+    /// those pendings.
+    /// </para>
     /// </summary>
     internal static bool TryResolveShareCountFactor(
         DateOnly reportDate,
         IReadOnlyList<StockSplit> splits,
+        string listedTicker,
+        string primaryTicker,
+        IReadOnlyCollection<string> secondaryTickers,
         out decimal shareCountFactor
     )
     {
@@ -54,6 +68,7 @@ internal static class HoldingValueBasis
             return true;
         }
 
+        var positionSeries = listedTicker ?? primaryTicker;
         var factor = 1m;
         foreach (var split in splits)
         {
@@ -61,6 +76,43 @@ internal static class HoldingValueBasis
             // comparison is strict — the same boundary SplitAdjustment.ShareCountFactor uses.
             if (split.EffectiveDate <= reportDate)
             {
+                continue;
+            }
+
+            var belongsToSeries =
+                split.PriceSeriesTicker == null
+                    ? listedTicker == null
+                    : string.Equals(
+                        split.PriceSeriesTicker,
+                        positionSeries,
+                        StringComparison.OrdinalIgnoreCase
+                    );
+            if (!belongsToSeries)
+            {
+                // Another listing of the same issuer split after the report date: for a
+                // secondary it means the class's own basis cannot be established from
+                // stored data — stay pending.
+                if (listedTicker != null)
+                {
+                    return false;
+                }
+
+                // For the primary, a split attributed to a KNOWN sibling listing moves
+                // nothing here. But an attribution matching neither the current primary
+                // nor any current secondary is a stale symbol (the primary renamed after
+                // capture, and the attribution is preserved verbatim) — that split very
+                // likely IS this series' own, so silently skipping it re-creates the
+                // ratio-sized error this class exists to prevent. Unknown basis: pending.
+                var attributedToKnownSibling =
+                    secondaryTickers != null
+                    && secondaryTickers.Contains(
+                        split.PriceSeriesTicker,
+                        StringComparer.OrdinalIgnoreCase
+                    );
+                if (!attributedToKnownSibling)
+                {
+                    return false;
+                }
                 continue;
             }
 

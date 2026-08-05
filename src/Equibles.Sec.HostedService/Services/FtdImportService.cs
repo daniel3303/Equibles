@@ -163,7 +163,7 @@ public class FtdImportService
     /// </summary>
     public async Task BackfillRetiredCusips(CancellationToken cancellationToken)
     {
-        var fileNames = await NextAliasSweepFiles();
+        var fileNames = await NextSweepFiles(AliasSweepCursorName);
         if (fileNames.Count == 0)
         {
             return;
@@ -217,7 +217,7 @@ public class FtdImportService
         }
 
         var recorded = await RecordRetiredCusips(cusipsByTicker, cancellationToken);
-        await AdvanceAliasSweepFrontier(fileNames[^1]);
+        await AdvanceSweepFrontier(AliasSweepCursorName, fileNames[^1]);
 
         if (recorded > 0)
         {
@@ -227,6 +227,231 @@ public class FtdImportService
                 fileNames.Count
             );
         }
+    }
+
+    /// <summary>
+    /// Walks the FTD archive recording the CUSIPs of tracked stocks' SECONDARY listings —
+    /// sibling share classes, units, fund series — as <see cref="CommonStockListedCusip"/> rows.
+    /// <para>
+    /// The retired-CUSIP sweep above deliberately admits only PRIMARY symbols, so a sibling
+    /// class's CUSIP (Alphabet Class C, 02079K107 under symbol GOOG) was never captured and
+    /// every 13F line filed under it dropped at import. This sweep resolves the CNS feed's
+    /// symbol against the secondary-ticker space instead, pairing each hit's CUSIP with the
+    /// exact listed ticker so the holdings lane can key the class's positions separately.
+    /// </para>
+    /// <para>
+    /// Same authority and guards as the alias sweep: the SEC publishes SYMBOL and CUSIP on one
+    /// row (no name matching); a symbol that is any stock's PRIMARY ticker is left to the alias
+    /// sweep; a symbol two stocks' secondary lists collapse onto is dropped rather than guessed;
+    /// and the CUSIP must share the stock's issuer prefix, which blocks recycled symbols.
+    /// Sibling classes SHARE the issuer prefix — here that is the point, not a trap.
+    /// </para>
+    /// <para>
+    /// Own frontier (<see cref="ListedCusipSweepCursorName"/>) starting at the archive origin:
+    /// the alias sweep's cursor has already consumed the archive on long-running deployments,
+    /// and these rows were never collected on that pass.
+    /// </para>
+    /// </summary>
+    public async Task BackfillListedTickerCusips(CancellationToken cancellationToken)
+    {
+        var fileNames = await NextSweepFiles(ListedCusipSweepCursorName);
+        if (fileNames.Count == 0)
+        {
+            return;
+        }
+
+        var primaryMap = await BuildTickerMap(cancellationToken);
+        var secondaryMap = await BuildSecondaryTickerMap(primaryMap, cancellationToken);
+        if (secondaryMap.Count == 0)
+        {
+            // Nothing to resolve against (fresh install, company sync not yet run). Do NOT
+            // advance: consuming the archive now would permanently skip these files' rows,
+            // and the frontier has no reset path. Wedging is already prevented per-file by
+            // the download catch below; this state clears itself once stocks exist.
+            return;
+        }
+
+        var strippedAliases = BuildStrippedSecondaryAliases(secondaryMap, primaryMap);
+        // stockId → (listedTicker → cusips seen for it)
+        var byStock = new Dictionary<Guid, Dictionary<string, HashSet<string>>>();
+
+        foreach (var fileName in fileNames)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                var records = await DownloadAndParse(fileName, cancellationToken);
+                foreach (var record in records)
+                {
+                    if (string.IsNullOrEmpty(record.Cusip) || string.IsNullOrEmpty(record.Symbol))
+                        continue;
+                    // A primary symbol is the alias sweep's business, and letting it
+                    // through here would record the primary's own CUSIP as a listing.
+                    if (primaryMap.ContainsKey(record.Symbol))
+                        continue;
+                    if (
+                        !secondaryMap.TryGetValue(record.Symbol, out var listing)
+                        && !(
+                            strippedAliases.TryGetValue(record.Symbol, out var spelled)
+                            && secondaryMap.TryGetValue(spelled, out listing)
+                        )
+                    )
+                        continue;
+
+                    if (!byStock.TryGetValue(listing.StockId, out var byTicker))
+                    {
+                        byTicker = new Dictionary<string, HashSet<string>>(
+                            StringComparer.OrdinalIgnoreCase
+                        );
+                        byStock[listing.StockId] = byTicker;
+                    }
+                    if (!byTicker.TryGetValue(listing.Ticker, out var cusips))
+                    {
+                        cusips = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        byTicker[listing.Ticker] = cusips;
+                    }
+                    cusips.Add(record.Cusip);
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                // A missing archive file costs coverage for that fortnight only; the
+                // frontier still advances so the sweep cannot wedge on one bad file.
+                _logger.LogWarning(
+                    ex,
+                    "Listed-CUSIP sweep: failed to download {File}, skipping",
+                    fileName
+                );
+            }
+        }
+
+        var recorded = await RecordListedCusips(byStock, cancellationToken);
+        await AdvanceSweepFrontier(ListedCusipSweepCursorName, fileNames[^1]);
+
+        if (recorded > 0)
+        {
+            _logger.LogInformation(
+                "Listed-CUSIP sweep: recorded {Count} listing CUSIP(s) across {Files} FTD file(s)",
+                recorded,
+                fileNames.Count
+            );
+        }
+    }
+
+    private async Task<int> RecordListedCusips(
+        Dictionary<Guid, Dictionary<string, HashSet<string>>> byStock,
+        CancellationToken cancellationToken
+    )
+    {
+        if (byStock.Count == 0)
+        {
+            return 0;
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+
+        var stocks = await stockRepo.GetByIds(byStock.Keys).ToListAsync(cancellationToken);
+
+        var recorded = 0;
+        foreach (var stock in stocks)
+        {
+            // Without a current primary CUSIP there is no issuer prefix to anchor the
+            // recycled-symbol guard against — skip rather than record unverifiable identity.
+            if (stock.Cusip == null || !byStock.TryGetValue(stock.Id, out var byTicker))
+                continue;
+
+            var candidates = byTicker
+                .SelectMany(kv =>
+                    kv.Value.Where(c => CusipIdentity.SameIssuer(c, stock.Cusip))
+                        .Select(c => (ListedTicker: kv.Key, Cusip: c))
+                )
+                .ToList();
+            if (candidates.Count == 0)
+                continue;
+
+            recorded += await stockManager.RecordListedTickerCusips(stock, candidates);
+        }
+
+        return recorded;
+    }
+
+    /// <summary>
+    /// Secondary ticker → owning stock. A symbol that is any stock's primary ticker is
+    /// excluded (the primary space wins), and a symbol two stocks' secondary lists collapse
+    /// onto is dropped rather than guessed — same refusal the stripped-alias builder applies.
+    /// </summary>
+    private async Task<Dictionary<string, (Guid StockId, string Ticker)>> BuildSecondaryTickerMap(
+        Dictionary<string, Guid> primaryMap,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+
+        var query =
+            _workerOptions.TickersToSync?.Count > 0
+                ? stockRepo.GetByTickers(_workerOptions.TickersToSync)
+                : stockRepo.GetAll();
+        var stocks = await query
+            .Where(cs => cs.SecondaryTickers.Count > 0)
+            .Select(cs => new { cs.Id, cs.SecondaryTickers })
+            .ToListAsync(cancellationToken);
+
+        var map = new Dictionary<string, (Guid StockId, string Ticker)>(
+            StringComparer.OrdinalIgnoreCase
+        );
+        var ambiguous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var stock in stocks)
+        {
+            foreach (var ticker in stock.SecondaryTickers.Where(t => !string.IsNullOrWhiteSpace(t)))
+            {
+                if (primaryMap.ContainsKey(ticker))
+                    continue;
+                if (!map.TryAdd(ticker, (stock.Id, ticker)) && map[ticker].StockId != stock.Id)
+                    ambiguous.Add(ticker);
+            }
+        }
+
+        foreach (var key in ambiguous)
+            map.Remove(key);
+
+        return map;
+    }
+
+    /// <summary>
+    /// CNS separator-stripped spellings of the secondary tickers ("BRKA" → "BRK-A"), never
+    /// shadowing a real primary or secondary symbol, ambiguous collapses dropped — the same
+    /// rules <see cref="BuildStrippedTickerAliases"/> applies to the primary space.
+    /// </summary>
+    private static Dictionary<string, string> BuildStrippedSecondaryAliases(
+        Dictionary<string, (Guid StockId, string Ticker)> secondaryMap,
+        Dictionary<string, Guid> primaryMap
+    )
+    {
+        var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var ambiguous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var ticker in secondaryMap.Keys)
+        {
+            var stripped = string.Concat(ticker.Where(char.IsLetterOrDigit));
+            if (
+                stripped.Length == 0
+                || string.Equals(stripped, ticker, StringComparison.OrdinalIgnoreCase)
+            )
+                continue;
+            if (primaryMap.ContainsKey(stripped) || secondaryMap.ContainsKey(stripped))
+                continue;
+            if (!aliases.TryAdd(stripped, ticker))
+                ambiguous.Add(stripped);
+        }
+
+        foreach (var key in ambiguous)
+            aliases.Remove(key);
+
+        return aliases;
     }
 
     private async Task<int> RecordRetiredCusips(
@@ -266,13 +491,13 @@ public class FtdImportService
         return recorded;
     }
 
-    // The sweep runs oldest-first from the start of the archive and stops once the
+    // The sweeps run oldest-first from the start of the archive and stop once their
     // frontier passes the newest file — the live import owns everything from there.
-    private async Task<List<string>> NextAliasSweepFiles()
+    private async Task<List<string>> NextSweepFiles(string cursorName)
     {
         using var scope = _scopeFactory.CreateScope();
         var stateRepo = scope.ServiceProvider.GetRequiredService<BackfillStateRepository>();
-        var state = await stateRepo.GetByName(AliasSweepCursorName);
+        var state = await stateRepo.GetByName(cursorName);
 
         var all = GetFileNames(OldestAvailableDate);
         var startIndex = 0;
@@ -291,14 +516,14 @@ public class FtdImportService
         return all.Skip(startIndex).Take(AliasSweepFilesPerCycle).ToList();
     }
 
-    private async Task AdvanceAliasSweepFrontier(string lastFileName)
+    private async Task AdvanceSweepFrontier(string cursorName, string lastFileName)
     {
         using var scope = _scopeFactory.CreateScope();
         var stateRepo = scope.ServiceProvider.GetRequiredService<BackfillStateRepository>();
-        var state = await stateRepo.GetByName(AliasSweepCursorName);
+        var state = await stateRepo.GetByName(cursorName);
         if (state == null)
         {
-            state = new BackfillState { Name = AliasSweepCursorName };
+            state = new BackfillState { Name = cursorName };
             stateRepo.Add(state);
         }
 
@@ -328,6 +553,10 @@ public class FtdImportService
     }
 
     private const string AliasSweepCursorName = "Ftd.RetiredCusipSweep";
+
+    // Separate cursor: the alias sweep's frontier has already consumed the archive on
+    // long-running deployments, and listed-CUSIP rows were never collected on that pass.
+    private const string ListedCusipSweepCursorName = "Ftd.ListedCusipSweep";
 
     // Twelve fortnightly files ≈ six months of archive per daily cycle, so the whole
     // 2017→today range is swept in about a fortnight of cycles without ever making the

@@ -209,14 +209,14 @@ public class Realtime13DGIngestionPoisonedFilingTests : IAsyncLifetime
         var prices = Substitute.For<IStockPriceProvider>();
         prices
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(ci =>
             {
-                var dict = new Dictionary<(Guid, DateOnly), decimal>();
-                foreach (var (id, date) in ci.ArgAt<IEnumerable<(Guid, DateOnly)>>(0))
-                    dict[(id, date)] = 10m;
+                var dict = new Dictionary<(Guid, string, DateOnly), decimal>();
+                foreach (var (id, ticker, date) in ci.ArgAt<IEnumerable<(Guid, string, DateOnly)>>(0))
+                    dict[(id, ticker, date)] = 10m;
                 return Task.FromResult(dict);
             });
 

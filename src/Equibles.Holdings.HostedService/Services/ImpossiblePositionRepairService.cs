@@ -67,6 +67,8 @@ public class ImpossiblePositionRepairService
                     new
                     {
                         Holding = h,
+                        cs.Ticker,
+                        cs.SecondaryTickers,
                         cs.SharesOutStanding,
                         cs.MarketCapitalization,
                     }
@@ -101,6 +103,9 @@ public class ImpossiblePositionRepairService
                 !HoldingValueBasis.TryResolveShareCountFactor(
                     candidate.Holding.ReportDate,
                     splits,
+                    candidate.Holding.ListedTicker,
+                    candidate.Ticker,
+                    candidate.SecondaryTickers,
                     out var shareCountFactor
                 )
             )

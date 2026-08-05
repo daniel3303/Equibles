@@ -24,9 +24,9 @@ public class Corrupt13FShareCountRepairerRepairValueOverflowTests
         // close: reportedDollars ÷ price ≈ 1.84e19 overflows Int64 at the (long) cast.
         var row = DuplicatedRow(value: long.MaxValue);
         var rows = new List<BufferedHoldingRow> { row };
-        var prices = new Dictionary<(Guid, DateOnly), decimal>
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
         {
-            [(row.Holding.CommonStockId, row.Holding.ReportDate)] = 0.50m,
+            [(row.Holding.CommonStockId, row.Holding.ListedTicker, row.Holding.ReportDate)] = 0.50m,
         };
 
         var act = () => Corrupt13FShareCountRepairer.Repair(rows, prices);

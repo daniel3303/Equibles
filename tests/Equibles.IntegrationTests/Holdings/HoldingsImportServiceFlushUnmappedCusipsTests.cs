@@ -141,7 +141,10 @@ public class HoldingsImportServiceFlushUnmappedCusipsTests : IAsyncLifetime
                     Cik = "1649339",
                 },
             },
-            CusipMapping = (mapped ?? []).ToDictionary(c => c, _ => Guid.NewGuid()),
+            CusipMapping = (mapped ?? []).ToDictionary(
+                c => c,
+                _ => new CusipTarget(Guid.NewGuid(), null)
+            ),
         };
 
         foreach (var (cusip, issuer, dollars) in tally)

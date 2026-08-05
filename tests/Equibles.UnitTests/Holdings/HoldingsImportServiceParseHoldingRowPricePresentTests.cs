@@ -52,16 +52,25 @@ public class HoldingsImportServiceParseHoldingRowPricePresentTests
         var context = new ImportContext
         {
             CoverPages = new Dictionary<string, CoverPageRow>(),
-            StockPrices = new Dictionary<(Guid, DateOnly), decimal>
+            StockPrices = new Dictionary<(Guid, string, DateOnly), decimal>
             {
-                [(commonStockId, reportDate)] = 12.50m,
+                [(commonStockId, null, reportDate)] = 12.50m,
             },
             OtherManagers = new Dictionary<string, Dictionary<int, OtherManagerIdentity>>(),
         };
 
         var result = method.Invoke(
             null,
-            [row, accession, "037833100", commonStockId, holderId, filingDate, reportDate, context]
+            [
+                row,
+                accession,
+                "037833100",
+                new CusipTarget(commonStockId, null),
+                holderId,
+                filingDate,
+                reportDate,
+                context,
+            ]
         );
 
         var holding = (InstitutionalHolding)result.GetType().GetField("Item1").GetValue(result);

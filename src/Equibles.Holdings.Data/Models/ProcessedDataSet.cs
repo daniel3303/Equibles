@@ -47,8 +47,15 @@ public class ProcessedDataSet
     /// split this way. The re-import credits each leg to the first referenced
     /// manager and keeps the raw list on SharedManagerNumbers, healing the
     /// sets version 5 imported with the nulled legs.
+    /// Version 7: resolve sibling-listing CUSIPs to their exact listed ticker
+    /// (#4247). CUSIPs of a filer's OTHER listed securities (Alphabet Class C at
+    /// 02079K107 beside GOOGL's 02079K305) matched nothing, so every such 13F
+    /// line was dropped at import — Alphabet's institutional ownership was
+    /// missing its entire Class C side. The re-import maps them through
+    /// CommonStockListedCusip, keys the rows by (…, ListedTicker), and values
+    /// them from the class's own exact price series.
     /// </summary>
-    public const int CurrentParserVersion = 6;
+    public const int CurrentParserVersion = 7;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 

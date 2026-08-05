@@ -31,6 +31,9 @@ public class HoldingValueBasisUnreconciledSplitTests
         var resolved = HoldingValueBasis.TryResolveShareCountFactor(
             new DateOnly(2024, 6, 30),
             splits,
+            null,
+            "TEST",
+            null,
             out var factor
         );
 
@@ -59,6 +62,9 @@ public class HoldingValueBasisUnreconciledSplitTests
         var resolved = HoldingValueBasis.TryResolveShareCountFactor(
             new DateOnly(2025, 3, 31),
             splits,
+            null,
+            "TEST",
+            null,
             out var factor
         );
 
