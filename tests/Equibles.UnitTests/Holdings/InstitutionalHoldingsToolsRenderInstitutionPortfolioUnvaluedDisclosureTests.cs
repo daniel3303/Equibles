@@ -79,12 +79,15 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioUnvaluedDisclos
 
         var output = Render(unvaluedPositions: 507, declaringFiling: filing);
 
+        // The two gaps have different causes: unvalued rows are tracked, so they explain part
+        // of the VALUE difference but none of the position-count difference.
         output
             .Should()
             .Contain(
-                "security types outside this platform's coverage plus the unvalued positions",
+                "the position difference is security types outside this platform's coverage",
                 "blaming coverage alone once hid a valuation hole behind an excuse"
             );
+        output.Should().Contain("the value difference also reflects the unvalued positions");
     }
 
     [Fact]
@@ -99,7 +102,9 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioUnvaluedDisclos
 
         var output = Render(unvaluedPositions: 0, declaringFiling: filing);
 
-        output.Should().Contain("the difference is security types outside this platform's coverage.");
-        output.Should().NotContain("plus the unvalued positions");
+        output
+            .Should()
+            .Contain("the difference is security types outside this platform's coverage.");
+        output.Should().NotContain("unvalued positions");
     }
 }
