@@ -406,6 +406,14 @@ public class InstitutionalHoldingsTools
                     .CountAsync();
                 var totalValue = await allHoldings.SumAsync(h => (long?)h.Value) ?? 0L;
 
+                // Tracked rows whose dollar value could not be derived (price still pending, or
+                // honestly unknowable). They sit in the table at $0 and sort last, so without a
+                // count the total and every percentage silently understate the filing — at its
+                // worst 48% of a quarter's positions, hiding a filer's real top holdings.
+                var unvaluedPositions = await allHoldings.CountAsync(h =>
+                    h.Value == 0L && (h.ValuePending || h.ValueUnavailable)
+                );
+
                 // What the filer itself declared for the quarter, from the latest filing's cover
                 // page — so the answer can say "7 of the 8 declared positions" instead of
                 // presenting the tracked subset as the whole filing. Null on rows ingested
@@ -437,6 +445,7 @@ public class InstitutionalHoldingsTools
                     splitsByStock,
                     totalPositions,
                     totalValue,
+                    unvaluedPositions,
                     declaringFiling,
                     JoinNotes(matchNote, dateNote)
                 );
@@ -453,6 +462,7 @@ public class InstitutionalHoldingsTools
         IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
         int totalPositions,
         long totalValue,
+        int unvaluedPositions,
         InstitutionalFiling declaringFiling,
         string notes
     )
@@ -463,7 +473,9 @@ public class InstitutionalHoldingsTools
 
         // The filer's own cover-page declaration, when captured, makes the coverage exact: the
         // reader learns how many positions the filing carries in total and what they are worth,
-        // so a tracked subset can never read as the whole filing.
+        // so a tracked subset can never read as the whole filing. The declared-vs-tracked gap has
+        // TWO causes and blaming coverage for both once hid real top holdings — unvalued rows are
+        // named separately below.
         if (
             declaringFiling
             is { DeclaredPositionCount: not null }
@@ -477,7 +489,22 @@ public class InstitutionalHoldingsTools
                 declaredParts.Add($"${FormatMillions(declaredValue)}M");
             subtitle +=
                 $" The filing itself declares {string.Join(" totalling ", declaredParts)}; "
-                + "the difference is security types outside this platform's coverage.";
+                + (
+                    unvaluedPositions > 0
+                        ? "the difference is security types outside this platform's coverage "
+                            + "plus the unvalued positions noted below."
+                        : "the difference is security types outside this platform's coverage."
+                );
+        }
+
+        // Rows at $0 are not "no position" — they are tracked positions with no derivable dollar
+        // value yet. Say so, or the total and every percentage read as the whole story.
+        if (unvaluedPositions > 0)
+        {
+            subtitle +=
+                $" NOTE: {McpFormat.WholeNumber(unvaluedPositions)} tracked position(s) have no "
+                + "derivable value and count as $0 here, so the total and the percentages "
+                + "understate the filing.";
         }
         if (notes != null)
             subtitle = $"{subtitle}\n{notes}";
