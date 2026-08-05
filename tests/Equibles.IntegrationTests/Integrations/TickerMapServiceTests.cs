@@ -180,6 +180,22 @@ public class TickerMapServiceTests : IDisposable
         result["aapl"].Should().Be(apple.Id);
     }
 
+    [Fact]
+    public async Task Build_OrdinalComparer_DoesNotFoldCaseVariants()
+    {
+        // FINRA writes preferred/when-issued suffixes in lowercase (TpC is a different
+        // security from TPC), so its importers request an ordinal map: a case-variant
+        // lookup must MISS instead of folding two securities onto one stock.
+        var tpc = CreateStock("TPC", "Tutor Perini Corp");
+        await SeedStocks(tpc);
+
+        var result = await _service.Build(null, CancellationToken.None, StringComparer.Ordinal);
+
+        result.Should().ContainKey("TPC").WhoseValue.Should().Be(tpc.Id);
+        result.Should().NotContainKey("TpC");
+        result.Should().NotContainKey("tpc");
+    }
+
     // ── Build with secondary tickers ──────────────────────────────────
 
     [Fact]

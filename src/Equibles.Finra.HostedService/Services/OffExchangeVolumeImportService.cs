@@ -93,9 +93,14 @@ public class OffExchangeVolumeImportService
             scopeKey
         );
 
+        // Ordinal for the same reason as the daily lane: FINRA symbol casing is identity
+        // (lowercase suffix = a different security), so a case-insensitive map merges two
+        // securities' weekly volumes. Historical corrupt weeks outside FINRA's rolling
+        // publication window cannot be re-imported and are not healed here.
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
-            cancellationToken
+            cancellationToken,
+            StringComparer.Ordinal
         );
         foreach (var week in weeks)
         {
