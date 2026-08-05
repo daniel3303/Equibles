@@ -183,12 +183,20 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetLatestPrices("AAPL,MSFT");
 
-        result.Should().Contain("AAPL");
-        result.Should().Contain("MSFT");
-        result.Should().Contain("175.50");
-        result.Should().Contain("425.75");
-        result.Should().Contain("2026-04-05");
-        result.Should().NotContain("100.00"); // The older price must not show up.
+        // The older 100.00 close must never surface as a ROW price — it legitimately appears
+        // as AAPL's 52-week low. The full-row pins keep the two placements apart, and the
+        // date-scoped negative proves the older bar never becomes its own row.
+        result
+            .Should()
+            .Contain(
+                "| AAPL | 2026-04-05 | 175.50 | — | — | 50,000,000 | 175.50\\* | 100.00\\* | 0.00% | +75.50% |"
+            );
+        result
+            .Should()
+            .Contain(
+                "| MSFT | 2026-04-05 | 425.75 | — | — | 22,000,000 | 425.75\\* | 425.75\\* | 0.00% | 0.00% |"
+            );
+        result.Should().NotContain("| AAPL | 2026-04-01");
     }
 
     [Fact]
@@ -227,8 +235,10 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetLatestPrices("AAPL,aapl,AAPL");
 
-        // One header line + one data line containing 175.50 — not three duplicates.
-        var occurrences = result.Split("175.50").Length - 1;
-        occurrences.Should().Be(1);
+        // Exactly one AAPL data row — not three duplicates. Counting rows, not the "175.50"
+        // substring, because the close legitimately repeats as the 52-week high/low of a
+        // single-bar series.
+        var rows = result.Split('\n').Count(line => line.StartsWith("| AAPL |"));
+        rows.Should().Be(1);
     }
 }

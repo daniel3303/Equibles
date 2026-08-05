@@ -87,8 +87,14 @@ public class StockPriceToolsGetLatestPricesDayChangeGapTests : ParadeDbMcpTestBa
 
         var result = await Sut().GetLatestPrices("GAP");
 
-        result.Should().Contain("| GAP | 2026-07-27 | 110.00 | — | — |");
-        result.Should().NotContain("+10.00%");
+        // The +10% multi-session move may appear in the 52-week range columns — it IS the
+        // window's span — but never in the Change cells, which stay em-dashed. Pinning the
+        // full row keeps the two placements distinguishable.
+        result
+            .Should()
+            .Contain(
+                "| GAP | 2026-07-27 | 110.00 | — | — | 1,000,000 | 110.00\\* | 100.00\\* | 0.00% | +10.00% |"
+            );
         result.Should().Contain("no row for the session before");
     }
 
