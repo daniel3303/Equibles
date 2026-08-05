@@ -241,4 +241,32 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         var rows = result.Split('\n').Count(line => line.StartsWith("| AAPL |"));
         rows.Should().Be(1);
     }
+
+    [Fact]
+    public async Task GetStockPrices_DefaultWindowWithFullTradingYear_ReturnsEveryRow()
+    {
+        // A year holds ~251 trading sessions, so the old default maxResults of 250 silently
+        // dropped the oldest day(s) of the tool's own default 1-year window. The default cap
+        // must cover a full trading year: seed 251 rows inside the window and expect all back.
+        var aapl = AaplStock();
+        DbContext.Set<CommonStock>().Add(aapl);
+        var date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-2);
+        var seeded = 0;
+        while (seeded < 251)
+        {
+            if (date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+            {
+                DbContext.Set<DailyStockPrice>().Add(PriceFor(aapl, date));
+                seeded++;
+            }
+            date = date.AddDays(-1);
+        }
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetStockPrices("AAPL");
+
+        var rows = result.Split('\n').Count(line => line.StartsWith("| 2"));
+        rows.Should().Be(251, "the default cap must not truncate the default 1-year window");
+        result.Should().NotContain("Showing the");
+    }
 }

@@ -58,9 +58,11 @@ public class StockPriceTools
         [Description("End date in YYYY-MM-DD format (defaults to latest available)")]
             string endDate = null,
         [Description(
-            "Maximum number of records to return (default: 250, max: 500). When the range holds more rows the newest are kept; rows are always listed oldest to newest."
+            "Maximum number of records to return (default: 260, max: 500). When the range holds more rows the newest are kept; rows are always listed oldest to newest."
         )]
-            int maxResults = 250
+        // 260 covers the default 1-year window: a year holds ~251 trading sessions, so the
+        // old default of 250 silently dropped the oldest day(s) of its own default range.
+        int maxResults = 260
     )
     {
         return _runner.Execute(
