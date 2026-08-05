@@ -1,4 +1,6 @@
 using System.Data;
+using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Calendars;
@@ -20,6 +22,15 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Equibles.Yahoo.HostedService.Services;
+
+internal readonly record struct PriceSeriesKey(Guid CommonStockId, string ListedTicker);
+
+internal readonly record struct PriceSeriesTarget(string Ticker, Guid CommonStockId, bool IsPrimary)
+{
+    public PriceSeriesKey Key => new(CommonStockId, Ticker);
+}
+
+internal readonly record struct LockedPriceSeries(CommonStock Stock, bool IsPrimary);
 
 [Service]
 public class YahooPriceImportService
@@ -70,8 +81,13 @@ public class YahooPriceImportService
             _workerOptions.TickersToSync,
             cancellationToken
         );
+        var priceTargets = await BuildPriceSeriesTargets(
+            tickerMap.Values.Distinct().ToList(),
+            cancellationToken
+        );
         _logger.LogInformation(
-            "Starting Yahoo price sync for {Count} stocks (enrichment: {Enrichment})",
+            "Starting Yahoo price sync for {SeriesCount} listed symbols across {StockCount} stocks (enrichment: {Enrichment})",
+            priceTargets.Count,
             tickerMap.Count,
             includeEnrichment ? "on" : "off"
         );
@@ -85,7 +101,7 @@ public class YahooPriceImportService
         // Crawl the recently-active stocks first, stalest-first within them, and the long-dormant
         // tail afterwards (see OrderByCrawlPriority for why the plain stalest-first order starved
         // the daily lane).
-        var crawlOrder = await OrderByCrawlPriority(tickerMap, cancellationToken);
+        var crawlOrder = await OrderByCrawlPriority(priceTargets, cancellationToken);
 
         // Prices for the WHOLE universe first, enrichment only afterwards. The two used to be
         // interleaved per ticker, which made every stock cost three Yahoo calls instead of one and
@@ -103,12 +119,79 @@ public class YahooPriceImportService
         );
 
         if (includeEnrichment)
-            await ImportEnrichment(crawlOrder, cancellationToken);
+        {
+            var primaryOrder = crawlOrder.Where(target => target.IsPrimary).ToList();
+            await ImportEnrichment(primaryOrder, cancellationToken);
+        }
     }
 
-    // Pass 1 — the settled daily bars. One Yahoo call per stock that actually needs one.
+    private async Task<List<PriceSeriesTarget>> BuildPriceSeriesTargets(
+        IReadOnlyCollection<Guid> stockIds,
+        CancellationToken cancellationToken
+    )
+    {
+        if (stockIds.Count == 0)
+            return [];
+
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var stocks = await stockRepository
+            .GetByIds(stockIds)
+            .Select(stock => new
+            {
+                stock.Id,
+                stock.Ticker,
+                stock.SecondaryTickers,
+            })
+            .ToListAsync(cancellationToken);
+
+        var targets = new List<PriceSeriesTarget>();
+        foreach (var stock in stocks)
+        {
+            if (string.IsNullOrWhiteSpace(stock.Ticker))
+                continue;
+
+            var primaryTicker = TickerNormalizer.Normalize(stock.Ticker);
+            targets.Add(new PriceSeriesTarget(primaryTicker, stock.Id, IsPrimary: true));
+
+            foreach (
+                var secondaryTicker in (stock.SecondaryTickers ?? [])
+                    .Where(ticker => !string.IsNullOrWhiteSpace(ticker))
+                    .Select(TickerNormalizer.Normalize)
+                    .Where(ticker => ticker != primaryTicker)
+                    .Distinct(StringComparer.Ordinal)
+            )
+            {
+                targets.Add(new PriceSeriesTarget(secondaryTicker, stock.Id, IsPrimary: false));
+            }
+        }
+
+        return targets;
+    }
+
+    private static async Task<LockedPriceSeries?> LockPriceSeries(
+        CommonStockRepository stockRepository,
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        var stock = await stockRepository.GetForUpdate(target.CommonStockId, cancellationToken);
+        var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, target.Ticker);
+        if (
+            resolvedTicker == null
+            || !string.Equals(resolvedTicker, target.Ticker, StringComparison.OrdinalIgnoreCase)
+        )
+            return null;
+
+        return new LockedPriceSeries(
+            stock,
+            string.Equals(resolvedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
+    // Pass 1 — the settled daily bars. One Yahoo call per listed symbol that actually needs one.
     private async Task<int> ImportPrices(
-        List<KeyValuePair<string, Guid>> crawlOrder,
+        List<PriceSeriesTarget> crawlOrder,
         CancellationToken cancellationToken
     )
     {
@@ -116,8 +199,9 @@ public class YahooPriceImportService
         var fetched = 0;
         var fetchedWithNothingNew = 0;
 
-        foreach (var (ticker, commonStockId) in crawlOrder)
+        foreach (var target in crawlOrder)
         {
+            var ticker = target.Ticker;
             cancellationToken.ThrowIfCancellationRequested();
 
             // Resolved per ticker, not once per cycle: a multi-hour crawl straddles the UTC
@@ -128,7 +212,7 @@ public class YahooPriceImportService
 
             try
             {
-                var result = await ImportTicker(ticker, commonStockId, today, cancellationToken);
+                var result = await ImportTicker(target, today, cancellationToken);
                 totalInserted += result.Inserted;
                 if (result.Fetched)
                 {
@@ -193,8 +277,8 @@ public class YahooPriceImportService
             return;
 
         _logger.LogWarning(
-            "Yahoo served no new settled bars for {Barren} of {Fetched} stocks that needed one "
-                + "({Percent:P0} of the {Universe}-stock universe). The price feed is likely "
+            "Yahoo served no new settled bars for {Barren} of {Fetched} listed symbols that needed one "
+                + "({Percent:P0} of the {Universe}-symbol universe). The price feed is likely "
                 + "publishing incomplete bars upstream; stored prices will stay stale until it "
                 + "recovers.",
             fetchedWithNothingNew,
@@ -219,18 +303,19 @@ public class YahooPriceImportService
     // Pass 2 — key statistics + company profile. Two extra Yahoo calls per stock and the bulk of a
     // cycle's traffic, which is why it runs on its own slower cadence AND strictly after prices.
     private async Task ImportEnrichment(
-        List<KeyValuePair<string, Guid>> crawlOrder,
+        List<PriceSeriesTarget> crawlOrder,
         CancellationToken cancellationToken
     )
     {
-        foreach (var (ticker, commonStockId) in crawlOrder)
+        foreach (var target in crawlOrder)
         {
+            var ticker = target.Ticker;
             cancellationToken.ThrowIfCancellationRequested();
 
             try
             {
-                await SyncKeyStatistics(ticker, commonStockId, cancellationToken);
-                await SyncCompanyProfile(ticker, commonStockId, cancellationToken);
+                await SyncKeyStatistics(target, cancellationToken);
+                await SyncCompanyProfile(target, cancellationToken);
             }
             catch (HttpRequestException ex)
             {
@@ -269,50 +354,60 @@ public class YahooPriceImportService
     // was guarding against. The dormant tail still runs every cycle, just second — and once the
     // working set is current it costs nearly nothing to walk (the settled-trading-day gate skips an
     // up-to-date stock without any Yahoo call), so the tail gets almost the entire cycle anyway.
-    private async Task<List<KeyValuePair<string, Guid>>> OrderByCrawlPriority(
-        Dictionary<string, Guid> tickerMap,
+    private async Task<List<PriceSeriesTarget>> OrderByCrawlPriority(
+        List<PriceSeriesTarget> targets,
         CancellationToken cancellationToken
     )
     {
         using var scope = _scopeFactory.CreateScope();
         var priceRepo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
-        var lastDates = await priceRepo
-            .GetAll()
-            .GroupBy(p => p.CommonStockId)
-            .Select(g => new { StockId = g.Key, LastDate = g.Max(p => p.Date) })
-            .ToDictionaryAsync(x => x.StockId, x => x.LastDate, cancellationToken);
+        var rows = await priceRepo
+            .GetAllSeries()
+            .GroupBy(p => new { p.CommonStockId, p.ListedTicker })
+            .Select(group => new
+            {
+                group.Key.CommonStockId,
+                group.Key.ListedTicker,
+                LastDate = group.Max(p => p.Date),
+            })
+            .ToListAsync(cancellationToken);
+        var lastDates = rows.ToDictionary(
+            row => new PriceSeriesKey(row.CommonStockId, row.ListedTicker),
+            row => row.LastDate
+        );
 
-        return BuildCrawlOrder(tickerMap, lastDates, DateOnly.FromDateTime(DateTime.UtcNow));
+        return BuildCrawlOrder(targets, lastDates, DateOnly.FromDateTime(DateTime.UtcNow));
     }
 
     // Pure so the priority rule is pinnable in tests without a database.
-    private static List<KeyValuePair<string, Guid>> BuildCrawlOrder(
-        Dictionary<string, Guid> tickerMap,
-        IReadOnlyDictionary<Guid, DateOnly> lastDates,
+    internal static List<PriceSeriesTarget> BuildCrawlOrder(
+        IReadOnlyCollection<PriceSeriesTarget> targets,
+        IReadOnlyDictionary<PriceSeriesKey, DateOnly> lastDates,
         DateOnly today
     )
     {
         var activeSince = today.AddDays(-ActivelyTradedWindowDays);
 
-        return tickerMap
-            .Select(kv => new
+        return targets
+            .Select(target => new
             {
-                Entry = kv,
-                LastDate = lastDates.TryGetValue(kv.Value, out var lastDate)
+                Target = target,
+                LastDate = lastDates.TryGetValue(target.Key, out var lastDate)
                     ? lastDate
                     : DateOnly.MinValue,
             })
             // false (0) sorts before true (1), so the actively-traded group leads.
             .OrderBy(x => x.LastDate < activeSince)
             .ThenBy(x => x.LastDate)
-            .Select(x => x.Entry)
+            .ThenBy(x => x.Target.Ticker, StringComparer.Ordinal)
+            .ThenBy(x => x.Target.CommonStockId)
+            .Select(x => x.Target)
             .ToList();
     }
 
-    // Re-syncs the full price history of every stock that has an unreconciled split, capped per
-    // cycle. Yahoo serves the whole history already split-adjusted, so the fix is to overwrite the
-    // stored rows with a fresh pull rather than doing ratio arithmetic — self-healing, since the
-    // next split re-marks the stock pending and re-syncs it again (#2879).
+    // Re-syncs the full price history of every exact listed series that has an unreconciled split,
+    // capped per cycle. Yahoo serves the whole history already split-adjusted, so the fix is to
+    // overwrite that series with a fresh pull rather than doing ratio arithmetic.
     private async Task ReconcilePendingSplits(DateOnly today, CancellationToken cancellationToken)
     {
         PendingSplitSelection selection;
@@ -320,53 +415,41 @@ public class YahooPriceImportService
         {
             var manager =
                 scope.ServiceProvider.GetRequiredService<SplitPriceReconciliationManager>();
-            selection = await manager.SelectPendingStocks(
+            selection = await manager.SelectPendingSeries(
                 _workerOptions.MaxSplitPriceReconciliationsPerCycle
             );
         }
 
-        if (selection.StockIds.Count == 0)
+        if (selection.Series.Count == 0)
             return;
 
         _logger.LogInformation(
-            "Re-syncing split-adjusted price history for {Count} stock(s) with pending splits",
-            selection.StockIds.Count
+            "Re-syncing split-adjusted price history for {Count} listed series with pending splits",
+            selection.Series.Count
         );
         if (selection.Skipped > 0)
             _logger.LogInformation(
-                "{Remaining} more stock(s) with pending splits exceed the per-cycle cap "
+                "{Remaining} more listed series with pending splits exceed the per-cycle cap "
                     + "and will be reconciled on a later cycle",
                 selection.Skipped
             );
 
-        var tickers = await ResolveTickers(selection.StockIds, cancellationToken);
-        var floor = _workerOptions.MinSyncDate.HasValue
-            ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
-            : new DateOnly(2020, 1, 1);
+        var floor = PriceHistoryFloor();
 
-        foreach (var commonStockId in selection.StockIds)
+        foreach (var series in selection.Series)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!tickers.TryGetValue(commonStockId, out var ticker))
-            {
-                _logger.LogWarning(
-                    "No ticker resolved for stock {StockId} with a pending split; leaving it pending",
-                    commonStockId
-                );
-                continue;
-            }
-
             try
             {
-                await ReconcileStock(ticker, commonStockId, floor, today, cancellationToken);
+                await ReconcileStock(series, floor, today, cancellationToken);
             }
             catch (HttpRequestException ex)
             {
                 _logger.LogWarning(
                     ex,
                     "Failed to fetch split-adjusted history for {Ticker}; leaving its split(s) pending",
-                    ticker
+                    series.ListedTicker
                 );
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -380,38 +463,30 @@ public class YahooPriceImportService
                 _logger.LogError(
                     ex,
                     "Error reconciling split-adjusted history for {Ticker}",
-                    ticker
+                    series.ListedTicker
                 );
                 await _errorReporter.Report(
                     ErrorSource.YahooPriceScraper,
-                    $"ReconcilePendingSplits({ticker})",
+                    $"ReconcilePendingSplits({series.ListedTicker})",
                     ex
                 );
             }
         }
     }
 
-    private async Task<Dictionary<Guid, string>> ResolveTickers(
-        IReadOnlyList<Guid> stockIds,
-        CancellationToken cancellationToken
-    )
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-        return await stockRepo
-            .GetByIds(stockIds)
-            .ToDictionaryAsync(s => s.Id, s => s.Ticker, cancellationToken);
-    }
-
     private async Task ReconcileStock(
-        string ticker,
-        Guid commonStockId,
+        PendingSplitSeries selectedSeries,
         DateOnly floor,
         DateOnly today,
         CancellationToken cancellationToken
     )
     {
-        var chartData = await _yahooClient.GetChart(ticker, floor, today);
+        var target = new PriceSeriesTarget(
+            selectedSeries.ListedTicker,
+            selectedSeries.CommonStockId,
+            IsPrimary: false
+        );
+        var chartData = await _yahooClient.GetChart(target.Ticker, floor, today);
 
         // A delisted/unresolved ticker returns no prices. Do NOT wipe the existing series in that
         // case — leave the split pending so a later run or another source can handle it.
@@ -419,14 +494,13 @@ public class YahooPriceImportService
         {
             _logger.LogWarning(
                 "Yahoo returned no prices for {Ticker}; keeping existing rows and leaving its split(s) pending",
-                ticker
+                target.Ticker
             );
             return;
         }
 
         var replaced = await ReplaceStoredPrices(
-            ticker,
-            commonStockId,
+            target,
             floor,
             today,
             chartData.Prices,
@@ -437,14 +511,18 @@ public class YahooPriceImportService
 
         // Refresh the authoritative current share count + market cap by refetch, not arithmetic —
         // this is #2879's shares-outstanding requirement.
-        await SyncKeyStatistics(ticker, commonStockId, cancellationToken);
+        await SyncKeyStatistics(target, cancellationToken);
 
         using var scope = _scopeFactory.CreateScope();
         var manager = scope.ServiceProvider.GetRequiredService<SplitPriceReconciliationManager>();
-        var stamped = await manager.StampApplied(commonStockId, DateTime.UtcNow);
+        var stamped = await manager.StampApplied(
+            selectedSeries,
+            DateTime.UtcNow,
+            cancellationToken
+        );
         _logger.LogInformation(
             "Reconciled {Ticker}: replaced stored price history and stamped {Count} split(s) applied",
-            ticker,
+            target.Ticker,
             stamped
         );
     }
@@ -454,52 +532,51 @@ public class YahooPriceImportService
     // (all rows overflowed the numeric ceiling, or the parent CommonStock was removed) so a stock
     // is never left with an empty series.
     private async Task<bool> ReplaceStoredPrices(
-        string ticker,
-        Guid commonStockId,
+        PriceSeriesTarget target,
         DateOnly floor,
         DateOnly today,
         List<HistoricalPrice> prices,
         CancellationToken cancellationToken
     )
     {
-        var freshRows = MapFreshRows(commonStockId, prices, ticker, today);
+        var freshRows = MapFreshRows(target.CommonStockId, prices, target.Ticker, today);
         if (freshRows.Count == 0)
         {
             _logger.LogWarning(
                 "No storable prices for {Ticker} after the numeric range guard; keeping existing rows",
-                ticker
+                target.Ticker
             );
             return false;
         }
 
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-
-        // Same GH-1591 guard as the incremental flush: the parent CommonStock can be removed
-        // between selection and now, which would trip the FK on insert.
-        var stockExists = await stockRepo
-            .GetAll()
-            .AnyAsync(s => s.Id == commonStockId, cancellationToken);
-        if (!stockExists)
-        {
-            _logger.LogWarning(
-                "Skipping reconcile for CommonStock {Id}: parent row was removed",
-                commonStockId
-            );
-            return false;
-        }
-
         var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
-        await ReplacePriceRows(repo, commonStockId, floor, today, freshRows, cancellationToken);
-        return true;
+        var replaced = await ReplacePriceRows(
+            repo,
+            stockRepo,
+            target,
+            floor,
+            today,
+            freshRows,
+            cancellationToken
+        );
+        if (!replaced)
+            _logger.LogWarning(
+                "Skipping reconcile for {Ticker}: it no longer belongs to CommonStock {Id}",
+                target.Ticker,
+                target.CommonStockId
+            );
+        return replaced;
     }
 
     // The transactional core of the replacement: delete the stock's rows in [floor, today], then
     // bulk-insert the fresh rows in batches, all in one transaction so the stock is never left with
     // a partial series on failure. Takes the repo so it is unit-testable without a live worker.
-    private static async Task ReplacePriceRows(
+    private static async Task<bool> ReplacePriceRows(
         DailyStockPriceRepository repo,
-        Guid commonStockId,
+        CommonStockRepository stockRepo,
+        PriceSeriesTarget target,
         DateOnly floor,
         DateOnly today,
         List<DailyStockPrice> freshRows,
@@ -510,7 +587,7 @@ public class YahooPriceImportService
         // already guards empty fetches upstream; keeping the invariant local too means the
         // transaction (and its delete) is never opened for an empty replacement.
         if (freshRows.Count == 0)
-            return;
+            return false;
 
         await using var transaction = await repo.CreateTransaction(
             IsolationLevel.ReadCommitted,
@@ -518,7 +595,18 @@ public class YahooPriceImportService
         );
         try
         {
-            var existing = await repo.GetByStocks([commonStockId], floor, today)
+            if (await LockPriceSeries(stockRepo, target, cancellationToken) == null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return false;
+            }
+            var existing = await repo.GetAllSeries()
+                .Where(p =>
+                    p.CommonStockId == target.CommonStockId
+                    && p.ListedTicker == target.Ticker
+                    && p.Date >= floor
+                    && p.Date <= today
+                )
                 .ToListAsync(cancellationToken);
             if (existing.Count > 0)
             {
@@ -533,6 +621,7 @@ public class YahooPriceImportService
             }
 
             await transaction.CommitAsync(cancellationToken);
+            return true;
         }
         catch
         {
@@ -557,6 +646,7 @@ public class YahooPriceImportService
             .Select(p => new DailyStockPrice
             {
                 CommonStockId = commonStockId,
+                ListedTicker = ticker,
                 Date = p.Date,
                 Open = p.Open,
                 High = p.High,
@@ -616,38 +706,74 @@ public class YahooPriceImportService
     private static readonly TickerImportResult NoFetchNeeded = new(Fetched: false, Inserted: 0);
 
     private async Task<TickerImportResult> ImportTicker(
-        string ticker,
-        Guid commonStockId,
+        PriceSeriesTarget target,
         DateOnly today,
         CancellationToken cancellationToken
     )
     {
-        var startDate = await ResolveStartDate(commonStockId, today, cancellationToken);
+        var startDate = await ResolveStartDate(target, today, cancellationToken);
         if (!HasSettledTradingDay(startDate, today))
             return NoFetchNeeded;
 
         // One chart fetch yields the price bars plus any split and dividend
         // events for the window — capture both off the same response, no extra
         // HTTP.
-        var chartData = await _yahooClient.GetChart(ticker, startDate, today);
+        var chartData = await _yahooClient.GetChart(target.Ticker, startDate, today);
 
-        var inserted = await PersistPrices(
-            ticker,
-            commonStockId,
-            chartData.Prices,
-            today,
-            cancellationToken
-        );
+        // Every exact listing needs a full-history rebase when its chart reports a split: Yahoo
+        // retroactively adjusts old bars while the ordinary importer only appends. Doing this for
+        // both the snapshotted primary and secondaries makes a concurrent designation change
+        // harmless. Issuer-level action capture below independently locks and requires whichever
+        // listing is primary at write time.
+        var floor = PriceHistoryFloor();
+        if (chartData.Splits.Count > 0 && startDate > floor)
+        {
+            var fullChart = await _yahooClient.GetChart(target.Ticker, floor, today);
+            if (fullChart.Prices.Count == 0)
+            {
+                _logger.LogWarning(
+                    "Yahoo returned no full history for split on {Ticker}; keeping its stored series",
+                    target.Ticker
+                );
+                return new TickerImportResult(Fetched: true, Inserted: 0);
+            }
 
-        await CaptureSplits(commonStockId, chartData.Splits);
-        await CaptureDividends(commonStockId, chartData.Dividends);
+            var replaced = await ReplaceStoredPrices(
+                target,
+                floor,
+                today,
+                fullChart.Prices,
+                cancellationToken
+            );
+            if (replaced)
+            {
+                _logger.LogInformation(
+                    "Reconciled {Ticker}: replaced its split-adjusted listed price history",
+                    target.Ticker
+                );
+                await CaptureSplits(target, chartData.Splits, cancellationToken);
+                await CaptureDividends(target, chartData.Dividends, cancellationToken);
+            }
+            return new TickerImportResult(Fetched: true, Inserted: 0);
+        }
+
+        var inserted = await PersistPrices(target, chartData.Prices, today, cancellationToken);
+
+        // The capture paths lock and revalidate the current primary. A stale crawl target can
+        // therefore keep its exact prices but cannot write issuer-level actions.
+        await CaptureSplits(target, chartData.Splits, cancellationToken);
+        await CaptureDividends(target, chartData.Dividends, cancellationToken);
 
         return new TickerImportResult(Fetched: true, Inserted: inserted);
     }
 
+    private DateOnly PriceHistoryFloor() =>
+        _workerOptions.MinSyncDate.HasValue
+            ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
+            : new DateOnly(2020, 1, 1);
+
     private async Task<int> PersistPrices(
-        string ticker,
-        Guid commonStockId,
+        PriceSeriesTarget target,
         List<HistoricalPrice> prices,
         DateOnly today,
         CancellationToken cancellationToken
@@ -656,22 +782,39 @@ public class YahooPriceImportService
         if (prices.Count == 0)
             return 0;
 
-        // Load existing dates covering the actual response range to avoid duplicates
+        var freshRows = MapFreshRows(target.CommonStockId, prices, target.Ticker, today);
+        if (freshRows.Count == 0)
+            return 0;
+
+        // The new exact-listing table starts empty after the additive migration. Publish a
+        // listing's first full response in one transaction so readers see either no exact series
+        // or the complete backfill, never the first 500-row batch of a multi-batch insert.
+        if (!await HasStoredSeries(target, cancellationToken))
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+            var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+            var stored = await ReplacePriceRows(
+                repo,
+                stockRepo,
+                target,
+                PriceHistoryFloor(),
+                today,
+                freshRows,
+                cancellationToken
+            );
+            return stored ? freshRows.Count : 0;
+        }
+
+        // Load existing dates covering the actual response range to avoid duplicates.
         var minDate = prices.Min(p => p.Date);
         var maxDate = prices.Max(p => p.Date);
-        var existingDates = await GetExistingDates(
-            commonStockId,
-            minDate,
-            maxDate,
-            cancellationToken
-        );
-
-        var freshRows = MapFreshRows(commonStockId, prices, ticker, today);
+        var existingDates = await GetExistingDates(target, minDate, maxDate, cancellationToken);
 
         // Runs before the insert path's early return: a stock whose only revised bar is one it
         // ALREADY stored has nothing new to insert, and that is exactly the stock whose settled
         // OHLC/volume still needs correcting.
-        await ResettleStoredBars(ticker, commonStockId, freshRows, today, cancellationToken);
+        await ResettleStoredBars(target, freshRows, today, cancellationToken);
 
         var newPrices = freshRows.Where(p => !existingDates.Contains(p.Date)).ToList();
 
@@ -680,8 +823,22 @@ public class YahooPriceImportService
 
         var inserted = await BatchPersister.Persist(newPrices, InsertBatchSize, FlushPriceBatch);
 
-        _logger.LogDebug("Inserted {Count} prices for {Ticker}", inserted, ticker);
+        _logger.LogDebug("Inserted {Count} prices for {Ticker}", inserted, target.Ticker);
         return inserted;
+    }
+
+    private async Task<bool> HasStoredSeries(
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        return await repo.GetAllSeries()
+            .AnyAsync(
+                p => p.CommonStockId == target.CommonStockId && p.ListedTicker == target.Ticker,
+                cancellationToken
+            );
     }
 
     // Corrects stored bars that were captured before the feed settled them.
@@ -696,8 +853,7 @@ public class YahooPriceImportService
     // extra upstream call — ResolveStartDate only widens a request that was going to happen anyway.
     // Steady state therefore corrects each session when the next session syncs.
     private async Task<int> ResettleStoredBars(
-        string ticker,
-        Guid commonStockId,
+        PriceSeriesTarget target,
         List<DailyStockPrice> freshRows,
         DateOnly today,
         CancellationToken cancellationToken
@@ -719,8 +875,28 @@ public class YahooPriceImportService
 
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
-        var stored = await repo.GetAll()
-            .Where(p => p.CommonStockId == commonStockId && p.Date >= windowStart && p.Date < today)
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        await using var transaction = await repo.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        if (await LockPriceSeries(stockRepo, target, cancellationToken) == null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            _logger.LogWarning(
+                "Skipping settled-bar repair for {Ticker}: it no longer belongs to CommonStock {Id}",
+                target.Ticker,
+                target.CommonStockId
+            );
+            return 0;
+        }
+        var stored = await repo.GetAllSeries()
+            .Where(p =>
+                p.CommonStockId == target.CommonStockId
+                && p.ListedTicker == target.Ticker
+                && p.Date >= windowStart
+                && p.Date < today
+            )
             .ToListAsync(cancellationToken);
 
         var corrected = 0;
@@ -771,17 +947,21 @@ public class YahooPriceImportService
             _logger.LogInformation(
                 "Skipped {Count} stored bars for {Ticker}: stored close disagrees with the feed's split basis",
                 skippedOnBasis,
-                ticker
+                target.Ticker
             );
         }
 
         if (corrected == 0)
+        {
+            await transaction.CommitAsync(cancellationToken);
             return 0;
+        }
 
         // The rows are tracked, so saving the mutations is enough — no repo.Update, which
         // would mark every column dirty and clobber a concurrent split reconcile's price basis.
         await repo.SaveChanges();
-        _logger.LogDebug("Corrected {Count} stored bars for {Ticker}", corrected, ticker);
+        await transaction.CommitAsync(cancellationToken);
+        _logger.LogDebug("Corrected {Count} stored bars for {Ticker}", corrected, target.Ticker);
         return corrected;
     }
 
@@ -800,28 +980,29 @@ public class YahooPriceImportService
         using (var scope = _scopeFactory.CreateScope())
         {
             var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
-            targets = await repo.GetAll()
+            targets = await repo.GetAllSeries()
                 .AsNoTracking()
                 .Where(p =>
-                    p.Open <= 0
-                    || p.High <= 0
-                    || p.Low <= 0
-                    || p.Close <= 0
-                    || p.High < p.Open
-                    || p.High < p.Close
-                    || p.Low > p.Open
-                    || p.Low > p.Close
-                    || p.High < p.Low
+                    (
+                        p.ListedTicker == p.CommonStock.Ticker
+                        || p.CommonStock.SecondaryTickers.Contains(p.ListedTicker)
+                    )
+                    && (
+                        p.Open <= 0
+                        || p.High <= 0
+                        || p.Low <= 0
+                        || p.Close <= 0
+                        || p.High < p.Open
+                        || p.High < p.Close
+                        || p.Low > p.Open
+                        || p.Low > p.Close
+                        || p.High < p.Low
+                    )
                 )
                 .OrderBy(p => p.CreationTime)
                 .ThenBy(p => p.Id)
                 .Take(batchSize)
-                .Select(p => new InvalidOhlcTarget(
-                    p.Id,
-                    p.CommonStockId,
-                    p.CommonStock.Ticker,
-                    p.Date
-                ))
+                .Select(p => new InvalidOhlcTarget(p.Id, p.CommonStockId, p.ListedTicker, p.Date))
                 .ToListAsync(cancellationToken);
         }
 
@@ -829,7 +1010,7 @@ public class YahooPriceImportService
             return true;
 
         var replacements = new Dictionary<Guid, DailyStockPrice>();
-        var deferredStockIds = new HashSet<Guid>();
+        var deferredSeries = new HashSet<PriceSeriesKey>();
 
         foreach (var group in targets.GroupBy(t => new { t.CommonStockId, t.Ticker }))
         {
@@ -860,7 +1041,7 @@ public class YahooPriceImportService
             }
             catch (HttpRequestException ex)
             {
-                deferredStockIds.Add(group.Key.CommonStockId);
+                deferredSeries.Add(new PriceSeriesKey(group.Key.CommonStockId, group.Key.Ticker));
                 _logger.LogWarning(
                     ex,
                     "Failed to fetch OHLC repair data for {Ticker}; deferring its invalid rows",
@@ -874,14 +1055,40 @@ public class YahooPriceImportService
         using (var scope = _scopeFactory.CreateScope())
         {
             var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+            var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+            await using var transaction = await repo.CreateTransaction(
+                IsolationLevel.ReadCommitted,
+                cancellationToken
+            );
             var targetIds = targets.Select(t => t.PriceId).ToList();
-            var storedRows = await repo.GetAll()
+            var seriesByPriceId = targets.ToDictionary(
+                target => target.PriceId,
+                target => new PriceSeriesKey(target.CommonStockId, target.Ticker)
+            );
+            var validSeries = new HashSet<PriceSeriesKey>();
+            foreach (
+                var series in seriesByPriceId
+                    .Values.Distinct()
+                    .OrderBy(series => series.CommonStockId)
+                    .ThenBy(series => series.ListedTicker, StringComparer.Ordinal)
+            )
+            {
+                var target = new PriceSeriesTarget(
+                    series.ListedTicker,
+                    series.CommonStockId,
+                    IsPrimary: false
+                );
+                if (await LockPriceSeries(stockRepo, target, cancellationToken) != null)
+                    validSeries.Add(series);
+            }
+            var storedRows = await repo.GetAllSeries()
                 .Where(p => targetIds.Contains(p.Id))
                 .ToListAsync(cancellationToken);
 
             foreach (var row in storedRows)
             {
-                if (deferredStockIds.Contains(row.CommonStockId))
+                var series = seriesByPriceId[row.Id];
+                if (deferredSeries.Contains(series) || !validSeries.Contains(series))
                     continue;
 
                 if (
@@ -906,6 +1113,7 @@ public class YahooPriceImportService
 
             if (repaired > 0 || removed > 0)
                 await repo.SaveChanges();
+            await transaction.CommitAsync(cancellationToken);
         }
 
         _logger.LogInformation(
@@ -913,10 +1121,10 @@ public class YahooPriceImportService
             targets.Count,
             repaired,
             removed,
-            deferredStockIds.Count
+            deferredSeries.Count
         );
 
-        return targets.Count < batchSize && deferredStockIds.Count == 0;
+        return targets.Count < batchSize && deferredSeries.Count == 0;
     }
 
     private sealed record InvalidOhlcTarget(
@@ -988,8 +1196,9 @@ public class YahooPriceImportService
     // the other per-write scopes); skipped when there are no splits so the common
     // no-split path costs nothing.
     private async Task CaptureSplits(
-        Guid commonStockId,
-        IReadOnlyCollection<StockSplitEvent> splits
+        PriceSeriesTarget target,
+        IReadOnlyCollection<StockSplitEvent> splits,
+        CancellationToken cancellationToken
     )
     {
         if (splits.Count == 0)
@@ -1009,18 +1218,19 @@ public class YahooPriceImportService
             .ToList();
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-        var stock = await stockRepo.Get(commonStockId);
-        if (stock == null)
-            return;
-
         var captureManager = scope.ServiceProvider.GetRequiredService<StockSplitCaptureManager>();
-        var count = await captureManager.Capture(stock, captured);
+        var count = await captureManager.Capture(
+            target.CommonStockId,
+            target.Ticker,
+            captured,
+            cancellationToken
+        );
         if (count > 0)
             _logger.LogInformation(
-                "Captured {Count} stock split(s) for {StockId}",
+                "Captured {Count} stock split(s) for {Ticker} on {StockId}",
                 count,
-                commonStockId
+                target.Ticker,
+                target.CommonStockId
             );
     }
 
@@ -1029,8 +1239,9 @@ public class YahooPriceImportService
     // CaptureSplits: its own scope, and skipped when there are no dividends so
     // the common no-dividend path costs nothing.
     private async Task CaptureDividends(
-        Guid commonStockId,
-        IReadOnlyCollection<CashDividendEvent> dividends
+        PriceSeriesTarget target,
+        IReadOnlyCollection<CashDividendEvent> dividends,
+        CancellationToken cancellationToken
     )
     {
         if (dividends.Count == 0)
@@ -1050,17 +1261,26 @@ public class YahooPriceImportService
 
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-        var stock = await stockRepo.Get(commonStockId);
-        if (stock == null)
+        await using var transaction = await stockRepo.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        var lockedSeries = await LockPriceSeries(stockRepo, target, cancellationToken);
+        if (lockedSeries is not { IsPrimary: true })
+        {
+            await transaction.RollbackAsync(cancellationToken);
             return;
+        }
 
         var captureManager = scope.ServiceProvider.GetRequiredService<CashDividendCaptureManager>();
-        var count = await captureManager.Capture(stock, captured);
+        var count = await captureManager.Capture(lockedSeries.Value.Stock, captured);
+        await transaction.CommitAsync(cancellationToken);
         if (count > 0)
             _logger.LogInformation(
-                "Captured {Count} cash dividend(s) for {StockId}",
+                "Captured {Count} cash dividend(s) for {Ticker} on {StockId}",
                 count,
-                commonStockId
+                target.Ticker,
+                target.CommonStockId
             );
     }
 
@@ -1068,34 +1288,40 @@ public class YahooPriceImportService
     {
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        await using var transaction = await repo.CreateTransaction(IsolationLevel.ReadCommitted);
 
-        // Each batch holds rows for a single ticker, so a single existence check
-        // is enough. Guards GH-1591: CompanySync can delete the parent CommonStock
-        // between TickerMapService.Build and this flush, which would otherwise
-        // trip FK_DailyStockPrice_CommonStock_CommonStockId at SaveChanges.
-        var commonStockId = batch[0].CommonStockId;
-        var stockExists = await stockRepo.GetAll().AnyAsync(s => s.Id == commonStockId);
-        if (!stockExists)
+        // Each batch holds rows for one exact ticker. Locking the parent makes ownership
+        // validation and insert atomic with a concurrent CompanySync designation change.
+        var first = batch[0];
+        var target = new PriceSeriesTarget(
+            first.ListedTicker,
+            first.CommonStockId,
+            IsPrimary: false
+        );
+        if (await LockPriceSeries(stockRepo, target, CancellationToken.None) == null)
         {
+            await transaction.RollbackAsync();
             _logger.LogWarning(
-                "Skipping {Count} prices for CommonStock {Id}: parent row was removed before flush",
+                "Skipping {Count} prices for {Ticker}: it no longer belongs to CommonStock {Id}",
                 batch.Count,
-                commonStockId
+                first.ListedTicker,
+                first.CommonStockId
             );
             return;
         }
 
-        var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
         repo.AddRange(batch);
         await repo.SaveChanges();
+        await transaction.CommitAsync();
     }
 
     private async Task SyncKeyStatistics(
-        string ticker,
-        Guid commonStockId,
+        PriceSeriesTarget target,
         CancellationToken cancellationToken
     )
     {
+        var ticker = target.Ticker;
         // Yahoo has NOTHING for some listings (closed-end funds like PSUS, fresh IPOs): no stats
         // modules at all, or every field zero. That used to end the sync, leaving the stored pair
         // at 0/0 forever — even when EDGAR carries an authoritative cover-page count and this same
@@ -1107,17 +1333,22 @@ public class YahooPriceImportService
 
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-
-        var stock = await stockRepo.Get(commonStockId);
-        if (stock == null)
+        await using var transaction = await stockRepo.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        var lockedSeries = await LockPriceSeries(stockRepo, target, cancellationToken);
+        if (lockedSeries is not { IsPrimary: true })
         {
+            await transaction.RollbackAsync(cancellationToken);
             _logger.LogWarning(
-                "Skipping key statistics for {Ticker}: CommonStock {Id} was removed during the sync",
+                "Skipping key statistics for {Ticker}: it is no longer the primary listing on CommonStock {Id}",
                 ticker,
-                commonStockId
+                target.CommonStockId
             );
             return;
         }
+        var stock = lockedSeries.Value.Stock;
 
         // The SEC cover-page count (dei:EntityCommonStockSharesOutstanding) is authoritative and
         // current; Yahoo's figure is per-share-class and lags corporate actions. Defer to EDGAR
@@ -1221,9 +1452,13 @@ public class YahooPriceImportService
         }
 
         if (!changed)
+        {
+            await transaction.CommitAsync(cancellationToken);
             return;
-        if (!await SaveStockChanges(stockRepo, commonStockId, ticker, cancellationToken))
+        }
+        if (!await SaveStockChanges(stockRepo, target.CommonStockId, ticker, cancellationToken))
             return;
+        await transaction.CommitAsync(cancellationToken);
 
         _logger.LogDebug(
             "Updated key stats for {Ticker}: shares={Shares} marketCap={MarketCap}",
@@ -1288,11 +1523,11 @@ public class YahooPriceImportService
         yahooImpliedShares > 0 ? yahooImpliedShares : yahooShares;
 
     private async Task SyncCompanyProfile(
-        string ticker,
-        Guid commonStockId,
+        PriceSeriesTarget target,
         CancellationToken cancellationToken
     )
     {
+        var ticker = target.Ticker;
         var profile = await _yahooClient.GetCompanyProfile(ticker);
         if (profile == null || string.IsNullOrWhiteSpace(profile.Industry))
             return;
@@ -1301,17 +1536,22 @@ public class YahooPriceImportService
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var industryRepo = scope.ServiceProvider.GetRequiredService<IndustryRepository>();
         var sectorRepo = scope.ServiceProvider.GetRequiredService<SectorRepository>();
-
-        var stock = await stockRepo.Get(commonStockId);
-        if (stock == null)
+        await using var transaction = await stockRepo.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        var lockedSeries = await LockPriceSeries(stockRepo, target, cancellationToken);
+        if (lockedSeries is not { IsPrimary: true })
         {
+            await transaction.RollbackAsync(cancellationToken);
             _logger.LogWarning(
-                "Skipping company profile for {Ticker}: CommonStock {Id} was removed during the sync",
+                "Skipping company profile for {Ticker}: it is no longer the primary listing on CommonStock {Id}",
                 ticker,
-                commonStockId
+                target.CommonStockId
             );
             return;
         }
+        var stock = lockedSeries.Value.Stock;
 
         // Upsert by case-insensitive name. Yahoo uses a small stable vocabulary, so
         // collisions are rare and a flat scan over Sector/Industry is fine — both tables
@@ -1325,11 +1565,15 @@ public class YahooPriceImportService
         );
 
         if (stock.IndustryId == industry.Id)
+        {
+            await transaction.CommitAsync(cancellationToken);
             return;
+        }
 
         stock.IndustryId = industry.Id;
-        if (!await SaveStockChanges(stockRepo, commonStockId, ticker, cancellationToken))
+        if (!await SaveStockChanges(stockRepo, target.CommonStockId, ticker, cancellationToken))
             return;
+        await transaction.CommitAsync(cancellationToken);
 
         _logger.LogDebug(
             "Updated industry for {Ticker}: {Industry} (sector {Sector})",
@@ -1431,12 +1675,12 @@ public class YahooPriceImportService
     // its window, so an up-to-date stock still costs zero Yahoo calls — the property the whole
     // cheap-cycle design rests on.
     private async Task<DateOnly> ResolveStartDate(
-        Guid commonStockId,
+        PriceSeriesTarget target,
         DateOnly today,
         CancellationToken cancellationToken
     )
     {
-        var forwardOnly = await GetSyncStartDate(commonStockId, cancellationToken);
+        var forwardOnly = await GetSyncStartDate(target, cancellationToken);
 
         // The heal only ever RIDES a fetch the forward-only date already demands — it must never
         // trigger one of its own. A stock that is fully current returns here untouched, so the
@@ -1474,17 +1718,22 @@ public class YahooPriceImportService
         using (var scope = _scopeFactory.CreateScope())
         {
             var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
-            storedDates = await repo.GetAll()
+            storedDates = await repo.GetAllSeries()
                 .Where(p =>
-                    p.CommonStockId == commonStockId && p.Date >= windowStart && p.Date < today
+                    p.CommonStockId == target.CommonStockId
+                    && p.ListedTicker == target.Ticker
+                    && p.Date >= windowStart
+                    && p.Date < today
                 )
                 .Select(p => p.Date)
                 .ToListAsync(cancellationToken);
             // The stock's first bar EVER, not first-in-window: the discriminator between "listed
             // mid-window" and "the feed failed to serve the window's leading edge" (see
             // FindEarliestGap). An aggregate on the (CommonStockId, Date) index.
-            earliestStored = await repo.GetAll()
-                .Where(p => p.CommonStockId == commonStockId)
+            earliestStored = await repo.GetAllSeries()
+                .Where(p =>
+                    p.CommonStockId == target.CommonStockId && p.ListedTicker == target.Ticker
+                )
                 .MinAsync(p => (DateOnly?)p.Date, cancellationToken);
         }
 
@@ -1532,7 +1781,7 @@ public class YahooPriceImportService
     }
 
     private async Task<DateOnly> GetSyncStartDate(
-        Guid commonStockId,
+        PriceSeriesTarget target,
         CancellationToken cancellationToken
     )
     {
@@ -1540,8 +1789,10 @@ public class YahooPriceImportService
             _scopeFactory,
             _workerOptions,
             repo =>
-                repo.GetAll()
-                    .Where(p => p.CommonStockId == commonStockId)
+                repo.GetAllSeries()
+                    .Where(p =>
+                        p.CommonStockId == target.CommonStockId && p.ListedTicker == target.Ticker
+                    )
                     .Select(p => p.Date)
                     .OrderByDescending(d => d),
             cancellationToken
@@ -1618,7 +1869,7 @@ public class YahooPriceImportService
         || Math.Abs(p.AdjustedClose) > MaxPriceValue;
 
     private async Task<HashSet<DateOnly>> GetExistingDates(
-        Guid commonStockId,
+        PriceSeriesTarget target,
         DateOnly startDate,
         DateOnly endDate,
         CancellationToken cancellationToken
@@ -1627,9 +1878,12 @@ public class YahooPriceImportService
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
 
-        var dates = await repo.GetAll()
+        var dates = await repo.GetAllSeries()
             .Where(p =>
-                p.CommonStockId == commonStockId && p.Date >= startDate && p.Date <= endDate
+                p.CommonStockId == target.CommonStockId
+                && p.ListedTicker == target.Ticker
+                && p.Date >= startDate
+                && p.Date <= endDate
             )
             .Select(p => p.Date)
             .ToListAsync(cancellationToken);

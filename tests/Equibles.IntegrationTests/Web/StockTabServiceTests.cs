@@ -20,6 +20,8 @@ using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data;
+using Equibles.Sec.FinancialFacts.Data.Enums;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
 using Equibles.Web.Services;
@@ -747,6 +749,78 @@ public class StockTabServiceTests : IDisposable
         result.MacdLine.Should().HaveCount(30);
         result.MacdSignal.Should().HaveCount(30);
         result.MacdHistogram.Should().HaveCount(30);
+    }
+
+    [Fact]
+    public async Task LoadPriceTab_SecondaryListing_ReturnsOnlyItsExactSeries()
+    {
+        var stock = CreateStock("BRK-B", "Berkshire Hathaway Inc.");
+        stock.SecondaryTickers = ["BRK-A"];
+        var date = new DateOnly(2026, 8, 3);
+        var epsConcept = new FinancialConcept
+        {
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "EarningsPerShareDiluted",
+        };
+        _dbContext
+            .Set<DailyStockPrice>()
+            .AddRange(
+                new DailyStockPrice
+                {
+                    CommonStockId = stock.Id,
+                    ListedTicker = "BRK-B",
+                    Date = date,
+                    Open = 299m,
+                    High = 301m,
+                    Low = 298m,
+                    Close = 300m,
+                    AdjustedClose = 300m,
+                    Volume = 1_000,
+                },
+                new DailyStockPrice
+                {
+                    CommonStockId = stock.Id,
+                    ListedTicker = "BRK-A",
+                    Date = date,
+                    Open = 599_000m,
+                    High = 601_000m,
+                    Low = 598_000m,
+                    Close = 600_000m,
+                    AdjustedClose = 600_000m,
+                    Volume = 100,
+                }
+            );
+        _dbContext.Set<FinancialConcept>().Add(epsConcept);
+        _dbContext
+            .Set<FinancialFact>()
+            .Add(
+                new FinancialFact
+                {
+                    CommonStockId = stock.Id,
+                    FinancialConceptId = epsConcept.Id,
+                    Unit = "USD/shares",
+                    PeriodType = FactPeriodType.Duration,
+                    PeriodStart = new DateOnly(2025, 1, 1),
+                    PeriodEnd = new DateOnly(2025, 12, 31),
+                    Value = 20m,
+                    FiscalYear = 2025,
+                    FiscalPeriod = SecFiscalPeriod.FullYear,
+                    Form = DocumentType.TenK,
+                    FiledDate = new DateOnly(2026, 2, 1),
+                    AccessionNumber = "0000000000-26-000001",
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.LoadPriceTab(stock, "BRK-A");
+        var metrics = await _service.LoadKeyMetrics(stock, "BRK-A");
+
+        result.Ticker.Should().Be("BRK-A");
+        result.Prices.Should().ContainSingle().Which.Close.Should().Be(600_000m);
+        result.Prices.Should().OnlyContain(price => price.ListedTicker == "BRK-A");
+        metrics.LatestClose.Should().Be(600_000m);
+        metrics.EpsDiluted.Should().BeNull();
+        metrics.PeRatio.Should().BeNull();
     }
 
     [Fact]

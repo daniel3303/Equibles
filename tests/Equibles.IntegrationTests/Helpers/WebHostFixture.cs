@@ -99,6 +99,7 @@ public class WebHostFixture : IAsyncLifetime
                             .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)
                 );
                 options.UseLazyLoadingProxies();
+                options.AddInterceptors(new DailyStockPriceSeedInterceptor());
                 options.ConfigureWarnings(w =>
                     w.Ignore(RelationalEventId.PendingModelChangesWarning)
                 );

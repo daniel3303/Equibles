@@ -1,5 +1,6 @@
 using System.Reflection;
 using Equibles.CommonStocks.Data;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data;
@@ -50,18 +51,22 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
         var friday = new DateOnly(2024, 6, 14);
         var saturday = new DateOnly(2024, 6, 15);
 
+        _dbContext.Set<CommonStock>().Add(new CommonStock { Id = stockId, Ticker = "WKND" });
+
         _dbContext
             .Set<DailyStockPrice>()
             .AddRange(
                 new DailyStockPrice
                 {
                     CommonStockId = stockId,
+                    ListedTicker = "WKND",
                     Date = thursday,
                     Close = 48m,
                 },
                 new DailyStockPrice
                 {
                     CommonStockId = stockId,
+                    ListedTicker = "WKND",
                     Date = friday,
                     Close = 50m,
                 }

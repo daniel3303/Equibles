@@ -125,4 +125,64 @@ public class StocksPriceTabViewRenderingTests
                 "with no SPY tracked the fallback note must render"
             );
     }
+
+    [Theory]
+    [InlineData("/Stocks/BRK-A/price")]
+    [InlineData("/Stocks/BRK.A/price")]
+    public async Task GetPriceTab_SecondaryListingAndDotAlias_RenderExactSecondarySeries(
+        string path
+    )
+    {
+        var stockId = Guid.NewGuid();
+
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new CommonStock
+                {
+                    Id = stockId,
+                    Ticker = "BRK-B",
+                    SecondaryTickers = ["BRK-A"],
+                    Name = "Berkshire Hathaway Inc.",
+                }
+            );
+            var date = new DateOnly(2026, 8, 3);
+            db.AddRange(
+                new DailyStockPrice
+                {
+                    CommonStockId = stockId,
+                    ListedTicker = "BRK-B",
+                    Date = date,
+                    Open = 299m,
+                    High = 301m,
+                    Low = 298m,
+                    Close = 300m,
+                    AdjustedClose = 300m,
+                    Volume = 1_000,
+                },
+                new DailyStockPrice
+                {
+                    CommonStockId = stockId,
+                    ListedTicker = "BRK-A",
+                    Date = date,
+                    Open = 599_000m,
+                    High = 601_000m,
+                    Low = 598_000m,
+                    Close = 600_000m,
+                    AdjustedClose = 600_000m,
+                    Volume = 100,
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync(path);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain(">BRK-A</h1>");
+        html.Should().Contain("const allClose = [600000.0000];");
+        html.Should().NotContain("const allClose = [300.0000];");
+        html.Should().Contain("/stocks/brk-a/holdings");
+    }
 }

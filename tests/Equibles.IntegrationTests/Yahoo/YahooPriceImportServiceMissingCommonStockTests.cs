@@ -42,7 +42,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
 
     public YahooPriceImportServiceMissingCommonStockTests()
     {
-        _dbContext = TestDbContextFactory.Create(
+        _dbContext = TestDbContextFactory.CreateIgnoringInMemoryTransactions(
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
@@ -67,9 +67,9 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
             (typeof(ISharesOutstandingProvider), _sharesProvider),
             (
                 typeof(SplitPriceReconciliationManager),
-                new SplitPriceReconciliationManager(splitRepo)
+                new SplitPriceReconciliationManager(splitRepo, _stockRepo)
             ),
-            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(splitRepo))
+            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(splitRepo, _stockRepo))
         );
 
         _sut = new YahooPriceImportService(

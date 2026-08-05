@@ -41,7 +41,7 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
 
     public YahooPriceImportServiceCompanyProfileTests()
     {
-        _dbContext = TestDbContextFactory.Create(
+        _dbContext = TestDbContextFactory.CreateIgnoringInMemoryTransactions(
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
@@ -70,9 +70,9 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
             (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>()),
             (
                 typeof(SplitPriceReconciliationManager),
-                new SplitPriceReconciliationManager(splitRepo)
+                new SplitPriceReconciliationManager(splitRepo, _stockRepo)
             ),
-            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(splitRepo))
+            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(splitRepo, _stockRepo))
         );
 
         _service = new YahooPriceImportService(

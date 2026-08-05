@@ -1,11 +1,9 @@
-using System.Reflection;
 using Equibles.Yahoo.HostedService.Services;
 
 namespace Equibles.UnitTests.Yahoo;
 
 /// <summary>
-/// Tests for the crawl priority rule in <see cref="YahooPriceImportService"/>, exercised through
-/// the pure private static <c>BuildCrawlOrder</c> via reflection.
+/// Tests for the crawl priority rule in <see cref="YahooPriceImportService"/>.
 ///
 /// The lane used to sort the whole universe stalest-first, which reads as obviously correct and was
 /// the reason the daily price lane fell days behind. Stocks that will never return data again —
@@ -17,12 +15,6 @@ namespace Equibles.UnitTests.Yahoo;
 /// </summary>
 public class YahooPriceImportServiceCrawlOrderTests
 {
-    private static readonly MethodInfo BuildCrawlOrderMethod =
-        typeof(YahooPriceImportService).GetMethod(
-            "BuildCrawlOrder",
-            BindingFlags.NonPublic | BindingFlags.Static
-        );
-
     private static readonly DateOnly Today = new(2026, 7, 27);
 
     private static List<string> Order(
@@ -30,10 +22,20 @@ public class YahooPriceImportServiceCrawlOrderTests
         Dictionary<Guid, DateOnly> lastDates
     )
     {
-        var result =
-            (List<KeyValuePair<string, Guid>>)
-                BuildCrawlOrderMethod.Invoke(null, [tickerMap, lastDates, Today]);
-        return result.Select(kv => kv.Key).ToList();
+        var targets = tickerMap
+            .Select(pair => new PriceSeriesTarget(pair.Key, pair.Value, IsPrimary: true))
+            .ToList();
+        var seriesDates = tickerMap
+            .Where(pair => lastDates.ContainsKey(pair.Value))
+            .ToDictionary(
+                pair => new PriceSeriesKey(pair.Value, pair.Key),
+                pair => lastDates[pair.Value]
+            );
+
+        return YahooPriceImportService
+            .BuildCrawlOrder(targets, seriesDates, Today)
+            .Select(target => target.Ticker)
+            .ToList();
     }
 
     [Fact]
@@ -129,5 +131,26 @@ public class YahooPriceImportServiceCrawlOrderTests
         };
 
         Order(tickerMap, lastDates).Should().BeEquivalentTo(tickerMap.Keys);
+    }
+
+    [Fact]
+    public void SecondaryListing_FreshnessIsIndependentFromThePrimary()
+    {
+        var stockId = Guid.NewGuid();
+        var primary = new PriceSeriesTarget("GOOGL", stockId, IsPrimary: true);
+        var secondary = new PriceSeriesTarget("GOOG", stockId, IsPrimary: false);
+        var lastDates = new Dictionary<PriceSeriesKey, DateOnly>
+        {
+            [primary.Key] = Today.AddDays(-1),
+            [secondary.Key] = Today.AddDays(-30),
+        };
+
+        var ordered = YahooPriceImportService.BuildCrawlOrder(
+            [secondary, primary],
+            lastDates,
+            Today
+        );
+
+        ordered.Select(target => target.Ticker).Should().Equal("GOOGL", "GOOG");
     }
 }

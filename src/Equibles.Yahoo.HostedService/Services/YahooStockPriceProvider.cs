@@ -40,7 +40,10 @@ public class YahooStockPriceProvider : IStockPriceProvider
             var prices = await _dbContext
                 .Set<DailyStockPrice>()
                 .Where(p =>
-                    stockIds.Contains(p.CommonStockId) && p.Date >= minDate && p.Date <= date
+                    p.ListedTicker == p.CommonStock.Ticker
+                    && stockIds.Contains(p.CommonStockId)
+                    && p.Date >= minDate
+                    && p.Date <= date
                 )
                 .Select(p => new
                 {

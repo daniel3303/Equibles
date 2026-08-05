@@ -12,7 +12,7 @@ Index of the financial-domain modules in `src/`. Each row is one logical domain;
 | **Insider Trading** ([`Equibles.InsiderTrading.*`](../../src/Equibles.InsiderTrading.Data)) | SEC Form 3 / 4 / 144 | `InsiderOwner`, `InsiderTransaction` (with `TransactionCode`, `AcquiredDisposed`, `OwnershipNature` enums), `Form144Filing` (proposed-sale notices) | piggy-backs on SEC — `InsiderTradingFilingProcessor` runs inside `DocumentProcessorWorker` (no scraper project of its own) | `Equibles.InsiderTrading.Mcp` |
 | **Congress** ([`Equibles.Congress.*`](../../src/Equibles.Congress.Data)) | House / Senate disclosures | `CongressMember`, `CongressionalTrade` (with `CongressPosition`, `CongressTransactionType` enums) | `CongressionalTradeScraperWorker` | `Equibles.Congress.Mcp` |
 | **FRED** ([`Equibles.Fred.*`](../../src/Equibles.Fred.Data)) | Federal Reserve Bank of St. Louis FRED API | `FredSeries`, `FredObservation`, `FredSeriesCategory` | `FredScraperWorker` | `Equibles.Fred.Mcp` |
-| **Yahoo Prices** ([`Equibles.Yahoo.*`](../../src/Equibles.Yahoo.Data)) | Yahoo Finance | `DailyStockPrice` (OHLCV + `AdjustedClose`) | `YahooPriceScraperWorker` | `Equibles.Yahoo.Mcp` |
+| **Yahoo Prices** ([`Equibles.Yahoo.*`](../../src/Equibles.Yahoo.Data)) | Yahoo Finance | `DailyStockPrice` in `ListedDailyStockPrice` (OHLCV + `AdjustedClose`, independently keyed per authoritative listed ticker) | `YahooPriceScraperWorker` | `Equibles.Yahoo.Mcp` |
 | **FINRA Short Data** ([`Equibles.Finra.*`](../../src/Equibles.Finra.Data)) | FINRA API | `DailyShortVolume`, `ShortInterest` | `FinraScraperWorker` | `Equibles.Finra.Mcp` |
 | **CFTC** ([`Equibles.Cftc.*`](../../src/Equibles.Cftc.Data)) | CFTC Commitments of Traders | `CftcContract`, `CftcContractCategory`, `CftcPositionReport` | `CftcScraperWorker` | `Equibles.Cftc.Mcp` |
 | **CBOE** ([`Equibles.Cboe.*`](../../src/Equibles.Cboe.Data)) | CBOE | `CboeVixDaily`, `CboePutCallRatio` (with `CboePutCallRatioType` enum) | `CboeScraperWorker` | `Equibles.Cboe.Mcp` |
@@ -33,6 +33,8 @@ These do not own a financial-domain dataset; they support every other module.
 | `Equibles.Plugins` | Optional plugin assembly loader called as the very first startup step in every host. |
 
 ## Module nuances
+
+- **Yahoo exact-listing prices use isolated storage.** Current readers and writers map `DailyStockPrice` to `ListedDailyStockPrice`; a schema-only `LegacyDailyStockPrice` mapping retains the untouched pre-listing `DailyStockPrice` table in the EF model without exposing it through current price repositories, so a retiring worker cannot see or corrupt sibling series during a rolling deployment.
 
 - **Insider Trading has no `.HostedService` project.** Form 3 / Form 4 filings are SEC documents and arrive through the SEC pipeline.
 - [`InsiderTradingFilingProcessor`](../../src/Equibles.Sec.HostedService/Services/InsiderTradingFilingProcessor.cs) runs inside `DocumentProcessorWorker`.

@@ -21,6 +21,15 @@ public class StockSplit
     public Guid CommonStockId { get; set; }
     public virtual CommonStock CommonStock { get; set; }
 
+    /// <summary>
+    /// The exact listed ticker whose Yahoo series produced this issuer-level action. The price
+    /// reconciliation lane uses it instead of whichever symbol is primary later. Null preserves
+    /// rows captured before exact series attribution existed, including by the old worker during a
+    /// rolling upgrade; those rows stay pending until a new exact Yahoo observation labels them.
+    /// </summary>
+    [MaxLength(32)]
+    public string PriceSeriesTicker { get; set; }
+
     public DateOnly EffectiveDate { get; set; }
 
     public decimal Numerator { get; set; }

@@ -117,6 +117,32 @@ public class CommonStockRepository : BaseRepository<CommonStock>
         return GetAll().Where(cs => ids.Contains(cs.Id));
     }
 
+    /// <summary>
+    /// Loads and locks one stock until the caller's current transaction completes. Writers that
+    /// key data by an authoritative listed ticker use this immediately before saving, so company
+    /// sync cannot change ticker ownership between validation and the write.
+    /// </summary>
+    public async Task<CommonStock> GetForUpdate(
+        Guid commonStockId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!DbContext.Database.IsRelational())
+        {
+            return await GetAll()
+                .FirstOrDefaultAsync(stock => stock.Id == commonStockId, cancellationToken);
+        }
+
+        if (DbContext.Database.CurrentTransaction == null)
+            throw new InvalidOperationException("GetForUpdate requires an active transaction.");
+
+        return await GetDbSet()
+            .FromSqlInterpolated(
+                $"""SELECT * FROM "CommonStock" WHERE "Id" = {commonStockId} FOR UPDATE"""
+            )
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public IQueryable<string> GetAllTickers()
     {
         return GetAll().Select(cs => cs.Ticker);

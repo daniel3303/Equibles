@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Yahoo.Data;
@@ -36,13 +37,20 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
         var end = new DateOnly(2024, 6, 20);
 
         _dbContext
+            .Set<CommonStock>()
+            .AddRange(
+                new CommonStock { Id = inSet, Ticker = "IN" },
+                new CommonStock { Id = notInSet, Ticker = "OUT" }
+            );
+
+        _dbContext
             .Set<DailyStockPrice>()
             .AddRange(
-                Price(inSet, start.AddDays(-1)), // before window — excluded
-                Price(inSet, start), // lower boundary — included
-                Price(inSet, end), // upper boundary — included
-                Price(inSet, end.AddDays(1)), // after window — excluded
-                Price(notInSet, new DateOnly(2024, 6, 15)) // in range but wrong stock — excluded
+                Price(inSet, "IN", start.AddDays(-1)), // before window — excluded
+                Price(inSet, "IN", start), // lower boundary — included
+                Price(inSet, "IN", end), // upper boundary — included
+                Price(inSet, "IN", end.AddDays(1)), // after window — excluded
+                Price(notInSet, "OUT", new DateOnly(2024, 6, 15)) // in range but wrong stock — excluded
             );
         await _dbContext.SaveChangesAsync(CancellationToken.None);
 
@@ -55,10 +63,11 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
         result.Select(p => p.Date).Should().BeEquivalentTo([start, end]);
     }
 
-    private static DailyStockPrice Price(Guid stockId, DateOnly date) =>
+    private static DailyStockPrice Price(Guid stockId, string listedTicker, DateOnly date) =>
         new()
         {
             CommonStockId = stockId,
+            ListedTicker = listedTicker,
             Date = date,
             Close = 100m,
         };

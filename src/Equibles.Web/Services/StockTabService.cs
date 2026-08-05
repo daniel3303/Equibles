@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Repositories;
@@ -418,9 +419,13 @@ public class StockTabService
         return new CongressionalTradesTabViewModel { Trades = trades, Ticker = stock.Ticker };
     }
 
-    public async Task<PriceTabViewModel> LoadPriceTab(CommonStock stock)
+    public Task<PriceTabViewModel> LoadPriceTab(CommonStock stock) =>
+        LoadPriceTab(stock, stock.Ticker);
+
+    public async Task<PriceTabViewModel> LoadPriceTab(CommonStock stock, string listedTicker)
     {
-        var priceQuery = _dailyStockPriceRepository.GetByStock(stock);
+        var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, listedTicker);
+        var priceQuery = _dailyStockPriceRepository.GetByStock(stock, resolvedTicker);
         if (_minSyncDate is { } minDate)
         {
             // Clamp the indicators too: derived series (SMA, RSI, MACD) over
@@ -452,7 +457,7 @@ public class StockTabService
 
         return new PriceTabViewModel
         {
-            Ticker = stock.Ticker,
+            Ticker = resolvedTicker,
             Prices = prices,
             Returns = returns,
             BenchmarkTicker = BenchmarkTicker,
@@ -675,12 +680,16 @@ public class StockTabService
             _ => 0,
         };
 
-    public async Task<KeyMetricsViewModel> LoadKeyMetrics(CommonStock stock)
+    public Task<KeyMetricsViewModel> LoadKeyMetrics(CommonStock stock) =>
+        LoadKeyMetrics(stock, stock.Ticker);
+
+    public async Task<KeyMetricsViewModel> LoadKeyMetrics(CommonStock stock, string listedTicker)
     {
         var vm = new KeyMetricsViewModel { MarketCapitalization = stock.MarketCapitalization };
+        var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, listedTicker);
 
         var recentPrices = await _dailyStockPriceRepository
-            .GetByStock(stock)
+            .GetByStock(stock, resolvedTicker)
             .OrderByDescending(p => p.Date)
             .Take(252)
             .ToListAsync();
@@ -691,6 +700,11 @@ public class StockTabService
             vm.High52Week = recentPrices.Max(p => p.High);
             vm.Low52Week = recentPrices.Min(p => p.Low);
         }
+
+        // SEC EPS facts belong to the filer's primary share basis. Keep the secondary listing's
+        // exact price/range, but never combine it with primary-only per-share fundamentals.
+        if (!string.Equals(resolvedTicker, stock.Ticker, StringComparison.Ordinal))
+            return vm;
 
         var epsConcept = await _financialConceptRepository
             .GetMatching([FactTaxonomy.UsGaap], ["EarningsPerShareDiluted"])

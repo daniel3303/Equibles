@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
@@ -8,6 +9,7 @@ using Equibles.Data;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using NSubstitute;
 
 namespace Equibles.UnitTests.CorporateActions;
@@ -26,6 +28,7 @@ public class StockSplitBackfillManagerTests
         var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         var ctx = new EquiblesFinancialDbContext(
             options,
@@ -42,7 +45,20 @@ public class StockSplitBackfillManagerTests
     private static StockSplitBackfillManager NewManager(
         EquiblesFinancialDbContext db,
         IYahooFinanceClient yahooClient
-    ) => new(yahooClient, new StockSplitCaptureManager(new StockSplitRepository(db)));
+    ) =>
+        new(
+            yahooClient,
+            new StockSplitCaptureManager(
+                new StockSplitRepository(db),
+                new CommonStockRepository(db)
+            )
+        );
+
+    private static async Task SeedStock(EquiblesFinancialDbContext db, CommonStock stock)
+    {
+        db.Add(stock);
+        await db.SaveChangesAsync();
+    }
 
     private static IYahooFinanceClient ClientReturning(params StockSplitEvent[] splits)
     {
@@ -60,6 +76,7 @@ public class StockSplitBackfillManagerTests
         var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
         var since = new DateOnly(2020, 1, 1);
         var client = ClientReturning();
+        await SeedStock(db, stock);
 
         var before = DateOnly.FromDateTime(DateTime.UtcNow);
         await NewManager(db, client).BackfillHistory(stock, since, CancellationToken.None);
@@ -84,6 +101,7 @@ public class StockSplitBackfillManagerTests
                 Denominator = 1m,
             }
         );
+        await SeedStock(db, stock);
 
         var captured = await NewManager(db, client)
             .BackfillHistory(stock, new DateOnly(2020, 1, 1), CancellationToken.None);
@@ -95,7 +113,8 @@ public class StockSplitBackfillManagerTests
         split.Numerator.Should().Be(4m);
         split.Denominator.Should().Be(1m);
         split.Source.Should().Be(StockSplitSource.Yahoo);
-        // Null marks the stock pending for the price sync's split reconciliation,
+        split.PriceSeriesTicker.Should().Be("AAPL");
+        // Null marks the exact listed series pending for the price sync's split reconciliation,
         // which re-pulls the fully-adjusted history — the backfill itself never
         // touches stored prices.
         split.PriceAdjustmentAppliedTime.Should().BeNull();
@@ -115,6 +134,7 @@ public class StockSplitBackfillManagerTests
             }
         );
         var since = new DateOnly(2020, 1, 1);
+        await SeedStock(db, stock);
 
         await NewManager(db, client).BackfillHistory(stock, since, CancellationToken.None);
         var secondPass = await NewManager(db, client)
@@ -129,6 +149,7 @@ public class StockSplitBackfillManagerTests
     {
         await using var db = NewDb();
         var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        await SeedStock(db, stock);
 
         var captured = await NewManager(db, ClientReturning())
             .BackfillHistory(stock, new DateOnly(2020, 1, 1), CancellationToken.None);
@@ -143,6 +164,7 @@ public class StockSplitBackfillManagerTests
         await using var db = NewDb();
         var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
         var client = ClientReturning();
+        await SeedStock(db, stock);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 

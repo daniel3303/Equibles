@@ -114,7 +114,15 @@ public class StocksController : BaseController
 
     [HttpGet("~/stocks/{ticker}/price")]
     public Task<IActionResult> Price(string ticker) =>
-        ShowStockTab(ticker, "price", async s => await _stockTabService.LoadPriceTab(s));
+        ShowStockTab(
+            ticker,
+            "price",
+            async s =>
+                await _stockTabService.LoadPriceTab(
+                    s,
+                    SecondaryTickerPolicy.ResolveListedTicker(s, ticker)
+                )
+        );
 
     [HttpGet("~/stocks/{ticker}/holdings")]
     public Task<IActionResult> Holdings(
@@ -236,7 +244,8 @@ public class StocksController : BaseController
         if (stock == null)
             return NotFound();
 
-        var viewModel = BuildStockViewModel(stock, activeTab);
+        var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker) ?? stock.Ticker;
+        var viewModel = BuildStockViewModel(stock, activeTab, listedTicker);
 
         var since = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-FilingActivityDays);
         var filingActivity = await _institutionalHoldingRepository
@@ -245,7 +254,7 @@ public class StocksController : BaseController
         viewModel.RecentFilingCount = filingActivity?.FilingCount ?? 0;
         viewModel.RecentFilerCount = filingActivity?.FilerCount ?? 0;
         viewModel.FilingActivityDays = FilingActivityDays;
-        viewModel.KeyMetrics = await _stockTabService.LoadKeyMetrics(stock);
+        viewModel.KeyMetrics = await _stockTabService.LoadKeyMetrics(stock, listedTicker);
 
         var (hasFundHoldings, hasFundOperations) = await _stockTabService.LoadFundTabAvailability(
             stock
@@ -277,19 +286,32 @@ public class StocksController : BaseController
 
     private async Task<Equibles.CommonStocks.Data.Models.CommonStock> LoadStock(string ticker)
     {
-        return await _commonStockRepository.GetByTicker(TickerNormalizer.Normalize(ticker));
+        var normalizedTicker = TickerNormalizer.Normalize(ticker);
+        var stock = await _commonStockRepository.GetByTicker(normalizedTicker);
+        if (stock != null || !normalizedTicker.Contains('.'))
+            return stock;
+
+        // U.S. class-share symbols are commonly entered with dot notation while the
+        // authoritative stored/Yahoo spelling uses a dash (BRK.A -> BRK-A).
+        return await _commonStockRepository.GetByTicker(normalizedTicker.Replace('.', '-'));
     }
 
     private StockDetailViewModel BuildStockViewModel(
         Equibles.CommonStocks.Data.Models.CommonStock stock,
-        string activeTab
+        string activeTab,
+        string listedTicker
     )
     {
-        var viewModel = new StockDetailViewModel { Stock = stock, ActiveTab = activeTab };
+        var viewModel = new StockDetailViewModel
+        {
+            Stock = stock,
+            ActiveTab = activeTab,
+            ListingTicker = listedTicker,
+        };
 
-        ViewData["Title"] = $"{stock.Ticker} - {stock.Name}";
+        ViewData["Title"] = $"{listedTicker} - {stock.Name}";
         ViewData["Description"] =
-            $"{stock.Ticker} - {stock.Name}. View institutional holdings, short volume, short interest, and SEC filings for {stock.Ticker}.";
+            $"{listedTicker} - {stock.Name}. View institutional holdings, short volume, short interest, and SEC filings for {listedTicker}.";
         return viewModel;
     }
 
