@@ -138,6 +138,66 @@ public class InsiderTransactionPriceValidatorSplitBasisTests
     }
 
     [Fact]
+    public void Evaluate_ReverseSplit_RawBasisPriceIsNoLongerAdmitted()
+    {
+        // 1:10 reverse split after the transaction (factor 0.1): the as-filed basis is
+        // close × 0.1 = $5. A correct as-filed price stays valid; a junk figure that was
+        // plausible on the RAW close basis (the old either-basis union admitted anything up
+        // to 10 × close = $500) must now be flagged. Reverse splits concentrate in the
+        // penny-stock population with the junkiest per-share fields, so the raw branch was
+        // 1/factor = 10× too permissive exactly where it hurts most.
+        var correct = _validator.Evaluate(
+            reportedPrice: 5.20m,
+            shares: 1_000,
+            kind: InsiderSecurityKind.NonDerivative,
+            securityTitle: "Common Stock",
+            bar: new DailyBarContext { Close = 50m, SplitFactorToPresent = 0.1m }
+        );
+        correct.IsPriceValid.Should().BeTrue();
+        correct.WasRepaired.Should().BeFalse();
+
+        var rawBasisJunk = _validator.Evaluate(
+            reportedPrice: 400m,
+            shares: 3,
+            kind: InsiderSecurityKind.NonDerivative,
+            securityTitle: "Common Stock",
+            bar: new DailyBarContext { Close = 50m, SplitFactorToPresent = 0.1m }
+        );
+        rawBasisJunk.IsPriceValid.Should().BeFalse();
+        rawBasisJunk.WasRepaired.Should().BeFalse();
+        rawBasisJunk.EffectivePrice.Should().Be(400m);
+    }
+
+    [Fact]
+    public void Evaluate_RepairBand_NeverAcceptsACandidateOnTheWrongBasis()
+    {
+        // Factor 20: a candidate near the PRESENT-basis close ($150 on a $165 close) is off
+        // by exactly the split ratio on the as-filed basis. The old either-basis band would
+        // have stamped it as an audited repair — the same corruption shape this validator
+        // exists to prevent. ($45,000 total: implausible as filed since 45,000/10 > the
+        // as-filed close basis of ~$3,300; over 300 shares it divides to $150.)
+        var result = _validator.Evaluate(
+            reportedPrice: 45_000m,
+            shares: 300,
+            kind: InsiderSecurityKind.NonDerivative,
+            securityTitle: "Common Stock",
+            bar: new DailyBarContext
+            {
+                Close = 165.01m,
+                Low = 163.00m,
+                High = 166.50m,
+                SplitFactorToPresent = 20m,
+            }
+        );
+
+        result.IsPriceValid.Should().BeFalse();
+        result.WasRepaired.Should().BeFalse();
+        result
+            .EffectivePrice.Should()
+            .Be(45_000m, "a candidate on the present basis must be refused, not stamped");
+    }
+
+    [Fact]
     public void Evaluate_NoUsableRange_FallsBackToTheCloseBand()
     {
         // Bar without Low/High: the band is [close/2, close×2]. $120 on a $50 close is

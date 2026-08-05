@@ -168,14 +168,18 @@ public class InsiderTransactionPriceValidator
             };
         }
 
-        // Plausible against the close on EITHER basis — keep as filed. The
-        // factor-scaled comparison is what accepts a correct pre-split price
-        // (AMZN $3,300.24 vs the adjusted $165 close, factor 20). Divide
-        // rather than multiply the price side so a near-decimal.MaxValue
-        // close can't overflow.
+        // Plausible against the close on the AS-FILED basis only. A filed price
+        // is definitionally on the transaction date's basis, and the resolver
+        // already went pending above when that basis was unknowable — so the
+        // one correct comparison is close × factor (AMZN $3,300.24 vs the
+        // adjusted $165 close, factor 20). A raw-basis "second opinion" would
+        // be dominated on forward splits and 1/factor too permissive on
+        // reverse splits. Divide the price side (not multiply) so a
+        // near-decimal.MaxValue price can't overflow; the close × factor side
+        // stays small because both are market-scale numbers.
         var factor = bar.SplitFactorToPresent > 0m ? bar.SplitFactorToPresent : 1m;
         var scaled = basePrice / MaxPriceToCloseMultiplier;
-        if (scaled <= close.Value || scaled / factor <= close.Value)
+        if (scaled <= close.Value * factor)
         {
             return new InsiderTransactionPriceEvaluation
             {
@@ -200,7 +204,7 @@ public class InsiderTransactionPriceValidator
 
         // Repair candidate: the mis-entered total divided by the share count.
         // Accepted only when it reproduces a price inside the session's band
-        // on one of the two bases — otherwise flag, never fabricate.
+        // on the as-filed basis — otherwise flag, never fabricate.
         var candidate = basePrice / shares;
         if (IsInsideRepairBand(candidate, bar, factor))
         {
@@ -234,9 +238,12 @@ public class InsiderTransactionPriceValidator
             bandHigh = bar.Close.Value * RepairFallbackHighFactor;
         }
 
-        // Present basis, then the as-filed basis (band × factor).
-        if (candidate >= bandLow && candidate <= bandHigh)
-            return true;
+        // As-filed basis only (band × factor; factor is 1 with no resolved
+        // split). The candidate comes from a filed total, so it is on the
+        // transaction date's basis — accepting it against the present-basis
+        // band when factor != 1 would stamp a price wrong by exactly the split
+        // ratio as an audited repair, the same shape as the corruption this
+        // validator exists to prevent.
         return candidate >= bandLow * factor && candidate <= bandHigh * factor;
     }
 

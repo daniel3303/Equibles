@@ -163,4 +163,59 @@ public class InsiderMisrepairedPriceSweepTests : IDisposable
         (await CreateSweep().Run(CancellationToken.None)).Should().Be(1);
         (await CreateSweep().Run(CancellationToken.None)).Should().Be(0);
     }
+
+    [Fact]
+    public async Task ReopenShareslessVerdicts_StrandedShareslessRow_NullsTheVerdict()
+    {
+        // The old basis-blind comparison flagged the row invalid via its shares <= 0 branch;
+        // the price was never touched, so only the verdict re-opens for the fixed validator.
+        var row = await Seed(
+            pricePerShare: 3_300.24m,
+            reportedPricePerShare: 3_300.24m,
+            shares: 0,
+            isPriceValid: false
+        );
+
+        var reopened = await CreateSweep().ReopenShareslessVerdicts(CancellationToken.None);
+
+        reopened.Should().Be(1);
+        var verify = CreateContext();
+        var updated = await verify.Set<InsiderTransaction>().SingleAsync(t => t.Id == row.Id);
+        updated.PricePerShare.Should().Be(3_300.24m, "the price was never corrupted");
+        updated.IsPriceValid.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ReopenShareslessVerdicts_RowWithShares_IsNotTouched()
+    {
+        // An invalid verdict with a positive share count came from the repair-refusal path,
+        // not the sharesless branch — it stays.
+        var row = await Seed(
+            pricePerShare: 1_000_000m,
+            reportedPricePerShare: 1_000_000m,
+            shares: 1_000,
+            isPriceValid: false
+        );
+
+        (await CreateSweep().ReopenShareslessVerdicts(CancellationToken.None)).Should().Be(0);
+        (await CreateContext().Set<InsiderTransaction>().SingleAsync(t => t.Id == row.Id))
+            .IsPriceValid.Should()
+            .BeFalse();
+    }
+
+    [Fact]
+    public async Task Run_DoesNotTouchTheShareslessCohort()
+    {
+        // The two passes are separate on purpose: Run is self-terminating and safe every
+        // cycle; the sharesless reopen is one-shot (worker-gated) because a re-flagged row
+        // matches its predicate again.
+        await Seed(
+            pricePerShare: 3_300.24m,
+            reportedPricePerShare: 3_300.24m,
+            shares: 0,
+            isPriceValid: false
+        );
+
+        (await CreateSweep().Run(CancellationToken.None)).Should().Be(0);
+    }
 }

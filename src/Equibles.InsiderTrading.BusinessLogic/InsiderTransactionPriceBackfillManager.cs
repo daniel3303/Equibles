@@ -68,7 +68,8 @@ public class InsiderTransactionPriceBackfillManager
     }
 
     public async Task<InsiderTransactionPriceBackfillResult> Run(
-        Func<InsiderTransactionPriceBackfillResult, Task> onProgress = null
+        Func<InsiderTransactionPriceBackfillResult, Task> onProgress = null,
+        CancellationToken cancellationToken = default
     )
     {
         // Snapshot of the work-set size for the progress bar. The live parser
@@ -98,6 +99,10 @@ public class InsiderTransactionPriceBackfillManager
         var lastId = Guid.Empty;
         while (true)
         {
+            // Between batches only: a granted stop lands after the current batch's
+            // SaveChanges, so no evaluation is half-persisted and the next run resumes
+            // from the surviving null rows.
+            cancellationToken.ThrowIfCancellationRequested();
             var batch = await _transactionRepository
                 .GetAll()
                 .Where(t => t.IsPriceValid == null)
@@ -107,7 +112,7 @@ public class InsiderTransactionPriceBackfillManager
                 .OrderBy(t => t.TransactionDate)
                 .ThenBy(t => t.Id)
                 .Take(BatchSize)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
             if (batch.Count == 0)
                 break;

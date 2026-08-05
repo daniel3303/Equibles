@@ -90,4 +90,57 @@ public class InsiderMisrepairedPriceSweep
 
         return rows.Count;
     }
+
+    /// <summary>
+    /// Re-opens the second cohort the old basis-blind comparison stranded: rows it flagged
+    /// invalid via its <c>shares &lt;= 0</c> branch. Their price was never touched (nothing to
+    /// restore), but the verdict came from the wrong comparison and no other heal path reaches
+    /// <c>IsPriceValid == false</c> — nulling the verdict routes them through the fixed
+    /// validator, which accepts a correct pre-split price as filed even with no usable share
+    /// count. NOT self-terminating: a row the fixed validator re-flags invalid matches this
+    /// predicate again, so the caller must gate this behind a one-shot marker rather than
+    /// running it every cycle.
+    /// </summary>
+    public async Task<int> ReopenShareslessVerdicts(CancellationToken cancellationToken = default)
+    {
+        if (_dbContext.Database.IsRelational())
+        {
+            _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
+        }
+
+        var stranded = await _transactionRepository
+            .GetAll()
+            .Where(t =>
+                t.IsPriceValid == false
+                && !t.PriceWasRepaired
+                && t.Shares <= 0
+                && t.ReportedPricePerShare > 0m
+                && t.PricePerShare == t.ReportedPricePerShare
+            )
+            .OrderBy(t => t.TransactionDate)
+            .ThenBy(t => t.Id)
+            .Take(MaxRowsPerCycle)
+            .ToListAsync(cancellationToken);
+
+        if (stranded.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var row in stranded)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            row.IsPriceValid = null;
+        }
+
+        await _transactionRepository.SaveChanges();
+
+        _logger.LogWarning(
+            "Misrepaired-price sweep: re-opened {Count} shareless invalid verdict(s) for "
+                + "re-evaluation under the split-basis-aware validator",
+            stranded.Count
+        );
+
+        return stranded.Count;
+    }
 }
