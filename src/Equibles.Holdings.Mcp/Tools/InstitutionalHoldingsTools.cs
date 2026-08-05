@@ -400,11 +400,34 @@ public class InstitutionalHoldingsTools
                     return dateError;
 
                 var allHoldings = _holdingRepository.Get13FByHolderWithStock(holder, targetDate);
-                var totalPositions = await allHoldings
-                    .Select(h => h.CommonStockId)
-                    .Distinct()
-                    .CountAsync();
-                var totalValue = await allHoldings.SumAsync(h => (long?)h.Value) ?? 0L;
+
+                // One grouped round trip for the three header scalars — this is the same table
+                // whose non-index-only scans once drained a connection pool, so the extra
+                // per-call queries matter. The unvalued count shares the header's distinct-stock
+                // basis (a filer's option and share rows must not double-count), and its
+                // predicate must catch every cohort of $0 rows: still pending, marked
+                // unknowable, AND rows the old retry ladder abandoned with neither flag set —
+                // those carry only the filer's own FiledValue as the tell. Counting just the
+                // flagged rows once reported "1 unvalued position" for a filer with 94 of its 96
+                // positions at $0 — the same dishonesty this disclosure exists to remove.
+                var summary = await allHoldings
+                    .GroupBy(h => 1)
+                    .Select(g => new
+                    {
+                        Positions = g.Select(h => h.CommonStockId).Distinct().Count(),
+                        Value = g.Sum(h => h.Value),
+                        Unvalued = g.Where(h =>
+                                h.Value == 0L
+                                && (h.ValuePending || h.ValueUnavailable || h.FiledValue > 0)
+                            )
+                            .Select(h => h.CommonStockId)
+                            .Distinct()
+                            .Count(),
+                    })
+                    .FirstOrDefaultAsync();
+                var totalPositions = summary?.Positions ?? 0;
+                var totalValue = summary?.Value ?? 0L;
+                var unvaluedPositions = summary?.Unvalued ?? 0;
 
                 // What the filer itself declared for the quarter, from the latest filing's cover
                 // page — so the answer can say "7 of the 8 declared positions" instead of
@@ -437,6 +460,7 @@ public class InstitutionalHoldingsTools
                     splitsByStock,
                     totalPositions,
                     totalValue,
+                    unvaluedPositions,
                     declaringFiling,
                     JoinNotes(matchNote, dateNote)
                 );
@@ -453,6 +477,7 @@ public class InstitutionalHoldingsTools
         IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
         int totalPositions,
         long totalValue,
+        int unvaluedPositions,
         InstitutionalFiling declaringFiling,
         string notes
     )
@@ -463,7 +488,9 @@ public class InstitutionalHoldingsTools
 
         // The filer's own cover-page declaration, when captured, makes the coverage exact: the
         // reader learns how many positions the filing carries in total and what they are worth,
-        // so a tracked subset can never read as the whole filing.
+        // so a tracked subset can never read as the whole filing. The declared-vs-tracked gap has
+        // TWO causes and blaming coverage for both once hid real top holdings — unvalued rows are
+        // named separately below.
         if (
             declaringFiling
             is { DeclaredPositionCount: not null }
@@ -475,9 +502,27 @@ public class InstitutionalHoldingsTools
                 declaredParts.Add($"{McpFormat.WholeNumber(declaredCount)} positions");
             if (declaringFiling.DeclaredTotalValue is { } declaredValue)
                 declaredParts.Add($"${FormatMillions(declaredValue)}M");
+            // Unvalued rows are TRACKED — already inside the tracked position count — so they
+            // explain none of the position-count gap; they explain part of the VALUE gap only.
             subtitle +=
                 $" The filing itself declares {string.Join(" totalling ", declaredParts)}; "
-                + "the difference is security types outside this platform's coverage.";
+                + (
+                    unvaluedPositions > 0
+                        ? "the position difference is security types outside this platform's "
+                            + "coverage, and the value difference also reflects the unvalued "
+                            + "positions noted below."
+                        : "the difference is security types outside this platform's coverage."
+                );
+        }
+
+        // Rows at $0 are not "no position" — they are tracked positions with no derivable dollar
+        // value yet. Say so, or the total and every percentage read as the whole story.
+        if (unvaluedPositions > 0)
+        {
+            subtitle +=
+                $" NOTE: {McpFormat.WholeNumber(unvaluedPositions)} tracked position(s) have no "
+                + "derivable value and count as $0 in the total above, so the total and the "
+                + "percentages understate the filing.";
         }
         if (notes != null)
             subtitle = $"{subtitle}\n{notes}";

@@ -63,6 +63,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
             splitsByStock,
             holdings.Count,
             holdings.Sum(h => h.Value),
+            0, // unvaluedPositions
             null,
             null,
         ];
