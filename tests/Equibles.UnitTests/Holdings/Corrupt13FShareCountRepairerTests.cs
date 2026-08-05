@@ -198,5 +198,10 @@ public class Corrupt13FShareCountRepairerTests
     private static Dictionary<(Guid, string, DateOnly), decimal> Prices(
         BufferedHoldingRow row,
         decimal closePrice
-    ) => new() { [(row.Holding.CommonStockId, row.Holding.ListedTicker, row.Holding.ReportDate)] = closePrice };
+    ) =>
+        new()
+        {
+            [(row.Holding.CommonStockId, row.Holding.ListedTicker, row.Holding.ReportDate)] =
+                closePrice,
+        };
 }

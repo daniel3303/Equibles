@@ -139,7 +139,9 @@ public class HoldingsValueRecalculatorTests
                 Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>());
+            .Returns(
+                new Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>()
+            );
 
         await harness.BuildRecalculator(db).Recalculate(CancellationToken.None);
 
@@ -189,7 +191,9 @@ public class HoldingsValueRecalculatorTests
                 Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>());
+            .Returns(
+                new Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>()
+            );
 
         await harness.BuildRecalculator(db).Recalculate(CancellationToken.None);
 

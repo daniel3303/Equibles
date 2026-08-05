@@ -180,7 +180,10 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             ("INFOTABLE.tsv", infoTable)
         );
 
-        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
+        {
+            [(stock.Id, null, reportDate)] = 150m,
+        };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
         var result = await sut.ImportDataSet(
@@ -336,7 +339,10 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             ("SUMMARYPAGE.tsv", summaryPage)
         );
 
-        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
+        {
+            [(stock.Id, null, reportDate)] = 150m,
+        };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
         var result = await sut.ImportDataSet(
@@ -804,7 +810,10 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 
         var sut = CreateImporter(
             PriceProviderReturning(
-                new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 200m }
+                new Dictionary<(Guid, string, DateOnly), decimal>
+                {
+                    [(stock.Id, null, reportDate)] = 200m,
+                }
             )
         );
 
@@ -915,7 +924,10 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 
         var sut = CreateImporter(
             PriceProviderReturning(
-                new Dictionary<(Guid, string, DateOnly), decimal> { [(stockAmended.Id, null, eventDate)] = 200m }
+                new Dictionary<(Guid, string, DateOnly), decimal>
+                {
+                    [(stockAmended.Id, null, eventDate)] = 200m,
+                }
             )
         );
 
@@ -1014,7 +1026,10 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             ("OTHERMANAGER2.tsv", otherManager)
         );
 
-        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
+        {
+            [(stock.Id, null, reportDate)] = 150m,
+        };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
         var result = await sut.ImportDataSet(
@@ -1072,7 +1087,10 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             ("INFOTABLE.tsv", infoTable)
         );
 
-        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
+        {
+            [(stock.Id, null, reportDate)] = 150m,
+        };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
         var result = await sut.ImportDataSet(

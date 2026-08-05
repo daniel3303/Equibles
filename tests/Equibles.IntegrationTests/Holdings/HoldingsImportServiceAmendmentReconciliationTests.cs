@@ -139,7 +139,10 @@ public class HoldingsImportServiceAmendmentReconciliationTests : IAsyncLifetime
         }
 
         var reportDate = new DateOnly(2024, 9, 30);
-        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 100m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
+        {
+            [(stock.Id, null, reportDate)] = 100m,
+        };
 
         const string cover =
             "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n";

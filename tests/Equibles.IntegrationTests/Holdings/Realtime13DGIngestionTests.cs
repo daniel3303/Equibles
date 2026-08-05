@@ -192,7 +192,9 @@ public class Realtime13DGIngestionTests : IAsyncLifetime
             .Returns(ci =>
             {
                 var dict = new Dictionary<(Guid, string, DateOnly), decimal>();
-                foreach (var (id, ticker, date) in ci.ArgAt<IEnumerable<(Guid, string, DateOnly)>>(0))
+                foreach (
+                    var (id, ticker, date) in ci.ArgAt<IEnumerable<(Guid, string, DateOnly)>>(0)
+                )
                     dict[(id, ticker, date)] = 10m;
                 return Task.FromResult(dict);
             });

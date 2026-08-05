@@ -164,7 +164,10 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
         }
 
         var reportDate = new DateOnly(2025, 12, 31);
-        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(apple.Id, null, reportDate)] = 250m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
+        {
+            [(apple.Id, null, reportDate)] = 250m,
+        };
         foreach (var p in padding)
             prices[(p.Id, null, reportDate)] = 1m;
 
