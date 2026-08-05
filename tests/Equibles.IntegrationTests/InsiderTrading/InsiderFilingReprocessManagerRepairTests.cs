@@ -1,5 +1,6 @@
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
@@ -62,7 +63,7 @@ public class InsiderFilingReprocessManagerRepairTests : ParadeDbMcpTestBase
             FilingDate = date,
             TransactionDate = date,
             TransactionCode = TransactionCode.Purchase,
-            Shares = 1000,
+            Shares = 20_000,
             PricePerShare = 1_000_000m,
             ReportedPricePerShare = 1_000_000m,
             AcquiredDisposed = AcquiredDisposed.Acquired,
@@ -80,7 +81,7 @@ public class InsiderFilingReprocessManagerRepairTests : ParadeDbMcpTestBase
             + "<transactionDate><value>2024-06-14</value></transactionDate>"
             + "<transactionCoding><transactionCode>P</transactionCode></transactionCoding>"
             + "<transactionAmounts>"
-            + "<transactionShares><value>1000</value></transactionShares>"
+            + "<transactionShares><value>20000</value></transactionShares>"
             + "<transactionPricePerShare><value>1000000</value></transactionPricePerShare>"
             + "</transactionAmounts>"
             + "</nonDerivativeTransaction></nonDerivativeTable>"
@@ -123,6 +124,7 @@ public class InsiderFilingReprocessManagerRepairTests : ParadeDbMcpTestBase
             new InsiderTransactionRepository(runCtx),
             new InsiderFilingRepository(runCtx),
             new DailyStockPriceRepository(runCtx),
+            new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             edgar,
             fileManager,
@@ -138,8 +140,10 @@ public class InsiderFilingReprocessManagerRepairTests : ParadeDbMcpTestBase
 
         await using var verify = Fixture.CreateDbContext();
         var row = await verify.Set<InsiderTransaction>().FindAsync(stale.Id);
-        // Repaired to 1,000,000 / 1000 shares = 1,000 per share; the as-filed value is preserved.
-        row!.PricePerShare.Should().Be(1_000m);
+        // Repaired to 1,000,000 / 20,000 shares = $50 per share — the close itself, inside the
+        // repair band; the as-filed value is preserved and the repair is stamped auditable.
+        row!.PricePerShare.Should().Be(50m);
+        row.PriceWasRepaired.Should().BeTrue();
         row.ReportedPricePerShare.Should().Be(1_000_000m);
         row.IsPriceValid.Should().Be(true);
         row.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);

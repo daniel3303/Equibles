@@ -1,6 +1,8 @@
 using System.Reflection;
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data;
@@ -24,12 +26,14 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
     {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new InsiderTradingModuleConfiguration(),
             new YahooModuleConfiguration()
         );
         _manager = new InsiderTransactionPriceBackfillManager(
             new InsiderTransactionRepository(_dbContext),
             new DailyStockPriceRepository(_dbContext),
+            new StockSplitRepository(_dbContext),
             new InsiderTransactionPriceValidator(),
             _dbContext,
             NullLogger<InsiderTransactionPriceBackfillManager>.Instance
@@ -84,13 +88,16 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
         };
 
         var method = typeof(InsiderTransactionPriceBackfillManager).GetMethod(
-            "FetchCloses",
+            "FetchBars",
             BindingFlags.NonPublic | BindingFlags.Instance
         );
-        var closes = await (Task<Dictionary<(Guid, DateOnly), decimal>>)
-            method.Invoke(_manager, [batch]);
+        var barsTask = (Task)method.Invoke(_manager, [batch]);
+        await barsTask;
+        var bars = (System.Collections.IDictionary)
+            barsTask.GetType().GetProperty("Result").GetValue(barsTask);
 
-        closes.Should().ContainKey((stockId, saturday));
-        closes[(stockId, saturday)].Should().Be(50m);
+        bars.Contains((stockId, saturday)).Should().BeTrue();
+        var bar = bars[(stockId, saturday)];
+        ((decimal)bar.GetType().GetProperty("Close").GetValue(bar)).Should().Be(50m);
     }
 }

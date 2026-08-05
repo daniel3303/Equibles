@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
@@ -68,6 +69,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         var manager = new InsiderTransactionPriceBackfillManager(
             new InsiderTransactionRepository(runCtx),
             new DailyStockPriceRepository(runCtx),
+            new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             runCtx,
             NullLogger<InsiderTransactionPriceBackfillManager>()
@@ -151,6 +153,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         var manager = new InsiderTransactionPriceBackfillManager(
             new InsiderTransactionRepository(runCtx),
             new DailyStockPriceRepository(runCtx),
+            new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             runCtx,
             NullLogger<InsiderTransactionPriceBackfillManager>()

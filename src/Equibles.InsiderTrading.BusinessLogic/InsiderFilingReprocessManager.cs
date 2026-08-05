@@ -1,6 +1,9 @@
 using System.Text;
 using System.Xml.Linq;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.InsiderTrading.BusinessLogic.Models;
 using Equibles.InsiderTrading.Data.Models;
@@ -47,6 +50,7 @@ public class InsiderFilingReprocessManager
     private readonly InsiderTransactionRepository _transactionRepository;
     private readonly InsiderFilingRepository _filingRepository;
     private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
     private readonly InsiderTransactionPriceValidator _validator;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly IFileManager _fileManager;
@@ -57,6 +61,7 @@ public class InsiderFilingReprocessManager
         InsiderTransactionRepository transactionRepository,
         InsiderFilingRepository filingRepository,
         DailyStockPriceRepository dailyStockPriceRepository,
+        StockSplitRepository stockSplitRepository,
         InsiderTransactionPriceValidator validator,
         ISecEdgarClient secEdgarClient,
         IFileManager fileManager,
@@ -67,6 +72,7 @@ public class InsiderFilingReprocessManager
         _transactionRepository = transactionRepository;
         _filingRepository = filingRepository;
         _dailyStockPriceRepository = dailyStockPriceRepository;
+        _stockSplitRepository = stockSplitRepository;
         _validator = validator;
         _secEdgarClient = secEdgarClient;
         _fileManager = fileManager;
@@ -308,22 +314,41 @@ public class InsiderFilingReprocessManager
 
         // Date corrections must land before close lookup so price validation uses the
         // repaired trading day rather than the impossible source typo.
-        var closes = await FetchCloses(first.CommonStockId, rows);
+        var bars = await FetchBars(first.CommonStockId, rows);
+        var splits = await _stockSplitRepository
+            .GetAll()
+            .Where(sp => sp.CommonStockId == first.CommonStockId)
+            .ToListAsync();
+        var identity = await _dbContext
+            .Set<CommonStock>()
+            .Where(cs => cs.Id == first.CommonStockId)
+            .Select(cs => new { cs.Ticker, cs.SecondaryTickers })
+            .FirstOrDefaultAsync();
 
         foreach (var row in rows)
         {
-            decimal? close = closes.TryGetValue(row.TransactionDate, out var value) ? value : null;
+            bars.TryGetValue(row.TransactionDate, out var barRow);
+            var bar = InsiderDailyBars.Build(
+                barRow?.Close,
+                barRow?.Low,
+                barRow?.High,
+                row.TransactionDate,
+                splits,
+                identity?.Ticker,
+                identity?.SecondaryTickers ?? []
+            );
 
             var evaluation = _validator.Evaluate(
                 row.ReportedPricePerShare,
                 row.Shares,
                 row.SecurityKind,
                 row.SecurityTitle,
-                close,
+                bar,
                 row.Notes
             );
             row.PricePerShare = evaluation.EffectivePrice;
             row.IsPriceValid = evaluation.IsPriceValid;
+            row.PriceWasRepaired = evaluation.WasRepaired;
             if (evaluation.WasRepaired)
                 result.Repaired++;
 
@@ -436,7 +461,11 @@ public class InsiderFilingReprocessManager
             row.ParserVersion = InsiderTransaction.CurrentParserVersion;
     }
 
-    private async Task<Dictionary<DateOnly, decimal>> FetchCloses(
+    private sealed record BarRow(decimal Close, decimal Low, decimal High);
+
+    // The stored bars are on TODAY'S split-adjusted basis; the evaluation carries the split
+    // factor so a pre-split filed price is validated on its own basis instead of "repaired".
+    private async Task<Dictionary<DateOnly, BarRow>> FetchBars(
         Guid stockId,
         List<InsiderTransaction> rows
     )
@@ -447,18 +476,24 @@ public class InsiderFilingReprocessManager
         var prices = await _dailyStockPriceRepository
             .GetAll()
             .Where(p => p.CommonStockId == stockId && p.Date >= minDate && p.Date <= maxDate)
-            .Select(p => new { p.Date, p.Close })
+            .Select(p => new
+            {
+                p.Date,
+                p.Close,
+                p.Low,
+                p.High,
+            })
             .OrderByDescending(p => p.Date)
             .ToListAsync();
 
-        var result = new Dictionary<DateOnly, decimal>();
+        var result = new Dictionary<DateOnly, BarRow>();
         foreach (var row in rows)
         {
             if (result.ContainsKey(row.TransactionDate))
                 continue;
             var match = prices.FirstOrDefault(p => p.Date <= row.TransactionDate);
             if (match != null)
-                result[row.TransactionDate] = match.Close;
+                result[row.TransactionDate] = new BarRow(match.Close, match.Low, match.High);
         }
         return result;
     }

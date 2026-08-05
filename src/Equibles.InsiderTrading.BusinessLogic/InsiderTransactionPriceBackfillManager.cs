@@ -1,4 +1,7 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.InsiderTrading.BusinessLogic.Models;
 using Equibles.InsiderTrading.Data.Models;
@@ -13,10 +16,13 @@ namespace Equibles.InsiderTrading.BusinessLogic;
 /// <summary>
 /// Evaluates the not-yet-checked insider transactions — those whose
 /// <see cref="InsiderTransaction.IsPriceValid"/> is still <c>null</c>. Each
-/// row's reported price is cross-checked against the Yahoo unadjusted close
-/// on the transaction date (most recent prior trading day for weekends /
-/// holidays) via <see cref="InsiderTransactionPriceValidator"/>; implausible
-/// rows are repaired (reported total ÷ shares) and the raw value preserved in
+/// row's reported price is cross-checked against the stored close on the
+/// transaction date (most recent prior trading day for weekends / holidays)
+/// via <see cref="InsiderTransactionPriceValidator"/>. The stored close is on
+/// TODAY'S split-adjusted basis while the filed price is on the transaction
+/// date's basis, so each check carries the split factor and runs on both
+/// bases; implausible rows are repaired (reported total ÷ shares) only inside
+/// the session's price band, and the raw value is preserved in
 /// <see cref="InsiderTransaction.ReportedPricePerShare"/>.
 ///
 /// Only null rows are touched, so a row is evaluated exactly once and re-runs
@@ -39,6 +45,7 @@ public class InsiderTransactionPriceBackfillManager
 
     private readonly InsiderTransactionRepository _transactionRepository;
     private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
     private readonly InsiderTransactionPriceValidator _validator;
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ILogger<InsiderTransactionPriceBackfillManager> _logger;
@@ -46,6 +53,7 @@ public class InsiderTransactionPriceBackfillManager
     public InsiderTransactionPriceBackfillManager(
         InsiderTransactionRepository transactionRepository,
         DailyStockPriceRepository dailyStockPriceRepository,
+        StockSplitRepository stockSplitRepository,
         InsiderTransactionPriceValidator validator,
         EquiblesFinancialDbContext dbContext,
         ILogger<InsiderTransactionPriceBackfillManager> logger
@@ -53,13 +61,15 @@ public class InsiderTransactionPriceBackfillManager
     {
         _transactionRepository = transactionRepository;
         _dailyStockPriceRepository = dailyStockPriceRepository;
+        _stockSplitRepository = stockSplitRepository;
         _validator = validator;
         _dbContext = dbContext;
         _logger = logger;
     }
 
     public async Task<InsiderTransactionPriceBackfillResult> Run(
-        Func<InsiderTransactionPriceBackfillResult, Task> onProgress = null
+        Func<InsiderTransactionPriceBackfillResult, Task> onProgress = null,
+        CancellationToken cancellationToken = default
     )
     {
         // Snapshot of the work-set size for the progress bar. The live parser
@@ -89,6 +99,10 @@ public class InsiderTransactionPriceBackfillManager
         var lastId = Guid.Empty;
         while (true)
         {
+            // Between batches only: a granted stop lands after the current batch's
+            // SaveChanges, so no evaluation is half-persisted and the next run resumes
+            // from the surviving null rows.
+            cancellationToken.ThrowIfCancellationRequested();
             var batch = await _transactionRepository
                 .GetAll()
                 .Where(t => t.IsPriceValid == null)
@@ -98,29 +112,43 @@ public class InsiderTransactionPriceBackfillManager
                 .OrderBy(t => t.TransactionDate)
                 .ThenBy(t => t.Id)
                 .Take(BatchSize)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
             if (batch.Count == 0)
                 break;
 
-            var closes = await FetchCloses(batch);
+            var bars = await FetchBars(batch);
+            var (splitsByStock, identityByStock) = await FetchSplitContext(batch);
 
             foreach (var transaction in batch)
             {
                 var key = (transaction.CommonStockId, transaction.TransactionDate);
-                decimal? close = closes.TryGetValue(key, out var value) ? value : null;
+                bars.TryGetValue(key, out var barRow);
+                splitsByStock.TryGetValue(transaction.CommonStockId, out var splits);
+                identityByStock.TryGetValue(transaction.CommonStockId, out var identity);
+
+                var bar = InsiderDailyBars.Build(
+                    barRow?.Close,
+                    barRow?.Low,
+                    barRow?.High,
+                    transaction.TransactionDate,
+                    splits ?? [],
+                    identity?.Ticker,
+                    identity?.SecondaryTickers
+                );
 
                 var evaluation = _validator.Evaluate(
                     transaction.ReportedPricePerShare,
                     transaction.Shares,
                     transaction.SecurityKind,
                     transaction.SecurityTitle,
-                    close,
+                    bar,
                     transaction.Notes
                 );
 
                 transaction.PricePerShare = evaluation.EffectivePrice;
                 transaction.IsPriceValid = evaluation.IsPriceValid;
+                transaction.PriceWasRepaired = evaluation.WasRepaired;
 
                 if (evaluation.IsPriceValid == null)
                     result.Pending++;
@@ -159,15 +187,22 @@ public class InsiderTransactionPriceBackfillManager
         return result;
     }
 
+    private sealed record BarRow(decimal Close, decimal Low, decimal High);
+
+    private sealed record StockIdentity(
+        string Ticker,
+        IReadOnlyCollection<string> SecondaryTickers
+    );
+
     /// <summary>
-    /// Fetch one close per distinct (CommonStockId, TransactionDate) — the
-    /// most recent <see cref="DailyStockPrice.Close"/> on or before that
-    /// date. Uses the unadjusted Close, never AdjustedClose: a reverse
-    /// split between the transaction date and today would otherwise shift
-    /// the historical adjusted close away from the raw price the filer
-    /// reported and produce false rejections.
+    /// Fetch one bar per distinct (CommonStockId, TransactionDate) — the most
+    /// recent <see cref="DailyStockPrice"/> on or before that date. The stored
+    /// Close/Low/High are on TODAY'S split-adjusted basis (the split
+    /// reconciliation rewrites the whole listed series), which is exactly why
+    /// the evaluation carries the split factor rather than treating the close
+    /// as the raw price the filer saw.
     /// </summary>
-    private async Task<Dictionary<(Guid, DateOnly), decimal>> FetchCloses(
+    private async Task<Dictionary<(Guid, DateOnly), BarRow>> FetchBars(
         List<InsiderTransaction> batch
     )
     {
@@ -185,6 +220,8 @@ public class InsiderTransactionPriceBackfillManager
                 p.CommonStockId,
                 p.Date,
                 p.Close,
+                p.Low,
+                p.High,
             })
             .ToListAsync();
 
@@ -192,7 +229,7 @@ public class InsiderTransactionPriceBackfillManager
             .GroupBy(p => p.CommonStockId)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(p => p.Date).ToList());
 
-        var result = new Dictionary<(Guid, DateOnly), decimal>();
+        var result = new Dictionary<(Guid, DateOnly), BarRow>();
         foreach (var transaction in batch)
         {
             var key = (transaction.CommonStockId, transaction.TransactionDate);
@@ -202,8 +239,45 @@ public class InsiderTransactionPriceBackfillManager
                 continue;
             var match = stockPrices.FirstOrDefault(p => p.Date <= transaction.TransactionDate);
             if (match != null)
-                result[key] = match.Close;
+                result[key] = new BarRow(match.Close, match.Low, match.High);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Splits and ticker identity per stock in the batch — the inputs the
+    /// split-basis resolver needs to restate the stored close onto each
+    /// transaction date's basis (or declare it ambiguous).
+    /// </summary>
+    private async Task<(
+        Dictionary<Guid, List<StockSplit>> SplitsByStock,
+        Dictionary<Guid, StockIdentity> IdentityByStock
+    )> FetchSplitContext(List<InsiderTransaction> batch)
+    {
+        var stockIds = batch.Select(t => t.CommonStockId).Distinct().ToList();
+
+        var splitsByStock = (
+            await _stockSplitRepository
+                .GetAll()
+                .Where(sp => stockIds.Contains(sp.CommonStockId))
+                .ToListAsync()
+        )
+            .GroupBy(sp => sp.CommonStockId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var identityByStock = (
+            await _dbContext
+                .Set<CommonStock>()
+                .Where(cs => stockIds.Contains(cs.Id))
+                .Select(cs => new
+                {
+                    cs.Id,
+                    cs.Ticker,
+                    cs.SecondaryTickers,
+                })
+                .ToListAsync()
+        ).ToDictionary(cs => cs.Id, cs => new StockIdentity(cs.Ticker, cs.SecondaryTickers ?? []));
+
+        return (splitsByStock, identityByStock);
     }
 }

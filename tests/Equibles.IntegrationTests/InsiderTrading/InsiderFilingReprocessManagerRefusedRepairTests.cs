@@ -18,27 +18,23 @@ using FileContent = Equibles.Media.Data.Models.FileContent;
 namespace Equibles.IntegrationTests.InsiderTrading;
 
 /// <summary>
-/// End-to-end pin for the version-driven reprocess loop, which needs a real
-/// relational provider (it calls Database.SetCommandTimeout, unsupported by the
-/// in-memory provider). Contract: a row below the current parser version is
-/// re-parsed from its cached ownership XML — a local read, not an EDGAR fetch —
-/// SecurityKind and corrected dates are re-derived from the source (authoritative
-/// over stored values), and the row is stamped with the current parser version so
-/// it drops out of future runs.
+/// The refusal arm of the reprocess repair path: an implausible price whose share-count
+/// division does NOT land inside the session band is flagged invalid and left as filed —
+/// never divided and published. This is the exact fixture shape the old validator "repaired"
+/// into a fabricated $1,000 price ($1,000,000 over 1,000 shares against a $50 close, 20× the
+/// session), persisted end-to-end through the manager.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
+public class InsiderFilingReprocessManagerRefusedRepairTests : ParadeDbMcpTestBase
 {
-    public InsiderFilingReprocessManagerReclassifyTests(ParadeDbFixture fixture)
+    public InsiderFilingReprocessManagerRefusedRepairTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     [Fact]
-    public async Task Run_V5RowWithCachedXml_ReclassifiesAndCorrectsDateFromSource()
+    public async Task Run_RepairCandidateOutsideTheBand_FlagsInvalidWithoutFabricating()
     {
-        var reportDate = new DateOnly(2024, 6, 14);
-        var filingDate = new DateOnly(2024, 6, 17);
-        var impossibleDate = new DateOnly(2035, 6, 14);
-        var accession = "0000320193-24-000001";
+        var date = new DateOnly(2024, 6, 14);
+        var accession = "0000320193-24-000056";
 
         var stock = new CommonStock
         {
@@ -50,16 +46,12 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
         var owner = new InsiderOwner
         {
             Id = Guid.NewGuid(),
-            OwnerCik = "0001",
+            OwnerCik = "0002",
             Name = "Jane Insider",
             City = "Cupertino",
             StateOrCountry = "CA",
             IsDirector = true,
         };
-
-        // This v5 row predates the parser generation for date correction. Its source
-        // date is impossible and its security type is wrong; cached XML authoritatively
-        // supplies both the table classification and the period-of-report fallback.
         var stale = new InsiderTransaction
         {
             Id = Guid.NewGuid(),
@@ -67,32 +59,29 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
             InsiderOwnerId = owner.Id,
             AccessionNumber = accession,
             TransactionOrder = 0,
-            FilingDate = filingDate,
-            TransactionDate = impossibleDate,
+            FilingDate = date,
+            TransactionDate = date,
             TransactionCode = TransactionCode.Purchase,
-            Shares = 1000,
-            PricePerShare = 55m,
-            ReportedPricePerShare = 55m,
+            Shares = 1_000,
+            PricePerShare = 1_000_000m,
+            ReportedPricePerShare = 1_000_000m,
             AcquiredDisposed = AcquiredDisposed.Acquired,
             SharesOwnedAfter = 5000,
             OwnershipNature = OwnershipNature.Direct,
             SecurityTitle = "Common Stock",
-            SecurityKind = InsiderSecurityKind.Derivative,
-            ParserVersion = 5,
+            SecurityKind = InsiderSecurityKind.NonDerivative,
+            ParserVersion = 0,
         };
 
-        // The reprocess maps a re-parsed row onto the stored row by TransactionOrder,
-        // so the cached XML's single non-derivative transaction (order 0) lines up.
         var ownershipXml =
             "<ownershipDocument>"
-            + "<periodOfReport>2024-06-14</periodOfReport>"
             + "<nonDerivativeTable><nonDerivativeTransaction>"
             + "<securityTitle><value>Common Stock</value></securityTitle>"
-            + "<transactionDate><value>2035-06-14</value></transactionDate>"
+            + "<transactionDate><value>2024-06-14</value></transactionDate>"
             + "<transactionCoding><transactionCode>P</transactionCode></transactionCoding>"
             + "<transactionAmounts>"
             + "<transactionShares><value>1000</value></transactionShares>"
-            + "<transactionPricePerShare><value>55</value></transactionPricePerShare>"
+            + "<transactionPricePerShare><value>1000000</value></transactionPricePerShare>"
             + "</transactionAmounts>"
             + "</nonDerivativeTransaction></nonDerivativeTable>"
             + "</ownershipDocument>";
@@ -117,8 +106,8 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
             new DailyStockPrice
             {
                 CommonStockId = stock.Id,
-                Date = reportDate,
-                Close = 55m,
+                Date = date,
+                Close = 50m,
             }
         );
         DbContext.Add(stale);
@@ -144,20 +133,15 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
 
         var result = await manager.Run();
 
-        result.Total.Should().Be(1);
-        result.Processed.Should().Be(1);
-        result.Reclassified.Should().Be(1);
-        result.Repaired.Should().Be(0);
-        result.DatesCorrected.Should().Be(1);
+        result.Repaired.Should().Be(0, "a candidate 20x the session band is not a repair");
         result.Failed.Should().Be(0);
-        // Served entirely from the cached blob — no EDGAR round-trip.
-        result.Fetched.Should().Be(0);
-        await edgar.DidNotReceive().GetDocumentContent(Arg.Any<string>(), Arg.Any<string>());
 
         await using var verify = Fixture.CreateDbContext();
-        var reprocessed = await verify.Set<InsiderTransaction>().FindAsync(stale.Id);
-        reprocessed!.SecurityKind.Should().Be(InsiderSecurityKind.NonDerivative);
-        reprocessed.TransactionDate.Should().Be(reportDate);
-        reprocessed.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
+        var row = await verify.Set<InsiderTransaction>().FindAsync(stale.Id);
+        row!.PricePerShare.Should().Be(1_000_000m, "a refused repair must not fabricate a price");
+        row.ReportedPricePerShare.Should().Be(1_000_000m);
+        row.PriceWasRepaired.Should().BeFalse();
+        row.IsPriceValid.Should().Be(false);
+        row.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
     }
 }

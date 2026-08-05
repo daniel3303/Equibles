@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
@@ -55,6 +57,7 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
             new IModuleConfiguration[]
             {
                 new CommonStocksModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
                 new MediaModuleConfiguration(),
                 new SecTombstoneModuleConfiguration(),
             }
@@ -77,6 +80,7 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
         services.AddScoped<InsiderFilingRepository>();
         services.AddScoped<FailedFilingIngestRepository>();
         services.AddScoped<DailyStockPriceRepository>();
+        services.AddScoped<StockSplitRepository>();
         services.AddScoped<InsiderTransactionPriceValidator>();
         var scopeFactory = services
             .BuildServiceProvider()

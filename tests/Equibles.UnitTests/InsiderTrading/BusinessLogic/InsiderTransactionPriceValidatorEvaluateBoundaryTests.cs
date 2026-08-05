@@ -1,4 +1,5 @@
 using Equibles.InsiderTrading.BusinessLogic;
+using Equibles.InsiderTrading.BusinessLogic.Models;
 using Equibles.InsiderTrading.Data.Models;
 
 namespace Equibles.UnitTests.InsiderTrading.BusinessLogic;
@@ -19,7 +20,7 @@ public class InsiderTransactionPriceValidatorEvaluateBoundaryTests
             shares: 1000,
             kind: InsiderSecurityKind.NonDerivative,
             securityTitle: "Common Stock",
-            unadjustedClose: 50m
+            bar: new DailyBarContext { Close = 50m }
         );
 
         result.IsPriceValid.Should().Be(true);

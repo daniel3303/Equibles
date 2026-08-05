@@ -1,6 +1,8 @@
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.InsiderTrading.BusinessLogic;
+using Equibles.Sec.Data.Models;
+using Equibles.Sec.Repositories;
 using Equibles.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -42,8 +44,54 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
     )
         : base(logger, scopeFactory, errorReporter) { }
 
+    // One-shot marker for the sharesless-verdict reopen: unlike the signature restore, that
+    // pass is NOT self-terminating (a re-flagged row matches its predicate again), so it runs
+    // exactly once and the marker keeps it off every later cycle.
+    private const string ShareslessReopenMarker = "InsiderTrading.ShareslessVerdictReopen";
+
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
+        // Restore rows the old basis-blind validator misrepaired BEFORE the version-driven
+        // reprocess, so the nulled rows join the pending population this same cycle drains.
+        // Bounded and self-terminating; a no-op scan once the back catalogue is clean.
+        // Isolated failure domain: a sweep fault (timeout, deploy-time DB bounce) must not
+        // starve the reprocess and backfill stages below, which do not depend on it.
+        try
+        {
+            await using var sweepScope = ScopeFactory.CreateAsyncScope();
+            var sweep =
+                sweepScope.ServiceProvider.GetRequiredService<InsiderMisrepairedPriceSweep>();
+            await sweep.Run(stoppingToken);
+
+            var backfillStateRepo =
+                sweepScope.ServiceProvider.GetRequiredService<BackfillStateRepository>();
+            if (await backfillStateRepo.GetByName(ShareslessReopenMarker) == null)
+            {
+                var reopened = await sweep.ReopenShareslessVerdicts(stoppingToken);
+                if (reopened < InsiderMisrepairedPriceSweep.MaxRowsPerCycle)
+                {
+                    // Drained in this pass — stamp the marker so the non-self-terminating
+                    // predicate never re-opens rows the fixed validator re-flagged.
+                    backfillStateRepo.Add(
+                        new BackfillState
+                        {
+                            Name = ShareslessReopenMarker,
+                            LastFullRescanAt = DateTime.UtcNow,
+                        }
+                    );
+                    await backfillStateRepo.SaveChanges();
+                }
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Misrepaired-price sweep failed; continuing with reprocess");
+        }
+
         await using var scope = ScopeFactory.CreateAsyncScope();
         var manager = scope.ServiceProvider.GetRequiredService<InsiderFilingReprocessManager>();
 
@@ -51,5 +99,23 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
 
         if (result.Processed > 0)
             Logger.LogInformation("Insider filing reprocess cycle: {Summary}", result.Summary);
+
+        // Drain the pending (IsPriceValid = null) population — freshly restored rows above,
+        // plus rows whose close has since landed — through the same evaluation the backoffice
+        // recompute uses. DB-only work; no EDGAR budget consumed.
+        await using (var backfillScope = ScopeFactory.CreateAsyncScope())
+        {
+            var backfill =
+                backfillScope.ServiceProvider.GetRequiredService<InsiderTransactionPriceBackfillManager>();
+            var backfillResult = await backfill.Run(cancellationToken: stoppingToken);
+            if (backfillResult.Processed > 0)
+                Logger.LogInformation(
+                    "Insider price backfill cycle: processed {Processed}, repaired={Repaired}, invalid={Invalid}, pending={Pending}",
+                    backfillResult.Processed,
+                    backfillResult.Repaired,
+                    backfillResult.Invalid,
+                    backfillResult.Pending
+                );
+        }
     }
 }

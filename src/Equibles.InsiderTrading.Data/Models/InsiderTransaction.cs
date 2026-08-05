@@ -71,6 +71,14 @@ public class InsiderTransaction
     /// </summary>
     public decimal ReportedPricePerShare { get; set; }
 
+    /// <summary>
+    /// True when <see cref="PricePerShare"/> is a repaired value (the mis-entered total divided
+    /// by the share count) rather than the filed figure. Makes repairs auditable and lets the
+    /// misrepair sweep skip rows the current band-guarded validator repaired — rows repaired
+    /// before this column existed carry <c>false</c> and are exactly the sweep's candidates.
+    /// </summary>
+    public bool PriceWasRepaired { get; set; }
+
     public AcquiredDisposed AcquiredDisposed { get; set; }
     public long SharesOwnedAfter { get; set; }
     public OwnershipNature OwnershipNature { get; set; }

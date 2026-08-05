@@ -1,4 +1,5 @@
 using Equibles.InsiderTrading.BusinessLogic;
+using Equibles.InsiderTrading.BusinessLogic.Models;
 using Equibles.InsiderTrading.Data.Models;
 
 namespace Equibles.UnitTests.InsiderTrading.BusinessLogic;
@@ -23,7 +24,7 @@ public class InsiderTransactionPriceValidatorUnknownKindBlankTitleTests
             shares: 1000,
             kind: InsiderSecurityKind.Unknown,
             securityTitle: "   ",
-            unadjustedClose: 50m
+            bar: new DailyBarContext { Close = 50m }
         );
 
         // Repaired (not waved through as a derivative): the mis-entered total is
