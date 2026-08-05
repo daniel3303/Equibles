@@ -590,7 +590,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Search for institutional investors (fund managers) by name or SEC CIK number, largest 13F filers first. Returns matching institutions with their SEC CIK number, city, and state/country. Use this to find the correct institution name before calling GetInstitutionPortfolio or to discover which institutions are tracked in the database."
+        "Search for institutional investors (fund managers) by name or SEC CIK number, largest recently-active 13F filers first. Returns matching institutions with their SEC CIK number, city, and state/country. Use this to find the correct institution name before calling GetInstitutionPortfolio or to discover which institutions are tracked in the database."
     )]
     public Task<string> SearchInstitutions(
         [Description("Search query — institution name, partial name, or CIK")] string query,
@@ -615,7 +615,7 @@ public class InstitutionalHoldingsTools
                 var table = MarkdownTable.Render(
                     holders,
                     $"No institutions found matching '{query}'.",
-                    $"Institutions matching '{query}' (largest 13F filers first):",
+                    $"Institutions matching '{query}' (largest recently-active 13F filers first):",
                     "| Institution | CIK | City | State/Country |",
                     "|------------|-----|------|--------------|",
                     h =>
@@ -1299,10 +1299,12 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the portfolio summary header for an institutional 13F filer — 13F reported value (long U.S. positions only, not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database. Use this to answer 'how big and how concentrated is this fund?' or to compare two funds at a glance. Search resolves by institution name or CIK (largest 13F filer wins on ambiguous names)."
+        "Get the portfolio summary header for an institutional 13F filer — 13F reported value (long U.S. positions only, not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database. Use this to answer 'how big and how concentrated is this fund?' or to compare two funds at a glance. Search resolves by institution name or CIK (the largest recently-active 13F filer wins on ambiguous names)."
     )]
     public Task<string> GetInstitutionSummary(
-        [Description("Institution name or CIK (partial names resolve to the largest 13F filer)")]
+        [Description(
+            "Institution name or CIK (partial names resolve to the largest recently-active 13F filer)"
+        )]
             string institutionName,
         [Description(
             "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the holder's latest; an off-quarter date snaps to the nearest report on or before it)"
@@ -1446,7 +1448,9 @@ public class InstitutionalHoldingsTools
         "Get an institution's 13F portfolio allocation for a given report quarter (defaults to the latest), grouped by fine-grained industry (default) or rolled up by sector via `groupBy`. Returns a markdown table sorted by % of portfolio descending, with stocks lacking a classification collapsed into a single 'Unclassified' row at the end. Ambiguous names resolve to the largest matching 13F filer — use SearchInstitutions to disambiguate. Use this to answer 'is this fund concentrated in tech / energy / generalist?'"
     )]
     public Task<string> GetInstitutionSectorAllocation(
-        [Description("Institution name or CIK (partial names resolve to the largest 13F filer)")]
+        [Description(
+            "Institution name or CIK (partial names resolve to the largest recently-active 13F filer)"
+        )]
             string institutionName,
         [Description(
             "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the holder's latest; an off-quarter date snaps to the nearest report on or before it)"
@@ -1505,7 +1509,9 @@ public class InstitutionalHoldingsTools
         "Get an institution's quarterly position-change activity — Initiated / Increased / Reduced / Exited stocks diffed against the immediately prior quarter. Returns the buckets as one markdown section per bucket, sorted by absolute Δ market-value desc (Δ Value includes price movement, not just trading). Use `bucket` to filter to a single bucket. Use this to answer 'what did this fund do this quarter?'"
     )]
     public Task<string> GetInstitutionQuarterlyActivity(
-        [Description("Institution name or CIK (partial names resolve to the largest 13F filer)")]
+        [Description(
+            "Institution name or CIK (partial names resolve to the largest recently-active 13F filer)"
+        )]
             string institutionName,
         [Description(
             "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the holder's latest; an off-quarter date snaps to the nearest report on or before it)"
@@ -1676,11 +1682,11 @@ public class InstitutionalHoldingsTools
     )]
     public Task<string> GetFundOverlap(
         [Description(
-            "First institution name or CIK (partial names resolve to the largest 13F filer)"
+            "First institution name or CIK (partial names resolve to the largest recently-active 13F filer)"
         )]
             string institutionName1,
         [Description(
-            "Second institution name or CIK (partial names resolve to the largest 13F filer)"
+            "Second institution name or CIK (partial names resolve to the largest recently-active 13F filer)"
         )]
             string institutionName2,
         [Description(
@@ -1987,7 +1993,8 @@ public class InstitutionalHoldingsTools
         return result.ToString();
     }
 
-    // Best single match for a name or CIK: the largest 13F filer among the matches. The old
+    // Best single match for a name or CIK: the largest recently-active 13F filer among the
+    // matches (dormant re-registrations rank below live filers). The old
     // shortest-name-wins ordering silently resolved famous names to the wrong firm
     // ("Bridgewater" → Bridgewater Advisors Inc., a small RIA, instead of Bridgewater
     // Associates, LP) and the whole output would read as the wrong fund's portfolio.
@@ -2010,7 +2017,7 @@ public class InstitutionalHoldingsTools
         var holder = matches[0];
         var matchNote =
             matches.Count > 1
-                ? $"Note: '{name}' matched {holder.Name} (CIK {holder.Cik}, largest 13F filer of the matches); other matches: "
+                ? $"Note: '{name}' matched {holder.Name} (CIK {holder.Cik}, largest recently-active 13F filer of the matches); other matches: "
                     + $"{string.Join(", ", matches.Skip(1).Select(m => m.Name))} — pass a CIK or use SearchInstitutions to disambiguate."
                 : null;
         return (holder, matchNote, null);

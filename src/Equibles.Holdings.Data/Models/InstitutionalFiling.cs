@@ -5,12 +5,21 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.Data.Models;
 
 /// <summary>
-/// One row per 13F-HR submission, keyed by accession number — the filing-level
+/// One row per submission, keyed by accession number — the filing-level
 /// rollup of the per-position <see cref="InstitutionalHolding"/> rows that share
 /// that accession. Holdings are stored only at the position grain, so the
 /// "latest filings" feed used to reconstruct one row per filing with a
 /// table-wide GROUP BY on every request; this table is that rollup, written once
 /// at ingestion and read back with a plain indexed scan.
+///
+/// <para>
+/// Despite the class name, the rollup is NOT 13F-only: Schedule 13D/G imports
+/// flow through the same writer, so single-stake rows with event dates (not
+/// quarter ends) sit beside the 13F quarters. <see cref="FilingType"/> is the
+/// discriminator — any consumer treating a row as a 13F portfolio quarter
+/// (recency, size ranking, AUM) must filter on it, or a filer's newest "filing"
+/// is one 13D/G stake worth a fraction of its real book.
+/// </para>
 ///
 /// <para>
 /// <see cref="PositionCount"/> and <see cref="TotalValue"/> count only the
@@ -49,6 +58,13 @@ public class InstitutionalFiling
     public DateOnly FilingDate { get; set; }
     public DateOnly ReportDate { get; set; }
     public bool IsAmendment { get; set; }
+
+    /// <summary>
+    /// What kind of submission this rollup row summarises, copied from its holdings rows at
+    /// sync. Rows written before the column existed default to <see cref="FilingType.Form13F"/>
+    /// until the worker's backfill restamps the 13D/G ones from their holdings.
+    /// </summary>
+    public FilingType FilingType { get; set; }
 
     public int PositionCount { get; set; }
     public long TotalValue { get; set; }

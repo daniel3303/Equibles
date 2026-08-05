@@ -47,7 +47,7 @@ public class CloneBacktestTools
     )]
     public Task<string> GetFundCloneBacktest(
         [Description(
-            "Institution name or SEC CIK (e.g., 'Berkshire Hathaway', '1067983', or zero-padded '0001067983'; ambiguous names resolve to the largest 13F filer)"
+            "Institution name or SEC CIK (e.g., 'Berkshire Hathaway', '1067983', or zero-padded '0001067983'; ambiguous names resolve to the largest recently-active 13F filer)"
         )]
             string institution,
         [Description("Benchmark ticker to compare against (default: SPY)")]
@@ -143,7 +143,7 @@ public class CloneBacktestTools
         var notes = new List<string>();
         if (matches.Count > 1)
             notes.Add(
-                $"Note: matched {holder.Name} (CIK {holder.Cik}, largest 13F filer of the matches); other matches: "
+                $"Note: matched {holder.Name} (CIK {holder.Cik}, largest recently-active 13F filer of the matches); other matches: "
                     + $"{string.Join(", ", matches.Skip(1).Select(m => $"{m.Name} (CIK {m.Cik})"))}."
             );
         if (!explicitWindow && requestedYears != clampedYears)

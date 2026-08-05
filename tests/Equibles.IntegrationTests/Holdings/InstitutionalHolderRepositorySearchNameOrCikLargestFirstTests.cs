@@ -7,13 +7,15 @@ using Xunit;
 namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
-/// Pins the two resolution fixes behind the MCP audit's wrong-entity findings:
-/// (1) SearchNameOrCikLargestFirst ranks matches by 13F size (the InstitutionalFiling
-/// rollup's TotalValue), so "Bridgewater" resolves to Bridgewater Associates — not whichever
-/// small RIA has the shortest or alphabetically-first name — with rollup-less (13D/G-only)
-/// filers last; (2) an all-digit query strips its leading zeros before the CIK prefix match,
-/// so the SEC-canonical zero-padded '0001067983' resolves the same filer as the stored
-/// unpadded '1067983'.
+/// Pins the resolution ranking behind the MCP audit's wrong-entity findings:
+/// SearchNameOrCikLargestFirst buckets matches by 13F recency first (a dormant
+/// re-registration must not beat the live successor), then ranks by size at the latest 13F
+/// quarter, so "Bridgewater" resolves to Bridgewater Associates — not whichever small RIA has
+/// the shortest name — with rollup-less filers last. Recency and size read 13F rollup rows
+/// ONLY: Schedule 13D/G rows share the table with fresher event dates and one-stake values,
+/// and ranking on them resolves "Millennium" to whichever namesake filed a 13D/G last. Also
+/// pins the CIK normalization: an all-digit query strips its leading zeros, so the
+/// SEC-canonical zero-padded '0001067983' resolves the same filer as the stored '1067983'.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class InstitutionalHolderRepositorySearchNameOrCikLargestFirstTests : ParadeDbMcpTestBase
@@ -166,6 +168,121 @@ public class InstitutionalHolderRepositorySearchNameOrCikLargestFirstTests : Par
                 "Bridgewater Associates, LP",
                 "one quarter of filing lag keeps the flagship inside the live window"
             );
+        matches[1].Name.Should().Be("Bridgewater Adv.");
+    }
+
+    [Fact]
+    public async Task SearchNameOrCikLargestFirst_Fresh13DGStake_DoesNotShadowTheFlagships13FBook()
+    {
+        // The rollup table also carries Schedule 13D/G rows: event dates always fresher than
+        // the last quarter end, TotalValue a single stake. Ranked unfiltered, "Millennium"
+        // resolved to whichever namesake filed a 13D/G most recently — a $45.6M stake outranked
+        // the $79.3B flagship book on production data.
+        var flagship = new InstitutionalHolder
+        {
+            Cik = "1273087",
+            Name = "Millennium Management LLC",
+        };
+        var namesake = new InstitutionalHolder
+        {
+            Cik = "1273099",
+            Name = "Millennium Advisors LLC",
+        };
+        DbContext.AddRange(flagship, namesake);
+        DbContext.AddRange(
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-flagship-13f",
+                InstitutionalHolderId = flagship.Id,
+                FilingDate = new DateOnly(2026, 5, 13),
+                ReportDate = new DateOnly(2026, 3, 31),
+                FilingType = FilingType.Form13F,
+                PositionCount = 4904,
+                TotalValue = 79_267_431_315L,
+            },
+            // The flagship's own newest rollup row: a one-position 13D/G stake dated AFTER the
+            // quarter end. It must move neither the flagship's recency nor its size.
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-flagship-13g",
+                InstitutionalHolderId = flagship.Id,
+                FilingDate = new DateOnly(2026, 7, 23),
+                ReportDate = new DateOnly(2026, 7, 23),
+                FilingType = FilingType.Schedule13G,
+                PositionCount = 1,
+                TotalValue = 45_595_645L,
+            },
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-namesake-13f",
+                InstitutionalHolderId = namesake.Id,
+                FilingDate = new DateOnly(2026, 5, 13),
+                ReportDate = new DateOnly(2026, 3, 31),
+                FilingType = FilingType.Form13F,
+                PositionCount = 120,
+                TotalValue = 1_500_000_000L,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var repository = new InstitutionalHolderRepository(verify);
+
+        var matches = await repository.SearchNameOrCikLargestFirst("Millennium", 2);
+
+        matches[0]
+            .Name.Should()
+            .Be(
+                "Millennium Management LLC",
+                "recency and size must come from 13F rollup rows only, never a 13D/G stake"
+            );
+        matches[1].Name.Should().Be("Millennium Advisors LLC");
+    }
+
+    [Fact]
+    public async Task SearchNameOrCikLargestFirst_AllDormantMatchSet_StillRanksBySizeWithRolluplessLast()
+    {
+        // A genuinely defunct name: the live window anchors on the match set's own newest
+        // quarter, so an all-dormant set keeps ranking by size instead of collapsing.
+        var big = new InstitutionalHolder { Cik = "4000001", Name = "Defunct Cap A" };
+        var small = new InstitutionalHolder { Cik = "4000002", Name = "Defunct Cap B" };
+        var noRollup = new InstitutionalHolder { Cik = "4000003", Name = "Defunct Cap C" };
+        DbContext.AddRange(big, small, noRollup);
+        DbContext.AddRange(
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-defunct-big",
+                InstitutionalHolderId = big.Id,
+                FilingDate = new DateOnly(2021, 8, 13),
+                ReportDate = new DateOnly(2021, 6, 30),
+                FilingType = FilingType.Form13F,
+                PositionCount = 300,
+                TotalValue = 10_000_000_000L,
+            },
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-defunct-small",
+                InstitutionalHolderId = small.Id,
+                FilingDate = new DateOnly(2021, 8, 13),
+                ReportDate = new DateOnly(2021, 6, 30),
+                FilingType = FilingType.Form13F,
+                PositionCount = 50,
+                TotalValue = 400_000_000L,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var repository = new InstitutionalHolderRepository(verify);
+
+        var matches = await repository.SearchNameOrCikLargestFirst("Defunct Cap", 3);
+
+        matches
+            .Select(m => m.Name)
+            .Should()
+            .ContainInOrder("Defunct Cap A", "Defunct Cap B", "Defunct Cap C");
     }
 
     [Fact]
