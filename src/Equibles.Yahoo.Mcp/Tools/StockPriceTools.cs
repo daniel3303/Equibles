@@ -264,13 +264,24 @@ public class StockPriceTools
 
                 if (rowDates.Count > 1)
                 {
+                    // The settling explanation only holds when the spread is a single session;
+                    // a wider spread means some series are simply behind (stale or delisted
+                    // listings keep their last stored session) and blaming the nightly settle
+                    // would tell the caller a years-old close is a fresh artifact.
+                    var newest = rowDates.Max();
+                    var oneSessionSpread =
+                        rowDates.Min() >= UsMarketCalendar.PreviousTradingDay(newest);
                     result.AppendLine();
                     result.AppendLine(
-                        "Note: rows span more than one session (see the Date column). Each ticker "
-                            + "shows its newest SETTLED daily bar, and for a few hours after a US "
-                            + "close some tickers still show the prior session while the fresh bar "
-                            + "settles. Anchor any dated output on each row's Date, not on the "
-                            + "newest date in the batch."
+                        oneSessionSpread
+                            ? "Note: rows span two adjacent sessions (see the Date column). Each "
+                                + "ticker shows its newest SETTLED daily bar, and for a few hours "
+                                + "after a US close some tickers still show the prior session while "
+                                + "the fresh bar settles. Anchor any dated output on each row's "
+                                + "Date, not on the newest date in the batch."
+                            : "Note: rows span more than one session (see the Date column) — some "
+                                + "stored series end earlier than others, so anchor any dated "
+                                + "output on each row's Date, not on the newest date in the batch."
                     );
                 }
 
@@ -855,13 +866,15 @@ public class StockPriceTools
     {
         var starred = oldest > cutoff.AddDays(BaselineSlackDays);
         var star = starred ? "\\*" : "";
+        // The row's own close must be positive too: a corrupt $0 bar would otherwise render
+        // both distances as -100%, breaking the ≤0 / ≥0 sign contract the columns promise.
         return new FiftyTwoWeekCells(
             McpFormat.Invariant(high, "F2") + star,
             McpFormat.Invariant(low, "F2") + star,
-            high > 0
+            high > 0 && close > 0
                 ? McpFormat.Invariant((close / high - 1m) * 100m, "+0.00;-0.00;0.00") + "%"
                 : "—",
-            low > 0
+            low > 0 && close > 0
                 ? McpFormat.Invariant((close / low - 1m) * 100m, "+0.00;-0.00;0.00") + "%"
                 : "—",
             starred

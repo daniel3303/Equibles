@@ -105,6 +105,33 @@ public class StockPriceToolsFiftyTwoWeekCellsTests
     }
 
     [Fact]
+    public void NonPositiveClose_BlanksTheDistances()
+    {
+        // A corrupt $0 row close would otherwise render both distances as -100%, breaking the
+        // ≤0 / ≥0 sign contract; the absolute bounds still render.
+        var cells = Build(0m, 120m, 60m, Cutoff, Cutoff);
+
+        cells.High.Should().Be("120.00");
+        cells.Low.Should().Be("60.00");
+        cells.OffHigh.Should().Be("—");
+        cells.AboveLow.Should().Be("—");
+    }
+
+    [Fact]
+    public void PlaceholderRow_MatchesTheWidenedColumnCount()
+    {
+        // The placeholder must always carry the same cell count as the 10-column header, or a
+        // ticker fallback renders a broken markdown table with no other signal.
+        var method = typeof(StockPriceTools).GetMethod(
+            "PlaceholderRow",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+        var row = (string)method.Invoke(null, ["ZZZZ", "No data"]);
+
+        row.Count(c => c == '|').Should().Be(11);
+    }
+
+    [Fact]
     public void PercentFormatting_IsCultureInvariant()
     {
         var original = CultureInfo.CurrentCulture;
