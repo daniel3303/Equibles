@@ -108,7 +108,12 @@ public static class HoldingsPositionGrouper
                 g => new HolderAggregate
                 {
                     Holder = g.First().InstitutionalHolder,
-                    LatestHolding = g.OrderByDescending(h => h.FilingDate).First(),
+                    // Representative row for labels: prefer the PRIMARY class (null
+                    // ListedTicker) so a two-class holder's row isn't captioned with a
+                    // sibling listing's identity; latest filing breaks the tie.
+                    LatestHolding = g.OrderBy(h => h.ListedTicker == null ? 0 : 1)
+                        .ThenByDescending(h => h.FilingDate)
+                        .First(),
                     TotalShares = g.Sum(h => h.Shares),
                     TotalValue = g.Sum(h => h.Value),
                 }
