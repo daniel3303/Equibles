@@ -247,11 +247,15 @@ public class ShortVolumeImportService
     }
 
     /// <summary>
-    /// Stocks whose stored row for the day can only have come from the retired case-fold: the
-    /// day's file carries a case-variant of the stock's ticker (a different security) but not
-    /// the ticker itself, so the ordinal re-import produces no aggregate to overwrite the
-    /// corrupt row and it must be deleted instead. A stock the file doesn't reference at all is
-    /// left alone — its stored row may be legitimate history from another source scope.
+    /// Stocks whose stored row for the day is attributable to the retired case-fold: the day's
+    /// file carries a case-variant of the stock's ticker (a different security) but not the
+    /// ticker itself, so the ordinal re-import produces no aggregate to overwrite the corrupt
+    /// row and it is deleted instead. A stock the file doesn't reference at all is left alone —
+    /// its stored row may be legitimate history. This rests on two stated assumptions: every
+    /// stored ticker is all-uppercase (enforced below — a hypothetical mixed-case ticker would
+    /// otherwise be deleted daily), and the stock's primary ticker hasn't changed since the
+    /// partition date (a renamed ticker whose OLD file happens to carry a case-variant of the
+    /// NEW symbol would lose that day — measured exposure in production is near zero).
     /// </summary>
     private static HashSet<Guid> CollisionOnlyStocks(
         List<ShortVolumeRecord> records,
@@ -274,6 +278,17 @@ public class ShortVolumeImportService
         {
             if (aggregated.ContainsKey(stockId))
                 continue;
+            // Deletion is unrecoverable, so it is confined to the population the case-fold
+            // could actually corrupt: all-uppercase tickers (every stored ticker today). A
+            // mixed-case ticker would permanently miss the ordinal map, and flagging it here
+            // would delete its rows every day the file mentions its symbol.
+            if (ticker.Any(char.IsLower))
+                continue;
+            // The ordinal-absence clause is redundant TODAY (a symbol equal to the ticker
+            // would have aggregated, so the ContainsKey guard already skipped this stock) but
+            // deliberately kept load-bearing: the moment AggregateVolumesByStock learns to
+            // filter records (e.g. dropping zero-volume rows), a filtered-but-present exact
+            // symbol must still protect the stock from deletion.
             if (fileSymbolsCaseInsensitive.Contains(ticker) && !fileSymbolsOrdinal.Contains(ticker))
                 collisionOnly.Add(stockId);
         }
