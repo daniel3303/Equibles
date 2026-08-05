@@ -21,6 +21,11 @@ namespace Equibles.Yahoo.Mcp.Tools;
 [McpServerToolType]
 public class StockPriceTools
 {
+    // A 52-week window whose oldest stored bar starts later than this many days past the
+    // year boundary is a shorter listed history, not a full year — markets close for
+    // holidays and weekends, but a window starting weeks late is a young listing.
+    private const int BaselineSlackDays = 14;
+
     private readonly DailyStockPriceRepository _priceRepository;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly McpToolRunner _runner;
@@ -111,11 +116,18 @@ public class StockPriceTools
 
     [McpServerTool(Name = "GetLatestPrices", Title = "Latest Prices", ReadOnly = true)]
     [Description(
-        "Get the most recent closing price (USD), daily change, and volume for one or more "
-            + "stocks. Useful for quick price checks across a portfolio or watchlist. The "
-            + "change columns are a ONE-SESSION move: they are shown only when the stored "
-            + "series holds the trading day immediately before the date on the row, and are "
-            + "\"—\" otherwise, so a change is never a multi-session move in disguise."
+        "Get the most recent closing price (USD), daily change, volume, and trailing 52-week "
+            + "range for one or more stocks. Useful for quick price checks across a portfolio "
+            + "or watchlist. The change columns are a ONE-SESSION move: they are shown only "
+            + "when the stored series holds the trading day immediately before the date on the "
+            + "row, and are \"—\" otherwise, so a change is never a multi-session move in "
+            + "disguise. Each row is that ticker's newest SETTLED daily bar and the Date column "
+            + "names its session: for a few hours after a US close some tickers still show the "
+            + "prior session while the fresh bar settles, so dates within one response can "
+            + "differ — anchor on the Date column, never the wall clock. 52W High/Low are the "
+            + "highest and lowest daily closes in the 365 days ending on the row's date "
+            + "(current split basis); Off High / Above Low are the close's percent distance "
+            + "from those bounds."
     )]
     public Task<string> GetLatestPrices(
         [Description(
@@ -143,14 +155,22 @@ public class StockPriceTools
 
                 var result = StartTable(
                     "Latest prices:",
-                    "| Ticker | Date | Close | Change | Change % | Volume |",
-                    "|--------|------|-------|--------|----------|--------|"
+                    "| Ticker | Date | Close | Change | Change % | Volume | 52W High | 52W Low | Off High | Above Low |",
+                    "|--------|------|-------|--------|----------|--------|----------|---------|----------|-----------|"
                 );
 
                 // Set when at least one ticker's change columns were withheld because its
                 // stored series skips the prior session, so the footnote explains the em-dash
                 // rather than leaving the caller to read it as missing coverage.
                 var gapped = false;
+
+                // Set when a ticker's 52-week window holds less than a full year of stored
+                // history (a recent listing), so the starred range is explained.
+                var shortWindow = false;
+
+                // Sessions of the rendered rows: more than one means the newest session is
+                // still settling for part of the batch, which earns its own footnote.
+                var rowDates = new HashSet<DateOnly>();
 
                 foreach (var ticker in tickerList)
                 {
@@ -197,8 +217,37 @@ public class StockPriceTools
                         gapped = true;
                     }
 
+                    // Trailing 52-week close range, anchored on the row's own session so a
+                    // stock that stopped trading doesn't fabricate a fresh range. Stored
+                    // closes are already on the current split basis, so raw closes compare.
+                    var cutoff = price.Date.AddDays(-365);
+                    var range = await _priceRepository
+                        .GetByStock(stock, priceTicker)
+                        .Where(p => p.Date >= cutoff && p.Close > 0)
+                        .GroupBy(p => 1)
+                        .Select(g => new
+                        {
+                            High = g.Max(p => p.Close),
+                            Low = g.Min(p => p.Close),
+                            Oldest = g.Min(p => p.Date),
+                        })
+                        .FirstOrDefaultAsync();
+
+                    var cells =
+                        range == null
+                            ? FiftyTwoWeekCells.Empty
+                            : BuildFiftyTwoWeekCells(
+                                price.Close,
+                                range.High,
+                                range.Low,
+                                range.Oldest,
+                                cutoff
+                            );
+                    shortWindow |= cells.Starred;
+
+                    rowDates.Add(price.Date);
                     result.AppendLine(
-                        $"| {ticker} | {price.Date:yyyy-MM-dd} | {McpFormat.Invariant(price.Close, "F2")} | {changeCell} | {changePctCell} | {McpFormat.WholeNumber(price.Volume)} |"
+                        $"| {ticker} | {price.Date:yyyy-MM-dd} | {McpFormat.Invariant(price.Close, "F2")} | {changeCell} | {changePctCell} | {McpFormat.WholeNumber(price.Volume)} | {cells.High} | {cells.Low} | {cells.OffHigh} | {cells.AboveLow} |"
                     );
                 }
 
@@ -210,6 +259,28 @@ public class StockPriceTools
                             + "before the date shown, so no one-day move can be stated. The close and "
                             + "volume on that row are still correct. Use GetStockPrices to see which "
                             + "sessions are present."
+                    );
+                }
+
+                if (rowDates.Count > 1)
+                {
+                    result.AppendLine();
+                    result.AppendLine(
+                        "Note: rows span more than one session (see the Date column). Each ticker "
+                            + "shows its newest SETTLED daily bar, and for a few hours after a US "
+                            + "close some tickers still show the prior session while the fresh bar "
+                            + "settles. Anchor any dated output on each row's Date, not on the "
+                            + "newest date in the batch."
+                    );
+                }
+
+                if (shortWindow)
+                {
+                    result.AppendLine();
+                    result.AppendLine(
+                        "Note: a 52-week value marked \\* covers a stored history shorter than 52 "
+                            + "weeks (for example a recent listing), so it is the range since the "
+                            + "history begins, not a full year."
                     );
                 }
 
@@ -757,10 +828,50 @@ public class StockPriceTools
         && previous.Date < latest.Date
         && previous.Date >= UsMarketCalendar.PreviousTradingDay(latest.Date);
 
+    // The four rendered 52-week cells for one row, plus whether the range earned the
+    // short-history star so the caller can emit the explaining footnote exactly once.
+    private sealed record FiftyTwoWeekCells(
+        string High,
+        string Low,
+        string OffHigh,
+        string AboveLow,
+        bool Starred
+    )
+    {
+        public static readonly FiftyTwoWeekCells Empty = new("—", "—", "—", "—", false);
+    }
+
+    // Renders the trailing 52-week range cells from the window aggregate. The window is
+    // anchored on the row's own session (cutoff = row date minus 365 days); a window whose
+    // oldest bar starts more than BaselineSlackDays past the cutoff covers a shorter listed
+    // history than a year, so its absolute values carry a star rather than being withheld.
+    private static FiftyTwoWeekCells BuildFiftyTwoWeekCells(
+        decimal close,
+        decimal high,
+        decimal low,
+        DateOnly oldest,
+        DateOnly cutoff
+    )
+    {
+        var starred = oldest > cutoff.AddDays(BaselineSlackDays);
+        var star = starred ? "\\*" : "";
+        return new FiftyTwoWeekCells(
+            McpFormat.Invariant(high, "F2") + star,
+            McpFormat.Invariant(low, "F2") + star,
+            high > 0
+                ? McpFormat.Invariant((close / high - 1m) * 100m, "+0.00;-0.00;0.00") + "%"
+                : "—",
+            low > 0
+                ? McpFormat.Invariant((close / low - 1m) * 100m, "+0.00;-0.00;0.00") + "%"
+                : "—",
+            starred
+        );
+    }
+
     // Placeholder row for a ticker with no price to show (unknown symbol or no data),
     // keeping the em-dash columns identical across the per-ticker fallback branches.
     private static string PlaceholderRow(string ticker, string status) =>
-        $"| {ticker} | — | {status} | — | — | — |";
+        $"| {ticker} | — | {status} | — | — | — | — | — | — | — |";
 
     // Leading "Date | Close" cells shared by every technical-indicator table row;
     // keeps the date format and close precision in sync across the four tables.
