@@ -113,6 +113,26 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             })
             .IncludeProperties(h => new { h.Shares, h.Value });
 
+        // Partial index for the repricing lane — in steady state ~0% of rows are
+        // pending, so a full btree wastes space; without any index the lane's
+        // "WHERE ValuePending" distinct-pair scan walks all ~33M rows and can
+        // outlive the command timeout. Columns match the lane's pair identity
+        // (CommonStockId, ListedTicker, ReportDate) — deliberately NOT the bare
+        // (CommonStockId, ReportDate) tuple, which would collide with (and
+        // silently replace) the covering index above. The [Index] attribute
+        // cannot express the HasFilter predicate (same trade-off as
+        // AumQuarterlySnapshot.DirtyAt).
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(h => new
+            {
+                h.CommonStockId,
+                h.ListedTicker,
+                h.ReportDate,
+            })
+            .HasDatabaseName("IX_InstitutionalHolding_ValuePending_Pairs")
+            .HasFilter("\"ValuePending\"");
+
         builder.Entity<UnmappedCusip>();
         builder.Entity<FilingOtherManager>();
         builder.Entity<ProcessedDataSet>();

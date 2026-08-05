@@ -46,6 +46,13 @@ public class HoldingsValueRecalculator
         using var lookupScope = _scopeFactory.CreateScope();
         var lookupContext =
             lookupScope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        // The pending scan is served by the partial ValuePending index, but a first pass over a
+        // large backlog can still outlive the default timeout — and the worker's catch used to
+        // swallow that silently, freezing the whole lane.
+        if (lookupContext.Database.IsRelational())
+        {
+            lookupContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
+        }
 
         var pendingPairs = await lookupContext
             .Set<InstitutionalHolding>()
@@ -111,7 +118,7 @@ public class HoldingsValueRecalculator
             cs => cs.SecondaryTickers ?? []
         );
 
-        var (totalUpdated, totalDeferred) = await ResolveHoldingsWithNewPrices(
+        var (totalUpdated, deferredPairKeys) = await ResolveHoldingsWithNewPrices(
             prices,
             splitsByStock,
             primaryTickers,
@@ -119,17 +126,20 @@ public class HoldingsValueRecalculator
             cancellationToken
         );
 
-        if (totalDeferred > 0)
+        if (deferredPairKeys.Count > 0)
         {
             _logger.LogInformation(
-                "Left {Deferred} (stock, date) pair(s) pending: a captured split has not had its price adjustment applied, so the share basis is still ambiguous",
-                totalDeferred
+                "Left {Deferred} (stock, date) pair(s) unvalued this pass: an ambiguous split basis or an implausible close blocked an honest derivation",
+                deferredPairKeys.Count
             );
         }
 
+        // A pair with a price that could not be used (basis ambiguous, close implausible) has NOT
+        // been resolved — it must advance the retry ladder like a priceless pair, or it sits at its
+        // current retry count forever. That escape once froze 828,603 rows at ValueRetryCount = 1.
         var unresolvedPairs = pendingPairs
-            .Where(p => !resolvedPairKeys.Contains((p.CommonStockId, p.ListedTicker, p.ReportDate)))
             .Select(p => (p.CommonStockId, p.ListedTicker, p.ReportDate))
+            .Where(key => !resolvedPairKeys.Contains(key) || deferredPairKeys.Contains(key))
             .ToList();
 
         var totalGivenUp = await IncrementRetryForUnresolved(
@@ -165,6 +175,7 @@ public class HoldingsValueRecalculator
 
             var holdings = await dbContext
                 .Set<InstitutionalHolding>()
+                .Include(h => h.ManagerEntries)
                 .Where(h =>
                     h.ValuePending
                     && h.CommonStockId == pair.CommonStockId
@@ -174,6 +185,7 @@ public class HoldingsValueRecalculator
                 .ToListAsync(cancellationToken);
 
             var changed = false;
+            var settledRows = new List<InstitutionalHolding>();
 
             foreach (var holding in holdings)
             {
@@ -188,7 +200,19 @@ public class HoldingsValueRecalculator
 
                 if (holding.ValueRetryCount > MaxRetries)
                 {
-                    holding.ValuePending = false;
+                    // The ladder is exhausted — derivation is not going to happen. Publish the
+                    // filer's own figure rather than a silent zero; only a row the filing itself
+                    // left unvalued is honestly unknowable.
+                    if (holding.FiledValue is > 0)
+                    {
+                        ApplyFiledValue(holding);
+                        settledRows.Add(holding);
+                    }
+                    else
+                    {
+                        holding.ValuePending = false;
+                        holding.ValueUnavailable = true;
+                    }
                     totalGivenUp++;
                 }
 
@@ -199,11 +223,24 @@ public class HoldingsValueRecalculator
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
+
+            if (settledRows.Count > 0)
+            {
+                await HoldingsRollupRefresher.Refresh(
+                    dbContext,
+                    settledRows.Select(h => h.AccessionNumber).ToHashSet(),
+                    settledRows.Select(h => h.ReportDate).ToHashSet(),
+                    cancellationToken
+                );
+            }
         }
         return totalGivenUp;
     }
 
-    private async Task<(int Updated, int Deferred)> ResolveHoldingsWithNewPrices(
+    private async Task<(
+        int Updated,
+        HashSet<(Guid CommonStockId, string ListedTicker, DateOnly Date)> DeferredPairKeys
+    )> ResolveHoldingsWithNewPrices(
         Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal> prices,
         Dictionary<Guid, List<StockSplit>> splitsByStock,
         Dictionary<Guid, string> primaryTickers,
@@ -212,10 +249,19 @@ public class HoldingsValueRecalculator
     )
     {
         var totalUpdated = 0;
-        var totalDeferred = 0;
+        var deferredPairKeys = new HashSet<(Guid, string, DateOnly)>();
         foreach (var ((stockId, listedTicker, reportDate), closePrice) in prices)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // A corrupt stored close prices every position in the stock at once, so the whole
+            // pair is refused rather than published; the pair advances the retry ladder and lands
+            // on the filed-value fallback when the ladder exhausts.
+            if (HoldingValueSanityGuard.IsImplausibleClose(closePrice))
+            {
+                deferredPairKeys.Add((stockId, listedTicker, reportDate));
+                continue;
+            }
 
             splitsByStock.TryGetValue(stockId, out var splits);
             primaryTickers.TryGetValue(stockId, out var primaryTicker);
@@ -234,7 +280,7 @@ public class HoldingsValueRecalculator
                 // The stored series straddles two share bases until the split's price adjustment
                 // runs. Leave the rows pending rather than publish a value off by the split ratio;
                 // the reconciliation stamps the split and a later cycle prices them honestly.
-                totalDeferred++;
+                deferredPairKeys.Add((stockId, listedTicker, reportDate));
                 continue;
             }
 
@@ -254,8 +300,20 @@ public class HoldingsValueRecalculator
 
             foreach (var holding in pendingHoldings)
             {
+                var derived = holding.Shares * shareCountFactor * closePrice;
+
+                // A per-row basis error (depositary ratio, split the series never captured) shows
+                // as a derivation grossly above the filer's own figure — publish the filed value
+                // rather than the wrong derivation.
+                if (HoldingValueSanityGuard.GrosslyExceedsFiled(derived, holding.FiledValue))
+                {
+                    ApplyFiledValue(holding);
+                    continue;
+                }
+
                 holding.Value = ToBoundedValue(holding.Shares, shareCountFactor, closePrice);
                 holding.ValuePending = false;
+                holding.ValueSource = ValueSource.Derived;
 
                 foreach (var entry in holding.ManagerEntries)
                 {
@@ -265,8 +323,40 @@ public class HoldingsValueRecalculator
 
             await dbContext.SaveChangesAsync(cancellationToken);
             totalUpdated += pendingHoldings.Count;
+
+            // Values moved from zero to real figures, so the per-accession rollups and the
+            // quarter's AUM snapshot are stale until re-derived.
+            if (pendingHoldings.Count > 0)
+            {
+                await HoldingsRollupRefresher.Refresh(
+                    dbContext,
+                    pendingHoldings.Select(h => h.AccessionNumber).ToHashSet(),
+                    [reportDate],
+                    cancellationToken
+                );
+            }
         }
-        return (totalUpdated, totalDeferred);
+        return (totalUpdated, deferredPairKeys);
+    }
+
+    /// <summary>
+    /// Publishes the filer's own reported value on a row no honest derivation can price, splitting
+    /// it across manager legs in proportion to their shares (the only allocation the filing
+    /// supports — legs carry counts, not values).
+    /// </summary>
+    internal static void ApplyFiledValue(InstitutionalHolding holding)
+    {
+        holding.Value = holding.FiledValue ?? 0L;
+        holding.ValuePending = false;
+        holding.ValueSource = ValueSource.Filed;
+
+        foreach (var entry in holding.ManagerEntries)
+        {
+            entry.Value =
+                holding.Shares > 0
+                    ? (long)(holding.Value * ((decimal)entry.Shares / holding.Shares))
+                    : 0L;
+        }
     }
 
     // shares comes from filer-controlled SSHPRNAMT; an oversized count makes the decimal

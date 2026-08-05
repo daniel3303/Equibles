@@ -96,6 +96,13 @@ public class InstitutionalHolding
     public DateTime? ValueLastRetryAt { get; set; }
 
     /// <summary>
+    /// Whether <see cref="Value"/> is the derived figure or a fallback to the filer's own
+    /// <see cref="FiledValue"/>. Filed is used only when derivation is impossible or implausible —
+    /// see <see cref="Models.ValueSource"/> for the contract.
+    /// </summary>
+    public ValueSource ValueSource { get; set; }
+
+    /// <summary>
     /// The position's dollar value could not be derived honestly, so <see cref="Value"/> is zero
     /// and means "unknown" rather than "nothing". Set when the reported share count is larger than
     /// the issuer itself — the tell of a count in different units from our price series, such as a

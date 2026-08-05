@@ -195,38 +195,10 @@ public class ImpossiblePositionRepairService
             return 0;
         }
 
-        var totals = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(h => accessionNumbers.Contains(h.AccessionNumber))
-            .GroupBy(h => h.AccessionNumber)
-            .Select(g => new { AccessionNumber = g.Key, TotalValue = g.Sum(h => h.Value) })
-            .ToListAsync(cancellationToken);
-
-        var totalByAccession = totals.ToDictionary(t => t.AccessionNumber, t => t.TotalValue);
-
-        var filings = await dbContext
-            .Set<InstitutionalFiling>()
-            .Where(f => accessionNumbers.Contains(f.AccessionNumber))
-            .ToListAsync(cancellationToken);
-
-        var realigned = 0;
-        foreach (var filing in filings)
-        {
-            if (
-                totalByAccession.TryGetValue(filing.AccessionNumber, out var total)
-                && filing.TotalValue != total
-            )
-            {
-                filing.TotalValue = total;
-                realigned++;
-            }
-        }
-
-        if (realigned > 0)
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        return realigned;
+        return await HoldingsRollupRefresher.RealignFilingTotals(
+            dbContext,
+            accessionNumbers,
+            cancellationToken
+        );
     }
 }

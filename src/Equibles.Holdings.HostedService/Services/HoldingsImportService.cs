@@ -1713,7 +1713,11 @@ public class HoldingsImportService
             secondaryTickers,
             out var shareCountFactor
         );
-        var canValue = hasPrice && basisKnown;
+        // An implausible close (a corrupt bar in the price series) is no price at all: deriving
+        // from it once stated a $13.7T position for a $1.09M filing. The row stays pending and the
+        // repricing lane values it when the series heals — or falls back to the filed value.
+        var canValue =
+            hasPrice && basisKnown && !HoldingValueSanityGuard.IsImplausibleClose(closePrice);
 
         // shares comes from filer-controlled SSHPRNAMT; an oversized count makes the decimal
         // product exceed Int64, so range-check before the cast (mirrors Filing13DGXmlParser)
@@ -1770,6 +1774,16 @@ public class HoldingsImportService
             );
         }
 
+        // A derivation grossly above the filer's own figure is a basis error (a depositary ratio,
+        // a split the series never captured) — the audit above measures it; this acts on it.
+        // Publish the filed figure instead of the wrong derivation.
+        var valueSource = ValueSource.Derived;
+        if (value > 0 && HoldingValueSanityGuard.GrosslyExceedsFiled(value, filedValue))
+        {
+            value = filedValue.Value;
+            valueSource = ValueSource.Filed;
+        }
+
         var (otherManagerNumber, sharedManagerNumbers) = ParseOtherManagerAttribution(
             GetValue(row, "OTHERMANAGER")
         );
@@ -1820,6 +1834,7 @@ public class HoldingsImportService
             IsAmendment = isAmendment,
             ValueUnavailable = valueUnavailable,
             ValuePending = valuePending,
+            ValueSource = valueSource,
         };
 
         return (holding, managerEntry, valuePending, reportedValue);
