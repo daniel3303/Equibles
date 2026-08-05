@@ -20,7 +20,12 @@ namespace Equibles.Finra.HostedService.Services;
 [Service]
 public class ShortVolumeImportService
 {
-    private const string Dataset = "daily-short-volume-files-v1";
+    // v2: v1 partitions were imported through a case-insensitive ticker map that folded
+    // FINRA's lowercase preferred/when-issued symbols onto common tickers (TpC summed into
+    // TPC) — the aggregates are corrupt wherever a case-variant sibling traded. The bump
+    // orphans every v1 marker, so CandidateDates re-imports the full history newest-first
+    // (bounded per cycle) and the upsert REPLACES the corrupted sums.
+    private const string Dataset = "daily-short-volume-files-v2";
     private const int CorrectionLookbackDays = 7;
     private static readonly DateOnly FirstConsolidatedFileDate = new(2018, 8, 1);
     private static readonly TimeSpan RecentPartitionRefreshInterval = TimeSpan.FromHours(24);
@@ -96,9 +101,12 @@ public class ShortVolumeImportService
             scopeKey
         );
 
+        // Ordinal: FINRA symbol casing is identity (lowercase suffix = preferred/when-issued,
+        // a different security) — a case-insensitive map merges two securities' volumes.
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
-            cancellationToken
+            cancellationToken,
+            StringComparer.Ordinal
         );
         foreach (var date in dates)
         {
@@ -145,7 +153,13 @@ public class ShortVolumeImportService
         {
             var records = await _finraClient.GetDailyShortVolume(date, cancellationToken);
             var aggregated = AggregateVolumesByStock(records, tickerMap, date);
-            var totalImported = await UpsertDay(aggregated.Values, date, cancellationToken);
+            var collisionOnlyStocks = CollisionOnlyStocks(records, tickerMap, aggregated);
+            var totalImported = await UpsertDay(
+                aggregated.Values,
+                collisionOnlyStocks,
+                date,
+                cancellationToken
+            );
             await _partitionTracker.MarkImported(
                 Dataset,
                 scopeKey,
@@ -193,6 +207,7 @@ public class ShortVolumeImportService
 
     private async Task<int> UpsertDay(
         IEnumerable<DailyShortVolume> volumes,
+        IReadOnlySet<Guid> collisionOnlyStocks,
         DateOnly date,
         CancellationToken cancellationToken
     )
@@ -214,8 +229,71 @@ public class ShortVolumeImportService
         foreach (var volume in validBatch)
             UpsertVolume(repo, existing, volume);
 
+        var stale = existing
+            .Values.Where(volume => collisionOnlyStocks.Contains(volume.CommonStockId))
+            .ToList();
+        if (stale.Count > 0)
+        {
+            repo.Delete(stale);
+            _logger.LogInformation(
+                "Deleted {Count} case-fold-only short volume rows for {Date}",
+                stale.Count,
+                date
+            );
+        }
+
         await repo.SaveChanges();
         return validBatch.Count;
+    }
+
+    /// <summary>
+    /// Stocks whose stored row for the day is attributable to the retired case-fold: the day's
+    /// file carries a case-variant of the stock's ticker (a different security) but not the
+    /// ticker itself, so the ordinal re-import produces no aggregate to overwrite the corrupt
+    /// row and it is deleted instead. A stock the file doesn't reference at all is left alone —
+    /// its stored row may be legitimate history. This rests on two stated assumptions: every
+    /// stored ticker is all-uppercase (enforced below — a hypothetical mixed-case ticker would
+    /// otherwise be deleted daily), and the stock's primary ticker hasn't changed since the
+    /// partition date (a renamed ticker whose OLD file happens to carry a case-variant of the
+    /// NEW symbol would lose that day — measured exposure in production is near zero).
+    /// </summary>
+    private static HashSet<Guid> CollisionOnlyStocks(
+        List<ShortVolumeRecord> records,
+        IReadOnlyDictionary<string, Guid> tickerMap,
+        IReadOnlyDictionary<Guid, DailyShortVolume> aggregated
+    )
+    {
+        var fileSymbolsOrdinal = new HashSet<string>(StringComparer.Ordinal);
+        var fileSymbolsCaseInsensitive = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var record in records)
+        {
+            if (string.IsNullOrEmpty(record.Symbol))
+                continue;
+            fileSymbolsOrdinal.Add(record.Symbol);
+            fileSymbolsCaseInsensitive.Add(record.Symbol);
+        }
+
+        var collisionOnly = new HashSet<Guid>();
+        foreach (var (ticker, stockId) in tickerMap)
+        {
+            if (aggregated.ContainsKey(stockId))
+                continue;
+            // Deletion is unrecoverable, so it is confined to the population the case-fold
+            // could actually corrupt: all-uppercase tickers (every stored ticker today). A
+            // mixed-case ticker would permanently miss the ordinal map, and flagging it here
+            // would delete its rows every day the file mentions its symbol.
+            if (ticker.Any(char.IsLower))
+                continue;
+            // The ordinal-absence clause is redundant TODAY (a symbol equal to the ticker
+            // would have aggregated, so the ContainsKey guard already skipped this stock) but
+            // deliberately kept load-bearing: the moment AggregateVolumesByStock learns to
+            // filter records (e.g. dropping zero-volume rows), a filtered-but-present exact
+            // symbol must still protect the stock from deletion.
+            if (fileSymbolsCaseInsensitive.Contains(ticker) && !fileSymbolsOrdinal.Contains(ticker))
+                collisionOnly.Add(stockId);
+        }
+
+        return collisionOnly;
     }
 
     private void LogDroppedRows(int dropped, DateOnly date)

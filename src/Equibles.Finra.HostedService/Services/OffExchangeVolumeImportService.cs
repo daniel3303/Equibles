@@ -17,7 +17,12 @@ namespace Equibles.Finra.HostedService.Services;
 [Service]
 public class OffExchangeVolumeImportService
 {
-    private const string Dataset = "off-exchange-weekly-v1";
+    // v2: v1 partitions were imported through the case-insensitive ticker map that folded
+    // FINRA's lowercase sibling-security symbols onto common tickers. The bump orphans the v1
+    // markers so every week still inside FINRA's rolling publication window (~1 year)
+    // re-imports and the upsert replaces the corrupted totals; weeks that have aged out of the
+    // window cannot be re-fetched and stay as stored.
+    private const string Dataset = "off-exchange-weekly-v2";
     private const int CorrectionLookbackWeeks = 8;
     private static readonly TimeSpan RecentPartitionRefreshInterval = TimeSpan.FromHours(24);
     private static readonly HashSet<string> CompletePublicationTiers = new(
@@ -93,9 +98,14 @@ public class OffExchangeVolumeImportService
             scopeKey
         );
 
+        // Ordinal for the same reason as the daily lane: FINRA symbol casing is identity
+        // (lowercase suffix = a different security), so a case-insensitive map merges two
+        // securities' weekly volumes. The dataset-key bump above re-imports every week FINRA
+        // still publishes; only weeks that have aged out of the rolling window stay corrupt.
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
-            cancellationToken
+            cancellationToken,
+            StringComparer.Ordinal
         );
         foreach (var week in weeks)
         {

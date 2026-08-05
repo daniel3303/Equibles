@@ -127,7 +127,7 @@ public class ShortVolumeImportServiceTests : IDisposable
         _partitionRepo.Add(
             new FinraImportPartition
             {
-                Dataset = "daily-short-volume-files-v1",
+                Dataset = "daily-short-volume-files-v2",
                 PartitionDate = date,
                 ScopeKey = scopeKey,
                 ImportedAt = importedAt ?? Now.UtcDateTime,
@@ -289,7 +289,7 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         await _finraClient.Received(1).GetDailyShortVolume(today);
         _partitionRepo
-            .GetPartition("daily-short-volume-files-v1", "all", today)
+            .GetPartition("daily-short-volume-files-v2", "all", today)
             .Should()
             .ContainSingle();
     }
@@ -326,7 +326,7 @@ public class ShortVolumeImportServiceTests : IDisposable
         volumes.Should().Contain(v => v.CommonStockId == apple.Id && v.ShortVolume == 200_000);
         volumes.Should().Contain(v => v.CommonStockId == microsoft.Id && v.ShortVolume == 300_000);
         _partitionRepo
-            .GetPartition("daily-short-volume-files-v1", "all", existingDate)
+            .GetPartition("daily-short-volume-files-v2", "all", existingDate)
             .Should()
             .ContainSingle();
 
