@@ -37,6 +37,7 @@ public class HoldingValueBasisReverseSplitTests
             splits,
             null,
             "TEST",
+            null,
             out var factor
         );
 

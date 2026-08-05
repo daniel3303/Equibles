@@ -68,6 +68,16 @@ public class CommonStockManager
             .Select(a => a.Cusip)
             .ToListAsync();
         var taken = new HashSet<string>(alreadyRecorded, StringComparer.OrdinalIgnoreCase);
+        // A CUSIP recorded as a sibling LISTING is a different security's current identity —
+        // aliasing it would outrank the listing at resolution time and merge the two classes'
+        // positions into one row. One CUSIP identifies one security, in both directions.
+        taken.UnionWith(
+            await _commonStockRepository
+                .GetListedCusips()
+                .Where(l => candidates.Contains(l.Cusip.ToUpper()))
+                .Select(l => l.Cusip)
+                .ToListAsync()
+        );
 
         var recorded = 0;
         foreach (var cusip in candidates.Where(c => !taken.Contains(c)))
@@ -138,11 +148,25 @@ public class CommonStockManager
                 !string.IsNullOrWhiteSpace(c.ListedTicker) && !string.IsNullOrWhiteSpace(c.Cusip)
             )
             .Select(c => (Ticker: c.ListedTicker.Trim(), Cusip: c.Cusip.Trim().ToUpperInvariant()))
+            // Store the SecondaryTickers-side spelling, not the caller's: every consumer joins
+            // on this string, and one canonical spelling per listing keeps those joins exact.
+            .Select(c =>
+                secondaryTickers.TryGetValue(c.Ticker, out var canonical)
+                    ? (Ticker: canonical, c.Cusip)
+                    : c
+            )
             .Where(c =>
                 secondaryTickers.Contains(c.Ticker)
                 && !string.Equals(c.Cusip, commonStock.Cusip, StringComparison.OrdinalIgnoreCase)
             )
-            .DistinctBy(c => c.Cusip, StringComparer.OrdinalIgnoreCase)
+            // A CUSIP offered under TWO listed tickers is contradictory feed data; keeping an
+            // arbitrary pairing would price the class from the other sibling's series. Drop it —
+            // the same refusal the sweep applies to ambiguous symbols.
+            .GroupBy(c => c.Cusip, StringComparer.OrdinalIgnoreCase)
+            .Where(g =>
+                g.Select(c => c.Ticker).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1
+            )
+            .Select(g => g.First())
             .ToList();
         if (cleaned.Count == 0)
         {

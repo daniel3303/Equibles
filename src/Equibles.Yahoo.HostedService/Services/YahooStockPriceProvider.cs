@@ -41,9 +41,11 @@ public class YahooStockPriceProvider : IStockPriceProvider
         {
             var minDate = date.AddDays(-LookbackDays);
             var stockIds = listings.Select(l => l.CommonStockId).Distinct().ToList();
+            // The stored series ticker is normalized uppercase; fold the request the same way
+            // so one non-canonical spelling can't silently park a class's positions pending.
             var secondaryTickers = listings
                 .Where(l => l.ListedTicker != null)
-                .Select(l => l.ListedTicker)
+                .Select(l => l.ListedTicker.ToUpperInvariant())
                 .Distinct()
                 .ToList();
 
@@ -79,14 +81,22 @@ public class YahooStockPriceProvider : IStockPriceProvider
             var byRequestedListing = latestBySeries.ToDictionary(p =>
                 (
                     p.CommonStockId,
-                    // The caller addresses the primary series as null; a secondary by its symbol.
-                    ListedTicker: p.ListedTicker == p.PrimaryTicker ? null : p.ListedTicker
+                    // The caller addresses the primary series as null; a secondary by its
+                    // symbol, folded uppercase to match the request normalization above.
+                    ListedTicker: string.Equals(
+                        p.ListedTicker,
+                        p.PrimaryTicker,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                        ? null
+                        : p.ListedTicker.ToUpperInvariant()
                 )
             );
 
             foreach (var listing in listings)
             {
-                if (byRequestedListing.TryGetValue(listing, out var price))
+                var lookup = (listing.CommonStockId, listing.ListedTicker?.ToUpperInvariant());
+                if (byRequestedListing.TryGetValue(lookup, out var price))
                 {
                     result[(listing.CommonStockId, listing.ListedTicker, date)] = price.Close;
                 }

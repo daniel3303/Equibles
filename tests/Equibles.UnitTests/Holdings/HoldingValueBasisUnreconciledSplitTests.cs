@@ -33,6 +33,7 @@ public class HoldingValueBasisUnreconciledSplitTests
             splits,
             null,
             "TEST",
+            null,
             out var factor
         );
 
@@ -63,6 +64,7 @@ public class HoldingValueBasisUnreconciledSplitTests
             splits,
             null,
             "TEST",
+            null,
             out var factor
         );
 

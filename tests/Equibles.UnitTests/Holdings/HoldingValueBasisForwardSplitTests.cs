@@ -34,6 +34,7 @@ public class HoldingValueBasisForwardSplitTests
             splits,
             null,
             "TEST",
+            null,
             out var factor
         );
 

@@ -95,16 +95,27 @@ public class HoldingsValueRecalculator
         )
             .GroupBy(s => s.CommonStockId)
             .ToDictionary(g => g.Key, g => g.ToList());
-        var primaryTickers = await lookupContext
+        var tickerIdentities = await lookupContext
             .Set<CommonStock>()
             .Where(cs => pendingStockIds.Contains(cs.Id))
-            .Select(cs => new { cs.Id, cs.Ticker })
-            .ToDictionaryAsync(cs => cs.Id, cs => cs.Ticker, cancellationToken);
+            .Select(cs => new
+            {
+                cs.Id,
+                cs.Ticker,
+                cs.SecondaryTickers,
+            })
+            .ToListAsync(cancellationToken);
+        var primaryTickers = tickerIdentities.ToDictionary(cs => cs.Id, cs => cs.Ticker);
+        var secondaryTickers = tickerIdentities.ToDictionary(
+            cs => cs.Id,
+            cs => cs.SecondaryTickers ?? []
+        );
 
         var (totalUpdated, totalDeferred) = await ResolveHoldingsWithNewPrices(
             prices,
             splitsByStock,
             primaryTickers,
+            secondaryTickers,
             cancellationToken
         );
 
@@ -135,7 +146,11 @@ public class HoldingsValueRecalculator
     }
 
     private async Task<int> IncrementRetryForUnresolved(
-        IReadOnlyList<(Guid CommonStockId, string ListedTicker, DateOnly ReportDate)> unresolvedPairs,
+        IReadOnlyList<(
+            Guid CommonStockId,
+            string ListedTicker,
+            DateOnly ReportDate
+        )> unresolvedPairs,
         DateTime now,
         CancellationToken cancellationToken
     )
@@ -192,6 +207,7 @@ public class HoldingsValueRecalculator
         Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal> prices,
         Dictionary<Guid, List<StockSplit>> splitsByStock,
         Dictionary<Guid, string> primaryTickers,
+        Dictionary<Guid, List<string>> secondaryTickersByStock,
         CancellationToken cancellationToken
     )
     {
@@ -203,12 +219,14 @@ public class HoldingsValueRecalculator
 
             splitsByStock.TryGetValue(stockId, out var splits);
             primaryTickers.TryGetValue(stockId, out var primaryTicker);
+            secondaryTickersByStock.TryGetValue(stockId, out var secondaryTickers);
             if (
                 !HoldingValueBasis.TryResolveShareCountFactor(
                     reportDate,
                     splits,
                     listedTicker,
                     primaryTicker,
+                    secondaryTickers,
                     out var shareCountFactor
                 )
             )

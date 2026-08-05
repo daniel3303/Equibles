@@ -264,8 +264,10 @@ public class FtdImportService
         var secondaryMap = await BuildSecondaryTickerMap(primaryMap, cancellationToken);
         if (secondaryMap.Count == 0)
         {
-            // Nothing to resolve against — still advance so the sweep cannot wedge here.
-            await AdvanceSweepFrontier(ListedCusipSweepCursorName, fileNames[^1]);
+            // Nothing to resolve against (fresh install, company sync not yet run). Do NOT
+            // advance: consuming the archive now would permanently skip these files' rows,
+            // and the frontier has no reset path. Wedging is already prevented per-file by
+            // the download catch below; this state clears itself once stocks exist.
             return;
         }
 
@@ -351,9 +353,7 @@ public class FtdImportService
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
 
-        var stocks = await stockRepo
-            .GetByIds(byStock.Keys)
-            .ToListAsync(cancellationToken);
+        var stocks = await stockRepo.GetByIds(byStock.Keys).ToListAsync(cancellationToken);
 
         var recorded = 0;
         foreach (var stock in stocks)

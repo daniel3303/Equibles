@@ -42,6 +42,7 @@ public class HoldingValueBasisListedTickerTests
                 splits,
                 "GOOG",
                 "GOOGL",
+                ["GOOG"],
                 out var factor
             )
             .Should()
@@ -65,6 +66,7 @@ public class HoldingValueBasisListedTickerTests
                 splits,
                 "GOOG",
                 "GOOGL",
+                ["GOOG"],
                 out var factor
             )
             .Should()
@@ -86,6 +88,7 @@ public class HoldingValueBasisListedTickerTests
                 splits,
                 "GOOG",
                 "GOOGL",
+                ["GOOG"],
                 out var factor
             )
             .Should()
@@ -105,6 +108,7 @@ public class HoldingValueBasisListedTickerTests
                 splits,
                 "GOOG",
                 "GOOGL",
+                ["GOOG"],
                 out var factor
             )
             .Should()
@@ -126,12 +130,38 @@ public class HoldingValueBasisListedTickerTests
                 splits,
                 null,
                 "NVDA",
+                null,
                 out var factor
             )
             .Should()
             .BeTrue();
 
         factor.Should().Be(10m);
+    }
+
+    [Fact]
+    public void PrimaryPosition_SplitAttributedToAStaleSymbol_RefusesToResolve()
+    {
+        // The capture manager preserves a split's attribution verbatim forever, so after a
+        // primary RENAME (LC → HAPN) the stored attribution matches neither the current
+        // primary nor any secondary. That split very likely IS the primary series' own —
+        // silently skipping it publishes a value off by exactly the ratio, the error class
+        // this file exists to prevent. Unknown basis: the row stays pending instead.
+        var splits = new List<StockSplit> { Applied(new DateOnly(2024, 6, 10), 10m, 1m, "LC") };
+
+        HoldingValueBasis
+            .TryResolveShareCountFactor(
+                new DateOnly(2023, 12, 31),
+                splits,
+                null,
+                "HAPN",
+                [],
+                out var factor
+            )
+            .Should()
+            .BeFalse();
+
+        factor.Should().Be(1m, "an unusable factor must be inert, never silently applied");
     }
 
     [Fact]
@@ -147,6 +177,7 @@ public class HoldingValueBasisListedTickerTests
                 splits,
                 null,
                 "BRK-B",
+                ["BRK-A"],
                 out var factor
             )
             .Should()

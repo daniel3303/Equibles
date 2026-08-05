@@ -476,15 +476,42 @@ public class HoldingsImportService
             .ToListAsync(cancellationToken);
 
         // Precedence on a collision (defended against at write time, kept coherent here):
-        // the primary CUSIP wins over a retired alias, which wins over a listing claim.
+        // the primary CUSIP wins over a retired alias, which wins over a listing claim —
+        // EXCEPT when a CUSIP is claimed as both an alias and a listing. An alias maps to
+        // the primary series and a listing to a different security, so preferring either
+        // silently merges two securities' positions; the CUSIP is dropped instead (its
+        // lines accrue as unmapped) until the write-time guards converge the tables.
         var cusipMapping = new Dictionary<string, CusipTarget>(StringComparer.OrdinalIgnoreCase);
         foreach (var listed in listedCusips)
         {
-            cusipMapping[listed.Cusip] = new CusipTarget(listed.CommonStockId, listed.ListedTicker);
+            var listedTicker = string.IsNullOrWhiteSpace(listed.ListedTicker)
+                ? null
+                : listed.ListedTicker;
+            cusipMapping[listed.Cusip] = new CusipTarget(listed.CommonStockId, listedTicker);
         }
+        var listedClaims = new HashSet<string>(
+            listedCusips.Select(l => l.Cusip),
+            StringComparer.OrdinalIgnoreCase
+        );
+        var contested = new List<string>();
         foreach (var alias in cusipAliases)
         {
+            if (listedClaims.Contains(alias.Cusip))
+            {
+                contested.Add(alias.Cusip);
+                cusipMapping.Remove(alias.Cusip);
+                continue;
+            }
             cusipMapping[alias.Cusip] = new CusipTarget(alias.CommonStockId, null);
+        }
+        if (contested.Count > 0)
+        {
+            _logger.LogWarning(
+                "Dropped {Count} CUSIP(s) claimed as both a retired alias and a secondary "
+                    + "listing ({Cusips}) — resolving either way would merge two securities",
+                contested.Count,
+                string.Join(", ", contested)
+            );
         }
         foreach (var stock in stocksWithCusip)
         {
@@ -510,20 +537,30 @@ public class HoldingsImportService
         context.CusipMapping = cusipMapping;
         var mappedStockIds = cusipMapping.Values.Select(t => t.CommonStockId).Distinct().ToList();
         context.IssuerSizes = await LoadIssuerSizes(stockRepo, mappedStockIds, cancellationToken);
-        context.PrimaryTickers = await stockRepo
+        var tickerIdentities = await stockRepo
             .GetByIds(mappedStockIds)
-            .Select(cs => new { cs.Id, cs.Ticker })
-            .ToDictionaryAsync(cs => cs.Id, cs => cs.Ticker, cancellationToken);
+            .Select(cs => new
+            {
+                cs.Id,
+                cs.Ticker,
+                cs.SecondaryTickers,
+            })
+            .ToListAsync(cancellationToken);
+        context.PrimaryTickers = tickerIdentities.ToDictionary(cs => cs.Id, cs => cs.Ticker);
+        context.SecondaryTickers = tickerIdentities.ToDictionary(
+            cs => cs.Id,
+            cs => cs.SecondaryTickers ?? []
+        );
 
         foreach (var (accession, cusips) in scheduleCusipsByAccession)
         {
-            var stockIds = new HashSet<Guid>();
+            var targets = new HashSet<CusipTarget>();
             foreach (var cusip in cusips)
             {
                 if (cusipMapping.TryGetValue(cusip, out var target))
-                    stockIds.Add(target.CommonStockId);
+                    targets.Add(target);
             }
-            context.ScheduleAccessionStockIds[accession] = stockIds;
+            context.ScheduleAccessionTargets[accession] = targets;
         }
 
         return CusipMappingOutcome.Mapped;
@@ -1317,31 +1354,45 @@ public class HoldingsImportService
                 );
 
             // A 13F restatement replaces the holder's whole portfolio for the
-            // quarter, but a Schedule 13D/G filing covers a SINGLE issuer — its
-            // delete must be scoped to the issuer(s) the amendment itself
-            // reports. Passive filers amend many issuers with the same event
-            // date (year/quarter end); an unscoped delete let each 13G/A wipe
-            // every other issuer's stake at that date, and since the wiped
+            // quarter, but a Schedule 13D/G filing covers a SINGLE security — its
+            // delete must be scoped to the exact (issuer, listing) pairs the
+            // amendment itself reports, not the whole issuer. Passive filers
+            // amend many issuers with the same event date (year/quarter end);
+            // an unscoped delete let each 13G/A wipe every other issuer's stake
+            // at that date, and a stock-grained one wipes the SIBLING CLASS's
+            // stake when a filer holds two classes — and since the wiped
             // accessions stay recorded as processed and no bulk data set exists
-            // for 13D/G, the loss was permanent and silent.
+            // for 13D/G, either loss is permanent and silent.
+            var deleted = 0;
             if (filingType != FilingType.Form13F)
             {
                 if (
-                    !context.ScheduleAccessionStockIds.TryGetValue(accession, out var issuerStocks)
-                    || issuerStocks.Count == 0
+                    !context.ScheduleAccessionTargets.TryGetValue(accession, out var issuerTargets)
+                    || issuerTargets.Count == 0
                 )
                     continue;
 
-                var issuerStockIds = issuerStocks.ToList();
-                existingQuery = existingQuery.Where(h => issuerStockIds.Contains(h.CommonStockId));
+                foreach (var target in issuerTargets)
+                {
+                    // One DELETE per (issuer, listing) pair — an accession names one
+                    // security, at most a handful. A null listing compares as IS NULL.
+                    deleted += await existingQuery
+                        .Where(h =>
+                            h.CommonStockId == target.CommonStockId
+                            && h.ListedTicker == target.ListedTicker
+                        )
+                        .ExecuteDeleteAsync(cancellationToken);
+                }
             }
-
-            // Set-based delete: materialising a large filer's whole portfolio
-            // into the change tracker (and deleting row-by-id) accumulated
-            // hundreds of thousands of tracked entities across a bulk data
-            // set's restatements; one DELETE statement per amendment does the
-            // same work with zero materialisation.
-            var deleted = await existingQuery.ExecuteDeleteAsync(cancellationToken);
+            else
+            {
+                // Set-based delete: materialising a large filer's whole portfolio
+                // into the change tracker (and deleting row-by-id) accumulated
+                // hundreds of thousands of tracked entities across a bulk data
+                // set's restatements; one DELETE statement per amendment does the
+                // same work with zero materialisation.
+                deleted = await existingQuery.ExecuteDeleteAsync(cancellationToken);
+            }
 
             if (deleted > 0)
             {
@@ -1653,11 +1704,13 @@ public class HoldingsImportService
         // conservative rule while per-class split capture does not exist yet.
         context.StockSplits.TryGetValue(commonStockId, out var splits);
         context.PrimaryTickers.TryGetValue(commonStockId, out var primaryTicker);
+        context.SecondaryTickers.TryGetValue(commonStockId, out var secondaryTickers);
         var basisKnown = HoldingValueBasis.TryResolveShareCountFactor(
             reportDate,
             splits,
             target.ListedTicker,
             primaryTicker,
+            secondaryTickers,
             out var shareCountFactor
         );
         var canValue = hasPrice && basisKnown;

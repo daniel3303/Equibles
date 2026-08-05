@@ -44,7 +44,7 @@ public class ImportContext
     // of the issuer(s) the filing reports. A 13D/G covers a single issuer, so its
     // amendment delete must be scoped to that issuer rather than the holder's
     // whole (reportDate, filingType) slice.
-    public Dictionary<string, HashSet<Guid>> ScheduleAccessionStockIds { get; set; } = [];
+    public Dictionary<string, HashSet<CusipTarget>> ScheduleAccessionTargets { get; set; } = [];
 
     // Yahoo stock prices: (CommonStockId, ListedTicker, ReportDate) → closing price. The
     // listing (null = primary series) is load-bearing: a sibling class trades at its own
@@ -55,6 +55,11 @@ public class ImportContext
     // to decide which splits belong to a position's own series: captured splits are attributed
     // to the primary's symbol, while legacy rows carry no attribution at all.
     public Dictionary<Guid, string> PrimaryTickers { get; set; } = [];
+
+    // CommonStockId → current secondary tickers. HoldingValueBasis uses it to tell a split
+    // attributed to a KNOWN sibling listing (moves nothing for the primary) from one carrying
+    // a stale symbol after a primary rename (unknown basis — the row stays pending).
+    public Dictionary<Guid, List<string>> SecondaryTickers { get; set; } = [];
 
     // Issuer size: CommonStockId → (shares outstanding, market capitalization). Used only to
     // reject a position larger than the company it is in (ImpossiblePositionGuard); a stock

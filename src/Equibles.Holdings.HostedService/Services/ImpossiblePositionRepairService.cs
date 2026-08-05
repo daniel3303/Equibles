@@ -68,6 +68,7 @@ public class ImpossiblePositionRepairService
                     {
                         Holding = h,
                         cs.Ticker,
+                        cs.SecondaryTickers,
                         cs.SharesOutStanding,
                         cs.MarketCapitalization,
                     }
@@ -104,6 +105,7 @@ public class ImpossiblePositionRepairService
                     splits,
                     candidate.Holding.ListedTicker,
                     candidate.Ticker,
+                    candidate.SecondaryTickers,
                     out var shareCountFactor
                 )
             )

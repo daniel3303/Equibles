@@ -57,6 +57,7 @@ internal static class HoldingValueBasis
         IReadOnlyList<StockSplit> splits,
         string listedTicker,
         string primaryTicker,
+        IReadOnlyCollection<string> secondaryTickers,
         out decimal shareCountFactor
     )
     {
@@ -78,19 +79,37 @@ internal static class HoldingValueBasis
                 continue;
             }
 
-            var belongsToSeries = split.PriceSeriesTicker == null
-                ? listedTicker == null
-                : string.Equals(
-                    split.PriceSeriesTicker,
-                    positionSeries,
-                    StringComparison.OrdinalIgnoreCase
-                );
+            var belongsToSeries =
+                split.PriceSeriesTicker == null
+                    ? listedTicker == null
+                    : string.Equals(
+                        split.PriceSeriesTicker,
+                        positionSeries,
+                        StringComparison.OrdinalIgnoreCase
+                    );
             if (!belongsToSeries)
             {
-                // Another listing of the same issuer split after the report date. For the
-                // primary that split moves nothing here; for a secondary it means the class's
-                // own basis cannot be established from stored data — stay pending.
+                // Another listing of the same issuer split after the report date: for a
+                // secondary it means the class's own basis cannot be established from
+                // stored data — stay pending.
                 if (listedTicker != null)
+                {
+                    return false;
+                }
+
+                // For the primary, a split attributed to a KNOWN sibling listing moves
+                // nothing here. But an attribution matching neither the current primary
+                // nor any current secondary is a stale symbol (the primary renamed after
+                // capture, and the attribution is preserved verbatim) — that split very
+                // likely IS this series' own, so silently skipping it re-creates the
+                // ratio-sized error this class exists to prevent. Unknown basis: pending.
+                var attributedToKnownSibling =
+                    secondaryTickers != null
+                    && secondaryTickers.Contains(
+                        split.PriceSeriesTicker,
+                        StringComparer.OrdinalIgnoreCase
+                    );
+                if (!attributedToKnownSibling)
                 {
                     return false;
                 }
