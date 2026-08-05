@@ -55,12 +55,22 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
         return unpadded.Length == 0 ? search : unpadded;
     }
 
-    // Resolves a name/CIK query to filers ranked largest-first by the biggest 13F filing on
-    // record (the InstitutionalFiling rollup's TotalValue). A bare famous name must resolve
-    // to the flagship filer: shortest-name and alphabetical orderings both sent "Bridgewater"
-    // to Bridgewater Advisors Inc. (a small RIA) instead of Bridgewater Associates, LP.
-    // Filers with no 13F rollup rows (13D/G-only filers) rank last; ties break on name length
-    // then name so an exact name still beats longer decorated variants at equal size.
+    // A filer whose newest 13F is within this window of the newest 13F among the matches is
+    // "live". One quarter (92 days) plus the 45-day filing deadline, with slack: mid filing
+    // season the flagship may not have filed the newest quarter yet, and must not lose its
+    // bucket to a smaller filer that filed a few days earlier.
+    private const int LiveFilerWindowDays = 135;
+
+    // Resolves a name/CIK query to filers ranked live-and-largest-first. Recency comes before
+    // size: corporate re-registrations leave the old CIK dormant with its giant historical
+    // filings intact, and pure size ranking then resolves the household name to the dead entity
+    // forever — "BlackRock" answered a two-year-stale portfolio off the retired filer while the
+    // live successor CIK filed on schedule. Within a bucket, size at the LATEST quarter ranks
+    // (not the all-time maximum, which rewards a filer for a past it no longer has); a bare
+    // famous name must still resolve to the flagship filer, not a small same-named RIA
+    // ("Bridgewater" → Bridgewater Associates, LP, never Bridgewater Advisors Inc.). Filers
+    // with no 13F rollup rows (13D/G-only filers) rank last; ties break on name length then
+    // name so an exact name still beats longer decorated variants at equal size.
     public async Task<List<InstitutionalHolder>> SearchNameOrCikLargestFirst(
         string search,
         int maxResults,
@@ -74,15 +84,50 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             return [];
 
         var ids = matches.Select(m => m.Id).ToList();
-        var sizeByHolder = await DbContext
+        var quarterSizes = await DbContext
             .Set<InstitutionalFiling>()
             .Where(f => ids.Contains(f.InstitutionalHolderId))
-            .GroupBy(f => f.InstitutionalHolderId)
-            .Select(g => new { Id = g.Key, MaxTotalValue = g.Max(f => f.TotalValue) })
-            .ToDictionaryAsync(x => x.Id, x => x.MaxTotalValue, cancellationToken);
+            .GroupBy(f => new { f.InstitutionalHolderId, f.ReportDate })
+            .Select(g => new
+            {
+                g.Key.InstitutionalHolderId,
+                g.Key.ReportDate,
+                MaxTotalValue = g.Max(f => f.TotalValue),
+            })
+            .ToListAsync(cancellationToken);
+
+        // Per holder: the newest reported quarter, and the size of the largest filing IN that
+        // quarter (an amendment and its original are separate rollup rows; the largest is the
+        // fuller picture).
+        var statsByHolder = quarterSizes
+            .GroupBy(q => q.InstitutionalHolderId)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var latest = g.Max(q => q.ReportDate);
+                    return (
+                        LatestReportDate: latest,
+                        SizeAtLatest: g.Where(q => q.ReportDate == latest)
+                            .Max(q => q.MaxTotalValue)
+                    );
+                }
+            );
+
+        // The live window anchors on the newest quarter among the MATCHES, so an all-dormant
+        // match set (a genuinely defunct name) still ranks sensibly instead of losing its
+        // bucket to an empty threshold.
+        var liveThreshold = statsByHolder.Count > 0
+            ? statsByHolder.Values.Max(s => s.LatestReportDate).AddDays(-LiveFilerWindowDays)
+            : DateOnly.MinValue;
 
         var topIds = matches
-            .OrderByDescending(m => sizeByHolder.TryGetValue(m.Id, out var size) ? size : -1L)
+            .OrderByDescending(m =>
+                statsByHolder.TryGetValue(m.Id, out var s) && s.LatestReportDate >= liveThreshold
+            )
+            .ThenByDescending(m =>
+                statsByHolder.TryGetValue(m.Id, out var s) ? s.SizeAtLatest : -1L
+            )
             .ThenBy(m => m.Name.Length)
             .ThenBy(m => m.Name, StringComparer.Ordinal)
             .Take(maxResults)
