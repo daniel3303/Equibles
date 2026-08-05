@@ -1648,6 +1648,13 @@ public class HoldingsImportService
             // One unpriceable leg makes the merged position unpriceable: the surviving legs would
             // otherwise sum to a value that silently omits part of the holding.
             existing.ValueUnavailable |= holding.ValueUnavailable;
+            // Likewise one filed-value leg makes the merged figure partly filed: keeping the
+            // Derived label would present the mixed sum as a clean derivation — and expose it to
+            // the implausible-derivation reset, which must never touch a filer's own figure.
+            if (holding.ValueSource == ValueSource.Filed)
+            {
+                existing.ValueSource = ValueSource.Filed;
+            }
             existing.ManagerEntries.Add(managerEntry);
             return false;
         }

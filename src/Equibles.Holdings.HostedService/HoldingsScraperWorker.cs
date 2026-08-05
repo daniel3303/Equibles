@@ -287,10 +287,13 @@ public class HoldingsScraperWorker : BaseScraperWorker
         {
             throw;
         }
-        catch (Exception ex) when (ex is NpgsqlException or TimeoutException)
+        catch (Exception ex)
+            when (ex is TimeoutException or NpgsqlException { InnerException: TimeoutException })
         {
             // A timed-out scan is a capacity signal, not a fault: the backlog is still there and
             // the next cycle retries it. Warn — an error here once hid a frozen lane for months.
+            // Only the client-side command timeout gets this treatment; every other database
+            // fault (constraint violation, deadlock, connection loss) is a real error below.
             Logger.LogWarning(
                 ex,
                 "Recalculating pending holding values timed out; retrying next cycle"

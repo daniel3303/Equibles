@@ -49,10 +49,7 @@ public class HoldingsValueRecalculator
         // The pending scan is served by the partial ValuePending index, but a first pass over a
         // large backlog can still outlive the default timeout — and the worker's catch used to
         // swallow that silently, freezing the whole lane.
-        if (lookupContext.Database.IsRelational())
-        {
-            lookupContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
-        }
+        ExtendCommandTimeout(lookupContext);
 
         var pendingPairs = await lookupContext
             .Set<InstitutionalHolding>()
@@ -166,12 +163,15 @@ public class HoldingsValueRecalculator
     )
     {
         var totalGivenUp = 0;
+        var settledAccessions = new HashSet<string>();
+        var settledReportDates = new HashSet<DateOnly>();
         foreach (var pair in unresolvedPairs)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            ExtendCommandTimeout(dbContext);
 
             var holdings = await dbContext
                 .Set<InstitutionalHolding>()
@@ -224,16 +224,17 @@ public class HoldingsValueRecalculator
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
 
-            if (settledRows.Count > 0)
+            foreach (var settled in settledRows)
             {
-                await HoldingsRollupRefresher.Refresh(
-                    dbContext,
-                    settledRows.Select(h => h.AccessionNumber).ToHashSet(),
-                    settledRows.Select(h => h.ReportDate).ToHashSet(),
-                    cancellationToken
-                );
+                settledAccessions.Add(settled.AccessionNumber);
+                settledReportDates.Add(settled.ReportDate);
             }
         }
+
+        // One rollup pass for everything that settled this cycle — the per-accession re-sum
+        // scans every position of every touched filing, so running it once per pair repeated
+        // that scan for every pair in the pass.
+        await RefreshRollups(settledAccessions, settledReportDates, cancellationToken);
         return totalGivenUp;
     }
 
@@ -250,6 +251,8 @@ public class HoldingsValueRecalculator
     {
         var totalUpdated = 0;
         var deferredPairKeys = new HashSet<(Guid, string, DateOnly)>();
+        var staleAccessions = new HashSet<string>();
+        var staleReportDates = new HashSet<DateOnly>();
         foreach (var ((stockId, listedTicker, reportDate), closePrice) in prices)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -284,8 +287,19 @@ public class HoldingsValueRecalculator
                 continue;
             }
 
+            // The published per-share figure is factor × close, so a plausible close behind a
+            // large restatement factor can still imply an impossible price. Guarding only the
+            // raw close would let the derivation through here while the fallback repair keeps
+            // resetting it — the two must test the same number or they chase each other forever.
+            if (HoldingValueSanityGuard.IsImplausibleClose(shareCountFactor * closePrice))
+            {
+                deferredPairKeys.Add((stockId, listedTicker, reportDate));
+                continue;
+            }
+
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            ExtendCommandTimeout(dbContext);
 
             var pendingHoldings = await dbContext
                 .Set<InstitutionalHolding>()
@@ -311,6 +325,16 @@ public class HoldingsValueRecalculator
                     continue;
                 }
 
+                // A product past Int64 has no honest published form and no filed figure to fall
+                // back on (a filed figure that large would have routed above) — mark the row
+                // unknowable rather than publish the silent zero this lane exists to close.
+                if (derived > long.MaxValue)
+                {
+                    holding.ValuePending = false;
+                    holding.ValueUnavailable = true;
+                    continue;
+                }
+
                 holding.Value = ToBoundedValue(holding.Shares, shareCountFactor, closePrice);
                 holding.ValuePending = false;
                 holding.ValueSource = ValueSource.Derived;
@@ -324,19 +348,55 @@ public class HoldingsValueRecalculator
             await dbContext.SaveChangesAsync(cancellationToken);
             totalUpdated += pendingHoldings.Count;
 
-            // Values moved from zero to real figures, so the per-accession rollups and the
-            // quarter's AUM snapshot are stale until re-derived.
+            foreach (var holding in pendingHoldings)
+            {
+                staleAccessions.Add(holding.AccessionNumber);
+            }
             if (pendingHoldings.Count > 0)
             {
-                await HoldingsRollupRefresher.Refresh(
-                    dbContext,
-                    pendingHoldings.Select(h => h.AccessionNumber).ToHashSet(),
-                    [reportDate],
-                    cancellationToken
-                );
+                staleReportDates.Add(reportDate);
             }
         }
+
+        // Values moved from zero to real figures, so the per-accession rollups and each touched
+        // quarter's AUM snapshot are stale until re-derived. One pass for the whole cycle — the
+        // re-sum scans every position of every touched filing, so a per-pair refresh repeated
+        // that scan for every priced pair.
+        await RefreshRollups(staleAccessions, staleReportDates, cancellationToken);
         return (totalUpdated, deferredPairKeys);
+    }
+
+    private async Task RefreshRollups(
+        HashSet<string> accessions,
+        HashSet<DateOnly> reportDates,
+        CancellationToken cancellationToken
+    )
+    {
+        if (accessions.Count == 0)
+        {
+            return;
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        ExtendCommandTimeout(dbContext);
+        await HoldingsRollupRefresher.Refresh(
+            dbContext,
+            accessions,
+            reportDates,
+            cancellationToken
+        );
+    }
+
+    // Per-pair scopes resolve fresh contexts with the default 30s command timeout; a large pair
+    // (every institution holding a mega-cap that quarter) needs the same headroom the lookup
+    // context gets, or the first heavy pair aborts the whole pass.
+    private static void ExtendCommandTimeout(EquiblesFinancialDbContext dbContext)
+    {
+        if (dbContext.Database.IsRelational())
+        {
+            dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
+        }
     }
 
     /// <summary>
@@ -346,7 +406,18 @@ public class HoldingsValueRecalculator
     /// </summary>
     internal static void ApplyFiledValue(InstitutionalHolding holding)
     {
-        holding.Value = holding.FiledValue ?? 0L;
+        // A Filed row with no filed figure would be a permanently invisible zero: matched by
+        // neither repair phase (phase 1 needs FiledValue > 0, phase 2 excludes Filed). Callers
+        // must gate on FiledValue is > 0; fail loudly rather than mint such a row.
+        if (holding.FiledValue is not > 0)
+        {
+            throw new ArgumentException(
+                "ApplyFiledValue requires a positive FiledValue",
+                nameof(holding)
+            );
+        }
+
+        holding.Value = holding.FiledValue.Value;
         holding.ValuePending = false;
         holding.ValueSource = ValueSource.Filed;
 

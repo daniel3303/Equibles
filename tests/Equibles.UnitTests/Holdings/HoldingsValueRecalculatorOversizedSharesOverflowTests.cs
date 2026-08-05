@@ -55,6 +55,15 @@ public class HoldingsValueRecalculatorOversizedSharesOverflowTests
             .NotThrowAsync<OverflowException>(
                 "one oversized pending holding must degrade gracefully, not abort the whole nightly recalc pass and leave every other pending holding unresolved"
             );
+
+        // Graceful degradation must not mean a silent zero: with no filed figure to fall back
+        // on, the row is marked unknowable rather than published as a $0 position.
+        var holding = db.Set<InstitutionalHolding>().Single();
+        holding.ValuePending.Should().BeFalse();
+        holding
+            .ValueUnavailable.Should()
+            .BeTrue("an Int64-overflowing product has no honest published form");
+        holding.Value.Should().Be(0L);
     }
 
     private static EquiblesFinancialDbContext CreateDbContext()

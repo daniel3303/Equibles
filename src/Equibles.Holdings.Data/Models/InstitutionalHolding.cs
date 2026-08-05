@@ -106,13 +106,15 @@ public class InstitutionalHolding
     /// The position's dollar value could not be derived honestly, so <see cref="Value"/> is zero
     /// and means "unknown" rather than "nothing". Set when the reported share count is larger than
     /// the issuer itself — the tell of a count in different units from our price series, such as a
-    /// depositary-share issuer whose filer reports the underlying ordinary shares. The share count
-    /// is still what the filer reported; only the valuation is withheld.
+    /// depositary-share issuer whose filer reports the underlying ordinary shares — and when the
+    /// retry ladder exhausts with no price ever arriving and no <see cref="FiledValue"/> to fall
+    /// back on. The share count is still what the filer reported; only the valuation is withheld.
     /// </summary>
     /// <remarks>
     /// Distinct from <see cref="ValuePending"/>, which means "no price yet, retry later". This one
-    /// never resolves on its own: re-deriving from the same count would reproduce the same wrong
-    /// figure, so the repricing lane must leave these rows alone.
+    /// never resolves on its own: the unit-mismatch case would re-derive the same wrong figure,
+    /// and the exhausted case already spent its retries — so the repricing lane must leave these
+    /// rows alone.
     /// </remarks>
     public bool ValueUnavailable { get; set; }
 

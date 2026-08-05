@@ -222,6 +222,48 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
             .Be(2, "a basis-deferred pair must not freeze at its current retry count");
     }
 
+    [Fact]
+    public async Task Recalculate_PlausibleCloseBehindLargeRestatementFactor_DefersInsteadOfPublishing()
+    {
+        var reportDate = new DateOnly(2024, 6, 30);
+        var (stock, holding) = await Seed(
+            reportDate,
+            shares: 1000,
+            filedValue: null,
+            retryCount: 0,
+            lastRetryAt: DateTime.UtcNow.AddDays(-2)
+        );
+
+        // An applied 100:1 forward split after the report date restates the count ×100, so a
+        // perfectly plausible $15,000 close implies $1.5M per as-filed share. The fallback
+        // repair resets published rows above that bound, so publishing here would put the two
+        // passes in a permanent reset/re-derive loop — the pair must defer instead.
+        var seedContext = CreateSharedContext();
+        seedContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    Id = Guid.NewGuid(),
+                    CommonStockId = stock.Id,
+                    EffectiveDate = reportDate.AddDays(10),
+                    Numerator = 100,
+                    Denominator = 1,
+                    PriceAdjustmentAppliedTime = DateTime.UtcNow.AddDays(-1),
+                }
+            );
+        await seedContext.SaveChangesAsync();
+
+        SetPrices(new() { [(stock.Id, null, reportDate)] = 15_000m });
+
+        await CreateRecalculator().Recalculate(CancellationToken.None);
+
+        var updated = await Reload(holding.Id);
+        updated.ValuePending.Should().BeTrue("the effective per-share price is implausible");
+        updated.Value.Should().Be(0L);
+        updated.ValueRetryCount.Should().Be(1, "a refused derivation must advance the ladder");
+    }
+
     // ── Ladder exhaustion publishes the filed value ────────────────────
 
     [Fact]

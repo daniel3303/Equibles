@@ -25,6 +25,12 @@ namespace Equibles.Holdings.HostedService.Services;
 /// </remarks>
 internal static class HoldingsRollupRefresher
 {
+    // Each accession's re-sum scans every position of that filing (hundreds to thousands of
+    // rows), so a caller handing over a whole repair cycle's accessions in one statement turns
+    // the GROUP BY into a multi-million-row aggregate. Batching keeps each statement inside
+    // ordinary query cost while staying one logical pass.
+    private const int AccessionBatchSize = 500;
+
     internal static async Task Refresh(
         EquiblesFinancialDbContext dbContext,
         IReadOnlyCollection<string> accessionNumbers,
@@ -49,36 +55,43 @@ internal static class HoldingsRollupRefresher
             return 0;
         }
 
-        var totals = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(h => accessions.Contains(h.AccessionNumber))
-            .GroupBy(h => h.AccessionNumber)
-            .Select(g => new { AccessionNumber = g.Key, TotalValue = g.Sum(h => h.Value) })
-            .ToListAsync(cancellationToken);
-
-        var totalByAccession = totals.ToDictionary(t => t.AccessionNumber, t => t.TotalValue);
-
-        var filings = await dbContext
-            .Set<InstitutionalFiling>()
-            .Where(f => accessions.Contains(f.AccessionNumber))
-            .ToListAsync(cancellationToken);
-
         var realigned = 0;
-        foreach (var filing in filings)
+        foreach (var batch in accessions.Chunk(AccessionBatchSize))
         {
-            if (
-                totalByAccession.TryGetValue(filing.AccessionNumber, out var total)
-                && filing.TotalValue != total
-            )
-            {
-                filing.TotalValue = total;
-                realigned++;
-            }
-        }
+            cancellationToken.ThrowIfCancellationRequested();
 
-        if (realigned > 0)
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
+            var totals = await dbContext
+                .Set<InstitutionalHolding>()
+                .Where(h => batch.Contains(h.AccessionNumber))
+                .GroupBy(h => h.AccessionNumber)
+                .Select(g => new { AccessionNumber = g.Key, TotalValue = g.Sum(h => h.Value) })
+                .ToListAsync(cancellationToken);
+
+            var totalByAccession = totals.ToDictionary(t => t.AccessionNumber, t => t.TotalValue);
+
+            var filings = await dbContext
+                .Set<InstitutionalFiling>()
+                .Where(f => batch.Contains(f.AccessionNumber))
+                .ToListAsync(cancellationToken);
+
+            var batchRealigned = 0;
+            foreach (var filing in filings)
+            {
+                if (
+                    totalByAccession.TryGetValue(filing.AccessionNumber, out var total)
+                    && filing.TotalValue != total
+                )
+                {
+                    filing.TotalValue = total;
+                    batchRealigned++;
+                }
+            }
+
+            if (batchRealigned > 0)
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            realigned += batchRealigned;
         }
 
         return realigned;

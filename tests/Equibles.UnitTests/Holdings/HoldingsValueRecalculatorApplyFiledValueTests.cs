@@ -61,16 +61,16 @@ public class HoldingsValueRecalculatorApplyFiledValueTests
     }
 
     [Fact]
-    public void ApplyFiledValue_NullFiledValue_PublishesZero()
+    public void ApplyFiledValue_NullFiledValue_ThrowsInsteadOfMintingAnInvisibleZero()
     {
-        // Callers gate on FiledValue > 0; if one slips through the row must not throw and must
-        // not invent a figure.
+        // A Filed row with Value = 0 and no FiledValue is matched by neither repair phase, so it
+        // would be a permanently invisible zero — fail loudly instead of relying on every caller
+        // remembering the FiledValue > 0 gate.
         var holding = MakeHolding(shares: 1000, filedValue: null, 1000);
 
-        HoldingsValueRecalculator.ApplyFiledValue(holding);
+        var act = () => HoldingsValueRecalculator.ApplyFiledValue(holding);
 
-        holding.Value.Should().Be(0L);
-        holding.ValueSource.Should().Be(ValueSource.Filed);
-        holding.ValuePending.Should().BeFalse();
+        act.Should().Throw<ArgumentException>();
+        holding.ValuePending.Should().BeTrue("a refused fallback must leave the row untouched");
     }
 }

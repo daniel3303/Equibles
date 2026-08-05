@@ -74,8 +74,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         return scopeFactory;
     }
 
-    private HoldingValueFallbackRepairService CreateService() =>
-        new(CreateScopeFactory(), _logger);
+    private HoldingValueFallbackRepairService CreateService() => new(CreateScopeFactory(), _logger);
 
     private async Task<InstitutionalHolding> SeedHolding(
         long value,
@@ -84,7 +83,8 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         bool valuePending = false,
         bool valueUnavailable = false,
         ValueSource valueSource = ValueSource.Derived,
-        string accession = null
+        string accession = null,
+        int valueRetryCount = 0
     )
     {
         var seedContext = CreateSharedContext();
@@ -113,6 +113,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
             ValuePending = valuePending,
             ValueUnavailable = valueUnavailable,
             ValueSource = valueSource,
+            ValueRetryCount = valueRetryCount,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
             AccessionNumber = accession ?? Guid.NewGuid().ToString()[..20],
@@ -184,14 +185,42 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Repair_ZeroWithoutFiledValue_IsLeftAlone()
+    public async Task Repair_ZeroWithoutFiledValueAndNoRetries_IsLeftAlone()
     {
+        // ValueRetryCount = 0 means the row was never on the ladder — a legitimately derived
+        // zero (a sub-dollar position), not an abandoned one. No phase may touch it.
         var holding = await SeedHolding(value: 0L, filedValue: null, shares: 1000);
 
         var repaired = await CreateService().Repair(CancellationToken.None);
 
         repaired.Should().Be(0);
-        (await Reload(holding.Id)).Value.Should().Be(0L);
+        var updated = await Reload(holding.Id);
+        updated.Value.Should().Be(0L);
+        updated.ValueUnavailable.Should().BeFalse();
+    }
+
+    // ── Phase 3: abandoned zeros with no filed figure ──────────────────
+
+    [Fact]
+    public async Task Repair_AbandonedZeroWithoutFiledValue_IsMarkedUnavailable()
+    {
+        // The old ladder cleared ValuePending on give-up without stamping anything, leaving
+        // "unknown" indistinguishable from "worth nothing" — invisible to every surface that
+        // discloses unvalued rows through the flags.
+        var holding = await SeedHolding(
+            value: 0L,
+            filedValue: null,
+            shares: 1000,
+            valueRetryCount: 4
+        );
+
+        var repaired = await CreateService().Repair(CancellationToken.None);
+
+        repaired.Should().Be(1);
+        var updated = await Reload(holding.Id);
+        updated.Value.Should().Be(0L);
+        updated.ValueUnavailable.Should().BeTrue();
+        updated.ValuePending.Should().BeFalse();
     }
 
     // ── Phase 2: implausible derivations ───────────────────────────────
