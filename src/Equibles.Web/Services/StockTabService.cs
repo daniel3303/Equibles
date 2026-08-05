@@ -701,6 +701,11 @@ public class StockTabService
             vm.Low52Week = recentPrices.Min(p => p.Low);
         }
 
+        // SEC EPS facts belong to the filer's primary share basis. Keep the secondary listing's
+        // exact price/range, but never combine it with primary-only per-share fundamentals.
+        if (!string.Equals(resolvedTicker, stock.Ticker, StringComparison.Ordinal))
+            return vm;
+
         var epsConcept = await _financialConceptRepository
             .GetMatching([FactTaxonomy.UsGaap], ["EarningsPerShareDiluted"])
             .Select(c => c.Id)
