@@ -9,4 +9,8 @@ public enum CashDividendSource
 
     [Display(Name = "Manual")]
     Manual,
+
+    // A non-primary external data integration configured by the hosting deployment.
+    [Display(Name = "External")]
+    External,
 }
