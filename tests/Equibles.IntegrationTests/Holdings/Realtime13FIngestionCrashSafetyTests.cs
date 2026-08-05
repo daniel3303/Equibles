@@ -188,7 +188,9 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
                     throw new InvalidOperationException("price service unavailable");
 
                 var dict = new Dictionary<(Guid, string, DateOnly), decimal>();
-                foreach (var (id, ticker, date) in ci.ArgAt<IEnumerable<(Guid, string, DateOnly)>>(0))
+                foreach (
+                    var (id, ticker, date) in ci.ArgAt<IEnumerable<(Guid, string, DateOnly)>>(0)
+                )
                     dict[(id, ticker, date)] = 100m;
                 return Task.FromResult(dict);
             });

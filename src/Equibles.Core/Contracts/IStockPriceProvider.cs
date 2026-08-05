@@ -18,7 +18,9 @@ public interface IStockPriceProvider
     /// close is never acceptable.
     /// </para>
     /// </summary>
-    Task<Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>> GetClosingPrices(
+    Task<
+        Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>
+    > GetClosingPrices(
         IEnumerable<(Guid CommonStockId, string ListedTicker, DateOnly Date)> requests,
         CancellationToken cancellationToken = default
     );

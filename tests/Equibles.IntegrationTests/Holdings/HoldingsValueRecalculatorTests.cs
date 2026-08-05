@@ -157,7 +157,10 @@ public class HoldingsValueRecalculatorTests : IDisposable
                 Arg.Any<CancellationToken>()
             )
             .Returns(
-                new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150.50m }
+                new Dictionary<(Guid, string, DateOnly), decimal>
+                {
+                    [(stock.Id, null, reportDate)] = 150.50m,
+                }
             );
 
         var scopeFactory = CreateScopeFactory();
@@ -223,7 +226,12 @@ public class HoldingsValueRecalculatorTests : IDisposable
                 Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 200m });
+            .Returns(
+                new Dictionary<(Guid, string, DateOnly), decimal>
+                {
+                    [(stock.Id, null, reportDate)] = 200m,
+                }
+            );
 
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);
@@ -334,7 +342,12 @@ public class HoldingsValueRecalculatorTests : IDisposable
                 Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 100m });
+            .Returns(
+                new Dictionary<(Guid, string, DateOnly), decimal>
+                {
+                    [(stock.Id, null, reportDate)] = 100m,
+                }
+            );
 
         var scopeFactory = CreateScopeFactory();
         var recalculator = CreateRecalculator(scopeFactory);

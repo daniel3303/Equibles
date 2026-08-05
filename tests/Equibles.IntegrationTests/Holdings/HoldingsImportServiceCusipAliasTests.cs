@@ -168,7 +168,10 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
             ("INFOTABLE.tsv", infoTable)
         );
 
-        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 32m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
+        {
+            [(stock.Id, null, reportDate)] = 32m,
+        };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
         var result = await sut.ImportDataSet(

@@ -145,7 +145,10 @@ public class HoldingsImportServicePublishesFilingsImportedTests : IAsyncLifetime
             NullLogger<HoldingsImportService>.Instance,
             Options.Create(new WorkerOptions()),
             PriceProviderReturning(
-                new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150m }
+                new Dictionary<(Guid, string, DateOnly), decimal>
+                {
+                    [(stock.Id, null, reportDate)] = 150m,
+                }
             ),
             bus
         );
