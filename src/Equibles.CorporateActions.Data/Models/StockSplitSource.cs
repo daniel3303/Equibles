@@ -7,8 +7,9 @@ public enum StockSplitSource
     [Display(Name = "Yahoo")]
     Yahoo,
 
-    [Display(Name = "Massive")]
-    Massive,
+    // A non-primary external data integration configured by the hosting deployment.
+    [Display(Name = "External")]
+    External,
 
     [Display(Name = "SEC Filing")]
     SecFiling,
