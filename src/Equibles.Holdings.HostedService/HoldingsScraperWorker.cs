@@ -9,6 +9,7 @@ using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace Equibles.Holdings.HostedService;
 
@@ -133,6 +134,11 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // Withdraw the derived value from stored positions bigger than their issuer. Self-
         // terminating once the back catalogue is clean, so it costs one query per cycle after that.
         await RepairImpossiblePositions(stoppingToken);
+
+        // Heal abandoned zero-value rows (publish the filed figure) and reset implausible
+        // derivations for honest repricing. Bounded per cycle; self-terminating like the pass
+        // above once the backlog drains.
+        await RepairAbandonedValues(stoppingToken);
     }
 
     private async Task RepairImpossiblePositions(CancellationToken cancellationToken)
@@ -282,8 +288,36 @@ public class HoldingsScraperWorker : BaseScraperWorker
             throw;
         }
         catch (Exception ex)
+            when (ex is TimeoutException or NpgsqlException { InnerException: TimeoutException })
+        {
+            // A timed-out scan is a capacity signal, not a fault: the backlog is still there and
+            // the next cycle retries it. Warn — an error here once hid a frozen lane for months.
+            // Only the client-side command timeout gets this treatment; every other database
+            // fault (constraint violation, deadlock, connection loss) is a real error below.
+            Logger.LogWarning(
+                ex,
+                "Recalculating pending holding values timed out; retrying next cycle"
+            );
+        }
+        catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to recalculate pending holding values");
+        }
+    }
+
+    private async Task RepairAbandonedValues(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var repairer =
+                scope.ServiceProvider.GetRequiredService<HoldingValueFallbackRepairService>();
+            await repairer.Repair(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            // Maintenance, not ingestion — same contract as the impossible-position pass.
+            Logger.LogWarning(exception, "Value fallback repair pass failed");
         }
     }
 
