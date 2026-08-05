@@ -11,24 +11,53 @@ namespace Equibles.InsiderTrading.BusinessLogic;
 /// (a per-share field), which then explodes the dashboard's Shares × Price
 /// sort into nonsense numbers (trillions, quadrillions).
 ///
-/// Stateless and pure — the close price is passed in by the caller. Lookup
-/// is done by callers that have repository access (parser at ingest time;
-/// backfill manager during one-off recomputes).
+/// Stateless and pure — the daily bar and split basis are passed in by the
+/// caller. Lookup is done by callers that have repository access (parser at
+/// ingest time; backfill manager during recomputes).
+///
+/// The stored close is on TODAY'S split-adjusted basis while the filed price
+/// is on the transaction date's basis, so every check runs on BOTH bases
+/// (raw, and × the split factor). Comparing a pre-split price against the
+/// adjusted close as if it were unadjusted once "repaired" 15,822 correct
+/// prices into nonsense — AMZN's pre-20:1 $3,300.24 became $8.42, self-sealed
+/// as valid.
 /// </summary>
 [Service]
 public class InsiderTransactionPriceValidator
 {
     /// <summary>
-    /// Reject when the reported per-share price exceeds the unadjusted close
-    /// by more than this multiple. Real intraday spreads vs. close are well
-    /// under 2×; common stocks above $100k/share don't exist outside BRK.A;
-    /// 10× is a generous ceiling that still catches the actual failure mode
-    /// (per-share field containing the total dollar value, which is
+    /// Reject when the reported per-share price exceeds the close (on both
+    /// bases) by more than this multiple. Real intraday spreads vs. close are
+    /// well under 2×; common stocks above $100k/share don't exist outside
+    /// BRK.A; 10× is a generous ceiling that still catches the actual failure
+    /// mode (per-share field containing the total dollar value, which is
     /// Shares × close = thousands of times the unit price).
     /// </summary>
     public const decimal MaxPriceToCloseMultiplier = 10m;
 
-    public bool IsPlausible(decimal pricePerShare, string securityTitle, decimal? unadjustedClose)
+    /// <summary>
+    /// Slack around the session range when accepting a repaired price: the
+    /// candidate must land inside [Low × 0.9, High × 1.1] on one of the two
+    /// bases. A genuine fat-finger's total ÷ shares reproduces a real fill
+    /// inside the day's range; a coincidence does not.
+    /// </summary>
+    public const decimal RepairBandLowFactor = 0.9m;
+    public const decimal RepairBandHighFactor = 1.1m;
+
+    /// <summary>
+    /// Fallback repair band when the bar carries no usable Low/High: half to
+    /// double the close, on either basis. Wider than the range band because a
+    /// close alone says nothing about the day's extremes.
+    /// </summary>
+    public const decimal RepairFallbackLowFactor = 0.5m;
+    public const decimal RepairFallbackHighFactor = 2m;
+
+    /// <summary>
+    /// Quick single-basis plausibility probe against a close. Basis-naive by
+    /// design (no split context) — kept for spot checks; the persisting paths
+    /// all go through <see cref="Evaluate"/>, which checks both bases.
+    /// </summary>
+    public bool IsPlausible(decimal pricePerShare, string securityTitle, decimal? close)
     {
         // Holdings (Form 3 sentinels) and post-transaction-only rows report
         // 0 price by design — not a real per-share price to validate.
@@ -49,28 +78,33 @@ public class InsiderTransactionPriceValidator
 
         // No close on file (delisted, brand-new IPO, foreign listing not in
         // the Yahoo feed). Can't validate — don't penalize.
-        if (!unadjustedClose.HasValue || unadjustedClose.Value <= 0m)
+        if (!close.HasValue || close.Value <= 0m)
             return true;
 
         // Compare via division rather than close * multiplier: an extreme-but-
         // legal close (near decimal.MaxValue) overflows the product, and this
         // method must always return a verdict, never throw.
-        return pricePerShare / MaxPriceToCloseMultiplier <= unadjustedClose.Value;
+        return pricePerShare / MaxPriceToCloseMultiplier <= close.Value;
     }
 
     /// <summary>
     /// Full tri-state evaluation of a reported per-share price, plus the repair.
-    /// Pure — the caller supplies the close and persists the outcome.
+    /// Pure — the caller supplies the daily bar + split basis and persists the
+    /// outcome.
     ///
-    /// Differs from <see cref="IsPlausible"/> in two ways:
+    /// Differs from <see cref="IsPlausible"/> in three ways:
     /// <list type="bullet">
-    /// <item>A missing close yields a <em>pending</em> result (null) instead of
-    /// valid, so the row is re-checked by a later recompute once the close
-    /// lands rather than being silently accepted.</item>
-    /// <item>An implausible real price is <em>repaired</em>: the per-share
-    /// field almost always holds the total transaction value, so dividing by
-    /// <paramref name="shares"/> recovers the unit price. Rows with no share
-    /// count can't be divided and stay flagged invalid.</item>
+    /// <item>A missing close — or an ambiguous split basis — yields a
+    /// <em>pending</em> result (null) instead of valid, so the row is
+    /// re-checked once the close lands or the basis settles rather than being
+    /// silently accepted (or worse, silently repaired).</item>
+    /// <item>Plausibility runs on both bases: the stored close as-is, and the
+    /// close restated onto the as-filed basis via the split factor. A pre-split
+    /// price is VALID AS FILED, never a repair candidate.</item>
+    /// <item>An implausible price is repaired (total ÷ shares) only when the
+    /// candidate lands inside the session's price band on one of the two bases
+    /// — a repair must reproduce a price the market actually traded at, never
+    /// fabricate one. Outside the band the row is flagged invalid, unrepaired.</item>
     /// </list>
     ///
     /// Derivative classification uses the authoritative <paramref name="kind"/>
@@ -89,7 +123,7 @@ public class InsiderTransactionPriceValidator
         long shares,
         InsiderSecurityKind kind,
         string securityTitle,
-        decimal? unadjustedClose,
+        DailyBarContext bar,
         IReadOnlyList<string> notes = null
     )
     {
@@ -120,8 +154,12 @@ public class InsiderTransactionPriceValidator
         )
             basePrice = reportedPrice / ratio;
 
-        // A real price we can't yet check stays pending (null), not valid.
-        if (!unadjustedClose.HasValue || unadjustedClose.Value <= 0m)
+        // A real price we can't yet check stays pending (null), not valid —
+        // and a series whose split basis is unsettled is exactly as
+        // uncheckable as a missing close: any verdict would be a guess off by
+        // the split ratio.
+        var close = bar?.Close;
+        if (!close.HasValue || close.Value <= 0m || bar.SplitBasisAmbiguous)
         {
             return new InsiderTransactionPriceEvaluation
             {
@@ -130,9 +168,14 @@ public class InsiderTransactionPriceValidator
             };
         }
 
-        // Plausible against the close — keep as filed. Divide rather than
-        // multiply the close so a near-decimal.MaxValue close can't overflow.
-        if (basePrice / MaxPriceToCloseMultiplier <= unadjustedClose.Value)
+        // Plausible against the close on EITHER basis — keep as filed. The
+        // factor-scaled comparison is what accepts a correct pre-split price
+        // (AMZN $3,300.24 vs the adjusted $165 close, factor 20). Divide
+        // rather than multiply the price side so a near-decimal.MaxValue
+        // close can't overflow.
+        var factor = bar.SplitFactorToPresent > 0m ? bar.SplitFactorToPresent : 1m;
+        var scaled = basePrice / MaxPriceToCloseMultiplier;
+        if (scaled <= close.Value || scaled / factor <= close.Value)
         {
             return new InsiderTransactionPriceEvaluation
             {
@@ -155,14 +198,46 @@ public class InsiderTransactionPriceValidator
             };
         }
 
-        // Implausible — repair by dividing the mis-entered total by the share
-        // count and accept the result as the per-share price.
+        // Repair candidate: the mis-entered total divided by the share count.
+        // Accepted only when it reproduces a price inside the session's band
+        // on one of the two bases — otherwise flag, never fabricate.
+        var candidate = basePrice / shares;
+        if (IsInsideRepairBand(candidate, bar, factor))
+        {
+            return new InsiderTransactionPriceEvaluation
+            {
+                IsPriceValid = true,
+                EffectivePrice = candidate,
+                WasRepaired = true,
+            };
+        }
+
         return new InsiderTransactionPriceEvaluation
         {
-            IsPriceValid = true,
-            EffectivePrice = basePrice / shares,
-            WasRepaired = true,
+            IsPriceValid = false,
+            EffectivePrice = basePrice,
         };
+    }
+
+    private static bool IsInsideRepairBand(decimal candidate, DailyBarContext bar, decimal factor)
+    {
+        decimal bandLow;
+        decimal bandHigh;
+        if (bar.Low is > 0m && bar.High >= bar.Low)
+        {
+            bandLow = bar.Low.Value * RepairBandLowFactor;
+            bandHigh = bar.High.Value * RepairBandHighFactor;
+        }
+        else
+        {
+            bandLow = bar.Close.Value * RepairFallbackLowFactor;
+            bandHigh = bar.Close.Value * RepairFallbackHighFactor;
+        }
+
+        // Present basis, then the as-filed basis (band × factor).
+        if (candidate >= bandLow && candidate <= bandHigh)
+            return true;
+        return candidate >= bandLow * factor && candidate <= bandHigh * factor;
     }
 
     // Authoritative when the row carries a known kind (parsed from the Form 4

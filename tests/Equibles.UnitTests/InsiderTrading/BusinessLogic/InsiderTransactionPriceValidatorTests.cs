@@ -1,4 +1,5 @@
 using Equibles.InsiderTrading.BusinessLogic;
+using Equibles.InsiderTrading.BusinessLogic.Models;
 using Equibles.InsiderTrading.Data.Models;
 
 namespace Equibles.UnitTests.InsiderTrading.BusinessLogic;
@@ -64,7 +65,7 @@ public class InsiderTransactionPriceValidatorTests
         var result = _validator.IsPlausible(
             pricePerShare: 24_035_774.40m,
             securityTitle: "Common Stock",
-            unadjustedClose: 0.24m
+            close: 0.24m
         );
 
         result.Should().BeFalse();
@@ -78,7 +79,7 @@ public class InsiderTransactionPriceValidatorTests
         var result = _validator.IsPlausible(
             pricePerShare: 11_000_689.50m,
             securityTitle: "Common Stock",
-            unadjustedClose: 20.50m
+            close: 20.50m
         );
 
         result.Should().BeFalse();
@@ -132,7 +133,7 @@ public class InsiderTransactionPriceValidatorTests
             shares: 1000,
             InsiderSecurityKind.NonDerivative,
             "Common Stock",
-            unadjustedClose: null
+            bar: null
         );
 
         result.IsPriceValid.Should().BeNull();
@@ -151,7 +152,7 @@ public class InsiderTransactionPriceValidatorTests
             shares: 100_149_893, // 24,035,774.40 / 0.24
             kind: InsiderSecurityKind.NonDerivative,
             securityTitle: "Common Stock",
-            unadjustedClose: 0.24m
+            bar: new DailyBarContext { Close = 0.24m }
         );
 
         result.IsPriceValid.Should().BeTrue();
@@ -169,7 +170,7 @@ public class InsiderTransactionPriceValidatorTests
             shares: 0,
             InsiderSecurityKind.NonDerivative,
             "Common Stock",
-            unadjustedClose: 50m
+            bar: new DailyBarContext { Close = 50m }
         );
 
         result.IsPriceValid.Should().BeFalse();
@@ -185,7 +186,7 @@ public class InsiderTransactionPriceValidatorTests
             shares: 1000,
             InsiderSecurityKind.NonDerivative,
             "Common Stock",
-            unadjustedClose: 50m
+            bar: new DailyBarContext { Close = 50m }
         );
 
         result.IsPriceValid.Should().BeTrue();
@@ -204,7 +205,7 @@ public class InsiderTransactionPriceValidatorTests
             shares: 1000,
             InsiderSecurityKind.Derivative,
             "Stock Option (Right to Buy)",
-            unadjustedClose: 50m
+            bar: new DailyBarContext { Close = 50m }
         );
 
         result.IsPriceValid.Should().BeTrue();
@@ -223,7 +224,7 @@ public class InsiderTransactionPriceValidatorTests
             shares: 5_000_000,
             InsiderSecurityKind.Derivative,
             "Common Stock",
-            unadjustedClose: 1.20m
+            bar: new DailyBarContext { Close = 1.20m }
         );
 
         result.IsPriceValid.Should().BeTrue();
@@ -241,7 +242,7 @@ public class InsiderTransactionPriceValidatorTests
             shares: 1000,
             InsiderSecurityKind.Unknown,
             "Warrant",
-            unadjustedClose: 50m
+            bar: new DailyBarContext { Close = 50m }
         );
 
         result.IsPriceValid.Should().BeTrue();
@@ -257,7 +258,7 @@ public class InsiderTransactionPriceValidatorTests
             shares: 0,
             InsiderSecurityKind.NonDerivative,
             "Common Stock",
-            unadjustedClose: null
+            bar: null
         );
 
         result.IsPriceValid.Should().BeTrue();
@@ -280,7 +281,7 @@ public class InsiderTransactionPriceValidatorTests
             shares: -1000,
             kind: InsiderSecurityKind.NonDerivative,
             securityTitle: "Common Stock",
-            unadjustedClose: 50m
+            bar: new DailyBarContext { Close = 50m }
         );
 
         result.IsPriceValid.Should().NotBe(true);

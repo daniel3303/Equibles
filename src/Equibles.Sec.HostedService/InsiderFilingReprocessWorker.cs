@@ -44,6 +44,16 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
+        // Restore rows the old basis-blind validator misrepaired BEFORE the version-driven
+        // reprocess, so the nulled rows join the pending population this same cycle drains.
+        // Bounded and self-terminating; a no-op scan once the back catalogue is clean.
+        await using (var sweepScope = ScopeFactory.CreateAsyncScope())
+        {
+            var sweep =
+                sweepScope.ServiceProvider.GetRequiredService<InsiderMisrepairedPriceSweep>();
+            await sweep.Run(stoppingToken);
+        }
+
         await using var scope = ScopeFactory.CreateAsyncScope();
         var manager = scope.ServiceProvider.GetRequiredService<InsiderFilingReprocessManager>();
 
@@ -51,5 +61,23 @@ public class InsiderFilingReprocessWorker : BaseScraperWorker
 
         if (result.Processed > 0)
             Logger.LogInformation("Insider filing reprocess cycle: {Summary}", result.Summary);
+
+        // Drain the pending (IsPriceValid = null) population — freshly restored rows above,
+        // plus rows whose close has since landed — through the same evaluation the backoffice
+        // recompute uses. DB-only work; no EDGAR budget consumed.
+        await using (var backfillScope = ScopeFactory.CreateAsyncScope())
+        {
+            var backfill =
+                backfillScope.ServiceProvider.GetRequiredService<InsiderTransactionPriceBackfillManager>();
+            var backfillResult = await backfill.Run();
+            if (backfillResult.Processed > 0)
+                Logger.LogInformation(
+                    "Insider price backfill cycle: processed {Processed}, repaired={Repaired}, invalid={Invalid}, pending={Pending}",
+                    backfillResult.Processed,
+                    backfillResult.Repaired,
+                    backfillResult.Invalid,
+                    backfillResult.Pending
+                );
+        }
     }
 }

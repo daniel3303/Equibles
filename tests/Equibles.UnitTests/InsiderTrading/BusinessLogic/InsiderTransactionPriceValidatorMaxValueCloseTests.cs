@@ -1,4 +1,5 @@
 using Equibles.InsiderTrading.BusinessLogic;
+using Equibles.InsiderTrading.BusinessLogic.Models;
 using Equibles.InsiderTrading.Data.Models;
 
 namespace Equibles.UnitTests.InsiderTrading.BusinessLogic;
@@ -35,7 +36,7 @@ public class InsiderTransactionPriceValidatorMaxValueCloseTests
                 shares: 10,
                 kind: InsiderSecurityKind.NonDerivative,
                 securityTitle: "Common Stock",
-                unadjustedClose: decimal.MaxValue
+                bar: new DailyBarContext { Close = decimal.MaxValue }
             );
 
         act.Should().NotThrow();

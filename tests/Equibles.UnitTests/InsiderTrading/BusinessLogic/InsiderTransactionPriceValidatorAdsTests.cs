@@ -1,4 +1,5 @@
 using Equibles.InsiderTrading.BusinessLogic;
+using Equibles.InsiderTrading.BusinessLogic.Models;
 using Equibles.InsiderTrading.Data.Models;
 
 namespace Equibles.UnitTests.InsiderTrading.BusinessLogic;
@@ -28,7 +29,7 @@ public class InsiderTransactionPriceValidatorAdsTests
             shares: 2_501_582_400L,
             kind: InsiderSecurityKind.NonDerivative,
             securityTitle: "Ordinary Shares",
-            unadjustedClose: 3.45m,
+            bar: new DailyBarContext { Close = 3.45m },
             notes: SvreNotes
         );
 
@@ -49,7 +50,7 @@ public class InsiderTransactionPriceValidatorAdsTests
             shares: 2_501_582_400L,
             kind: InsiderSecurityKind.NonDerivative,
             securityTitle: "Ordinary Shares",
-            unadjustedClose: 3.45m,
+            bar: new DailyBarContext { Close = 3.45m },
             notes: null
         );
 
@@ -66,7 +67,7 @@ public class InsiderTransactionPriceValidatorAdsTests
             shares: 1_000L,
             kind: InsiderSecurityKind.NonDerivative,
             securityTitle: "Common Stock",
-            unadjustedClose: 49m,
+            bar: new DailyBarContext { Close = 49m },
             notes: new[] { "Represents shares withheld to cover taxes." }
         );
 

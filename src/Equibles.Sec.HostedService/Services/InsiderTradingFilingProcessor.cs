@@ -2,6 +2,7 @@ using System.Text;
 using System.Xml.Linq;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.InsiderTrading.BusinessLogic;
@@ -118,6 +119,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
         var priceValidator =
             scope.ServiceProvider.GetRequiredService<InsiderTransactionPriceValidator>();
+        var stockSplitRepository = scope.ServiceProvider.GetRequiredService<StockSplitRepository>();
 
         var existing = await transactionRepository
             .GetByAccessionNumber(filing.AccessionNumber)
@@ -303,7 +305,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         await ApplyPriceValidity(
             transactions,
             companyId,
+            companyOutContext.Ticker,
+            companyOutContext.SecondaryTickers,
             dailyStockPriceRepository,
+            stockSplitRepository,
             priceValidator
         );
 
@@ -758,16 +763,22 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
     // filings dump the total transaction value (or a placeholder like the
     // share count) into that field, which then explodes the dashboard's
     // Shares × Price sort. Preserve the as-filed value in ReportedPricePerShare,
-    // then cross-check against Yahoo's unadjusted close on the TransactionDate
-    // (most recent prior trading day for weekends/holidays): plausible rows
-    // stay as filed, implausible rows are repaired (total ÷ shares). If the
-    // Yahoo feed hasn't caught up yet, IsPriceValid is left null (pending) —
-    // the backoffice maintenance recompute re-evaluates it once the close
-    // exists, rather than silently accepting it as valid.
+    // then cross-check against the stored close on the TransactionDate (most
+    // recent prior trading day for weekends/holidays). The stored close is on
+    // TODAY'S split-adjusted basis while the filed price is on the transaction
+    // date's basis, so the evaluation carries the split factor and checks both
+    // bases: plausible rows stay as filed, implausible rows are repaired
+    // (total ÷ shares) only inside the session's price band. If the price feed
+    // hasn't caught up yet — or the split basis is unsettled — IsPriceValid is
+    // left null (pending) and re-evaluated later, rather than silently
+    // accepted or guessed at.
     private static async Task ApplyPriceValidity(
         List<InsiderTransaction> transactions,
         Guid companyId,
+        string primaryTicker,
+        IReadOnlyCollection<string> secondaryTickers,
         DailyStockPriceRepository dailyStockPriceRepository,
+        StockSplitRepository stockSplitRepository,
         InsiderTransactionPriceValidator priceValidator
     )
     {
@@ -780,16 +791,33 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         var prices = await dailyStockPriceRepository
             .GetAll()
             .Where(p => p.CommonStockId == companyId && p.Date >= minDate && p.Date <= maxDate)
-            .Select(p => new { p.Date, p.Close })
+            .Select(p => new
+            {
+                p.Date,
+                p.Close,
+                p.Low,
+                p.High,
+            })
             .OrderByDescending(p => p.Date)
+            .ToListAsync();
+
+        var splits = await stockSplitRepository
+            .GetAll()
+            .Where(sp => sp.CommonStockId == companyId)
             .ToListAsync();
 
         foreach (var transaction in transactions)
         {
-            var close = prices
-                .Where(p => p.Date <= transaction.TransactionDate)
-                .Select(p => (decimal?)p.Close)
-                .FirstOrDefault();
+            var barRow = prices.FirstOrDefault(p => p.Date <= transaction.TransactionDate);
+            var bar = InsiderDailyBars.Build(
+                barRow?.Close,
+                barRow?.Low,
+                barRow?.High,
+                transaction.TransactionDate,
+                splits,
+                primaryTicker,
+                secondaryTickers
+            );
 
             // Capture the as-filed price first; both this path and the backfill
             // manager evaluate from ReportedPricePerShare so the "reported is
@@ -801,11 +829,12 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 transaction.Shares,
                 transaction.SecurityKind,
                 transaction.SecurityTitle,
-                close,
+                bar,
                 transaction.Notes
             );
             transaction.PricePerShare = evaluation.EffectivePrice;
             transaction.IsPriceValid = evaluation.IsPriceValid;
+            transaction.PriceWasRepaired = evaluation.WasRepaired;
         }
     }
 }

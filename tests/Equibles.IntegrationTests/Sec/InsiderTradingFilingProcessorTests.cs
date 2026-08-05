@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data;
 using Equibles.Errors.Repositories;
@@ -378,6 +380,7 @@ public class InsiderTradingFilingProcessorTests
         var dbContext = TestDbContextFactory.Create(
             new InsiderTradingModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
+            new CorporateActionsModuleConfiguration(),
             new ErrorsModuleConfiguration(),
             new YahooModuleConfiguration()
         );
@@ -401,7 +404,8 @@ public class InsiderTradingFilingProcessorTests
             (typeof(IFileManager), fileManager),
             (typeof(ErrorManager), errorManager),
             (typeof(DailyStockPriceRepository), dailyStockPriceRepo),
-            (typeof(InsiderTransactionPriceValidator), priceValidator)
+            (typeof(InsiderTransactionPriceValidator), priceValidator),
+            (typeof(StockSplitRepository), new StockSplitRepository(dbContext))
         );
 
         var errorReporter = new ErrorReporter(

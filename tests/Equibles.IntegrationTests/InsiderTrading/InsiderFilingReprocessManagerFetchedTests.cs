@@ -1,5 +1,6 @@
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.InsiderTrading.BusinessLogic;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Repositories;
@@ -125,6 +126,7 @@ public class InsiderFilingReprocessManagerFetchedTests : ParadeDbMcpTestBase
             new InsiderTransactionRepository(runCtx),
             new InsiderFilingRepository(runCtx),
             new DailyStockPriceRepository(runCtx),
+            new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             edgar,
             fileManager,
