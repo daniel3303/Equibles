@@ -58,7 +58,10 @@ internal static class Corrupt13FShareCountRepairer
     /// </summary>
     internal static Corrupt13FRepairOutcome Repair(
         List<BufferedHoldingRow> rows,
-        IReadOnlyDictionary<(Guid StockId, string ListedTicker, DateOnly ReportDate), decimal> stockPrices
+        IReadOnlyDictionary<
+            (Guid StockId, string ListedTicker, DateOnly ReportDate),
+            decimal
+        > stockPrices
     )
     {
         var repaired = 0;

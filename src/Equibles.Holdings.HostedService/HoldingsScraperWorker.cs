@@ -139,6 +139,26 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // derivations for honest repricing. Bounded per cycle; self-terminating like the pass
         // above once the backlog drains.
         await RepairAbandonedValues(stoppingToken);
+
+        // Restamp FilingType on filing rollup rows written before the column existed. Self-
+        // terminating like the pass above.
+        await BackfillFilingRollupTypes(stoppingToken);
+    }
+
+    private async Task BackfillFilingRollupTypes(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var backfill =
+                scope.ServiceProvider.GetRequiredService<FilingRollupTypeBackfillService>();
+            await backfill.Backfill(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            // Maintenance, not ingestion: its failure must not fail the import cycle.
+            Logger.LogWarning(exception, "Filing rollup type backfill pass failed");
+        }
     }
 
     private async Task RepairImpossiblePositions(CancellationToken cancellationToken)

@@ -1999,6 +1999,7 @@ public class HoldingsImportService
                 h.FilingDate,
                 h.ReportDate,
                 h.IsAmendment,
+                h.FilingType,
             })
             .Select(g => new
             {
@@ -2007,6 +2008,7 @@ public class HoldingsImportService
                 g.Key.FilingDate,
                 g.Key.ReportDate,
                 g.Key.IsAmendment,
+                g.Key.FilingType,
                 PositionCount = g.Count(),
                 TotalValue = g.Sum(h => h.Value),
             })
@@ -2033,6 +2035,7 @@ public class HoldingsImportService
                 FilingDate = r.FilingDate,
                 ReportDate = r.ReportDate,
                 IsAmendment = r.IsAmendment,
+                FilingType = r.FilingType,
                 PositionCount = r.PositionCount,
                 TotalValue = r.TotalValue,
                 DeclaredPositionCount = context.SummaryPages.TryGetValue(
@@ -2064,6 +2067,7 @@ public class HoldingsImportService
                             FilingDate = incoming.FilingDate,
                             ReportDate = incoming.ReportDate,
                             IsAmendment = incoming.IsAmendment,
+                            FilingType = incoming.FilingType,
                             PositionCount = incoming.PositionCount,
                             TotalValue = incoming.TotalValue,
                             DeclaredPositionCount = incoming.DeclaredPositionCount,
