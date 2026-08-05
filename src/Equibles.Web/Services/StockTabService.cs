@@ -214,7 +214,11 @@ public class StockTabService
                 {
                     InstitutionalHolderId = g.Key,
                     InstitutionalHolder = g.First().InstitutionalHolder,
-                    CurrentHolding = g.OrderByDescending(h => h.FilingDate).First(),
+                    // Prefer the primary-class row as the label-bearing representative,
+                    // mirroring HoldingsPositionGrouper.AggregateByHolder.
+                    CurrentHolding = g.OrderBy(h => h.ListedTicker == null ? 0 : 1)
+                        .ThenByDescending(h => h.FilingDate)
+                        .First(),
                     CurrentShares = g.Sum(h => h.Shares),
                     CurrentValue = g.Sum(h => h.Value),
                     ChangeType = PositionChangeType.Unchanged,

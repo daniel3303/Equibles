@@ -217,8 +217,14 @@ public class InstitutionalHoldingsTools
                 // absolute share count is restated onto today's basis.
                 var pct = Percentage.Of(h.Shares, totalSharesAll);
                 var adjustedShares = SplitAdjustment.AdjustShareCount(h.Shares, shareFactor);
+                // A sibling-class row is a DIFFERENT security of the same issuer; the class
+                // qualifies the type in place so single-class stocks pay no extra column.
+                var positionType =
+                    h.ListedTicker == null
+                        ? PositionType(h.OptionType)
+                        : $"{PositionType(h.OptionType)} ({h.ListedTicker})";
                 return $"| {rank} | {h.InstitutionalHolder.Name} | "
-                    + $"{PositionType(h.OptionType)} | "
+                    + $"{positionType} | "
                     + $"{McpFormat.WholeNumber(adjustedShares)} | "
                     + $"{FormatMillions(h.Value)} | "
                     + $"{McpFormat.Invariant(pct, "F2")}% |";
@@ -493,7 +499,9 @@ public class InstitutionalHoldingsTools
                     SplitsFor(splitsByStock, h.CommonStockId)
                 );
                 var pct = Percentage.Of(h.Value, totalValue);
-                return $"| {rank} | {h.CommonStock.Ticker} | {h.CommonStock.Name} | "
+                // The exact listing held: a GOOG position must not render as GOOGL.
+                var listedTicker = h.ListedTicker ?? h.CommonStock.Ticker;
+                return $"| {rank} | {listedTicker} | {h.CommonStock.Name} | "
                     + $"{PositionType(h.OptionType)} | "
                     + $"{McpFormat.WholeNumber(shares)} | "
                     + $"{FormatMillions(h.Value)} | "
