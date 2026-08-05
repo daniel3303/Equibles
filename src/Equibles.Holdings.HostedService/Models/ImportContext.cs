@@ -4,6 +4,13 @@ using Equibles.Holdings.HostedService.Services;
 
 namespace Equibles.Holdings.HostedService.Models;
 
+/// <summary>
+/// The exact security a filed CUSIP resolves to: the filer's <see cref="CommonStockId"/>,
+/// plus the listed ticker when the CUSIP identifies one of the filer's SECONDARY listings.
+/// Null <see cref="ListedTicker"/> = the primary security (or a retired alias of it).
+/// </summary>
+public readonly record struct CusipTarget(Guid CommonStockId, string ListedTicker);
+
 public class ImportContext
 {
     // Immutable inputs
@@ -14,7 +21,12 @@ public class ImportContext
     // Populated by phases
     public Dictionary<string, SubmissionRow> Submissions { get; set; }
     public Dictionary<string, CoverPageRow> CoverPages { get; set; }
-    public Dictionary<string, Guid> CusipMapping { get; set; }
+
+    // CUSIP → the exact security it identifies: the filer row plus the listed ticker when
+    // the CUSIP belongs to one of the filer's SECONDARY listings (null = the primary or a
+    // retired alias of it). The listing is part of the position's identity — GOOGL and
+    // GOOG lines must never merge — so it rides the mapping from resolution to upsert.
+    public Dictionary<string, CusipTarget> CusipMapping { get; set; }
     public Dictionary<string, Guid> CikToHolderId { get; set; }
 
     // Summary-page other managers (the positions this filing reports on behalf of):
@@ -34,8 +46,15 @@ public class ImportContext
     // whole (reportDate, filingType) slice.
     public Dictionary<string, HashSet<Guid>> ScheduleAccessionStockIds { get; set; } = [];
 
-    // Yahoo stock prices: (CommonStockId, ReportDate) → closing price
-    public Dictionary<(Guid, DateOnly), decimal> StockPrices { get; set; } = [];
+    // Yahoo stock prices: (CommonStockId, ListedTicker, ReportDate) → closing price. The
+    // listing (null = primary series) is load-bearing: a sibling class trades at its own
+    // price, and BRK-A priced at the BRK-B close is off by ~1500x with no guard firing.
+    public Dictionary<(Guid, string, DateOnly), decimal> StockPrices { get; set; } = [];
+
+    // CommonStockId → current primary ticker for every mapped stock. HoldingValueBasis needs it
+    // to decide which splits belong to a position's own series: captured splits are attributed
+    // to the primary's symbol, while legacy rows carry no attribution at all.
+    public Dictionary<Guid, string> PrimaryTickers { get; set; } = [];
 
     // Issuer size: CommonStockId → (shares outstanding, market capitalization). Used only to
     // reject a position larger than the company it is in (ImpossiblePositionGuard); a stock

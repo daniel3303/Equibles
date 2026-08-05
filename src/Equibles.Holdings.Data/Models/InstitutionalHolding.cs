@@ -70,6 +70,23 @@ public class InstitutionalHolding
     [MaxLength(9)]
     public string Cusip { get; set; }
 
+    /// <summary>
+    /// The exact listed security this position is in, when the filed CUSIP resolved to
+    /// one of the filer's SECONDARY listings (a sibling share class, unit, or fund
+    /// series — <c>CommonStockListedCusip</c>). Null when the CUSIP resolved to the
+    /// primary security or one of its retired aliases — the overwhelming majority, so
+    /// existing rows keep meaning "the primary class" without a rewrite.
+    /// </summary>
+    /// <remarks>
+    /// Part of the position's identity: it joins the unique upsert key (nulls not
+    /// distinct) so GOOGL and GOOG positions held by one filer in one quarter are two
+    /// rows instead of a silent merge. Aggregating surfaces that sum a stock's
+    /// holdings now include every class; per-row surfaces should display the class
+    /// when this is non-null.
+    /// </remarks>
+    [MaxLength(32)]
+    public string ListedTicker { get; set; }
+
     [MaxLength(32)]
     public string AccessionNumber { get; set; }
 

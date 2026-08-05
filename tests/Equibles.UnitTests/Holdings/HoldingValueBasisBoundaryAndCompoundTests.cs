@@ -28,7 +28,7 @@ public class HoldingValueBasisBoundaryAndCompoundTests
         var splits = new List<StockSplit> { Applied(new DateOnly(2024, 6, 30), 10m, 1m) };
 
         HoldingValueBasis
-            .TryResolveShareCountFactor(new DateOnly(2024, 6, 30), splits, out var factor)
+            .TryResolveShareCountFactor(new DateOnly(2024, 6, 30), splits, null, "TEST", out var factor)
             .Should()
             .BeTrue();
 
@@ -48,7 +48,7 @@ public class HoldingValueBasisBoundaryAndCompoundTests
         };
 
         HoldingValueBasis
-            .TryResolveShareCountFactor(new DateOnly(2020, 12, 31), splits, out var factor)
+            .TryResolveShareCountFactor(new DateOnly(2020, 12, 31), splits, null, "TEST", out var factor)
             .Should()
             .BeTrue();
 
@@ -62,7 +62,7 @@ public class HoldingValueBasisBoundaryAndCompoundTests
         // path has to be an exact no-op: a factor of anything but 1 here would perturb every
         // value on the platform.
         HoldingValueBasis
-            .TryResolveShareCountFactor(new DateOnly(2024, 6, 30), [], out var factor)
+            .TryResolveShareCountFactor(new DateOnly(2024, 6, 30), [], null, "TEST", out var factor)
             .Should()
             .BeTrue();
 
@@ -82,7 +82,7 @@ public class HoldingValueBasisBoundaryAndCompoundTests
         };
 
         HoldingValueBasis
-            .TryResolveShareCountFactor(new DateOnly(2024, 12, 31), splits, out var factor)
+            .TryResolveShareCountFactor(new DateOnly(2024, 12, 31), splits, null, "TEST", out var factor)
             .Should()
             .BeTrue();
 

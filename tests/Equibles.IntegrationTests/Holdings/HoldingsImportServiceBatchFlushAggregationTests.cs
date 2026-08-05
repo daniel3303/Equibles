@@ -113,13 +113,13 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
     }
 
     private static IStockPriceProvider PriceProviderReturning(
-        Dictionary<(Guid, DateOnly), decimal> prices
+        Dictionary<(Guid, string, DateOnly), decimal> prices
     )
     {
         var provider = Substitute.For<IStockPriceProvider>();
         provider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(Task.FromResult(prices));
@@ -164,9 +164,9 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
         }
 
         var reportDate = new DateOnly(2025, 12, 31);
-        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(apple.Id, reportDate)] = 250m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(apple.Id, null, reportDate)] = 250m };
         foreach (var p in padding)
-            prices[(p.Id, reportDate)] = 1m;
+            prices[(p.Id, null, reportDate)] = 1m;
 
         const string coverHeader =
             "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n";

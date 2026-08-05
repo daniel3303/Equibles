@@ -109,13 +109,13 @@ public class HoldingsImportServiceCrossFilingTypeAmendmentTests : IAsyncLifetime
     }
 
     private static IStockPriceProvider PriceProviderReturning(
-        Dictionary<(Guid, DateOnly), decimal> prices
+        Dictionary<(Guid, string, DateOnly), decimal> prices
     )
     {
         var provider = Substitute.For<IStockPriceProvider>();
         provider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(Task.FromResult(prices));
@@ -142,7 +142,7 @@ public class HoldingsImportServiceCrossFilingTypeAmendmentTests : IAsyncLifetime
         // Quarter end shared by the 13F-HR portfolio and the 13G/A stake — the
         // exact collision BlackRock hits every December and March.
         var reportDate = new DateOnly(2024, 9, 30);
-        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 100m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 100m };
 
         const string cover = "ACCESSION_NUMBER\tISAMENDMENT\tAMENDMENTTYPE\tFILINGMANAGER_NAME\n";
         const string infoHeader =

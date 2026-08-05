@@ -104,7 +104,7 @@ public class Corrupt13FShareCountRepairerTests
 
         var outcome = Corrupt13FShareCountRepairer.Repair(
             rows,
-            new Dictionary<(Guid, DateOnly), decimal>()
+            new Dictionary<(Guid, string, DateOnly), decimal>()
         );
 
         outcome.Should().Be(new Corrupt13FRepairOutcome(RepairedRows: 1, DroppedRows: 0));
@@ -121,7 +121,7 @@ public class Corrupt13FShareCountRepairerTests
 
         var outcome = Corrupt13FShareCountRepairer.Repair(
             rows,
-            new Dictionary<(Guid, DateOnly), decimal>()
+            new Dictionary<(Guid, string, DateOnly), decimal>()
         );
 
         outcome.Should().Be(new Corrupt13FRepairOutcome(RepairedRows: 0, DroppedRows: 1));
@@ -195,8 +195,8 @@ public class Corrupt13FShareCountRepairerTests
         };
     }
 
-    private static Dictionary<(Guid, DateOnly), decimal> Prices(
+    private static Dictionary<(Guid, string, DateOnly), decimal> Prices(
         BufferedHoldingRow row,
         decimal closePrice
-    ) => new() { [(row.Holding.CommonStockId, row.Holding.ReportDate)] = closePrice };
+    ) => new() { [(row.Holding.CommonStockId, row.Holding.ListedTicker, row.Holding.ReportDate)] = closePrice };
 }

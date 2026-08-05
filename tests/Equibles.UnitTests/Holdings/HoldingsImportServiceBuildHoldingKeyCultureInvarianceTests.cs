@@ -57,6 +57,7 @@ public class HoldingsImportServiceBuildHoldingKeyCultureInvarianceTests
                 typeof(ShareType),
                 typeof(OptionType?),
                 typeof(FilingType),
+                typeof(string),
             ]
         );
 
@@ -71,6 +72,7 @@ public class HoldingsImportServiceBuildHoldingKeyCultureInvarianceTests
             ShareType.Shares,
             (OptionType?)null,
             FilingType.Form13F,
+            null,
         ];
 
         var original = CultureInfo.CurrentCulture;

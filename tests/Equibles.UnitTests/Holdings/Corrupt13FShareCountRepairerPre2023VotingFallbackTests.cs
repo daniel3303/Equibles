@@ -34,7 +34,7 @@ public class Corrupt13FShareCountRepairerPre2023VotingFallbackTests
 
         var outcome = Corrupt13FShareCountRepairer.Repair(
             rows,
-            new Dictionary<(Guid, DateOnly), decimal>()
+            new Dictionary<(Guid, string, DateOnly), decimal>()
         );
 
         outcome.Should().Be(new Corrupt13FRepairOutcome(RepairedRows: 1, DroppedRows: 0));

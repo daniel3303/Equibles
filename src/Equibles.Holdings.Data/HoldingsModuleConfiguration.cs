@@ -18,6 +18,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.ShareType,
                 h.OptionType,
                 h.FilingType,
+                h.ListedTicker,
             })
             .IsUnique()
             .AreNullsDistinct(false);

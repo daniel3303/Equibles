@@ -58,7 +58,7 @@ internal static class Corrupt13FShareCountRepairer
     /// </summary>
     internal static Corrupt13FRepairOutcome Repair(
         List<BufferedHoldingRow> rows,
-        IReadOnlyDictionary<(Guid StockId, DateOnly ReportDate), decimal> stockPrices
+        IReadOnlyDictionary<(Guid StockId, string ListedTicker, DateOnly ReportDate), decimal> stockPrices
     )
     {
         var repaired = 0;
@@ -78,7 +78,7 @@ internal static class Corrupt13FShareCountRepairer
 
             if (
                 stockPrices.TryGetValue(
-                    (holding.CommonStockId, holding.ReportDate),
+                    (holding.CommonStockId, holding.ListedTicker, holding.ReportDate),
                     out var closePrice
                 )
                 && closePrice > 0

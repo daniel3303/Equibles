@@ -179,7 +179,7 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
         var priceCalls = 0;
         prices
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(ci =>
@@ -187,9 +187,9 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
                 if (Interlocked.Increment(ref priceCalls) == 1)
                     throw new InvalidOperationException("price service unavailable");
 
-                var dict = new Dictionary<(Guid, DateOnly), decimal>();
-                foreach (var (id, date) in ci.ArgAt<IEnumerable<(Guid, DateOnly)>>(0))
-                    dict[(id, date)] = 100m;
+                var dict = new Dictionary<(Guid, string, DateOnly), decimal>();
+                foreach (var (id, ticker, date) in ci.ArgAt<IEnumerable<(Guid, string, DateOnly)>>(0))
+                    dict[(id, ticker, date)] = 100m;
                 return Task.FromResult(dict);
             });
 

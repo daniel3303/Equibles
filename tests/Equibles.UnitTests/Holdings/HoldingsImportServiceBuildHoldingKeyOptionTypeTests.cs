@@ -42,6 +42,7 @@ public class HoldingsImportServiceBuildHoldingKeyOptionTypeTests
                 typeof(ShareType),
                 typeof(OptionType?),
                 typeof(FilingType),
+                typeof(string),
             ]
         );
 
@@ -59,6 +60,7 @@ public class HoldingsImportServiceBuildHoldingKeyOptionTypeTests
                     ShareType.Shares,
                     (OptionType?)OptionType.Call,
                     FilingType.Form13F,
+                    null,
                 ]
             );
         var putKey = (string)
@@ -71,6 +73,7 @@ public class HoldingsImportServiceBuildHoldingKeyOptionTypeTests
                     ShareType.Shares,
                     (OptionType?)OptionType.Put,
                     FilingType.Form13F,
+                    null,
                 ]
             );
 
@@ -90,6 +93,7 @@ public class HoldingsImportServiceBuildHoldingKeyOptionTypeTests
                 typeof(ShareType),
                 typeof(OptionType?),
                 typeof(FilingType),
+                typeof(string),
             ]
         );
 
@@ -107,6 +111,7 @@ public class HoldingsImportServiceBuildHoldingKeyOptionTypeTests
                     ShareType.Shares,
                     (OptionType?)null,
                     FilingType.Form13F,
+                    null,
                 ]
             );
         var key13D = (string)
@@ -119,6 +124,7 @@ public class HoldingsImportServiceBuildHoldingKeyOptionTypeTests
                     ShareType.Shares,
                     (OptionType?)null,
                     FilingType.Schedule13D,
+                    null,
                 ]
             );
 

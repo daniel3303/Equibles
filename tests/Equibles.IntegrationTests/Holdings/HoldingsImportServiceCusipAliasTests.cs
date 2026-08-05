@@ -117,13 +117,13 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
     }
 
     private static IStockPriceProvider PriceProviderReturning(
-        Dictionary<(Guid, DateOnly), decimal> prices
+        Dictionary<(Guid, string, DateOnly), decimal> prices
     )
     {
         var provider = Substitute.For<IStockPriceProvider>();
         provider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(Task.FromResult(prices));
@@ -168,7 +168,7 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
             ("INFOTABLE.tsv", infoTable)
         );
 
-        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 32m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 32m };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
         var result = await sut.ImportDataSet(
@@ -233,10 +233,10 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
             ("INFOTABLE.tsv", infoTable)
         );
 
-        var prices = new Dictionary<(Guid, DateOnly), decimal>
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
         {
-            [(stockA.Id, reportDate)] = 100m,
-            [(stockB.Id, reportDate)] = 100m,
+            [(stockA.Id, null, reportDate)] = 100m,
+            [(stockB.Id, null, reportDate)] = 100m,
         };
         var sut = CreateImporter(PriceProviderReturning(prices));
 

@@ -32,6 +32,8 @@ public class HoldingValueBasisForwardSplitTests
         var resolved = HoldingValueBasis.TryResolveShareCountFactor(
             new DateOnly(2023, 12, 31),
             splits,
+            null,
+            "TEST",
             out var factor
         );
 

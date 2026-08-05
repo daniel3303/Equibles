@@ -108,13 +108,13 @@ public class HoldingsImportServiceAmendmentReconciliationTests : IAsyncLifetime
     }
 
     private static IStockPriceProvider PriceProviderReturning(
-        Dictionary<(Guid, DateOnly), decimal> prices
+        Dictionary<(Guid, string, DateOnly), decimal> prices
     )
     {
         var provider = Substitute.For<IStockPriceProvider>();
         provider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(Task.FromResult(prices));
@@ -139,7 +139,7 @@ public class HoldingsImportServiceAmendmentReconciliationTests : IAsyncLifetime
         }
 
         var reportDate = new DateOnly(2024, 9, 30);
-        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 100m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 100m };
 
         const string cover =
             "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n";
@@ -247,10 +247,10 @@ public class HoldingsImportServiceAmendmentReconciliationTests : IAsyncLifetime
         }
 
         var reportDate = new DateOnly(2024, 9, 30);
-        var prices = new Dictionary<(Guid, DateOnly), decimal>
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
         {
-            [(aapl.Id, reportDate)] = 100m,
-            [(msft.Id, reportDate)] = 100m,
+            [(aapl.Id, null, reportDate)] = 100m,
+            [(msft.Id, null, reportDate)] = 100m,
         };
 
         const string coverWithType =

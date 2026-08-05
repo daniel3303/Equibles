@@ -31,6 +31,7 @@ public class HoldingsImportServiceBuildHoldingKeyShareTypeTests
                 typeof(ShareType),
                 typeof(OptionType?),
                 typeof(FilingType),
+                typeof(string),
             ]
         );
 
@@ -48,6 +49,7 @@ public class HoldingsImportServiceBuildHoldingKeyShareTypeTests
                     ShareType.Shares,
                     (OptionType?)null,
                     FilingType.Form13F,
+                    null,
                 ]
             );
         var principalKey = (string)
@@ -60,6 +62,7 @@ public class HoldingsImportServiceBuildHoldingKeyShareTypeTests
                     ShareType.Principal,
                     (OptionType?)null,
                     FilingType.Form13F,
+                    null,
                 ]
             );
 

@@ -121,13 +121,13 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
     }
 
     private static IStockPriceProvider PriceProviderReturning(
-        Dictionary<(Guid, DateOnly), decimal> prices
+        Dictionary<(Guid, string, DateOnly), decimal> prices
     )
     {
         var provider = Substitute.For<IStockPriceProvider>();
         provider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(Task.FromResult(prices));
@@ -180,7 +180,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             ("INFOTABLE.tsv", infoTable)
         );
 
-        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 150m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150m };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
         var result = await sut.ImportDataSet(
@@ -258,7 +258,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         var priceProvider = Substitute.For<IStockPriceProvider>();
         priceProvider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(_ =>
@@ -270,10 +270,10 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
                 delete.Remove(staleApple);
                 delete.SaveChanges();
                 return Task.FromResult(
-                    new Dictionary<(Guid, DateOnly), decimal>
+                    new Dictionary<(Guid, string, DateOnly), decimal>
                     {
-                        [(apple.Id, reportDate)] = 150m,
-                        [(microsoft.Id, reportDate)] = 400m,
+                        [(apple.Id, null, reportDate)] = 150m,
+                        [(microsoft.Id, null, reportDate)] = 400m,
                     }
                 );
             });
@@ -336,7 +336,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             ("SUMMARYPAGE.tsv", summaryPage)
         );
 
-        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 150m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150m };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
         var result = await sut.ImportDataSet(
@@ -392,9 +392,9 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             ("INFOTABLE.tsv", infoTable)
         );
 
-        var prices = new Dictionary<(Guid, DateOnly), decimal>
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
         {
-            [(stock.Id, new DateOnly(2024, 9, 30))] = 150m,
+            [(stock.Id, null, new DateOnly(2024, 9, 30))] = 150m,
         };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
@@ -420,7 +420,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // closing price instead of the corrupt count.
         var reportDate = new DateOnly(2026, 3, 31);
         var stocks = new List<CommonStock>();
-        var prices = new Dictionary<(Guid, DateOnly), decimal>();
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>();
         var infoTable = new StringBuilder(
             "ACCESSION_NUMBER\tCUSIP\tVALUE\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
         );
@@ -436,7 +436,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
                 Cusip = $"11111111{i}",
             };
             stocks.Add(stock);
-            prices[(stock.Id, reportDate)] = 250m;
+            prices[(stock.Id, null, reportDate)] = 250m;
 
             // SSHPRNAMT duplicates VALUE — the defect under test.
             var dollarValue = i * 2_500_000L;
@@ -517,7 +517,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         );
 
         var sut = CreateImporter(
-            PriceProviderReturning(new Dictionary<(Guid, DateOnly), decimal>())
+            PriceProviderReturning(new Dictionary<(Guid, string, DateOnly), decimal>())
         );
 
         var result = await sut.ImportDataSet(
@@ -703,9 +703,9 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 
         var sut = CreateImporter(
             PriceProviderReturning(
-                new Dictionary<(Guid, DateOnly), decimal>
+                new Dictionary<(Guid, string, DateOnly), decimal>
                 {
-                    [(stock.Id, new DateOnly(2024, 9, 30))] = 100m,
+                    [(stock.Id, null, new DateOnly(2024, 9, 30))] = 100m,
                 }
             )
         );
@@ -804,7 +804,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 
         var sut = CreateImporter(
             PriceProviderReturning(
-                new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 200m }
+                new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 200m }
             )
         );
 
@@ -915,7 +915,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 
         var sut = CreateImporter(
             PriceProviderReturning(
-                new Dictionary<(Guid, DateOnly), decimal> { [(stockAmended.Id, eventDate)] = 200m }
+                new Dictionary<(Guid, string, DateOnly), decimal> { [(stockAmended.Id, null, eventDate)] = 200m }
             )
         );
 
@@ -1014,7 +1014,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             ("OTHERMANAGER2.tsv", otherManager)
         );
 
-        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 150m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150m };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
         var result = await sut.ImportDataSet(
@@ -1072,7 +1072,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             ("INFOTABLE.tsv", infoTable)
         );
 
-        var prices = new Dictionary<(Guid, DateOnly), decimal> { [(stock.Id, reportDate)] = 150m };
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal> { [(stock.Id, null, reportDate)] = 150m };
         var sut = CreateImporter(PriceProviderReturning(prices));
 
         var result = await sut.ImportDataSet(

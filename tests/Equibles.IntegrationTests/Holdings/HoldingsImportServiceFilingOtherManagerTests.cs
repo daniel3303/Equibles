@@ -83,10 +83,10 @@ public class HoldingsImportServiceFilingOtherManagerTests : IAsyncLifetime
         var priceProvider = Substitute.For<IStockPriceProvider>();
         priceProvider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(Task.FromResult(new Dictionary<(Guid, DateOnly), decimal>()));
+            .Returns(Task.FromResult(new Dictionary<(Guid, string, DateOnly), decimal>()));
 
         return new HoldingsImportService(
             CreateScopeFactory(),

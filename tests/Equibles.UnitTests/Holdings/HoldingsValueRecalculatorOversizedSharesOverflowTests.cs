@@ -38,13 +38,13 @@ public class HoldingsValueRecalculatorOversizedSharesOverflowTests
         var priceProvider = Substitute.For<IStockPriceProvider>();
         priceProvider
             .GetClosingPrices(
-                Arg.Any<IEnumerable<(Guid, DateOnly)>>(),
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(
-                new Dictionary<(Guid CommonStockId, DateOnly Date), decimal>
+                new Dictionary<(Guid CommonStockId, string ListedTicker, DateOnly Date), decimal>
                 {
-                    [(stockId, reportDate)] = 2m,
+                    [(stockId, null, reportDate)] = 2m,
                 }
             );
         var recalculator = BuildRecalculator(db, priceProvider);
