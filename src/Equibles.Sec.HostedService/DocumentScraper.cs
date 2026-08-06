@@ -330,6 +330,13 @@ public class DocumentScraper : IDocumentScraper
                 documentRepository
             );
 
+            // Only collected while a feed-flagged filing awaits confirmation —
+            // a full-history company enumerates tens of thousands of
+            // accessions, and building that set every pass would be waste.
+            var enumeratedFilings = _filingDiscoveryService.HasPendingFeedAccessions
+                ? new HashSet<(string AccessionNumber, string Cik)>()
+                : null;
+
             foreach (var documentType in _options.DocumentTypesToSync)
             {
                 var secFilter = documentType.ToSecEdgarFilter();
@@ -348,9 +355,17 @@ public class DocumentScraper : IDocumentScraper
                     secFilter.Value,
                     result,
                     secEdgarClient,
-                    persistenceService
+                    persistenceService,
+                    enumeratedFilings
                 );
             }
+
+            // Confirm feed-flagged filings this enumeration saw — anything the
+            // feed promised that is NOT in this set stays pending in discovery
+            // and re-dirties the company (the submissions JSON lags acceptance,
+            // so an enumeration right after the flag can legitimately miss it).
+            if (enumeratedFilings != null)
+                _filingDiscoveryService.MarkAccessionsEnumerated(enumeratedFilings);
 
             var duration = DateTime.UtcNow - startTime;
             _logger.LogInformation(
@@ -485,7 +500,8 @@ public class DocumentScraper : IDocumentScraper
         DocumentTypeFilter secFilter,
         ScrapingResult result,
         ISecEdgarClient secEdgarClient,
-        IDocumentPersistenceService persistenceService
+        IDocumentPersistenceService persistenceService,
+        HashSet<(string AccessionNumber, string Cik)> enumeratedFilings
     )
     {
         _logger.LogDebug(
@@ -503,6 +519,15 @@ public class DocumentScraper : IDocumentScraper
                 result,
                 secEdgarClient
             );
+
+            if (enumeratedFilings != null)
+            {
+                foreach (var filing in filings)
+                {
+                    if (!string.IsNullOrEmpty(filing.AccessionNumber))
+                        enumeratedFilings.Add((filing.AccessionNumber, filing.Cik));
+                }
+            }
 
             result.DocumentsFound += filings.Count;
 

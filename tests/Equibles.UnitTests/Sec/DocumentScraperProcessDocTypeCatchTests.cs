@@ -76,6 +76,7 @@ public class DocumentScraperProcessDocTypeCatchTests
                     result,
                     secEdgarClient,
                     Substitute.For<IDocumentPersistenceService>(),
+                    null,
                 ]
             );
 

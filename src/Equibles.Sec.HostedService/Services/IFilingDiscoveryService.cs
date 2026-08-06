@@ -17,4 +17,22 @@ public interface IFilingDiscoveryService
         IReadOnlyList<CommonStock> trackedCompanies,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// True while any feed-flagged filing awaits confirmation by a company
+    /// enumeration — the scraper only collects enumerated accessions for
+    /// <see cref="MarkAccessionsEnumerated"/> when this is set.
+    /// </summary>
+    bool HasPendingFeedAccessions { get; }
+
+    /// <summary>
+    /// Reports the (accession, filer CIK) pairs a company enumeration actually
+    /// returned, confirming any feed-flagged filings still pending under that
+    /// CIK. A filing the feed flagged but the (lagging) submissions JSON hasn't
+    /// listed yet stays pending and keeps its company in the discovery set
+    /// until confirmed here or abandoned (retry/expiry bounds).
+    /// </summary>
+    void MarkAccessionsEnumerated(
+        IReadOnlyCollection<(string AccessionNumber, string Cik)> enumeratedFilings
+    );
 }
