@@ -23,6 +23,9 @@ namespace Equibles.UnitTests.Sec;
 /// client's prefix-matched rows with an exact form comparison so "4" cannot
 /// dirty a 424B2 filer.
 /// </summary>
+// Shares FilingDiscoveryService's cross-cycle statics with the pending-accession
+// suite; serialize them so one class's reset can't land mid-test in the other.
+[Collection("SecFilingDiscoveryStatics")]
 public class FilingDiscoveryServiceDiscoveryTests
 {
     private static readonly DateOnly LatestFinalDay = FilingDiscoveryService.LatestFinalIndexDay(

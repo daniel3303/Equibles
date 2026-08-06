@@ -45,6 +45,28 @@ public class DocumentScraperOptions
     // still unseen (first poll after a boot, or a heavy burst).
     public int RecentFeedMaxPages { get; set; } = 5;
 
+    // A feed-flagged filing can be invisible to the company's submissions JSON
+    // for minutes — the JSON is served through a CDN that lags acceptance, so a
+    // company enumerated seconds after its feed flag legitimately finds nothing
+    // and would otherwise drop the filing until the daily-index backstop next
+    // morning. Such accessions stay pending and re-dirty their company until
+    // the enumeration sees them: at most one retry per this many seconds …
+    public int FeedPendingRetrySeconds { get; set; } = 120;
+
+    // … at most this many retries per filing (past a handful the JSON is not
+    // merely lagging — abandon with a warning; the daily index owns recovery) …
+    public int FeedPendingMaxRetries { get; set; } = 10;
+
+    // … abandoned regardless after this many minutes of wall clock (covers
+    // entries that never got an enumeration attempt at all) …
+    public int FeedPendingExpiryMinutes { get; set; } = 360;
+
+    // … and at most this many pending re-flags admitted per cycle (oldest
+    // first), so a submissions-JSON stall cannot turn every recently flagged
+    // filer into a simultaneous re-enumeration storm — the same bounding idea
+    // as MaxReconciliationsPerCycle.
+    public int MaxPendingReflagsPerCycle { get; set; } = 50;
+
     // A company whose last full filing enumeration is older than this gets a
     // reconciliation re-sweep — the correctness backstop that converges on the
     // authoritative submissions JSON no matter what the realtime layers missed.

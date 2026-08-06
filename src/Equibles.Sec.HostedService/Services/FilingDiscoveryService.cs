@@ -23,6 +23,22 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     private static readonly ConcurrentDictionary<string, DateTime> SeenFeedEntries = new();
     private static readonly TimeSpan SeenFeedEntryRetention = TimeSpan.FromHours(12);
 
+    // Feed-flagged filings not yet confirmed by their company's submissions
+    // enumeration, keyed "accession|numericCik" — the same two-sided discipline
+    // as SeenFeedEntries, because one accession appears once per associated
+    // entity and each tracked side needs its own confirmation. The submissions
+    // JSON trails acceptance by minutes, so an enumeration run seconds after
+    // the feed flag can miss the filing; entries here keep re-dirtying the
+    // company until MarkAccessionsEnumerated sees the accession under that CIK,
+    // else the filing silently waits ~a day for the daily-index backstop.
+    private static readonly ConcurrentDictionary<
+        string,
+        PendingFeedAccession
+    > PendingFeedAccessions = new();
+
+    private static string PendingKey(string accessionNumber, long numericCik) =>
+        $"{accessionNumber}|{numericCik}";
+
     private const int FeedPageSize = 100;
 
     private static readonly TimeZoneInfo EasternTimeZone = ResolveEasternTimeZone();
@@ -54,10 +70,146 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         var syncedForms = BuildSyncedFormSet();
         var dirty = new Dictionary<Guid, CommonStock>();
 
+        // Captured before the collectors run so entries seeded during this
+        // pass's feed poll can never look retry-due in this same pass, even
+        // when a slow multi-page poll makes the pass span minutes.
+        var utcNow = DateTime.UtcNow;
+
         await CollectFromRecentFeed(cikToCompany, syncedForms, dirty, cancellationToken);
         await CollectFromDailyIndex(cikToCompany, syncedForms, dirty, cancellationToken);
+        ReflagPendingAccessions(cikToCompany, dirty, utcNow);
 
         return [.. dirty.Values];
+    }
+
+    /// <inheritdoc />
+    public bool HasPendingFeedAccessions => !PendingFeedAccessions.IsEmpty;
+
+    /// <inheritdoc />
+    public void MarkAccessionsEnumerated(
+        IReadOnlyCollection<(string AccessionNumber, string Cik)> enumeratedFilings
+    )
+    {
+        if (enumeratedFilings == null || enumeratedFilings.Count == 0)
+            return;
+        if (PendingFeedAccessions.IsEmpty)
+            return;
+
+        foreach (var (accessionNumber, cik) in enumeratedFilings)
+        {
+            if (string.IsNullOrEmpty(accessionNumber) || !long.TryParse(cik, out var numericCik))
+                continue;
+
+            if (
+                !PendingFeedAccessions.TryRemove(
+                    PendingKey(accessionNumber, numericCik),
+                    out var pending
+                )
+            )
+                continue;
+
+            if (pending.RetryLogged)
+            {
+                _logger.LogInformation(
+                    "Feed-flagged filing {AccessionNumber} appeared in CIK {Cik}'s submissions enumeration {Minutes:F1} minutes after its feed flag",
+                    accessionNumber,
+                    numericCik,
+                    (DateTime.UtcNow - pending.FirstSeenAtUtc).TotalMinutes
+                );
+            }
+        }
+    }
+
+    /// <summary>
+    /// Keeps companies with unconfirmed feed-flagged filings dirty so they are
+    /// re-enumerated until the submissions JSON catches up. Without this, a
+    /// company enumerated inside the JSON's lag window is stamped as synced,
+    /// its feed entry stays "seen" for 12h, and the filing silently waits for
+    /// the next-morning daily index — exactly the after-the-bell earnings 8-Ks
+    /// the realtime layer exists for. Retries are rate-limited per accession
+    /// and give up after the configured expiry (the daily index still owns
+    /// recovery past that).
+    /// </summary>
+    private void ReflagPendingAccessions(
+        Dictionary<long, CommonStock> cikToCompany,
+        Dictionary<Guid, CommonStock> dirty,
+        DateTime utcNow
+    )
+    {
+        if (PendingFeedAccessions.IsEmpty)
+            return;
+
+        var due = new List<(string Key, PendingFeedAccession Pending, CommonStock Company)>();
+
+        foreach (var (key, pending) in PendingFeedAccessions)
+        {
+            var expired =
+                utcNow - pending.FirstSeenAtUtc
+                > TimeSpan.FromMinutes(_options.FeedPendingExpiryMinutes);
+            if (expired || pending.RetryCount >= _options.FeedPendingMaxRetries)
+            {
+                PendingFeedAccessions.TryRemove(key, out _);
+                _logger.LogWarning(
+                    "Feed-flagged filing {PendingKey} never appeared in the submissions enumeration ({Reason}: {Retries} retries over {Minutes:F0} minutes) — abandoning the realtime retry; the daily index will backstop it",
+                    key,
+                    expired ? "expired" : "retries exhausted",
+                    pending.RetryCount,
+                    (utcNow - pending.FirstSeenAtUtc).TotalMinutes
+                );
+                continue;
+            }
+
+            // The filer left the tracked universe mid-retry (delisted or
+            // dropped by company sync) — nothing to re-enumerate.
+            if (!cikToCompany.TryGetValue(pending.Cik, out var company))
+            {
+                PendingFeedAccessions.TryRemove(key, out _);
+                continue;
+            }
+
+            if (
+                utcNow - pending.LastRetriedAtUtc
+                < TimeSpan.FromSeconds(_options.FeedPendingRetrySeconds)
+            )
+                continue;
+
+            due.Add((key, pending, company));
+        }
+
+        // Oldest first under a per-cycle cap: a submissions-JSON stall must not
+        // turn every recently flagged filer into one simultaneous
+        // re-enumeration storm against an already-degraded EDGAR.
+        foreach (
+            var (key, pending, company) in due.OrderBy(d => d.Pending.FirstSeenAtUtc)
+                .Take(_options.MaxPendingReflagsPerCycle)
+        )
+        {
+            pending.LastRetriedAtUtc = utcNow;
+            pending.RetryCount++;
+            dirty[company.Id] = company;
+
+            // Expected-path event (the JSON routinely lags acceptance), so
+            // Information — the warnings-only file sink stays reserved for the
+            // abandonment above.
+            if (!pending.RetryLogged)
+            {
+                pending.RetryLogged = true;
+                _logger.LogInformation(
+                    "Filing {PendingKey} for {Ticker} was feed-flagged {Minutes:F0} minutes ago but is not yet enumerable in the submissions JSON — keeping the company flagged for re-enumeration",
+                    key,
+                    company.Ticker,
+                    (utcNow - pending.FirstSeenAtUtc).TotalMinutes
+                );
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "Re-flagging {Ticker} for pending feed accession {PendingKey}",
+                    company.Ticker,
+                    key
+                );
+            }
+        }
     }
 
     /// <summary>
@@ -125,8 +277,31 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                 if (!syncedForms.Contains(entry.FormType))
                     continue;
 
-                if (TryResolveCompany(cikToCompany, entry.Cik, out var company))
-                    dirty[company.Id] = company;
+                if (
+                    !long.TryParse(entry.Cik, out var numericCik)
+                    || !cikToCompany.TryGetValue(numericCik, out var company)
+                )
+                    continue;
+
+                dirty[company.Id] = company;
+
+                // Track the accession until the company's enumeration confirms
+                // it under this CIK — the submissions JSON may not list it yet
+                // (see ReflagPendingAccessions). LastRetriedAtUtc starts now:
+                // the company is already dirty this cycle, so the first re-flag
+                // waits a full retry interval.
+                if (!string.IsNullOrEmpty(entry.AccessionNumber))
+                {
+                    PendingFeedAccessions.TryAdd(
+                        PendingKey(entry.AccessionNumber, numericCik),
+                        new PendingFeedAccession
+                        {
+                            Cik = numericCik,
+                            FirstSeenAtUtc = utcNow,
+                            LastRetriedAtUtc = utcNow,
+                        }
+                    );
+                }
             }
 
             // Overlap with the previous poll (or a short page) means the window
@@ -335,5 +510,6 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     {
         _lastFeedPollAtUtc = default;
         SeenFeedEntries.Clear();
+        PendingFeedAccessions.Clear();
     }
 }
