@@ -89,26 +89,34 @@ public class ChartIndicators
     public List<ChartAdjClose> AdjClose { get; set; } = [];
 }
 
+// Every price/volume array is read tolerantly: one element the CLR type cannot hold must not
+// discard the whole response. See TolerantNumberListConverter for the incident behind it.
 public class ChartQuote
 {
     [JsonProperty("open")]
+    [JsonConverter(typeof(TolerantDecimalListConverter))]
     public List<decimal?> Open { get; set; } = [];
 
     [JsonProperty("high")]
+    [JsonConverter(typeof(TolerantDecimalListConverter))]
     public List<decimal?> High { get; set; } = [];
 
     [JsonProperty("low")]
+    [JsonConverter(typeof(TolerantDecimalListConverter))]
     public List<decimal?> Low { get; set; } = [];
 
     [JsonProperty("close")]
+    [JsonConverter(typeof(TolerantDecimalListConverter))]
     public List<decimal?> Close { get; set; } = [];
 
     [JsonProperty("volume")]
+    [JsonConverter(typeof(TolerantLongListConverter))]
     public List<long?> Volume { get; set; } = [];
 }
 
 public class ChartAdjClose
 {
     [JsonProperty("adjclose")]
+    [JsonConverter(typeof(TolerantDecimalListConverter))]
     public List<decimal?> AdjustedClose { get; set; } = [];
 }
