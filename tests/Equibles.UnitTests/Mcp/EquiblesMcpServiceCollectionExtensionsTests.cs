@@ -45,4 +45,25 @@ public class EquiblesMcpServiceCollectionExtensionsTests
                 d.ServiceType == typeof(Microsoft.Extensions.Caching.Memory.IMemoryCache)
             );
     }
+
+    [Fact]
+    public void AddEquiblesMcp_KeepsAHostsOwnMemoryCacheRegistration()
+    {
+        // The guarantee is TryAdd-based: a host that registered its own cache
+        // before AddEquiblesMcp must keep it — the builder fills the gap, it
+        // never replaces the host's choice.
+        var services = new ServiceCollection();
+        var hostsOwnCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(
+            new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()
+        );
+        services.AddSingleton<Microsoft.Extensions.Caching.Memory.IMemoryCache>(hostsOwnCache);
+
+        services.AddEquiblesMcp(_ => { });
+
+        using var provider = services.BuildServiceProvider();
+        provider
+            .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()
+            .Should()
+            .BeSameAs(hostsOwnCache);
+    }
 }

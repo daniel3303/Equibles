@@ -57,6 +57,8 @@ public class ShortSqueezeScoreManager
     /// surface that caches <see cref="Compute"/> shares ONE entry per process —
     /// the MCP tool reads through it, and a host may refresh the same key in the
     /// background so interactive callers never pay the whole-universe computation.
+    /// The cached list is handed to concurrent readers: treat it as immutable —
+    /// filter or sort into a copy, never in place.
     /// </summary>
     public const string UniverseCacheKey = "short-squeeze-scores";
 

@@ -620,8 +620,13 @@ public class ShortDataTools
             {
                 // The score is peer-relative, so it is always computed for the whole
                 // universe at once — a per-call Compute() made every request pay that
-                // multi-second build. Cached under the manager-owned shared key so any
-                // host-side background refresh of the same entry serves this tool warm.
+                // multi-second build. Cached under the manager-owned shared key so a
+                // host-side background refresh of the same entry serves this tool warm:
+                // a refresher replaces the entry in place (the old value stays readable
+                // throughout), so this tool only computes when the entry is genuinely
+                // absent — process cold start, or a refresher that stopped. Its
+                // single-flight is local to this extension's lock table, so that cold
+                // window can at worst run one build alongside a host's own; accepted.
                 // The factory takes no cancellation token: an abandoned request must
                 // not kill a build every later caller would reuse.
                 var scores = await _memoryCache.GetOrCreateSafeAsync(

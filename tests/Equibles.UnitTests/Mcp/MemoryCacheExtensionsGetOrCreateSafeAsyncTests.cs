@@ -100,6 +100,55 @@ public class MemoryCacheExtensionsGetOrCreateSafeAsyncTests
         second.Should().Be(42);
     }
 
+    // A queued caller may abandon its wait with its own request's token — it
+    // throws OperationCanceledException — but cancelling the WAIT never aborts
+    // the in-flight factory, which completes and caches for everyone else.
+    [Fact]
+    public async Task GetOrCreateSafeAsync_WaiterCancelled_FactoryStillCompletesAndCaches()
+    {
+        var factoryEntered = new SemaphoreSlim(0, 1);
+        var factoryRelease = new TaskCompletionSource<int>();
+        var factoryCalls = 0;
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var key = $"waiter-cancelled-{Guid.NewGuid()}";
+
+        var task1 = cache.GetOrCreateSafeAsync(
+            key,
+            TimeSpan.FromMinutes(5),
+            async () =>
+            {
+                Interlocked.Increment(ref factoryCalls);
+                factoryEntered.Release();
+                return await factoryRelease.Task;
+            }
+        );
+
+        await factoryEntered.WaitAsync();
+
+        using var waiterCancellation = new CancellationTokenSource();
+        var task2 = cache.GetOrCreateSafeAsync(
+            key,
+            TimeSpan.FromMinutes(5),
+            () => Task.FromResult(99),
+            waiterCancellation.Token
+        );
+        waiterCancellation.Cancel();
+
+        var abandoned = async () => await task2;
+        await abandoned.Should().ThrowAsync<OperationCanceledException>();
+
+        factoryRelease.SetResult(42);
+        (await task1).Should().Be(42);
+
+        var later = await cache.GetOrCreateSafeAsync(
+            key,
+            TimeSpan.FromMinutes(5),
+            () => Task.FromResult(7)
+        );
+        later.Should().Be(42);
+        factoryCalls.Should().Be(1);
+    }
+
     // A factory that legitimately produces null has that null cached and served:
     // TryGetValue reports the entry as present, so later calls do not re-run the
     // factory just because the value is null.

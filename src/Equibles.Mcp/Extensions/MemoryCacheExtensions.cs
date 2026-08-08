@@ -13,6 +13,10 @@ public static class MemoryCacheExtensions
     // each paying the computation. The wait is cancellable so a queued caller can
     // abandon the wait with its own request; cancelling never aborts the in-flight
     // factory, which keeps running for whoever owns the lock.
+    //
+    // Keys must come from a bounded, program-controlled set (compile-time
+    // constants) — never per-request input: lock entries are kept for the process
+    // lifetime, so an unbounded key space grows the table forever.
     public static async Task<T> GetOrCreateSafeAsync<T>(
         this IMemoryCache cache,
         string key,
