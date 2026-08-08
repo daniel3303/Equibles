@@ -9,6 +9,7 @@ using Equibles.Finra.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Repositories;
 using Equibles.Yahoo.Repositories;
+using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Mcp;
@@ -38,6 +39,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
                 []
             ),
             new StockSplitRepository(DbContext),
+            new MemoryCache(new MemoryCacheOptions()),
             ErrorManager,
             NullLogger<ShortDataTools>()
         );
