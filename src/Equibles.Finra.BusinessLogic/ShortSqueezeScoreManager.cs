@@ -52,6 +52,21 @@ namespace Equibles.Finra.BusinessLogic;
 [Service]
 public class ShortSqueezeScoreManager
 {
+    /// <summary>
+    /// Cache identity for the computed universe, owned here so every read-side
+    /// surface that caches <see cref="Compute"/> shares ONE entry per process —
+    /// the MCP tool reads through it, and a host may refresh the same key in the
+    /// background so interactive callers never pay the whole-universe computation.
+    /// </summary>
+    public const string UniverseCacheKey = "short-squeeze-scores";
+
+    /// <summary>
+    /// How long a cached universe stays valid. Short interest refreshes
+    /// bi-monthly and the daily inputs settle overnight, so an hour of staleness
+    /// is invisible next to the data's own cadence.
+    /// </summary>
+    public static readonly TimeSpan UniverseCacheDuration = TimeSpan.FromHours(1);
+
     /// <summary>Each trend window pools two calendar weeks of daily short-volume rows.</summary>
     public const int TrendWindowDays = 14;
 

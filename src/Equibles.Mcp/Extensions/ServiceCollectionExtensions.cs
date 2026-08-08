@@ -12,6 +12,11 @@ public static class ServiceCollectionExtensions
     )
     {
         var mcpServerBuilder = services.AddMcpServer().WithHttpTransport();
+        // Tools that cache an expensive whole-universe computation (e.g. the
+        // short-squeeze board) resolve IMemoryCache, so the builder guarantees it
+        // regardless of what the host registers. AddMemoryCache is TryAdd-based —
+        // a host that already registered its own cache keeps it.
+        services.AddMemoryCache();
         var mcpBuilder = new EquiblesMcpBuilder(services, mcpServerBuilder);
         configureMcp(mcpBuilder);
         WrapToolsWithInvalidParamsTranslation(services);

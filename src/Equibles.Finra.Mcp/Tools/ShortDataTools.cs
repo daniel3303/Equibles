@@ -14,8 +14,10 @@ using Equibles.Finra.BusinessLogic.Models;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.Repositories;
 using Equibles.Mcp;
+using Equibles.Mcp.Extensions;
 using Equibles.Mcp.Helpers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
@@ -34,6 +36,7 @@ public class ShortDataTools
     private readonly CommonStockRepository _commonStockRepository;
     private readonly ShortSqueezeScoreManager _shortSqueezeScoreManager;
     private readonly StockSplitRepository _stockSplitRepository;
+    private readonly IMemoryCache _memoryCache;
     private readonly McpToolRunner _runner;
 
     public ShortDataTools(
@@ -42,6 +45,7 @@ public class ShortDataTools
         CommonStockRepository commonStockRepository,
         ShortSqueezeScoreManager shortSqueezeScoreManager,
         StockSplitRepository stockSplitRepository,
+        IMemoryCache memoryCache,
         ErrorManager errorManager,
         ILogger<ShortDataTools> logger
     )
@@ -51,6 +55,7 @@ public class ShortDataTools
         _commonStockRepository = commonStockRepository;
         _shortSqueezeScoreManager = shortSqueezeScoreManager;
         _stockSplitRepository = stockSplitRepository;
+        _memoryCache = memoryCache;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -613,7 +618,17 @@ public class ShortDataTools
         return _runner.Execute(
             async () =>
             {
-                var scores = await _shortSqueezeScoreManager.Compute();
+                // The score is peer-relative, so it is always computed for the whole
+                // universe at once — a per-call Compute() made every request pay that
+                // multi-second build. Cached under the manager-owned shared key so any
+                // host-side background refresh of the same entry serves this tool warm.
+                // The factory takes no cancellation token: an abandoned request must
+                // not kill a build every later caller would reuse.
+                var scores = await _memoryCache.GetOrCreateSafeAsync(
+                    ShortSqueezeScoreManager.UniverseCacheKey,
+                    ShortSqueezeScoreManager.UniverseCacheDuration,
+                    () => _shortSqueezeScoreManager.Compute()
+                );
                 if (scores.Count == 0)
                     return "No short-squeeze scores available — no short interest data on file.";
 
