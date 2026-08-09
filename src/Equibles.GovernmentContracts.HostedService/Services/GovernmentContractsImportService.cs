@@ -47,6 +47,19 @@ public class GovernmentContractsImportService : IImporter
     // that stop appearing cost nothing.
     private const int ParentCacheStalenessDays = 180;
 
+    // A failure row (ProfileFetchFailed) re-resolves much sooner: it records an
+    // unavailability, not a reading, so it should not silence the recipient for the full
+    // staleness window if the server-side fault clears.
+    private const int FailedProfileRetryDays = 7;
+
+    // How many recipients per window may have their profile fetch fail server-side before
+    // the failure stops looking recipient-specific and starts looking like a source
+    // outage. Isolated poisoned profiles (USAspending 502s some individual recipients
+    // permanently) are skipped with a short-TTL failure row so one broken profile can
+    // never wedge the scan; past this budget the window fails and the checkpoint
+    // machinery re-covers it — an outage must never mass-cache "no parent" answers.
+    private const int MaxProfileFailuresPerWindow = 3;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<GovernmentContractsImportService> _logger;
     private readonly IUsaSpendingClient _client;
@@ -371,7 +384,6 @@ public class GovernmentContractsImportService : IImporter
     )
     {
         var now = DateTime.UtcNow;
-        var staleBefore = now.AddDays(-ParentCacheStalenessDays);
         var pending = unmatched
             .Where(a => a.RecipientId != null && !parentCache.ContainsKey(a.RecipientId))
             .GroupBy(a => a.RecipientId, StringComparer.Ordinal)
@@ -384,48 +396,101 @@ public class GovernmentContractsImportService : IImporter
             scope.ServiceProvider.GetRequiredService<GovernmentContractRecipientParentRepository>();
 
         var stored = await repository.GetByRecipientIds(pending.Keys.ToList(), cancellationToken);
-        foreach (var row in stored.Where(r => r.ResolvedAt >= staleBefore))
+        foreach (var row in stored.Where(r => IsFresh(r, now)))
         {
             parentCache[row.RecipientId] = row;
             pending.Remove(row.RecipientId);
         }
         var staleRows = stored
-            .Where(r => r.ResolvedAt < staleBefore)
+            .Where(r => !IsFresh(r, now))
             .ToDictionary(r => r.RecipientId, StringComparer.Ordinal);
 
         if (pending.Count == 0)
             return;
 
+        // Successful resolutions persist even when a later fetch aborts the window —
+        // without this, one failing recipient forces every earlier one to be re-fetched
+        // on every retry of the same window.
         var persisted = 0;
-        foreach (var (recipientId, recipientName) in pending)
+        var profileFailures = 0;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var profile = await _client.GetRecipientProfile(recipientId, cancellationToken);
-            var parent = ChooseParent(profile);
-
-            if (staleRows.TryGetValue(recipientId, out var row))
+            foreach (var (recipientId, recipientName) in pending)
             {
-                row.ParentRecipientId = parent?.ParentId;
-                row.ParentNames = JoinParentNames(parent?.Names);
-                row.ResolvedAt = now;
-                repository.Update(row);
-            }
-            else
-            {
-                row = new GovernmentContractRecipientParent
+                cancellationToken.ThrowIfCancellationRequested();
+
+                UsaSpendingRecipientProfile profile = null;
+                var fetchFailed = false;
+                try
                 {
-                    RecipientId = recipientId,
-                    RecipientName = Truncate(recipientName, 512),
-                    ParentRecipientId = parent?.ParentId,
-                    ParentNames = JoinParentNames(parent?.Names),
-                    ResolvedAt = now,
-                };
-                repository.Add(row);
-            }
+                    profile = await _client.GetRecipientProfile(recipientId, cancellationToken);
+                }
+                catch (HttpRequestException ex) when ((int?)ex.StatusCode >= 500)
+                {
+                    // A server error that survived the client's whole retry ladder for
+                    // THIS recipient. Isolated, that is a poisoned profile (observed
+                    // live: some recipients 502 permanently) — record the unavailability
+                    // on a short retry window and keep scanning. Repeated, it is a source
+                    // outage: rethrow so the window fails and nothing gets mass-cached.
+                    if (++profileFailures > MaxProfileFailuresPerWindow)
+                        throw;
 
-            parentCache[recipientId] = row;
-            persisted++;
+                    fetchFailed = true;
+                    _logger.LogWarning(
+                        ex,
+                        "Government contracts import: recipient profile {RecipientId} keeps "
+                            + "failing server-side; caching as unavailable for {Days} days",
+                        recipientId,
+                        FailedProfileRetryDays
+                    );
+                }
+
+                var parent = ChooseParent(profile);
+
+                if (staleRows.TryGetValue(recipientId, out var row))
+                {
+                    row.ParentRecipientId = parent?.ParentId;
+                    row.ParentNames = JoinParentNames(parent?.Names);
+                    row.ResolvedAt = now;
+                    row.ProfileFetchFailed = fetchFailed;
+                    repository.Update(row);
+                }
+                else
+                {
+                    row = new GovernmentContractRecipientParent
+                    {
+                        RecipientId = recipientId,
+                        RecipientName = Truncate(recipientName, 512),
+                        ParentRecipientId = parent?.ParentId,
+                        ParentNames = JoinParentNames(parent?.Names),
+                        ResolvedAt = now,
+                        ProfileFetchFailed = fetchFailed,
+                    };
+                    repository.Add(row);
+                }
+
+                parentCache[recipientId] = row;
+                persisted++;
+            }
+        }
+        catch when (persisted > 0)
+        {
+            // Best-effort save of the resolutions completed before the abort; the window
+            // still fails and is re-covered, but the finished lookups are banked.
+            try
+            {
+                await repository.SaveChanges();
+            }
+            catch (Exception saveEx)
+            {
+                _logger.LogWarning(
+                    saveEx,
+                    "Government contracts import: failed to bank {Count} parent resolutions "
+                        + "before the window abort",
+                    persisted
+                );
+            }
+            throw;
         }
 
         if (persisted > 0)
@@ -535,6 +600,17 @@ public class GovernmentContractsImportService : IImporter
 
         return kept.Count > 0 ? string.Join('\n', kept) : null;
     }
+
+    /// <summary>
+    /// Whether a cached parent row still answers for its recipient. A reading holds for
+    /// <see cref="ParentCacheStalenessDays"/>; a failure row (an unavailability, not a
+    /// reading) re-resolves after <see cref="FailedProfileRetryDays"/>.
+    /// </summary>
+    internal static bool IsFresh(GovernmentContractRecipientParent row, DateTime now) =>
+        row.ResolvedAt
+        >= now.AddDays(
+            -(row.ProfileFetchFailed ? FailedProfileRetryDays : ParentCacheStalenessDays)
+        );
 
     internal static string[] SplitParentNames(string parentNames) =>
         parentNames == null ? [] : parentNames.Split('\n');
