@@ -672,7 +672,34 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().SearchInsiders("Trunc", maxResults: 2);
 
-        result.Should().Contain("Showing first 2 of 3 results - raise maxResults to see more.");
+        result
+            .Should()
+            .Contain(
+                "Showing results 1-2 of 3 - raise maxResults (max 500) or pass offset=2 to continue."
+            );
+    }
+
+    [Fact]
+    public async Task SearchInsiders_OffsetPaging_TiedNamesSplitCleanlyAcrossPages()
+    {
+        // Four owners tied on the name sort key so only the CIK tiebreak orders them —
+        // exactly where a partial order would repeat or skip rows between offset pages.
+        var ciks = new[] { "0000555001", "0000555002", "0000555003", "0000555004" };
+        DbContext
+            .Set<InsiderOwner>()
+            .AddRange(ciks.Select(cik => CreateOwner(cik: cik, name: "Paged Insider")));
+        await DbContext.SaveChangesAsync();
+
+        var page1 = await Sut().SearchInsiders("Paged", maxResults: 2);
+        var page2 = await Sut().SearchInsiders("Paged", maxResults: 2, offset: 2);
+
+        var onPage1 = ciks.Where(c => page1.Contains(c)).ToList();
+        var onPage2 = ciks.Where(c => page2.Contains(c)).ToList();
+        onPage1.Should().HaveCount(2);
+        onPage2.Should().HaveCount(2);
+        onPage1.Intersect(onPage2).Should().BeEmpty();
+        onPage1.Concat(onPage2).Should().BeEquivalentTo(ciks);
+        page2.Should().Contain("Showing results 3-4 of 4 (the last page).");
     }
 
     [Fact]

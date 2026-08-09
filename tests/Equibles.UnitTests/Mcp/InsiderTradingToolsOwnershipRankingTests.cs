@@ -206,7 +206,58 @@ public class InsiderTradingToolsOwnershipRankingTests
 
         output.Should().Contain("First Holder");
         output.Should().NotContain("Second Holder");
-        output.Should().Contain("Showing first 1 of 2 results - raise maxResults to see more.");
+        output
+            .Should()
+            .Contain(
+                "Showing results 1-1 of 2 - raise maxResults (max 500) or pass offset=1 to continue."
+            );
+    }
+
+    [Fact]
+    public async Task GetInsiderOwnership_OffsetPaging_TiedHoldingsSplitCleanlyAcrossPages()
+    {
+        // Four insiders tied on the adjusted holding so only the name/id tiebreaks order
+        // them — exactly where a partial order would repeat or skip rows between pages.
+        await using var db = NewDb();
+        var stock = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
+        db.Add(stock);
+        var names = new[] { "Alpha Holder", "Bravo Holder", "Charlie Holder", "Delta Holder" };
+        foreach (var (name, index) in names.Select((n, i) => (n, i)))
+        {
+            var owner = new InsiderOwner
+            {
+                OwnerCik = $"000000010{index}",
+                Name = name,
+                IsDirector = true,
+            };
+            db.Add(owner);
+            db.Add(
+                NewTransaction(
+                    stock,
+                    owner,
+                    new DateOnly(2024, 6, 1),
+                    sharesOwnedAfter: 5_000,
+                    accessionNumber: $"acc-p-{index}"
+                )
+            );
+        }
+        await db.SaveChangesAsync();
+
+        var page1 = await Sut(db).GetInsiderOwnership("AAPL", maxResults: 2);
+        var page2 = await Sut(db).GetInsiderOwnership("AAPL", maxResults: 2, offset: 2);
+
+        var onPage1 = names.Where(n => page1.Contains(n)).ToList();
+        var onPage2 = names.Where(n => page2.Contains(n)).ToList();
+        onPage1.Should().HaveCount(2);
+        onPage2.Should().HaveCount(2);
+        onPage1.Intersect(onPage2).Should().BeEmpty();
+        onPage1.Concat(onPage2).Should().BeEquivalentTo(names);
+        page2.Should().Contain("Showing results 3-4 of 4 (the last page).");
     }
 
     [Fact]

@@ -125,6 +125,34 @@ public class ShortDataToolsLargestShortVolumeSortAndLegendTests : ParadeDbMcpTes
 
         var result = await Sut().GetLargestShortVolume(maxResults: 1);
 
-        result.Should().Contain("Showing first 1 of 2 results");
+        result
+            .Should()
+            .Contain(
+                "Showing results 1-1 of 2 - raise maxResults (max 500) or pass offset=1 to continue."
+            );
+    }
+
+    [Fact]
+    public async Task LargestShortVolume_OffsetPaging_TiedRowsSplitCleanlyAcrossPages()
+    {
+        // Four rows tied on short volume so only the ticker tiebreak orders them —
+        // exactly where a partial order would repeat or skip rows between offset pages.
+        AddVolume(AddStock("AAA", "Alpha Corp"), 5_000_000, 10_000_000);
+        AddVolume(AddStock("BBB", "Bravo Corp"), 5_000_000, 10_000_000);
+        AddVolume(AddStock("CCC", "Chase Corp"), 5_000_000, 10_000_000);
+        AddVolume(AddStock("DDD", "Delta Corp"), 5_000_000, 10_000_000);
+        await DbContext.SaveChangesAsync();
+
+        var page1 = await Sut().GetLargestShortVolume(maxResults: 2);
+        var page2 = await Sut().GetLargestShortVolume(maxResults: 2, offset: 2);
+
+        var tickers = new[] { "AAA", "BBB", "CCC", "DDD" };
+        var onPage1 = tickers.Where(t => page1.Contains(t)).ToList();
+        var onPage2 = tickers.Where(t => page2.Contains(t)).ToList();
+        onPage1.Should().HaveCount(2);
+        onPage2.Should().HaveCount(2);
+        onPage1.Intersect(onPage2).Should().BeEmpty();
+        onPage1.Concat(onPage2).Should().BeEquivalentTo(tickers);
+        page2.Should().Contain("Showing results 3-4 of 4 (the last page).");
     }
 }

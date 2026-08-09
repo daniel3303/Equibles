@@ -127,7 +127,11 @@ public class CongressTools
             string startDate = null,
         [Description("End date in YYYY-MM-DD format (defaults to today)")] string endDate = null,
         [Description("Maximum number of trades to return (default: 50, max: 500, newest first)")]
-            int maxResults = 50
+            int maxResults = 50,
+        [Description(
+            "Number of trades to skip before returning rows — pass the previous call's shown count to page past the maxResults cap (default: 0)"
+        )]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -152,13 +156,22 @@ public class CongressTools
                     query = query.Where(t => t.TransactionType == typeFilter);
 
                 maxResults = McpLimit.Clamp(maxResults);
+                offset = McpLimit.ClampOffset(offset);
                 var totalCount = await query.CountAsync();
 
+                // Same-day trades tie constantly, so the ordering ends on the row id — an
+                // offset over a partial order would silently repeat or skip trades between
+                // pages.
                 var trades = await query
                     .Include(t => t.CommonStock)
                     .OrderByDescending(t => t.TransactionDate)
+                    .ThenByDescending(t => t.FilingDate)
+                    .ThenBy(t => t.Id)
+                    .Skip(offset)
                     .Take(maxResults)
                     .ToListAsync();
+                if (trades.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {totalCount} trades match; lower offset.";
 
                 var table = MarkdownTable.Render(
                     trades,
@@ -173,10 +186,11 @@ public class CongressTools
                         return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {t.AssetName} | {FormatOwner(t.OwnerType)} |";
                     }
                 );
-                return AppendTruncationNote(table, trades.Count, totalCount);
+                var note = McpOutput.PagedTruncationNote(trades.Count, totalCount, offset);
+                return note.Length == 0 ? table : $"{table}\n{note}";
             },
             "GetMemberTrades",
-            $"memberName: {memberName}"
+            $"memberName: {memberName}, offset: {offset}"
         );
     }
 

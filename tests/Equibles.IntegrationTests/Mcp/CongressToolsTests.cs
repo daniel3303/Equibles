@@ -233,6 +233,50 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetMemberTrades_OffsetPaging_TiedDatesSplitCleanlyAcrossPages()
+    {
+        // Four trades tied on transaction AND filing date so only the Id tiebreak orders
+        // them — exactly where a partial order would repeat or skip rows between pages.
+        var stock = NvdaStock();
+        var pelosi = PelosiMember();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<CongressMember>().Add(pelosi);
+        var markers = new[] { "Alpha Lot", "Bravo Lot", "Charlie Lot", "Delta Lot" };
+        DbContext
+            .Set<CongressionalTrade>()
+            .AddRange(
+                markers.Select(m =>
+                    TradeFor(pelosi, stock, new DateOnly(2026, 3, 15), assetName: m)
+                )
+            );
+        await DbContext.SaveChangesAsync();
+
+        var page1 = await Sut()
+            .GetMemberTrades(
+                "Nancy Pelosi",
+                startDate: "2026-01-01",
+                endDate: "2026-04-30",
+                maxResults: 2
+            );
+        var page2 = await Sut()
+            .GetMemberTrades(
+                "Nancy Pelosi",
+                startDate: "2026-01-01",
+                endDate: "2026-04-30",
+                maxResults: 2,
+                offset: 2
+            );
+
+        var onPage1 = markers.Where(m => page1.Contains(m)).ToList();
+        var onPage2 = markers.Where(m => page2.Contains(m)).ToList();
+        onPage1.Should().HaveCount(2);
+        onPage2.Should().HaveCount(2);
+        onPage1.Intersect(onPage2).Should().BeEmpty();
+        onPage1.Concat(onPage2).Should().BeEquivalentTo(markers);
+        page2.Should().Contain("Showing results 3-4 of 4 (the last page).");
+    }
+
+    [Fact]
     public async Task GetMemberTrades_FiltersByDateRange()
     {
         var stock = NvdaStock();

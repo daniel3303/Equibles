@@ -360,7 +360,14 @@ public class FinancialFactsTools
         if (perPeriod.Count < totalPeriods)
         {
             result.AppendLine();
-            result.AppendLine(McpOutput.TruncationNote(perPeriod.Count, totalPeriods));
+            result.AppendLine(
+                McpOutput.TruncationNote(
+                    perPeriod.Count,
+                    totalPeriods,
+                    cap: MaxResultsCap,
+                    atCapAdvice: "narrow the period range with fromDate/toDate to see older periods"
+                )
+            );
         }
 
         return result.ToString();

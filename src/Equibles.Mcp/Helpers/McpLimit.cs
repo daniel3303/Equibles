@@ -16,4 +16,13 @@ public static class McpLimit
     // ever affects an explicit non-positive request. The upper bound guards against resource
     // exhaustion from an oversized request.
     public static int Clamp(int maxResults) => Math.Clamp(maxResults, 1, MaxResults);
+
+    // Upper bound on a paging offset. Mirrors the REST host's MaxOffset: a deep offset makes
+    // the database skip-scan that many rows, so an unbounded value is a resource-exhaustion
+    // vector just like an unbounded cap.
+    public const int MaxOffset = 100_000;
+
+    // Clamps a client-supplied paging offset to [0, MaxOffset]. A negative offset would flow
+    // into .Skip(...) as a negative SQL OFFSET; zero (the default) means "from the top".
+    public static int ClampOffset(int offset) => Math.Clamp(offset, 0, MaxOffset);
 }

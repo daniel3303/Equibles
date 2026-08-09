@@ -380,7 +380,9 @@ public class ShortSqueezeScoreManager
         }
 
         ApplyPercentiles(scores);
-        return scores.OrderByDescending(s => s.Score).ToList();
+        // Ticker tiebreak keeps equal scores in a total order, so consumers that page the
+        // board with an offset never repeat or skip rows between pages.
+        return scores.OrderByDescending(s => s.Score).ThenBy(s => s.Ticker).ToList();
     }
 
     /// <summary>

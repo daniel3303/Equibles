@@ -683,14 +683,19 @@ public class StockPriceTools
     }
 
     // Appended after tables that keep the NEWEST rows but render oldest-to-newest, where
-    // the shared "Showing first N" wording would point at the wrong end of the table.
+    // the shared "Showing first N" wording would point at the wrong end of the table. At the
+    // cap "raise maxResults" is impossible advice, so the note names the cap instead.
     private static void AppendNewestKeptTruncationNote(StringBuilder result, int shown, int total)
     {
         if (shown >= total)
             return;
+        var advice =
+            shown >= McpLimit.MaxResults
+                ? $"maxResults is at its cap of {McpLimit.MaxResults}; narrow the date range to see older rows"
+                : "raise maxResults or narrow the date range to see older rows";
         result.AppendLine();
         result.AppendLine(
-            $"_Showing the newest {shown} of {total} records in the range - raise maxResults or narrow the date range to see older rows._"
+            $"_Showing the newest {shown} of {total} records in the range - {advice}._"
         );
     }
 
@@ -778,11 +783,20 @@ public class StockPriceTools
         AppendNewestFirstRows(result, count, renderFrom, maxResults, formatRow);
 
         var available = count - renderFrom;
-        var note = McpOutput.TruncationNote(Math.Min(available, maxResults), available);
-        if (note.Length > 0)
+        var shown = Math.Min(available, maxResults);
+        if (shown < available)
         {
+            // These tables render newest-first, so name the kept end explicitly; and when
+            // the shown count already sits AT the cap, "raise maxResults" is impossible
+            // advice — the date range is this family's real continuation.
+            var advice =
+                shown >= McpLimit.MaxResults
+                    ? $"maxResults is at its cap of {McpLimit.MaxResults}; narrow the date range to see older rows"
+                    : "raise maxResults or narrow the date range to see older rows";
             result.AppendLine();
-            result.AppendLine(note);
+            result.AppendLine(
+                $"_Showing the newest {shown} of {available} records in the range - {advice}._"
+            );
         }
 
         if (footnote != null)
