@@ -85,7 +85,7 @@ public class FailToDeliverTools
                     f =>
                     {
                         var value = f.Quantity * f.Price;
-                        return $"| {f.SettlementDate:yyyy-MM-dd} | {McpFormat.WholeNumber(f.Quantity)} | ${McpFormat.Invariant(f.Price, "F2")} | ${McpFormat.WholeNumber(value)} |";
+                        return $"| {f.SettlementDate:yyyy-MM-dd} | {McpFormat.WholeNumber(f.Quantity)} | ${McpFormat.Price(f.Price)} | ${McpFormat.WholeNumber(value)} |";
                     }
                 );
 

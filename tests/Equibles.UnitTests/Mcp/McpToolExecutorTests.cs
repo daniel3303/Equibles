@@ -31,17 +31,20 @@ public class McpToolExecutorTests
     }
 
     [Fact]
-    public async Task Execute_ActionThrows_ReturnsDefaultErrorMessage()
+    public async Task Execute_ActionThrows_ThrowsFaultWithDefaultMessage()
     {
-        var result = await McpToolExecutor.Execute(
-            () => throw new InvalidOperationException("boom"),
-            _logger,
-            "TestTool",
-            "ticker=AAPL",
-            _reportError
-        );
+        var act = () =>
+            McpToolExecutor.Execute(
+                () => throw new InvalidOperationException("boom"),
+                _logger,
+                "TestTool",
+                "ticker=AAPL",
+                _reportError
+            );
 
-        result.Should().Be("An error occurred while executing TestTool. Please try again.");
+        (await act.Should().ThrowAsync<McpToolFaultException>()).WithMessage(
+            "An error occurred while executing TestTool. Please try again."
+        );
     }
 
     [Fact]
@@ -49,30 +52,35 @@ public class McpToolExecutorTests
     {
         var exception = new InvalidOperationException("boom");
 
-        await McpToolExecutor.Execute(
-            () => throw exception,
-            _logger,
-            "TestTool",
-            "ticker=AAPL",
-            _reportError
-        );
+        var act = () =>
+            McpToolExecutor.Execute(
+                () => throw exception,
+                _logger,
+                "TestTool",
+                "ticker=AAPL",
+                _reportError
+            );
 
+        await act.Should().ThrowAsync<McpToolFaultException>();
         await _reportError.Received(1).Invoke("TestTool", exception, "ticker=AAPL");
     }
 
     [Fact]
-    public async Task Execute_ActionThrows_WithCustomErrorMessage_ReturnsCustomMessage()
+    public async Task Execute_ActionThrows_WithCustomErrorMessage_ThrowsFaultWithCustomMessage()
     {
-        var result = await McpToolExecutor.Execute(
-            () => throw new InvalidOperationException("boom"),
-            _logger,
-            "TestTool",
-            "ticker=AAPL",
-            _reportError,
-            errorMessage: "Something went wrong with your request."
-        );
+        var act = () =>
+            McpToolExecutor.Execute(
+                () => throw new InvalidOperationException("boom"),
+                _logger,
+                "TestTool",
+                "ticker=AAPL",
+                _reportError,
+                errorMessage: "Something went wrong with your request."
+            );
 
-        result.Should().Be("Something went wrong with your request.");
+        (await act.Should().ThrowAsync<McpToolFaultException>()).WithMessage(
+            "Something went wrong with your request."
+        );
     }
 
     [Fact]
@@ -80,13 +88,15 @@ public class McpToolExecutorTests
     {
         var exception = new InvalidOperationException("boom");
 
-        await McpToolExecutor.Execute(
-            () => throw exception,
-            _logger,
-            "TestTool",
-            "ticker=AAPL",
-            _reportError
-        );
+        var act = () =>
+            McpToolExecutor.Execute(
+                () => throw exception,
+                _logger,
+                "TestTool",
+                "ticker=AAPL",
+                _reportError
+            );
+        await act.Should().ThrowAsync<McpToolFaultException>();
 
         _logger
             .Received(1)
@@ -108,30 +118,35 @@ public class McpToolExecutorTests
             .Invoke(Arg.Any<string>(), Arg.Any<Exception>(), Arg.Any<string>())
             .ThrowsAsync(new Exception("reporting failed"));
 
-        var result = await McpToolExecutor.Execute(
-            () => throw new InvalidOperationException("boom"),
-            _logger,
-            "TestTool",
-            "ticker=AAPL",
-            _reportError
-        );
+        var act = () =>
+            McpToolExecutor.Execute(
+                () => throw new InvalidOperationException("boom"),
+                _logger,
+                "TestTool",
+                "ticker=AAPL",
+                _reportError
+            );
 
-        result.Should().Be("An error occurred while executing TestTool. Please try again.");
+        // The reporter's own failure never masks the tool fault the caller must see.
+        (await act.Should().ThrowAsync<McpToolFaultException>()).WithMessage(
+            "An error occurred while executing TestTool. Please try again."
+        );
     }
 
     [Fact]
-    public async Task Execute_ActionThrowsCancellation_ReturnsMessageWithoutReporting()
+    public async Task Execute_ActionThrowsCancellation_PropagatesWithoutReporting()
     {
-        var result = await McpToolExecutor.Execute(
-            () => throw new OperationCanceledException("call aborted"),
-            _logger,
-            "TestTool",
-            "ticker=AAPL",
-            _reportError
-        );
+        var act = () =>
+            McpToolExecutor.Execute(
+                () => throw new OperationCanceledException("call aborted"),
+                _logger,
+                "TestTool",
+                "ticker=AAPL",
+                _reportError
+            );
 
-        // A wound-down call still answers, but no Errors row: cancellations are noise.
-        result.Should().Be("An error occurred while executing TestTool. Please try again.");
+        // An abort stays an abort — no Errors row, no fault translation: cancellations are noise.
+        await act.Should().ThrowAsync<OperationCanceledException>();
         await _reportError
             .DidNotReceive()
             .Invoke(Arg.Any<string>(), Arg.Any<Exception>(), Arg.Any<string>());
