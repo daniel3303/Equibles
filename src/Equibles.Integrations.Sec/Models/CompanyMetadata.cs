@@ -5,6 +5,10 @@ namespace Equibles.Integrations.Sec.Models;
 public class CompanyMetadata
 {
     public string Cik { get; set; }
+
+    /// <summary>SEC's registrant name for the CIK (submissions "name").</summary>
+    public string Name { get; set; }
+
     public string EntityType { get; set; }
 
     /// <summary>

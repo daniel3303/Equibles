@@ -4,6 +4,7 @@ using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Sec.HostedService.Services;
+using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -64,6 +65,13 @@ public class CompanySyncServiceBuildSecondaryCikToParentDuplicateTests
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ILogger<ErrorReporter>>()
         );
-        return new CompanySyncService(scopeFactory, secEdgarClient, options, logger, errorReporter);
+        return new CompanySyncService(
+            scopeFactory,
+            secEdgarClient,
+            options,
+            logger,
+            errorReporter,
+            Substitute.For<IBus>()
+        );
     }
 }

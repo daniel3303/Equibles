@@ -4,6 +4,7 @@ using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Sec.HostedService.Services;
+using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -37,7 +38,8 @@ public class CompanySyncServiceBuildSecondaryCikToParentTests
             new ErrorReporter(
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
-            )
+            ),
+            Substitute.For<IBus>()
         );
 
         var firstParent = new CommonStock

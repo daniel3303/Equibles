@@ -58,7 +58,8 @@ public class CompanySyncServiceUpdateExistingCollisionTests : ParadeDbMcpTestBas
             new ErrorReporter(
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
-            )
+            ),
+            Substitute.For<IBus>()
         );
     }
 

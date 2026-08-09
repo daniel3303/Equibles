@@ -17,6 +17,7 @@
     <ProjectReference Include="..\Equibles.Media.BusinessLogic\Equibles.Media.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.Sec.FinancialFacts.BusinessLogic\Equibles.Sec.FinancialFacts.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Repositories\Equibles.Sec.FinancialFacts.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Messaging\Equibles.Messaging.csproj" />
     <ProjectReference Include="..\Equibles.Sec.Repositories\Equibles.Sec.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
