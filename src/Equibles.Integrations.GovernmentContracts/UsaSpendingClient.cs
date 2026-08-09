@@ -17,6 +17,7 @@ namespace Equibles.Integrations.GovernmentContracts;
 public class UsaSpendingClient : IUsaSpendingClient
 {
     private const string SearchUrl = "https://api.usaspending.gov/api/v2/search/spending_by_award/";
+    private const string RecipientProfileUrlBase = "https://api.usaspending.gov/api/v2/recipient/";
 
     // USAspending's front-end intermittently accepts a connection and then closes it without
     // a response ("empty reply", surfaced by .NET as "the response ended prematurely") — in a
@@ -112,6 +113,41 @@ public class UsaSpendingClient : IUsaSpendingClient
             cancellationToken
         );
         return results;
+    }
+
+    public async Task<UsaSpendingRecipientProfile> GetRecipientProfile(
+        string recipientId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var url = RecipientProfileUrlBase + Uri.EscapeDataString(recipientId) + "/";
+        string content;
+        try
+        {
+            content = await SendWithRetry(
+                async () =>
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                    request.Headers.Accept.Add(
+                        new MediaTypeWithQualityHeaderValue("application/json")
+                    );
+                    // Same fresh-connection rule as PostQuery — the sick-backend roulette
+                    // lives in front of the whole API, not one endpoint.
+                    request.Headers.ConnectionClose = true;
+                    return await _httpClient.SendAsync(request, cancellationToken);
+                },
+                cancellationToken
+            );
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            // 404 is the endpoint's "no such recipient / no profile" answer, not a fault —
+            // rethrowing would fail the import window over a recipient that simply has no
+            // corporate-family record.
+            return null;
+        }
+
+        return JsonConvert.DeserializeObject<UsaSpendingRecipientProfile>(content);
     }
 
     /// <summary>

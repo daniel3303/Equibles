@@ -7,6 +7,7 @@ using Equibles.GovernmentContracts.Data.Models;
 using Equibles.GovernmentContracts.HostedService.Configuration;
 using Equibles.GovernmentContracts.Repositories;
 using Equibles.Integrations.GovernmentContracts.Contracts;
+using Equibles.Integrations.GovernmentContracts.Models;
 using Equibles.Worker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +31,21 @@ public class GovernmentContractsImportService : IImporter
 
     // Single well-known row that persists the forward award scan's resume point.
     private const string ScanStateName = "award-scan";
+
+    // Version of the recipient-matching rules (normaliser + parent fallback). Unmatched
+    // awards are dropped, not stored, so a matching improvement is invisible to history
+    // until the range is re-walked: bump this when matching can newly resolve recipients it
+    // previously dropped, and the next cycle pulls the cursor back to the epoch once
+    // (deduplicated by AwardUniqueKey). Version 1 is the original exact-name matching;
+    // 2 added the 2-character key floor, EDGAR slash-marker stripping, and SAM
+    // parent-fallback resolution.
+    internal const int RecipientMatchingVersion = 2;
+
+    // Re-fetch a cached recipient-parent profile at point of use once it is older than
+    // this — acquisitions move subsidiaries between listed parents, and a permanently
+    // stale row would mis-attribute every future award. Encounter-driven, so recipients
+    // that stop appearing cost nothing.
+    private const int ParentCacheStalenessDays = 180;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<GovernmentContractsImportService> _logger;
@@ -69,6 +85,8 @@ public class GovernmentContractsImportService : IImporter
             return;
         }
 
+        await ApplyMatchingVersionReset(cancellationToken);
+
         var startDate = await DetermineStartDate(cancellationToken);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         if (startDate > today)
@@ -107,6 +125,13 @@ public class GovernmentContractsImportService : IImporter
         // days still completes.
         var consecutiveWindowFailures = 0;
 
+        // Recipient-parent resolutions already read or fetched THIS cycle, so a recipient
+        // appearing in many windows costs one profile lookup per cycle at most. Keyed by
+        // USAspending's level-qualified recipient hash.
+        var parentCache = new Dictionary<string, GovernmentContractRecipientParent>(
+            StringComparer.Ordinal
+        );
+
         for (
             var windowStart = startDate;
             windowStart <= today;
@@ -125,6 +150,7 @@ public class GovernmentContractsImportService : IImporter
                     windowStart,
                     windowEnd,
                     recipientLookup,
+                    parentCache,
                     cancellationToken
                 );
 
@@ -227,6 +253,7 @@ public class GovernmentContractsImportService : IImporter
         DateOnly windowStart,
         DateOnly windowEnd,
         IReadOnlyDictionary<string, Guid> recipientLookup,
+        Dictionary<string, GovernmentContractRecipientParent> parentCache,
         CancellationToken cancellationToken
     )
     {
@@ -240,16 +267,50 @@ public class GovernmentContractsImportService : IImporter
             return 0;
 
         // Resolve to public companies, map, and de-duplicate within the batch by unique key.
+        // Direct name matches first; recipients whose own name matched nothing get a second
+        // chance through their SAM-registered parent (operating subsidiaries — "CACI Inc -
+        // Federal" — award under names our CommonStock universe never carries).
+        var unmatched = new List<UsaSpendingAwardRecord>();
         var mapped = new Dictionary<string, GovernmentContract>(StringComparer.Ordinal);
         foreach (var award in awards)
         {
             var commonStockId = RecipientResolver.Resolve(award.RecipientName, recipientLookup);
             if (commonStockId == null)
+            {
+                if (award.RecipientId != null)
+                    unmatched.Add(award);
                 continue;
+            }
 
             var entity = UsaSpendingAwardMapper.Map(award, commonStockId.Value);
             if (entity != null)
                 mapped[entity.AwardUniqueKey] = entity;
+        }
+
+        if (unmatched.Count > 0)
+        {
+            // A profile fetch that fails transport-level propagates out of here and fails
+            // the WINDOW, exactly like the award search itself — the checkpoint machinery
+            // then re-covers it, so an outage can never silently drop this window's
+            // parent-resolved awards. A 404 never reaches this path (the client answers it
+            // as a null profile, cached as parentless).
+            await ResolveParents(unmatched, parentCache, cancellationToken);
+
+            foreach (var award in unmatched)
+            {
+                if (!parentCache.TryGetValue(award.RecipientId, out var parent))
+                    continue;
+                var commonStockId = RecipientResolver.ResolveViaParents(
+                    [parent.ParentName],
+                    recipientLookup
+                );
+                if (commonStockId == null)
+                    continue;
+
+                var entity = UsaSpendingAwardMapper.Map(award, commonStockId.Value);
+                if (entity != null)
+                    mapped[entity.AwardUniqueKey] = entity;
+            }
         }
 
         if (mapped.Count == 0)
@@ -274,6 +335,169 @@ public class GovernmentContractsImportService : IImporter
             awards.Count
         );
         return inserted;
+    }
+
+    /// <summary>
+    /// Ensure every unmatched award's recipient has a parent-resolution row in
+    /// <paramref name="parentCache"/>: stored rows are read in one batch, and recipients
+    /// with no stored row (or a stale one, per <see cref="ParentCacheStalenessDays"/>) get
+    /// one profile fetch each, persisted so the answer — including "no usable parent" —
+    /// survives across cycles. The fetch runs inside the caller's window try/catch on
+    /// purpose: a transport failure here must fail the window, not skip the recipient.
+    /// </summary>
+    private async Task ResolveParents(
+        IReadOnlyList<UsaSpendingAwardRecord> unmatched,
+        Dictionary<string, GovernmentContractRecipientParent> parentCache,
+        CancellationToken cancellationToken
+    )
+    {
+        var now = DateTime.UtcNow;
+        var staleBefore = now.AddDays(-ParentCacheStalenessDays);
+        var pending = unmatched
+            .Where(a => a.RecipientId != null && !parentCache.ContainsKey(a.RecipientId))
+            .GroupBy(a => a.RecipientId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().RecipientName, StringComparer.Ordinal);
+        if (pending.Count == 0)
+            return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var repository =
+            scope.ServiceProvider.GetRequiredService<GovernmentContractRecipientParentRepository>();
+
+        var stored = await repository.GetByRecipientIds(pending.Keys.ToList(), cancellationToken);
+        foreach (var row in stored.Where(r => r.ResolvedAt >= staleBefore))
+        {
+            parentCache[row.RecipientId] = row;
+            pending.Remove(row.RecipientId);
+        }
+        var staleRows = stored
+            .Where(r => r.ResolvedAt < staleBefore)
+            .ToDictionary(r => r.RecipientId, StringComparer.Ordinal);
+
+        if (pending.Count == 0)
+            return;
+
+        var persisted = 0;
+        foreach (var (recipientId, recipientName) in pending)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var profile = await _client.GetRecipientProfile(recipientId, cancellationToken);
+            var parent = ChooseParent(profile, recipientId);
+
+            if (staleRows.TryGetValue(recipientId, out var row))
+            {
+                row.ParentRecipientId = parent?.ParentId;
+                row.ParentName = parent?.ParentName;
+                row.ResolvedAt = now;
+                repository.Update(row);
+            }
+            else
+            {
+                row = new GovernmentContractRecipientParent
+                {
+                    RecipientId = recipientId,
+                    RecipientName = Truncate(recipientName, 512),
+                    ParentRecipientId = parent?.ParentId,
+                    ParentName = Truncate(parent?.ParentName, 512),
+                    ResolvedAt = now,
+                };
+                repository.Add(row);
+            }
+
+            parentCache[recipientId] = row;
+            persisted++;
+        }
+
+        if (persisted > 0)
+            await repository.SaveChanges();
+    }
+
+    /// <summary>
+    /// Pick the ONE parent a recipient profile supports, or null. The top-level
+    /// parent_id/parent_name pair is USAspending's current SAM linkage and wins when
+    /// present; otherwise the parents[] history is used only when it names a single
+    /// distinct parent — several distinct parents means ownership moved and guessing
+    /// between them could assert a wrong link. A parent that IS the recipient itself
+    /// (parent-level recipients self-reference) carries no new name to match and is
+    /// treated as no parent.
+    /// </summary>
+    internal static UsaSpendingRecipientParentRef ChooseParent(
+        UsaSpendingRecipientProfile profile,
+        string recipientId
+    )
+    {
+        if (profile == null)
+            return null;
+
+        var candidate =
+            !string.IsNullOrWhiteSpace(profile.ParentId)
+            && !string.IsNullOrWhiteSpace(profile.ParentName)
+                ? new UsaSpendingRecipientParentRef
+                {
+                    ParentId = profile.ParentId,
+                    ParentName = profile.ParentName,
+                }
+                : null;
+
+        if (candidate == null)
+        {
+            var distinct = (profile.Parents ?? [])
+                .Where(p =>
+                    !string.IsNullOrWhiteSpace(p?.ParentId)
+                    && !string.IsNullOrWhiteSpace(p.ParentName)
+                )
+                .GroupBy(p => p.ParentId, StringComparer.Ordinal)
+                .Select(g => g.First())
+                .ToList();
+            if (distinct.Count == 1)
+                candidate = distinct[0];
+        }
+
+        if (candidate == null || candidate.ParentId == recipientId)
+            return null;
+
+        return candidate;
+    }
+
+    private static string Truncate(string value, int maxLength) =>
+        value != null && value.Length > maxLength ? value[..maxLength] : value;
+
+    /// <summary>
+    /// Pull the scan cursor back to the epoch ONCE when the recipient-matching code is
+    /// newer than the version the stored range was matched under. Unmatched awards are
+    /// dropped rather than stored, so this rescan is the only way a matching improvement
+    /// reaches history; everything re-fetched deduplicates by AwardUniqueKey. Cursor and
+    /// version stamp move in one save — a crash between cycles just re-triggers the same
+    /// idempotent rescan. Unlike the checkpoint writes this is NOT best-effort: failing to
+    /// persist must fail the cycle, or the scan would advance and re-stamp under the new
+    /// version without ever having re-walked history.
+    /// </summary>
+    private async Task ApplyMatchingVersionReset(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var scope = _scopeFactory.CreateScope();
+        var repository =
+            scope.ServiceProvider.GetRequiredService<GovernmentContractsScanStateRepository>();
+
+        var state = await repository.GetByName(ScanStateName);
+        if (state == null || state.MatchingVersion >= RecipientMatchingVersion)
+            return;
+
+        _logger.LogInformation(
+            "Government contracts import: recipient matching upgraded (v{From} -> v{To}); "
+                + "rescanning from the {Epoch} epoch to recover previously unmatched awards",
+            state.MatchingVersion,
+            RecipientMatchingVersion,
+            UsaSpendingMinimumActionDate
+        );
+
+        state.LastCompletedWindowEnd = UsaSpendingMinimumActionDate.AddDays(-1);
+        state.MatchingVersion = RecipientMatchingVersion;
+        state.UpdatedAt = DateTime.UtcNow;
+        repository.Update(state);
+        await repository.SaveChanges();
     }
 
     private async Task<HashSet<string>> LoadExistingKeys(
@@ -394,7 +618,14 @@ public class GovernmentContractsImportService : IImporter
             var isNew = state == null;
             if (isNew)
             {
-                state = new GovernmentContractsScanState { Name = ScanStateName };
+                // A first row is born current: whatever range this install scans, it scans
+                // under today's matching rules, so stamping the version here keeps a fresh
+                // install from triggering the version-reset epoch rescan on its next cycle.
+                state = new GovernmentContractsScanState
+                {
+                    Name = ScanStateName,
+                    MatchingVersion = RecipientMatchingVersion,
+                };
             }
             else if (state.LastCompletedWindowEnd >= windowEnd)
             {
@@ -459,6 +690,7 @@ public class GovernmentContractsImportService : IImporter
                         Name = ScanStateName,
                         LastCompletedWindowEnd = windowEnd,
                         UpdatedAt = DateTime.UtcNow,
+                        MatchingVersion = RecipientMatchingVersion,
                     }
                 );
                 await repository.SaveChanges();

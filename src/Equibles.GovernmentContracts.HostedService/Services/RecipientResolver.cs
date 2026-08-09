@@ -68,4 +68,31 @@ public class RecipientResolver
 
         return lookup.TryGetValue(key, out var id) ? id : null;
     }
+
+    /// <summary>
+    /// Resolves a recipient through its SAM-registered parent name(s) when the recipient's
+    /// own name matched nothing. Each candidate name goes through the same exact normalised
+    /// lookup; the match holds only when every resolving candidate lands on ONE stock —
+    /// parents that resolve to different companies (ownership moved between listed parents
+    /// over the registration history) are ambiguous and dropped, so a wrong link is never
+    /// asserted.
+    /// </summary>
+    public static Guid? ResolveViaParents(
+        IEnumerable<string> parentNames,
+        IReadOnlyDictionary<string, Guid> lookup
+    )
+    {
+        Guid? resolved = null;
+        foreach (var name in parentNames)
+        {
+            var id = Resolve(name, lookup);
+            if (id == null)
+                continue;
+            if (resolved != null && resolved != id)
+                return null;
+            resolved = id;
+        }
+
+        return resolved;
+    }
 }

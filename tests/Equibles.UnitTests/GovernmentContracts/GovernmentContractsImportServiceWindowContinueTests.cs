@@ -226,6 +226,9 @@ public class GovernmentContractsImportServiceWindowContinueTests
                     Name = "award-scan",
                     LastCompletedWindowEnd = today.AddDays(-1),
                     UpdatedAt = DateTime.UtcNow,
+                    // Born current so the matching-version epoch rescan stays out of this
+                    // trailing-rescan scenario.
+                    MatchingVersion = GovernmentContractsImportService.RecipientMatchingVersion,
                 }
             );
             await seed.SaveChangesAsync();

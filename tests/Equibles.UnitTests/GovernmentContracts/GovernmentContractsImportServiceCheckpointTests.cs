@@ -167,6 +167,9 @@ public class GovernmentContractsImportServiceCheckpointTests
                     Name = ScanStateName,
                     LastCompletedWindowEnd = today,
                     UpdatedAt = DateTime.UtcNow,
+                    // Born current so the matching-version epoch rescan stays out of this
+                    // trailing-rescan scenario.
+                    MatchingVersion = GovernmentContractsImportService.RecipientMatchingVersion,
                 }
             );
             seed.SaveChanges();
