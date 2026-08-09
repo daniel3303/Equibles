@@ -55,23 +55,38 @@ public class FinancialFactsImportService
         if (string.IsNullOrEmpty(stock.Cik))
             return;
 
-        CompanyFactsResponse response;
-        try
+        // Every attached CIK contributes to ONE fact set: a holdco reorganisation
+        // moves the ticker to a NEW registrant while the entire XBRL history stays
+        // on the predecessor CIK (Exxon's 2026 reorg left XOM with six documents
+        // and no pre-2026 facts, GH-7041), and a co-registrant subsidiary can file
+        // facts of its own. Cross-CIK duplicates are impossible downstream: the
+        // natural key carries the AccessionNumber, and accessions are globally
+        // unique in SEC. Any CIK failing to download skips the whole cycle so the
+        // checkpoint never advances past an unread source.
+        var parsed = new List<ParsedFact>();
+        foreach (var cik in new[] { stock.Cik }.Concat(stock.SecondaryCiks ?? []))
         {
-            response = await _secEdgarClient.GetCompanyFacts(stock.Cik);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Company Facts download failed for {Ticker} (CIK {Cik}), skipping this cycle",
-                stock.Ticker,
-                stock.Cik
-            );
-            return;
+            CompanyFactsResponse response;
+            try
+            {
+                response = await _secEdgarClient.GetCompanyFacts(cik);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Company Facts download failed for {Ticker} (CIK {Cik}), skipping this cycle",
+                    stock.Ticker,
+                    cik
+                );
+                return;
+            }
+
+            if (response != null && response.Facts.Count > 0)
+                parsed.AddRange(ParseFacts(response, stock));
         }
 
-        // Guards GH-1591: the stock can be deleted during the network call
+        // Guards GH-1591: the stock can be deleted during the network calls
         // above. Without this check, every UpsertSyncStatus and FlushFacts
         // path below trips FK_*_CommonStock_CommonStockId on Postgres. The
         // cycle is per-stock, so a single existence check covers all writes.
@@ -85,13 +100,6 @@ public class FinancialFactsImportService
             return;
         }
 
-        if (response == null || response.Facts.Count == 0)
-        {
-            await UpsertSyncStatus(stock, null, cancellationToken);
-            return;
-        }
-
-        var parsed = ParseFacts(response, stock).ToList();
         if (parsed.Count == 0)
         {
             await UpsertSyncStatus(stock, null, cancellationToken);

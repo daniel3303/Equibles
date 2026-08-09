@@ -295,6 +295,91 @@ public class CommonStockManager
     }
 
     /// <summary>
+    /// Attaches an additional CIK to a stock — a predecessor registrant after a holdco
+    /// reorganisation (Exxon's 2026 reorg moved XOM to a new CIK and left the entire
+    /// filing and fact history on the old one, GH-7041) or a co-registrant subsidiary.
+    /// Operator-driven: no SEC feed states successorship in structured form, so the
+    /// association is a human decision; everything downstream is automatic — filing
+    /// discovery and the document scraper enumerate every attached CIK each sweep, and
+    /// the published <see cref="StockSecondaryCikAttached"/> resets the financial-facts
+    /// checkpoint so the predecessor's full XBRL history imports on the next cycle.
+    /// Returns null on success, otherwise a reason the attachment was refused.
+    /// </summary>
+    public async Task<string> AttachSecondaryCik(CommonStock commonStock, string cik)
+    {
+        ArgumentNullException.ThrowIfNull(commonStock);
+
+        var normalized = NormalizeCik(cik);
+        if (normalized == null)
+        {
+            return $"'{cik}' is not a valid CIK — expected up to ten digits.";
+        }
+        if (normalized == NormalizeCik(commonStock.Cik))
+        {
+            return $"CIK {normalized} is already this stock's primary CIK.";
+        }
+        if (commonStock.SecondaryCiks.Contains(normalized))
+        {
+            return $"CIK {normalized} is already attached to this stock.";
+        }
+
+        // One CIK belongs to one stock, ever — attaching a CIK another row owns
+        // (as primary or secondary) would merge two companies' filings.
+        var owner = await _commonStockRepository
+            .GetAll()
+            .Where(cs => cs.Cik == normalized || cs.SecondaryCiks.Contains(normalized))
+            .Select(cs => new { cs.Ticker })
+            .FirstOrDefaultAsync();
+        if (owner != null)
+        {
+            return $"CIK {normalized} already belongs to {owner.Ticker}.";
+        }
+
+        commonStock.SecondaryCiks = [.. commonStock.SecondaryCiks, normalized];
+        await _commonStockRepository.SaveChanges();
+
+        // Publish via the root bus (bypasses any bus outbox) after the write commits.
+        await _bus.Publish(
+            new StockSecondaryCikAttached(commonStock.Id, commonStock.Ticker, normalized)
+        );
+        return null;
+    }
+
+    /// <summary>
+    /// Removes a previously attached secondary CIK. Already-imported documents and
+    /// facts stay (they were the operator's deliberate backfill); the scrapers simply
+    /// stop sweeping the detached CIK. Returns null on success, otherwise a reason.
+    /// </summary>
+    public async Task<string> DetachSecondaryCik(CommonStock commonStock, string cik)
+    {
+        ArgumentNullException.ThrowIfNull(commonStock);
+
+        var normalized = NormalizeCik(cik);
+        if (normalized == null || !commonStock.SecondaryCiks.Contains(normalized))
+        {
+            return $"CIK {cik} is not attached to this stock.";
+        }
+
+        commonStock.SecondaryCiks = commonStock
+            .SecondaryCiks.Where(c => c != normalized)
+            .ToList();
+        await _commonStockRepository.SaveChanges();
+        return null;
+    }
+
+    // CIKs are stored with leading zeros trimmed (matching SEC filer CIKs elsewhere in
+    // the model); a CIK is one to ten digits.
+    internal static string NormalizeCik(string cik)
+    {
+        var trimmed = cik?.Trim().TrimStart('0');
+        if (string.IsNullOrEmpty(trimmed) || trimmed.Length > 10 || !trimmed.All(char.IsAsciiDigit))
+        {
+            return null;
+        }
+        return trimmed;
+    }
+
+    /// <summary>
     /// Stages a <see cref="CommonStockTickerAlias"/> for a primary ticker the stock is
     /// abandoning, so URLs published under the old symbol can 301 to the current one.
     /// Stages only — no SaveChanges: the caller is the SEC sync mid-rename, and the alias
