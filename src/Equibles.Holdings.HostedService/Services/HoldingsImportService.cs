@@ -1783,9 +1783,11 @@ public class HoldingsImportService
 
         // A derivation grossly above the filer's own figure is a basis error (a depositary ratio,
         // a split the series never captured) — the audit above measures it; this acts on it.
-        // Publish the filed figure instead of the wrong derivation.
+        // Publish the filed figure instead of the wrong derivation — unless the disagreement is
+        // the ~1,000× signature of a filer still reporting thousands, where the filed figure is
+        // the wrong one and the derivation stands.
         var valueSource = ValueSource.Derived;
-        if (value > 0 && HoldingValueSanityGuard.GrosslyExceedsFiled(value, filedValue))
+        if (HoldingValueSanityGuard.ShouldPublishFiledInsteadOfDerived(value, shares, filedValue))
         {
             value = filedValue.Value;
             valueSource = ValueSource.Filed;

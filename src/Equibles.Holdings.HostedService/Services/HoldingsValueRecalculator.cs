@@ -318,8 +318,15 @@ public class HoldingsValueRecalculator
 
                 // A per-row basis error (depositary ratio, split the series never captured) shows
                 // as a derivation grossly above the filer's own figure — publish the filed value
-                // rather than the wrong derivation.
-                if (HoldingValueSanityGuard.GrosslyExceedsFiled(derived, holding.FiledValue))
+                // rather than the wrong derivation. A ~1,000× disagreement is the opposite case
+                // (the filer still reports thousands) and keeps the derivation.
+                if (
+                    HoldingValueSanityGuard.ShouldPublishFiledInsteadOfDerived(
+                        derived,
+                        holding.Shares,
+                        holding.FiledValue
+                    )
+                )
                 {
                     ApplyFiledValue(holding);
                     continue;

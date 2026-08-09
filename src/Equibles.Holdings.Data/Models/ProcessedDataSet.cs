@@ -54,8 +54,18 @@ public class ProcessedDataSet
     /// missing its entire Class C side. The re-import maps them through
     /// CommonStockListedCusip, keys the rows by (…, ListedTicker), and values
     /// them from the class's own exact price series.
+    /// Version 8: keep the derivation when the filed value is on a thousands
+    /// basis. Filers still reporting the VALUE column in thousands after the
+    /// SEC's 2023 whole-dollar switch made the correct derivation look 1,000×
+    /// "too big", so the sanity guard published the thousands-scale filed
+    /// figure and served their books 1,000× understated (Baupost's ~$5B book
+    /// read ~$5M). The re-import re-derives those rows under the banded guard
+    /// and heals the mis-published history. Open-quarter latency, accepted:
+    /// realtime-swept accessions are behind the realtime watermark, not this
+    /// ledger, so the current quarter's affected rows stay understated until
+    /// its bulk quarterly data set lands and re-imports them.
     /// </summary>
-    public const int CurrentParserVersion = 7;
+    public const int CurrentParserVersion = 8;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
