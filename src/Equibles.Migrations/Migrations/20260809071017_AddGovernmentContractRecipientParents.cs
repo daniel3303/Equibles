@@ -25,7 +25,7 @@ namespace Equibles.Migrations.Migrations
                     RecipientId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     RecipientName = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
                     ParentRecipientId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
-                    ParentName = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
+                    ParentNames = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true),
                     ResolvedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>

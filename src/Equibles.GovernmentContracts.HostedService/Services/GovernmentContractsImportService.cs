@@ -115,6 +115,11 @@ public class GovernmentContractsImportService : IImporter
         // rescan lookback.
         var frontierIsContiguous = true;
 
+        // A backfill (above all the matching-version epoch rescan) runs thousands of
+        // windows in one cycle; a periodic marker keeps a multi-hour walk distinguishable
+        // from a hang.
+        var windowsCompleted = 0;
+
         // Nothing stepped over may fan out across the range. 422 is USAspending's validation
         // rejection for the WHOLE request, not just its dates, so a bad request-invariant field
         // (a filter shape, an award-type code, an out-of-range amount bound) 422s on every
@@ -162,6 +167,17 @@ public class GovernmentContractsImportService : IImporter
                     await AdvanceCheckpoint(windowEnd);
 
                 consecutiveWindowFailures = 0;
+
+                if (++windowsCompleted % 250 == 0)
+                {
+                    _logger.LogInformation(
+                        "Government contracts import: {Windows} windows scanned, at {WindowEnd} "
+                            + "({Inserted} awards persisted so far)",
+                        windowsCompleted,
+                        windowEnd,
+                        totalInserted
+                    );
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -289,11 +305,14 @@ public class GovernmentContractsImportService : IImporter
 
         if (unmatched.Count > 0)
         {
-            // A profile fetch that fails transport-level propagates out of here and fails
-            // the WINDOW, exactly like the award search itself — the checkpoint machinery
-            // then re-covers it, so an outage can never silently drop this window's
-            // parent-resolved awards. A 404 never reaches this path (the client answers it
-            // as a null profile, cached as parentless).
+            // A profile fetch that fails transport-level propagates out of here like the
+            // award search itself: non-422 is systemic, so the CYCLE aborts and the
+            // checkpoint machinery re-covers this window next cycle — an outage can never
+            // silently drop its parent-resolved awards. (Accepted trade-off: a recipient
+            // whose profile deterministically fails non-404 stalls ingestion at this
+            // window until the source recovers — freshness loss, never data loss.) A 404
+            // never reaches this path; the client answers it as a null profile, cached as
+            // parentless.
             await ResolveParents(unmatched, parentCache, cancellationToken);
 
             foreach (var award in unmatched)
@@ -301,7 +320,7 @@ public class GovernmentContractsImportService : IImporter
                 if (!parentCache.TryGetValue(award.RecipientId, out var parent))
                     continue;
                 var commonStockId = RecipientResolver.ResolveViaParents(
-                    [parent.ParentName],
+                    SplitParentNames(parent.ParentNames),
                     recipientLookup
                 );
                 if (commonStockId == null)
@@ -383,12 +402,12 @@ public class GovernmentContractsImportService : IImporter
             cancellationToken.ThrowIfCancellationRequested();
 
             var profile = await _client.GetRecipientProfile(recipientId, cancellationToken);
-            var parent = ChooseParent(profile, recipientId);
+            var parent = ChooseParent(profile);
 
             if (staleRows.TryGetValue(recipientId, out var row))
             {
                 row.ParentRecipientId = parent?.ParentId;
-                row.ParentName = parent?.ParentName;
+                row.ParentNames = JoinParentNames(parent?.Names);
                 row.ResolvedAt = now;
                 repository.Update(row);
             }
@@ -399,7 +418,7 @@ public class GovernmentContractsImportService : IImporter
                     RecipientId = recipientId,
                     RecipientName = Truncate(recipientName, 512),
                     ParentRecipientId = parent?.ParentId,
-                    ParentName = Truncate(parent?.ParentName, 512),
+                    ParentNames = JoinParentNames(parent?.Names),
                     ResolvedAt = now,
                 };
                 repository.Add(row);
@@ -414,51 +433,111 @@ public class GovernmentContractsImportService : IImporter
     }
 
     /// <summary>
-    /// Pick the ONE parent a recipient profile supports, or null. The top-level
-    /// parent_id/parent_name pair is USAspending's current SAM linkage and wins when
-    /// present; otherwise the parents[] history is used only when it names a single
-    /// distinct parent — several distinct parents means ownership moved and guessing
-    /// between them could assert a wrong link. A parent that IS the recipient itself
-    /// (parent-level recipients self-reference) carries no new name to match and is
-    /// treated as no parent.
+    /// Pick the ONE parent REGISTRANT a recipient profile supports, or null.
+    ///
+    /// The unit of ambiguity is the registrant, not the name or the hash: the same owner
+    /// appears under several names (legal renames — CACI International's history also
+    /// carries its former name Systemware) and several ids/UEIs (the DUNS→UEI migration
+    /// re-hashed identities), while genuinely different owners always carry different
+    /// DUNS. So the union of the profile's current top-level parent and its parents[]
+    /// history is grouped by DUNS (falling back to UEI, then id, for entries missing it),
+    /// and only a SINGLE surviving group resolves — every name that group has carried is
+    /// returned so exact-match resolution can try each. More than one group means
+    /// ownership moved over the recipient's history (Sikorsky lists both RTX and Lockheed
+    /// Martin), and one link cannot be right for awards spanning both eras — verified
+    /// live against USAspending, and the epoch rescan would make a guess permanent, so
+    /// ambiguity is always dropped. A recipient's own self-registration era (SAM lists
+    /// the recipient as its own parent, under a DIFFERENT registrant identity) forms its
+    /// own group and therefore contributes ambiguity by design: an era in which the
+    /// recipient answered to no listed parent must not have its awards attributed to a
+    /// later owner.
     /// </summary>
-    internal static UsaSpendingRecipientParentRef ChooseParent(
-        UsaSpendingRecipientProfile profile,
-        string recipientId
-    )
+    internal static RecipientParentChoice ChooseParent(UsaSpendingRecipientProfile profile)
     {
         if (profile == null)
             return null;
 
-        var candidate =
-            !string.IsNullOrWhiteSpace(profile.ParentId)
-            && !string.IsNullOrWhiteSpace(profile.ParentName)
-                ? new UsaSpendingRecipientParentRef
+        var candidates = new List<UsaSpendingRecipientParentRef>();
+        if (!string.IsNullOrWhiteSpace(profile.ParentName))
+        {
+            candidates.Add(
+                new UsaSpendingRecipientParentRef
                 {
                     ParentId = profile.ParentId,
                     ParentName = profile.ParentName,
+                    ParentDuns = profile.ParentDuns,
+                    ParentUei = profile.ParentUei,
                 }
-                : null;
-
-        if (candidate == null)
-        {
-            var distinct = (profile.Parents ?? [])
-                .Where(p =>
-                    !string.IsNullOrWhiteSpace(p?.ParentId)
-                    && !string.IsNullOrWhiteSpace(p.ParentName)
-                )
-                .GroupBy(p => p.ParentId, StringComparer.Ordinal)
-                .Select(g => g.First())
-                .ToList();
-            if (distinct.Count == 1)
-                candidate = distinct[0];
+            );
         }
+        candidates.AddRange(
+            (profile.Parents ?? []).Where(p => !string.IsNullOrWhiteSpace(p?.ParentName))
+        );
 
-        if (candidate == null || candidate.ParentId == recipientId)
+        var groups = candidates
+            .Select(c => (Key: RegistrantKey(c), Candidate: c))
+            .Where(x => x.Key != null)
+            .GroupBy(x => x.Key, StringComparer.Ordinal)
+            .ToList();
+        if (groups.Count != 1)
             return null;
 
-        return candidate;
+        var members = groups[0].Select(x => x.Candidate).ToList();
+        return new RecipientParentChoice
+        {
+            ParentId = members
+                .Select(m => m.ParentId)
+                .FirstOrDefault(id => !string.IsNullOrWhiteSpace(id)),
+            Names = members
+                .Select(m => m.ParentName.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+        };
     }
+
+    /// <summary>
+    /// The identity two parent entries must share to count as the SAME registrant. DUNS
+    /// first — it survives renames and the DUNS→UEI migration (Lockheed appears under one
+    /// DUNS but two UEIs/hashes). Entries missing every identity are unusable. Prefixed
+    /// so a DUNS value can never collide with a UEI or hash value.
+    /// </summary>
+    private static string RegistrantKey(UsaSpendingRecipientParentRef candidate)
+    {
+        if (!string.IsNullOrWhiteSpace(candidate.ParentDuns))
+            return "duns:" + candidate.ParentDuns;
+        if (!string.IsNullOrWhiteSpace(candidate.ParentUei))
+            return "uei:" + candidate.ParentUei;
+        if (!string.IsNullOrWhiteSpace(candidate.ParentId))
+            return "id:" + candidate.ParentId;
+        return null;
+    }
+
+    /// <summary>
+    /// The registrant's names pack newline-delimited into one bounded column; whole names
+    /// only — a name that would cross the 1024 bound is dropped, never cut mid-way into a
+    /// string that could exact-match the wrong company.
+    /// </summary>
+    internal static string JoinParentNames(IReadOnlyList<string> names)
+    {
+        if (names == null || names.Count == 0)
+            return null;
+
+        var kept = new List<string>();
+        var length = 0;
+        foreach (var name in names)
+        {
+            var cost = name.Length + (kept.Count > 0 ? 1 : 0);
+            if (length + cost > 1024)
+                continue;
+            kept.Add(name);
+            length += cost;
+        }
+
+        return kept.Count > 0 ? string.Join('\n', kept) : null;
+    }
+
+    internal static string[] SplitParentNames(string parentNames) =>
+        parentNames == null ? [] : parentNames.Split('\n');
 
     private static string Truncate(string value, int maxLength) =>
         value != null && value.Length > maxLength ? value[..maxLength] : value;
@@ -482,8 +561,25 @@ public class GovernmentContractsImportService : IImporter
             scope.ServiceProvider.GetRequiredService<GovernmentContractsScanStateRepository>();
 
         var state = await repository.GetByName(ScanStateName);
-        if (state == null || state.MatchingVersion >= RecipientMatchingVersion)
+        if (state == null)
+        {
+            // No checkpoint row yet. A truly fresh install needs no reset (whatever it
+            // scans, it scans under current rules, and AdvanceCheckpoint stamps its first
+            // row current) — but an install that already HOLDS contracts scanned them
+            // under older rules, and skipping here would let that history be marked
+            // current without ever re-walking it. Open the row as a version-0 reset.
+            var contractRepository =
+                scope.ServiceProvider.GetRequiredService<GovernmentContractRepository>();
+            if (!await contractRepository.GetAll().AnyAsync(cancellationToken))
+                return;
+
+            state = new GovernmentContractsScanState { Name = ScanStateName };
+            repository.Add(state);
+        }
+        else if (state.MatchingVersion >= RecipientMatchingVersion)
+        {
             return;
+        }
 
         _logger.LogInformation(
             "Government contracts import: recipient matching upgraded (v{From} -> v{To}); "
@@ -496,7 +592,6 @@ public class GovernmentContractsImportService : IImporter
         state.LastCompletedWindowEnd = UsaSpendingMinimumActionDate.AddDays(-1);
         state.MatchingVersion = RecipientMatchingVersion;
         state.UpdatedAt = DateTime.UtcNow;
-        repository.Update(state);
         await repository.SaveChanges();
     }
 

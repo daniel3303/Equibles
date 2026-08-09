@@ -24,8 +24,10 @@ public static partial class RecipientNameNormalizer
     // ("Caci International Inc /De/", "Nve Corp /New/", "Fnb Corp/Pa/") that USAspending
     // recipient names never do; left in place it lands a stray trailing token in the key and
     // defeats the exact match. Removing the marker is a mechanical format rule, not a
-    // heuristic — matching stays exact on what remains.
-    [GeneratedRegex("/[A-Za-z ]{1,8}/")]
+    // heuristic — matching stays exact on what remains. Anchored to the END of the name
+    // (markers are always trailing, possibly stacked) so interior slashes in a real name
+    // can never be mangled into a different key.
+    [GeneratedRegex(@"(?:/[A-Za-z ]{1,8}/\s*)+$")]
     private static partial Regex EdgarSlashMarker();
 
     private static readonly HashSet<string> LegalSuffixes = new(StringComparer.Ordinal)

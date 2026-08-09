@@ -35,6 +35,15 @@ public class RecipientNameNormalizerEdgarSlashMarkerTests
     }
 
     [Fact]
+    public void Normalize_InteriorSlashes_AreNeverMangledByTheMarkerRule()
+    {
+        // The marker regex is anchored to the END of the name; interior short slash-wrapped
+        // segments (an unanchored pattern would pair "AB/CD EF/GH"'s inner slashes and
+        // silently drop "CD EF") keep the pre-existing slash-becomes-space behaviour.
+        RecipientNameNormalizer.Normalize("AB/CD EF/GH Corp").Should().Be("AB CD EF GH");
+    }
+
+    [Fact]
     public void Normalize_SingleSlashSuffix_IsUntouchedByTheMarkerRule()
     {
         // "Slb Limited/Nv" has no closing slash, so the marker regex must not fire; the

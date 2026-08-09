@@ -1171,9 +1171,9 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.Property<string>("ParentName")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                    b.Property<string>("ParentNames")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
 
                     b.Property<string>("ParentRecipientId")
                         .HasMaxLength(64)

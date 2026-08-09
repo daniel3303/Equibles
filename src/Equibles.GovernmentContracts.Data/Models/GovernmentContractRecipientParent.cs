@@ -30,16 +30,21 @@ public class GovernmentContractRecipientParent
     public string RecipientName { get; set; }
 
     /// <summary>
-    /// The parent's level-qualified recipient hash; null when the profile names no parent,
-    /// names more than one distinct parent (ambiguous — never guessed), or the recipient is
-    /// unknown to the profile endpoint.
+    /// A representative level-qualified hash for the parent registrant; null when the
+    /// profile names no parent, names more than one distinct REGISTRANT (ownership moved —
+    /// ambiguous, never guessed), or the recipient is unknown to the profile endpoint.
     /// </summary>
     [MaxLength(64)]
     public string ParentRecipientId { get; set; }
 
-    /// <summary>The parent's registered name; null under the same conditions.</summary>
-    [MaxLength(512)]
-    public string ParentName { get; set; }
+    /// <summary>
+    /// Every name the parent registrant has carried (legal renames are one owner),
+    /// newline-delimited; null under the same conditions as
+    /// <see cref="ParentRecipientId"/>. Resolution tries each name through the exact
+    /// normalised lookup, so whichever name our stock universe stores can match.
+    /// </summary>
+    [MaxLength(1024)]
+    public string ParentNames { get; set; }
 
     /// <summary>When the profile was last fetched (UTC) — drives point-of-use re-resolution.</summary>
     public DateTime ResolvedAt { get; set; }

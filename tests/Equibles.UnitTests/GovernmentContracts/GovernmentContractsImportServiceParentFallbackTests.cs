@@ -50,6 +50,7 @@ public class GovernmentContractsImportServiceParentFallbackTests
                     RecipientId = SubsidiaryRecipientId,
                     ParentId = "def456-P",
                     ParentName = "CACI INTERNATIONAL INC",
+                    ParentDuns = "045534641",
                 }
             );
 
@@ -63,7 +64,7 @@ public class GovernmentContractsImportServiceParentFallbackTests
         var cached = ctx.Set<GovernmentContractRecipientParent>().AsNoTracking().Single();
         cached.RecipientId.Should().Be(SubsidiaryRecipientId);
         cached.ParentRecipientId.Should().Be("def456-P");
-        cached.ParentName.Should().Be("CACI INTERNATIONAL INC");
+        cached.ParentNames.Should().Be("CACI INTERNATIONAL INC");
     }
 
     [Fact]
@@ -80,7 +81,7 @@ public class GovernmentContractsImportServiceParentFallbackTests
                     RecipientId = SubsidiaryRecipientId,
                     RecipientName = SubsidiaryName,
                     ParentRecipientId = "def456-P",
-                    ParentName = "CACI INTERNATIONAL INC",
+                    ParentNames = "CACI INTERNATIONAL INC",
                     ResolvedAt = DateTime.UtcNow.AddDays(-1),
                 }
             );
@@ -123,7 +124,7 @@ public class GovernmentContractsImportServiceParentFallbackTests
         using var ctx = NewContext(options);
         ctx.Set<GovernmentContract>().AsNoTracking().Should().BeEmpty();
         var cached = ctx.Set<GovernmentContractRecipientParent>().AsNoTracking().Single();
-        cached.ParentName.Should().BeNull();
+        cached.ParentNames.Should().BeNull();
         cached.ParentRecipientId.Should().BeNull();
     }
 
