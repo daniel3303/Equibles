@@ -260,6 +260,10 @@ public class ShortDataTools
         [Description("Maximum number of results to return (default: 50, max: 500)")]
             int maxResults = 50,
         [Description(
+            "Number of ranked results to skip before returning rows — pass the previous call's last row number to page past the maxResults cap (default: 0)"
+        )]
+            int offset = 0,
+        [Description(
             "Minimum average daily share volume — set a floor (e.g. 100000) to drop illiquid names whose days-to-cover is inflated by a tiny volume denominator (default: 0 = no floor)"
         )]
             long minAvgDailyVolume = 0,
@@ -332,8 +336,14 @@ public class ShortDataTools
                     );
                 }
 
+                offset = McpLimit.ClampOffset(offset);
                 var total = await query.CountAsync();
-                var records = await ordered.Take(McpLimit.Clamp(maxResults)).ToListAsync();
+                var records = await ordered
+                    .Skip(offset)
+                    .Take(McpLimit.Clamp(maxResults))
+                    .ToListAsync();
+                if (records.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {total} rows match; lower offset.";
 
                 var volumeClause =
                     minAvgDailyVolume > 0
@@ -349,10 +359,13 @@ public class ShortDataTools
                     r => RenderShortInterestRow(r.CommonStock.Ticker, r)
                 );
 
-                return AppendNote(table, McpOutput.TruncationNote(records.Count, total));
+                return AppendNote(
+                    table,
+                    McpOutput.PagedTruncationNote(records.Count, total, offset)
+                );
             },
             "GetShortInterestSnapshot",
-            $"minDaysToCover: {minDaysToCover}, minAvgDailyVolume: {minAvgDailyVolume}, sortBy: {sortBy}"
+            $"minDaysToCover: {minDaysToCover}, minAvgDailyVolume: {minAvgDailyVolume}, sortBy: {sortBy}, offset: {offset}"
         );
     }
 
@@ -370,6 +383,10 @@ public class ShortDataTools
         [Description("Minimum short volume filter (default: 0)")] long minShortVolume = 0,
         [Description("Maximum number of results to return (default: 50, max: 500)")]
             int maxResults = 50,
+        [Description(
+            "Number of ranked results to skip before returning rows — pass the previous call's last row number to page past the maxResults cap (default: 0)"
+        )]
+            int offset = 0,
         [Description(
             "Sort key: shortVolume (default) or shortPercent — with shortPercent set a minTotalVolume floor, otherwise illiquid names dominate"
         )]
@@ -432,8 +449,14 @@ public class ShortDataTools
                     return McpOutput.InvalidArgument("sortBy", sortBy, "shortVolume, shortPercent");
                 }
 
+                offset = McpLimit.ClampOffset(offset);
                 var total = await query.CountAsync();
-                var records = await ordered.Take(McpLimit.Clamp(maxResults)).ToListAsync();
+                var records = await ordered
+                    .Skip(offset)
+                    .Take(McpLimit.Clamp(maxResults))
+                    .ToListAsync();
+                if (records.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {total} rows match; lower offset.";
 
                 var totalVolumeClause =
                     minTotalVolume > 0
@@ -451,10 +474,13 @@ public class ShortDataTools
                     r => RenderShortVolumeRow($"{r.CommonStock.Ticker} | {r.CommonStock.Name}", r)
                 );
 
-                return AppendNote(table, McpOutput.TruncationNote(records.Count, total));
+                return AppendNote(
+                    table,
+                    McpOutput.PagedTruncationNote(records.Count, total, offset)
+                );
             },
             "GetLargestShortVolume",
-            $"date: {date}, sortBy: {sortBy}, minTotalVolume: {minTotalVolume}"
+            $"date: {date}, sortBy: {sortBy}, minTotalVolume: {minTotalVolume}, offset: {offset}"
         );
     }
 
@@ -612,7 +638,11 @@ public class ShortDataTools
         [Description(
             "Optional stock ticker (e.g. GME): returns that one stock's score, factor breakdown, and rank within the scored universe instead of the board. The liquidity floors do not apply to a single-ticker lookup."
         )]
-            string ticker = null
+            string ticker = null,
+        [Description(
+            "Number of ranked results to skip before returning rows — pass the previous call's last rank to page past the maxResults cap (default: 0; ignored for a single-ticker lookup)"
+        )]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -656,6 +686,9 @@ public class ShortDataTools
                     return $"No scored stocks clear the requested liquidity floor (of {scores.Count} scored at settlement {settlementDate:yyyy-MM-dd}). Lower minMarketCap/minDollarVolume.";
 
                 var take = Math.Clamp(maxResults, 1, 200);
+                offset = McpLimit.ClampOffset(offset);
+                if (offset >= filtered.Count)
+                    return $"No results at offset {offset} - only {filtered.Count} scored stocks clear the filters; lower offset.";
                 var sb = new System.Text.StringBuilder();
                 sb.AppendLine(
                     $"# Highest short-squeeze scores — settlement {settlementDate:yyyy-MM-dd}"
@@ -671,12 +704,14 @@ public class ShortDataTools
                 sb.AppendLine(
                     "|---|--------|-------|-------------------|---------------|--------------------|------------------|-------------|---------------|-----------|------------|--------------|"
                 );
-                var shown = Math.Min(take, filtered.Count);
+                var shown = Math.Min(take, filtered.Count - offset);
                 sb.AppendNumberedRows(
-                    filtered.Take(take).ToList(),
+                    filtered.Skip(offset).Take(take).ToList(),
                     (rank, score) =>
                     {
-                        return $"| {rank} | {score.Ticker} | {score.Score.ToString("0", CultureInfo.InvariantCulture)} | "
+                        // Rank is the ABSOLUTE position in the filtered board, so page two
+                        // continues 26, 27, … instead of restarting at 1.
+                        return $"| {offset + rank} | {score.Ticker} | {score.Score.ToString("0", CultureInfo.InvariantCulture)} | "
                             + $"{score.ShortInterestPercentOfShares.ToString("P1", CultureInfo.InvariantCulture)} | "
                             + $"{score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"} | "
                             + $"{FormatSignedPercent(score.ShortVolumeShareTrend)} | "
@@ -687,16 +722,22 @@ public class ShortDataTools
                     }
                 );
 
-                if (shown < filtered.Count)
+                var pagedNote = McpOutput.PagedTruncationNote(
+                    shown,
+                    filtered.Count,
+                    offset,
+                    cap: 200
+                );
+                if (pagedNote.Length > 0)
                 {
                     sb.AppendLine();
-                    sb.AppendLine(McpOutput.TruncationNote(shown, filtered.Count));
+                    sb.AppendLine(pagedNote);
                 }
 
                 return sb.ToString();
             },
             "GetShortSqueezeScores",
-            $"minMarketCap: {minMarketCap}, minDollarVolume: {minDollarVolume}, maxResults: {maxResults}, ticker: {ticker}"
+            $"minMarketCap: {minMarketCap}, minDollarVolume: {minDollarVolume}, maxResults: {maxResults}, ticker: {ticker}, offset: {offset}"
         );
     }
 

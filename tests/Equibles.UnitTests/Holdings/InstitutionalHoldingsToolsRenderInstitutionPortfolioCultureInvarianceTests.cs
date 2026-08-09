@@ -61,7 +61,9 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
             targetDate,
             holdings,
             splitsByStock,
-            holdings.Count,
+            0, // offset
+            holdings.Count, // totalRows
+            holdings.Count, // totalPositions
             holdings.Sum(h => h.Value),
             0, // unvaluedPositions
             null,

@@ -376,7 +376,11 @@ public class InstitutionalHoldingsTools
         )]
             string reportDate = null,
         [Description("Maximum number of holdings to return (default: 20, clamped to 1-500)")]
-            int maxResults = 20
+            int maxResults = 20,
+        [Description(
+            "Number of ranked holding rows to skip before returning rows — pass the previous call's last row number to page past the maxResults cap (default: 0)"
+        )]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -414,6 +418,11 @@ public class InstitutionalHoldingsTools
                     .GroupBy(h => 1)
                     .Select(g => new
                     {
+                        // Rows and Positions differ: a stock held as shares AND as puts/calls
+                        // is one distinct position spread over several holding rows, and the
+                        // table below renders ROWS — quoting the distinct-stock count as its
+                        // denominator once produced "top 39 of 35".
+                        Rows = g.Count(),
                         Positions = g.Select(h => h.CommonStockId).Distinct().Count(),
                         Value = g.Sum(h => h.Value),
                         Unvalued = g.Where(h =>
@@ -425,6 +434,7 @@ public class InstitutionalHoldingsTools
                             .Count(),
                     })
                     .FirstOrDefaultAsync();
+                var totalRows = summary?.Rows ?? 0;
                 var totalPositions = summary?.Positions ?? 0;
                 var totalValue = summary?.Value ?? 0L;
                 var unvaluedPositions = summary?.Unvalued ?? 0;
@@ -439,11 +449,20 @@ public class InstitutionalHoldingsTools
                     .ThenByDescending(f => f.AccessionNumber)
                     .FirstOrDefaultAsync();
 
+                offset = McpLimit.ClampOffset(offset);
+                // Values tie (equal-sized lines, $0 unvalued rows), so the ordering ends on
+                // the row id — an offset over a partial order would silently repeat or skip
+                // rows between pages.
                 var holdings = await allHoldings
                     .OrderByDescending(h => h.Value)
+                    .ThenBy(h => h.CommonStockId)
+                    .ThenBy(h => h.Id)
+                    .Skip(offset)
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
+                if (holdings.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {totalRows} holding rows on file for {holder.Name} as of {FormatDate(targetDate)}; lower offset.";
                 if (holdings.Count == 0)
                     return $"No holdings found for {holder.Name} as of {FormatDate(targetDate)}.";
 
@@ -458,6 +477,8 @@ public class InstitutionalHoldingsTools
                     targetDate,
                     holdings,
                     splitsByStock,
+                    offset,
+                    totalRows,
                     totalPositions,
                     totalValue,
                     unvaluedPositions,
@@ -466,7 +487,7 @@ public class InstitutionalHoldingsTools
                 );
             },
             "GetInstitutionPortfolio",
-            $"institution: {institutionName}"
+            $"institution: {institutionName}, offset: {offset}"
         );
     }
 
@@ -475,6 +496,8 @@ public class InstitutionalHoldingsTools
         DateOnly targetDate,
         List<InstitutionalHolding> holdings,
         IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
+        int offset,
+        int totalRows,
         int totalPositions,
         long totalValue,
         int unvaluedPositions,
@@ -482,8 +505,13 @@ public class InstitutionalHoldingsTools
         string notes
     )
     {
+        // The table renders holding ROWS, so the coverage line counts rows — quoting the
+        // distinct-stock count as the denominator once produced "top 39 of 35" for a filer
+        // whose stocks appear as separate share and option rows.
         var subtitle =
-            $"Showing top {holdings.Count} of {McpFormat.WholeNumber(totalPositions)} tracked positions. "
+            $"Showing holding rows {offset + 1}-{offset + holdings.Count} of {McpFormat.WholeNumber(totalRows)}, "
+            + $"largest value first ({McpFormat.WholeNumber(totalPositions)} distinct tracked stocks — a stock "
+            + "held as shares and as options appears as separate rows). "
             + $"Tracked 13F value: ${FormatMillions(totalValue)}M";
 
         // The filer's own cover-page declaration, when captured, makes the coverage exact: the
@@ -546,7 +574,9 @@ public class InstitutionalHoldingsTools
                 var pct = Percentage.Of(h.Value, totalValue);
                 // The exact listing held: a GOOG position must not render as GOOGL.
                 var listedTicker = h.ListedTicker ?? h.CommonStock.Ticker;
-                return $"| {rank} | {listedTicker} | {h.CommonStock.Name} | "
+                // Rank is the ABSOLUTE position in the value-ranked rows, so page two
+                // continues 21, 22, … instead of restarting at 1.
+                return $"| {offset + rank} | {listedTicker} | {h.CommonStock.Name} | "
                     + $"{PositionType(h.OptionType)} | "
                     + $"{McpFormat.WholeNumber(shares)} | "
                     + $"{FormatMillions(h.Value)} | "
@@ -571,6 +601,13 @@ public class InstitutionalHoldingsTools
                 + "coverage — preferred shares, bonds, warrants, untracked share classes — so the "
                 + "filing's own declared total can exceed the figure above._"
         );
+
+        var pagedNote = McpOutput.PagedTruncationNote(holdings.Count, totalRows, offset);
+        if (pagedNote.Length > 0)
+        {
+            result.AppendLine();
+            result.AppendLine(pagedNote);
+        }
 
         return result.ToString();
     }

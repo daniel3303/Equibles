@@ -265,7 +265,11 @@ public class InsiderTradingTools
         [Description(
             "Maximum number of insiders to return (default: 30, max: 500; values outside 1-500 are clamped)"
         )]
-            int maxResults = 30
+            int maxResults = 30,
+        [Description(
+            "Number of ranked insiders to skip before returning rows — pass the previous call's shown count to page past the maxResults cap (default: 0)"
+        )]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -300,6 +304,10 @@ public class InsiderTradingTools
                 // adjusted holding so the ordering — and the top-N cut itself — compares
                 // like with like.
                 var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                offset = McpLimit.ClampOffset(offset);
+                // Adjusted holdings tie constantly (zero-share former insiders), so the
+                // ordering ends on stable keys — an offset over a partial order would
+                // silently repeat or skip insiders between pages.
                 var ranked = latestTransactions
                     .OrderByDescending(t =>
                         SplitAdjustment.AdjustShareCount(
@@ -308,9 +316,14 @@ public class InsiderTradingTools
                             splits
                         )
                     )
+                    .ThenBy(t => t.InsiderOwner.Name)
+                    .ThenBy(t => t.Id)
+                    .Skip(offset)
                     .Take(maxResults)
                     .ToList();
 
+                if (ranked.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {latestTransactions.Count} insiders on file; lower offset.";
                 if (ranked.Count == 0)
                     return $"No insider ownership data found for {stock.Ticker}.";
 
@@ -340,7 +353,11 @@ public class InsiderTradingTools
                     }
                 );
 
-                var truncation = McpOutput.TruncationNote(ranked.Count, latestTransactions.Count);
+                var truncation = McpOutput.PagedTruncationNote(
+                    ranked.Count,
+                    latestTransactions.Count,
+                    offset
+                );
                 if (truncation.Length > 0)
                 {
                     sb.AppendLine();
@@ -350,7 +367,7 @@ public class InsiderTradingTools
                 return sb.ToString();
             },
             "GetInsiderOwnership",
-            $"ticker: {ticker}"
+            $"ticker: {ticker}, offset: {offset}"
         );
     }
 
@@ -468,13 +485,18 @@ public class InsiderTradingTools
         [Description(
             "Maximum number of results (default: 10, max: 500; values outside 1-500 are clamped)"
         )]
-            int maxResults = 10
+            int maxResults = 10,
+        [Description(
+            "Number of matches to skip before returning rows — pass the previous call's shown count to page past the maxResults cap (default: 0)"
+        )]
+            int offset = 0
     )
     {
         return _runner.Execute(
             async () =>
             {
                 maxResults = McpLimit.Clamp(maxResults);
+                offset = McpLimit.ClampOffset(offset);
 
                 var matches = _ownerRepository.Search(query);
                 var total = await matches.CountAsync();
@@ -490,9 +512,12 @@ public class InsiderTradingTools
                     )
                     .ThenBy(o => o.Name)
                     .ThenBy(o => o.OwnerCik)
+                    .Skip(offset)
                     .Take(maxResults)
                     .ToListAsync();
 
+                if (insiders.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {total} insiders match; lower offset.";
                 if (insiders.Count == 0)
                     return $"No insiders found matching '{query}'. Names are matched as filed with the SEC (legal names, often 'LAST FIRST MIDDLE') and every word of the query must appear in the name - retry with the surname alone.";
 
@@ -541,7 +566,7 @@ public class InsiderTradingTools
                     }
                 );
 
-                var truncation = McpOutput.TruncationNote(insiders.Count, total);
+                var truncation = McpOutput.PagedTruncationNote(insiders.Count, total, offset);
                 if (truncation.Length > 0)
                 {
                     sb.AppendLine();
@@ -551,7 +576,7 @@ public class InsiderTradingTools
                 return sb.ToString();
             },
             "SearchInsiders",
-            $"query: {query}"
+            $"query: {query}, offset: {offset}"
         );
     }
 

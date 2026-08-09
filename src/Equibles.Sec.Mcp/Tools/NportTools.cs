@@ -61,10 +61,18 @@ public class NportTools
                     .Take(McpLimit.Clamp(maxResults))
                     .ToList();
 
+                // Sweep-discovered series (no CommonStock link) only have their TRACKED-stock
+                // positions stored, so their row count is a subset, not the portfolio — a bond
+                // fund would otherwise read "0 total holdings" beside billions in net assets.
+                var storedCountLabel =
+                    filing.CommonStockId == null
+                        ? $"{filing.Holdings.Count} tracked-stock holdings on record (only positions in stocks this platform tracks are stored for this fund — not its full portfolio)"
+                        : $"{filing.Holdings.Count} total holdings";
+
                 var result = MarkdownTable.Start(
                     $"Portfolio holdings for {fundName} ({ticker}) — "
                         + $"reported {filing.ReportPeriodDate:yyyy-MM-dd}, net assets ${FormatAmount(filing.NetAssets)}, "
-                        + $"{filing.Holdings.Count} total holdings, showing the largest {holdings.Count}:",
+                        + $"{storedCountLabel}, showing the largest {holdings.Count}:",
                     "| Holding | CUSIP | Balance | Units | Value (USD) | % Net Assets | Category | Country |",
                     "|---------|-------|---------|-------|-------------|--------------|----------|---------|"
                 );

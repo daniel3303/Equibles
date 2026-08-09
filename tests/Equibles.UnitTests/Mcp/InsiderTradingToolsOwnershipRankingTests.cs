@@ -206,7 +206,11 @@ public class InsiderTradingToolsOwnershipRankingTests
 
         output.Should().Contain("First Holder");
         output.Should().NotContain("Second Holder");
-        output.Should().Contain("Showing first 1 of 2 results - raise maxResults to see more.");
+        output
+            .Should()
+            .Contain(
+                "Showing results 1-1 of 2 - raise maxResults (max 500) or pass offset=1 to continue."
+            );
     }
 
     [Fact]

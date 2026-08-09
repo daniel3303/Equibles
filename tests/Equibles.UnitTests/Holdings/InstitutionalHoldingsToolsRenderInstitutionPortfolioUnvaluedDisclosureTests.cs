@@ -41,6 +41,8 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioUnvaluedDisclos
                     new DateOnly(2026, 3, 31),
                     holdings,
                     new Dictionary<Guid, List<StockSplit>>(),
+                    0,
+                    holdings.Count,
                     holdings.Count,
                     holdings.Sum(h => h.Value),
                     unvaluedPositions,

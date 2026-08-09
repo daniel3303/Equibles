@@ -76,6 +76,10 @@ public class FundDirectoryTools
 
                 var result = MarkdownTable.Start(
                     $"Registered funds matching '{query}', largest by net assets first (showing {matches.Count} of {totalCount}):",
+                    // Sweep-discovered series only have their tracked-stock positions stored,
+                    // so a bond fund's Holdings can read 0 beside real net assets — say so, or
+                    // the count reads as "this fund holds nothing".
+                    "_Holdings = stored holding rows on the fund's latest report. For the large multi-series trusts only positions in stocks this platform tracks are stored, so the count can be a small subset of (or zero within) the real portfolio; Net Assets is always the fund's own reported total._",
                     "| Fund | Profile id | Ticker | Type | Net Assets (USD) | Holdings | Latest Report |",
                     "|------|-----------|--------|------|------------------|----------|---------------|"
                 );
