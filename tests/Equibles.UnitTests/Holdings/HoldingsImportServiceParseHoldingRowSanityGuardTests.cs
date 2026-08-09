@@ -107,6 +107,23 @@ public class HoldingsImportServiceParseHoldingRowSanityGuardTests
     }
 
     [Fact]
+    public void ParseHoldingRow_FiledValueOnThousandsBasis_PublishesDerivedValue()
+    {
+        // A filer still reporting VALUE in thousands after the 2023 whole-dollar switch:
+        // 273,201 × $208.40 derives $56.9M against a filed 56,935 — the ~1,000× unit
+        // signature. The heal runs through this exact path on re-import (parser version 8).
+        var (holding, valuePending) = Parse(
+            Guid.NewGuid(),
+            closePrice: 208.40m,
+            filedValueField: "56935"
+        );
+
+        valuePending.Should().BeFalse();
+        holding.Value.Should().Be((long)(273_201m * 208.40m));
+        holding.ValueSource.Should().Be(ValueSource.Derived);
+    }
+
+    [Fact]
     public void ParseHoldingRow_OrdinaryDerivation_StaysDerived()
     {
         // 273,201 × $4 ≈ the filed $1.09M — inside the 5× drift ceiling, published as derived.

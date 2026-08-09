@@ -343,4 +343,30 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
         updated.Value.Should().Be(1_092_804L);
         updated.ValueSource.Should().Be(ValueSource.Filed);
     }
+
+    [Fact]
+    public async Task Recalculate_FiledValueOnThousandsBasis_PublishesDerivedValue()
+    {
+        var reportDate = new DateOnly(2026, 3, 31);
+        // The Baupost signature: a filer still reporting the VALUE column in thousands after
+        // the SEC's 2023 whole-dollar switch. 3,118,754 shares × $208.40 derives ~$650M against
+        // a filed 649,543 — almost exactly 1,000×. The old guard read that as an implausible
+        // derivation and published the filed figure, serving the position 1,000× understated.
+        var (stock, holding) = await Seed(
+            reportDate,
+            shares: 3_118_754,
+            filedValue: 649_543L,
+            retryCount: 0,
+            lastRetryAt: null
+        );
+
+        SetPrices(new() { [(stock.Id, null, reportDate)] = 208.40m });
+
+        await CreateRecalculator().Recalculate(CancellationToken.None);
+
+        var updated = await Reload(holding.Id);
+        updated.ValuePending.Should().BeFalse();
+        updated.Value.Should().Be((long)(3_118_754m * 208.40m));
+        updated.ValueSource.Should().Be(ValueSource.Derived);
+    }
 }
