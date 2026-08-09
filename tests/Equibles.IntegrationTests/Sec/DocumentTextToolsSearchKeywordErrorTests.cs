@@ -2,6 +2,7 @@ using System.Text;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Errors.Data.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
@@ -29,7 +30,7 @@ public class DocumentTextToolsSearchKeywordErrorTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public async Task SearchDocumentKeyword_NullKeyword_LogsReportsAndReturnsFallback()
+    public async Task SearchDocumentKeyword_NullKeyword_LogsReportsAndThrowsFault()
     {
         var content = "Some filing text on the only line.";
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
@@ -64,9 +65,13 @@ public class DocumentTextToolsSearchKeywordErrorTests : ParadeDbMcpTestBase
             Substitute.For<ILogger<DocumentTextTools>>()
         );
 
-        var output = await sut.SearchDocumentKeyword(document.Id, keyword: null);
+        var act = () => sut.SearchDocumentKeyword(document.Id, keyword: null);
 
-        output.Should().Be("An error occurred while searching the document. Please try again.");
+        // The failure surfaces as a tool fault (translated to an in-band isError result by
+        // the decorator) instead of success-shaped text, so it is countable as an error.
+        (await act.Should().ThrowAsync<McpToolFaultException>()).WithMessage(
+            "An error occurred while searching the document. Please try again."
+        );
 
         await using var verify = Fixture.CreateDbContext();
         var reported = await verify

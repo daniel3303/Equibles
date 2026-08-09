@@ -42,6 +42,17 @@ public class InvalidParamsTranslatingTool : McpServerTool
         {
             return await _inner.InvokeAsync(request, cancellationToken);
         }
+        catch (McpToolFaultException ex)
+        {
+            // Already logged and reported by McpToolExecutor — this is only the transport
+            // translation: an in-band tool error the client (and the usage-recording
+            // middleware's isError detection) can see, instead of a success-shaped string.
+            return new CallToolResult
+            {
+                IsError = true,
+                Content = [new TextContentBlock { Text = ex.Message }],
+            };
+        }
         catch (Exception ex) when (ex is ArgumentException or JsonException)
         {
             _logger.LogInformation(

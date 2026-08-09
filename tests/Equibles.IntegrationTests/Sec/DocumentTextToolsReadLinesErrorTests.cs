@@ -1,5 +1,6 @@
 using Equibles.Errors.Data.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Mcp;
 using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
@@ -23,7 +24,7 @@ public class DocumentTextToolsReadLinesErrorTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public async Task ReadDocumentLines_RepositoryThrows_LogsReportsAndReturnsFallback()
+    public async Task ReadDocumentLines_RepositoryThrows_LogsReportsAndThrowsFault()
     {
         // A repository over a disposed context throws on first access, driving
         // the catch arm. The error manager uses the live base context.
@@ -37,9 +38,13 @@ public class DocumentTextToolsReadLinesErrorTests : ParadeDbMcpTestBase
             Substitute.For<ILogger<DocumentTextTools>>()
         );
 
-        var output = await sut.ReadDocumentLines(Guid.NewGuid(), startLine: 1, endLine: 10);
+        var act = () => sut.ReadDocumentLines(Guid.NewGuid(), startLine: 1, endLine: 10);
 
-        output.Should().Be("An error occurred while reading document lines. Please try again.");
+        // The failure surfaces as a tool fault (translated to an in-band isError result by
+        // the decorator) instead of success-shaped text, so it is countable as an error.
+        (await act.Should().ThrowAsync<McpToolFaultException>()).WithMessage(
+            "An error occurred while reading document lines. Please try again."
+        );
 
         await using var verify = Fixture.CreateDbContext();
         var reported = await verify

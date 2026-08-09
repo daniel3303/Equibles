@@ -24,6 +24,42 @@ public static class McpFormat
     public static string Invariant<T>(T value, string format)
         where T : IFormattable => value.ToString(format, CultureInfo.InvariantCulture);
 
+    // Per-share price with magnitude-adaptive decimals: two decimals at or above $1, and
+    // below that enough decimals to keep at least two significant digits (capped at 8), so a
+    // sub-dollar OHLC row never collapses to one flat value — a $0.0072 close rendered "0.01"
+    // was 39% overstated and reported a 20% daily range as flat. The rule follows the VALUE,
+    // never a per-tool constant, so every price column shares one behaviour.
+    public static string Price(decimal value)
+    {
+        var abs = Math.Abs(value);
+        if (abs >= 1m || abs == 0m)
+        {
+            return value.ToString("F2", CultureInfo.InvariantCulture);
+        }
+
+        var decimals = 2;
+        var scaled = abs;
+        while (scaled < 0.1m && decimals < 8)
+        {
+            scaled *= 10m;
+            decimals++;
+        }
+        return value.ToString("F" + decimals, CultureInfo.InvariantCulture);
+    }
+
+    // Nullable companion to Price: em-dash when null.
+    public static string PriceOrDash(decimal? value) => value.HasValue ? Price(value.Value) : Dash;
+
+    // Signed price delta (change columns): explicit +/− with Price's adaptive decimals, so a
+    // sub-dollar move never rounds to a signless 0.00.
+    public static string SignedPrice(decimal value) =>
+        value switch
+        {
+            > 0 => "+" + Price(value),
+            < 0 => "-" + Price(Math.Abs(value)),
+            _ => Price(0m),
+        };
+
     // Compact USD for wide-magnitude dollar figures (market caps, dollar volumes):
     // $1.23T / $45.6B / $789M / $12.3K, em-dash when null. Invariant culture so MCP
     // markdown does not fork the decimal separator by host locale.

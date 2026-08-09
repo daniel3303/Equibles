@@ -49,23 +49,33 @@ public static class McpToolExecutor
         {
             return await action();
         }
+        catch (OperationCanceledException)
+        {
+            // A cancellation (host shutdown winding down an in-flight call, an aborted
+            // client) is not a fault worth an Errors row — same drop-by-type policy as
+            // ErrorReporter. Propagate it so the SDK handles the abort as an abort, but
+            // leave a trace: a cancellation storm (client aborting every call, a wedged
+            // upstream timing out as TaskCanceledException) must stay visible in logs.
+            logger.LogInformation("{ToolName} cancelled — {Context}", toolName, context);
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "{ToolName} failed — {Context}", toolName, context);
-            // A cancellation (host shutdown winding down an in-flight call, an aborted
-            // client) is not a fault worth an Errors row — same drop-by-type policy as
-            // ErrorReporter. The reporter receives the exception itself so the recorded
-            // row carries the flattened inner chain, not a wrapper's message.
-            if (ex is not OperationCanceledException)
+            // The reporter receives the exception itself so the recorded row carries the
+            // flattened inner chain, not a wrapper's message.
+            try
             {
-                try
-                {
-                    await reportError(toolName, ex, context);
-                }
-                catch { }
+                await reportError(toolName, ex, context);
             }
-            return errorMessage
-                ?? $"An error occurred while executing {toolName}. Please try again.";
+            catch { }
+            // Surface the fault as a fault: returning the message as ordinary tool text made
+            // the call count as a success (ErrorCount never moved) and left the calling model
+            // unable to tell a failure from an answer. InvalidParamsTranslatingTool turns
+            // this into an in-band isError tool result carrying the same message.
+            throw new McpToolFaultException(
+                errorMessage ?? $"An error occurred while executing {toolName}. Please try again."
+            );
         }
     }
 }

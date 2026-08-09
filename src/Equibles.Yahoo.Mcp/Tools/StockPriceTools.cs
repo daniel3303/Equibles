@@ -104,7 +104,7 @@ public class StockPriceTools
                 result.AppendRows(
                     records.OrderBy(p => p.Date),
                     p =>
-                        $"| {p.Date:yyyy-MM-dd} | {McpFormat.Invariant(p.Open, "F2")} | {McpFormat.Invariant(p.High, "F2")} | {McpFormat.Invariant(p.Low, "F2")} | {McpFormat.Invariant(p.Close, "F2")} | {McpFormat.WholeNumber(p.Volume)} |"
+                        $"| {p.Date:yyyy-MM-dd} | {McpFormat.Price(p.Open)} | {McpFormat.Price(p.High)} | {McpFormat.Price(p.Low)} | {McpFormat.Price(p.Close)} | {McpFormat.WholeNumber(p.Volume)} |"
                 );
 
                 AppendNewestKeptTruncationNote(result, records.Count, total);
@@ -204,7 +204,7 @@ public class StockPriceTools
                     if (previousClose != null)
                     {
                         var change = price.Close - previousClose.Value;
-                        changeCell = McpFormat.Invariant(change, "+0.00;-0.00;0.00");
+                        changeCell = McpFormat.SignedPrice(change);
                         changePctCell =
                             McpFormat.Invariant(
                                 change / previousClose.Value * 100m,
@@ -249,7 +249,7 @@ public class StockPriceTools
 
                     rowDates.Add(price.Date);
                     result.AppendLine(
-                        $"| {ticker} | {price.Date:yyyy-MM-dd} | {McpFormat.Invariant(price.Close, "F2")} | {changeCell} | {changePctCell} | {McpFormat.WholeNumber(price.Volume)} | {cells.High} | {cells.Low} | {cells.OffHigh} | {cells.AboveLow} |"
+                        $"| {ticker} | {price.Date:yyyy-MM-dd} | {McpFormat.Price(price.Close)} | {changeCell} | {changePctCell} | {McpFormat.WholeNumber(price.Volume)} | {cells.High} | {cells.Low} | {cells.OffHigh} | {cells.AboveLow} |"
                     );
                 }
 
@@ -583,9 +583,9 @@ public class StockPriceTools
                     maxResults,
                     i =>
                     {
-                        var lowerCell = McpFormat.OrDash(lower[i], "F2");
-                        var middleCell = McpFormat.OrDash(middle[i], "F2");
-                        var upperCell = McpFormat.OrDash(upper[i], "F2");
+                        var lowerCell = McpFormat.PriceOrDash(lower[i]);
+                        var middleCell = McpFormat.PriceOrDash(middle[i]);
+                        var upperCell = McpFormat.PriceOrDash(upper[i]);
                         var percentB = PercentB(closes[i], upper[i], lower[i]);
                         var bandwidth = Bandwidth(middle[i], upper[i], lower[i]);
                         return $"| {DateAndCloseCells(records[i])} | {lowerCell} | {middleCell} | {upperCell} | {McpFormat.OrDash(percentB, "F2")} | {McpFormat.OrDash(bandwidth, "F4")} |";
@@ -871,8 +871,8 @@ public class StockPriceTools
         // The row's own close must be positive too: a corrupt $0 bar would otherwise render
         // both distances as -100%, breaking the ≤0 / ≥0 sign contract the columns promise.
         return new FiftyTwoWeekCells(
-            McpFormat.Invariant(high, "F2") + star,
-            McpFormat.Invariant(low, "F2") + star,
+            McpFormat.Price(high) + star,
+            McpFormat.Price(low) + star,
             high > 0 && close > 0
                 ? McpFormat.Invariant((close / high - 1m) * 100m, "+0.00;-0.00;0.00") + "%"
                 : "—",
@@ -891,7 +891,7 @@ public class StockPriceTools
     // Leading "Date | Close" cells shared by every technical-indicator table row;
     // keeps the date format and close precision in sync across the four tables.
     private static string DateAndCloseCells(DailyStockPrice record) =>
-        $"{record.Date:yyyy-MM-dd} | {McpFormat.Invariant(record.Close, "F2")}";
+        $"{record.Date:yyyy-MM-dd} | {McpFormat.Price(record.Close)}";
 
     private static (
         List<decimal> Highs,
