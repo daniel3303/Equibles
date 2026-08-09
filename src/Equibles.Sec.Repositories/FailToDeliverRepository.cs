@@ -19,4 +19,15 @@ public class FailToDeliverRepository : BaseRepository<FailToDeliver>
     {
         return GetAll().LatestValue(f => f.SettlementDate, distinct: true);
     }
+
+    /// <summary>
+    /// The earliest settlement date on file across the whole table — the ingest lane is
+    /// forward-only from its first run, so this is the data's coverage floor. Absence
+    /// of a date can only be read as "no reported fails" INSIDE the covered window;
+    /// surfaces must scope that claim with this value.
+    /// </summary>
+    public IQueryable<DateOnly> GetEarliestDate()
+    {
+        return GetAll().OrderBy(f => f.SettlementDate).Select(f => f.SettlementDate).Take(1);
+    }
 }

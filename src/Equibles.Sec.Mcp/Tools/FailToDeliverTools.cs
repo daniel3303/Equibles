@@ -34,7 +34,7 @@ public class FailToDeliverTools
 
     [McpServerTool(Name = "GetFailsToDeliver", Title = "Fails-to-Deliver Data", ReadOnly = true)]
     [Description(
-        "Get fails-to-deliver (FTD) data for a stock from the SEC's twice-monthly FTD files. Quantity is the aggregate net fail-to-deliver position OUTSTANDING on each settlement date — a balance, not that day's new fails, so never sum Quantity across dates. Price is the previous trading day's closing price (SEC file convention, not a settlement price) and Value = Quantity × Price. Dates absent from the table had no reported fails; the SEC publishes each half-month batch with roughly a two-week lag, so the newest rows trail today. High or persistent FTD balances may indicate naked short selling or settlement issues."
+        "Get fails-to-deliver (FTD) data for a stock from the SEC's twice-monthly FTD files. Quantity is the aggregate net fail-to-deliver position OUTSTANDING on each settlement date — a balance, not that day's new fails, so never sum Quantity across dates. Price is the previous trading day's closing price (SEC file convention, not a settlement price) and Value = Quantity × Price. Within the covered window (the output names the earliest covered settlement date), dates absent from the table had no reported fails; earlier dates are simply not covered. The SEC publishes each half-month batch with roughly a two-week lag, so the newest rows trail today. High or persistent FTD balances may indicate naked short selling or settlement issues."
     )]
     public Task<string> GetFailsToDeliver(
         [Description("Stock ticker symbol (e.g., AAPL, GME, AMC)")] string ticker,
@@ -70,6 +70,18 @@ public class FailToDeliverTools
                     .Where(f => f.SettlementDate >= start && f.SettlementDate <= end);
 
                 var total = await query.CountAsync();
+
+                // The lane is forward-only from its first run, so the table's earliest
+                // settlement date is a coverage floor: "absent = no reported fails"
+                // only holds at or after it, and stating it unscoped converted the
+                // floor into a false factual claim (#7045).
+                var coverageFloor = await _ftdRepository.GetEarliestDate().FirstOrDefaultAsync();
+                var coverageNote =
+                    coverageFloor == default
+                        ? "No FTD data is covered yet."
+                        : $"Coverage starts {coverageFloor:yyyy-MM-dd}: within the covered window, dates absent from the table had no reported fails; earlier dates are not covered.";
+                var footnote =
+                    $"_Quantity is the outstanding FTD position on each settlement date (a balance — do not sum across dates); Prior Close is the previous trading day's closing price per SEC convention; Value = Quantity × Prior Close. {coverageNote} The SEC publishes in half-month batches with a ~2-week lag._";
                 var records = await query
                     .OrderByDescending(f => f.SettlementDate)
                     .Take(maxResults)
@@ -79,7 +91,7 @@ public class FailToDeliverTools
                     records.OrderBy(f => f.SettlementDate).ToList(),
                     $"No FTD data found for {stock.Ticker} in the specified date range.",
                     $"Fails-to-deliver for {stock.Ticker} ({stock.Name}):",
-                    "_Quantity is the outstanding FTD position on each settlement date (a balance — do not sum across dates); Prior Close is the previous trading day's closing price per SEC convention; Value = Quantity × Prior Close. Dates absent from the table had no reported fails; the SEC publishes in half-month batches with a ~2-week lag._",
+                    footnote,
                     "| Settlement Date | Quantity | Prior Close | Value |",
                     "|----------------|---------|-------------|-------|",
                     f =>
