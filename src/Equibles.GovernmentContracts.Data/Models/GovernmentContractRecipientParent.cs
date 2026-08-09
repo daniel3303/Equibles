@@ -48,4 +48,14 @@ public class GovernmentContractRecipientParent
 
     /// <summary>When the profile was last fetched (UTC) — drives point-of-use re-resolution.</summary>
     public DateTime ResolvedAt { get; set; }
+
+    /// <summary>
+    /// True when this row records a profile fetch that kept FAILING server-side for this
+    /// one recipient (USAspending 502s some individual profiles permanently — observed
+    /// live on the first epoch-rescan window, where one such recipient wedged the whole
+    /// lane for hours). A failure row answers "no usable parent" like a parentless row,
+    /// but re-resolves on a much shorter staleness window because the answer is an
+    /// unavailability, not a reading.
+    /// </summary>
+    public bool ProfileFetchFailed { get; set; }
 }
