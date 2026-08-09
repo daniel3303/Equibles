@@ -1399,6 +1399,9 @@ public class InstitutionalHoldingsTools
         result.AppendLine();
         result.AppendLine("| Metric | Value |");
         result.AppendLine("|--------|-------|");
+        // The CIK is how a caller chains this fund into every other institution route, and
+        // a name-resolved lookup has no other way to learn it.
+        result.AppendLine($"| CIK | {holder.Cik} |");
         result.AppendLine($"| Reported AUM | ${McpFormat.WholeNumber(summary.ReportedAum)} |");
         result.AppendLine($"| # Positions | {McpFormat.WholeNumber(summary.PositionCount)} |");
         result.AppendLine(
