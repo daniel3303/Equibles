@@ -5,6 +5,7 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
+using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Mcp;
@@ -16,6 +17,7 @@ public class FailToDeliverToolsGetFailsToDeliverCultureInvarianceTests : ParadeD
         new(
             new FailToDeliverRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new MemoryCache(new MemoryCacheOptions()),
             ErrorManager,
             NullLogger<FailToDeliverTools>()
         );
