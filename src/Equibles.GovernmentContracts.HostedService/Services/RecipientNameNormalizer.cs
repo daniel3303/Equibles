@@ -1,18 +1,34 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Equibles.GovernmentContracts.HostedService.Services;
 
 /// <summary>
 /// Normalises a company/recipient legal name to a comparable key for exact-match
 /// resolution between USAspending recipients and our <c>CommonStock</c> universe.
-/// Deliberately conservative — it strips punctuation, a leading "THE", and trailing
+/// Deliberately conservative — it strips punctuation, a leading "THE", EDGAR's
+/// slash-wrapped incorporation markers ("/DE/", "/PA/", "/NEW/"), and trailing
 /// legal-entity suffixes (CORP/INC/LLC/…) so "Lockheed Martin Corporation" and
 /// "Lockheed Martin Corp" collapse to the same key, but it never fuzzy-matches.
 /// Returns null when nothing meaningful remains.
 /// </summary>
-public static class RecipientNameNormalizer
+public static partial class RecipientNameNormalizer
 {
-    private const int MinimumKeyLength = 4;
+    // Two characters, not more: with matching kept exact and ambiguous keys dropped by the
+    // resolver, short DISTINCTIVE names ("3M", "RTX", "V2X") are safe, and a floor of 4 was
+    // silently excluding those companies from resolution entirely. Single characters stay
+    // out — a one-letter key carries no identity.
+    private const int MinimumKeyLength = 2;
+
+    // EDGAR registrant names carry a slash-wrapped state-of-incorporation or vintage marker
+    // ("Caci International Inc /De/", "Nve Corp /New/", "Fnb Corp/Pa/") that USAspending
+    // recipient names never do; left in place it lands a stray trailing token in the key and
+    // defeats the exact match. Removing the marker is a mechanical format rule, not a
+    // heuristic — matching stays exact on what remains. Anchored to the END of the name
+    // (markers are always trailing, possibly stacked) so interior slashes in a real name
+    // can never be mangled into a different key.
+    [GeneratedRegex(@"(?:/[A-Za-z ]{1,8}/\s*)+$")]
+    private static partial Regex EdgarSlashMarker();
 
     private static readonly HashSet<string> LegalSuffixes = new(StringComparer.Ordinal)
     {
@@ -39,6 +55,8 @@ public static class RecipientNameNormalizer
     {
         if (string.IsNullOrWhiteSpace(name))
             return null;
+
+        name = EdgarSlashMarker().Replace(name, " ");
 
         var cleaned = new StringBuilder(name.Length);
         foreach (var c in name.ToUpperInvariant())

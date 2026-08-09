@@ -9,5 +9,6 @@ public class GovernmentContractsModuleConfiguration : Equibles.Data.IFinancialMo
     {
         builder.Entity<GovernmentContract>();
         builder.Entity<GovernmentContractsScanState>();
+        builder.Entity<GovernmentContractRecipientParent>();
     }
 }

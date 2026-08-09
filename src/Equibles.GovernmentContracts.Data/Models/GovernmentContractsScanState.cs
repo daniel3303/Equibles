@@ -29,4 +29,14 @@ public class GovernmentContractsScanState
 
     /// <summary>When the checkpoint last advanced (UTC); null until the first advance.</summary>
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// The recipient-matching code version this cursor's scanned range was matched under
+    /// (the parser-version pattern). Unmatched awards are dropped, not stored, so a matching
+    /// improvement can only recover them by re-scanning history: when the code's version is
+    /// newer than this stamp the import pulls the cursor back to the epoch once and re-walks
+    /// the whole range, deduplicated by AwardUniqueKey. Rows written before the column
+    /// existed read as 0 and therefore reset on first sight.
+    /// </summary>
+    public int MatchingVersion { get; set; }
 }
