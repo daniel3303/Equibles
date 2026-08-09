@@ -173,7 +173,11 @@ public class ShortDataToolsSnapshotSentinelTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetShortInterestSnapshot(maxResults: 2);
 
-        result.Should().Contain("Showing first 2 of 3 results");
+        result
+            .Should()
+            .Contain(
+                "Showing results 1-2 of 3 - raise maxResults (max 500) or pass offset=2 to continue."
+            );
     }
 
     [Fact]
@@ -184,6 +188,30 @@ public class ShortDataToolsSnapshotSentinelTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetShortInterestSnapshot();
 
-        result.Should().NotContain("Showing first");
+        result.Should().NotContain("Showing results");
+    }
+
+    [Fact]
+    public async Task Snapshot_OffsetPaging_TiedRowsSplitCleanlyAcrossPages()
+    {
+        // Four rows tied on every sort key so only the ticker tiebreak orders them —
+        // exactly where a partial order would repeat or skip rows between offset pages.
+        AddShortInterest(AddStock("AAA", "Alpha Corp"), 5.0m);
+        AddShortInterest(AddStock("BBB", "Bravo Corp"), 5.0m);
+        AddShortInterest(AddStock("CCC", "Chase Corp"), 5.0m);
+        AddShortInterest(AddStock("DDD", "Delta Corp"), 5.0m);
+        await DbContext.SaveChangesAsync();
+
+        var page1 = await Sut().GetShortInterestSnapshot(maxResults: 2);
+        var page2 = await Sut().GetShortInterestSnapshot(maxResults: 2, offset: 2);
+
+        var tickers = new[] { "AAA", "BBB", "CCC", "DDD" };
+        var onPage1 = tickers.Where(t => page1.Contains(t)).ToList();
+        var onPage2 = tickers.Where(t => page2.Contains(t)).ToList();
+        onPage1.Should().HaveCount(2);
+        onPage2.Should().HaveCount(2);
+        onPage1.Intersect(onPage2).Should().BeEmpty();
+        onPage1.Concat(onPage2).Should().BeEquivalentTo(tickers);
+        page2.Should().Contain("Showing results 3-4 of 4 (the last page).");
     }
 }

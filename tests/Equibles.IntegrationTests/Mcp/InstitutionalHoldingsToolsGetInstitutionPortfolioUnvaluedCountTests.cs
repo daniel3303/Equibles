@@ -60,7 +60,8 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioUnvaluedCountTests
         var output = await Sut().GetInstitutionPortfolio("Gotham");
 
         output.Should().Contain("3 tracked position(s) have no derivable value");
-        output.Should().Contain("of 5 tracked positions");
+        output.Should().Contain("Showing holding rows 1-5 of 5");
+        output.Should().Contain("(5 distinct tracked stocks");
     }
 
     private InstitutionalHoldingsTools Sut()

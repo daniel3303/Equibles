@@ -343,4 +343,53 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
         result.Should().Contain("MLP", "MLP common units are genuine operating equity");
         result.Should().NotContain("FXZ", "trust units are created/redeemed at NAV — no squeeze");
     }
+
+    [Fact]
+    public async Task GetShortSqueezeScores_OffsetPaging_TiedScoresSplitCleanlyAcrossPages()
+    {
+        // Four identical stocks score identically, so only the manager's ticker tiebreak
+        // orders the board — exactly where a partial order would repeat or skip rows
+        // between offset pages. Ranks must stay ABSOLUTE across pages.
+        var settlement = new DateOnly(2026, 4, 15);
+        foreach (
+            var (ticker, cik) in new[]
+            {
+                ("AAA", "0000000301"),
+                ("BBB", "0000000302"),
+                ("CCC", "0000000303"),
+                ("DDD", "0000000304"),
+            }
+        )
+        {
+            var stock = new CommonStock
+            {
+                Ticker = ticker,
+                Name = $"{ticker} Corp",
+                Cik = cik,
+                SharesOutStanding = 1_000_000,
+            };
+            DbContext.Set<CommonStock>().Add(stock);
+            DbContext
+                .Set<ShortInterest>()
+                .Add(
+                    new ShortInterest
+                    {
+                        CommonStockId = stock.Id,
+                        SettlementDate = settlement,
+                        CurrentShortPosition = 300_000,
+                        DaysToCover = 8m,
+                    }
+                );
+        }
+        await DbContext.SaveChangesAsync();
+
+        var page1 = await Sut().GetShortSqueezeScores(maxResults: 2);
+        var page2 = await Sut().GetShortSqueezeScores(maxResults: 2, offset: 2);
+
+        page1.Should().Contain("| 1 | AAA |").And.Contain("| 2 | BBB |");
+        page1.Should().NotContain("CCC").And.NotContain("DDD");
+        page2.Should().Contain("| 3 | CCC |").And.Contain("| 4 | DDD |");
+        page2.Should().NotContain("| 1 |").And.NotContain("AAA").And.NotContain("BBB");
+        page2.Should().Contain("Showing results 3-4 of 4 (the last page).");
+    }
 }

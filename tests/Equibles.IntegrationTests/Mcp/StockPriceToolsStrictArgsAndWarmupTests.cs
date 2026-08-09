@@ -142,8 +142,8 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetOnBalanceVolume_MoreRowsThanMaxResults_AppendsTruncationNote()
     {
-        // Indicator tables render newest first, so the shared "Showing first N of M"
-        // wording is accurate there.
+        // Indicator tables keep the NEWEST rows, so the footer names that end of the
+        // table and offers the date range as the continuation.
         await SeedDailyCloses(new DateOnly(2026, 4, 1), 101m, 102m, 103m);
 
         var result = await Sut()
@@ -154,7 +154,11 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
                 maxResults: 2
             );
 
-        result.Should().Contain("Showing first 2 of 3 results");
+        result
+            .Should()
+            .Contain(
+                "Showing the newest 2 of 3 records in the range - raise maxResults or narrow the date range to see older rows."
+            );
     }
 
     // ── maxResults clamp on indicator tools ──────────────────────────────
