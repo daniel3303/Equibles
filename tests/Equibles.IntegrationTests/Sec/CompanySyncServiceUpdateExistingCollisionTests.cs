@@ -59,7 +59,7 @@ public class CompanySyncServiceUpdateExistingCollisionTests : ParadeDbMcpTestBas
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             )
-        );
+        , Substitute.For<IBus>());
     }
 
     [Fact]

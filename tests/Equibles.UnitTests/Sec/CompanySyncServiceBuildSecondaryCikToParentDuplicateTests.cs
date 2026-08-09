@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using MassTransit;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -64,6 +65,6 @@ public class CompanySyncServiceBuildSecondaryCikToParentDuplicateTests
             Substitute.For<IServiceScopeFactory>(),
             Substitute.For<ILogger<ErrorReporter>>()
         );
-        return new CompanySyncService(scopeFactory, secEdgarClient, options, logger, errorReporter);
+        return new CompanySyncService(scopeFactory, secEdgarClient, options, logger, errorReporter, Substitute.For<IBus>());
     }
 }

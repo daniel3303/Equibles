@@ -52,7 +52,8 @@ public class CompanySyncServiceUpdateExistingBranchATests
             new ErrorReporter(
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
-            )
+            ),
+            Substitute.For<IBus>()
         );
 
     private static object BuildState(

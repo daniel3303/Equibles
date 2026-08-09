@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using MassTransit;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -38,7 +39,7 @@ public class CompanySyncServiceBuildSecondaryCikToParentTests
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             )
-        );
+        , Substitute.For<IBus>());
 
         var firstParent = new CommonStock
         {

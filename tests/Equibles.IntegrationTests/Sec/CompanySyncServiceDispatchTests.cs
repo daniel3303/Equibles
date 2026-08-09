@@ -51,7 +51,7 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             )
-        );
+        , Substitute.For<IBus>());
     }
 
     private static CompanyInfo Company(string cik, string ticker, string name) =>

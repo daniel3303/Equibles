@@ -64,7 +64,7 @@ public class FinancialFactsImportService
         // unique in SEC. Any CIK failing to download skips the whole cycle so the
         // checkpoint never advances past an unread source.
         var parsed = new List<ParsedFact>();
-        foreach (var cik in new[] { stock.Cik }.Concat(stock.SecondaryCiks ?? []))
+        foreach (var cik in CiksFor(stock))
         {
             CompanyFactsResponse response;
             try
@@ -477,6 +477,15 @@ public class FinancialFactsImportService
             AccessionNumber = p.Accession,
             Frame = p.Frame,
         };
+    }
+
+    // The CIK set one facts import reads: primary first, then every attached
+    // secondary. Distinct because the subsidiary-attach path writes SEC's value
+    // verbatim — a duplicate would double the companyfacts download and the
+    // parsed set held in memory. Internal static so the unit suite pins it.
+    internal static IEnumerable<string> CiksFor(CommonStock stock)
+    {
+        return new[] { stock.Cik }.Concat(stock.SecondaryCiks ?? []).Distinct();
     }
 
     private async Task<bool> CommonStockStillExists(

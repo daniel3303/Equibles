@@ -167,6 +167,29 @@ public class CommonStockManagerAttachSecondaryCikTests
     }
 
     [Fact]
+    public async Task Detach_ZeroPaddedStoredCik_StillRemoves()
+    {
+        // The company sync's subsidiary attach stores SEC's value verbatim, so a
+        // zero-padded CIK can live in the column; the detach comparison must
+        // normalize BOTH sides or that entry becomes unremovable.
+        var (sut, _, _, db) = NewSut();
+        var stock = new CommonStock
+        {
+            Ticker = "XOM",
+            Name = "Exxon Mobil",
+            Cik = "2115436",
+            SecondaryCiks = ["0000034088"],
+        };
+        db.Add(stock);
+        await db.SaveChangesAsync();
+
+        var error = await sut.DetachSecondaryCik(stock, "34088");
+
+        error.Should().BeNull();
+        stock.SecondaryCiks.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Detach_NotAttachedCik_Refuses()
     {
         var (sut, repo, _, db) = NewSut();

@@ -10,6 +10,8 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.Messaging.Contracts.CommonStocks;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -32,13 +34,15 @@ public class CompanySyncService : ICompanySyncService
     private readonly WorkerOptions _workerOptions;
     private readonly ILogger<CompanySyncService> _logger;
     private readonly ErrorReporter _errorReporter;
+    private readonly IBus _bus;
 
     public CompanySyncService(
         IServiceScopeFactory serviceScopeFactory,
         ISecEdgarClient secEdgarClient,
         IOptions<WorkerOptions> workerOptions,
         ILogger<CompanySyncService> logger,
-        ErrorReporter errorReporter
+        ErrorReporter errorReporter,
+        IBus bus
     )
     {
         _serviceScopeFactory = serviceScopeFactory;
@@ -46,6 +50,7 @@ public class CompanySyncService : ICompanySyncService
         _workerOptions = workerOptions.Value;
         _logger = logger;
         _errorReporter = errorReporter;
+        _bus = bus;
     }
 
     public async Task SyncCompaniesFromSecApi()
@@ -569,6 +574,13 @@ public class CompanySyncService : ICompanySyncService
         // an unnecessary round-trip for a SecondaryCiks-only mutation.
         await state.CommonStockRepository.SaveChanges();
         state.SecondaryCikToParent[incoming.Cik] = incumbent;
+
+        // Same signal the operator attach publishes (root bus, after the commit):
+        // without it the financial-facts checkpoint is never reset, so the newly
+        // attached CIK's older facts are skipped until the primary next files.
+        await _bus.Publish(
+            new StockSecondaryCikAttached(incumbent.Id, incumbent.Ticker, incoming.Cik)
+        );
 
         _logger.LogInformation(
             "Attached subsidiary CIK {Cik} ({Name}) to parent {Ticker} (CIK: {ParentCik})",

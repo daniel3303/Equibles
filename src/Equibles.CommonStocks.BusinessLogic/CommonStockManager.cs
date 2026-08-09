@@ -354,14 +354,17 @@ public class CommonStockManager
     {
         ArgumentNullException.ThrowIfNull(commonStock);
 
+        // Normalize BOTH sides: AttachSecondaryCik always stores normalized values,
+        // but the company sync's subsidiary attach writes SEC's value verbatim — a
+        // zero-padded stored CIK must still be removable.
         var normalized = NormalizeCik(cik);
-        if (normalized == null || !commonStock.SecondaryCiks.Contains(normalized))
+        if (normalized == null || !commonStock.SecondaryCiks.Any(c => NormalizeCik(c) == normalized))
         {
             return $"CIK {cik} is not attached to this stock.";
         }
 
         commonStock.SecondaryCiks = commonStock
-            .SecondaryCiks.Where(c => c != normalized)
+            .SecondaryCiks.Where(c => NormalizeCik(c) != normalized)
             .ToList();
         await _commonStockRepository.SaveChanges();
         return null;

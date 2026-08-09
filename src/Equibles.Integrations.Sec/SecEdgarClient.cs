@@ -213,6 +213,7 @@ public class SecEdgarClient : ISecEdgarClient
             return new CompanyMetadata
             {
                 Cik = cik,
+                Name = apiResponse.Name,
                 EntityType = apiResponse.EntityType,
                 Sic = apiResponse.Sic,
                 Exchanges = apiResponse.Exchanges ?? [],

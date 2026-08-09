@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
+using MassTransit;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -34,7 +35,7 @@ public class CompanySyncServiceResolveTickerCollisionTests
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             )
-        );
+        , Substitute.For<IBus>());
         return (sut, client);
     }
 
