@@ -5,12 +5,12 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.HostedService.Services;
+using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
-using MassTransit;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -34,8 +34,9 @@ public class CompanySyncServiceResolveTickerCollisionTests
             new ErrorReporter(
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
-            )
-        , Substitute.For<IBus>());
+            ),
+            Substitute.For<IBus>()
+        );
         return (sut, client);
     }
 

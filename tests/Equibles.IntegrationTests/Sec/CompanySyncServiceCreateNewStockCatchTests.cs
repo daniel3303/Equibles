@@ -66,8 +66,9 @@ public class CompanySyncServiceCreateNewStockCatchTests : ParadeDbMcpTestBase
             secEdgarClient,
             Options.Create(new WorkerOptions { TickersToSync = [] }),
             Substitute.For<ILogger<CompanySyncService>>(),
-            new ErrorReporter(errorScopeFactory, Substitute.For<ILogger<ErrorReporter>>())
-        , Substitute.For<IBus>());
+            new ErrorReporter(errorScopeFactory, Substitute.For<ILogger<ErrorReporter>>()),
+            Substitute.For<IBus>()
+        );
 
         // The whole sync must complete (the bad entry is caught, not rethrown).
         await sut.SyncCompaniesFromSecApi();

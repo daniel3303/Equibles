@@ -28,7 +28,12 @@ public class CommonStockManagerAttachSecondaryCikTests
         );
     }
 
-    private static (CommonStockManager Manager, CommonStockRepository Repo, IBus Bus, EquiblesFinancialDbContext Db) NewSut()
+    private static (
+        CommonStockManager Manager,
+        CommonStockRepository Repo,
+        IBus Bus,
+        EquiblesFinancialDbContext Db
+    ) NewSut()
     {
         var db = NewDb();
         var repo = Substitute.ForPartsOf<CommonStockRepository>(db);
@@ -40,7 +45,12 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Attach_NewCik_AppendsNormalizedPublishesAndSaves()
     {
         var (sut, _, bus, db) = NewSut();
-        var stock = new CommonStock { Ticker = "XOM", Name = "Exxon Mobil", Cik = "2115436" };
+        var stock = new CommonStock
+        {
+            Ticker = "XOM",
+            Name = "Exxon Mobil",
+            Cik = "2115436",
+        };
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -60,7 +70,12 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Attach_PrimaryCikOfSameStock_RefusesWithoutPublishing()
     {
         var (sut, repo, bus, db) = NewSut();
-        var stock = new CommonStock { Ticker = "XOM", Name = "Exxon Mobil", Cik = "2115436" };
+        var stock = new CommonStock
+        {
+            Ticker = "XOM",
+            Name = "Exxon Mobil",
+            Cik = "2115436",
+        };
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -97,8 +112,18 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Attach_CikOwnedByAnotherStockAsPrimary_Refuses()
     {
         var (sut, _, bus, db) = NewSut();
-        var stock = new CommonStock { Ticker = "XOM", Name = "Exxon Mobil", Cik = "2115436" };
-        var other = new CommonStock { Ticker = "CVX", Name = "Chevron", Cik = "93410" };
+        var stock = new CommonStock
+        {
+            Ticker = "XOM",
+            Name = "Exxon Mobil",
+            Cik = "2115436",
+        };
+        var other = new CommonStock
+        {
+            Ticker = "CVX",
+            Name = "Chevron",
+            Cik = "93410",
+        };
         db.Add(stock);
         db.Add(other);
         await db.SaveChangesAsync();
@@ -114,7 +139,12 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Attach_CikOwnedByAnotherStockAsSecondary_Refuses()
     {
         var (sut, _, bus, db) = NewSut();
-        var stock = new CommonStock { Ticker = "XOM", Name = "Exxon Mobil", Cik = "2115436" };
+        var stock = new CommonStock
+        {
+            Ticker = "XOM",
+            Name = "Exxon Mobil",
+            Cik = "2115436",
+        };
         var other = new CommonStock
         {
             Ticker = "CVX",
@@ -136,7 +166,12 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Attach_InvalidCik_Refuses()
     {
         var (sut, _, bus, db) = NewSut();
-        var stock = new CommonStock { Ticker = "XOM", Name = "Exxon Mobil", Cik = "2115436" };
+        var stock = new CommonStock
+        {
+            Ticker = "XOM",
+            Name = "Exxon Mobil",
+            Cik = "2115436",
+        };
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -193,7 +228,12 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Detach_NotAttachedCik_Refuses()
     {
         var (sut, repo, _, db) = NewSut();
-        var stock = new CommonStock { Ticker = "XOM", Name = "Exxon Mobil", Cik = "2115436" };
+        var stock = new CommonStock
+        {
+            Ticker = "XOM",
+            Name = "Exxon Mobil",
+            Cik = "2115436",
+        };
         db.Add(stock);
         await db.SaveChangesAsync();
 

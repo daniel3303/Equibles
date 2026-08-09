@@ -358,7 +358,10 @@ public class CommonStockManager
         // but the company sync's subsidiary attach writes SEC's value verbatim — a
         // zero-padded stored CIK must still be removable.
         var normalized = NormalizeCik(cik);
-        if (normalized == null || !commonStock.SecondaryCiks.Any(c => NormalizeCik(c) == normalized))
+        if (
+            normalized == null
+            || !commonStock.SecondaryCiks.Any(c => NormalizeCik(c) == normalized)
+        )
         {
             return $"CIK {cik} is not attached to this stock.";
         }

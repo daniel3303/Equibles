@@ -4,11 +4,11 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Sec.HostedService.Services;
+using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
-using MassTransit;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -321,7 +321,14 @@ public class CompanySyncServiceTests
             Substitute.For<ILogger<ErrorReporter>>()
         );
 
-        return new CompanySyncService(scopeFactory, secEdgarClient, options, logger, errorReporter, Substitute.For<IBus>());
+        return new CompanySyncService(
+            scopeFactory,
+            secEdgarClient,
+            options,
+            logger,
+            errorReporter,
+            Substitute.For<IBus>()
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════

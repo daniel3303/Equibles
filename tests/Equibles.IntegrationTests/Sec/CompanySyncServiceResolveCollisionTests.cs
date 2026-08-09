@@ -117,8 +117,9 @@ public class CompanySyncServiceResolveCollisionTests : ParadeDbMcpTestBase
             new ErrorReporter(
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
-            )
-        , Substitute.For<IBus>());
+            ),
+            Substitute.For<IBus>()
+        );
 
         await sut.SyncCompaniesFromSecApi();
 
