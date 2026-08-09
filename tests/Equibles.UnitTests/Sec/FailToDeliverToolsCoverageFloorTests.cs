@@ -9,22 +9,23 @@ using Equibles.Sec.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Equibles.UnitTests.Sec;
 
 // Contract (#7045): "an absent date means no reported fails" is only true INSIDE the
-// covered window — the ingest lane is forward-only from its first run, so the earliest
-// stored settlement date is a coverage floor, and the tool must scope the absence claim
-// with it instead of converting the floor into a factual claim about earlier dates.
+// fully covered window. The table holds a sparse pre-full-universe trickle era and a
+// full-universe era — the floor must be the first DENSE settlement date (per-date row
+// count at or above the repository threshold), because a raw earliest date would let
+// years of partial ingestion masquerade as covered.
 public class FailToDeliverToolsCoverageFloorTests
 {
     [Fact]
-    public async Task GetFailsToDeliver_ScopesTheAbsenceClaimToTheCoverageFloor()
+    public async Task GetFailsToDeliver_ScopesTheAbsenceClaimToTheDenseCoverageFloor()
     {
         var options = NewDbOptions();
-        Guid stockId;
         using (var seed = NewContext(options))
         {
             var stock = new CommonStock
@@ -35,18 +36,18 @@ public class FailToDeliverToolsCoverageFloorTests
             };
             seed.Add(stock);
             seed.SaveChanges();
-            stockId = stock.Id;
             seed.Add(
                 new FailToDeliver
                 {
-                    CommonStockId = stockId,
+                    CommonStockId = stock.Id,
                     SettlementDate = new DateOnly(2026, 3, 2),
                     Quantity = 1000,
                     Price = 10m,
                 }
             );
-            // Another stock's older row sets the GLOBAL floor — the claim is about the
-            // whole table's coverage, not one ticker's rows.
+            // Another stock carries a sparse trickle-era row BELOW the per-date
+            // threshold — it must NOT set the floor — plus enough same-date rows to
+            // make 2026-03-02 the first dense date.
             var other = new CommonStock
             {
                 Ticker = "FTDO",
@@ -64,16 +65,23 @@ public class FailToDeliverToolsCoverageFloorTests
                     Price = 1m,
                 }
             );
+            for (var i = 0; i < FailToDeliverRepository.MinRowsPerCoveredDate; i++)
+            {
+                seed.Add(
+                    new FailToDeliver
+                    {
+                        CommonStockId = other.Id,
+                        SettlementDate = new DateOnly(2026, 3, 2),
+                        Quantity = 10 + i,
+                        Price = 1m,
+                    }
+                );
+            }
             seed.SaveChanges();
         }
 
         using var ctx = NewContext(options);
-        var tools = new FailToDeliverTools(
-            new FailToDeliverRepository(ctx),
-            new CommonStockRepository(ctx),
-            new ErrorManager(null),
-            NullLogger<FailToDeliverTools>.Instance
-        );
+        var tools = NewTools(ctx);
 
         var result = await tools.GetFailsToDeliver(
             "FTDC",
@@ -81,15 +89,96 @@ public class FailToDeliverToolsCoverageFloorTests
             endDate: "2026-04-01"
         );
 
-        result.Should().Contain("Coverage starts 2026-01-15");
+        result.Should().Contain("Full-universe coverage begins 2026-03-02");
         result
             .Should()
             .Contain(
                 "within the covered window, dates absent from the table had no reported fails",
                 "the absence promise must be scoped, never absolute"
             );
-        result.Should().Contain("earlier dates are not covered");
+        result
+            .Should()
+            .Contain(
+                "earlier dates are only partially covered",
+                "the sparse trickle era must not read as covered"
+            );
+        result
+            .Should()
+            .NotContain("begins 2026-01-15", "a below-threshold date must not set the floor");
     }
+
+    [Fact]
+    public async Task DenseCoverageFloor_IgnoresSparseDatesBelowThreshold()
+    {
+        var options = NewDbOptions();
+        using (var seed = NewContext(options))
+        {
+            var stock = new CommonStock
+            {
+                Ticker = "FTDS",
+                Name = "Sparse Corp",
+                Cik = "3",
+            };
+            seed.Add(stock);
+            seed.SaveChanges();
+            // One row short of the threshold on the earlier date: not covered.
+            for (var i = 0; i < FailToDeliverRepository.MinRowsPerCoveredDate - 1; i++)
+            {
+                seed.Add(
+                    new FailToDeliver
+                    {
+                        CommonStockId = stock.Id,
+                        SettlementDate = new DateOnly(2025, 6, 2),
+                        Quantity = i + 1,
+                        Price = 1m,
+                    }
+                );
+            }
+            // Exactly the threshold on the later date: the floor.
+            for (var i = 0; i < FailToDeliverRepository.MinRowsPerCoveredDate; i++)
+            {
+                seed.Add(
+                    new FailToDeliver
+                    {
+                        CommonStockId = stock.Id,
+                        SettlementDate = new DateOnly(2026, 3, 2),
+                        Quantity = i + 1,
+                        Price = 1m,
+                    }
+                );
+            }
+            seed.SaveChanges();
+        }
+
+        using var ctx = NewContext(options);
+        var floor = await new FailToDeliverRepository(ctx)
+            .GetDenseCoverageFloor()
+            .Select(d => (DateOnly?)d)
+            .FirstOrDefaultAsync();
+
+        floor.Should().Be(new DateOnly(2026, 3, 2));
+    }
+
+    [Fact]
+    public async Task DenseCoverageFloor_EmptyTable_YieldsNull()
+    {
+        using var ctx = NewContext(NewDbOptions());
+        var floor = await new FailToDeliverRepository(ctx)
+            .GetDenseCoverageFloor()
+            .Select(d => (DateOnly?)d)
+            .FirstOrDefaultAsync();
+
+        floor.Should().BeNull();
+    }
+
+    private static FailToDeliverTools NewTools(EquiblesFinancialDbContext ctx) =>
+        new(
+            new FailToDeliverRepository(ctx),
+            new CommonStockRepository(ctx),
+            new MemoryCache(new MemoryCacheOptions()),
+            new ErrorManager(null),
+            NullLogger<FailToDeliverTools>.Instance
+        );
 
     private static DbContextOptions<EquiblesFinancialDbContext> NewDbOptions() =>
         new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
