@@ -101,8 +101,9 @@ public class NportTools
     /// SEC series id, stored series ticker, or verified share-class alias is authoritative and
     /// keeps the filing query constrained to that series. Only identifiers absent from the fund
     /// directory fall back to a tracked stock ticker. The latest report is the one with the
-    /// greatest report period (filing date as tiebreaker), so a late-filed amendment of an older
-    /// period never shadows the newest period.
+    /// greatest report period (filing date, then accession number as tiebreakers), so a
+    /// late-filed amendment of an older period never shadows the newest period and same-day
+    /// amendments resolve deterministically.
     /// </summary>
     private async Task<(NportFiling Filing, string FundName, string Error)> ResolveLatestFiling(
         string identifier
@@ -127,6 +128,8 @@ public class NportTools
                 )
                 .Include(f => f.Holdings)
                 .OrderByDescending(f => f.ReportPeriodDate)
+                .ThenByDescending(f => f.FilingDate)
+                .ThenByDescending(f => f.AccessionNumber)
                 .FirstOrDefaultAsync();
 
             return latest == null
@@ -146,6 +149,7 @@ public class NportTools
                 .Include(f => f.Holdings)
                 .OrderByDescending(f => f.ReportPeriodDate)
                 .ThenByDescending(f => f.FilingDate)
+                .ThenByDescending(f => f.AccessionNumber)
                 .FirstOrDefaultAsync();
 
             return filing == null
