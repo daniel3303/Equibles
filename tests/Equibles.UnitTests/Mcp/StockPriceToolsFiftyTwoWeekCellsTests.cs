@@ -26,10 +26,11 @@ public class StockPriceToolsFiftyTwoWeekCellsTests
         decimal high,
         decimal low,
         DateOnly oldest,
-        DateOnly cutoff
+        DateOnly cutoff,
+        bool splitLimited = false
     )
     {
-        var cells = Method().Invoke(null, [close, high, low, oldest, cutoff]);
+        var cells = Method().Invoke(null, [close, high, low, oldest, cutoff, splitLimited]);
         var type = cells.GetType();
         return (
             (string)type.GetProperty("High").GetValue(cells),
@@ -92,6 +93,16 @@ public class StockPriceToolsFiftyTwoWeekCellsTests
         cells.Low.Should().Be("60.00\\*");
         cells.OffHigh.Should().Be("-25.00%");
         cells.AboveLow.Should().Be("+50.00%");
+    }
+
+    [Fact]
+    public void SplitLimitedWindow_StarsBoundsEvenInsideCalendarSlack()
+    {
+        var cells = Build(90m, 120m, 60m, Cutoff.AddDays(2), Cutoff, splitLimited: true);
+
+        cells.Starred.Should().BeTrue();
+        cells.High.Should().Be("120.00\\*");
+        cells.Low.Should().Be("60.00\\*");
     }
 
     [Fact]
