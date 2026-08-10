@@ -181,6 +181,7 @@ public class FinancialFactsTools
                         filtered
                             .GroupBy(f => (f.FiscalYear, f.FiscalPeriod))
                             .Select(g => PickBestFact(g, conceptPriority, asOriginallyReported))
+                            .Where(f => f != null)
                     )
                     .OrderByDescending(f => f.PeriodEnd)
                     .ToList();
@@ -334,7 +335,9 @@ public class FinancialFactsTools
                 // implicit row order).
                 var bestByStock = facts
                     .GroupBy(f => f.CommonStockId)
-                    .ToDictionary(g => g.Key, g => PickBestFact(g, conceptPriority));
+                    .Select(g => (StockId: g.Key, Fact: PickBestFact(g, conceptPriority)))
+                    .Where(item => item.Fact != null)
+                    .ToDictionary(item => item.StockId, item => item.Fact);
 
                 var (rows, skipped) = BuildComparisonRows(requested, stockByTicker, bestByStock);
 
@@ -524,8 +527,19 @@ public class FinancialFactsTools
         // quarter reads as the discrete three months and never the year-to-date total a
         // 10-Q tags under the same fiscal Q2/Q3 (the financials tab handles this in
         // FinancialStatementsHelper.PickCurrentlyReportedFact). Instants (balance sheet,
-        // zero span) always qualify; if nothing matches the span, keep every candidate.
+        // zero span) always qualify. A source-stamped short transition year remains a
+        // fallback; a duration above the annual ceiling is removed before fallback.
         var fiscalPeriod = candidates[0].FiscalPeriod;
+        candidates = candidates
+            .Where(f =>
+                f.PeriodType != FactPeriodType.Duration
+                || f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber
+                    is >= 0
+                        and <= FiscalPeriodSpanDays.MaxAnnualSpanDays
+            )
+            .ToList();
+        if (candidates.Count == 0)
+            return null;
         var preferredSpan = candidates
             .Where(f =>
             {
@@ -534,11 +548,14 @@ public class FinancialFactsTools
                 var spanDays = f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber;
                 return fiscalPeriod == SecFiscalPeriod.FullYear
                     ? spanDays >= FiscalPeriodSpanDays.MinAnnualSpanDays
+                        && spanDays <= FiscalPeriodSpanDays.MaxAnnualSpanDays
                     : spanDays <= FiscalPeriodSpanDays.MaxDiscreteQuarterDays;
             })
             .ToList();
         if (preferredSpan.Count > 0)
             candidates = preferredSpan;
+        else if (fiscalPeriod != SecFiscalPeriod.FullYear)
+            return null;
 
         // Latest period end first: a filing re-reports comparative prior periods (the
         // prior-year quarter, prior fiscal years, the prior year-end balance instant)

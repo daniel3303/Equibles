@@ -94,4 +94,112 @@ public class StatementLineFactsPickFactTests
                 "ResearchAndDevelopmentExpenseSoftwareExcludingAcquiredInProcessCost",
             ]);
     }
+
+    [Fact]
+    public void PickCurrentlyReported_FullYearRejectsAnOverlongDuration()
+    {
+        var validAnnual = new FinancialFact
+        {
+            Value = 120m,
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = new DateOnly(2025, 1, 1),
+            PeriodEnd = new DateOnly(2025, 12, 31),
+            FiledDate = new DateOnly(2026, 2, 1),
+            AccessionNumber = "annual",
+        };
+        var inceptionToDate = new FinancialFact
+        {
+            Value = 9_999m,
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = new DateOnly(2020, 1, 1),
+            PeriodEnd = new DateOnly(2025, 12, 31),
+            FiledDate = new DateOnly(2026, 3, 1),
+            AccessionNumber = "inception",
+        };
+
+        StatementLineFacts
+            .PickCurrentlyReported([inceptionToDate, validAnnual], SecFiscalPeriod.FullYear)
+            .Should()
+            .BeSameAs(validAnnual);
+        StatementLineFacts
+            .PickCurrentlyReported([inceptionToDate], SecFiscalPeriod.FullYear)
+            .Should()
+            .BeNull("a multi-year duration is not a fiscal-year fallback");
+    }
+
+    [Fact]
+    public void PickCurrentlyReportedByConcept_RejectedPreferredTagFallsThroughToValidVariant()
+    {
+        var line = RdLine();
+        var genericId = Guid.NewGuid();
+        var softwareId = Guid.NewGuid();
+        var conceptIdByKey = new Dictionary<(FactTaxonomy, string), Guid>
+        {
+            [(FactTaxonomy.UsGaap, "ResearchAndDevelopmentExpense")] = genericId,
+            [
+                (
+                    FactTaxonomy.UsGaap,
+                    "ResearchAndDevelopmentExpenseSoftwareExcludingAcquiredInProcessCost"
+                )
+            ] = softwareId,
+        };
+        var facts = new[]
+        {
+            new FinancialFact
+            {
+                FinancialConceptId = genericId,
+                Value = 9_999m,
+                PeriodType = FactPeriodType.Duration,
+                PeriodStart = new DateOnly(2020, 1, 1),
+                PeriodEnd = new DateOnly(2025, 12, 31),
+            },
+            new FinancialFact
+            {
+                FinancialConceptId = softwareId,
+                Value = 200m,
+                PeriodType = FactPeriodType.Duration,
+                PeriodStart = new DateOnly(2025, 1, 1),
+                PeriodEnd = new DateOnly(2025, 12, 31),
+            },
+        };
+
+        var byConcept = StatementLineFacts.PickCurrentlyReportedByConcept(
+            facts,
+            SecFiscalPeriod.FullYear
+        );
+        var picked = StatementLineFacts.PickFact(line, conceptIdByKey, byConcept);
+
+        byConcept.Should().NotContainKey(genericId);
+        picked.Should().BeSameAs(facts[1]);
+    }
+
+    [Fact]
+    public void PickCurrentlyReported_QuarterStampRejectsAnOverlongDuration()
+    {
+        var validQuarter = new FinancialFact
+        {
+            Value = 25m,
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = new DateOnly(2025, 4, 1),
+            PeriodEnd = new DateOnly(2025, 6, 30),
+            FiscalPeriod = SecFiscalPeriod.Q2,
+        };
+        var inceptionToDate = new FinancialFact
+        {
+            Value = 9_999m,
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = new DateOnly(2003, 5, 13),
+            PeriodEnd = new DateOnly(2025, 6, 30),
+            FiscalPeriod = SecFiscalPeriod.Q2,
+        };
+
+        StatementLineFacts
+            .PickCurrentlyReported([inceptionToDate, validQuarter], SecFiscalPeriod.Q2)
+            .Should()
+            .BeSameAs(validQuarter);
+        StatementLineFacts
+            .PickCurrentlyReported([inceptionToDate], SecFiscalPeriod.Q2)
+            .Should()
+            .BeNull("a fiscal stamp cannot turn an inception duration into a quarter");
+    }
 }

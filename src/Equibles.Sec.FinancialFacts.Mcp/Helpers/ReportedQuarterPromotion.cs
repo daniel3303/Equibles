@@ -36,6 +36,7 @@ internal static class ReportedQuarterPromotion
                 f.FiscalPeriod == SecFiscalPeriod.FullYear
                 && f.PeriodType == FactPeriodType.Duration
                 && Span(f) >= FiscalPeriodSpanDays.MinAnnualSpanDays
+                && Span(f) <= FiscalPeriodSpanDays.MaxAnnualSpanDays
             )
             .GroupBy(f => f.PeriodEnd)
             .ToDictionary(g => g.Key, g => g.Min(f => f.FiscalYear));
@@ -70,14 +71,18 @@ internal static class ReportedQuarterPromotion
                 && f.PeriodType == FactPeriodType.Duration
             )
             .ToList();
-        var annualEnds = fullYearDurations
-            .Where(f => Span(f) >= FiscalPeriodSpanDays.MinAnnualSpanDays)
-            .Select(f => f.PeriodEnd)
-            .ToList();
-        if (annualEnds.Count == 0)
+        if (fullYearDurations.Count == 0)
             return [];
 
-        var ownYearEnd = annualEnds.Max();
+        var ownYearEnd = fullYearDurations.Max(f => f.PeriodEnd);
+        var hasOwnYearAnchor = fullYearDurations.Any(f =>
+            f.PeriodEnd == ownYearEnd
+            && Span(f) >= FiscalPeriodSpanDays.MinAnnualSpanDays
+            && Span(f) <= FiscalPeriodSpanDays.MaxAnnualSpanDays
+        );
+        if (!hasOwnYearAnchor)
+            return [];
+
         return fullYearDurations
             .Where(IsQuarterSpanFullYearDuration)
             .Where(f => f.PeriodEnd == ownYearEnd)

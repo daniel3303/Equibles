@@ -93,6 +93,21 @@ public class ReportedQuarterPromotionHistoryTests
             );
     }
 
+    [Fact]
+    public void WithPromotedFourthQuarters_MultiYearDurationIsNotAnAnnualAnchor()
+    {
+        var periodEnd = new DateOnly(2025, 12, 31);
+        var facts = new List<FinancialFact>
+        {
+            MakeFullYearFlow(2025, 25m, new DateOnly(2025, 10, 1), periodEnd),
+            MakeFullYearFlow(2025, 999m, new DateOnly(2020, 1, 1), periodEnd),
+        };
+
+        var result = ReportedQuarterPromotion.WithPromotedFourthQuarters(facts);
+
+        result.Should().BeSameAs(facts, "an inception-to-date fact cannot authenticate Q4");
+    }
+
     private static FinancialFact MakeFullYearFlow(
         int fiscalYear,
         decimal value,
