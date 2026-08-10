@@ -47,9 +47,11 @@ public class StockPriceTools
         "Get daily OHLCV (Open, High, Low, Close, Volume) price history for a stock. Useful for "
             + "technical analysis, charting, and price trend analysis. Prices are in USD and "
             + "restated to the current split basis. Close is the price as traded; an Adj Close "
-            + "column shows the stored split-adjusted close on the rows where it differs. That "
-            + "series is maintained for splits only, NOT for dividends, so it cannot be used to "
-            + "compute total return — treat both columns as price series."
+            + "column shows the stored adjusted close on the rows where it differs. Each stored "
+            + "row carries whatever adjustment the provider had applied when that row was "
+            + "written, and it is not restated when a later corporate action goes ex, so the "
+            + "adjustment basis is inconsistent across the series and it must not be used to "
+            + "compute total return."
     )]
     public Task<string> GetStockPrices(
         [Description(
@@ -98,12 +100,14 @@ public class StockPriceTools
                 if (records.Count == 0)
                     return $"No price data found for {priceTicker} in the specified date range.";
 
-                // AdjustedClose is the provider's STORED adjusted close, and our pipeline restates
-                // it only on a SPLIT rebase — dividends never rebase it, and the forward EOD lane
-                // writes AdjustedClose = Close. So a differing value proves a split rebase reached
-                // these rows; equality proves NOTHING about the world (a dividend payer's recent
-                // bars are equal). The column therefore renders when the stored rows differ, and
-                // every word around it speaks only about the stored rows shown.
+                // AdjustedClose is whatever the provider had adjusted for at the moment each row
+                // was written or last rebased; nothing restates a stored row when a LATER
+                // corporate action goes ex, and the forward EOD lane writes AdjustedClose = Close.
+                // Measured consequence: a dividend payer's differing bars stop on the last session
+                // before its newest ex-date, so one series straddles two bases (see issue #7088).
+                // A differing value therefore proves only that some adjustment reached that row,
+                // and equality proves NOTHING about the world. Render the column when the stored
+                // rows differ, and say only what the stored rows shown can support.
                 var hasAdjustment = records.Any(p => p.AdjustedClose != p.Close);
 
                 var result = hasAdjustment
@@ -131,8 +135,8 @@ public class StockPriceTools
                 result.AppendLine();
                 result.AppendLine(
                     hasAdjustment
-                        ? "_Close is the price as traded. Adj Close is the stored split-adjusted close: it is restated when a split is applied and is NOT maintained for dividends, so it does not give a total-return series — do not compute total return from it._"
-                        : "_Close is the price as traded. The stored split-adjusted close equals Close on every row shown. That series is restated only when a split rebase runs (dividends never restate it), so this says nothing about whether the company paid a dividend or split in this window._"
+                        ? "_Close is the price as traded. Adj Close is the stored adjusted close: each row carries whatever adjustment the provider had applied when that row was written, and a stored row is never restated when a later corporate action goes ex. The basis is therefore inconsistent across the series — do not compute total return from it._"
+                        : "_Close is the price as traded. The stored adjusted close equals Close on every row shown, and a stored row is never restated when a later corporate action goes ex, so this says nothing about whether the company paid a dividend or split in this window._"
                 );
 
                 return result.ToString();

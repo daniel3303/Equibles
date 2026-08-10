@@ -11,12 +11,14 @@ namespace Equibles.IntegrationTests.Mcp;
 /// <summary>
 /// Pins the adjusted-close rule on GetStockPrices (#7058).
 /// <para>
-/// The rule is about STORED ROWS, not about the world. Our AdjustedClose is restated only when a
-/// split rebase runs; dividends never rebase it and the forward EOD lane writes AdjustedClose =
-/// Close. So equality between the two columns proves only that no split rebase has touched these
-/// rows — a dividend payer's recent bars are equal while dividends were certainly paid. The tool
-/// must therefore never infer an absence of corporate actions, and must never offer the series as
-/// a total-return basis.
+/// The rule is about STORED ROWS, not about the world. A stored AdjustedClose carries whatever
+/// adjustment the provider had applied when that row was written, and nothing restates it when a
+/// LATER corporate action goes ex; the forward EOD lane also writes AdjustedClose = Close. So one
+/// series straddles bases — a dividend payer's older bars are discounted and its newer bars are
+/// not — and equality between the two columns proves nothing about the issuer. The tool must
+/// never infer an absence of corporate actions, must never offer the series as a total-return
+/// basis, and must never describe it as split-only: a caller told that would add dividends back
+/// itself and double-discount the pre-seam rows.
 /// </para>
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -43,11 +45,14 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
 
         result.Should().Contain("| Date | Open | High | Low | Close | Adj Close | Volume |");
         result.Should().Contain("97.00");
-        result.Should().Contain("split-adjusted");
-        // The series is split-only, so promising total return from it would be wrong in the
-        // understating direction — the very error #7058 was filed about.
+        result.Should().Contain("stored adjusted close");
+        result.Should().Contain("never restated when a later corporate action goes ex");
+        // Promising total return off an inconsistent basis is the error #7058 was filed about;
+        // calling the series split-only is the opposite error, because a caller who believed it
+        // would add dividends back and double-discount every pre-seam row.
         result.Should().NotContain("total return from Adj Close");
-        result.Should().Contain("NOT maintained for dividends");
+        result.Should().NotContain("splits only");
+        result.Should().NotContain("dividends never restate");
     }
 
     [Fact]
@@ -72,10 +77,11 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_ForADividendPayerWithNoStoredRebase_MakesNoCorporateActionClaim()
     {
-        // The production case that made the old wording a false statement: KO, JNJ, MSFT and PG
-        // all paid dividends recently, yet none has a single adj != close bar since 2026-05-01,
-        // because only a split rebase restates the stored series. The tool must not translate
-        // "our two stored columns match" into "the company paid nothing".
+        // The production case that made the old wording a false statement (issue #7088): each
+        // dividend payer's differing bars stop on the last session before its newest ex-date —
+        // KO 2026-06-12 vs ex-div 2026-06-15, PG 2026-07-23 vs 2026-07-24 — so the newest rows
+        // match while the company plainly paid. The tool must not translate "our two stored
+        // columns match" into "the company paid nothing".
         var stock = await SeedPrices(adjustedOffset: 0m);
 
         var result = await Sut()
@@ -88,6 +94,8 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
                 "no dividend",
                 "total return equals price return",
                 "adjusted for splits and dividends",
+                "splits only",
+                "not dividend-adjusted",
             }
         )
         {
