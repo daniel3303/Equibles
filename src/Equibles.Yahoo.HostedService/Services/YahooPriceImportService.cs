@@ -516,10 +516,15 @@ public class YahooPriceImportService
         if (!replaced)
             return;
 
-        // Capture actions carried by the full-history response before stamping the selected
-        // snapshot. Anything newly discovered here remains pending for one more reconciliation.
+        // Capture actions carried by the full-history response before stamping. Dividends that
+        // still exactly match this response can be marked from the same fetch; a concurrent
+        // restatement remains pending because the manager revalidates the locked current row.
         await CaptureSplits(target, chartData.Splits, cancellationToken);
-        await CaptureDividends(target, chartData.Dividends, cancellationToken);
+        var capturedDividends = await CaptureDividends(
+            target,
+            chartData.Dividends,
+            cancellationToken
+        );
 
         // A split changes the share base, so refresh the authoritative current share count +
         // market cap by refetch, not arithmetic (#2879). A dividend-only price reconciliation is
@@ -533,6 +538,8 @@ public class YahooPriceImportService
             scope.ServiceProvider.GetRequiredService<CorporateActionPriceReconciliationManager>();
         var stamped = await manager.StampApplied(
             selectedSeries,
+            capturedDividends,
+            today,
             DateTime.UtcNow,
             cancellationToken
         );
@@ -1254,14 +1261,14 @@ public class YahooPriceImportService
     // CashDividend via the CorporateActions capture manager. Mirrors
     // CaptureSplits: its own scope, and skipped when there are no dividends so
     // the common no-dividend path costs nothing.
-    private async Task CaptureDividends(
+    private async Task<IReadOnlyCollection<CapturedDividend>> CaptureDividends(
         PriceSeriesTarget target,
         IReadOnlyCollection<CashDividendEvent> dividends,
         CancellationToken cancellationToken
     )
     {
         if (dividends.Count == 0)
-            return;
+            return [];
 
         // Map Yahoo's dividend shape onto the source-neutral capture DTO at the
         // worker boundary, stamping Yahoo as the source, so the domain manager
@@ -1290,6 +1297,8 @@ public class YahooPriceImportService
                 target.Ticker,
                 target.CommonStockId
             );
+
+        return captured;
     }
 
     private async Task FlushPriceBatch(List<DailyStockPrice> batch)
