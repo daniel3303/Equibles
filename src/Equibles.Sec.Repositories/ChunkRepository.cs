@@ -111,11 +111,11 @@ public class ChunkRepository : BaseRepository<Chunk>
         // Document.ReportingDate is the filing/source date surfaced everywhere else. The chunk's
         // denormalized copy is only an indexed cache and legacy transcript chunks can trail a
         // corrected document date, so it must never decide date-window membership (#7049).
-        if (startDate.HasValue)
-            query = query.Where(c => c.Document.ReportingDate >= startDate.Value);
+        if (startDate is { } windowStart)
+            query = query.Where(c => c.Document.ReportingDate >= windowStart);
 
-        if (endDate.HasValue)
-            query = query.Where(c => c.Document.ReportingDate <= endDate.Value);
+        if (endDate is { } windowEnd)
+            query = query.Where(c => c.Document.ReportingDate <= windowEnd);
 
         // Set a hard CommandTimeout for this call so Postgres aborts the
         // statement independently of pdb.parse / pdb.score honouring the
