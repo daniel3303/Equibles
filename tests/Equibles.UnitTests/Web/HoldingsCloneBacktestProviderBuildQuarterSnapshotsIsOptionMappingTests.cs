@@ -34,7 +34,14 @@ public class HoldingsCloneBacktestProviderBuildQuarterSnapshotsIsOptionMappingTe
         list.Add(
             Activator.CreateInstance(
                 RowType,
-                [new DateOnly(2024, 12, 31), stockId, 1_000L, 500_000L, (OptionType?)OptionType.Put]
+                [
+                    new DateOnly(2024, 12, 31),
+                    stockId,
+                    null,
+                    1_000L,
+                    500_000L,
+                    (OptionType?)OptionType.Put,
+                ]
             )
         );
 

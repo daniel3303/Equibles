@@ -1,3 +1,4 @@
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService;
 
 namespace Equibles.UnitTests.Holdings;
@@ -23,7 +24,7 @@ public class FundScoringWorkerIsScoreDueTests
     public void UnscoredFiler_IsDue()
     {
         FundScoringWorker
-            .IsScoreDue(null, StaleBefore.AddDays(-30), OldFiling, StaleBefore)
+            .IsScoreDue(null, null, StaleBefore.AddDays(-30), OldFiling, StaleBefore)
             .Should()
             .BeTrue();
     }
@@ -34,7 +35,13 @@ public class FundScoringWorkerIsScoreDueTests
         var lastScored = StaleBefore.AddDays(2);
 
         FundScoringWorker
-            .IsScoreDue(lastScored, lastScored.AddDays(-10), OldFiling, StaleBefore)
+            .IsScoreDue(
+                lastScored,
+                FundScore.CurrentCalculationVersion,
+                lastScored.AddDays(-10),
+                OldFiling,
+                StaleBefore
+            )
             .Should()
             .BeFalse();
     }
@@ -45,7 +52,13 @@ public class FundScoringWorkerIsScoreDueTests
         var lastScored = StaleBefore.AddDays(2);
 
         FundScoringWorker
-            .IsScoreDue(lastScored, lastScored.AddMinutes(1), OldFiling, StaleBefore)
+            .IsScoreDue(
+                lastScored,
+                FundScore.CurrentCalculationVersion,
+                lastScored.AddMinutes(1),
+                OldFiling,
+                StaleBefore
+            )
             .Should()
             .BeTrue();
     }
@@ -61,7 +74,13 @@ public class FundScoringWorkerIsScoreDueTests
         var filedOn = DateOnly.FromDateTime(lastScored);
 
         FundScoringWorker
-            .IsScoreDue(lastScored, lastScored.AddDays(-10), filedOn, StaleBefore)
+            .IsScoreDue(
+                lastScored,
+                FundScore.CurrentCalculationVersion,
+                lastScored.AddDays(-10),
+                filedOn,
+                StaleBefore
+            )
             .Should()
             .BeTrue();
     }
@@ -73,7 +92,13 @@ public class FundScoringWorkerIsScoreDueTests
         var filedOn = DateOnly.FromDateTime(lastScored).AddDays(-1);
 
         FundScoringWorker
-            .IsScoreDue(lastScored, lastScored.AddDays(-10), filedOn, StaleBefore)
+            .IsScoreDue(
+                lastScored,
+                FundScore.CurrentCalculationVersion,
+                lastScored.AddDays(-10),
+                filedOn,
+                StaleBefore
+            )
             .Should()
             .BeFalse();
     }
@@ -84,7 +109,13 @@ public class FundScoringWorkerIsScoreDueTests
         var lastScored = StaleBefore.AddDays(-1);
 
         FundScoringWorker
-            .IsScoreDue(lastScored, lastScored.AddDays(-10), OldFiling, StaleBefore)
+            .IsScoreDue(
+                lastScored,
+                FundScore.CurrentCalculationVersion,
+                lastScored.AddDays(-10),
+                OldFiling,
+                StaleBefore
+            )
             .Should()
             .BeTrue();
     }
@@ -97,8 +128,31 @@ public class FundScoringWorkerIsScoreDueTests
         var lastScored = StaleBefore.AddDays(2);
 
         FundScoringWorker
-            .IsScoreDue(lastScored, lastScored, OldFiling, StaleBefore)
+            .IsScoreDue(
+                lastScored,
+                FundScore.CurrentCalculationVersion,
+                lastScored,
+                OldFiling,
+                StaleBefore
+            )
             .Should()
             .BeFalse();
+    }
+
+    [Fact]
+    public void FreshScoreFromAnOlderCalculationBasis_IsDue()
+    {
+        var lastScored = StaleBefore.AddDays(2);
+
+        FundScoringWorker
+            .IsScoreDue(
+                lastScored,
+                FundScore.CurrentCalculationVersion - 1,
+                lastScored.AddDays(-10),
+                OldFiling,
+                StaleBefore
+            )
+            .Should()
+            .BeTrue();
     }
 }

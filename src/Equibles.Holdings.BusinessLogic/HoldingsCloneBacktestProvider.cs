@@ -5,7 +5,6 @@ using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
-using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.BusinessLogic;
@@ -25,19 +24,19 @@ public class HoldingsCloneBacktestProvider
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly CommonStockRepository _stockRepository;
-    private readonly DailyStockPriceRepository _priceRepository;
+    private readonly BacktestPriceLoader _priceLoader;
 
     public HoldingsCloneBacktestProvider(
         InstitutionalHolderRepository holderRepository,
         InstitutionalHoldingRepository holdingRepository,
         CommonStockRepository stockRepository,
-        DailyStockPriceRepository priceRepository
+        BacktestPriceLoader priceLoader
     )
     {
         _holderRepository = holderRepository;
         _holdingRepository = holdingRepository;
         _stockRepository = stockRepository;
-        _priceRepository = priceRepository;
+        _priceLoader = priceLoader;
     }
 
     /// <summary>
@@ -111,6 +110,7 @@ public class HoldingsCloneBacktestProvider
             .Select(h => new BacktestHoldingRow(
                 h.ReportDate,
                 h.CommonStockId,
+                h.ListedTicker,
                 h.Shares,
                 h.Value,
                 h.OptionType
@@ -119,17 +119,10 @@ public class HoldingsCloneBacktestProvider
 
         var snapshots = BuildQuarterSnapshots(holdings);
 
-        var stockIds = holdings
-            .Where(h => h.OptionType == null && h.Value > 0)
-            .Select(h => h.CommonStockId)
-            .Distinct()
-            .ToList();
-
-        var result = await BacktestPriceLoader.RunBacktest(
-            _priceRepository,
+        var result = await _priceLoader.RunBacktest(
             snapshots,
-            stockIds,
             benchmarkStock,
+            outcome.Benchmark,
             resolvedFrom,
             resolvedTo
         );
@@ -156,6 +149,7 @@ public class HoldingsCloneBacktestProvider
                 Positions = g.Select(h => new BacktestPosition
                     {
                         CommonStockId = h.CommonStockId,
+                        ListedTicker = h.ListedTicker,
                         Shares = h.Shares,
                         Value = h.Value,
                         IsOption = h.OptionType != null,
@@ -191,6 +185,7 @@ public class HoldingsCloneBacktestProvider
     private readonly record struct BacktestHoldingRow(
         DateOnly ReportDate,
         Guid CommonStockId,
+        string ListedTicker,
         long Shares,
         long Value,
         OptionType? OptionType

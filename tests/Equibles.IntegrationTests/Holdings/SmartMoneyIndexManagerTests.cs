@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data;
@@ -35,7 +36,11 @@ public class SmartMoneyIndexManagerTests : IDisposable
             new InstitutionalHolderRepository(_dbContext),
             new InstitutionalHoldingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext)
+            new BacktestPriceLoader(
+                new DailyStockPriceRepository(_dbContext),
+                new CommonStockRepository(_dbContext),
+                new StockSplitRepository(_dbContext)
+            )
         );
     }
 
@@ -254,6 +259,7 @@ public class SmartMoneyIndexManagerTests : IDisposable
                 new DailyStockPrice
                 {
                     CommonStockId = stock.Id,
+                    ListedTicker = stock.Ticker,
                     Date = date,
                     Open = close,
                     High = close,

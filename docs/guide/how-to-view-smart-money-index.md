@@ -34,11 +34,11 @@ Raising **Min funds holding** makes the basket more selective; raising **Max hol
 1. A line under the heading summarizes the build: how many holdings the basket contains, how many funds fed it, the portfolio quarter used, and the benchmark (SPY).
 
 2. Two summary cards compare the **Smart Money Index** against the **Benchmark (SPY)**, each showing:
-   - **Total return** — the full return over the tracked period.
-   - **CAGR** — the compound annual growth rate.
+   - **Price return** — the raw-closing-price return over the tracked period; dividends are excluded.
+   - **Price CAGR** — the annualized raw-closing-price return.
    - **Max drawdown** — the largest peak-to-trough drop.
 
-3. A **Cumulative return** chart plots the index against the benchmark, both starting at 100, so you can see how they diverge over time.
+3. A **Cumulative price return** chart plots the index against the benchmark, both starting at 100, so you can see how they diverge over time. A captured split can shorten the comparable window.
 
 4. A **Constituents** table lists the stocks in the basket, with columns for Ticker, Name, **Held by** (how many top funds hold it), **Avg position weight**, and **Index weight**.
 

@@ -27,8 +27,12 @@ public class HoldingsBacktestCalculatorMarkToMarketNegativePriceTests
 
         var validId = Guid.NewGuid();
         var badId = Guid.NewGuid();
-        var holdings = new Dictionary<Guid, decimal> { [validId] = 100m, [badId] = 200m };
-        Func<Guid, DateOnly, decimal?> priceOf = (id, _) => id == validId ? 50m : -10m;
+        var holdings = new Dictionary<HoldingsBacktestCalculator.BacktestSecurityKey, decimal>
+        {
+            [new(validId, null)] = 100m,
+            [new(badId, null)] = 200m,
+        };
+        Func<Guid, string, DateOnly, decimal?> priceOf = (id, _, _) => id == validId ? 50m : -10m;
 
         var result = (decimal)
             method!.Invoke(null, [holdings, new DateOnly(2024, 6, 14), priceOf, 0m]);

@@ -1,4 +1,9 @@
+using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
+using Equibles.Core.AutoWiring;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
 using Equibles.Yahoo.Data.Models;
@@ -8,68 +13,210 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.BusinessLogic;
 
 /// <summary>
-/// Loads adjusted-close price series and runs the look-ahead-safe backtest for the BusinessLogic
-/// backtests (<see cref="FundScoringManager"/>, <see cref="SmartMoneyIndexManager"/>). Kept
-/// self-contained in the BusinessLogic assembly so the scoring worker and the index have no
-/// dependency on the web host.
+/// Loads raw-close price-return series and runs the look-ahead-safe holdings backtests. Every
+/// exact listing is bounded at its latest captured split; the whole simulation begins at the
+/// latest such boundary so it never compares raw bars from opposite sides of a split.
 /// </summary>
-internal static class BacktestPriceLoader
+[Service]
+public class BacktestPriceLoader
 {
     // Forward-fill needs a few trading days of pre-window history so day-zero resolves to the
     // last close even on a weekend or holiday.
     public const int PriceLookbackDays = 14;
 
-    /// <summary>
-    /// Loads the constituent and benchmark adjusted-close series for [<paramref name="from"/>,
-    /// <paramref name="to"/>] (padded with <see cref="PriceLookbackDays"/> of pre-window history)
-    /// and runs the look-ahead-safe backtest over <paramref name="snapshots"/>. Returns null when
-    /// the benchmark has no prices in the window — without a benchmark series the simulation can't
-    /// produce comparable returns.
-    /// </summary>
-    public static async Task<BacktestResult> RunBacktest(
+    // Bound both expression depth and SQL size. Large multi-quarter portfolios can contain
+    // thousands of exact listing keys; one left-deep OR tree risks translator/plan recursion.
+    internal const int ListingQueryBatchSize = 64;
+
+    private readonly DailyStockPriceRepository _priceRepository;
+    private readonly CommonStockRepository _stockRepository;
+    private readonly StockSplitRepository _splitRepository;
+
+    public BacktestPriceLoader(
         DailyStockPriceRepository priceRepository,
-        IReadOnlyList<BacktestQuarterSnapshot> snapshots,
-        IReadOnlyCollection<Guid> stockIds,
-        CommonStock benchmarkStock,
-        DateOnly from,
-        DateOnly to
+        CommonStockRepository stockRepository,
+        StockSplitRepository splitRepository
     )
     {
+        _priceRepository = priceRepository;
+        _stockRepository = stockRepository;
+        _splitRepository = splitRepository;
+    }
+
+    /// <summary>
+    /// Runs a price-return backtest over raw closes. The result intentionally excludes dividends;
+    /// callers must label it price return rather than total return.
+    /// </summary>
+    public async Task<BacktestResult> RunBacktest(
+        IReadOnlyList<BacktestQuarterSnapshot> snapshots,
+        CommonStock benchmarkStock,
+        string benchmarkListedTicker,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var requested = snapshots
+            .SelectMany(snapshot => snapshot.Positions)
+            .Where(position => !position.IsOption && position.Value > 0)
+            .Select(position => new RequestedListing(position.CommonStockId, position.ListedTicker))
+            .Distinct()
+            .ToList();
+
+        var stockIds = requested
+            .Select(request => request.CommonStockId)
+            .Append(benchmarkStock.Id)
+            .Distinct()
+            .ToArray();
+        var primaryTickers = await _stockRepository
+            .GetByIds(stockIds)
+            .Select(stock => new { stock.Id, stock.Ticker })
+            .ToDictionaryAsync(stock => stock.Id, stock => stock.Ticker, cancellationToken);
+
+        var listingKeys = requested
+            .Where(request => primaryTickers.ContainsKey(request.CommonStockId))
+            .Select(request => new ListingKey(
+                request.CommonStockId,
+                NormalizeTicker(request.ListedTicker ?? primaryTickers[request.CommonStockId])
+            ))
+            .Distinct()
+            .ToList();
+        var benchmarkKey = new ListingKey(
+            benchmarkStock.Id,
+            NormalizeTicker(benchmarkListedTicker)
+        );
+        if (!listingKeys.Contains(benchmarkKey))
+            listingKeys.Add(benchmarkKey);
+
         var priceWindowFrom =
             from > DateOnly.MinValue.AddDays(PriceLookbackDays)
                 ? from.AddDays(-PriceLookbackDays)
                 : DateOnly.MinValue;
+        var splits = await _splitRepository
+            .GetAll()
+            .Where(split =>
+                stockIds.Contains(split.CommonStockId)
+                && split.EffectiveDate > priceWindowFrom
+                && split.EffectiveDate <= to
+            )
+            .ToListAsync(cancellationToken);
 
-        var pricesByStock = (
-            stockIds.Count == 0
-                ? []
-                : await LoadPrices(priceRepository.GetByStocks(stockIds, priceWindowFrom, to))
-        )
-            .GroupBy(p => p.StockId)
-            .ToDictionary(g => g.Key, g => g.ToArray());
+        var boundaryByListing = new Dictionary<ListingKey, DateOnly?>();
+        var comparableFrom = from;
+        foreach (var key in listingKeys)
+        {
+            var primaryTicker = primaryTickers.GetValueOrDefault(key.CommonStockId);
+            var boundary = PriceSeriesSplitScope
+                .ForListing(
+                    splits.Where(split => split.CommonStockId == key.CommonStockId),
+                    primaryTicker,
+                    key.ListedTicker
+                )
+                .Select(split => (DateOnly?)split.EffectiveDate)
+                .Max();
+            boundaryByListing[key] = boundary;
+            if (boundary is { } splitDate && splitDate > comparableFrom)
+                comparableFrom = splitDate;
+        }
 
-        var benchmarkSeries = (
-            await LoadPrices(priceRepository.GetByStock(benchmarkStock, priceWindowFrom, to))
-        ).ToArray();
-        if (benchmarkSeries.Length == 0)
+        var requestedKeys = listingKeys.ToHashSet();
+        var rows = new List<LoadedPriceRow>();
+        foreach (var listingBatch in listingKeys.Chunk(ListingQueryBatchSize))
+        {
+            rows.AddRange(
+                await _priceRepository
+                    .GetAllSeries()
+                    .Where(ListingPredicate(listingBatch))
+                    .Where(price =>
+                        price.Date >= priceWindowFrom && price.Date <= to && price.Close > 0
+                    )
+                    .Select(price => new LoadedPriceRow
+                    {
+                        CommonStockId = price.CommonStockId,
+                        ListedTicker = price.ListedTicker,
+                        Date = price.Date,
+                        Close = price.Close,
+                    })
+                    .ToListAsync(cancellationToken)
+            );
+        }
+
+        var pricesByListing = rows.Select(row => new
+            {
+                Key = new ListingKey(row.CommonStockId, NormalizeTicker(row.ListedTicker)),
+                row.Date,
+                row.Close,
+            })
+            .Where(row =>
+                requestedKeys.Contains(row.Key)
+                && (boundaryByListing[row.Key] == null || row.Date >= boundaryByListing[row.Key])
+            )
+            .GroupBy(row => row.Key)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                    group
+                        .OrderBy(row => row.Date)
+                        .Select(row => new PriceRow(row.Key.CommonStockId, row.Date, row.Close))
+                        .ToArray()
+            );
+
+        if (!pricesByListing.TryGetValue(benchmarkKey, out var benchmarkSeries))
             return null;
 
-        return HoldingsBacktestCalculator.Calculate(
+        var usableFrom = ResolveUsableStart(
             snapshots,
-            from,
+            comparableFrom,
             to,
-            priceOf: (stockId, date) => ForwardFill(pricesByStock, stockId, date),
+            pricesByListing,
+            primaryTickers,
+            benchmarkSeries
+        );
+        if (usableFrom == null)
+        {
+            return new BacktestResult
+            {
+                StartDate = comparableFrom,
+                EndDate = to,
+                Reason = "no common comparable price date for the active portfolio and benchmark",
+            };
+        }
+
+        if (
+            !EveryRebalanceIsPriceable(
+                snapshots,
+                usableFrom.Value,
+                to,
+                pricesByListing,
+                primaryTickers
+            )
+        )
+        {
+            return new BacktestResult
+            {
+                StartDate = usableFrom.Value,
+                EndDate = to,
+                Reason =
+                    "an in-window rebalance contains a security without a comparable exact-listing price",
+            };
+        }
+
+        return HoldingsBacktestCalculator.CalculateByListing(
+            snapshots,
+            usableFrom.Value,
+            to,
+            priceOf: (stockId, listedTicker, date) =>
+            {
+                if (!primaryTickers.TryGetValue(stockId, out var primaryTicker))
+                    return null;
+                var key = new ListingKey(stockId, NormalizeTicker(listedTicker ?? primaryTicker));
+                return pricesByListing.TryGetValue(key, out var series)
+                    ? ForwardFill(series, date)
+                    : null;
+            },
             benchmarkPriceOf: date => ForwardFill(benchmarkSeries, date)
         );
     }
-
-    // OrderBy must precede the record projection — EF can't translate an OrderBy keyed off a
-    // projected record's property because the constructor isn't translatable.
-    public static Task<List<PriceRow>> LoadPrices(IQueryable<DailyStockPrice> query) =>
-        query
-            .OrderBy(p => p.Date)
-            .Select(p => new PriceRow(p.CommonStockId, p.Date, p.AdjustedClose))
-            .ToListAsync();
 
     public static decimal? ForwardFill(
         Dictionary<Guid, PriceRow[]> pricesByStock,
@@ -99,6 +246,180 @@ internal static class BacktestPriceLoader
             }
         }
         return matchIdx < 0 ? null : series[matchIdx].Price;
+    }
+
+    private static string NormalizeTicker(string ticker) => ticker?.Trim().ToUpperInvariant();
+
+    // Build one SQL-translatable exact-pair predicate. Filtering stock IDs and tickers in two
+    // independent IN clauses produces their Cartesian product and can transfer years of unused
+    // sibling-listing bars for large portfolios.
+    internal static Expression<Func<DailyStockPrice, bool>> ListingPredicate(
+        IReadOnlyCollection<ListingKey> listingKeys
+    )
+    {
+        var price = Expression.Parameter(typeof(DailyStockPrice), "price");
+        var stockId = Expression.Property(price, nameof(DailyStockPrice.CommonStockId));
+        var listedTicker = Expression.Property(price, nameof(DailyStockPrice.ListedTicker));
+        Expression body = Expression.Constant(false);
+        foreach (var key in listingKeys)
+        {
+            var exactPair = Expression.AndAlso(
+                Expression.Equal(stockId, Expression.Constant(key.CommonStockId)),
+                Expression.Equal(listedTicker, Expression.Constant(key.ListedTicker))
+            );
+            body = Expression.OrElse(body, exactPair);
+        }
+        return Expression.Lambda<Func<DailyStockPrice, bool>>(body, price);
+    }
+
+    // A split can be effective on a weekend or holiday. Starting the calculator on that date while
+    // every pre-boundary close is excluded makes Rebalance silently skip a holding whose first
+    // comparable close arrives on the next session. Advance until the benchmark and every security
+    // in the then-active snapshot can be priced; repeat when that advance crosses a later rebalance.
+    private static DateOnly? ResolveUsableStart(
+        IReadOnlyList<BacktestQuarterSnapshot> snapshots,
+        DateOnly requestedFrom,
+        DateOnly to,
+        IReadOnlyDictionary<ListingKey, PriceRow[]> pricesByListing,
+        IReadOnlyDictionary<Guid, string> primaryTickers,
+        PriceRow[] benchmarkSeries
+    )
+    {
+        if (snapshots.Count == 0)
+            return requestedFrom;
+
+        var ordered = snapshots
+            .Select(snapshot =>
+                (
+                    Snapshot: snapshot,
+                    RebalanceDate: HoldingsBacktestCalculator.RebalanceDateOf(snapshot.ReportDate)
+                )
+            )
+            .OrderBy(entry => entry.RebalanceDate)
+            .ToList();
+        var candidate = requestedFrom;
+
+        // Each pass either stabilizes or advances across at least one first-price/rebalance date.
+        // The extra two passes cover the initial benchmark and requested-start adjustments.
+        var maxPasses = ordered.Count + pricesByListing.Count + 2;
+        for (var pass = 0; pass < maxPasses; pass++)
+        {
+            var priorIndex = ordered.FindLastIndex(entry => entry.RebalanceDate <= candidate);
+            var snapshotIndex = priorIndex < 0 ? 0 : priorIndex;
+            var active = ordered[snapshotIndex];
+            var start = active.RebalanceDate > candidate ? active.RebalanceDate : candidate;
+            if (start > to)
+                return candidate;
+
+            var next = FirstUsableDate(benchmarkSeries, start);
+            if (next == null)
+                return null;
+
+            foreach (
+                var position in active.Snapshot.Positions.Where(position =>
+                    !position.IsOption && position.Value > 0
+                )
+            )
+            {
+                if (!primaryTickers.TryGetValue(position.CommonStockId, out var primaryTicker))
+                    return null;
+
+                var key = new ListingKey(
+                    position.CommonStockId,
+                    NormalizeTicker(position.ListedTicker ?? primaryTicker)
+                );
+                if (
+                    !pricesByListing.TryGetValue(key, out var series)
+                    || FirstUsableDate(series, start) is not { } firstPriceDate
+                )
+                {
+                    return null;
+                }
+
+                if (firstPriceDate > next.Value)
+                    next = firstPriceDate;
+            }
+
+            if (next.Value == start)
+                return start;
+            if (next.Value > to)
+                return null;
+
+            candidate = next.Value;
+        }
+
+        return null;
+    }
+
+    private static DateOnly? FirstUsableDate(PriceRow[] series, DateOnly date)
+    {
+        if (ForwardFill(series, date) is > 0)
+            return date;
+
+        foreach (var row in series)
+        {
+            if (row.Date > date && row.Price > 0)
+                return row.Date;
+        }
+        return null;
+    }
+
+    // A later filing can introduce a listing that was not in the initial portfolio. Rebalance uses
+    // reported value as its denominator, so silently skipping an unpriced position destroys that
+    // weight and publishes a false loss. Fail the result before simulation instead.
+    private static bool EveryRebalanceIsPriceable(
+        IReadOnlyList<BacktestQuarterSnapshot> snapshots,
+        DateOnly from,
+        DateOnly to,
+        IReadOnlyDictionary<ListingKey, PriceRow[]> pricesByListing,
+        IReadOnlyDictionary<Guid, string> primaryTickers
+    )
+    {
+        foreach (var snapshot in snapshots)
+        {
+            var rebalanceDate = HoldingsBacktestCalculator.RebalanceDateOf(snapshot.ReportDate);
+            if (rebalanceDate < from || rebalanceDate > to)
+                continue;
+
+            foreach (
+                var position in snapshot.Positions.Where(position =>
+                    !position.IsOption && position.Value > 0
+                )
+            )
+            {
+                if (!primaryTickers.TryGetValue(position.CommonStockId, out var primaryTicker))
+                    return false;
+
+                var key = new ListingKey(
+                    position.CommonStockId,
+                    NormalizeTicker(position.ListedTicker ?? primaryTicker)
+                );
+                if (
+                    !pricesByListing.TryGetValue(key, out var series)
+                    || ForwardFill(series, rebalanceDate) is not > 0
+                )
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private readonly record struct RequestedListing(Guid CommonStockId, string ListedTicker);
+
+    internal readonly record struct ListingKey(Guid CommonStockId, string ListedTicker);
+
+    private sealed class LoadedPriceRow
+    {
+        public Guid CommonStockId { get; init; }
+
+        public string ListedTicker { get; init; }
+
+        public DateOnly Date { get; init; }
+
+        public decimal Close { get; init; }
     }
 
     public readonly record struct PriceRow(Guid StockId, DateOnly Date, decimal Price);

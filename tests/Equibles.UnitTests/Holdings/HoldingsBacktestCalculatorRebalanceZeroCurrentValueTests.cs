@@ -26,7 +26,10 @@ public class HoldingsBacktestCalculatorRebalanceZeroCurrentValueTests
     [Fact]
     public void Rebalance_ZeroCurrentValueWithPositiveSnapshot_LeavesHoldingsEmpty()
     {
-        var holdings = new Dictionary<Guid, decimal> { [Guid.NewGuid()] = 42m };
+        var holdings = new Dictionary<HoldingsBacktestCalculator.BacktestSecurityKey, decimal>
+        {
+            [new(Guid.NewGuid(), null)] = 42m,
+        };
         var stockId = Guid.NewGuid();
         var snapshot = new BacktestQuarterSnapshot
         {
@@ -42,7 +45,7 @@ public class HoldingsBacktestCalculatorRebalanceZeroCurrentValueTests
                 },
             ],
         };
-        Func<Guid, DateOnly, decimal?> priceOf = (_, _) => 100m;
+        Func<Guid, string, DateOnly, decimal?> priceOf = (_, _, _) => 100m;
 
         RebalanceMethod.Invoke(null, [holdings, snapshot, new DateOnly(2024, 11, 14), 0m, priceOf]);
 

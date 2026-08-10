@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.Data.Models;
 
 /// <summary>
-/// The most recent performance score for an institutional filer: the hypothetical buy-and-hold
-/// return of its reported 13F portfolio over a rolling window, measured against a benchmark.
+/// The most recent price-return score for an institutional filer: the hypothetical buy-and-hold
+/// result of its reported 13F portfolio over a rolling window, measured against a benchmark.
 /// One row per (holder, window length, benchmark) — recomputed in place, so this always holds
 /// the latest score rather than a history. Alpha is the portfolio's annualised return (CAGR)
 /// minus the benchmark's CAGR over the same simulated window.
@@ -19,6 +19,8 @@ namespace Equibles.Holdings.Data.Models;
 [Index(nameof(WindowYears), nameof(BenchmarkTicker), nameof(AlphaPercent))]
 public class FundScore
 {
+    public const int CurrentCalculationVersion = 2;
+
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid InstitutionalHolderId { get; set; }
@@ -31,25 +33,31 @@ public class FundScore
     /// <summary>Length of the rolling window in years, e.g. 3.</summary>
     public int WindowYears { get; set; }
 
+    /// <summary>
+    /// Basis contract used to compute this row. Version 2 uses exact-listing raw closes,
+    /// excludes dividends, and never compares across a captured split.
+    /// </summary>
+    public int CalculationVersion { get; set; } = CurrentCalculationVersion;
+
     /// <summary>First day of the simulated window (the backtest's resolved start).</summary>
     public DateOnly WindowStart { get; set; }
 
     /// <summary>Last day of the simulated window (the backtest's resolved end).</summary>
     public DateOnly WindowEnd { get; set; }
 
-    /// <summary>Total portfolio return over the window, as a percentage (e.g. 42.5 = +42.5%).</summary>
+    /// <summary>Portfolio price return over the window, excluding dividends.</summary>
     [Precision(18, 4)]
     public decimal PortfolioTotalReturnPercent { get; set; }
 
-    /// <summary>Annualised portfolio return (CAGR) over the window, as a percentage.</summary>
+    /// <summary>Annualised portfolio price return over the window, excluding dividends.</summary>
     [Precision(18, 4)]
     public decimal PortfolioCagrPercent { get; set; }
 
-    /// <summary>Total benchmark return over the window, as a percentage.</summary>
+    /// <summary>Benchmark price return over the window, excluding dividends.</summary>
     [Precision(18, 4)]
     public decimal BenchmarkTotalReturnPercent { get; set; }
 
-    /// <summary>Annualised benchmark return (CAGR) over the window, as a percentage.</summary>
+    /// <summary>Annualised benchmark price return over the window, excluding dividends.</summary>
     [Precision(18, 4)]
     public decimal BenchmarkCagrPercent { get; set; }
 

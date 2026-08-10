@@ -6,7 +6,6 @@ using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
-using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.BusinessLogic;
@@ -38,21 +37,21 @@ public class SmartMoneyIndexManager
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly CommonStockRepository _stockRepository;
-    private readonly DailyStockPriceRepository _priceRepository;
+    private readonly BacktestPriceLoader _priceLoader;
 
     public SmartMoneyIndexManager(
         FundScoreRepository fundScoreRepository,
         InstitutionalHolderRepository holderRepository,
         InstitutionalHoldingRepository holdingRepository,
         CommonStockRepository stockRepository,
-        DailyStockPriceRepository priceRepository
+        BacktestPriceLoader priceLoader
     )
     {
         _fundScoreRepository = fundScoreRepository;
         _holderRepository = holderRepository;
         _holdingRepository = holdingRepository;
         _stockRepository = stockRepository;
-        _priceRepository = priceRepository;
+        _priceLoader = priceLoader;
     }
 
     public async Task<SmartMoneyIndexResult> Build(
@@ -159,8 +158,19 @@ public class SmartMoneyIndexManager
         var positions = await _holdingRepository
             .Get13FHistoryByHolder(holder)
             .Where(h => h.ReportDate == latest && h.OptionType == null && h.Value > 0)
-            .GroupBy(h => h.CommonStockId)
-            .Select(g => new { StockId = g.Key, Value = g.Sum(h => h.Value) })
+            // Legacy null attribution means the issuer's primary listing. Canonicalize it before
+            // composing consensus so null and an explicit primary ticker cannot count twice.
+            .GroupBy(h => new
+            {
+                h.CommonStockId,
+                ListedTicker = h.ListedTicker ?? h.CommonStock.Ticker,
+            })
+            .Select(g => new
+            {
+                StockId = g.Key.CommonStockId,
+                g.Key.ListedTicker,
+                Value = g.Sum(h => h.Value),
+            })
             .ToListAsync();
         if (positions.Count == 0)
             return null;
@@ -172,6 +182,7 @@ public class SmartMoneyIndexManager
                 .Select(p => new BacktestPosition
                 {
                     CommonStockId = p.StockId,
+                    ListedTicker = p.ListedTicker,
                     Value = p.Value,
                     IsOption = false,
                 })
@@ -183,7 +194,7 @@ public class SmartMoneyIndexManager
         IReadOnlyList<SmartMoneyIndexConstituent> constituents
     )
     {
-        var stockIds = constituents.Select(c => c.CommonStockId).ToList();
+        var stockIds = constituents.Select(c => c.CommonStockId).Distinct().ToList();
         var stocksById = await _stockRepository
             .GetByIds(stockIds)
             .Select(s => new
@@ -198,7 +209,7 @@ public class SmartMoneyIndexManager
         {
             if (stocksById.TryGetValue(constituent.CommonStockId, out var stock))
             {
-                constituent.Ticker = stock.Ticker;
+                constituent.Ticker = constituent.ListedTicker ?? stock.Ticker;
                 constituent.Name = stock.Name;
             }
         }
@@ -219,6 +230,7 @@ public class SmartMoneyIndexManager
                 .Select(c => new BacktestPosition
                 {
                     CommonStockId = c.CommonStockId,
+                    ListedTicker = c.ListedTicker,
                     Value = EqualWeightValue,
                     IsOption = false,
                 })
@@ -227,13 +239,10 @@ public class SmartMoneyIndexManager
 
         var from = HoldingsBacktestCalculator.RebalanceDateOf(constructionDate);
 
-        var stockIds = constituents.Select(c => c.CommonStockId).ToList();
-
-        var backtest = await BacktestPriceLoader.RunBacktest(
-            _priceRepository,
+        var backtest = await _priceLoader.RunBacktest(
             [snapshot],
-            stockIds,
             benchmarkStock,
+            result.BenchmarkTicker,
             from,
             asOf
         );
