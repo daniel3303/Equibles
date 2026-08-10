@@ -8,9 +8,9 @@ namespace Equibles.CorporateActions.Data.Models;
 /// An as-reported corporate-action stock split for a <see cref="CommonStock"/>.
 /// The ratio is expressed as <see cref="Numerator"/>:<see cref="Denominator"/>
 /// (e.g. 10:1 is a forward split, 1:12 is a reverse split).
-/// <see cref="PriceAdjustmentAppliedTime"/> is the idempotency marker for the
-/// price back-adjustment pass — a null value means historical prices have not
-/// yet been reconciled for this split.
+/// <see cref="PriceAdjustmentAppliedTime"/> is the idempotency marker for the price
+/// back-adjustment pass. The marker is applied only when its UTC date is after the effective
+/// date; null or older legacy markers remain pending.
 /// </summary>
 [Index(nameof(CommonStockId), nameof(EffectiveDate), IsUnique = true)]
 [Index(nameof(PriceAdjustmentAppliedTime))]
@@ -41,4 +41,14 @@ public class StockSplit
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 
     public DateTime? PriceAdjustmentAppliedTime { get; set; }
+
+    /// <summary>
+    /// True only when reconciliation ran on a UTC date after the effective date. Older workers
+    /// could stamp announced future splits before the provider history incorporated them.
+    /// </summary>
+    public bool IsPriceAdjustmentApplied()
+    {
+        return PriceAdjustmentAppliedTime != null
+            && DateOnly.FromDateTime(PriceAdjustmentAppliedTime.Value) > EffectiveDate;
+    }
 }

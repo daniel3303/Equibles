@@ -100,7 +100,7 @@ public static class SplitBasisResolver
                 continue;
             }
 
-            if (split.PriceAdjustmentAppliedTime == null)
+            if (!split.IsPriceAdjustmentApplied())
             {
                 return false;
             }
