@@ -283,9 +283,15 @@ public class FredTools
                     series,
                     $"No tracked series match '{query}'. Equibles tracks a curated ~40-series US macro set - FRED series outside it are not available. Try a category name (Inflation, Employment, InterestRates, ...) or an empty query to list all tracked series.",
                     title,
-                    "| Series ID | Title | Category | Frequency | Units |",
-                    "|-----------|-------|----------|-----------|-------|",
-                    s => $"| {s.SeriesId} | {s.Title} | {s.Category} | {s.Frequency} | {s.Units} |"
+                    // Seasonal adjustment decides whether two series are even comparable, and the
+                    // last-updated stamp is the only way to date a macro reading from search
+                    // alone — without it a caller cannot tell a live series from a retired one.
+                    "| Series ID | Title | Category | Frequency | Units | Seasonal Adj | Last Updated |",
+                    "|-----------|-------|----------|-----------|-------|--------------|--------------|",
+                    s =>
+                        $"| {s.SeriesId} | {s.Title} | {s.Category} | {s.Frequency} | {s.Units} "
+                        + $"| {(string.IsNullOrWhiteSpace(s.SeasonalAdjustment) ? "-" : s.SeasonalAdjustment)} "
+                        + $"| {(s.LastUpdated == null ? "-" : McpFormat.Invariant(s.LastUpdated.Value, "yyyy-MM-dd"))} |"
                 );
 
                 var truncation = McpOutput.TruncationNote(series.Count, total);

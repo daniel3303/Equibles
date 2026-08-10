@@ -1167,8 +1167,17 @@ public class InstitutionalHoldingsTools
                 return $"| {rank} | {ticker} | {name} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |";
             }
         );
+        result.AppendLine();
+        result.AppendLine(DeltaValueCaveat);
         return result.ToString();
     }
+
+    // Δ Value is the change in reported market value, so it moves with the stock's own price on
+    // positions merely held through the quarter. Without this, the "most bought" stock reads as
+    // heavy accumulation when the share change was a rounding error and the price simply rose.
+    private const string DeltaValueCaveat =
+        "_Δ Value is the change in reported position value and includes the quarter's price move on "
+        + "held positions, not just net buying or selling — read Δ Shares for the position change itself._";
 
     private async Task<string> RenderMarketActivityChurn(
         string normalizedBucket,

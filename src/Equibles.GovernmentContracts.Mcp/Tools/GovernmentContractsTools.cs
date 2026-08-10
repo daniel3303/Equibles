@@ -112,11 +112,11 @@ public class GovernmentContractsTools
                     $"No federal contract awards found for {stock.Ticker} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
                     $"Federal contract awards for {stock.Ticker} ({stock.Name}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd} "
                         + $"— {totalCount} awards totaling {FormatUsd(totalValue)}:",
-                    "| Award Date | Agency | Type | Total Value (obligated + ceiling) | Period End | Award ID | Description |",
-                    "|------------|--------|------|-----------------------------------|------------|----------|-------------|",
+                    "| Award Date | Recipient | Agency | Type | Total Value (obligated + ceiling) | Outlays | Period End | Award ID | Description |",
+                    "|------------|-----------|--------|------|-----------------------------------|---------|------------|----------|-------------|",
                     c =>
-                        $"| {Format(c.ActionDate)} | {Escape(c.AwardingAgency)} | {AwardTypeLabel(c.AwardType)} "
-                        + $"| {FormatUsd(c.Amount)} | {Format(c.EndDate)} | {Escape(c.AwardId)} "
+                        $"| {Format(c.ActionDate)} | {Escape(Shorten(c.RecipientName, 48))} | {Escape(c.AwardingAgency)} | {AwardTypeLabel(c.AwardType)} "
+                        + $"| {FormatUsd(c.Amount)} | {(c.TotalOutlays == null ? "—" : FormatUsd(c.TotalOutlays.Value))} | {Format(c.EndDate)} | {Escape(c.AwardId)} "
                         + $"| {Escape(Shorten(c.Description, 80))} |"
                 );
 
@@ -225,7 +225,10 @@ public class GovernmentContractsTools
 
         sb.AppendLine(
             "_Coverage: prime federal contract awards of $1M+ matched to listed companies; "
-                + "Total Value is obligated dollars plus unexercised option ceiling, not revenue received. "
+                + "Total Value is obligated dollars plus unexercised option ceiling, not revenue received; "
+                + "Outlays is what the government has actually disbursed so far. Recipient is the awarded "
+                + "entity as the government named it — a subsidiary's own name there is how an award reaches "
+                + "this company. "
                 + $"Latest ingested award action date: {Format(latestIngested)}._"
         );
 

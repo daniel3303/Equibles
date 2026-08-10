@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -82,7 +83,9 @@ public class RevenueBreakdownTools
     )]
     [Description(
         "Get a company's revenue disaggregated by business segment, geography and "
-            + "product/service, from the dimensional XBRL facts the issuer tags in its own "
+            + "product/service — plus operating income by segment when the issuer tags it, so "
+            + "segment profitability and margins are answerable — from the dimensional XBRL "
+            + "facts the issuer tags in its own "
             + "filings. Annual fiscal years only, latest restated values, one table per axis "
             + "the company reports; values are as-reported and never estimated. Rows within "
             + "one table can OVERLAP when the issuer tags several granularities on the same "
@@ -247,10 +250,106 @@ public class RevenueBreakdownTools
                     totals,
                     displayTotals
                 );
+                await AppendSegmentOperatingIncome(result, stock, years);
                 return result.ToString();
             },
             "GetRevenueBreakdown",
             $"ticker: {FactMarkdown.Clean(ticker)}"
+        );
+    }
+
+    // The profitability view of the segment cut: operating income tagged on the same
+    // business-segment axis. Unallocated corporate costs mean segments rarely add up to
+    // consolidated operating income, so this axis is rendered on its own reconciliation
+    // (its own consolidated totals) and never mixed into the revenue tables above.
+    private async Task AppendSegmentOperatingIncome(
+        StringBuilder result,
+        CommonStock stock,
+        int years
+    )
+    {
+        if (!FinancialConceptAliases.TryResolve("operating-income", out var conceptRefs))
+            return;
+
+        var taxonomies = conceptRefs.Select(r => r.Taxonomy).Distinct().ToList();
+        var tags = conceptRefs.Select(r => r.Tag).ToList();
+        var conceptIds = await _financialConceptRepository
+            .GetMatching(taxonomies, tags)
+            .Select(c => c.Id)
+            .ToListAsync();
+        if (conceptIds.Count == 0)
+            return;
+
+        var rows = await _financialFactRepository
+            .GetByStock(stock)
+            .Where(f =>
+                conceptIds.Contains(f.FinancialConceptId)
+                && f.PeriodType == FactPeriodType.Duration
+                && f.PeriodStart.AddDays(MinAnnualSpanDays) <= f.PeriodEnd
+                && f.DimensionsKey != ""
+                && f.Dimensions.Count(d => SegmentAxes.Contains(d.Axis)) == 1
+                && f.Dimensions.All(d =>
+                    SegmentAxes.Contains(d.Axis)
+                    || (d.Axis == ConsolidationItemsAxis && d.Member == OperatingSegmentsMember)
+                )
+            )
+            .Select(f => new DimensionalRevenueRow(
+                f.Dimensions.First(d => SegmentAxes.Contains(d.Axis)).Axis,
+                f.Dimensions.First(d => SegmentAxes.Contains(d.Axis)).Member,
+                f.PeriodEnd,
+                f.Value,
+                f.Unit,
+                f.FiledDate
+            ))
+            .ToListAsync();
+        if (rows.Count == 0)
+            return;
+
+        var consolidated = await _financialFactRepository
+            .GetConsolidatedByStock(stock)
+            .Where(f =>
+                conceptIds.Contains(f.FinancialConceptId)
+                && f.PeriodType == FactPeriodType.Duration
+                && f.PeriodStart.AddDays(MinAnnualSpanDays) <= f.PeriodEnd
+            )
+            .Select(f => new
+            {
+                f.PeriodEnd,
+                f.Unit,
+                f.FinancialConceptId,
+                f.Value,
+                f.FiledDate,
+            })
+            .ToListAsync();
+
+        var totals = consolidated
+            .GroupBy(f => (f.PeriodEnd, f.Unit))
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                    (IReadOnlyList<decimal>)
+                        g.GroupBy(f => f.FinancialConceptId)
+                            .Select(c => c.OrderByDescending(f => f.FiledDate).First().Value)
+                            .ToList()
+            );
+        var displayTotals = consolidated
+            .GroupBy(f => (f.PeriodEnd, f.Unit))
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.FiledDate).First().Value);
+
+        AppendAxis(
+            result,
+            "Segment operating income",
+            rows,
+            SegmentAxes,
+            years,
+            totals,
+            displayTotals
+        );
+        result.AppendLine(
+            "_Segment operating income is tagged on the same business-segment axis as the revenue "
+                + "cut above; unallocated corporate costs mean the members need not add up to "
+                + "consolidated operating income. Divide a member here by the same member and "
+                + "period in the segment revenue table for that segment's operating margin._"
         );
     }
 

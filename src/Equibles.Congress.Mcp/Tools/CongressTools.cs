@@ -93,14 +93,17 @@ public class CongressTools
                     trades,
                     $"No congressional trades found for {stock.Ticker} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
                     $"Congressional trades for {stock.Ticker} ({stock.Name}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
-                    "| Date | Filed | Member | Position | Type | Amount Range | Owner |",
-                    "|------|-------|--------|----------|------|-------------|-------|",
+                    "| Date | Filed | Member | Position | Type | Amount Range | Asset | Owner |",
+                    "|------|-------|--------|----------|------|-------------|-------|-------|",
                     t =>
                     {
                         var position = t.CongressMember.Position.NameForHumans();
                         var type = t.TransactionType.NameForHumans();
                         var amount = FormatAmountRange(t);
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {FormatOwner(t.OwnerType)} |";
+                        // The asset as filed is the ONLY thing separating an option or bond trade
+                        // from a stock trade — "Purchase" alone reads as a bullish share buy even
+                        // when the filing says it was a put.
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {t.AssetName} | {FormatOwner(t.OwnerType)} |";
                     }
                 );
                 return AppendTruncationNote(table, trades.Count, totalCount);

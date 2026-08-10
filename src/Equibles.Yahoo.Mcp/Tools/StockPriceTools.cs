@@ -46,7 +46,9 @@ public class StockPriceTools
     [Description(
         "Get daily OHLCV (Open, High, Low, Close, Volume) price history for a stock. Useful for "
             + "technical analysis, charting, and price trend analysis. Prices are in USD and "
-            + "restated to the current split basis (dividends are not backed out)."
+            + "restated to the current split basis. Close is as traded; an Adj Close column carries "
+            + "the split- and dividend-adjusted close whenever the window holds an adjustment, so a "
+            + "total-return series can be computed from it (Close alone understates a dividend payer)."
     )]
     public Task<string> GetStockPrices(
         [Description(
@@ -95,19 +97,41 @@ public class StockPriceTools
                 if (records.Count == 0)
                     return $"No price data found for {priceTicker} in the specified date range.";
 
-                var result = StartTable(
-                    $"Daily prices for {priceTicker} ({stock.Name}):",
-                    "| Date | Open | High | Low | Close | Volume |",
-                    "|------|------|------|-----|-------|--------|"
-                );
+                // Close is as-traded; AdjustedClose carries the split AND dividend adjustment, so
+                // it is the only basis a total-return series can be built on. The column is worth
+                // its width only when the window actually holds an adjustment — for a stock that
+                // paid nothing and never split the two series are identical, and the footer says
+                // so rather than leaving a caller guessing whether the tool can answer at all.
+                var hasAdjustment = records.Any(p => p.AdjustedClose != p.Close);
+
+                var result = hasAdjustment
+                    ? StartTable(
+                        $"Daily prices for {priceTicker} ({stock.Name}):",
+                        "| Date | Open | High | Low | Close | Adj Close | Volume |",
+                        "|------|------|------|-----|-------|-----------|--------|"
+                    )
+                    : StartTable(
+                        $"Daily prices for {priceTicker} ({stock.Name}):",
+                        "| Date | Open | High | Low | Close | Volume |",
+                        "|------|------|------|-----|-------|--------|"
+                    );
 
                 result.AppendRows(
                     records.OrderBy(p => p.Date),
                     p =>
-                        $"| {p.Date:yyyy-MM-dd} | {McpFormat.Price(p.Open)} | {McpFormat.Price(p.High)} | {McpFormat.Price(p.Low)} | {McpFormat.Price(p.Close)} | {McpFormat.WholeNumber(p.Volume)} |"
+                        hasAdjustment
+                            ? $"| {p.Date:yyyy-MM-dd} | {McpFormat.Price(p.Open)} | {McpFormat.Price(p.High)} | {McpFormat.Price(p.Low)} | {McpFormat.Price(p.Close)} | {McpFormat.Price(p.AdjustedClose)} | {McpFormat.WholeNumber(p.Volume)} |"
+                            : $"| {p.Date:yyyy-MM-dd} | {McpFormat.Price(p.Open)} | {McpFormat.Price(p.High)} | {McpFormat.Price(p.Low)} | {McpFormat.Price(p.Close)} | {McpFormat.WholeNumber(p.Volume)} |"
                 );
 
                 AppendNewestKeptTruncationNote(result, records.Count, total);
+
+                result.AppendLine();
+                result.AppendLine(
+                    hasAdjustment
+                        ? "_Close is as traded; Adj Close is adjusted for splits and dividends — compute total return from Adj Close, price return from Close._"
+                        : "_Close is as traded. The split- and dividend-adjusted close is identical across this window (no split or dividend), so total return equals price return here._"
+                );
 
                 return result.ToString();
             },

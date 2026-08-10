@@ -437,8 +437,8 @@ public class InsiderTradingTools
                 var result = MarkdownTable.Start(
                     $"Recent proposed sales (Form 144) for {stock.Name} ({stock.Ticker}):",
                     $"Showing {filings.Count} of {totalCount} most recent notices",
-                    "| Filed | Seller | Relationship | Shares | Market Value | % Outstanding | Approx. Sale Date | Broker |",
-                    "|-------|--------|--------------|--------|--------------|---------------|-------------------|--------|"
+                    "| Filed | Seller | Relationship | Shares | Market Value | % Outstanding | Approx. Sale Date | Broker | Remarks |",
+                    "|-------|--------|--------------|--------|--------------|---------------|-------------------|--------|---------|"
                 );
 
                 result.AppendRows(
@@ -448,7 +448,10 @@ public class InsiderTradingTools
                         var approxSaleDate =
                             f.ApproxSaleDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                             ?? "-";
-                        return $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {FormatPercentOfOutstanding(f.SharesToBeSold, f.SharesOutstanding)} | {approxSaleDate} | {f.BrokerName} |";
+                        // Remarks is where a filer states the sale runs under a 10b5-1 plan, which
+                        // is the difference between pre-scheduled and discretionary selling. Kept
+                        // verbatim (clipped for width) — never re-worded into a plan/no-plan flag.
+                        return $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {FormatPercentOfOutstanding(f.SharesToBeSold, f.SharesOutstanding)} | {approxSaleDate} | {f.BrokerName} | {ClipRemarks(f.Remarks)} |";
                     }
                 );
 
@@ -464,6 +467,21 @@ public class InsiderTradingTools
             "GetProposedSales",
             $"ticker: {ticker}"
         );
+    }
+
+    // Form 144 remarks are free text and occasionally run to a paragraph; the pipe would break the
+    // table row and the full prose is not worth a table cell, so it renders on one clipped line.
+    private const int MaxRemarksLength = 90;
+
+    private static string ClipRemarks(string remarks)
+    {
+        if (string.IsNullOrWhiteSpace(remarks))
+            return "-";
+
+        var flattened = remarks.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ").Trim();
+        return flattened.Length <= MaxRemarksLength
+            ? flattened
+            : flattened[..MaxRemarksLength] + "…";
     }
 
     // The standard Form 144 materiality signal: the proposed sale as a share of the notice's own
