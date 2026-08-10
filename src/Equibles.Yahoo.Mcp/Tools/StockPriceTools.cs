@@ -150,7 +150,10 @@ public class StockPriceTools
             + "prior session while the fresh bar settles, so dates within one response can "
             + "differ — anchor on the Date column, never the wall clock. 52W High/Low are the "
             + "highest and lowest daily closes in the 365 days ending on the row's date "
-            + "on the stored series; raw rows carry no split-basis metadata. Off High / Above "
+            + "on the stored series; raw rows carry no split-basis metadata. They are CLOSING "
+            + "extremes, never intraday highs and lows, and they are not dividend-adjusted, so "
+            + "a source quoting an intraday range reads higher and one quoting a "
+            + "dividend-adjusted range reads lower without either being wrong. Off High / Above "
             + "Low are the close's percent distance from those bounds."
     )]
     public Task<string> GetLatestPrices(
