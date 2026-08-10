@@ -9,5 +9,13 @@ public class CorporateActionsModuleConfiguration : Equibles.Data.IFinancialModul
     {
         builder.Entity<StockSplit>().Property(s => s.Source).HasConversion<string>();
         builder.Entity<CashDividend>().Property(d => d.Source).HasConversion<string>();
+        builder
+            .Entity<CorporateActionPriceReconciliationCursor>()
+            .HasData(
+                new CorporateActionPriceReconciliationCursor
+                {
+                    Name = CorporateActionPriceReconciliationCursor.DefaultName,
+                }
+            );
     }
 }

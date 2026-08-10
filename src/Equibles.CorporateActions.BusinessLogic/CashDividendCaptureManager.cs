@@ -53,6 +53,8 @@ public class CashDividendCaptureManager
             else if (match.AmountPerShare != dividend.AmountPerShare)
             {
                 match.AmountPerShare = dividend.AmountPerShare;
+                match.PriceAdjustmentAppliedAmountPerShare = null;
+                match.PriceAdjustmentAppliedTime = null;
                 changes++;
             }
         }

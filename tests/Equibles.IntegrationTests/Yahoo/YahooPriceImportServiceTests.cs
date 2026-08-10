@@ -32,6 +32,7 @@ public class YahooPriceImportServiceTests : IDisposable
     private readonly DailyStockPriceRepository _priceRepo;
     private readonly CommonStockRepository _stockRepo;
     private readonly StockSplitRepository _splitRepo;
+    private readonly CashDividendRepository _dividendRepo;
     private readonly IYahooFinanceClient _yahooClient;
     private readonly ISharesOutstandingProvider _sharesProvider;
     private readonly ErrorReporter _errorReporter;
@@ -48,6 +49,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _priceRepo = new DailyStockPriceRepository(_dbContext);
         _stockRepo = new CommonStockRepository(_dbContext);
         _splitRepo = new StockSplitRepository(_dbContext);
+        _dividendRepo = new CashDividendRepository(_dbContext);
 
         _yahooClient = Substitute.For<IYahooFinanceClient>();
         _errorReporter = Substitute.For<ErrorReporter>(
@@ -60,17 +62,25 @@ public class YahooPriceImportServiceTests : IDisposable
 
         // The service resolves DailyStockPriceRepository from scoped DI.
         // TickerMapService resolves CommonStockRepository from scoped DI.
-        // The split-reconciliation pass (#2879) resolves SplitPriceReconciliationManager
-        // and the per-ticker split capture resolves StockSplitCaptureManager.
+        // Corporate-action reconciliation and per-ticker action capture resolve from scoped DI.
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), _priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
             (typeof(ISharesOutstandingProvider), _sharesProvider),
             (
-                typeof(SplitPriceReconciliationManager),
-                new SplitPriceReconciliationManager(_splitRepo, _stockRepo)
+                typeof(CorporateActionPriceReconciliationManager),
+                new CorporateActionPriceReconciliationManager(
+                    _splitRepo,
+                    _dividendRepo,
+                    _stockRepo,
+                    new CorporateActionPriceReconciliationCursorRepository(_dbContext)
+                )
             ),
-            (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(_splitRepo, _stockRepo))
+            (
+                typeof(StockSplitCaptureManager),
+                new StockSplitCaptureManager(_splitRepo, _stockRepo)
+            ),
+            (typeof(CashDividendCaptureManager), new CashDividendCaptureManager(_dividendRepo))
         );
 
         var tickerMapService = new TickerMapService(scopeFactory);
@@ -404,6 +414,69 @@ public class YahooPriceImportServiceTests : IDisposable
         await _yahooClient.Received(1).GetChart("GOOG", floor, Arg.Any<DateOnly>());
     }
 
+    [Fact]
+    public async Task Import_PendingDividend_ReplacesWholeSeriesWithProviderAdjustedCloses()
+    {
+        var apple = CreateStock("AAPL", "Apple Inc.");
+        await SeedStocks(apple);
+        var beforeExDate = new DateOnly(2026, 5, 8);
+        var exDate = new DateOnly(2026, 5, 11);
+        await SeedPrices(CreatePrice(apple, beforeExDate, 100m), CreatePrice(apple, exDate, 105m));
+        var dividend = new CashDividend
+        {
+            CommonStockId = apple.Id,
+            ExDate = exDate,
+            AmountPerShare = 0.27m,
+            Source = CashDividendSource.Yahoo,
+        };
+        _dividendRepo.Add(dividend);
+        await _dividendRepo.SaveChanges();
+        _workerOptions.MinSyncDate = new DateTime(2026, 5, 1);
+
+        _yahooClient
+            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(
+                new YahooChartData
+                {
+                    Prices =
+                    [
+                        new HistoricalPrice
+                        {
+                            Date = beforeExDate,
+                            Open = 99m,
+                            High = 101m,
+                            Low = 98m,
+                            Close = 100m,
+                            AdjustedClose = 99.73m,
+                            Volume = 1_000_000,
+                        },
+                        new HistoricalPrice
+                        {
+                            Date = exDate,
+                            Open = 104m,
+                            High = 106m,
+                            Low = 103m,
+                            Close = 105m,
+                            AdjustedClose = 105m,
+                            Volume = 1_100_000,
+                        },
+                    ],
+                    Dividends = [new CashDividendEvent { Date = exDate, Amount = 0.27m }],
+                }
+            );
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        var stored = _priceRepo.GetByStock(apple, "AAPL").OrderBy(price => price.Date).ToList();
+        stored.Select(price => price.AdjustedClose).Should().Equal(99.73m, 105m);
+        dividend.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.27m);
+        dividend.PriceAdjustmentAppliedTime.Should().NotBeNull();
+        await _yahooClient
+            .Received()
+            .GetChart("AAPL", new DateOnly(2026, 5, 1), Arg.Any<DateOnly>());
+        await _yahooClient.DidNotReceive().GetKeyStatistics("AAPL");
+    }
+
     // ── Skips stocks with existing recent data ────────────────────────
 
     [Fact]
@@ -633,8 +706,8 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_CancelledMidSplitReconcile_RethrowsWithoutReportingPhantomError()
     {
-        // Same shutdown-cancellation contract for the split-reconciliation pass (the loop
-        // that produced the prod "ReconcilePendingSplits(JILL)" phantom): cancellation
+        // Same shutdown-cancellation contract for the reconciliation pass (the loop that
+        // produced the prod "ReconcilePendingSplits(JILL)" phantom): cancellation
         // mid-reconcile propagates instead of landing in the per-stock error report.
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);

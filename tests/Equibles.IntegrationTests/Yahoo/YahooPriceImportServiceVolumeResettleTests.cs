@@ -64,6 +64,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         _priceRepo = new DailyStockPriceRepository(_dbContext);
         _stockRepo = new CommonStockRepository(_dbContext);
         var splitRepo = new StockSplitRepository(_dbContext);
+        var dividendRepo = new CashDividendRepository(_dbContext);
 
         _yahooClient = Substitute.For<IYahooFinanceClient>();
         var errorReporter = Substitute.For<ErrorReporter>(
@@ -76,8 +77,13 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
             (typeof(CommonStockRepository), _stockRepo),
             (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>()),
             (
-                typeof(SplitPriceReconciliationManager),
-                new SplitPriceReconciliationManager(splitRepo, _stockRepo)
+                typeof(CorporateActionPriceReconciliationManager),
+                new CorporateActionPriceReconciliationManager(
+                    splitRepo,
+                    dividendRepo,
+                    _stockRepo,
+                    new CorporateActionPriceReconciliationCursorRepository(_dbContext)
+                )
             ),
             (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(splitRepo, _stockRepo))
         );

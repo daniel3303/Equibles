@@ -9,12 +9,10 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
-/// Pins the adjusted-close rule on GetStockPrices (#7058).
+/// Pins the adjusted-close rule on GetStockPrices (#7058/#7088).
 /// <para>
-/// AdjustedClose is an auxiliary stored provider series that can be rewritten with the full price
-/// history and is not guaranteed to be complete total return. Neither equality nor a difference
-/// identifies which corporate actions it reflects, and the tool makes no universal Close-basis
-/// claim.
+/// Captured splits and cash dividends trigger a full-series provider-history reconciliation, so
+/// AdjustedClose remains one consistent total-return basis after the pending action is processed.
 /// </para>
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -41,21 +39,18 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
 
         result.Should().Contain("| Date | Open | High | Low | Close | Adj Close | Volume |");
         result.Should().Contain("97.00");
-        result.Should().Contain("auxiliary stored provider series");
-        result.Should().Contain("rewritten with the full history during split reconciliation");
-        result.Should().Contain("not guaranteed to be complete total return");
-        result.Should().NotContain("compute total return from Adj Close");
-        result.Should().NotContain("splits only");
-        result.Should().NotContain("dividends never restate");
-        result.Should().NotContain("price as traded");
-        result.Should().NotContain("never restated");
+        result.Should().Contain("provider-adjusted close");
+        result.Should().Contain("full-history reconciliation");
+        result.Should().Contain("Once pending actions reconcile");
+        result.Should().Contain("use Adj Close rather than Close for total-return calculations");
+        result.Should().Contain("an action can remain pending until a later cycle");
+        result.Should().NotContain("not guaranteed to be complete total return");
     }
 
     [Fact]
     public async Task GetStockPrices_WhenNothingWasAdjusted_OmitsTheColumnAndSaysWhy()
     {
-        // This stored window has an identical adjusted series, so the column would repeat Close
-        // on every row. The note must describe only that stored equality, not infer why it exists.
+        // This stored window has an identical adjusted series, so the column would repeat Close.
         var stock = await SeedPrices(adjustedOffset: 0m);
 
         var result = await Sut()
@@ -63,40 +58,21 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
 
         result.Should().Contain("| Date | Open | High | Low | Close | Volume |");
         result.Should().NotContain("| Date | Open | High | Low | Close | Adj Close | Volume |");
-        // Says what is true of the stored rows, and nothing about whether the issuer acted.
-        result.Should().Contain("equals Close on every row shown");
-        result.Should().Contain("rewritten with the full history during split reconciliation");
-        result.Should().NotContain("no split or dividend");
-        result.Should().NotContain("total return equals price return");
+        result.Should().Contain("Adj Close equals Close on every row shown");
+        result.Should().Contain("splits and cash dividends trigger a full-history reconciliation");
+        result.Should().Contain("an action can remain pending until a later cycle");
     }
 
     [Fact]
-    public async Task GetStockPrices_ForADividendPayerWithNoStoredRebase_MakesNoCorporateActionClaim()
+    public async Task GetStockPrices_ReconciliationCanLag_DisclosesPendingWindow()
     {
-        // The production case that made the old wording a false statement (issue #7088): each
-        // dividend payer's differing bars stop on the last session before its newest ex-date —
-        // KO 2026-06-12 vs ex-div 2026-06-15, PG 2026-07-23 vs 2026-07-24 — so the newest rows
-        // match while the company plainly paid. The tool must not translate "our two stored
-        // columns match" into "the company paid nothing".
         var stock = await SeedPrices(adjustedOffset: 0m);
 
         var result = await Sut()
             .GetStockPrices(stock.Ticker, startDate: "2025-01-06", endDate: "2025-01-20");
 
-        foreach (
-            var forbidden in new[]
-            {
-                "no split or dividend",
-                "no dividend",
-                "total return equals price return",
-                "adjusted for splits and dividends",
-                "splits only",
-                "not dividend-adjusted",
-            }
-        )
-        {
-            result.Should().NotContain(forbidden);
-        }
+        result.Should().Contain("an action can remain pending until a later cycle");
+        result.Should().NotContain("not guaranteed to be complete total return");
     }
 
     private async Task<CommonStock> SeedPrices(decimal adjustedOffset)

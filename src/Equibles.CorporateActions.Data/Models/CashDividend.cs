@@ -11,6 +11,7 @@ namespace Equibles.CorporateActions.Data.Models;
 /// the idempotency guard for the capture upsert.
 /// </summary>
 [Index(nameof(CommonStockId), nameof(ExDate), IsUnique = true)]
+[Index(nameof(PriceAdjustmentAppliedTime))]
 public class CashDividend
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -25,4 +26,17 @@ public class CashDividend
     public CashDividendSource Source { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// The amount incorporated into the last full price-history reconciliation. Keeping the
+    /// applied value makes a restatement by an older worker detectable even when that worker does
+    /// not know to clear <see cref="PriceAdjustmentAppliedTime"/>.
+    /// </summary>
+    public decimal? PriceAdjustmentAppliedAmountPerShare { get; set; }
+
+    /// <summary>
+    /// Null while this dividend still requires a full provider-history reconciliation of the
+    /// stock's current primary listed series.
+    /// </summary>
+    public DateTime? PriceAdjustmentAppliedTime { get; set; }
 }
