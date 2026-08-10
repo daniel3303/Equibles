@@ -95,7 +95,7 @@ public class CashDividendCaptureManager
         return changes;
     }
 
-    private static List<CapturedDividend> CombineSameDateDividends(
+    internal static List<CapturedDividend> CombineSameDateDividends(
         IReadOnlyCollection<CapturedDividend> dividends
     ) =>
         dividends

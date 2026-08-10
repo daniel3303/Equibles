@@ -87,6 +87,14 @@ public class CorporateActionPriceReconciliationManagerStampingTests
             Source = CashDividendSource.Yahoo,
         };
 
+    private static CapturedDividend PriceSeriesDividend(DateOnly exDate, decimal amount) =>
+        new()
+        {
+            ExDate = exDate,
+            AmountPerShare = amount,
+            Source = CashDividendSource.Yahoo,
+        };
+
     [Fact]
     public async Task StampApplied_StampsSelectedSplitAndDividendSnapshots()
     {
@@ -198,6 +206,129 @@ public class CorporateActionPriceReconciliationManagerStampingTests
             .ContainSingle()
             .Which.Dividends.Should()
             .ContainSingle(snapshot => snapshot.AmountPerShare == 0.26m);
+    }
+
+    [Fact]
+    public async Task StampApplied_SelectedDividendRevisedToPriceSeriesAmount_StampsCurrentAmount()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var exDate = new DateOnly(2024, 5, 9);
+        db.Add(Stock(stockId));
+        var dividend = PendingDividend(stockId, exDate, 0.25m);
+        dividend.Source = CashDividendSource.External;
+        db.Add(dividend);
+        await db.SaveChangesAsync();
+
+        var manager = NewManager(db);
+        var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
+        dividend.AmountPerShare = 0.26m;
+        await db.SaveChangesAsync();
+        var appliedTime = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc);
+
+        var stamped = await manager.StampApplied(
+            selected,
+            [PriceSeriesDividend(exDate, 0.26m)],
+            SettledBefore,
+            appliedTime
+        );
+
+        stamped.Should().Be(1);
+        dividend.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.26m);
+        dividend.PriceAdjustmentAppliedTime.Should().Be(appliedTime);
+        (await manager.SelectPendingSeries(50, SettledBefore)).Series.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StampApplied_CurrentDividendDoesNotMatchPriceSeries_RemainsPending()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var exDate = new DateOnly(2024, 5, 9);
+        db.Add(Stock(stockId));
+        var dividend = PendingDividend(stockId, exDate, 0.25m);
+        db.Add(dividend);
+        await db.SaveChangesAsync();
+
+        var manager = NewManager(db);
+        var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
+        dividend.AmountPerShare = 0.27m;
+        await db.SaveChangesAsync();
+
+        var stamped = await manager.StampApplied(
+            selected,
+            [PriceSeriesDividend(exDate, 0.26m)],
+            SettledBefore,
+            DateTime.UtcNow
+        );
+
+        stamped.Should().Be(0);
+        dividend.PriceAdjustmentAppliedTime.Should().BeNull();
+        (await manager.SelectPendingSeries(50, SettledBefore))
+            .Series.Should()
+            .ContainSingle()
+            .Which.Dividends.Should()
+            .ContainSingle(snapshot => snapshot.AmountPerShare == 0.27m);
+    }
+
+    [Fact]
+    public async Task StampApplied_NewPriceSeriesDividendAfterSelection_StampsSameFetch()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var selectedExDate = new DateOnly(2024, 5, 9);
+        var discoveredExDate = new DateOnly(2025, 2, 7);
+        db.Add(Stock(stockId));
+        db.Add(PendingDividend(stockId, selectedExDate));
+        await db.SaveChangesAsync();
+
+        var manager = NewManager(db);
+        var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
+        var discovered = PendingDividend(stockId, discoveredExDate, 0.26m);
+        db.Add(discovered);
+        await db.SaveChangesAsync();
+
+        var stamped = await manager.StampApplied(
+            selected,
+            [
+                PriceSeriesDividend(selectedExDate, 0.25m),
+                PriceSeriesDividend(discoveredExDate, 0.26m),
+            ],
+            SettledBefore,
+            DateTime.UtcNow
+        );
+
+        stamped.Should().Be(2);
+        discovered.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.26m);
+        discovered.PriceAdjustmentAppliedTime.Should().NotBeNull();
+        (await manager.SelectPendingSeries(50, SettledBefore)).Series.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StampApplied_UnsettledPriceSeriesDividend_RemainsPending()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var selectedExDate = new DateOnly(2024, 5, 9);
+        db.Add(Stock(stockId));
+        db.Add(PendingDividend(stockId, selectedExDate));
+        await db.SaveChangesAsync();
+
+        var manager = NewManager(db);
+        var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
+        var unsettled = PendingDividend(stockId, SettledBefore, 0.26m);
+        db.Add(unsettled);
+        await db.SaveChangesAsync();
+
+        var stamped = await manager.StampApplied(
+            selected,
+            [PriceSeriesDividend(selectedExDate, 0.25m), PriceSeriesDividend(SettledBefore, 0.26m)],
+            SettledBefore,
+            DateTime.UtcNow
+        );
+
+        stamped.Should().Be(1);
+        unsettled.PriceAdjustmentAppliedTime.Should().BeNull();
     }
 
     [Fact]
