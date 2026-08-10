@@ -6,6 +6,7 @@ using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 using Equibles.Sec.FinancialFacts.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Mcp;
@@ -256,5 +257,146 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         var result = await Sut().GetFinancialStatement("AAPL", statement: "income");
 
         result.Should().Contain("| EPS (Diluted) | $6.13 | USD/shares |");
+    }
+
+    [Fact]
+    public async Task GetFinancialStatement_QuarterlyFlows_ShowExactSpansAndDropEarlierEndpoint()
+    {
+        var stock = Apple();
+        var revenue = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "Revenues",
+            Label = "Revenue",
+        };
+        var netIncome = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "NetIncomeLoss",
+            Label = "Net income",
+        };
+        var grossProfit = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "GrossProfit",
+            Label = "Gross profit",
+        };
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<FinancialConcept>().AddRange(revenue, netIncome, grossProfit);
+
+        FinancialFact Fact(
+            FinancialConcept concept,
+            DateOnly start,
+            DateOnly end,
+            decimal value,
+            string accession
+        ) =>
+            new()
+            {
+                CommonStockId = stock.Id,
+                FinancialConceptId = concept.Id,
+                Unit = "USD",
+                PeriodType = FactPeriodType.Duration,
+                PeriodStart = start,
+                PeriodEnd = end,
+                Value = value,
+                FiscalYear = 2025,
+                FiscalPeriod = SecFiscalPeriod.Q2,
+                Form = DocumentType.TenQ,
+                FiledDate = new DateOnly(2025, 8, 1),
+                AccessionNumber = accession,
+            };
+
+        DbContext
+            .Set<FinancialFact>()
+            .AddRange(
+                Fact(
+                    revenue,
+                    new DateOnly(2025, 4, 1),
+                    new DateOnly(2025, 6, 30),
+                    25_000_000m,
+                    "revenue"
+                ),
+                Fact(
+                    netIncome,
+                    new DateOnly(2025, 1, 1),
+                    new DateOnly(2025, 6, 30),
+                    4_000_000m,
+                    "net-income-ytd"
+                ),
+                Fact(
+                    grossProfit,
+                    new DateOnly(2025, 1, 1),
+                    new DateOnly(2025, 3, 31),
+                    99_000_000m,
+                    "stale-end"
+                )
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetFinancialStatement("AAPL", statement: "income", year: 2025, period: "Q2");
+
+        result.Should().Contain("| Revenue | $25,000,000 | USD | 2025-04-01 | 2025-06-30 |");
+        result.Should().Contain("| Net Income | $4,000,000 | USD | 2025-01-01 | 2025-06-30 |");
+        result.Should().NotContain("$99,000,000");
+        result.Should().Contain("discrete-quarter and fiscal-year-to-date facts");
+    }
+
+    [Fact]
+    public async Task GetFinancialStatement_LaterProxyDuplicate_DoesNotOutrankTenK()
+    {
+        var stock = Apple();
+        var revenue = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "Revenues",
+            Label = "Revenue",
+        };
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<FinancialConcept>().Add(revenue);
+        await SeedRevenue(
+            stock,
+            revenue,
+            2023,
+            SecFiscalPeriod.FullYear,
+            383_285_000_000m,
+            "USD",
+            "ten-k"
+        );
+        var proxy = await DbContext
+            .Set<FinancialFact>()
+            .SingleAsync(f => f.AccessionNumber == "ten-k");
+        DbContext
+            .Set<FinancialFact>()
+            .Add(
+                new FinancialFact
+                {
+                    CommonStockId = proxy.CommonStockId,
+                    FinancialConceptId = proxy.FinancialConceptId,
+                    Unit = proxy.Unit,
+                    PeriodType = proxy.PeriodType,
+                    PeriodStart = proxy.PeriodStart,
+                    PeriodEnd = proxy.PeriodEnd,
+                    Value = 383_000_000_000m,
+                    FiscalYear = proxy.FiscalYear,
+                    FiscalPeriod = proxy.FiscalPeriod,
+                    Form = DocumentType.Def14A,
+                    FiledDate = proxy.FiledDate.AddMonths(2),
+                    AccessionNumber = "proxy",
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetFinancialStatement("AAPL", statement: "income", year: 2023, period: "FY");
+
+        result.Should().Contain("$383,285,000,000");
+        result.Should().Contain("| 10-K |");
+        result.Should().NotContain("$383,000,000,000");
     }
 }

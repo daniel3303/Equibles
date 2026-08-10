@@ -46,7 +46,9 @@ public class FinancialStatementTools
         "Get a company's income statement, balance sheet, or cash-flow statement for a "
             + "given fiscal year and period, sourced from SEC Company Facts (structured XBRL). "
             + "Returns the standard line items (e.g. revenue, net income, total assets, "
-            + "operating cash flow) with the latest-restated value for the period. "
+            + "operating cash flow) with the latest-restated value for one exact statement "
+            + "period end. Each row carries its actual period start/end so discrete-quarter "
+            + "and fiscal-year-to-date flow facts remain distinguishable. "
             + "Company-specific dimensional facts (e.g. product-segment revenue) are not "
             + "included — use GetRevenueBreakdown for segment/geographic revenue, and "
             + "GetFinancialFact or CompareFinancialFact for one line item across periods "
@@ -133,6 +135,18 @@ public class FinancialStatementTools
                     )
                     .ToListAsync();
 
+                if (facts.Count == 0)
+                    return $"No {statementType.NameForHumans().ToLowerInvariant()} line items "
+                        + $"were reported by {stock.Ticker} for FY{selectedYear} "
+                        + $"{selectedPeriod.NameForHumans()}.";
+
+                // A filing re-reports comparative spans under its own fiscal stamp, and a stale
+                // concept can retain an earlier end under the same (year, period). Anchor the
+                // statement to one actual period end before selecting line values so it cannot
+                // silently combine different balance dates or flow endpoints.
+                var statementPeriodEnd = facts.Max(f => f.PeriodEnd);
+                facts = facts.Where(f => f.PeriodEnd == statementPeriodEnd).ToList();
+
                 // A 10-Q tags each line under one fiscal (year, period) for both the
                 // discrete quarter and the fiscal year-to-date span, and re-reports prior
                 // comparative instants (the prior fiscal-year-end balance) under that same
@@ -176,8 +190,8 @@ public class FinancialStatementTools
             $"{statementType.NameForHumans()} for {stock.Ticker} "
                 + $"({FactMarkdown.Cell(stock.Name)}) — "
                 + $"FY{selectedYear} {selectedPeriod.NameForHumans()}:",
-            "| Line Item | Value | Unit | Period End | Form | Filed |",
-            "|-----------|------:|------|-----------|------|-------|"
+            "| Line Item | Value | Unit | Period Start | Period End | Form | Filed |",
+            "|-----------|------:|------|--------------|------------|------|-------|"
         );
 
         var rendered = 0;
@@ -200,6 +214,7 @@ public class FinancialStatementTools
                 $"| {FactMarkdown.Cell(line.Label)} | "
                     + $"{FactMarkdown.Value(fact.Value, fact.Unit)} | "
                     + $"{FactMarkdown.Cell(fact.Unit)} | "
+                    + $"{fact.PeriodStart:yyyy-MM-dd} | "
                     + $"{fact.PeriodEnd:yyyy-MM-dd} | "
                     + $"{FactMarkdown.Cell(fact.Form?.DisplayName)} | "
                     + $"{fact.FiledDate:yyyy-MM-dd} |"
@@ -219,6 +234,16 @@ public class FinancialStatementTools
         if (omitted > 0)
             result.AppendLine(
                 "\n_Line items the filer did not report for this period are omitted._"
+            );
+
+        if (
+            selectedPeriod != SecFiscalPeriod.FullYear
+            && statementType != FinancialStatementType.BalanceSheet
+        )
+            result.AppendLine(
+                "\n_Quarterly flow rows preserve the exact SEC-reported span. A period can "
+                    + "contain discrete-quarter and fiscal-year-to-date facts; use Period Start "
+                    + "and Period End to distinguish them._"
             );
 
         // Each line independently takes its latest restatement, so one

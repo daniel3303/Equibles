@@ -26,6 +26,12 @@ public class FinancialFactsSyncStatus
     public DateOnly? LastFiledDateSeen { get; set; }
 
     /// <summary>
+    /// Version of the Company Facts import contract that last rebuilt this company's rows.
+    /// A lower value forces a full-history replay even when no newer filing exists.
+    /// </summary>
+    public int ImporterVersion { get; set; }
+
+    /// <summary>
     /// When the concept-metadata sweep (labels, descriptions, balance from the
     /// company's recent filings' MetaLinks) last ran for this company; null
     /// until the first run. A <see cref="LastFiledDateSeen"/> newer than this

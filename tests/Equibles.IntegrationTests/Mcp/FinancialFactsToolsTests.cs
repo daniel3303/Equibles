@@ -155,8 +155,8 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
         var result = await Sut().GetFinancialFact("AAPL", "revenue");
 
         // Newest period first; the alias spans both tags.
-        result.Should().Contain("| 2023-12-31 | 2023 | FY | $400,000,000,000 |");
-        result.Should().Contain("| 2022-12-31 | 2022 | FY | $320,000,000,000 |");
+        result.Should().Contain("| 2023-01-01 | 2023-12-31 | 2023 | FY | $400,000,000,000 |");
+        result.Should().Contain("| 2022-01-01 | 2022-12-31 | 2022 | FY | $320,000,000,000 |");
         result.Should().NotContain("$300,000,000,000", "the latest restatement wins by default");
         var idx2023 = result.IndexOf("2023-12-31", StringComparison.Ordinal);
         var idx2022 = result.IndexOf("2022-12-31", StringComparison.Ordinal);
@@ -273,6 +273,77 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
                 "$999,000,000,000",
                 "the secondary tag must not win a same-period, same-filed tie"
             );
+    }
+
+    [Fact]
+    public async Task GetFinancialFact_LaterProxyDuplicate_DoesNotOutrankPeriodicReport()
+    {
+        var stock = Apple();
+        DbContext.Set<CommonStock>().Add(stock);
+        var revenues = AddConcept("Revenues");
+        AddFact(
+            stock,
+            revenues,
+            2023,
+            SecFiscalPeriod.FullYear,
+            383_285_000_000m,
+            new DateOnly(2024, 2, 1),
+            DocumentType.TenK,
+            "ten-k"
+        );
+        AddFact(
+            stock,
+            revenues,
+            2023,
+            SecFiscalPeriod.FullYear,
+            383_000_000_000m,
+            new DateOnly(2024, 4, 1),
+            DocumentType.Def14A,
+            "proxy"
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetFinancialFact("AAPL", "revenue");
+
+        result.Should().Contain("$383,285,000,000");
+        result.Should().Contain("| 10-K |");
+        result.Should().NotContain("$383,000,000,000");
+    }
+
+    [Fact]
+    public async Task GetFinancialFact_AliasLagsCompanyCorpus_AppendsCoverageWarning()
+    {
+        var stock = Apple();
+        DbContext.Set<CommonStock>().Add(stock);
+        var revenues = AddConcept("Revenues");
+        var assets = AddConcept("Assets");
+        AddFact(
+            stock,
+            revenues,
+            2024,
+            SecFiscalPeriod.FullYear,
+            100_000_000m,
+            new DateOnly(2025, 2, 1),
+            DocumentType.TenK,
+            "revenue-2024"
+        );
+        AddFact(
+            stock,
+            assets,
+            2026,
+            SecFiscalPeriod.Q2,
+            500_000_000m,
+            new DateOnly(2026, 8, 1),
+            DocumentType.TenQ,
+            "assets-2026"
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetFinancialFact("AAPL", "revenue");
+
+        result.Should().Contain("Coverage warning: this alias ends 2024-12-31");
+        result.Should().Contain("other structured facts for AAPL reach 2026-12-31");
+        result.Should().Contain("may have changed XBRL tags");
     }
 
     [Fact]

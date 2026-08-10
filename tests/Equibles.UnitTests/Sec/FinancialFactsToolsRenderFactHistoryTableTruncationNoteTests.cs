@@ -39,7 +39,7 @@ public class FinancialFactsToolsRenderFactHistoryTableTruncationNoteTests
             })
             .ToList();
 
-        return (string)method.Invoke(null, ["revenue", stock, false, perPeriod, total]);
+        return (string)method.Invoke(null, ["revenue", stock, false, perPeriod, total, null]);
     }
 
     [Fact]

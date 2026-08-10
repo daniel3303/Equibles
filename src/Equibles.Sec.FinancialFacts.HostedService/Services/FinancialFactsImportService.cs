@@ -32,6 +32,11 @@ public class FinancialFactsImportService
 {
     private const int InsertBatchSize = 1000;
 
+    // Bump whenever parsing, fiscal identity, or quality filtering changes existing rows. The
+    // per-company checkpoint forces a full Company Facts replay without racing the old worker
+    // during an additive migration rollout.
+    internal const int CurrentImporterVersion = 1;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly ILogger<FinancialFactsImportService> _logger;
@@ -108,8 +113,13 @@ public class FinancialFactsImportService
 
         var maxFiled = parsed.Max(p => p.Filed);
 
-        var lastSeen = await GetLastFiledSeen(stock, cancellationToken);
-        if (lastSeen.HasValue && lastSeen.Value >= maxFiled)
+        var syncStatus = await GetSyncStatus(stock, cancellationToken);
+        var lastSeen = syncStatus?.LastFiledDateSeen;
+        if (
+            syncStatus?.ImporterVersion >= CurrentImporterVersion
+            && lastSeen.HasValue
+            && lastSeen.Value >= maxFiled
+        )
         {
             // Nothing filed since the last successful sync — record the check
             // and skip the (expensive) re-upsert of the full history. Still re-source the share
@@ -214,10 +224,10 @@ public class FinancialFactsImportService
     )
     {
         var conceptIds = await ResolveConcepts(parsed, cancellationToken);
-        var documentIds = await LoadDocumentIdsByAccession(stock, cancellationToken);
+        var documents = await LoadDocumentsByAccession(stock, cancellationToken);
 
         var built = parsed
-            .Select(p => BuildFact(stock, p, conceptIds, documentIds))
+            .Select(p => BuildFact(stock, p, conceptIds, documents))
             .Where(f => f != null)
             .ToList();
 
@@ -234,7 +244,19 @@ public class FinancialFactsImportService
             );
         }
 
-        var facts = CollapseToNaturalKey(built);
+        var quality = FinancialFactImportQualityFilter.Apply(built);
+        if (quality.Rejected.Count > 0)
+        {
+            await DeleteRejectedFacts(stock, quality.Rejected, cancellationToken);
+            _logger.LogWarning(
+                "Rejected {Count} lower-quality Company Facts rows for {Ticker} (CIK {Cik})",
+                quality.Rejected.Count,
+                stock.Ticker,
+                stock.Cik
+            );
+        }
+
+        var facts = CollapseToNaturalKey(quality.Accepted.ToList());
 
         // SyncStatus is advanced only here, after a successful persist, so a
         // failure leaves the checkpoint un-advanced and the company is
@@ -427,7 +449,7 @@ public class FinancialFactsImportService
         return (pairs, concepts);
     }
 
-    private async Task<Dictionary<string, Guid>> LoadDocumentIdsByAccession(
+    private async Task<Dictionary<string, FilingDocumentContext>> LoadDocumentsByAccession(
         CommonStock stock,
         CancellationToken cancellationToken
     )
@@ -438,12 +460,22 @@ public class FinancialFactsImportService
         var rows = await documentRepository
             .GetByCompany(stock)
             .Where(d => d.AccessionNumber != null)
-            .Select(d => new { d.Id, d.AccessionNumber })
+            .Select(d => new
+            {
+                d.Id,
+                d.AccessionNumber,
+                d.ReportingForDate,
+                d.DocumentType,
+            })
             .ToListAsync(cancellationToken);
 
-        var map = new Dictionary<string, Guid>();
+        var map = new Dictionary<string, FilingDocumentContext>();
         foreach (var row in rows)
-            map[row.AccessionNumber] = row.Id;
+            map[row.AccessionNumber] = new FilingDocumentContext(
+                row.Id,
+                row.ReportingForDate,
+                row.DocumentType
+            );
         return map;
     }
 
@@ -451,24 +483,27 @@ public class FinancialFactsImportService
         CommonStock stock,
         ParsedFact p,
         Dictionary<(FactTaxonomy, string), Guid> conceptIds,
-        Dictionary<string, Guid> documentIds
+        Dictionary<string, FilingDocumentContext> documents
     )
     {
         if (!conceptIds.TryGetValue((p.Taxonomy, p.Tag), out var conceptId))
             return null;
 
+        documents.TryGetValue(p.Accession, out var document);
+        var fiscalIdentity = ValidateAgainstFilingDocumentPeriod(stock, p, document);
+
         return new FinancialFact
         {
             CommonStockId = stock.Id,
             FinancialConceptId = conceptId,
-            DocumentId = documentIds.TryGetValue(p.Accession, out var docId) ? docId : null,
+            DocumentId = document?.Id,
             Unit = p.Unit,
             PeriodType = p.PeriodType,
             PeriodStart = p.PeriodStart,
             PeriodEnd = p.PeriodEnd,
             Value = p.Value,
-            FiscalYear = p.FiscalYear,
-            FiscalPeriod = p.FiscalPeriod,
+            FiscalYear = fiscalIdentity.Year,
+            FiscalPeriod = fiscalIdentity.Period,
             // SEC emits many form strings outside the known DocumentTypes
             // (NT 10-K, S-1, 485BPOS, …); fold them into Other rather than
             // fabricating untracked DocumentType instances.
@@ -478,6 +513,46 @@ public class FinancialFactsImportService
             Frame = p.Frame,
         };
     }
+
+    // The Company Facts fy/fp fields identify the filing, and old importer rows can retain that
+    // high stamp. For the accession's own annual period, the stored SEC document supplies an
+    // independent period anchor. Re-resolve against that exact span; if company FYE metadata is
+    // unavailable or stale, a matching annual filing still establishes an FY ending in the
+    // document period's calendar year. Comparable prior-year facts in the same accession do not
+    // match ReportingForDate and continue through the ordinary date resolver.
+    private static (int Year, SecFiscalPeriod Period) ValidateAgainstFilingDocumentPeriod(
+        CommonStock stock,
+        ParsedFact fact,
+        FilingDocumentContext document
+    )
+    {
+        var original = (fact.FiscalYear, fact.FiscalPeriod);
+        if (
+            document == null
+            || fact.PeriodType != FactPeriodType.Duration
+            || fact.PeriodEnd != document.ReportingForDate
+            || fact.PeriodEnd.DayNumber - fact.PeriodStart.DayNumber is < 350 or > 380
+            || !IsAnnualPeriodicForm(document.DocumentType)
+        )
+            return original;
+
+        var resolved = FiscalPeriodResolver.Resolve(
+            fact.PeriodStart,
+            document.ReportingForDate,
+            stock.FiscalYearEndMonth,
+            stock.FiscalYearEndDay
+        );
+        if (resolved is { } validated && validated.Period == SecFiscalPeriod.FullYear)
+            return validated;
+
+        return (document.ReportingForDate.Year, SecFiscalPeriod.FullYear);
+    }
+
+    private static bool IsAnnualPeriodicForm(DocumentType form) =>
+        form == DocumentType.TenK
+        || form == DocumentType.TenKa
+        || form == DocumentType.TwentyF
+        || form == DocumentType.FortyF;
 
     // The CIK set one facts import reads: primary first, then every attached
     // secondary. Distinct because the subsidiary-attach path writes SEC's value
@@ -526,6 +601,10 @@ public class FinancialFactsImportService
                     new FinancialFact
                     {
                         Value = incoming.Value,
+                        PeriodType = incoming.PeriodType,
+                        FiscalYear = incoming.FiscalYear,
+                        FiscalPeriod = incoming.FiscalPeriod,
+                        Form = incoming.Form,
                         Frame = incoming.Frame,
                         FiledDate = incoming.FiledDate,
                         DocumentId = incoming.DocumentId,
@@ -534,15 +613,14 @@ public class FinancialFactsImportService
             .RunAsync();
     }
 
-    private async Task<DateOnly?> GetLastFiledSeen(
+    private async Task<FinancialFactsSyncStatus> GetSyncStatus(
         CommonStock stock,
         CancellationToken cancellationToken
     )
     {
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<FinancialFactsSyncStatusRepository>();
-        var status = await repo.GetByStock(stock).FirstOrDefaultAsync(cancellationToken);
-        return status?.LastFiledDateSeen;
+        return await repo.GetByStock(stock).FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task UpsertSyncStatus(
@@ -559,6 +637,7 @@ public class FinancialFactsImportService
             CommonStockId = stock.Id,
             LastCheckedAt = DateTime.UtcNow,
             LastFiledDateSeen = lastFiledSeen,
+            ImporterVersion = CurrentImporterVersion,
         };
 
         await dbContext
@@ -572,10 +651,51 @@ public class FinancialFactsImportService
                         LastCheckedAt = incoming.LastCheckedAt,
                         LastFiledDateSeen =
                             incoming.LastFiledDateSeen ?? existing.LastFiledDateSeen,
+                        ImporterVersion = incoming.ImporterVersion,
                     }
             )
             .RunAsync(cancellationToken);
     }
+
+    private async Task DeleteRejectedFacts(
+        CommonStock stock,
+        IReadOnlyCollection<FinancialFact> rejected,
+        CancellationToken cancellationToken
+    )
+    {
+        var keys = rejected.Select(NaturalKey).ToHashSet();
+        var accessions = rejected.Select(f => f.AccessionNumber).Distinct().ToList();
+        var conceptIds = rejected.Select(f => f.FinancialConceptId).Distinct().ToList();
+
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var candidates = await dbContext
+            .Set<FinancialFact>()
+            .Where(f =>
+                f.CommonStockId == stock.Id
+                && f.DimensionsKey == ""
+                && accessions.Contains(f.AccessionNumber)
+                && conceptIds.Contains(f.FinancialConceptId)
+            )
+            .ToListAsync(cancellationToken);
+        var rows = candidates.Where(f => keys.Contains(NaturalKey(f))).ToList();
+        if (rows.Count == 0)
+            return;
+
+        dbContext.RemoveRange(rows);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static FactNaturalKey NaturalKey(FinancialFact fact) =>
+        new(
+            fact.CommonStockId,
+            fact.FinancialConceptId,
+            fact.Unit,
+            fact.PeriodStart,
+            fact.PeriodEnd,
+            fact.AccessionNumber,
+            fact.DimensionsKey
+        );
 
     private static bool TryMapTaxonomy(string key, out FactTaxonomy taxonomy)
     {
@@ -667,4 +787,20 @@ public class FinancialFactsImportService
         public string Accession { get; init; }
         public string Frame { get; init; }
     }
+
+    private sealed record FactNaturalKey(
+        Guid CommonStockId,
+        Guid FinancialConceptId,
+        string Unit,
+        DateOnly PeriodStart,
+        DateOnly PeriodEnd,
+        string AccessionNumber,
+        string DimensionsKey
+    );
+
+    internal sealed record FilingDocumentContext(
+        Guid Id,
+        DateOnly ReportingForDate,
+        DocumentType DocumentType
+    );
 }

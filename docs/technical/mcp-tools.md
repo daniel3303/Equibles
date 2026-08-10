@@ -89,12 +89,12 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `FinancialFactsTools`:
 
-- `GetFinancialFact` — time series for one XBRL concept (e.g. `us-gaap:Revenues`) on one ticker.
+- `GetFinancialFact` — time series for one XBRL concept (e.g. `us-gaap:Revenues`) on one ticker, with the exact period start/end and a coverage warning when the alias materially trails the company's other structured facts.
 - `CompareFinancialFact` — same concept compared across multiple tickers.
 
 `FinancialStatementTools`:
 
-- `GetFinancialStatement` — full income statement / balance sheet / cash flow for a ticker + fiscal period.
+- `GetFinancialStatement` — full income statement / balance sheet / cash flow for a ticker + fiscal period, anchored to one actual period end with each line's exact start/end span.
 
 `RevenueBreakdownTools`:
 

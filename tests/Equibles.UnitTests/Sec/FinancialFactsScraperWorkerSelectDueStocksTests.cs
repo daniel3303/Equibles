@@ -1,4 +1,5 @@
 using Equibles.Sec.FinancialFacts.HostedService;
+using Equibles.Sec.FinancialFacts.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -26,6 +27,7 @@ public class FinancialFactsScraperWorkerSelectDueStocksTests
         var due = FinancialFactsScraperWorker.SelectDueStocks(
             [stale, neverChecked],
             new Dictionary<Guid, DateTime> { [stale] = Cutoff.AddHours(-1) },
+            CurrentVersions(stale),
             Cutoff
         );
 
@@ -42,6 +44,7 @@ public class FinancialFactsScraperWorkerSelectDueStocksTests
         var due = FinancialFactsScraperWorker.SelectDueStocks(
             [fresh],
             new Dictionary<Guid, DateTime> { [fresh] = Now.AddHours(-1) },
+            CurrentVersions(fresh),
             Cutoff
         );
 
@@ -64,6 +67,7 @@ public class FinancialFactsScraperWorkerSelectDueStocksTests
         var due = FinancialFactsScraperWorker.SelectDueStocks(
             [stale3h, stale9h, stale6h],
             stamps,
+            CurrentVersions(stale3h, stale9h, stale6h),
             Cutoff
         );
 
@@ -81,9 +85,37 @@ public class FinancialFactsScraperWorkerSelectDueStocksTests
         var due = FinancialFactsScraperWorker.SelectDueStocks(
             [atCutoff],
             new Dictionary<Guid, DateTime> { [atCutoff] = Cutoff },
+            CurrentVersions(atCutoff),
             Cutoff
         );
 
         due.Should().BeEmpty();
     }
+
+    [Fact]
+    public void OlderImporterVersionIsDueEvenWhenFresh()
+    {
+        var outdated = Guid.NewGuid();
+        var ordinaryStale = Guid.NewGuid();
+
+        var due = FinancialFactsScraperWorker.SelectDueStocks(
+            [ordinaryStale, outdated],
+            new Dictionary<Guid, DateTime>
+            {
+                [ordinaryStale] = Cutoff.AddHours(-2),
+                [outdated] = Now.AddMinutes(-1),
+            },
+            new Dictionary<Guid, int>
+            {
+                [ordinaryStale] = FinancialFactsImportService.CurrentImporterVersion,
+                [outdated] = FinancialFactsImportService.CurrentImporterVersion - 1,
+            },
+            Cutoff
+        );
+
+        due.Should().Equal(outdated, ordinaryStale);
+    }
+
+    private static Dictionary<Guid, int> CurrentVersions(params Guid[] ids) =>
+        ids.ToDictionary(id => id, _ => FinancialFactsImportService.CurrentImporterVersion);
 }

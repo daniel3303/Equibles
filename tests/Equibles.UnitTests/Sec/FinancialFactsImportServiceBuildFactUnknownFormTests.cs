@@ -40,14 +40,14 @@ public class FinancialFactsImportServiceBuildFactUnknownFormTests
         {
             [(FactTaxonomy.UsGaap, "Revenues")] = conceptId,
         };
-        var documentIds = new Dictionary<string, Guid>();
+        var documents = new Dictionary<string, FinancialFactsImportService.FilingDocumentContext>();
 
         var method = serviceType.GetMethod(
             "BuildFact",
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        var fact = method.Invoke(null, [stock, parsedFact, conceptIds, documentIds]);
+        var fact = method.Invoke(null, [stock, parsedFact, conceptIds, documents]);
 
         var form = fact.GetType().GetProperty("Form").GetValue(fact);
         form.Should().Be(DocumentType.Other);
