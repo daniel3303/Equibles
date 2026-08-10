@@ -235,7 +235,23 @@ public class StockPriceTools
 
                     var price = latestTwo[0];
                     var previous = latestTwo.Count > 1 ? latestTwo[1] : null;
-                    var previousClose = DayChangeBasis(price, previous);
+
+                    // Trailing 52-week close range, anchored on the row's own session so a
+                    // stock that stopped trading doesn't fabricate a fresh range. A completed
+                    // provider refresh cannot certify the basis of raw rows, so a captured split
+                    // inside the requested year moves the comparison start to that split date.
+                    var cutoff = price.Date.AddDays(-365);
+                    var comparableWindow = await LoadComparablePriceWindow(
+                        stock,
+                        priceTicker,
+                        cutoff,
+                        price.Date
+                    );
+                    var previousClose = DayChangeBasis(
+                        price,
+                        previous,
+                        comparableWindow.SplitBoundaryDate
+                    );
                     var changeCell = "—";
                     var changePctCell = "—";
                     if (previousClose != null)
@@ -251,22 +267,10 @@ public class StockPriceTools
                     else if (previous != null && !IsPriorSession(price, previous))
                     {
                         // Only a skipped session earns the footnote. A prior row with a
-                        // non-positive close is blanked too, and saying "no row for the session
-                        // before" about it would be wrong.
+                        // non-positive close or one before a split boundary is blanked too, and
+                        // saying "no row for the session before" about either would be wrong.
                         gapped = true;
                     }
-
-                    // Trailing 52-week close range, anchored on the row's own session so a
-                    // stock that stopped trading doesn't fabricate a fresh range. A completed
-                    // provider refresh cannot certify the basis of raw rows, so a captured split
-                    // inside the requested year moves the comparison start to that split date.
-                    var cutoff = price.Date.AddDays(-365);
-                    var comparableWindow = await LoadComparablePriceWindow(
-                        stock,
-                        priceTicker,
-                        cutoff,
-                        price.Date
-                    );
                     var range = await _priceRepository
                         .GetByStock(stock, priceTicker)
                         .Where(p => p.Date >= comparableWindow.Start && p.Close > 0)
@@ -294,7 +298,7 @@ public class StockPriceTools
                         range != null
                         && range.Oldest > cutoff.AddDays(BaselineSlackDays)
                         && !comparableWindow.IsSplitLimited;
-                    splitLimitedWindow |= range != null && comparableWindow.IsSplitLimited;
+                    splitLimitedWindow |= comparableWindow.IsSplitLimited;
 
                     rowDates.Add(price.Date);
                     result.AppendLine(
@@ -351,9 +355,10 @@ public class StockPriceTools
                     result.AppendLine();
                     result.AppendLine(
                         "Note: a 52-week value marked \\* can begin at the latest recorded split "
-                            + "inside the requested year. Earlier raw bars are withheld because "
-                            + "stored rows do not identify their split basis; the displayed bounds "
-                            + "compare only the post-split interval."
+                            + "inside the requested year. A Change of \"—\" can also mean its "
+                            + "previous session falls before that split. Earlier raw bars are "
+                            + "withheld because stored rows do not identify their split basis; "
+                            + "the displayed figures compare only the post-split interval."
                     );
                 }
 
@@ -897,8 +902,16 @@ public class StockPriceTools
     // So the basis is chosen by DATE, never by position: only the row dated the trading day
     // immediately before the latest one qualifies. Otherwise there is no day change to state,
     // and an absent percentage is honest where a wrong one is not.
-    private static decimal? DayChangeBasis(DailyStockPrice latest, DailyStockPrice previous) =>
-        IsPriorSession(latest, previous) && previous.Close > 0 ? previous.Close : null;
+    private static decimal? DayChangeBasis(
+        DailyStockPrice latest,
+        DailyStockPrice previous,
+        DateOnly? splitBoundaryDate
+    ) =>
+        IsPriorSession(latest, previous)
+        && previous.Close > 0
+        && (splitBoundaryDate == null || previous.Date >= splitBoundaryDate)
+            ? previous.Close
+            : null;
 
     // Whether the second-newest stored row is the session immediately before the newest one.
     // Shared with the caller so the "series skips a session" footnote and the decision to blank

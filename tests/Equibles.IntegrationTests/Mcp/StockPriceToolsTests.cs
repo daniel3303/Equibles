@@ -242,6 +242,44 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("compare only the post-split interval");
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("AAPL")]
+    public async Task GetLatestPrices_LatestBarOnSplitDate_OmitsCrossBoundaryDayChange(
+        string priceSeriesTicker
+    )
+    {
+        var stock = AaplStock();
+        var splitDate = new DateOnly(2026, 8, 4);
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStock = stock,
+                    CommonStockId = stock.Id,
+                    PriceSeriesTicker = priceSeriesTicker,
+                    EffectiveDate = splitDate,
+                    Numerator = 1m,
+                    Denominator = 5m,
+                    Source = StockSplitSource.Yahoo,
+                }
+            );
+        DbContext
+            .Set<DailyStockPrice>()
+            .AddRange(
+                PriceFor(stock, new DateOnly(2026, 8, 3), close: 100m),
+                PriceFor(stock, splitDate, close: 20m)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLatestPrices("AAPL");
+
+        result.Should().Contain("| AAPL | 2026-08-04 | 20.00 | — | — |");
+        result.Should().Contain("previous session falls before that split");
+    }
+
     [Fact]
     public async Task GetLatestPrices_UnknownTickerInList_RendersNotFoundRow()
     {

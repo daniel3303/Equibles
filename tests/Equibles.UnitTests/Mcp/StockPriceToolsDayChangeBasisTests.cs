@@ -28,7 +28,8 @@ public class StockPriceToolsDayChangeBasisTests
     private static decimal? Basis(
         DateOnly latestDate,
         DateOnly? previousDate,
-        decimal previousClose = 100m
+        decimal previousClose = 100m,
+        DateOnly? splitBoundaryDate = null
     )
     {
         var latest = new DailyStockPrice { Date = latestDate, Close = 110m };
@@ -36,7 +37,7 @@ public class StockPriceToolsDayChangeBasisTests
             previousDate == null
                 ? null
                 : new DailyStockPrice { Date = previousDate.Value, Close = previousClose };
-        return (decimal?)Method().Invoke(null, [latest, previous]);
+        return (decimal?)Method().Invoke(null, [latest, previous, splitBoundaryDate]);
     }
 
     [Fact]
@@ -114,6 +115,22 @@ public class StockPriceToolsDayChangeBasisTests
         // A duplicate bar is not a prior session; differencing it would state 0.00% as a day
         // change that was never measured.
         Basis(new DateOnly(2025, 3, 12), new DateOnly(2025, 3, 12)).Should().BeNull();
+    }
+
+    [Fact]
+    public void PriorSessionBeforeSplitBoundary_YieldsNoBasis()
+    {
+        var splitDate = new DateOnly(2026, 8, 4);
+
+        Basis(splitDate, new DateOnly(2026, 8, 3), splitBoundaryDate: splitDate).Should().BeNull();
+    }
+
+    [Fact]
+    public void PriorSessionOnSplitBoundary_RemainsComparable()
+    {
+        var splitDate = new DateOnly(2026, 8, 4);
+
+        Basis(new DateOnly(2026, 8, 5), splitDate, splitBoundaryDate: splitDate).Should().Be(100m);
     }
 
     [Theory]
