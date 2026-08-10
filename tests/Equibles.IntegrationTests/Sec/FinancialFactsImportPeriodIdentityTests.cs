@@ -583,6 +583,16 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                                     "10-K/A",
                                     amendmentFiled
                                 ),
+                            ],
+                        },
+                    },
+                    ["ProfitLoss"] = new CompanyFactConcept
+                    {
+                        Label = "Net loss including noncontrolling interests",
+                        Units = new()
+                        {
+                            ["USD"] =
+                            [
                                 Value(
                                     new DateOnly(2023, 1, 1),
                                     new DateOnly(2023, 3, 31),
