@@ -48,9 +48,9 @@ public class YahooPriceImportServiceCompanyProfileBlankSectorTests : IDisposable
             Substitute.For<ILogger<ErrorReporter>>()
         );
 
-        // Import's split-reconciliation pass (#2879) resolves SplitPriceReconciliationManager
-        // from the scope, and the per-ticker split capture resolves StockSplitCaptureManager.
+        // Import's corporate-action reconciliation and split capture resolve from the scope.
         var splitRepo = new StockSplitRepository(_dbContext);
+        var dividendRepo = new CashDividendRepository(_dbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
@@ -61,8 +61,13 @@ public class YahooPriceImportServiceCompanyProfileBlankSectorTests : IDisposable
             // writes nothing" path so the profile sync still runs.
             (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>()),
             (
-                typeof(SplitPriceReconciliationManager),
-                new SplitPriceReconciliationManager(splitRepo, _stockRepo)
+                typeof(CorporateActionPriceReconciliationManager),
+                new CorporateActionPriceReconciliationManager(
+                    splitRepo,
+                    dividendRepo,
+                    _stockRepo,
+                    new CorporateActionPriceReconciliationCursorRepository(_dbContext)
+                )
             ),
             (typeof(StockSplitCaptureManager), new StockSplitCaptureManager(splitRepo, _stockRepo))
         );

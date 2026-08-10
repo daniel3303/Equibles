@@ -92,11 +92,13 @@ public class YahooPriceImportService
             includeEnrichment ? "on" : "off"
         );
 
-        // Before the forward-only incremental append: reconcile any stock whose captured split is
-        // still pending for its listed series. GetSyncStartDate only appends and cannot revisit the
-        // old rows, so re-pull the full provider-served history and overwrite them (#2879). The
-        // provider can serve that history on different bases; the pending marker does not prove one.
-        await ReconcilePendingSplits(DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
+        // Before the forward-only incremental append: reconcile listed series whose captured split
+        // or cash dividend is still pending. GetSyncStartDate only appends and cannot revisit old
+        // rows, so re-pull the full provider-served history and replace the series atomically.
+        await ReconcilePendingCorporateActions(
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            cancellationToken
+        );
 
         // Crawl the recently-active stocks first, stalest-first within them, and the long-dormant
         // tail afterwards (see OrderByCrawlPriority for why the plain stalest-first order starved
@@ -405,18 +407,23 @@ public class YahooPriceImportService
             .ToList();
     }
 
-    // Re-syncs the full price history of every exact listed series that has an unreconciled split,
-    // capped per cycle. Yahoo's served basis can vary around recent splits, so copy the response
-    // exactly rather than guessing a ratio or labelling the replacement universally adjusted.
-    private async Task ReconcilePendingSplits(DateOnly today, CancellationToken cancellationToken)
+    // Re-syncs the full price history of every exact listed series with an effective, unreconciled
+    // split or dividend, capped per cycle. Future actions remain pending until the first settled
+    // day after their action date. Copy the provider response instead of deriving adjustment ratios.
+    private async Task ReconcilePendingCorporateActions(
+        DateOnly today,
+        CancellationToken cancellationToken
+    )
     {
-        PendingSplitSelection selection;
+        PendingPriceReconciliationSelection selection;
         using (var scope = _scopeFactory.CreateScope())
         {
             var manager =
-                scope.ServiceProvider.GetRequiredService<SplitPriceReconciliationManager>();
+                scope.ServiceProvider.GetRequiredService<CorporateActionPriceReconciliationManager>();
             selection = await manager.SelectPendingSeries(
-                _workerOptions.MaxSplitPriceReconciliationsPerCycle
+                _workerOptions.MaxCorporateActionPriceReconciliationsPerCycle,
+                today,
+                cancellationToken
             );
         }
 
@@ -424,12 +431,12 @@ public class YahooPriceImportService
             return;
 
         _logger.LogInformation(
-            "Re-syncing full price history for {Count} listed series with pending splits",
+            "Re-syncing full price history for {Count} listed series with pending corporate actions",
             selection.Series.Count
         );
         if (selection.Skipped > 0)
             _logger.LogInformation(
-                "{Remaining} more listed series with pending splits exceed the per-cycle cap "
+                "{Remaining} more listed series with pending corporate actions exceed the per-cycle cap "
                     + "and will be reconciled on a later cycle",
                 selection.Skipped
             );
@@ -448,7 +455,7 @@ public class YahooPriceImportService
             {
                 _logger.LogWarning(
                     ex,
-                    "Failed to fetch full history for {Ticker}; leaving its split(s) pending",
+                    "Failed to fetch full history for {Ticker}; leaving its corporate actions pending",
                     series.ListedTicker
                 );
             }
@@ -467,7 +474,7 @@ public class YahooPriceImportService
                 );
                 await _errorReporter.Report(
                     ErrorSource.YahooPriceScraper,
-                    $"ReconcilePendingSplits({series.ListedTicker})",
+                    $"ReconcilePendingCorporateActions({series.ListedTicker})",
                     ex
                 );
             }
@@ -475,7 +482,7 @@ public class YahooPriceImportService
     }
 
     private async Task ReconcileStock(
-        PendingSplitSeries selectedSeries,
+        PendingPriceReconciliationSeries selectedSeries,
         DateOnly floor,
         DateOnly today,
         CancellationToken cancellationToken
@@ -493,7 +500,7 @@ public class YahooPriceImportService
         if (chartData.Prices.Count == 0)
         {
             _logger.LogWarning(
-                "Yahoo returned no prices for {Ticker}; keeping existing rows and leaving its split(s) pending",
+                "Yahoo returned no prices for {Ticker}; keeping existing rows and leaving its corporate actions pending",
                 target.Ticker
             );
             return;
@@ -509,19 +516,28 @@ public class YahooPriceImportService
         if (!replaced)
             return;
 
-        // Refresh the authoritative current share count + market cap by refetch, not arithmetic —
-        // this is #2879's shares-outstanding requirement.
-        await SyncKeyStatistics(target, cancellationToken);
+        // Capture actions carried by the full-history response before stamping the selected
+        // snapshot. Anything newly discovered here remains pending for one more reconciliation.
+        await CaptureSplits(target, chartData.Splits, cancellationToken);
+        await CaptureDividends(target, chartData.Dividends, cancellationToken);
+
+        // A split changes the share base, so refresh the authoritative current share count +
+        // market cap by refetch, not arithmetic (#2879). A dividend-only price reconciliation is
+        // complete after the atomic history replacement and must not depend on unrelated
+        // quote-summary or EDGAR enrichment succeeding.
+        if (selectedSeries.Splits.Count > 0)
+            await SyncKeyStatistics(target, cancellationToken);
 
         using var scope = _scopeFactory.CreateScope();
-        var manager = scope.ServiceProvider.GetRequiredService<SplitPriceReconciliationManager>();
+        var manager =
+            scope.ServiceProvider.GetRequiredService<CorporateActionPriceReconciliationManager>();
         var stamped = await manager.StampApplied(
             selectedSeries,
             DateTime.UtcNow,
             cancellationToken
         );
         _logger.LogInformation(
-            "Reconciled {Ticker}: replaced stored price history and stamped {Count} split(s) applied",
+            "Reconciled {Ticker}: replaced stored price history and stamped {Count} corporate action(s) applied",
             target.Ticker,
             stamped
         );
@@ -1155,7 +1171,7 @@ public class YahooPriceImportService
     // The stored series and the feed genuinely disagree here, in BOTH orderings — the guard must
     // stay direction-agnostic:
     //  - Pre-reconcile (the window EVERY split passes through): CaptureSplits records a split at
-    //    the end of the same cycle whose ReconcilePendingSplits pass already ran, so until the
+    //    the end of the same cycle whose ReconcilePendingCorporateActions pass already ran, so until the
     //    next cycle the stored pre-split rows are still as-traded while the feed already serves
     //    them adjusted. On a forward split the adjusted volume is ratio-times LARGER, so it reads
     //    as a settlement upgrade and would leave a row whose volume is adjusted under an as-traded

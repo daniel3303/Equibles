@@ -46,11 +46,10 @@ public class StockPriceTools
     [Description(
         "Get daily OHLCV (Open, High, Low, Close, Volume) price history for a stock. Useful for "
             + "technical analysis, charting, and price trend analysis. Prices are in USD. An Adj "
-            + "Close column shows the stored adjusted close on the rows where it differs from "
-            + "Close. Adj Close is an auxiliary stored provider series that can be rewritten "
-            + "with the full history during split reconciliation and is not guaranteed to be "
-            + "complete total return. Neither equality with nor a difference from Close "
-            + "identifies which corporate actions it reflects."
+            + "Close column shows the provider's split- and cash-dividend-adjusted close when it "
+            + "differs from Close. Captured corporate-action changes trigger a full-history "
+            + "reconciliation of the exact listed series. Once pending actions reconcile, use "
+            + "Adj Close for total-return analysis; an action can remain pending until a later cycle."
     )]
     public Task<string> GetStockPrices(
         [Description(
@@ -99,10 +98,8 @@ public class StockPriceTools
                 if (records.Count == 0)
                     return $"No price data found for {priceTicker} in the specified date range.";
 
-                // AdjustedClose is the provider's auxiliary series and is replaced with the full
-                // history during a split reconcile, but issue #7088 proves it is not a dependable
-                // total-return series. Render it when it differs without inferring a
-                // corporate-action cause or claiming a universal basis for Close.
+                // The provider-adjusted series is replaced in full after captured splits and cash
+                // dividends, so every stored row remains on one adjustment basis after reconcile.
                 var hasAdjustment = records.Any(p => p.AdjustedClose != p.Close);
 
                 var result = hasAdjustment
@@ -130,8 +127,8 @@ public class StockPriceTools
                 result.AppendLine();
                 result.AppendLine(
                     hasAdjustment
-                        ? "_Adj Close is an auxiliary stored provider series. It can be rewritten with the full history during split reconciliation, is not guaranteed to be complete total return, and its difference from Close does not identify which corporate actions it reflects._"
-                        : "_The stored Adj Close equals Close on every row shown, but that equality does not prove the absence of a dividend or split. Adj Close can be rewritten with the full history during split reconciliation and is not guaranteed to be complete total return._"
+                        ? "_Adj Close is the provider-adjusted close. Captured splits and cash dividends trigger a full-history reconciliation. Once pending actions reconcile, use Adj Close rather than Close for total-return calculations; an action can remain pending until a later cycle._"
+                        : "_Adj Close equals Close on every row shown. Captured splits and cash dividends trigger a full-history reconciliation; an action can remain pending until a later cycle._"
                 );
 
                 return result.ToString();

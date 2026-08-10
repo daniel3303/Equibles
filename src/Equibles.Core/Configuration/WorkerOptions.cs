@@ -6,10 +6,10 @@ public class WorkerOptions
     public List<string> TickersToSync { get; set; } = [];
 
     /// <summary>
-    /// Caps how many stocks the split-price back-adjustment pass re-syncs per cycle, so the
+    /// Caps how many listed series the corporate-action adjustment pass re-syncs per cycle, so the
     /// one-time universe backfill throttles against Yahoo's shared request limiter instead of
-    /// re-pulling every stock's full history at once. Stocks beyond the cap stay pending and are
+    /// re-pulling every series' full history at once. Series beyond the cap stay pending and are
     /// picked up on later cycles.
     /// </summary>
-    public int MaxSplitPriceReconciliationsPerCycle { get; set; } = 50;
+    public int MaxCorporateActionPriceReconciliationsPerCycle { get; set; } = 50;
 }

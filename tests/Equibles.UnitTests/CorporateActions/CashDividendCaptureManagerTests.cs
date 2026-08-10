@@ -60,6 +60,8 @@ public class CashDividendCaptureManagerTests
         stored.Should().HaveCount(2);
         stored.Single(d => d.ExDate == new DateOnly(2024, 2, 9)).AmountPerShare.Should().Be(0.24m);
         stored.Should().OnlyContain(d => d.Source == CashDividendSource.Yahoo);
+        stored.Should().OnlyContain(d => d.PriceAdjustmentAppliedTime == null);
+        stored.Should().OnlyContain(d => d.PriceAdjustmentAppliedAmountPerShare == null);
     }
 
     [Fact]
@@ -89,6 +91,10 @@ public class CashDividendCaptureManagerTests
             stock,
             [Dividend(exDate, 0.24m)]
         );
+        var original = await db.Set<CashDividend>().SingleAsync();
+        original.PriceAdjustmentAppliedAmountPerShare = original.AmountPerShare;
+        original.PriceAdjustmentAppliedTime = DateTime.UtcNow;
+        await db.SaveChangesAsync();
         var changes = await new CashDividendCaptureManager(new CashDividendRepository(db)).Capture(
             stock,
             [Dividend(exDate, 0.26m)]
@@ -98,6 +104,8 @@ public class CashDividendCaptureManagerTests
         var stored = await new CashDividendRepository(db).GetByStock(stock.Id).ToListAsync();
         stored.Should().HaveCount(1);
         stored[0].AmountPerShare.Should().Be(0.26m);
+        stored[0].PriceAdjustmentAppliedAmountPerShare.Should().BeNull();
+        stored[0].PriceAdjustmentAppliedTime.Should().BeNull();
     }
 
     [Fact]

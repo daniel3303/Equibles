@@ -253,23 +253,29 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
             await seed.SaveChangesAsync();
         }
 
-        PendingSplitSeries selected;
+        PendingPriceReconciliationSeries selected;
         await using (var selection = _fixture.CreateDbContext())
         {
-            var manager = new SplitPriceReconciliationManager(
+            var manager = new CorporateActionPriceReconciliationManager(
                 new StockSplitRepository(selection),
-                new CommonStockRepository(selection)
+                new CashDividendRepository(selection),
+                new CommonStockRepository(selection),
+                new CorporateActionPriceReconciliationCursorRepository(selection)
             );
-            selected = (await manager.SelectPendingSeries(50)).Series.Single();
+            selected = (
+                await manager.SelectPendingSeries(50, DateOnly.FromDateTime(DateTime.UtcNow))
+            ).Series.Single();
         }
 
         var saveGate = new SplitStampSaveGate();
         await using var stamping = _fixture.CreateDbContext(options =>
             options.AddInterceptors(saveGate)
         );
-        var stampingManager = new SplitPriceReconciliationManager(
+        var stampingManager = new CorporateActionPriceReconciliationManager(
             new StockSplitRepository(stamping),
-            new CommonStockRepository(stamping)
+            new CashDividendRepository(stamping),
+            new CommonStockRepository(stamping),
+            new CorporateActionPriceReconciliationCursorRepository(stamping)
         );
         var appliedTime = new DateTime(2026, 8, 4, 12, 0, 0, DateTimeKind.Utc);
         var stampTask = stampingManager.StampApplied(selected, appliedTime);
