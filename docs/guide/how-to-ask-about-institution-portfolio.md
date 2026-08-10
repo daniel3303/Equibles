@@ -16,7 +16,7 @@ Name the fund and what you want to know:
 - "What's Renaissance Technologies' sector allocation?"
 - "What did Citadel buy and sell last quarter?"
 
-If the name is ambiguous, the assistant first resolves it with `SearchInstitutions` (which returns matching funds with their SEC CIK number and location), then picks the matching tool. Institution lookups match on a partial name — the closest match wins — and default to the fund's latest report unless you name a quarter.
+If the name is ambiguous, the assistant first calls `SearchInstitutions`. Discovery tries all name tokens first and broadens to any token only when no strict row matches; its rows include SEC CIK, latest report date, reported 13F AUM, tracked position count, and location. Separate CIKs can represent current, predecessor, or otherwise distinct registrants, so compare the dates and use the intended CIK. Institution-scoped tools never use the broad fallback: they accept a unique strict partial or verified flagship alias, but reject ambiguity instead of selecting silently.
 
 ## What you should see
 

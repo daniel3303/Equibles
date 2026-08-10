@@ -7,6 +7,7 @@ using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.BusinessLogic.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
+using Equibles.Holdings.Repositories.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
 using Microsoft.Extensions.Logging;
@@ -47,7 +48,7 @@ public class CloneBacktestTools
     )]
     public Task<string> GetFundCloneBacktest(
         [Description(
-            "Institution name or SEC CIK (e.g., 'Berkshire Hathaway', '1067983', or zero-padded '0001067983'; ambiguous names resolve to the largest recently-active 13F filer)"
+            "Institution name or SEC CIK (e.g., 'Berkshire Hathaway', '1067983', or zero-padded '0001067983'). Unique partials and verified aliases resolve; ambiguous partials return candidate CIKs."
         )]
             string institution,
         [Description("Benchmark ticker to compare against (default: SPY)")]
@@ -89,12 +90,16 @@ public class CloneBacktestTools
                 if (explicitTo.HasValue && !explicitFrom.HasValue)
                     return "toDate requires fromDate — pass both to anchor the window.";
 
-                // Largest 13F filer first: an ambiguous name ("Fidelity") must backtest the
-                // flagship manager, not whichever small RIA sorts first alphabetically.
-                var matches = await _holderRepository.SearchNameOrCikLargestFirst(institution, 4);
-                if (matches.Count == 0)
-                    return $"No institution found matching '{institution}'.";
-                var holder = matches[0];
+                var resolution = await _holderRepository.ResolveNameOrCik(institution);
+                if (resolution.Selected == null)
+                {
+                    if (resolution.Candidates.Count == 0)
+                        return $"No match for '{institution}' in the tracked 13F filer set.";
+                    return $"'{institution}' is ambiguous in the tracked 13F filer set: "
+                        + FormatCandidates(resolution.Candidates)
+                        + ". Pass the intended SEC CIK or an exact filed name.";
+                }
+                var holder = resolution.Selected.Holder;
 
                 var to = explicitTo ?? DateOnly.FromDateTime(DateTime.UtcNow);
                 var from = explicitFrom ?? to.AddYears(-windowYears);
@@ -111,8 +116,6 @@ public class CloneBacktestTools
                         + (outcome.Result.Reason ?? "no data available for the requested window.");
 
                 var notes = BuildNotes(
-                    matches,
-                    holder,
                     outcome,
                     from,
                     explicitFrom.HasValue,
@@ -126,13 +129,9 @@ public class CloneBacktestTools
         );
     }
 
-    // The annotation lines that keep the numbers honest: which filer an ambiguous name
-    // resolved to (and the alternates), a clamped windowYears, and a window shortened by the
-    // available 13F history — an LLM comparing two funds at "windowYears: 10" must see when
-    // one simulation actually covers 6 years.
+    // The annotation lines that keep the numbers honest: a clamped windowYears and a window
+    // shortened by the available 13F history. Ambiguous filer names now fail before simulation.
     private static List<string> BuildNotes(
-        List<InstitutionalHolder> matches,
-        InstitutionalHolder holder,
         CloneBacktestOutcome outcome,
         DateOnly requestedFrom,
         bool explicitWindow,
@@ -141,11 +140,6 @@ public class CloneBacktestTools
     )
     {
         var notes = new List<string>();
-        if (matches.Count > 1)
-            notes.Add(
-                $"Note: matched {holder.Name} (CIK {holder.Cik}, largest recently-active 13F filer of the matches); other matches: "
-                    + $"{string.Join(", ", matches.Skip(1).Select(m => $"{m.Name} (CIK {m.Cik})"))}."
-            );
         if (!explicitWindow && requestedYears != clampedYears)
             notes.Add(
                 $"Note: windowYears {requestedYears} is outside 1-20 and was clamped to {clampedYears}."
@@ -161,6 +155,25 @@ public class CloneBacktestTools
         }
         return notes;
     }
+
+    private static string FormatCandidates(
+        IReadOnlyList<InstitutionalHolderSearchMatch> candidates
+    ) =>
+        string.Join(
+            "; ",
+            candidates.Select(c =>
+                $"{MarkdownTable.EscapeCell(c.Holder.Name, "—")} (CIK {c.Holder.Cik}, latest {FormatOptionalDate(c.LatestReportDate)}, reported AUM {FormatOptionalDollars(c.ReportedAum)}, positions {FormatOptionalCount(c.PositionCount)})"
+            )
+        );
+
+    private static string FormatOptionalDate(DateOnly? value) =>
+        value == null ? "—" : McpFormat.Invariant(value.Value, "yyyy-MM-dd");
+
+    private static string FormatOptionalDollars(long? value) =>
+        value == null ? "—" : $"${McpFormat.WholeNumber(value.Value)}";
+
+    private static string FormatOptionalCount(int? value) =>
+        value == null ? "—" : McpFormat.WholeNumber(value.Value);
 
     private static string Render(
         InstitutionalHolder holder,

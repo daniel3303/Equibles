@@ -33,7 +33,9 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
 
         var output = await sut.GetInstitutionSummary("Definitely Not A Fund");
 
-        output.Should().Contain("No institution found");
+        output
+            .Should()
+            .Contain("No match for 'Definitely Not A Fund' in the tracked 13F filer set");
     }
 
     [Fact]
@@ -123,13 +125,10 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
     }
 
     [Fact]
-    public async Task GetInstitutionSummary_AmbiguousName_PrefersLargest13FFiler()
+    public async Task GetInstitutionSummary_AmbiguousPartialName_ReturnsCandidateCiks()
     {
-        // "Bridgewater" matches both Bridgewater Advisors Inc. (a small RIA with the SHORTER
-        // name) and Bridgewater Associates, LP (the flagship hedge fund). Ranking must follow
-        // 13F size (the InstitutionalFiling rollup's TotalValue), not name length — the old
-        // shortest-name-wins ordering served the small RIA's numbers as "Bridgewater's"
-        // (MCP audit 2026-07).
+        // The discovery result still ranks the larger flagship first, but an entity-scoped
+        // tool must not silently select it when the caller supplied an ambiguous partial.
         var smallRia = new InstitutionalHolder { Cik = "00080001", Name = "Bridgewater Adv." };
         var flagship = new InstitutionalHolder
         {
@@ -165,9 +164,10 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
 
         var output = await sut.GetInstitutionSummary("Bridgewater");
 
-        // No holdings are seeded, so the tool reports "no 13F holdings" — for the flagship
-        // filer, proving the larger fund won the resolution despite its longer name.
-        output.Should().Contain("No 13F holdings reported by Bridgewater Associates, LP");
+        output.Should().Contain("'Bridgewater' is ambiguous in the tracked 13F filer set");
+        output.Should().Contain("Bridgewater Associates, LP (CIK 00080002");
+        output.Should().Contain("Bridgewater Adv. (CIK 00080001");
+        output.Should().Contain("Pass the intended SEC CIK");
     }
 
     [Fact]

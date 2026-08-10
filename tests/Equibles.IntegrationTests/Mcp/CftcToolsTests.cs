@@ -76,7 +76,9 @@ public class CftcToolsTests : ParadeDbMcpTestBase
 
         result
             .Should()
-            .Be("Contract '999999' not found. Use SearchCftcMarkets to find available contracts.");
+            .Be(
+                "No match for '999999' in the tracked CFTC contract set. Use SearchCftcMarkets to list that curated set."
+            );
     }
 
     [Fact]
@@ -215,7 +217,7 @@ public class CftcToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().SearchCftcMarkets("PLATINUM");
 
-        result.Should().Contain("No tracked contracts match 'PLATINUM'");
+        result.Should().Contain("No match for 'PLATINUM' in the tracked, curated set");
         result.Should().Contain("curated set");
     }
 

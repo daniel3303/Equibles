@@ -46,4 +46,54 @@ public class CongressMemberRepositoryPostgresSearchTests : ParadeDbMcpTestBase
         results.Should().ContainSingle();
         results[0].Name.Should().Be("Pelosi, Nancy");
     }
+
+    [Fact]
+    public async Task Search_NoAllTokenMatch_BroadensToAnyToken()
+    {
+        DbContext.AddRange(
+            new CongressMember
+            {
+                Name = "Pelosi, Nancy",
+                Position = CongressPosition.Representative,
+            },
+            new CongressMember { Name = "Tuberville, Tommy", Position = CongressPosition.Senator }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var results = await new CongressMemberRepository(verify)
+            .Search("current nancy pelosi")
+            .ToListAsync();
+
+        results.Should().ContainSingle().Which.Name.Should().Be("Pelosi, Nancy");
+    }
+
+    [Fact]
+    public async Task Search_ExactStoredName_OutranksVerifiedAlias()
+    {
+        DbContext.AddRange(
+            new CongressMember
+            {
+                Name = "Dan Crenshaw",
+                Position = CongressPosition.Representative,
+            },
+            new CongressMember
+            {
+                Name = "Daniel Crenshaw",
+                Position = CongressPosition.Representative,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var repository = new CongressMemberRepository(verify);
+        var results = await repository.Search("Dan Crenshaw").ToListAsync();
+        var resolved = await repository.GetByName("Dan Crenshaw");
+
+        results.Should().ContainSingle().Which.Name.Should().Be("Dan Crenshaw");
+        resolved.Should().NotBeNull();
+        resolved.Name.Should().Be("Dan Crenshaw");
+    }
 }

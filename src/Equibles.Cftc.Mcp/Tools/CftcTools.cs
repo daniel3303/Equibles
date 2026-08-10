@@ -48,7 +48,7 @@ public class CftcTools
     )]
     public Task<string> GetCftcPositioning(
         [Description(
-            "CFTC contract market code (e.g., 067651 for Crude Oil, 088691 for Gold, 13874A for E-mini S&P 500)"
+            "CFTC market code, common contract name, or standard futures symbol (e.g., 067651, WTI, ES, Gold futures)"
         )]
             string marketCode,
         [Description("Start date in YYYY-MM-DD format (defaults to 1 year ago)")]
@@ -69,7 +69,7 @@ public class CftcTools
                     .FirstOrDefaultAsync();
 
                 if (contract == null)
-                    return $"Contract '{marketCode}' not found. Use SearchCftcMarkets to find available contracts.";
+                    return $"No match for '{marketCode}' in the tracked CFTC contract set. Use SearchCftcMarkets to list that curated set.";
 
                 var rangeError = ParseRangeStrict(
                     startDate,
@@ -216,7 +216,7 @@ public class CftcTools
         ReadOnly = true
     )]
     [Description(
-        "Search the tracked CFTC futures contracts by name or market code, or omit the query "
+        "Search the tracked CFTC futures contracts by name, market code, common contract name, or standard futures symbol, or omit the query "
             + "to list every tracked contract. Coverage is a curated set of ~35 major contracts "
             + "across Agriculture, Energy, Metals, Equity Indices, Interest Rates, and "
             + "Currencies - markets outside this set have no COT data here. Returns matching "
@@ -225,7 +225,7 @@ public class CftcTools
     )]
     public Task<string> SearchCftcMarkets(
         [Description(
-            "Search query — market code or name keyword (e.g., 'gold', 'crude', 'S&P', '088691'). Omit to list all tracked contracts."
+            "Search query — market code, name words, common name, or standard symbol (e.g., 'gold futures', 'WTI', 'ES', 'S&P 500', '088691'). Search requires every punctuation-independent word first and broadens to any word only when no strict row matches. Omit to list all tracked contracts."
         )]
             string query = null,
         [Description("Maximum number of results to return (default: 50, max: 500)")]
@@ -253,13 +253,14 @@ public class CftcTools
                     contracts,
                     string.IsNullOrWhiteSpace(query)
                         ? "No CFTC contracts found in the database."
-                        : $"No tracked contracts match '{query}'. Coverage is a curated set of ~35 major contracts - omit the query to list them all.",
+                        : $"No match for '{query}' in the tracked, curated set of ~35 contracts. This does not assert that the futures market does not exist; omit the query to list every tracked contract.",
                     string.IsNullOrWhiteSpace(query)
                         ? "Tracked CFTC contracts:"
                         : $"CFTC contracts matching '{query}':",
                     "| Market Code | Name | Category |",
                     "|-------------|------|----------|",
-                    c => $"| {c.MarketCode} | {c.MarketName} | {c.Category.NameForHumans()} |"
+                    c =>
+                        $"| {MarkdownTable.EscapeCell(c.MarketCode, "-")} | {MarkdownTable.EscapeCell(c.MarketName, "-")} | {MarkdownTable.EscapeCell(c.Category.NameForHumans(), "-")} |"
                 );
 
                 var note = McpOutput.TruncationNote(contracts.Count, total);

@@ -160,8 +160,9 @@ public class InsiderTradingTools
 
                 if (!string.IsNullOrWhiteSpace(insiderName))
                 {
-                    // Same token-AND contains contract as SearchInsiders, against the
-                    // SEC-filed legal name.
+                    // This transaction-filter parameter deliberately keeps partial-name
+                    // contains semantics; SearchInsiders is the stricter whole-word discovery
+                    // surface and returns the filed name callers can pass here.
                     foreach (
                         var token in insiderName.Split(' ', StringSplitOptions.RemoveEmptyEntries)
                     )
@@ -481,7 +482,7 @@ public class InsiderTradingTools
 
     [McpServerTool(Name = "SearchInsiders", Title = "Search Corporate Insiders", ReadOnly = true)]
     [Description(
-        "Search for corporate insiders (directors, officers, 10% owners) by name. Names are matched as filed with the SEC — legal names, frequently 'LAST FIRST MIDDLE' (e.g. Jensen Huang is filed as 'HUANG JEN HSUN') — and every word of the query must appear in the name, so retry with the surname alone when a full name misses. Returns matching insiders with their CIK, role, the company of their most recent filing, and location, ordered by most recent filing activity. Pivot to the sibling ticker-keyed tools with the returned company ticker (e.g. GetInsiderTransactions with its insiderName filter) to see a person's trades."
+        "Search the tracked SEC corporate-insider set (directors, officers, 10% owners) by name. Search first requires every punctuation-independent whole query word in the filed legal name, then broadens to any whole word only when no strict row matches; a token inside a different word is not a match. Verified public-name aliases such as Jensen Huang resolve to the SEC owner identity. Returns CIK, role, latest filing company, and location, ordered by recent filing activity."
     )]
     public Task<string> SearchInsiders(
         [Description("Search query for insider name")] string query,
@@ -522,7 +523,7 @@ public class InsiderTradingTools
                 if (insiders.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {total} insiders match; lower offset.";
                 if (insiders.Count == 0)
-                    return $"No insiders found matching '{query}'. Names are matched as filed with the SEC (legal names, often 'LAST FIRST MIDDLE') and every word of the query must appear in the name - retry with the surname alone.";
+                    return $"No match for '{query}' in the tracked SEC insider set. This result describes only tracked filers; try fewer name words or the filed surname.";
 
                 // The issuer of each owner's most recent transaction — the affiliation that
                 // disambiguates common surnames and gives the caller the ticker the sibling

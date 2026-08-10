@@ -5,7 +5,7 @@ namespace Equibles.UnitTests.Data;
 public class LikePatternContainsTests
 {
     // Adversarial Lane A. LikePattern.Contains is the LIKE-injection guard behind
-    // every typeahead search in the app (CommonStockRepository, InsiderOwnerRepository,
+    // LIKE-backed typeahead searches in the app (CommonStockRepository,
     // InstitutionalHolderRepository, CongressMemberRepository, FormAdvAdviserRepository,
     // ErrorRepository, InstitutionsController, …). Its contract: "escapes LIKE
     // metacharacters and wraps in % for a contains match." The load-bearing security

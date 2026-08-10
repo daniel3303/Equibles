@@ -2,6 +2,7 @@ using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Holdings;
@@ -348,5 +349,281 @@ public class InstitutionalHolderRepositorySearchNameOrCikLargestFirstTests : Par
         var matches = await repository.SearchNameOrCikLargestFirst("0001067983", 5);
 
         matches.Should().ContainSingle().Which.Cik.Should().Be("1067983");
+    }
+
+    [Fact]
+    public async Task SearchNameOrCik_QueryTokensMatchAcrossFiledPunctuationAndWordOrder()
+    {
+        DbContext.AddRange(
+            new InstitutionalHolder
+            {
+                Cik = "1579982",
+                Name = "Grantham, Mayo, Van Otterloo & Co. LLC",
+            },
+            new InstitutionalHolder { Cik = "1579983", Name = "Grantham Capital LLC" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var matches = await new InstitutionalHolderRepository(verify).SearchNameOrCikLargestFirst(
+            "Mayo Grantham",
+            5
+        );
+
+        matches.Should().ContainSingle().Which.Cik.Should().Be("1579982");
+    }
+
+    [Fact]
+    public async Task SearchNameOrCik_NoAllTokenMatch_BroadensToAnyToken()
+    {
+        DbContext.Add(
+            new InstitutionalHolder
+            {
+                Cik = "1579982",
+                Name = "Grantham, Mayo, Van Otterloo & Co. LLC",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var matches = await new InstitutionalHolderRepository(verify).SearchNameOrCikLargestFirst(
+            "Current Mayo Grantham",
+            5
+        );
+
+        matches.Select(m => m.Cik).Should().Contain("1579982");
+    }
+
+    [Fact]
+    public async Task SearchNameOrCikLargestFirstWithStats_ExposesLatestQuarterComparisonFields()
+    {
+        var holder = new InstitutionalHolder { Cik = "5000001", Name = "Stats Capital LLC" };
+        DbContext.Add(holder);
+        DbContext.Add(
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-stats",
+                InstitutionalHolderId = holder.Id,
+                FilingDate = new DateOnly(2026, 5, 13),
+                ReportDate = new DateOnly(2026, 3, 31),
+                FilingType = FilingType.Form13F,
+                PositionCount = 321,
+                TotalValue = 12_345_678_900L,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var match = (
+            await new InstitutionalHolderRepository(verify).SearchNameOrCikLargestFirstWithStats(
+                "Stats Capital",
+                5
+            )
+        ).Single();
+
+        match.LatestReportDate.Should().Be(new DateOnly(2026, 3, 31));
+        match.ReportedAum.Should().Be(12_345_678_900L);
+        match.PositionCount.Should().Be(321);
+    }
+
+    [Fact]
+    public async Task SearchNameOrCikLargestFirstWithStats_SumsSplitAccessionsAtLatestQuarter()
+    {
+        var flagship = new InstitutionalHolder
+        {
+            Cik = "5000010",
+            Name = "Split Accessions Flagship",
+        };
+        var distractor = new InstitutionalHolder
+        {
+            Cik = "5000011",
+            Name = "Split Accessions Distractor",
+        };
+        DbContext.AddRange(flagship, distractor);
+        DbContext.AddRange(
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-split-original",
+                InstitutionalHolderId = flagship.Id,
+                FilingDate = new DateOnly(2026, 5, 10),
+                ReportDate = new DateOnly(2026, 3, 31),
+                FilingType = FilingType.Form13F,
+                PositionCount = 6,
+                TotalValue = 60_000_000L,
+            },
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-split-new-holdings",
+                InstitutionalHolderId = flagship.Id,
+                FilingDate = new DateOnly(2026, 5, 12),
+                ReportDate = new DateOnly(2026, 3, 31),
+                FilingType = FilingType.Form13F,
+                PositionCount = 5,
+                TotalValue = 50_000_000L,
+            },
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-distractor",
+                InstitutionalHolderId = distractor.Id,
+                FilingDate = new DateOnly(2026, 5, 11),
+                ReportDate = new DateOnly(2026, 3, 31),
+                FilingType = FilingType.Form13F,
+                PositionCount = 10,
+                TotalValue = 100_000_000L,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var matches = await new InstitutionalHolderRepository(
+            verify
+        ).SearchNameOrCikLargestFirstWithStats("Split Accessions", 2);
+
+        matches.Should().HaveCount(2);
+        matches[0].Holder.Cik.Should().Be("5000010");
+        matches[0].ReportedAum.Should().Be(110_000_000L);
+        matches[0].PositionCount.Should().Be(11);
+    }
+
+    [Fact]
+    public async Task ResolveNameOrCik_AmbiguousPartialFailsClosedWhileExactNameAndAliasResolve()
+    {
+        var dormant = new InstitutionalHolder { Cik = "1364742", Name = "BlackRock Inc." };
+        var live = new InstitutionalHolder { Cik = "2012383", Name = "BlackRock, Inc." };
+        var bridgewater = new InstitutionalHolder
+        {
+            Cik = "1350694",
+            Name = "Bridgewater Associates, LP",
+        };
+        var namesake = new InstitutionalHolder
+        {
+            Cik = "1600319",
+            Name = "Bridgewater Advisors Inc.",
+        };
+        DbContext.AddRange(dormant, live, bridgewater, namesake);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var repository = new InstitutionalHolderRepository(verify);
+
+        var ambiguous = await repository.ResolveNameOrCik("Bridgewater");
+        var exact = await repository.ResolveNameOrCik("Bridgewater Associates LP");
+        var alias = await repository.ResolveNameOrCik("BlackRock");
+        var literalExact = await repository.ResolveNameOrCik("BlackRock Inc.");
+
+        ambiguous.IsAmbiguous.Should().BeTrue();
+        ambiguous.Selected.Should().BeNull();
+        ambiguous.Candidates.Select(c => c.Holder.Cik).Should().Contain(["1350694", "1600319"]);
+        exact.Selected.Should().NotBeNull();
+        exact.Selected.Holder.Cik.Should().Be("1350694");
+        alias.Selected.Should().NotBeNull();
+        alias.Selected.Holder.Cik.Should().Be("2012383");
+        literalExact.Selected.Should().NotBeNull();
+        literalExact.Selected.Holder.Cik.Should().Be("1364742");
+    }
+
+    [Fact]
+    public async Task ResolveNameOrCik_SolePrefixStillFailsClosedWhenAnotherTokenMatchExists()
+    {
+        DbContext.AddRange(
+            new InstitutionalHolder { Cik = "6000001", Name = "Mayo Grantham LP" },
+            new InstitutionalHolder { Cik = "6000002", Name = "Grantham, Mayo LLC" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var resolution = await new InstitutionalHolderRepository(verify).ResolveNameOrCik(
+            "Mayo Grantham"
+        );
+
+        resolution.IsAmbiguous.Should().BeTrue();
+        resolution.Selected.Should().BeNull();
+        resolution.Candidates.Select(c => c.Holder.Cik).Should().Contain(["6000001", "6000002"]);
+    }
+
+    [Fact]
+    public async Task ResolveNameOrCik_ExactCikWinsBeforeCandidateRankingCutoff()
+    {
+        DbContext.Add(
+            new InstitutionalHolder
+            {
+                Cik = "123",
+                Name = "Very Long Exact Identity Name That Sorts After The Candidate Cutoff",
+            }
+        );
+        for (var i = 0; i < 30; i++)
+        {
+            DbContext.Add(new InstitutionalHolder { Cik = $"123{i:D4}", Name = $"A{i:D2}" });
+        }
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var resolution = await new InstitutionalHolderRepository(verify).ResolveNameOrCik("123");
+
+        resolution.Selected.Should().NotBeNull();
+        resolution.Selected.Holder.Cik.Should().Be("123");
+    }
+
+    [Fact]
+    public async Task ResolveNameOrCik_ExactPaddedCikWinsWhenBothSpellingsExist()
+    {
+        DbContext.AddRange(
+            new InstitutionalHolder { Cik = "0001067983", Name = "Exact Padded Holder" },
+            new InstitutionalHolder { Cik = "1067983", Name = "Alternate Unpadded Holder" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var resolution = await new InstitutionalHolderRepository(verify).ResolveNameOrCik(
+            "0001067983"
+        );
+
+        resolution.Selected.Should().NotBeNull();
+        resolution.Selected.Holder.Name.Should().Be("Exact Padded Holder");
+        resolution.Selected.Holder.Cik.Should().Be("0001067983");
+    }
+
+    [Fact]
+    public async Task ResolveNameOrCik_PaddedOnlyStorageResolvesExactSpelling()
+    {
+        DbContext.Add(new InstitutionalHolder { Cik = "0009999999", Name = "Padded Only Holder" });
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var repository = new InstitutionalHolderRepository(verify);
+        var resolution = await repository.ResolveNameOrCik("0009999999");
+        var discovery = await repository.SearchNameOrCik("0009999999").ToListAsync();
+
+        resolution.Selected.Should().NotBeNull();
+        resolution.Selected.Holder.Cik.Should().Be("0009999999");
+        discovery.Should().ContainSingle().Which.Cik.Should().Be("0009999999");
+    }
+
+    [Fact]
+    public async Task ResolveNameOrCik_DoesNotUseDiscoveryAnyTokenFallback()
+    {
+        DbContext.AddRange(
+            new InstitutionalHolder { Cik = "7000001", Name = "Berkshire Capital" },
+            new InstitutionalHolder { Cik = "7000002", Name = "Wrong Partners" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var resolution = await new InstitutionalHolderRepository(verify).ResolveNameOrCik(
+            "Wrong Berkshire"
+        );
+
+        resolution.Selected.Should().BeNull();
+        resolution.Candidates.Should().BeEmpty();
     }
 }

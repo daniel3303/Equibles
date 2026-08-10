@@ -151,9 +151,17 @@ public class FredToolsTests : ParadeDbMcpTestBase
     {
         var result = await Sut().GetEconomicIndicator("NONEXISTENT");
 
-        result.Should().Contain("not found");
+        result.Should().Contain("No match");
         result.Should().Contain("NONEXISTENT");
         result.Should().Contain("SearchEconomicIndicators");
+    }
+
+    [Fact]
+    public async Task GetEconomicIndicator_StandardNameAlias_ResolvesSeries()
+    {
+        var result = await Sut().GetEconomicIndicator("fed funds rate", "2025-01-01", "2025-12-31");
+
+        result.Should().Contain("Federal Funds Effective Rate (FEDFUNDS)");
     }
 
     [Fact]
@@ -453,7 +461,9 @@ public class FredToolsTests : ParadeDbMcpTestBase
     {
         var result = await Sut().SearchEconomicIndicators("zzzznonexistent");
 
-        result.Should().Contain("No tracked series match");
+        result
+            .Should()
+            .Contain("No match for 'zzzznonexistent' in the tracked, curated ~40-series");
         result.Should().Contain("zzzznonexistent");
         result
             .Should()

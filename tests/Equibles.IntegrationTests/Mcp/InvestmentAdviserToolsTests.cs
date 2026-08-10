@@ -76,7 +76,9 @@ public class InvestmentAdviserToolsTests : ParadeDbMcpTestBase
 
         var result = await CreateTools().SearchInvestmentAdvisers("nonexistent firm");
 
-        result.Should().Contain("No investment advisers found");
+        result
+            .Should()
+            .Contain("No match for \"nonexistent firm\" in the tracked Form ADV adviser set");
     }
 
     [Fact]

@@ -43,7 +43,9 @@ public class FredTools
         "Get time series data for a FRED economic indicator. Returns historical observations for indicators like FEDFUNDS (fed funds rate), CPIAUCSL (CPI inflation), UNRATE (unemployment), GDP, T10Y2Y (yield spread), VIXCLS (VIX), SP500, MORTGAGE30US, M2SL (money supply), and more. Covers the curated ~40-series set Equibles tracks, not the full FRED catalog — use SearchEconomicIndicators to find available series."
     )]
     public Task<string> GetEconomicIndicator(
-        [Description("FRED series ID (e.g., FEDFUNDS, CPIAUCSL, UNRATE, GDP, T10Y2Y, VIXCLS)")]
+        [Description(
+            "FRED series ID or standard indicator name (e.g., FEDFUNDS, fed funds rate, core CPI, jobless claims)"
+        )]
             string seriesId,
         [Description("Start date in YYYY-MM-DD format (defaults to 1 year before the end date)")]
             string startDate = null,
@@ -58,12 +60,10 @@ public class FredTools
         return _runner.Execute(
             async () =>
             {
-                var series = await _seriesRepository
-                    .GetBySeriesId(seriesId.ToUpper())
-                    .FirstOrDefaultAsync();
+                var series = await _seriesRepository.GetBySeriesId(seriesId).FirstOrDefaultAsync();
 
                 if (series == null)
-                    return $"Series '{seriesId}' not found. Use SearchEconomicIndicators to find available series.";
+                    return $"No match for '{seriesId}' in the tracked economic-indicator set. Use SearchEconomicIndicators to list or search that curated set.";
 
                 var end = DateOnly.FromDateTime(DateTime.UtcNow);
                 if (!string.IsNullOrWhiteSpace(endDate))
@@ -251,7 +251,7 @@ public class FredTools
         ReadOnly = true
     )]
     [Description(
-        "Search the curated set of ~40 US macro FRED series Equibles tracks (rates, inflation, employment, GDP, housing, market indicators) — not the full FRED catalog. Matches series ID, title, and category name: a category query like 'inflation' returns that whole category (CPI, PCE, PPI, breakevens), and an empty query lists every tracked series. Results include seasonal adjustment, the latest observation date, and the UTC time Equibles last synced the series. Use this to discover what economic data is available before calling GetEconomicIndicator."
+        "Search the curated set of ~40 US macro FRED series Equibles tracks (rates, inflation, employment, GDP, housing, market indicators) — not the full FRED catalog. Search first requires every punctuation-independent query word anywhere across the series ID, title, or category, then broadens to any word only when that strict search has no rows. Standard names such as fed funds rate, jobless claims, payrolls, yield curve, and core CPI are recognized. An empty query lists every tracked series. Results include seasonal adjustment, the latest observation date, and the UTC time Equibles last synced the series."
     )]
     public Task<string> SearchEconomicIndicators(
         [Description(
@@ -281,7 +281,7 @@ public class FredTools
 
                 var table = MarkdownTable.Render(
                     series,
-                    $"No tracked series match '{query}'. Equibles tracks a curated ~40-series US macro set - FRED series outside it are not available. Try a category name (Inflation, Employment, InterestRates, ...) or an empty query to list all tracked series.",
+                    $"No match for '{query}' in the tracked, curated ~40-series US macro set. This result describes only the tracked set, not whether FRED publishes such a series. Try fewer words, a category name, or an empty query to list every tracked series.",
                     title,
                     // Seasonal adjustment decides whether two series are even comparable. The
                     // ObservationEnd dates the newest data point; LastUpdated is the separate

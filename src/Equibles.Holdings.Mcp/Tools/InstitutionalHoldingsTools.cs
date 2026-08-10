@@ -369,7 +369,9 @@ public class InstitutionalHoldingsTools
         "View the stock portfolio of a specific institutional investor (fund manager) from their SEC 13F-HR filing. Shows the institution's largest tracked holdings by market value (default 20, max 500) with share counts, market values, and percent of the 13F-reported portfolio, plus the portfolio's total value and position count. Use this to understand what stocks a particular fund manager or institution is investing in; use SearchInstitutions first when the name is ambiguous."
     )]
     public Task<string> GetInstitutionPortfolio(
-        [Description("Institution name, partial name, or SEC CIK to search for")]
+        [Description(
+            "Institution name or SEC CIK. A unique partial name resolves; an ambiguous partial returns candidate CIKs instead of selecting silently."
+        )]
             string institutionName,
         [Description(
             "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the holder's latest; an off-quarter date snaps to the nearest report on or before it)"
@@ -627,7 +629,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Search for institutional investors (fund managers) by name or SEC CIK number, largest recently-active 13F filers first. Returns matching institutions with their SEC CIK number, city, and state/country. Use this to find the correct institution name before calling GetInstitutionPortfolio or to discover which institutions are tracked in the database."
+        "Search the tracked 13F filer set by institution name or SEC CIK. Search first requires every punctuation-independent query word anywhere in the filed name, then broadens to any word only when no strict row matches. Verified brand aliases such as Fidelity, Vanguard, and BlackRock include their current flagship CIK. Results are largest within the recently-active filing bucket first and include latest report date, reported 13F AUM, and tracked position count so same-name filers can be compared before calling an institution tool. Scoped institution tools remain strict and never discard an unmatched word."
     )]
     public Task<string> SearchInstitutions(
         [Description("Search query — institution name, partial name, or CIK")] string query,
@@ -642,25 +644,35 @@ public class InstitutionalHoldingsTools
 
                 var totalMatches = await _holderRepository.SearchNameOrCik(query).CountAsync();
                 if (totalMatches == 0)
-                    return $"No institutions found matching '{query}'.";
+                    return $"No match for '{query}' in the tracked 13F filer set. This result describes only tracked filers.";
 
-                var holders = await _holderRepository.SearchNameOrCikLargestFirst(
+                var holders = await _holderRepository.SearchNameOrCikLargestFirstWithStats(
                     query,
                     maxResults
                 );
 
                 var table = MarkdownTable.Render(
                     holders,
-                    $"No institutions found matching '{query}'.",
+                    $"No match for '{query}' in the tracked 13F filer set. This result describes only tracked filers.",
                     $"Institutions matching '{query}' (largest recently-active 13F filers first):",
-                    "| Institution | CIK | City | State/Country |",
-                    "|------------|-----|------|--------------|",
+                    "| Institution | CIK | Latest Report | Reported AUM | Positions | City | State/Country |",
+                    "|------------|-----|---------------|--------------|-----------|------|--------------|",
                     h =>
-                        $"| {h.Name} | {h.Cik} | {OrDash(h.City)} | {OrDash(EdgarStateCodes.Decode(h.StateOrCountry))} |"
+                        $"| {MarkdownTable.EscapeCell(h.Holder.Name, "—")} | {MarkdownTable.EscapeCell(h.Holder.Cik, "—")} | {FormatOptionalDate(h.LatestReportDate)} | {FormatOptionalDollars(h.ReportedAum)} | {FormatOptionalCount(h.PositionCount)} | {MarkdownTable.EscapeCell(OrDash(h.Holder.City), "—")} | {MarkdownTable.EscapeCell(OrDash(EdgarStateCodes.Decode(h.Holder.StateOrCountry)), "—")} |"
                 );
 
                 var truncation = McpOutput.TruncationNote(holders.Count, totalMatches);
-                return truncation.Length == 0 ? table : $"{table}\n{truncation}";
+                var notes = new List<string>();
+                if (truncation.Length > 0)
+                    notes.Add(truncation);
+                if (totalMatches > 1)
+                {
+                    notes.Add(
+                        "_Separate SEC CIKs can represent current, predecessor, or otherwise distinct registrants. An older CIK may carry the longer history; compare Latest Report and use the exact CIK in institution-scoped tools._"
+                    );
+                }
+
+                return notes.Count == 0 ? table : $"{table}\n{string.Join("\n", notes)}";
             },
             "SearchInstitutions",
             $"query: {query}"
@@ -670,6 +682,15 @@ public class InstitutionalHoldingsTools
     // Empty strings occur in the location columns alongside NULLs (importer stores what EDGAR
     // sends), so a bare null-coalesce still rendered blank cells instead of the placeholder.
     private static string OrDash(string value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private static string FormatOptionalDate(DateOnly? value) =>
+        value == null ? "—" : McpFormat.Invariant(value.Value, "yyyy-MM-dd");
+
+    private static string FormatOptionalDollars(long? value) =>
+        value == null ? "—" : $"${McpFormat.WholeNumber(value.Value)}";
+
+    private static string FormatOptionalCount(int? value) =>
+        value == null ? "—" : McpFormat.WholeNumber(value.Value);
 
     [McpServerTool(
         Name = "GetTopBuyersSellers",
@@ -1345,11 +1366,11 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the portfolio summary header for an institutional 13F filer — 13F reported value (long U.S. positions only, not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database. Use this to answer 'how big and how concentrated is this fund?' or to compare two funds at a glance. Search resolves by institution name or CIK (the largest recently-active 13F filer wins on ambiguous names)."
+        "Get the portfolio summary header for an institutional 13F filer — 13F reported value (long U.S. positions only, not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
     )]
     public Task<string> GetInstitutionSummary(
         [Description(
-            "Institution name or CIK (partial names resolve to the largest recently-active 13F filer)"
+            "Institution name or CIK (a unique partial resolves; ambiguous partials return candidate CIKs)"
         )]
             string institutionName,
         [Description(
@@ -1494,11 +1515,11 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get an institution's 13F portfolio allocation for a given report quarter (defaults to the latest), grouped by fine-grained industry (default) or rolled up by sector via `groupBy`. Returns a markdown table sorted by % of portfolio descending, with stocks lacking a classification collapsed into a single 'Unclassified' row at the end. Ambiguous names resolve to the largest matching 13F filer — use SearchInstitutions to disambiguate. Use this to answer 'is this fund concentrated in tech / energy / generalist?'"
+        "Get an institution's 13F portfolio allocation for a given report quarter (defaults to the latest), grouped by fine-grained industry (default) or rolled up by sector via `groupBy`. Returns a markdown table sorted by % of portfolio descending, with stocks lacking a classification collapsed into a single 'Unclassified' row at the end. Use SearchInstitutions for an exact CIK; ambiguous partial names return candidates instead of selecting silently."
     )]
     public Task<string> GetInstitutionSectorAllocation(
         [Description(
-            "Institution name or CIK (partial names resolve to the largest recently-active 13F filer)"
+            "Institution name or CIK (a unique partial resolves; ambiguous partials return candidate CIKs)"
         )]
             string institutionName,
         [Description(
@@ -1559,7 +1580,7 @@ public class InstitutionalHoldingsTools
     )]
     public Task<string> GetInstitutionQuarterlyActivity(
         [Description(
-            "Institution name or CIK (partial names resolve to the largest recently-active 13F filer)"
+            "Institution name or CIK (a unique partial resolves; ambiguous partials return candidate CIKs)"
         )]
             string institutionName,
         [Description(
@@ -1731,11 +1752,11 @@ public class InstitutionalHoldingsTools
     )]
     public Task<string> GetFundOverlap(
         [Description(
-            "First institution name or CIK (partial names resolve to the largest recently-active 13F filer)"
+            "First institution name or CIK (a unique partial resolves; ambiguous partials return candidate CIKs)"
         )]
             string institutionName1,
         [Description(
-            "Second institution name or CIK (partial names resolve to the largest recently-active 13F filer)"
+            "Second institution name or CIK (a unique partial resolves; ambiguous partials return candidate CIKs)"
         )]
             string institutionName2,
         [Description(
@@ -1901,7 +1922,7 @@ public class InstitutionalHoldingsTools
     )]
     public Task<string> GetConsensusHoldings(
         [Description(
-            "Comma- or semicolon-separated institution names or CIKs (partial names resolve to the largest matching 13F filer). 2-25 names."
+            "Comma- or semicolon-separated institution names or CIKs. Unique partial names and verified brand aliases resolve; ambiguous partials return candidate CIKs. 2-25 names."
         )]
             string institutionNames,
         [Description(
@@ -1933,21 +1954,29 @@ public class InstitutionalHoldingsTools
 
                 var holders = new List<InstitutionalHolder>();
                 var missing = new List<string>();
+                var ambiguous = new List<string>();
                 foreach (var name in names)
                 {
-                    var holder = await FindHolderByName(name);
-                    if (holder == null)
+                    var resolution = await _holderRepository.ResolveNameOrCik(name);
+                    if (resolution.Selected != null)
+                        holders.Add(resolution.Selected.Holder);
+                    else if (resolution.Candidates.Count == 0)
                         missing.Add(name);
                     else
-                        holders.Add(holder);
+                        ambiguous.Add(
+                            $"'{name}': {FormatResolutionCandidates(resolution.Candidates)}"
+                        );
                 }
+
+                if (ambiguous.Count > 0)
+                    return "Ambiguous institution input — no consensus was calculated. "
+                        + string.Join("; ", ambiguous)
+                        + ". Pass the intended SEC CIK or an exact filed name.";
                 if (holders.Count < 2)
                     return $"Could not resolve enough institutions. Missing: {string.Join(", ", missing)}.";
 
-                // Two spellings can resolve to the same filer (partial names funnel to the
-                // largest match). Combining the duplicate doubles every combined value and
-                // lets a single real fund satisfy minFunds as a fake consensus, so the
-                // resolved set is deduped by holder identity.
+                // Two inputs can resolve to the same exact filer (for example a brand alias
+                // and its CIK). Combining the duplicate would double every combined value.
                 holders = holders.DistinctBy(h => h.Id).ToList();
                 if (holders.Count < 2)
                     return $"The supplied names all resolve to the same institution — {holders[0].Name} (CIK {holders[0].Cik}). Pass at least two distinct institutions.";
@@ -2042,35 +2071,38 @@ public class InstitutionalHoldingsTools
         return result.ToString();
     }
 
-    // Best single match for a name or CIK: the largest recently-active 13F filer among the
-    // matches (dormant re-registrations rank below live filers). The old
-    // shortest-name-wins ordering silently resolved famous names to the wrong firm
-    // ("Bridgewater" → Bridgewater Advisors Inc., a small RIA, instead of Bridgewater
-    // Associates, LP) and the whole output would read as the wrong fund's portfolio.
-    private async Task<InstitutionalHolder> FindHolderByName(string name)
-    {
-        var matches = await _holderRepository.SearchNameOrCikLargestFirst(name ?? string.Empty, 1);
-        return matches.Count == 0 ? null : matches[0];
-    }
-
     private async Task<(
         InstitutionalHolder Holder,
         string MatchNote,
         string Error
     )> ResolveHolderByName(string name)
     {
-        var matches = await _holderRepository.SearchNameOrCikLargestFirst(name ?? string.Empty, 4);
-        if (matches.Count == 0)
-            return (null, null, $"No institution found matching '{name}'.");
+        var resolution = await _holderRepository.ResolveNameOrCik(name);
+        if (resolution.Selected != null)
+            return (resolution.Selected.Holder, null, null);
+        if (resolution.Candidates.Count == 0)
+            return (
+                null,
+                null,
+                $"No match for '{name}' in the tracked 13F filer set. Use SearchInstitutions to inspect the tracked set."
+            );
 
-        var holder = matches[0];
-        var matchNote =
-            matches.Count > 1
-                ? $"Note: '{name}' matched {holder.Name} (CIK {holder.Cik}, largest recently-active 13F filer of the matches); other matches: "
-                    + $"{string.Join(", ", matches.Skip(1).Select(m => m.Name))} — pass a CIK or use SearchInstitutions to disambiguate."
-                : null;
-        return (holder, matchNote, null);
+        return (
+            null,
+            null,
+            $"'{name}' is ambiguous in the tracked 13F filer set: {FormatResolutionCandidates(resolution.Candidates)}. Pass the intended SEC CIK or an exact filed name."
+        );
     }
+
+    private static string FormatResolutionCandidates(
+        IReadOnlyList<InstitutionalHolderSearchMatch> candidates
+    ) =>
+        string.Join(
+            "; ",
+            candidates.Select(c =>
+                $"{MarkdownTable.EscapeCell(c.Holder.Name, "—")} (CIK {c.Holder.Cik}, latest {FormatOptionalDate(c.LatestReportDate)}, reported AUM {FormatOptionalDollars(c.ReportedAum)}, positions {FormatOptionalCount(c.PositionCount)})"
+            )
+        );
 
     // 13F-only: a Schedule 13D/G stake whose event date coincides with a 13F quarter end
     // shares the holdings table and would double-count the position in every per-holder

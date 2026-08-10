@@ -34,7 +34,9 @@ public class InstitutionalHoldingsToolsGetInstitutionSectorAllocationTests : Par
 
         var output = await sut.GetInstitutionSectorAllocation("Definitely Not A Fund");
 
-        output.Should().Contain("No institution found");
+        output
+            .Should()
+            .Contain("No match for 'Definitely Not A Fund' in the tracked 13F filer set");
     }
 
     [Fact]

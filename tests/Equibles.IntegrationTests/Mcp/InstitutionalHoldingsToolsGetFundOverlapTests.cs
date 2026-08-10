@@ -31,7 +31,7 @@ public class InstitutionalHoldingsToolsGetFundOverlapTests : ParadeDbMcpTestBase
 
         var output = await sut.GetFundOverlap("Nobody", "Anybody");
 
-        output.Should().Contain("No institution found matching 'Nobody'");
+        output.Should().Contain("No match for 'Nobody' in the tracked 13F filer set");
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class InstitutionalHoldingsToolsGetFundOverlapTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetFundOverlap("Fund A", "Fund B");
+        var output = await sut.GetFundOverlap("Fund A LP", "Fund B LP");
 
         output.Should().Contain("share no common report dates");
     }
@@ -95,7 +95,7 @@ public class InstitutionalHoldingsToolsGetFundOverlapTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetFundOverlap("Overlap A", "Overlap B");
+        var output = await sut.GetFundOverlap("Overlap A LP", "Overlap B LP");
 
         output.Should().Contain("Portfolio overlap — **Overlap A LP** vs **Overlap B LP**");
         output.Should().Contain("Union positions");

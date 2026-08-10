@@ -15,7 +15,7 @@ Ask your assistant to search by fund name, registrant, or ticker:
 - "Search the fund directory for Vanguard."
 - "What fund has the ticker VOO?"
 
-The assistant calls the `SearchFunds` tool and replies with a table of matching fund series, largest by net assets first. Each row shows the fund's name, its **profile id**, ticker (when the fund is itself listed), fund type, net assets, number of reported holdings, and the latest report date.
+The assistant calls `SearchFunds`, which first requires every query word anywhere across the fund name, registrant, or ticker; punctuation and word order need not mirror the SEC row. If that strict search has no rows, it broadens to any query word. Verified share-class aliases such as VOO and VFIAX resolve their SEC series. The table is largest by net assets first and shows the **profile id**, ticker when present, fund type, net assets, stored holding rows, and latest report date. No result means no match in the tracked Form NPORT-P directory, not that the fund does not exist.
 
 The profile id is the key to the next step — note it for the fund you care about. The big fund families (iShares, Vanguard, Fidelity) run many series under one registrant and often have no single ticker, so searching by name or registrant is the way to reach them.
 

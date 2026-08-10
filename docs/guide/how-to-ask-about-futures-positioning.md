@@ -14,7 +14,7 @@ Name a futures market and ask about positioning:
 - "How are traders positioned in crude oil futures?"
 - "Show me the COT positioning trend for gold."
 
-The assistant calls the `GetCftcPositioning` tool and replies with commercial and non-commercial positions for that contract over time. If it needs the exact contract first, it uses `SearchCftcMarkets` to find the market code by name.
+The assistant calls `GetCftcPositioning` and replies with commercial and non-commercial positions over time. The contract can be supplied as its CFTC code, common name, or standard symbol (for example WTI/CL or ES); `SearchCftcMarkets` tries all query tokens first and broadens to any token only when no strict row matches.
 
 ## Ask for a market-wide snapshot
 

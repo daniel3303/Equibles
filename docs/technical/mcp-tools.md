@@ -24,7 +24,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetTopHolders` — top institutional holders of a given ticker for a `ReportDate`.
 - `GetOwnershipHistory` — historical ownership trend (shares, value, holder count) per quarter.
 - `GetInstitutionPortfolio` — full portfolio of one institution for a `ReportDate`.
-- `SearchInstitutions` — name-search returning matching `InstitutionalHolder` rows.
+- `SearchInstitutions` — punctuation-independent all-token name/CIK search with a sparse any-token fallback, largest within the recently-active 13F bucket first. Rows include CIK, latest report date, reported 13F AUM, tracked position count, and location. Verified flagship aliases include Fidelity/FMR, Vanguard, and BlackRock; institution-scoped tools stay strict, reject an ambiguous partial name, and return candidate CIKs.
 - `GetTopBuyersSellers` — biggest absolute share additions and reductions for a ticker vs. the prior `ReportDate`; flags new and sold-out positions.
 - `GetMarketWide13FActivity` — market-wide leaderboard for a quarter, selected by `bucket`: `top-buys`, `top-sells`, `new-positions`, `sold-out-positions`; Δ value includes the quarter's price move on held shares, so Δ shares is the position-change measure.
 - `GetInstitutionSummary` — portfolio header for one filer at a `ReportDate`: AUM, position count, top-10 / top-25 concentration, QoQ turnover, latest / prior dates.
@@ -41,7 +41,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 - `GetInsiderTransactions` — recent transactions for a ticker, filterable by transaction code.
 - `GetInsiderOwnership` — current insider ownership summary for a ticker.
-- `SearchInsiders` — search insiders by name / company / role.
+- `SearchInsiders` — punctuation-independent all-whole-word search of SEC-filed owner names with a sparse any-word fallback, plus verified public-name aliases such as Jensen Huang → filed `HUANG JEN HSUN`.
 - `GetProposedSales` — recent proposed insider sales for a ticker from SEC Form 144 notices: seller, relationship to the company, shares and aggregate market value to be sold, percent of shares outstanding, approximate sale date, broker, and filer remarks such as a stated 10b5-1 plan.
 
 ### `mcp.AddSec()` — SEC filings
@@ -73,7 +73,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `FundDirectoryTools`:
 
-- `SearchFunds` — search the directory of registered funds and ETFs (NPORT-P filers) by name, ticker, or registrant; returns each series with a profile id, net assets, reported-holding count, and latest report date, largest first. Covers multi-series trusts (iShares, Vanguard, Fidelity) that carry no ticker of their own.
+- `SearchFunds` — punctuation-independent all-token search of the tracked registered-fund directory by series, ticker, or registrant, with a sparse any-token fallback; verified share-class aliases such as VOO/VFIAX resolve their SEC series. Returns profile id, net assets, stored-holding count, and latest report date, largest first. An empty result means no match in this tracked directory, not that the fund does not exist.
 - `GetFundProfile` — one registered fund's profile and largest holdings from its latest NPORT-P report, addressed by a profile id from `SearchFunds` or the fund's own ticker.
 
 `NCenTools`:
@@ -82,7 +82,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `InvestmentAdviserTools`:
 
-- `SearchInvestmentAdvisers` — search SEC-registered investment advisers (Form ADV) by firm name; returns CRD number, main office, regulatory assets under management and employee count, largest by assets first.
+- `SearchInvestmentAdvisers` — punctuation-independent all-token search of tracked SEC Form ADV legal/business names with a sparse any-token fallback; returns CRD, main office, regulatory AUM, and employee count, largest by assets first.
 - `GetInvestmentAdviser` — full Form ADV profile for one adviser by Organization CRD number: legal and business names, SEC file number, main office, website, regulatory AUM (discretionary, non-discretionary, total), employee count, and fee structure.
 
 ### `mcp.AddFinancialFacts()` — XBRL facts
@@ -106,7 +106,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 - `GetCongressionalTrades` — disclosed securities transactions for a ticker across all members; the Asset column identifies stock, option, bond, or another filed instrument.
 - `GetMemberTrades` — disclosed securities transactions by one member of Congress, including the filed Asset instrument.
-- `SearchCongressMembers` — search members by name / chamber / position.
+- `SearchCongressMembers` — punctuation-independent all-token roster search with a sparse any-token fallback, plus verified public-name aliases such as Dan Crenshaw → filed Daniel Crenshaw; optional chamber filter.
 - `GetMemberNetWorth` — a member's net-worth history from annual financial disclosures, reported as yearly min–max bands (electronic filings only).
 
 ### `mcp.AddFred()` — FRED economic indicators
@@ -115,7 +115,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 - `GetEconomicIndicator` — observations for a FRED series (e.g. `DGS10`, `UNRATE`), with units, frequency, and seasonal-adjustment metadata.
 - `GetLatestEconomicData` — latest snapshot across the curated macro indicators.
-- `SearchEconomicIndicators` — keyword search across series titles / categories; each result includes seasonal adjustment, latest observation date, and the exact UTC series-sync time.
+- `SearchEconomicIndicators` — punctuation-independent all-token search across tracked series IDs, titles, and categories with a sparse any-token fallback, plus standard aliases such as fed funds rate, jobless claims, payrolls, yield curve, and core CPI. Each result includes seasonal adjustment, latest observation date, and exact UTC series-sync time; an empty result says only that the curated tracked set has no match.
 - `GetEconomicCalendar` — scheduled and recent US macro release dates (CPI, Employment Situation, GDP, …) and the FRED series each updates; defaults to the next 30 days.
 
 ### `mcp.AddStockPrices()` — Yahoo OHLCV + technical indicators
@@ -153,7 +153,7 @@ never substitutes `BRK-B`; dot share-class spelling such as `BRK.A` resolves to 
 
 - `GetCftcPositioning` — non-commercial / commercial / non-reportable positions over time for a contract.
 - `GetLatestCftcData` — latest weekly snapshot across all tracked contracts.
-- `SearchCftcMarkets` — search the CFTC contract universe.
+- `SearchCftcMarkets` — token-AND search of the curated CFTC contract set by name/code, plus common contract names and standard futures symbols such as WTI/CL and ES.
 
 ### `mcp.AddCboe()` — CBOE indicators
 

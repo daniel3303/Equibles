@@ -53,4 +53,101 @@ public class CftcContractRepositorySearchTests : ParadeDbMcpTestBase
         results.Should().ContainSingle();
         results[0].MarketCode.Should().Be("13874+");
     }
+
+    [Theory]
+    [InlineData("ES")]
+    [InlineData("S&P 500")]
+    [InlineData("S&P500")]
+    [InlineData("e mini s p")]
+    public async Task Search_StandardContractVocabulary_ResolvesCuratedMarketCode(string query)
+    {
+        DbContext.AddRange(
+            new CftcContract
+            {
+                MarketCode = "13874A",
+                MarketName = "E-mini S&P 500 (CME)",
+                Category = CftcContractCategory.EquityIndices,
+            },
+            new CftcContract
+            {
+                MarketCode = "ZZES",
+                MarketName = "Treasury Notes",
+                Category = CftcContractCategory.InterestRates,
+            },
+            new CftcContract
+            {
+                MarketCode = "DSTRCT",
+                MarketName = "E-mini S&P 500 Notes",
+                Category = CftcContractCategory.EquityIndices,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var results = await new CftcContractRepository(verify)
+            .Search(query)
+            .AsNoTracking()
+            .ToListAsync();
+
+        results.Should().ContainSingle().Which.MarketCode.Should().Be("13874A");
+    }
+
+    [Fact]
+    public async Task Search_ExactStoredCode_OutranksVerifiedAlias()
+    {
+        DbContext.AddRange(
+            new CftcContract
+            {
+                MarketCode = "ES",
+                MarketName = "Exact stored ES contract",
+                Category = CftcContractCategory.Other,
+            },
+            new CftcContract
+            {
+                MarketCode = "13874A",
+                MarketName = "E-mini S&P 500 (CME)",
+                Category = CftcContractCategory.EquityIndices,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var results = await new CftcContractRepository(verify)
+            .Search("ES")
+            .AsNoTracking()
+            .ToListAsync();
+
+        results.Should().ContainSingle().Which.MarketCode.Should().Be("ES");
+    }
+
+    [Fact]
+    public async Task Search_NoAllTokenMatch_BroadensToAnyToken()
+    {
+        DbContext.AddRange(
+            new CftcContract
+            {
+                MarketCode = "088691",
+                MarketName = "GOLD - COMMODITY EXCHANGE INC.",
+                Category = CftcContractCategory.Metals,
+            },
+            new CftcContract
+            {
+                MarketCode = "084691",
+                MarketName = "SILVER - COMMODITY EXCHANGE INC.",
+                Category = CftcContractCategory.Metals,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var results = await new CftcContractRepository(verify)
+            .Search("front month gold")
+            .AsNoTracking()
+            .ToListAsync();
+
+        results.Select(c => c.MarketCode).Should().Contain("088691");
+    }
 }

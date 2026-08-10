@@ -15,8 +15,9 @@ public class FormAdvAdviserRepository : BaseRepository<FormAdvAdviser>
     }
 
     /// <summary>
-    /// Matches advisers whose legal or primary business name contains <paramref name="term"/>,
-    /// largest by total regulatory assets under management first. Returns nothing for a blank term.
+    /// Matches advisers by punctuation-independent legal/business-name tokens, all-token first
+    /// with an any-token fallback only when strict matching has no rows. Orders by regulatory
+    /// assets under management and returns nothing for a blank term.
     /// </summary>
     public IQueryable<FormAdvAdviser> Search(string term)
     {
@@ -25,12 +26,34 @@ public class FormAdvAdviserRepository : BaseRepository<FormAdvAdviser>
             return GetAll().Where(a => false);
         }
 
-        var pattern = LikePattern.Contains(term.Trim());
-        return GetAll()
-            .Where(a =>
+        var tokens = SearchTerms.Tokenize(term);
+        if (tokens.Count == 0)
+            return GetAll().Where(_ => false);
+
+        var matches = GetAll();
+        var anyTokenMatches = GetAll().Where(_ => false);
+        foreach (var token in tokens)
+        {
+            var pattern = LikePattern.Contains(token);
+            matches = matches.Where(a =>
                 EF.Functions.ILike(a.LegalName, pattern, LikePattern.EscapeChar)
                 || EF.Functions.ILike(a.PrimaryBusinessName, pattern, LikePattern.EscapeChar)
-            )
+            );
+            anyTokenMatches = anyTokenMatches.Concat(
+                GetAll()
+                    .Where(a =>
+                        EF.Functions.ILike(a.LegalName, pattern, LikePattern.EscapeChar)
+                        || EF.Functions.ILike(
+                            a.PrimaryBusinessName,
+                            pattern,
+                            LikePattern.EscapeChar
+                        )
+                    )
+            );
+        }
+
+        return SearchTerms
+            .WithSparseAnyTokenFallback(matches, anyTokenMatches)
             // Coalesce so advisers that did not report assets sort last rather than first
             // (Postgres orders NULL highest under a plain DESC).
             .OrderByDescending(a => a.TotalRegulatoryAum ?? 0L);

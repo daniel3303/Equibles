@@ -225,7 +225,19 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         result
             .Should()
             .Be(
-                "Member 'Nonexistent Person' not found. Use SearchCongressMembers to find the exact name."
+                "Member 'Nonexistent Person' not found in the tracked congressional roster. Use SearchCongressMembers to inspect the tracked roster and find the exact filed name."
+            );
+    }
+
+    [Fact]
+    public async Task GetMemberNetWorth_UnknownMember_ReturnsTrackedRosterBoundary()
+    {
+        var result = await Sut().GetMemberNetWorth("Nonexistent Person");
+
+        result
+            .Should()
+            .Be(
+                "Member 'Nonexistent Person' not found in the tracked congressional roster. Use SearchCongressMembers to inspect the tracked roster and find the exact filed name."
             );
     }
 
@@ -342,7 +354,11 @@ public class CongressToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().SearchCongressMembers("Smith");
 
-        result.Should().Be("No congress members found matching 'Smith'.");
+        result
+            .Should()
+            .Be(
+                "No match for 'Smith' in the tracked congressional roster. This result describes only the tracked roster."
+            );
     }
 
     [Fact]
@@ -376,6 +392,28 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         var result = await Sut().SearchCongressMembers("pelosi");
 
         result.Should().Contain("Nancy Pelosi");
+    }
+
+    [Fact]
+    public async Task SearchCongressMembers_PublicNicknameAlias_ReturnsFiledRosterName()
+    {
+        DbContext
+            .Set<CongressMember>()
+            .Add(
+                new CongressMember
+                {
+                    Name = "Daniel Crenshaw",
+                    Position = CongressPosition.Representative,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var search = await Sut().SearchCongressMembers("Dan Crenshaw");
+        var tradesLookup = await Sut().GetMemberTrades("Dan Crenshaw");
+
+        search.Should().Contain("Daniel Crenshaw");
+        tradesLookup.Should().Contain("Daniel Crenshaw");
+        tradesLookup.Should().NotContain("Member 'Dan Crenshaw' not found");
     }
 
     [Fact]
@@ -609,6 +647,8 @@ public class CongressToolsTests : ParadeDbMcpTestBase
 
         result
             .Should()
-            .Be("Member 'Scott' not found. Use SearchCongressMembers to find the exact name.");
+            .Be(
+                "Member 'Scott' not found in the tracked congressional roster. Use SearchCongressMembers to inspect the tracked roster and find the exact filed name."
+            );
     }
 }

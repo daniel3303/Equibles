@@ -219,7 +219,7 @@ public class CftcContractRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task Search_MatchesBothCodeAndName_ReturnsAll()
+    public async Task Search_ExactMarketCode_OutranksNameMatches()
     {
         _dbContext
             .Set<CftcContract>()
@@ -231,7 +231,7 @@ public class CftcContractRepositoryTests : IDisposable
 
         var result = _repository.Search("GOLD").ToList();
 
-        result.Should().HaveCount(2);
+        result.Should().ContainSingle().Which.MarketCode.Should().Be("GOLD");
     }
 }
 
