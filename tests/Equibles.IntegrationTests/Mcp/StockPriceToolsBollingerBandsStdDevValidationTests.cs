@@ -23,6 +23,7 @@ public class StockPriceToolsBollingerBandsStdDevValidationTests : ParadeDbMcpTes
         new(
             new DailyStockPriceRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
         );

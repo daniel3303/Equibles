@@ -11,8 +11,9 @@ namespace Equibles.IntegrationTests.Mcp;
 /// <summary>
 /// Pins the adjusted-close rule on GetStockPrices (#7058/#7088).
 /// <para>
-/// Captured splits and cash dividends trigger a full-series provider-history reconciliation, so
-/// AdjustedClose remains one consistent total-return basis after the pending action is processed.
+/// Captured splits and cash dividends trigger a full-series provider-history refresh, but the
+/// stored rows do not certify which split basis the provider returned. The tool exposes the
+/// provider-adjusted values without promising a universally consistent total-return window.
 /// </para>
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -25,6 +26,7 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
         new(
             new DailyStockPriceRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
         );
@@ -40,11 +42,10 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
         result.Should().Contain("| Date | Open | High | Low | Close | Adj Close | Volume |");
         result.Should().Contain("97.00");
         result.Should().Contain("provider-adjusted close");
-        result.Should().Contain("full-history reconciliation");
-        result.Should().Contain("Once pending actions reconcile");
-        result.Should().Contain("use Adj Close rather than Close for total-return calculations");
-        result.Should().Contain("an action can remain pending until a later cycle");
-        result.Should().NotContain("not guaranteed to be complete total return");
+        result.Should().Contain("full-history refresh");
+        result.Should().Contain("stored rows do not certify which split basis");
+        result.Should().Contain("Do not infer a consistent total-return window");
+        result.Should().NotContain("Once pending actions reconcile");
     }
 
     [Fact]
@@ -59,20 +60,24 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
         result.Should().Contain("| Date | Open | High | Low | Close | Volume |");
         result.Should().NotContain("| Date | Open | High | Low | Close | Adj Close | Volume |");
         result.Should().Contain("Adj Close equals Close on every row shown");
-        result.Should().Contain("splits and cash dividends trigger a full-history reconciliation");
-        result.Should().Contain("an action can remain pending until a later cycle");
+        result.Should().Contain("splits and cash dividends trigger a full-history refresh");
+        result
+            .Should()
+            .Contain("equality does not prove that a split-spanning window uses one basis");
     }
 
     [Fact]
-    public async Task GetStockPrices_ReconciliationCanLag_DisclosesPendingWindow()
+    public async Task GetStockPrices_EqualAdjustedClose_DoesNotCertifySplitBasis()
     {
         var stock = await SeedPrices(adjustedOffset: 0m);
 
         var result = await Sut()
             .GetStockPrices(stock.Ticker, startDate: "2025-01-06", endDate: "2025-01-20");
 
-        result.Should().Contain("an action can remain pending until a later cycle");
-        result.Should().NotContain("not guaranteed to be complete total return");
+        result
+            .Should()
+            .Contain("equality does not prove that a split-spanning window uses one basis");
+        result.Should().NotContain("Once pending actions reconcile");
     }
 
     private async Task<CommonStock> SeedPrices(decimal adjustedOffset)

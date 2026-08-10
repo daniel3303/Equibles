@@ -5,6 +5,8 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Calendars;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -28,17 +30,20 @@ public class StockPriceTools
 
     private readonly DailyStockPriceRepository _priceRepository;
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public StockPriceTools(
         DailyStockPriceRepository priceRepository,
         CommonStockRepository commonStockRepository,
+        StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<StockPriceTools> logger
     )
     {
         _priceRepository = priceRepository;
         _commonStockRepository = commonStockRepository;
+        _stockSplitRepository = stockSplitRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -48,8 +53,9 @@ public class StockPriceTools
             + "technical analysis, charting, and price trend analysis. Prices are in USD. An Adj "
             + "Close column shows the provider's split- and cash-dividend-adjusted close when it "
             + "differs from Close. Captured corporate-action changes trigger a full-history "
-            + "reconciliation of the exact listed series. Once pending actions reconcile, use "
-            + "Adj Close for total-return analysis; an action can remain pending until a later cycle."
+            + "refresh of the exact listed series, but the stored rows do not certify which split "
+            + "basis the provider returned. Do not treat reconciliation status alone as proof that "
+            + "a window is a consistent total-return series."
     )]
     public Task<string> GetStockPrices(
         [Description(
@@ -99,7 +105,8 @@ public class StockPriceTools
                     return $"No price data found for {priceTicker} in the specified date range.";
 
                 // The provider-adjusted series is replaced in full after captured splits and cash
-                // dividends, so every stored row remains on one adjustment basis after reconcile.
+                // dividends. A differing column is useful evidence, but the provider response does
+                // not certify one universal split basis across every raw window.
                 var hasAdjustment = records.Any(p => p.AdjustedClose != p.Close);
 
                 var result = hasAdjustment
@@ -127,8 +134,8 @@ public class StockPriceTools
                 result.AppendLine();
                 result.AppendLine(
                     hasAdjustment
-                        ? "_Adj Close is the provider-adjusted close. Captured splits and cash dividends trigger a full-history reconciliation. Once pending actions reconcile, use Adj Close rather than Close for total-return calculations; an action can remain pending until a later cycle._"
-                        : "_Adj Close equals Close on every row shown. Captured splits and cash dividends trigger a full-history reconciliation; an action can remain pending until a later cycle._"
+                        ? "_Adj Close is the provider-adjusted close. Captured splits and cash dividends trigger a full-history refresh, but stored rows do not certify which split basis the provider returned. Do not infer a consistent total-return window from reconciliation status alone._"
+                        : "_Adj Close equals Close on every row shown. Captured splits and cash dividends trigger a full-history refresh, but equality does not prove that a split-spanning window uses one basis._"
                 );
 
                 return result.ToString();
@@ -149,8 +156,9 @@ public class StockPriceTools
             + "names its session: for a few hours after a US close some tickers still show the "
             + "prior session while the fresh bar settles, so dates within one response can "
             + "differ — anchor on the Date column, never the wall clock. 52W High/Low are the "
-            + "highest and lowest daily closes in the 365 days ending on the row's date "
-            + "on the stored series; raw rows carry no split-basis metadata. They are CLOSING "
+            + "highest and lowest daily closes in the 365 days ending on the row's date. If "
+            + "that window crosses a recorded split, it starts at the latest split because raw "
+            + "rows carry no split-basis metadata; the partial values are marked *. They are CLOSING "
             + "extremes, never intraday highs and lows, and they are not dividend-adjusted, so "
             + "a source quoting an intraday range reads higher and one quoting a "
             + "dividend-adjusted range reads lower without either being wrong. Off High / Above "
@@ -194,6 +202,10 @@ public class StockPriceTools
                 // Set when a ticker's 52-week window holds less than a full year of stored
                 // history (a recent listing), so the starred range is explained.
                 var shortWindow = false;
+
+                // Set when a ticker's raw 52-week window crosses a captured split. Raw rows carry
+                // no basis metadata, so bars before the latest split are withheld and starred.
+                var splitLimitedWindow = false;
 
                 // Sessions of the rendered rows: more than one means the newest session is
                 // still settling for part of the batch, which earns its own footnote.
@@ -245,13 +257,19 @@ public class StockPriceTools
                     }
 
                     // Trailing 52-week close range, anchored on the row's own session so a
-                    // stock that stopped trading doesn't fabricate a fresh range. This is the
-                    // extrema of the stored Close series; raw rows carry no basis metadata, so
-                    // do not attach a universal split-basis claim to the result.
+                    // stock that stopped trading doesn't fabricate a fresh range. A completed
+                    // provider refresh cannot certify the basis of raw rows, so a captured split
+                    // inside the requested year moves the comparison start to that split date.
                     var cutoff = price.Date.AddDays(-365);
+                    var comparableWindow = await LoadComparablePriceWindow(
+                        stock,
+                        priceTicker,
+                        cutoff,
+                        price.Date
+                    );
                     var range = await _priceRepository
                         .GetByStock(stock, priceTicker)
-                        .Where(p => p.Date >= cutoff && p.Close > 0)
+                        .Where(p => p.Date >= comparableWindow.Start && p.Close > 0)
                         .GroupBy(p => 1)
                         .Select(g => new
                         {
@@ -269,9 +287,14 @@ public class StockPriceTools
                                 range.High,
                                 range.Low,
                                 range.Oldest,
-                                cutoff
+                                cutoff,
+                                comparableWindow.IsSplitLimited
                             );
-                    shortWindow |= cells.Starred;
+                    shortWindow |=
+                        range != null
+                        && range.Oldest > cutoff.AddDays(BaselineSlackDays)
+                        && !comparableWindow.IsSplitLimited;
+                    splitLimitedWindow |= range != null && comparableWindow.IsSplitLimited;
 
                     rowDates.Add(price.Date);
                     result.AppendLine(
@@ -320,6 +343,17 @@ public class StockPriceTools
                         "Note: a 52-week value marked \\* covers a stored history shorter than 52 "
                             + "weeks (for example a recent listing), so it is the range since the "
                             + "history begins, not a full year."
+                    );
+                }
+
+                if (splitLimitedWindow)
+                {
+                    result.AppendLine();
+                    result.AppendLine(
+                        "Note: a 52-week value marked \\* can begin at the latest recorded split "
+                            + "inside the requested year. Earlier raw bars are withheld because "
+                            + "stored rows do not identify their split basis; the displayed bounds "
+                            + "compare only the post-split interval."
                     );
                 }
 
@@ -903,10 +937,11 @@ public class StockPriceTools
         decimal high,
         decimal low,
         DateOnly oldest,
-        DateOnly cutoff
+        DateOnly cutoff,
+        bool splitLimited = false
     )
     {
-        var starred = oldest > cutoff.AddDays(BaselineSlackDays);
+        var starred = splitLimited || oldest > cutoff.AddDays(BaselineSlackDays);
         var star = starred ? "\\*" : "";
         // The row's own close must be positive too: a corrupt $0 bar would otherwise render
         // both distances as -100%, breaking the ≤0 / ≥0 sign contract the columns promise.
@@ -921,6 +956,29 @@ public class StockPriceTools
                 : "—",
             starred
         );
+    }
+
+    private async Task<ComparablePriceWindow> LoadComparablePriceWindow(
+        CommonStock stock,
+        string priceTicker,
+        DateOnly requestedStart,
+        DateOnly end
+    )
+    {
+        var primary = string.Equals(priceTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase);
+        var applicableSplits = await _stockSplitRepository
+            .GetByStock(stock.Id)
+            .Where(split =>
+                split.EffectiveDate > requestedStart
+                && split.EffectiveDate <= end
+                && (
+                    split.PriceSeriesTicker == priceTicker
+                    || (primary && split.PriceSeriesTicker == null)
+                )
+            )
+            .ToListAsync();
+
+        return ComparablePriceWindow.Resolve(requestedStart, end, applicableSplits);
     }
 
     // Placeholder row for a ticker with no price to show (unknown symbol or no data),

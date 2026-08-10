@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Mcp.Tools;
@@ -15,6 +16,7 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         new(
             new DailyStockPriceRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
         );
@@ -197,6 +199,47 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
                 "| MSFT | 2026-04-05 | 425.75 | — | — | 22,000,000 | 425.75\\* | 425.75\\* | 0.00% | 0.00% |"
             );
         result.Should().NotContain("| AAPL | 2026-04-01");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("AAPL")]
+    public async Task GetLatestPrices_PrimarySplitInsideYear_UsesOnlyPostSplitCloses(
+        string priceSeriesTicker
+    )
+    {
+        var stock = AaplStock();
+        var splitDate = new DateOnly(2026, 8, 4);
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStock = stock,
+                    CommonStockId = stock.Id,
+                    PriceSeriesTicker = priceSeriesTicker,
+                    EffectiveDate = splitDate,
+                    Numerator = 1m,
+                    Denominator = 5m,
+                    Source = StockSplitSource.Yahoo,
+                }
+            );
+        DbContext
+            .Set<DailyStockPrice>()
+            .AddRange(
+                PriceFor(stock, splitDate.AddDays(-1), close: 120m),
+                PriceFor(stock, splitDate, close: 20m),
+                PriceFor(stock, new DateOnly(2026, 8, 10), close: 25m)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLatestPrices("AAPL");
+
+        result.Should().Contain("| 25.00\\* | 20.00\\* |");
+        result.Should().NotContain("| 120.00\\*");
+        result.Should().Contain("latest recorded split");
+        result.Should().Contain("compare only the post-split interval");
     }
 
     [Fact]

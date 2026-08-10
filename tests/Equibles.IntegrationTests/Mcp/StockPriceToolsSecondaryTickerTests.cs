@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Mcp.Tools;
@@ -28,6 +29,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
         new(
             new DailyStockPriceRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
         );
@@ -86,6 +88,89 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
         result.Should().Contain("| BRK-B | 2026-07-31 | 511.54 |", "the primary still answers");
         result.Should().Contain("| BRK-A | 2026-07-31 | 749200.00 |", "Class A has its own series");
         result.Should().NotContain("No series");
+    }
+
+    [Fact]
+    public async Task GetLatestPrices_LegacyPrimarySplit_DoesNotClipSecondaryRange()
+    {
+        var stock = await SeedBerkshire();
+        DbContext
+            .Set<DailyStockPrice>()
+            .Add(
+                new DailyStockPrice
+                {
+                    CommonStockId = stock.Id,
+                    ListedTicker = "BRK-A",
+                    Date = new DateOnly(2025, 8, 1),
+                    Open = 900_000m,
+                    High = 900_000m,
+                    Low = 900_000m,
+                    Close = 900_000m,
+                    AdjustedClose = 900_000m,
+                    Volume = 100,
+                }
+            );
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStockId = stock.Id,
+                    PriceSeriesTicker = null,
+                    EffectiveDate = new DateOnly(2026, 1, 2),
+                    Numerator = 2m,
+                    Denominator = 1m,
+                    Source = StockSplitSource.Yahoo,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLatestPrices("BRK-A");
+
+        result.Should().Contain("| 900000.00 | 749200.00 |");
+        result.Should().NotContain("latest recorded split");
+    }
+
+    [Fact]
+    public async Task GetLatestPrices_SecondarySplit_ClipsOnlyThatSecondaryRange()
+    {
+        var stock = await SeedBerkshire();
+        DbContext
+            .Set<DailyStockPrice>()
+            .Add(
+                new DailyStockPrice
+                {
+                    CommonStockId = stock.Id,
+                    ListedTicker = "BRK-A",
+                    Date = new DateOnly(2025, 8, 1),
+                    Open = 900_000m,
+                    High = 900_000m,
+                    Low = 900_000m,
+                    Close = 900_000m,
+                    AdjustedClose = 900_000m,
+                    Volume = 100,
+                }
+            );
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStockId = stock.Id,
+                    PriceSeriesTicker = "BRK-A",
+                    EffectiveDate = new DateOnly(2026, 1, 2),
+                    Numerator = 2m,
+                    Denominator = 1m,
+                    Source = StockSplitSource.Yahoo,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLatestPrices("BRK-A");
+
+        result.Should().Contain("| 749200.00\\* | 749200.00\\* |");
+        result.Should().NotContain("900000.00");
+        result.Should().Contain("latest recorded split");
     }
 
     [Fact]
