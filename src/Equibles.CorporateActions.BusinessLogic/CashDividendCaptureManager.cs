@@ -11,9 +11,9 @@ namespace Equibles.CorporateActions.BusinessLogic;
 // Upserts captured cash-dividend events into CashDividend. The manager locks and
 // revalidates the exact current primary listing before writing, so a company-sync
 // reorder cannot attach one security's action to another. Idempotent by (stock,
-// ExDate): a re-run with the same events writes nothing. A changed amount for an
-// existing ex-date is updated in place (Yahoo occasionally restates a dividend
-// after declaration).
+// ExDate): same-day cash components are summed into that one row, a re-run with
+// the same events writes nothing, and a changed total for an existing ex-date is
+// updated in place (providers occasionally restate a dividend after declaration).
 [Service]
 public class CashDividendCaptureManager
 {
@@ -39,6 +39,10 @@ public class CashDividendCaptureManager
         if (dividends == null || dividends.Count == 0)
             return 0;
 
+        var combinedDividends = CombineSameDateDividends(dividends);
+        if (combinedDividends.Count == 0)
+            return 0;
+
         await using var transaction = await _dividendRepository.CreateTransaction(
             IsolationLevel.ReadCommitted,
             cancellationToken
@@ -59,11 +63,8 @@ public class CashDividendCaptureManager
             .ToListAsync(cancellationToken);
         var changes = 0;
 
-        foreach (var dividend in dividends)
+        foreach (var dividend in combinedDividends)
         {
-            if (dividend.AmountPerShare <= 0)
-                continue;
-
             var match = existing.FirstOrDefault(d => d.ExDate == dividend.ExDate);
             if (match == null)
             {
@@ -92,5 +93,34 @@ public class CashDividendCaptureManager
 
         await transaction.CommitAsync(cancellationToken);
         return changes;
+    }
+
+    private static List<CapturedDividend> CombineSameDateDividends(
+        IReadOnlyCollection<CapturedDividend> dividends
+    ) =>
+        dividends
+            .Where(dividend => dividend.AmountPerShare > 0)
+            .GroupBy(dividend => dividend.ExDate)
+            .Select(CombineSameDateDividend)
+            .ToList();
+
+    private static CapturedDividend CombineSameDateDividend(
+        IGrouping<DateOnly, CapturedDividend> dividends
+    )
+    {
+        var sources = dividends.Select(dividend => dividend.Source).Distinct().ToList();
+        if (sources.Count != 1)
+        {
+            throw new InvalidOperationException(
+                $"Cash dividends on {dividends.Key:yyyy-MM-dd} must come from one source per capture batch."
+            );
+        }
+
+        return new CapturedDividend
+        {
+            ExDate = dividends.Key,
+            AmountPerShare = dividends.Sum(dividend => dividend.AmountPerShare),
+            Source = sources[0],
+        };
     }
 }
