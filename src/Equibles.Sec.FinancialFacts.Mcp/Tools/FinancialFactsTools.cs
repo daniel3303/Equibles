@@ -11,6 +11,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
@@ -27,6 +28,7 @@ public class FinancialFactsTools
 {
     private const int MaxResultsCap = 200;
     private const int MaxTickers = 25;
+    private const int MaxUnmarkedSeriesLagDays = 550;
 
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
@@ -53,8 +55,11 @@ public class FinancialFactsTools
             + "assets, operating cash flow) over time for a company, sourced from SEC "
             + "Company Facts (structured XBRL). Returns a time series, one row per fiscal "
             + "period, using the latest restated value unless asOriginallyReported is set. "
-            + "Fiscal years/quarters follow the company's own fiscal calendar. For a full "
-            + "statement use GetFinancialStatement; to compare peers use CompareFinancialFact."
+            + "Each row carries its actual period start/end; fiscal years/quarters follow the "
+            + "company's own fiscal calendar. Warns when the selected alias ends materially "
+            + "before the company's other structured facts, which can indicate an XBRL tag "
+            + "change. For a full statement use GetFinancialStatement; to compare peers use "
+            + "CompareFinancialFact."
     )]
     public Task<string> GetFinancialFact(
         [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -69,8 +74,8 @@ public class FinancialFactsTools
         [Description("Maximum periods to return, newest first (default 40, max 200)")]
             int maxResults = 40,
         [Description(
-            "When true, show the value as originally filed (earliest filing) instead of "
-                + "the latest restatement. Default false."
+            "When true, show the earliest canonical periodic filing instead of the latest "
+                + "restatement within that source priority. Default false."
         )]
             bool asOriginallyReported = false,
         [Description(
@@ -133,6 +138,16 @@ public class FinancialFactsTools
                     .GetConsolidatedByStock(stock)
                     .Where(f => conceptPriority.Keys.Contains(f.FinancialConceptId))
                     .ToListAsync();
+                var companyLatestPeriodEnd = await _financialFactRepository
+                    .GetConsolidatedByStock(stock)
+                    .MaxAsync(f => (DateOnly?)f.PeriodEnd);
+                var aliasLatestPeriodEnd =
+                    facts.Count == 0 ? (DateOnly?)null : facts.Max(f => f.PeriodEnd);
+                var coverageNote = BuildCoverageNote(
+                    stock.Ticker,
+                    aliasLatestPeriodEnd,
+                    companyLatestPeriodEnd
+                );
 
                 // Reported discrete fourth quarters hide under fp=FY — the same
                 // fiscal identity as the annual figure — so grouping by stamp
@@ -155,9 +170,10 @@ public class FinancialFactsTools
                 // One row per fiscal period. The alias may span several tags and
                 // a single period can carry facts under more than one of them
                 // (the ASC 606 transition year tags both Revenues and the new
-                // concept). Pick deterministically: the alias's primary tag
-                // wins, then the latest filing — or the earliest, when the
-                // caller wants the figure as originally reported. The picked
+                // concept). Pick deterministically: a canonical periodic source
+                // wins, then the alias's primary tag, then the latest filing — or
+                // the earliest within that source priority, when the caller wants
+                // the figure as originally reported. The picked
                 // rows are then deduped by actual reporting span, because a
                 // date window can degenerate a fiscal group to a comparative
                 // re-report of an earlier period (see DedupeByReportingSpan).
@@ -179,7 +195,8 @@ public class FinancialFactsTools
                     stock,
                     asOriginallyReported,
                     shown,
-                    perPeriod.Count
+                    perPeriod.Count,
+                    coverageNote
                 );
             },
             "GetFinancialFact",
@@ -311,9 +328,9 @@ public class FinancialFactsTools
                         .ToList();
                 }
 
-                // Same deterministic pick as GetFinancialFact: the alias's
-                // primary tag wins, then the latest filing, then accession as a
-                // stable tiebreak for same-day amendments (Postgres has no
+                // Same deterministic pick as GetFinancialFact: canonical periodic
+                // sources win before the alias's primary tag, then latest filing and
+                // accession provide stable amendment ordering (Postgres has no
                 // implicit row order).
                 var bestByStock = facts
                     .GroupBy(f => f.CommonStockId)
@@ -334,19 +351,20 @@ public class FinancialFactsTools
         CommonStock stock,
         bool asOriginallyReported,
         List<FinancialFact> perPeriod,
-        int totalPeriods
+        int totalPeriods,
+        string coverageNote
     )
     {
         var basis = asOriginallyReported ? "as originally reported" : "latest restated";
         var result = MarkdownTable.Start(
             $"{concept} for {stock.Ticker} ({FactMarkdown.Cell(stock.Name)}) — {basis}:",
-            "| Period End | FY | Period | Value | Unit | Form | Filed | Accession |",
-            "|-----------|---:|--------|------:|------|------|-------|-----------|"
+            "| Period Start | Period End | FY | Period | Value | Unit | Form | Filed | Accession |",
+            "|--------------|------------|---:|--------|------:|------|------|-------|-----------|"
         );
         result.AppendRows(
             perPeriod,
             f =>
-                $"| {f.PeriodEnd:yyyy-MM-dd} | {f.FiscalYear} | "
+                $"| {f.PeriodStart:yyyy-MM-dd} | {f.PeriodEnd:yyyy-MM-dd} | {f.FiscalYear} | "
                 + $"{f.FiscalPeriod.NameForHumans()} | "
                 + $"{FactMarkdown.Value(f.Value, f.Unit)} | "
                 + $"{FactMarkdown.Cell(f.Unit)} | "
@@ -370,7 +388,30 @@ public class FinancialFactsTools
             );
         }
 
+        if (coverageNote != null)
+            result.AppendLine($"\n_{coverageNote}_");
+
         return result.ToString();
+    }
+
+    internal static string BuildCoverageNote(
+        string ticker,
+        DateOnly? aliasLatestPeriodEnd,
+        DateOnly? companyLatestPeriodEnd
+    )
+    {
+        if (
+            aliasLatestPeriodEnd == null
+            || companyLatestPeriodEnd == null
+            || companyLatestPeriodEnd.Value.DayNumber - aliasLatestPeriodEnd.Value.DayNumber
+                <= MaxUnmarkedSeriesLagDays
+        )
+            return null;
+
+        return $"Coverage warning: this alias ends {aliasLatestPeriodEnd:yyyy-MM-dd}, while "
+            + $"other structured facts for {FactMarkdown.Cell(ticker)} reach "
+            + $"{companyLatestPeriodEnd:yyyy-MM-dd}. The filer may have changed XBRL tags; "
+            + "missing recent rows do not establish that the measure stopped.";
     }
 
     private static (
@@ -505,6 +546,7 @@ public class FinancialFactsTools
         // filed date — ignoring the period end surfaces a comparative column (#1546).
         var byPeriod = candidates
             .OrderByDescending(f => f.PeriodEnd)
+            .ThenBy(f => FinancialFactSourcePriority.Rank(f.Form))
             .ThenBy(f => conceptPriority[f.FinancialConceptId]);
         return asOriginallyReported
             ? byPeriod.ThenBy(f => f.FiledDate).ThenBy(f => f.AccessionNumber).First()

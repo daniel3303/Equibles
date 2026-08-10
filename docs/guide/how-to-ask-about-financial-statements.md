@@ -15,7 +15,7 @@ Name a company, a statement, and a period:
 - "What did Microsoft's balance sheet look like last fiscal year?"
 - "Pull NVDA's cash-flow statement for its latest annual period."
 
-The assistant calls the `GetFinancialStatement` tool and replies with the standard line items — revenue, net income, total assets, operating cash flow, and the rest — for the fiscal year and period you asked for, using the latest restated values.
+The assistant calls the `GetFinancialStatement` tool and replies with the standard line items — revenue, net income, total assets, operating cash flow, and the rest — for the fiscal year and period you asked for, using the latest restated values. Every line is anchored to one statement period end and includes its actual period start, so a discrete quarter and a fiscal-year-to-date flow remain visibly different.
 
 ## Follow one metric over time
 
@@ -24,7 +24,7 @@ To track a single concept across periods rather than a whole statement:
 - "How has Apple's revenue changed over the last several years?"
 - "Show me Tesla's diluted EPS history."
 
-The assistant uses `GetFinancialFact`, which returns a time series with one row per fiscal period. Common concepts include revenue, net income, diluted EPS, total assets, and operating cash flow.
+The assistant uses `GetFinancialFact`, which returns a time series with one row per fiscal period and the exact start/end span. Common concepts include revenue, net income, diluted EPS, total assets, and operating cash flow. If the alias ends more than roughly 18 months before the company's other structured facts, the result warns that the filer may have switched XBRL tags; an absent recent row is not treated as proof that the measure stopped.
 
 ## Compare companies side by side
 
@@ -36,7 +36,7 @@ The assistant calls `CompareFinancialFact`, returning one row per ticker for the
 
 ## What you should see
 
-A Markdown table (or several) with figures taken directly from the company's XBRL filings, labelled by fiscal year and period. Values are the latest restated numbers unless you ask for them as originally reported.
+A Markdown table (or several) with figures taken directly from the company's XBRL filings, labelled by fiscal year, fiscal period, period start, and period end. Values are the latest restated numbers unless you ask for them as originally reported. A canonical periodic report (10-K, 10-Q, 20-F, or 40-F) outranks a later proxy that repeats the same period's figure in rounded form.
 
 If a statement or metric is missing, the most likely reasons are that the scraper hasn't imported that company's XBRL facts yet, or the company doesn't tag that concept. For a breakdown of revenue by segment, geography, or product — which lives in dimensional facts rather than the standard statements — see [Ask your AI assistant for a company's revenue breakdown](how-to-ask-about-revenue-breakdown.md).
 

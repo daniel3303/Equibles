@@ -54,6 +54,7 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
     {
         List<Guid> allStockIds;
         Dictionary<Guid, DateTime> lastCheckedByStock;
+        Dictionary<Guid, int> importerVersionByStock;
         using (var scope = ScopeFactory.CreateScope())
         {
             var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
@@ -65,10 +66,24 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
 
             var syncStatusRepo =
                 scope.ServiceProvider.GetRequiredService<FinancialFactsSyncStatusRepository>();
-            lastCheckedByStock = await syncStatusRepo
+            var syncStatuses = await syncStatusRepo
                 .GetAll()
                 .AsNoTracking()
-                .ToDictionaryAsync(s => s.CommonStockId, s => s.LastCheckedAt, stoppingToken);
+                .Select(s => new
+                {
+                    s.CommonStockId,
+                    s.LastCheckedAt,
+                    s.ImporterVersion,
+                })
+                .ToListAsync(stoppingToken);
+            lastCheckedByStock = syncStatuses.ToDictionary(
+                s => s.CommonStockId,
+                s => s.LastCheckedAt
+            );
+            importerVersionByStock = syncStatuses.ToDictionary(
+                s => s.CommonStockId,
+                s => s.ImporterVersion
+            );
         }
 
         if (allStockIds.Count == 0)
@@ -89,6 +104,7 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
         var stockIds = SelectDueStocks(
             allStockIds,
             lastCheckedByStock,
+            importerVersionByStock,
             DateTime.UtcNow - _recheckInterval
         );
 
@@ -116,24 +132,31 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
     }
 
     /// <summary>
-    /// Companies due for a facts check: never checked (no sync-status row) or
-    /// checked before the cutoff. Never-checked first, then stalest first, so
-    /// an interrupted sweep resumes as an ordered rolling walk (mirrors
-    /// <c>DocumentScraper.SelectDueCompanies</c>).
+    /// Companies due for a facts check: never checked (no sync-status row),
+    /// imported under an older contract version, or checked before the cutoff.
+    /// Never-checked first, then outdated imports, then ordinary stale rows so
+    /// a release repairs the corpus promptly without losing rolling-walk order.
     /// </summary>
     internal static List<Guid> SelectDueStocks(
         List<Guid> stockIds,
         Dictionary<Guid, DateTime> lastCheckedByStock,
+        Dictionary<Guid, int> importerVersionByStock,
         DateTime cutoff
     ) =>
         stockIds
             .Where(id =>
-                !lastCheckedByStock.TryGetValue(id, out var lastChecked) || lastChecked < cutoff
+                !lastCheckedByStock.TryGetValue(id, out var lastChecked)
+                || !importerVersionByStock.TryGetValue(id, out var importerVersion)
+                || importerVersion < FinancialFactsImportService.CurrentImporterVersion
+                || lastChecked < cutoff
             )
-            .OrderBy(id =>
-                lastCheckedByStock.TryGetValue(id, out var lastChecked)
-                    ? lastChecked
-                    : DateTime.MinValue
+            .OrderBy(id => lastCheckedByStock.ContainsKey(id) ? 1 : 0)
+            .ThenBy(id =>
+                importerVersionByStock.TryGetValue(id, out var importerVersion)
+                && importerVersion >= FinancialFactsImportService.CurrentImporterVersion
+                    ? 1
+                    : 0
             )
+            .ThenBy(id => lastCheckedByStock.GetValueOrDefault(id, DateTime.MinValue))
             .ToList();
 }

@@ -142,11 +142,11 @@ public class FinancialFactsToolsComparativeWindowLeakTests : ParadeDbMcpTestBase
         // Exactly one row for period end 2025-01-26, labeled with ITS year.
         var occurrences = result.Split("| 2025-01-26 |").Length - 1;
         occurrences.Should().Be(1, "one reporting span is one row");
-        result.Should().Contain("| 2025-01-26 | 2025 |");
+        result.Should().Contain("| 2024-01-29 | 2025-01-26 | 2025 |");
         result
             .Should()
             .NotContain(
-                "| 2025-01-26 | 2026 |",
+                "| 2024-01-29 | 2025-01-26 | 2026 |",
                 "the comparative's re-stamp is not a period of its own"
             );
     }
@@ -158,8 +158,8 @@ public class FinancialFactsToolsComparativeWindowLeakTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetFinancialFact("NVDA", "eps-diluted");
 
-        result.Should().Contain("| 2026-01-25 | 2026 |");
-        result.Should().Contain("| 2025-01-26 | 2025 |");
+        result.Should().Contain("| 2025-01-27 | 2026-01-25 | 2026 |");
+        result.Should().Contain("| 2024-01-29 | 2025-01-26 | 2025 |");
         (result.Split("| 2025-01-26 |").Length - 1).Should().Be(1);
     }
 

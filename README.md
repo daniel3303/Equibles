@@ -327,8 +327,8 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 
 **Fundamentals (XBRL)**
 
-- GetFinancialStatement — income/balance/cash-flow statement by period
-- GetFinancialFact — one concept over time
+- GetFinancialStatement — income/balance/cash-flow statement anchored to one period end, with each line's exact span
+- GetFinancialFact — one concept over time with exact spans and stale-alias coverage warnings
 - CompareFinancialFact — a concept across companies
 - GetRevenueBreakdown — revenue by segment/geography/product plus reported segment operating income and derived margin
 

@@ -41,8 +41,8 @@ public static class StatementLineFacts
     /// period-end instant alongside re-stated comparative instants. Prefer the
     /// span matching the period's granularity (instants span zero days and
     /// always qualify), then the candidate ending latest so a comparative
-    /// column never stands in for the current one, then the latest restatement
-    /// among same-ending candidates (#1546).
+    /// column never stands in for the current one, then a canonical periodic
+    /// source and the latest restatement among same-ending candidates (#1546).
     /// </summary>
     public static FinancialFact PickCurrentlyReported(
         IEnumerable<FinancialFact> facts,
@@ -65,7 +65,9 @@ public static class StatementLineFacts
 
         return candidates
             .OrderByDescending(f => f.PeriodEnd)
+            .ThenBy(f => FinancialFactSourcePriority.Rank(f.Form))
             .ThenByDescending(f => f.FiledDate)
+            .ThenByDescending(f => f.AccessionNumber)
             .First();
     }
 

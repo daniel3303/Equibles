@@ -33,14 +33,14 @@ public class FinancialFactsImportServiceBuildFactMissingConceptTests
         {
             { (FactTaxonomy.UsGaap, "Revenues"), Guid.NewGuid() },
         };
-        var documentIds = new Dictionary<string, Guid>();
+        var documents = new Dictionary<string, FinancialFactsImportService.FilingDocumentContext>();
 
         var method = serviceType.GetMethod(
             "BuildFact",
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        var result = (FinancialFact)method.Invoke(null, [stock, parsed, conceptIds, documentIds]);
+        var result = (FinancialFact)method.Invoke(null, [stock, parsed, conceptIds, documents]);
 
         result.Should().BeNull();
     }
