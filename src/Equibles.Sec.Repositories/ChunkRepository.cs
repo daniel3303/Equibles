@@ -108,23 +108,14 @@ public class ChunkRepository : BaseRepository<Chunk>
 
         var query = DbContext.Set<Chunk>().Where(c => EF.Functions.JsonSearch(c.Id, searchQuery));
 
+        // Document.ReportingDate is the filing/source date surfaced everywhere else. The chunk's
+        // denormalized copy is only an indexed cache and legacy transcript chunks can trail a
+        // corrected document date, so it must never decide date-window membership (#7049).
         if (startDate.HasValue)
-        {
-            var startUtc = DateTime.SpecifyKind(
-                startDate.Value.ToDateTime(TimeOnly.MinValue),
-                DateTimeKind.Utc
-            );
-            query = query.Where(c => c.ReportingDate >= startUtc);
-        }
+            query = query.Where(c => c.Document.ReportingDate >= startDate.Value);
 
         if (endDate.HasValue)
-        {
-            var endUtc = DateTime.SpecifyKind(
-                endDate.Value.ToDateTime(TimeOnly.MinValue),
-                DateTimeKind.Utc
-            );
-            query = query.Where(c => c.ReportingDate <= endUtc);
-        }
+            query = query.Where(c => c.Document.ReportingDate <= endDate.Value);
 
         // Set a hard CommandTimeout for this call so Postgres aborts the
         // statement independently of pdb.parse / pdb.score honouring the
