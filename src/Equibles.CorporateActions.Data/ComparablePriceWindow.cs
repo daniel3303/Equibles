@@ -37,11 +37,6 @@ public readonly record struct ComparablePriceWindow(
             .Select(split => (DateOnly?)split.EffectiveDate)
             .Max();
 
-        return new ComparablePriceWindow(
-            requestedStart,
-            boundary ?? requestedStart,
-            end,
-            boundary
-        );
+        return new ComparablePriceWindow(requestedStart, boundary ?? requestedStart, end, boundary);
     }
 }
