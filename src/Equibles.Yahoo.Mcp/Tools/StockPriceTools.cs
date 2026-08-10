@@ -46,9 +46,10 @@ public class StockPriceTools
     [Description(
         "Get daily OHLCV (Open, High, Low, Close, Volume) price history for a stock. Useful for "
             + "technical analysis, charting, and price trend analysis. Prices are in USD and "
-            + "restated to the current split basis. Close is as traded; an Adj Close column carries "
-            + "the split- and dividend-adjusted close whenever the window holds an adjustment, so a "
-            + "total-return series can be computed from it (Close alone understates a dividend payer)."
+            + "restated to the current split basis. Close is the price as traded; an Adj Close "
+            + "column shows the stored split-adjusted close on the rows where it differs. That "
+            + "series is maintained for splits only, NOT for dividends, so it cannot be used to "
+            + "compute total return — treat both columns as price series."
     )]
     public Task<string> GetStockPrices(
         [Description(
@@ -97,11 +98,12 @@ public class StockPriceTools
                 if (records.Count == 0)
                     return $"No price data found for {priceTicker} in the specified date range.";
 
-                // Close is as-traded; AdjustedClose carries the split AND dividend adjustment, so
-                // it is the only basis a total-return series can be built on. The column is worth
-                // its width only when the window actually holds an adjustment — for a stock that
-                // paid nothing and never split the two series are identical, and the footer says
-                // so rather than leaving a caller guessing whether the tool can answer at all.
+                // AdjustedClose is the provider's STORED adjusted close, and our pipeline restates
+                // it only on a SPLIT rebase — dividends never rebase it, and the forward EOD lane
+                // writes AdjustedClose = Close. So a differing value proves a split rebase reached
+                // these rows; equality proves NOTHING about the world (a dividend payer's recent
+                // bars are equal). The column therefore renders when the stored rows differ, and
+                // every word around it speaks only about the stored rows shown.
                 var hasAdjustment = records.Any(p => p.AdjustedClose != p.Close);
 
                 var result = hasAdjustment
@@ -129,8 +131,8 @@ public class StockPriceTools
                 result.AppendLine();
                 result.AppendLine(
                     hasAdjustment
-                        ? "_Close is as traded; Adj Close is adjusted for splits and dividends — compute total return from Adj Close, price return from Close._"
-                        : "_Close is as traded. The split- and dividend-adjusted close is identical across this window (no split or dividend), so total return equals price return here._"
+                        ? "_Close is the price as traded. Adj Close is the stored split-adjusted close: it is restated when a split is applied and is NOT maintained for dividends, so it does not give a total-return series — do not compute total return from it._"
+                        : "_Close is the price as traded. The stored split-adjusted close equals Close on every row shown. That series is restated only when a split rebase runs (dividends never restate it), so this says nothing about whether the company paid a dividend or split in this window._"
                 );
 
                 return result.ToString();

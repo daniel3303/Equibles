@@ -143,7 +143,12 @@ public class NCenTools
                 var current = NamesForRole(oldestFirst[i], role);
                 // A role absent from a report is "not reported", not "dropped" — an N-CEN that
                 // omits the section would otherwise read as the fund firing its auditor.
-                if (previous.Length == 0 || current.Length == 0 || previous == current)
+                if (previous.Length == 0 || current.Length == 0)
+                    continue;
+                if (
+                    ComparableNamesForRole(oldestFirst[i - 1], role)
+                    == ComparableNamesForRole(oldestFirst[i], role)
+                )
                     continue;
 
                 changes.Add(
@@ -176,4 +181,23 @@ public class NCenTools
                 .Select(p => p.Name)
                 .OrderBy(n => n, StringComparer.Ordinal)
         );
+
+    // Filers re-punctuate and re-case the same firm between reports ("PricewaterhouseCoopers LLP"
+    // vs "PRICEWATERHOUSECOOPERS, LLP"). Comparing the raw strings reports those as a change of
+    // auditor, which is a false claim about the fund; the comparison runs on letters and digits
+    // only. Display still uses the filed spelling — this normalization never leaves the compare.
+    private static string ComparableNamesForRole(NCenFiling filing, NCenServiceProviderType role) =>
+        string.Join(
+            "|",
+            filing
+                .ServiceProviders.Where(p => p.ProviderType == role)
+                .Select(p => Squash(p.Name))
+                .Where(n => n.Length > 0)
+                .OrderBy(n => n, StringComparer.Ordinal)
+        );
+
+    private static string Squash(string value) =>
+        value == null
+            ? ""
+            : new string(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 }

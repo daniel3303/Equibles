@@ -343,7 +343,9 @@ public class RevenueBreakdownTools
             SegmentAxes,
             years,
             totals,
-            displayTotals
+            displayTotals,
+            totalLabel: "Total operating income (consolidated)",
+            checkOverlap: false
         );
         result.AppendLine(
             "_Segment operating income is tagged on the same business-segment axis as the revenue "
@@ -366,10 +368,23 @@ public class RevenueBreakdownTools
         string[] axes,
         int maxYears,
         IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> totals,
-        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), decimal> displayTotals
+        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), decimal> displayTotals,
+        // The total row is labelled per axis: printing an operating-income total under
+        // "Total revenue" would answer a revenue question with a profit figure.
+        string totalLabel = "Total revenue (consolidated)",
+        // The overlap warning below is a REVENUE rule — members that must add up to the
+        // consolidated total. Segment operating income is not expected to add up (unallocated
+        // corporate costs), so running it there fabricates a claim about the issuer's tagging.
+        bool checkOverlap = true
     )
     {
-        var (unit, periodEnds, members) = BuildAxisSeries(rows, axes, maxYears, totals);
+        var (unit, periodEnds, members) = BuildAxisSeries(
+            rows,
+            axes,
+            maxYears,
+            totals,
+            reconcilesToTotal: checkOverlap
+        );
         if (members.Count == 0)
             return;
 
@@ -401,9 +416,7 @@ public class RevenueBreakdownTools
             )
             .ToList();
         if (totalCells.Any(c => c != "—"))
-            result.AppendLine(
-                "| **Total revenue (consolidated)** | " + string.Join(" | ", totalCells) + " |"
-            );
+            result.AppendLine($"| **{totalLabel}** | " + string.Join(" | ", totalCells) + " |");
 
         // An issuer can tag a parent level alongside its components on the same
         // axis (AAPL's Product/Service next to iPhone/Mac/iPad; NVDA's Data
@@ -412,7 +425,7 @@ public class RevenueBreakdownTools
         // column sums to well over consolidated revenue — say so rather than
         // let a consumer double-count.
         var overlaps = false;
-        for (var i = 0; i < periodEnds.Count && !overlaps; i++)
+        for (var i = 0; i < periodEnds.Count && !overlaps && checkOverlap; i++)
         {
             if (!displayTotals.TryGetValue((periodEnds[i], unit), out var total) || total == 0m)
                 continue;
@@ -455,6 +468,29 @@ public class RevenueBreakdownTools
     // from older filings. Otherwise the latest filing only restated some members (a partial
     // amendment), so fall back to the latest-filed-per-member merge that carries un-amended
     // members forward.
+    // Completeness for an axis that cannot be reconciled arithmetically: the newest filing that
+    // reported the period defines which members still exist. A member absent from that filing was
+    // dropped by the issuer (a discontinued or renamed segment) and must not be carried forward
+    // from an older filing — the same defect ReconcileToTotal exists to prevent on the revenue
+    // axes, where the sum-to-total test can actually fire.
+    private static List<DimensionalRevenueRow> NewestRosterWins(
+        IEnumerable<DimensionalRevenueRow> axisRowsInUnit
+    )
+    {
+        var result = new List<DimensionalRevenueRow>();
+        foreach (var period in axisRowsInUnit.GroupBy(r => r.PeriodEnd))
+        {
+            var latestFiled = period.Max(r => r.FiledDate);
+            result.AddRange(
+                period
+                    .Where(r => r.FiledDate == latestFiled)
+                    .GroupBy(r => r.Member)
+                    .Select(g => g.First())
+            );
+        }
+        return result;
+    }
+
     private static List<DimensionalRevenueRow> ReconcileToTotal(
         IEnumerable<DimensionalRevenueRow> axisRowsInUnit,
         string unit,
@@ -748,7 +784,13 @@ public class RevenueBreakdownTools
         List<DimensionalRevenueRow> rows,
         string[] axes,
         int maxYears,
-        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> totals
+        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> totals,
+        // Segment operating income does not reconcile to a consolidated total by construction —
+        // unallocated corporate costs sit outside the segments — so the arithmetic completeness
+        // test can never pass there and would silently degrade to the carry-forward merge that
+        // lets a discontinued segment linger forever. Those axes use the newest filing's member
+        // roster as authoritative instead.
+        bool reconcilesToTotal = true
     )
     {
         var axisRows = rows.Where(r => axes.Contains(r.Axis)).ToList();
@@ -758,7 +800,10 @@ public class RevenueBreakdownTools
         // Pin the unit first (latest-filed fact's unit) so the reconciliation sum and the
         // consolidated total are always in the same currency.
         var unit = axisRows.OrderByDescending(r => r.FiledDate).First().Unit;
-        var current = ReconcileToTotal(axisRows.Where(r => r.Unit == unit), unit, totals);
+        var inUnit = axisRows.Where(r => r.Unit == unit);
+        var current = reconcilesToTotal
+            ? ReconcileToTotal(inUnit, unit, totals)
+            : NewestRosterWins(inUnit);
         if (current.Count == 0)
             return (null, [], []);
 

@@ -283,15 +283,17 @@ public class FredTools
                     series,
                     $"No tracked series match '{query}'. Equibles tracks a curated ~40-series US macro set - FRED series outside it are not available. Try a category name (Inflation, Employment, InterestRates, ...) or an empty query to list all tracked series.",
                     title,
-                    // Seasonal adjustment decides whether two series are even comparable, and the
-                    // last-updated stamp is the only way to date a macro reading from search
-                    // alone — without it a caller cannot tell a live series from a retired one.
-                    "| Series ID | Title | Category | Frequency | Units | Seasonal Adj | Last Updated |",
-                    "|-----------|-------|----------|-----------|-------|--------------|--------------|",
+                    // Seasonal adjustment decides whether two series are even comparable. The
+                    // date column is ObservationEnd — the newest observation the series carries.
+                    // LastUpdated is deliberately NOT shown: it is our own sync clock (set to
+                    // UtcNow on every import cycle), so it is identical across every series and
+                    // says nothing about whether a series is still being published.
+                    "| Series ID | Title | Category | Frequency | Units | Seasonal Adj | Latest Observation |",
+                    "|-----------|-------|----------|-----------|-------|--------------|--------------------|",
                     s =>
                         $"| {s.SeriesId} | {s.Title} | {s.Category} | {s.Frequency} | {s.Units} "
                         + $"| {(string.IsNullOrWhiteSpace(s.SeasonalAdjustment) ? "-" : s.SeasonalAdjustment)} "
-                        + $"| {(s.LastUpdated == null ? "-" : McpFormat.Invariant(s.LastUpdated.Value, "yyyy-MM-dd"))} |"
+                        + $"| {(s.ObservationEnd == null ? "-" : McpFormat.Invariant(s.ObservationEnd.Value, "yyyy-MM-dd"))} |"
                 );
 
                 var truncation = McpOutput.TruncationNote(series.Count, total);

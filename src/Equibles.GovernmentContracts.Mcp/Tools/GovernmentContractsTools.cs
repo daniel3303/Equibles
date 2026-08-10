@@ -135,7 +135,7 @@ public class GovernmentContractsTools
                         + $"| {Escape(Shorten(c.Description, 80))} |"
                 );
 
-                return await AppendFooters(table, awards.Count, totalCount, end);
+                return await AppendFooters(table, awards.Count, totalCount, end, hasOutlays);
             },
             "GetGovernmentContracts",
             $"ticker: {ticker}"
@@ -211,7 +211,13 @@ public class GovernmentContractsTools
                         $"| {++rank} | {Escape(r.Ticker)} | {Escape(r.Name)} | {FormatUsd(r.Total)} | {r.Count} |"
                 );
 
-                return await AppendFooters(table, ranked.Count, totalCompanies, end);
+                return await AppendFooters(
+                    table,
+                    ranked.Count,
+                    totalCompanies,
+                    end,
+                    hasOutlays: false
+                );
             },
             "GetTopGovernmentContractors",
             $"range: {startDate}..{endDate}"
@@ -220,7 +226,13 @@ public class GovernmentContractsTools
 
     // Every result carries the dataset's coverage limits and its true recency, so a sparse
     // window reads as a data gap rather than as an absence of awards.
-    private async Task<string> AppendFooters(string table, int shown, int total, DateOnly rangeEnd)
+    private async Task<string> AppendFooters(
+        string table,
+        int shown,
+        int total,
+        DateOnly rangeEnd,
+        bool hasOutlays
+    )
     {
         var sb = new StringBuilder(table.TrimEnd('\n', '\r'));
         sb.AppendLine();
@@ -240,8 +252,13 @@ public class GovernmentContractsTools
 
         sb.AppendLine(
             "_Coverage: prime federal contract awards of $1M+ matched to listed companies; "
-                + "Total Value is obligated dollars plus unexercised option ceiling, not revenue received; "
-                + "Outlays, when reported, is what the government has actually disbursed so far. Recipient is the awarded "
+                + "Total Value is obligated dollars plus unexercised option ceiling, not revenue received"
+                + (
+                    hasOutlays
+                        ? "; Outlays is what the government has actually disbursed so far"
+                        : ""
+                )
+                + ". Recipient is the awarded "
                 + "entity as the government named it — a subsidiary's own name there is how an award reaches "
                 + "this company. "
                 + $"Latest ingested award action date: {Format(latestIngested)}._"
