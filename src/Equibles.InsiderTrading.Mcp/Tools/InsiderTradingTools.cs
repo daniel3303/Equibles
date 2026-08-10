@@ -377,7 +377,7 @@ public class InsiderTradingTools
         ReadOnly = true
     )]
     [Description(
-        "Get recent proposed insider sales for a stock from SEC Form 144 notices. Each Form 144 is an affiliate's declaration of intent to sell restricted or control securities, showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the proposed sale as a share of shares outstanding, the approximate sale date, and the broker. Results are the most recent notices first and a note flags when more exist than were returned; use fromDate/toDate to scope a period (heavy 10b5-1 filers can flood the recency window with small daily notices). Use this to anticipate upcoming insider selling before it shows up as an executed Form 4."
+        "Get recent proposed insider sales for a stock from SEC Form 144 notices. Each Form 144 is an affiliate's declaration of intent to sell restricted or control securities, showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the proposed sale as a share of shares outstanding, the approximate sale date, the broker, and the filer's remarks (including any stated 10b5-1 plan). Results are the most recent notices first and a note flags when more exist than were returned; use fromDate/toDate to scope a period (heavy 10b5-1 filers can flood the recency window with small daily notices). Use this to anticipate upcoming insider selling before it shows up as an executed Form 4."
     )]
     public Task<string> GetProposedSales(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -449,9 +449,9 @@ public class InsiderTradingTools
                             f.ApproxSaleDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                             ?? "-";
                         // Remarks is where a filer states the sale runs under a 10b5-1 plan, which
-                        // is the difference between pre-scheduled and discretionary selling. Kept
-                        // verbatim (clipped for width) — never re-worded into a plan/no-plan flag.
-                        return $"| {f.FilingDate:yyyy-MM-dd} | {f.SellerName} | {f.RelationshipToIssuer} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {FormatPercentOfOutstanding(f.SharesToBeSold, f.SharesOutstanding)} | {approxSaleDate} | {f.BrokerName} | {ClipRemarks(f.Remarks)} |";
+                        // is the difference between pre-scheduled and discretionary selling. Keep
+                        // the complete filed text — a plan disclosure can occur at the end.
+                        return $"| {f.FilingDate:yyyy-MM-dd} | {MarkdownTable.EscapeCell(f.SellerName, "-")} | {MarkdownTable.EscapeCell(f.RelationshipToIssuer, "-")} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {FormatPercentOfOutstanding(f.SharesToBeSold, f.SharesOutstanding)} | {approxSaleDate} | {MarkdownTable.EscapeCell(f.BrokerName, "-")} | {MarkdownTable.EscapeCell(f.Remarks, "-")} |";
                     }
                 );
 
@@ -467,21 +467,6 @@ public class InsiderTradingTools
             "GetProposedSales",
             $"ticker: {ticker}"
         );
-    }
-
-    // Form 144 remarks are free text and occasionally run to a paragraph; the pipe would break the
-    // table row and the full prose is not worth a table cell, so it renders on one clipped line.
-    private const int MaxRemarksLength = 90;
-
-    private static string ClipRemarks(string remarks)
-    {
-        if (string.IsNullOrWhiteSpace(remarks))
-            return "-";
-
-        var flattened = remarks.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ").Trim();
-        return flattened.Length <= MaxRemarksLength
-            ? flattened
-            : flattened[..MaxRemarksLength] + "…";
     }
 
     // The standard Form 144 materiality signal: the proposed sale as a share of the notice's own

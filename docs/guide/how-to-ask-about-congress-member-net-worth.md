@@ -29,5 +29,5 @@ A Markdown table in the assistant's reply, with one row per year. A missing year
 
 ## See also
 
-- [View a member of Congress's trading profile](how-to-view-congress-member-trades.md) — their reported stock trades, on the web portal.
+- [View a member of Congress's trading profile](how-to-view-congress-member-trades.md) — their reported securities transactions, on the web portal.
 - [Connect an AI assistant and ask your first question](tutorial-connect-ai-assistant.md)

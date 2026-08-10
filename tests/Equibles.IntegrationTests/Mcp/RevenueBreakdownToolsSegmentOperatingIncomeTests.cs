@@ -21,9 +21,9 @@ namespace Equibles.IntegrationTests.Mcp;
 /// <item>segments are NOT expected to add up to the consolidated figure (unallocated corporate
 /// costs sit outside them), so the revenue-shaped overlap warning would fire on a normal filing
 /// and fabricate a claim about the issuer's XBRL tagging;</item>
-/// <item>and because that same non-reconciliation makes the arithmetic completeness test
-/// unpassable, a discontinued segment must be dropped by the newest filing's roster instead, or
-/// it lingers forever and is summed into the table.</item>
+/// <item>a partial amendment may restate only one member, so unchanged members must carry forward;
+/// a newest-filing roster is authoritative only when its members reconcile as a complete
+/// re-disaggregation.</item>
 /// </list>
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -83,6 +83,9 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
         var result = await Sut().GetRevenueBreakdown("AAPL");
 
         result.Should().Contain("**Segment operating income**");
+        result.Should().Contain("**Segment operating margin** (%)");
+        result.Should().Contain("| Americas Segment | 34 |");
+        result.Should().Contain("same folded raw member QName and exact period match");
         result.Should().Contain("Total operating income (consolidated)");
         // The profit total must never be presented as revenue.
         result.Should().NotContain("| **Total revenue (consolidated)** | $123,000,000,000");
@@ -97,24 +100,61 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     }
 
     [Fact]
-    public async Task GetRevenueBreakdown_SegmentOperatingIncome_DropsASegmentTheNewestFilingNoLongerReports()
+    public async Task GetRevenueBreakdown_IncomeWithoutDimensionalRevenue_StillRendersIncome()
     {
-        // The completeness defect this pins: on an axis that cannot reconcile arithmetically, the
-        // old rule always fell back to a per-member carry-forward merge, so a segment the issuer
-        // discontinued (NVDA Singapore, AMD Japan/Europe in the code's own examples) survived from
-        // an older filing and was summed into every later period.
+        var stock = AddStock("SOLO");
+        var revenue = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
+        var operatingIncome = AddConcept("OperatingIncomeLoss");
+
+        AddFact(stock, revenue, 2024, 100_000_000m);
+        AddFact(stock, operatingIncome, 2024, 20_000_000m);
+        AddFact(stock, operatingIncome, 2024, 12_000_000m, (SegmentAxis, "solo:CoreMember"));
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetRevenueBreakdown("SOLO");
+
+        result.Should().Contain("No dimensional revenue tagging is on record");
+        result.Should().Contain("**Segment operating income**");
+        result.Should().Contain("| Core | $12,000,000 |");
+        result.Should().NotContain("**Segment operating margin**");
+        result.Should().NotContain("has no dimensional revenue or segment operating income");
+    }
+
+    [Fact]
+    public async Task GetRevenueBreakdown_IncomeWithoutAnyRevenueConcept_StillRendersIncome()
+    {
+        var stock = AddStock("INCOMEONLY");
+        var operatingIncome = AddConcept("OperatingIncomeLoss");
+
+        AddFact(stock, operatingIncome, 2024, 20_000_000m);
+        AddFact(stock, operatingIncome, 2024, 12_000_000m, (SegmentAxis, "incomeonly:CoreMember"));
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetRevenueBreakdown("INCOMEONLY");
+
+        result.Should().Contain("No dimensional revenue tagging is on record");
+        result.Should().Contain("**Segment operating income**");
+        result.Should().Contain("| Core | $12,000,000 |");
+        result.Should().NotContain("**Segment operating margin**");
+        result.Should().NotContain("has no dimensional revenue or segment operating income");
+    }
+
+    [Fact]
+    public async Task GetRevenueBreakdown_SegmentOperatingIncome_CarriesUnchangedMembersAcrossPartialAmendment()
+    {
+        // A partial amendment can restate one segment without repeating every unchanged member.
+        // Treating that one-row filing as the whole roster silently deletes valid segments.
         var stock = AddStock("NVDA");
         var revenue = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
         var operatingIncome = AddConcept("OperatingIncomeLoss");
 
-        // The tool answers off the revenue cut, so a filer tagging segment operating income also
-        // tags segment revenue; without it the whole response short-circuits before this axis.
+        // Seed matching segment revenue so this case also exercises the derived-margin path.
         AddFact(stock, revenue, 2024, 60_000_000_000m);
         AddFact(stock, revenue, 2024, 35_000_000_000m, (SegmentAxis, "nvda:ComputeMember"));
         AddFact(stock, revenue, 2024, 25_000_000_000m, (SegmentAxis, "nvda:GraphicsMember"));
 
         AddFact(stock, operatingIncome, 2024, 30_000_000_000m);
-        // Older filing reports three segments including one later discontinued.
+        // Original filing reports all three segments.
         AddFact(
             stock,
             operatingIncome,
@@ -139,7 +179,8 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
             1,
             [(SegmentAxis, "nvda:SingaporeMember")]
         );
-        // Newest filing restates the same period with the Singapore segment gone.
+        // Amendment restates Compute alone. Its $11B cannot reconcile to the $30B consolidated
+        // figure, proving that this is not a complete re-disaggregation.
         AddFact(
             stock,
             operatingIncome,
@@ -148,22 +189,103 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
             2,
             [(SegmentAxis, "nvda:ComputeMember")]
         );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetRevenueBreakdown("NVDA");
+
+        result.Should().Contain("**Segment operating income**");
+        result.Should().Contain("Singapore");
+        result.Should().Contain("$11,000,000,000");
+        result.Should().Contain("$8,000,000,000");
+        result.Should().Contain("$2,000,000,000");
+    }
+
+    [Fact]
+    public async Task GetRevenueBreakdown_SegmentOperatingIncome_DropsOldMemberAfterCompleteRedisaggregation()
+    {
+        var stock = AddStock("DROP");
+        var operatingIncome = AddConcept("OperatingIncomeLoss");
+
+        AddFact(stock, operatingIncome, 2024, 20_000_000_000m);
+        AddFact(
+            stock,
+            operatingIncome,
+            2024,
+            10_000_000_000m,
+            1,
+            [(SegmentAxis, "drop:ComputeMember")]
+        );
+        AddFact(
+            stock,
+            operatingIncome,
+            2024,
+            8_000_000_000m,
+            1,
+            [(SegmentAxis, "drop:GraphicsMember")]
+        );
+        AddFact(
+            stock,
+            operatingIncome,
+            2024,
+            2_000_000_000m,
+            1,
+            [(SegmentAxis, "drop:SingaporeMember")]
+        );
+        AddFact(
+            stock,
+            operatingIncome,
+            2024,
+            11_000_000_000m,
+            2,
+            [(SegmentAxis, "drop:ComputeMember")]
+        );
         AddFact(
             stock,
             operatingIncome,
             2024,
             9_000_000_000m,
             2,
-            [(SegmentAxis, "nvda:GraphicsMember")]
+            [(SegmentAxis, "drop:GraphicsMember")]
         );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetRevenueBreakdown("NVDA");
+        var result = await Sut().GetRevenueBreakdown("DROP");
 
-        result.Should().Contain("**Segment operating income**");
-        result.Should().NotContain("Singapore");
-        // The restated values from the newest filing are the ones shown.
         result.Should().Contain("$11,000,000,000");
+        result.Should().Contain("$9,000,000,000");
+        result.Should().NotContain("Singapore");
+    }
+
+    [Fact]
+    public async Task GetRevenueBreakdown_MergesMemberQNameSpellingDriftAcrossYearsBeforeBuildingMargins()
+    {
+        var stock = AddStock("AMD");
+        var revenue = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
+        var operatingIncome = AddConcept("OperatingIncomeLoss");
+
+        AddFact(stock, revenue, 2023, 100m);
+        AddFact(stock, revenue, 2023, 60m, (SegmentAxis, "amd:DatacenterMember"));
+        AddFact(stock, revenue, 2023, 40m, (SegmentAxis, "amd:ClientMember"));
+        AddFact(stock, revenue, 2024, 200m);
+        AddFact(stock, revenue, 2024, 120m, (SegmentAxis, "amd:DataCenterMember"));
+        AddFact(stock, revenue, 2024, 80m, (SegmentAxis, "amd:ClientMember"));
+
+        AddFact(stock, operatingIncome, 2023, 25m);
+        AddFact(stock, operatingIncome, 2023, 15m, (SegmentAxis, "amd:DatacenterMember"));
+        AddFact(stock, operatingIncome, 2023, 10m, (SegmentAxis, "amd:ClientMember"));
+        AddFact(stock, operatingIncome, 2024, 50m);
+        AddFact(stock, operatingIncome, 2024, 30m, (SegmentAxis, "amd:DataCenterMember"));
+        AddFact(stock, operatingIncome, 2024, 20m, (SegmentAxis, "amd:ClientMember"));
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetRevenueBreakdown("AMD");
+        var marginSection = result[
+            result.IndexOf("**Segment operating margin**", StringComparison.Ordinal)..
+        ];
+
+        marginSection.Should().Contain("| Component | 2023-12-31 | 2024-12-31 |");
+        marginSection.Should().Contain("| Data Center | 25 | 25 |");
+        marginSection.Should().NotContain("| Datacenter |");
     }
 
     // Writes the real rendering so a docs example is copied from tool output rather than written

@@ -45,13 +45,12 @@ public class StockPriceTools
     [McpServerTool(Name = "GetStockPrices", Title = "Daily Price History", ReadOnly = true)]
     [Description(
         "Get daily OHLCV (Open, High, Low, Close, Volume) price history for a stock. Useful for "
-            + "technical analysis, charting, and price trend analysis. Prices are in USD and "
-            + "restated to the current split basis. Close is the price as traded; an Adj Close "
-            + "column shows the stored adjusted close on the rows where it differs. Each stored "
-            + "row carries whatever adjustment the provider had applied when that row was "
-            + "written, and it is not restated when a later corporate action goes ex, so the "
-            + "adjustment basis is inconsistent across the series and it must not be used to "
-            + "compute total return."
+            + "technical analysis, charting, and price trend analysis. Prices are in USD. An Adj "
+            + "Close column shows the stored adjusted close on the rows where it differs from "
+            + "Close. Adj Close is an auxiliary stored provider series that can be rewritten "
+            + "with the full history during split reconciliation and is not guaranteed to be "
+            + "complete total return. Neither equality with nor a difference from Close "
+            + "identifies which corporate actions it reflects."
     )]
     public Task<string> GetStockPrices(
         [Description(
@@ -100,14 +99,10 @@ public class StockPriceTools
                 if (records.Count == 0)
                     return $"No price data found for {priceTicker} in the specified date range.";
 
-                // AdjustedClose is whatever the provider had adjusted for at the moment each row
-                // was written or last rebased; nothing restates a stored row when a LATER
-                // corporate action goes ex, and the forward EOD lane writes AdjustedClose = Close.
-                // Measured consequence: a dividend payer's differing bars stop on the last session
-                // before its newest ex-date, so one series straddles two bases (see issue #7088).
-                // A differing value therefore proves only that some adjustment reached that row,
-                // and equality proves NOTHING about the world. Render the column when the stored
-                // rows differ, and say only what the stored rows shown can support.
+                // AdjustedClose is the provider's auxiliary series and is replaced with the full
+                // history during a split reconcile, but issue #7088 proves it is not a dependable
+                // total-return series. Render it when it differs without inferring a
+                // corporate-action cause or claiming a universal basis for Close.
                 var hasAdjustment = records.Any(p => p.AdjustedClose != p.Close);
 
                 var result = hasAdjustment
@@ -135,8 +130,8 @@ public class StockPriceTools
                 result.AppendLine();
                 result.AppendLine(
                     hasAdjustment
-                        ? "_Close is the price as traded. Adj Close is the stored adjusted close: each row carries whatever adjustment the provider had applied when that row was written, and a stored row is never restated when a later corporate action goes ex. The basis is therefore inconsistent across the series — do not compute total return from it._"
-                        : "_Close is the price as traded. The stored adjusted close equals Close on every row shown, and a stored row is never restated when a later corporate action goes ex, so this says nothing about whether the company paid a dividend or split in this window._"
+                        ? "_Adj Close is an auxiliary stored provider series. It can be rewritten with the full history during split reconciliation, is not guaranteed to be complete total return, and its difference from Close does not identify which corporate actions it reflects._"
+                        : "_The stored Adj Close equals Close on every row shown, but that equality does not prove the absence of a dividend or split. Adj Close can be rewritten with the full history during split reconciliation and is not guaranteed to be complete total return._"
                 );
 
                 return result.ToString();
@@ -158,8 +153,8 @@ public class StockPriceTools
             + "prior session while the fresh bar settles, so dates within one response can "
             + "differ — anchor on the Date column, never the wall clock. 52W High/Low are the "
             + "highest and lowest daily closes in the 365 days ending on the row's date "
-            + "(current split basis); Off High / Above Low are the close's percent distance "
-            + "from those bounds."
+            + "on the stored series; raw rows carry no split-basis metadata. Off High / Above "
+            + "Low are the close's percent distance from those bounds."
     )]
     public Task<string> GetLatestPrices(
         [Description(
@@ -250,8 +245,9 @@ public class StockPriceTools
                     }
 
                     // Trailing 52-week close range, anchored on the row's own session so a
-                    // stock that stopped trading doesn't fabricate a fresh range. Stored
-                    // closes are already on the current split basis, so raw closes compare.
+                    // stock that stopped trading doesn't fabricate a fresh range. This is the
+                    // extrema of the stored Close series; raw rows carry no basis metadata, so
+                    // do not attach a universal split-basis claim to the result.
                     var cutoff = price.Date.AddDays(-365);
                     var range = await _priceRepository
                         .GetByStock(stock, priceTicker)

@@ -21,4 +21,12 @@ public class FactMarkdownCellEscapingTests
 
         result.Should().Be("a\\|b c");
     }
+
+    [Fact]
+    public void Cell_BackslashBeforePipe_DoesNotReactivateTableDelimiter()
+    {
+        var result = FactMarkdown.Cell("a\\|b");
+
+        result.Should().Be("a\\\\\\|b");
+    }
 }

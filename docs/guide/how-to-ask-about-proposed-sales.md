@@ -19,7 +19,7 @@ The assistant picks the `GetProposedSales` tool and returns the company's recent
 
 ## What you should see
 
-A table of recent Form 144 notices, each showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the approximate sale date, and the broker.
+A table of recent Form 144 notices, each showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the sale as a percent of shares outstanding, the approximate sale date, the broker, and filed remarks such as a stated 10b5-1 plan.
 
 Remember that a Form 144 is a *declaration of intent*, not a completed trade — the actual sale, if it happens, later appears as an executed [Form 4 insider transaction](how-to-ask-about-insider-trading.md).
 

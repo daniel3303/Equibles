@@ -11,14 +11,10 @@ namespace Equibles.IntegrationTests.Mcp;
 /// <summary>
 /// Pins the adjusted-close rule on GetStockPrices (#7058).
 /// <para>
-/// The rule is about STORED ROWS, not about the world. A stored AdjustedClose carries whatever
-/// adjustment the provider had applied when that row was written, and nothing restates it when a
-/// LATER corporate action goes ex; the forward EOD lane also writes AdjustedClose = Close. So one
-/// series straddles bases — a dividend payer's older bars are discounted and its newer bars are
-/// not — and equality between the two columns proves nothing about the issuer. The tool must
-/// never infer an absence of corporate actions, must never offer the series as a total-return
-/// basis, and must never describe it as split-only: a caller told that would add dividends back
-/// itself and double-discount the pre-seam rows.
+/// AdjustedClose is an auxiliary stored provider series that can be rewritten with the full price
+/// history and is not guaranteed to be complete total return. Neither equality nor a difference
+/// identifies which corporate actions it reflects, and the tool makes no universal Close-basis
+/// claim.
 /// </para>
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -45,31 +41,31 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
 
         result.Should().Contain("| Date | Open | High | Low | Close | Adj Close | Volume |");
         result.Should().Contain("97.00");
-        result.Should().Contain("stored adjusted close");
-        result.Should().Contain("never restated when a later corporate action goes ex");
-        // Promising total return off an inconsistent basis is the error #7058 was filed about;
-        // calling the series split-only is the opposite error, because a caller who believed it
-        // would add dividends back and double-discount every pre-seam row.
-        result.Should().NotContain("total return from Adj Close");
+        result.Should().Contain("auxiliary stored provider series");
+        result.Should().Contain("rewritten with the full history during split reconciliation");
+        result.Should().Contain("not guaranteed to be complete total return");
+        result.Should().NotContain("compute total return from Adj Close");
         result.Should().NotContain("splits only");
         result.Should().NotContain("dividends never restate");
+        result.Should().NotContain("price as traded");
+        result.Should().NotContain("never restated");
     }
 
     [Fact]
     public async Task GetStockPrices_WhenNothingWasAdjusted_OmitsTheColumnAndSaysWhy()
     {
-        // A stock that neither split nor paid a dividend has an identical adjusted series, so the
-        // column would repeat the close on every row. Dropping it silently would read as the tool
-        // being unable to answer total return, hence the explicit statement.
+        // This stored window has an identical adjusted series, so the column would repeat Close
+        // on every row. The note must describe only that stored equality, not infer why it exists.
         var stock = await SeedPrices(adjustedOffset: 0m);
 
         var result = await Sut()
             .GetStockPrices(stock.Ticker, startDate: "2025-01-06", endDate: "2025-01-20");
 
         result.Should().Contain("| Date | Open | High | Low | Close | Volume |");
-        result.Should().NotContain("Adj Close");
+        result.Should().NotContain("| Date | Open | High | Low | Close | Adj Close | Volume |");
         // Says what is true of the stored rows, and nothing about whether the issuer acted.
         result.Should().Contain("equals Close on every row shown");
+        result.Should().Contain("rewritten with the full history during split reconciliation");
         result.Should().NotContain("no split or dividend");
         result.Should().NotContain("total return equals price return");
     }

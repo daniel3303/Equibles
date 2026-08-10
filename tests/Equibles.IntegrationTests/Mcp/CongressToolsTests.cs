@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Reflection;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Congress.Data.Models;
@@ -113,6 +115,38 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("Representative");
         result.Should().Contain("Purchase");
         result.Should().Contain("$1,000,001");
+    }
+
+    [Fact]
+    public async Task GetCongressionalTrades_OptionAsset_IsAttributedAsInstrumentAndTableSafe()
+    {
+        var stock = NvdaStock();
+        var pelosi = PelosiMember();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<CongressMember>().Add(pelosi);
+        DbContext
+            .Set<CongressionalTrade>()
+            .Add(
+                TradeFor(
+                    pelosi,
+                    stock,
+                    new DateOnly(2026, 3, 15),
+                    assetName: "NVDA put option \\| $100 strike"
+                )
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetCongressionalTrades("NVDA", startDate: "2026-01-01", endDate: "2026-04-30");
+        var description = typeof(CongressTools)
+            .GetMethod(nameof(CongressTools.GetCongressionalTrades))!
+            .GetCustomAttribute<DescriptionAttribute>()!
+            .Description;
+
+        result.Should().Contain("NVDA put option \\\\\\| $100 strike");
+        description.Should().Contain("securities transactions");
+        description.Should().Contain("Asset identifies the filed instrument");
+        description.Should().NotContain("bought or sold shares");
     }
 
     [Fact]

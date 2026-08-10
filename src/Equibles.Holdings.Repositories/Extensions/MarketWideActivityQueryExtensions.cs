@@ -15,42 +15,62 @@ public static class MarketWideActivityQueryExtensions
     ) =>
         source
             .Where(a => a.CurrentShares > a.PreviousShares)
-            .OrderByDescending(a => a.CurrentValue - a.PreviousValue);
+            .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
+            .ThenBy(a => a.CommonStockId);
 
     public static IEnumerable<MarketWideStockActivity> TopBuyers(
         this IEnumerable<MarketWideStockActivity> source
     ) =>
         source
             .Where(a => a.CurrentShares > a.PreviousShares)
-            .OrderByDescending(a => a.CurrentValue - a.PreviousValue);
+            .OrderByDescending(a => a.CurrentValue - a.PreviousValue)
+            .ThenBy(a => a.CommonStockId);
 
     public static IQueryable<MarketWideStockActivity> TopSellers(
         this IQueryable<MarketWideStockActivity> source
     ) =>
         source
             .Where(a => a.CurrentShares < a.PreviousShares)
-            .OrderBy(a => a.CurrentValue - a.PreviousValue);
+            .OrderBy(a => a.CurrentValue - a.PreviousValue)
+            .ThenBy(a => a.CommonStockId);
 
     public static IEnumerable<MarketWideStockActivity> TopSellers(
         this IEnumerable<MarketWideStockActivity> source
     ) =>
         source
             .Where(a => a.CurrentShares < a.PreviousShares)
-            .OrderBy(a => a.CurrentValue - a.PreviousValue);
+            .OrderBy(a => a.CurrentValue - a.PreviousValue)
+            .ThenBy(a => a.CommonStockId);
 
     public static IQueryable<MarketWideStockChurn> NewPositions(
         this IQueryable<MarketWideStockChurn> source
-    ) => source.Where(c => c.NewFilerCount > 0).OrderByDescending(c => c.NewFilerCount);
+    ) =>
+        source
+            .Where(c => c.NewFilerCount > 0)
+            .OrderByDescending(c => c.NewFilerCount)
+            .ThenBy(c => c.CommonStockId);
 
     public static IEnumerable<MarketWideStockChurn> NewPositions(
         this IEnumerable<MarketWideStockChurn> source
-    ) => source.Where(c => c.NewFilerCount > 0).OrderByDescending(c => c.NewFilerCount);
+    ) =>
+        source
+            .Where(c => c.NewFilerCount > 0)
+            .OrderByDescending(c => c.NewFilerCount)
+            .ThenBy(c => c.CommonStockId);
 
     public static IQueryable<MarketWideStockChurn> SoldOutPositions(
         this IQueryable<MarketWideStockChurn> source
-    ) => source.Where(c => c.SoldOutFilerCount > 0).OrderByDescending(c => c.SoldOutFilerCount);
+    ) =>
+        source
+            .Where(c => c.SoldOutFilerCount > 0)
+            .OrderByDescending(c => c.SoldOutFilerCount)
+            .ThenBy(c => c.CommonStockId);
 
     public static IEnumerable<MarketWideStockChurn> SoldOutPositions(
         this IEnumerable<MarketWideStockChurn> source
-    ) => source.Where(c => c.SoldOutFilerCount > 0).OrderByDescending(c => c.SoldOutFilerCount);
+    ) =>
+        source
+            .Where(c => c.SoldOutFilerCount > 0)
+            .OrderByDescending(c => c.SoldOutFilerCount)
+            .ThenBy(c => c.CommonStockId);
 }

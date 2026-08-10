@@ -46,8 +46,9 @@ public class GovernmentContractsTools
     )]
     [Description(
         "Get federal government contract awards (from USAspending.gov) won by a specific public company. "
-            + "Shows the award (action) date, awarding agency, total value (obligated dollars plus "
-            + "unexercised ceiling — not revenue received), period-of-performance end date, and description. "
+            + "Shows the award (action) date, recipient named by the government, awarding agency, total value "
+            + "(obligated dollars plus unexercised ceiling — not revenue received), outlays when reported, "
+            + "period-of-performance end date, and description. "
             + "Coverage: only prime contract awards of $1M or more that resolve to a listed company are "
             + "included, so sums understate total federal revenue. Useful for gauging a company's reliance "
             + "on federal spending; use GetTopGovernmentContractors to rank companies market-wide."
@@ -124,7 +125,7 @@ public class GovernmentContractsTools
                         ? "|------------|-----------|--------|------|-----------------------------------|---------|------------|----------|-------------|"
                         : "|------------|-----------|--------|------|-----------------------------------|------------|----------|-------------|",
                     c =>
-                        $"| {Format(c.ActionDate)} | {Escape(Shorten(c.RecipientName, 48))} | {Escape(c.AwardingAgency)} | {AwardTypeLabel(c.AwardType)} "
+                        $"| {Format(c.ActionDate)} | {Escape(c.RecipientName)} | {Escape(c.AwardingAgency)} | {AwardTypeLabel(c.AwardType)} "
                         + $"| {FormatUsd(c.Amount)} "
                         + (
                             hasOutlays
@@ -135,7 +136,14 @@ public class GovernmentContractsTools
                         + $"| {Escape(Shorten(c.Description, 80))} |"
                 );
 
-                return await AppendFooters(table, awards.Count, totalCount, end, hasOutlays);
+                return await AppendFooters(
+                    table,
+                    awards.Count,
+                    totalCount,
+                    end,
+                    hasOutlays,
+                    hasRecipient: true
+                );
             },
             "GetGovernmentContracts",
             $"ticker: {ticker}"
@@ -216,7 +224,8 @@ public class GovernmentContractsTools
                     ranked.Count,
                     totalCompanies,
                     end,
-                    hasOutlays: false
+                    hasOutlays: false,
+                    hasRecipient: false
                 );
             },
             "GetTopGovernmentContractors",
@@ -231,7 +240,8 @@ public class GovernmentContractsTools
         int shown,
         int total,
         DateOnly rangeEnd,
-        bool hasOutlays
+        bool hasOutlays,
+        bool hasRecipient
     )
     {
         var sb = new StringBuilder(table.TrimEnd('\n', '\r'));
@@ -258,9 +268,11 @@ public class GovernmentContractsTools
                         ? "; Outlays is what the government has actually disbursed so far"
                         : ""
                 )
-                + ". Recipient is the awarded "
-                + "entity as the government named it — a subsidiary's own name there is how an award reaches "
-                + "this company. "
+                + (
+                    hasRecipient
+                        ? ". Recipient is the awarded entity as the government named it — a subsidiary's own name there is how an award reaches this company. "
+                        : ". "
+                )
                 + $"Latest ingested award action date: {Format(latestIngested)}._"
         );
 
@@ -375,11 +387,5 @@ public class GovernmentContractsTools
         return trimmed.TruncateToFit(maxLength) + "…";
     }
 
-    // Markdown cells can't contain a raw pipe or newline without breaking the table.
-    private static string Escape(string value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return "";
-        return value.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
-    }
+    private static string Escape(string value) => MarkdownTable.EscapeCell(value);
 }

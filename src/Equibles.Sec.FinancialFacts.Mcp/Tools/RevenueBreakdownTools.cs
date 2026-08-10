@@ -87,7 +87,9 @@ public class RevenueBreakdownTools
             + "segment profitability and margins are answerable — from the dimensional XBRL "
             + "facts the issuer tags in its own "
             + "filings. Annual fiscal years only, latest restated values, one table per axis "
-            + "the company reports; values are as-reported and never estimated. Rows within "
+            + "the company reports; source values are as-reported and never estimated, while "
+            + "segment operating margin is derived as operating income divided by revenue for "
+            + "the same folded raw member QName and exact period. Rows within "
             + "one table can OVERLAP when the issuer tags several granularities on the same "
             + "axis (a parent segment alongside its components), so never sum rows to derive "
             + "total revenue — use the consolidated total row each table carries. For "
@@ -109,8 +111,10 @@ public class RevenueBreakdownTools
                 if (stockError != null)
                     return stockError;
 
-                if (!FinancialConceptAliases.TryResolve("revenue", out var conceptRefs))
-                    return "No revenue concepts are configured.";
+                // Load the revenue and segment-income families independently. A fresh or
+                // restricted corpus can contain valid OperatingIncomeLoss segment facts before
+                // any revenue-alias concept row exists; that must not suppress the income table.
+                FinancialConceptAliases.TryResolve("revenue", out var conceptRefs);
 
                 var taxonomies = conceptRefs.Select(r => r.Taxonomy).Distinct().ToList();
                 var tags = conceptRefs.Select(r => r.Tag).ToList();
@@ -133,8 +137,6 @@ public class RevenueBreakdownTools
                     .Where(c => priorityByPair.ContainsKey((c.Taxonomy, c.Tag)))
                     .ToDictionary(c => c.Id, c => priorityByPair[(c.Taxonomy, c.Tag)]);
                 var conceptIds = priorityById.Keys.ToList();
-                if (conceptIds.Count == 0)
-                    return $"No revenue data has been ingested for {stock.Ticker}.";
 
                 // Annual revenue facts carrying exactly one dimension on a known axis.
                 // Cross-cut facts (e.g. segment × geography) are excluded — including
@@ -163,13 +165,10 @@ public class RevenueBreakdownTools
                         f.PeriodEnd,
                         f.Value,
                         f.Unit,
-                        f.FiledDate
+                        f.FiledDate,
+                        f.PeriodStart
                     ))
                     .ToListAsync();
-
-                if (rows.Count == 0)
-                    return $"{stock.Ticker} has no dimensional revenue tagging on record — "
-                        + "the issuer reports revenue as a consolidated total only.";
 
                 // Consolidated (no-dimension) total revenue — the figure each axis's members
                 // must add up to, used to detect a complete re-disaggregation so a member a
@@ -226,31 +225,60 @@ public class RevenueBreakdownTools
                     $"Revenue breakdown for {stock.Ticker} ({FactMarkdown.Cell(stock.Name)}) — "
                         + "annual fiscal years, latest restated values:"
                 );
-                result.AppendLine(
-                    "_Components are shown exactly as the issuer tags them: a renamed member "
-                        + "appears as a new row, so '—' gaps can reflect renames or "
-                        + "reclassifications rather than zero revenue._"
-                );
-                AppendAxis(result, "By segment", rows, SegmentAxes, years, totals, displayTotals);
-                AppendAxis(
+                if (rows.Count == 0)
+                {
+                    result.AppendLine(
+                        "_No dimensional revenue tagging is on record; segment profitability "
+                            + "below is shown only when the issuer separately tags it._"
+                    );
+                }
+                else
+                {
+                    result.AppendLine(
+                        "_Components are shown exactly as the issuer tags them: a renamed member "
+                            + "appears as a new row, so '—' gaps can reflect renames or "
+                            + "reclassifications rather than zero revenue._"
+                    );
+                    AppendAxis(
+                        result,
+                        "By segment",
+                        rows,
+                        SegmentAxes,
+                        years,
+                        totals,
+                        displayTotals
+                    );
+                    AppendAxis(
+                        result,
+                        "By geography",
+                        rows,
+                        GeographyAxes,
+                        years,
+                        totals,
+                        displayTotals
+                    );
+                    AppendAxis(
+                        result,
+                        "By product & service",
+                        rows,
+                        ProductAxes,
+                        years,
+                        totals,
+                        displayTotals
+                    );
+                }
+
+                var hasSegmentOperatingIncome = await AppendSegmentOperatingIncome(
                     result,
-                    "By geography",
-                    rows,
-                    GeographyAxes,
+                    stock,
                     years,
-                    totals,
-                    displayTotals
-                );
-                AppendAxis(
-                    result,
-                    "By product & service",
                     rows,
-                    ProductAxes,
-                    years,
-                    totals,
-                    displayTotals
+                    totals
                 );
-                await AppendSegmentOperatingIncome(result, stock, years);
+                if (rows.Count == 0 && !hasSegmentOperatingIncome)
+                    return $"{stock.Ticker} has no dimensional revenue or segment operating "
+                        + "income tagging on record.";
+
                 return result.ToString();
             },
             "GetRevenueBreakdown",
@@ -262,14 +290,16 @@ public class RevenueBreakdownTools
     // business-segment axis. Unallocated corporate costs mean segments rarely add up to
     // consolidated operating income, so this axis is rendered on its own reconciliation
     // (its own consolidated totals) and never mixed into the revenue tables above.
-    private async Task AppendSegmentOperatingIncome(
+    private async Task<bool> AppendSegmentOperatingIncome(
         StringBuilder result,
         CommonStock stock,
-        int years
+        int years,
+        List<DimensionalRevenueRow> revenueRows,
+        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> revenueTotals
     )
     {
         if (!FinancialConceptAliases.TryResolve("operating-income", out var conceptRefs))
-            return;
+            return false;
 
         var taxonomies = conceptRefs.Select(r => r.Taxonomy).Distinct().ToList();
         var tags = conceptRefs.Select(r => r.Tag).ToList();
@@ -278,7 +308,7 @@ public class RevenueBreakdownTools
             .Select(c => c.Id)
             .ToListAsync();
         if (conceptIds.Count == 0)
-            return;
+            return false;
 
         var rows = await _financialFactRepository
             .GetByStock(stock)
@@ -299,11 +329,12 @@ public class RevenueBreakdownTools
                 f.PeriodEnd,
                 f.Value,
                 f.Unit,
-                f.FiledDate
+                f.FiledDate,
+                f.PeriodStart
             ))
             .ToListAsync();
         if (rows.Count == 0)
-            return;
+            return false;
 
         var consolidated = await _financialFactRepository
             .GetConsolidatedByStock(stock)
@@ -336,6 +367,10 @@ public class RevenueBreakdownTools
             .GroupBy(f => (f.PeriodEnd, f.Unit))
             .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.FiledDate).First().Value);
 
+        var incomeSeries = BuildAxisSeries(rows, SegmentAxes, years, totals);
+        if (incomeSeries.Members.Count == 0)
+            return false;
+
         AppendAxis(
             result,
             "Segment operating income",
@@ -349,10 +384,23 @@ public class RevenueBreakdownTools
         );
         result.AppendLine(
             "_Segment operating income is tagged on the same business-segment axis as the revenue "
-                + "cut above; unallocated corporate costs mean the members need not add up to "
-                + "consolidated operating income. Divide a member here by the same member and "
-                + "period in the segment revenue table for that segment's operating margin._"
+                + "facts; unallocated corporate costs mean the members need not add up to "
+                + "consolidated operating income._"
         );
+
+        var revenueSeries = BuildAxisSeries(revenueRows, SegmentAxes, years, revenueTotals);
+        var marginSeries = BuildSegmentMarginSeries(revenueSeries, incomeSeries);
+        if (marginSeries.Members.Count > 0)
+        {
+            AppendSeriesTable(result, "Segment operating margin", marginSeries);
+            result.AppendLine(
+                "_Derived as segment operating income ÷ revenue × 100 only where the same folded "
+                    + "raw member QName and exact period match and revenue is positive; missing cells "
+                    + "are not estimated._"
+            );
+        }
+
+        return true;
     }
 
     // How far above the consolidated total a period's member sum must land before the
@@ -378,32 +426,12 @@ public class RevenueBreakdownTools
         bool checkOverlap = true
     )
     {
-        var (unit, periodEnds, members) = BuildAxisSeries(
-            rows,
-            axes,
-            maxYears,
-            totals,
-            reconcilesToTotal: checkOverlap
-        );
-        if (members.Count == 0)
+        var series = BuildAxisSeries(rows, axes, maxYears, totals);
+        if (series.Members.Count == 0)
             return;
 
-        result.AppendLine();
-        result.AppendLine($"**{title}** ({FactMarkdown.Cell(unit)}):");
-        result.AppendLine();
-        result.AppendLine(
-            "| Component | " + string.Join(" | ", periodEnds.Select(p => $"{p:yyyy-MM-dd}")) + " |"
-        );
-        result.AppendLine("|-----------|" + string.Concat(periodEnds.Select(_ => "---:|")));
-        foreach (var member in members)
-        {
-            var cells = member.Values.Select(v =>
-                v.HasValue ? FactMarkdown.Value(v.Value, unit) : "—"
-            );
-            result.AppendLine(
-                $"| {FactMarkdown.Cell(member.Label)} | " + string.Join(" | ", cells) + " |"
-            );
-        }
+        AppendSeriesTable(result, title, series);
+        var (unit, periodEnds, members) = series;
 
         // The consolidated figure the members must be read against — lets a
         // consumer compute revenue shares and spot overlapping rows without a
@@ -455,6 +483,28 @@ public class RevenueBreakdownTools
             );
     }
 
+    private static void AppendSeriesTable(StringBuilder result, string title, AxisSeries series)
+    {
+        result.AppendLine();
+        result.AppendLine($"**{title}** ({FactMarkdown.Cell(series.Unit)}):");
+        result.AppendLine();
+        result.AppendLine(
+            "| Component | "
+                + string.Join(" | ", series.PeriodEnds.Select(p => $"{p:yyyy-MM-dd}"))
+                + " |"
+        );
+        result.AppendLine("|-----------|" + string.Concat(series.PeriodEnds.Select(_ => "---:|")));
+        foreach (var member in series.Members)
+        {
+            var cells = member.Values.Select(v =>
+                v.HasValue ? FactMarkdown.Value(v.Value, series.Unit) : "—"
+            );
+            result.AppendLine(
+                $"| {FactMarkdown.Cell(member.Label)} | " + string.Join(" | ", cells) + " |"
+            );
+        }
+    }
+
     // Resolve the surviving (member, period) facts for one axis, one row per cell — all in a
     // single pinned unit. The default rule keeps the latest-filed fact per (member, period) —
     // correct for a restatement that re-reports a member with a new value. It is wrong when a
@@ -468,29 +518,6 @@ public class RevenueBreakdownTools
     // from older filings. Otherwise the latest filing only restated some members (a partial
     // amendment), so fall back to the latest-filed-per-member merge that carries un-amended
     // members forward.
-    // Completeness for an axis that cannot be reconciled arithmetically: the newest filing that
-    // reported the period defines which members still exist. A member absent from that filing was
-    // dropped by the issuer (a discontinued or renamed segment) and must not be carried forward
-    // from an older filing — the same defect ReconcileToTotal exists to prevent on the revenue
-    // axes, where the sum-to-total test can actually fire.
-    private static List<DimensionalRevenueRow> NewestRosterWins(
-        IEnumerable<DimensionalRevenueRow> axisRowsInUnit
-    )
-    {
-        var result = new List<DimensionalRevenueRow>();
-        foreach (var period in axisRowsInUnit.GroupBy(r => r.PeriodEnd))
-        {
-            var latestFiled = period.Max(r => r.FiledDate);
-            result.AddRange(
-                period
-                    .Where(r => r.FiledDate == latestFiled)
-                    .GroupBy(r => r.Member)
-                    .Select(g => g.First())
-            );
-        }
-        return result;
-    }
-
     private static List<DimensionalRevenueRow> ReconcileToTotal(
         IEnumerable<DimensionalRevenueRow> axisRowsInUnit,
         string unit,
@@ -770,42 +797,32 @@ public class RevenueBreakdownTools
         return (best ?? [], best != null);
     }
 
-    // Pivot one axis's rows into period-end columns (oldest first) × member rows. Filings
+    // Pivot one axis's rows into period-end columns (oldest first) × member rows. Each cell also
+    // retains its exact duration start so a downstream ratio cannot join same-end/different-span
+    // facts. Filings
     // re-report comparative prior years, so the latest-filed fact wins per (member,
     // period-end); the axis is pinned to the latest-filed fact's unit so a reporting-
     // currency change can't mix currencies in one series. ReconcileToTotal then runs on the
     // single-unit rows — when a later filing completely re-disaggregates a period, members it
     // dropped must not linger from an older filing.
-    internal static (
-        string Unit,
-        List<DateOnly> PeriodEnds,
-        List<(string Label, List<decimal?> Values)> Members
-    ) BuildAxisSeries(
+    internal static AxisSeries BuildAxisSeries(
         List<DimensionalRevenueRow> rows,
         string[] axes,
         int maxYears,
-        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> totals,
-        // Segment operating income does not reconcile to a consolidated total by construction —
-        // unallocated corporate costs sit outside the segments — so the arithmetic completeness
-        // test can never pass there and would silently degrade to the carry-forward merge that
-        // lets a discontinued segment linger forever. Those axes use the newest filing's member
-        // roster as authoritative instead.
-        bool reconcilesToTotal = true
+        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> totals
     )
     {
         var axisRows = rows.Where(r => axes.Contains(r.Axis)).ToList();
         if (axisRows.Count == 0)
-            return (null, [], []);
+            return new AxisSeries(null, [], []);
 
         // Pin the unit first (latest-filed fact's unit) so the reconciliation sum and the
         // consolidated total are always in the same currency.
         var unit = axisRows.OrderByDescending(r => r.FiledDate).First().Unit;
         var inUnit = axisRows.Where(r => r.Unit == unit);
-        var current = reconcilesToTotal
-            ? ReconcileToTotal(inUnit, unit, totals)
-            : NewestRosterWins(inUnit);
+        var current = ReconcileToTotal(inUnit, unit, totals);
         if (current.Count == 0)
-            return (null, [], []);
+            return new AxisSeries(null, [], []);
 
         var periodEnds = current
             .Select(r => r.PeriodEnd)
@@ -816,24 +833,134 @@ public class RevenueBreakdownTools
             .ToList();
 
         var latest = periodEnds[^1];
+        // Fold before pivoting, not only when revenue and income are joined. An issuer can respell
+        // one member across filings (amd:DatacenterMember / amd:DataCenterMember); exact grouping
+        // would produce two half-series and make one side of a later margin join disappear. The
+        // latest-filed spelling fronts the merged series, and the latest-filed fact wins when two
+        // spellings survive for the same period.
         var members = current
-            .GroupBy(r => r.Member)
-            .Select(g => new { g.Key, ByPeriod = g.ToDictionary(r => r.PeriodEnd, r => r.Value) })
+            .GroupBy(r => FoldMemberQName(r.Member), StringComparer.Ordinal)
+            .Select(g => new
+            {
+                Key = g.OrderByDescending(r => r.FiledDate)
+                    .ThenByDescending(r => r.PeriodEnd)
+                    .First()
+                    .Member,
+                ByPeriod = g.GroupBy(r => r.PeriodEnd)
+                    .ToDictionary(
+                        pg => pg.Key,
+                        pg => pg.OrderByDescending(r => r.FiledDate).First()
+                    ),
+            })
             .Select(m => new
             {
                 m.Key,
-                Latest = m.ByPeriod.TryGetValue(latest, out var v) ? v : (decimal?)null,
+                Latest = m.ByPeriod.TryGetValue(latest, out var latestRow)
+                    ? latestRow.Value
+                    : (decimal?)null,
                 Values = periodEnds
-                    .Select(p => m.ByPeriod.TryGetValue(p, out var pv) ? pv : (decimal?)null)
+                    .Select(p =>
+                        m.ByPeriod.TryGetValue(p, out var row) ? row.Value : (decimal?)null
+                    )
+                    .ToList(),
+                PeriodStarts = periodEnds
+                    .Select(p =>
+                        m.ByPeriod.TryGetValue(p, out var row) ? row.PeriodStart : (DateOnly?)null
+                    )
                     .ToList(),
             })
             .Where(m => m.Values.Any(v => v.HasValue))
             .OrderByDescending(m => m.Latest ?? decimal.MinValue)
             .ThenBy(m => m.Key)
-            .Select(m => (Humanize(m.Key), m.Values))
+            .Select(m => new AxisMemberSeries(m.Key, Humanize(m.Key), m.Values, m.PeriodStarts))
             .ToList();
-        return (unit, periodEnds, members);
+        return new AxisSeries(unit, periodEnds, members);
     }
+
+    // REST parity for the derived margin axis: join the two independently selected axes by
+    // issuer member QName, exact duration, and unit, never by display label or row position. The fold is
+    // the corpus-backed XBRL identifier rule shared by the REST provider (case and underscores
+    // drift across filings); it retains the namespace prefix, so equal-looking labels from two
+    // different members cannot be combined.
+    internal static AxisSeries BuildSegmentMarginSeries(AxisSeries revenue, AxisSeries income)
+    {
+        if (
+            revenue.Members.Count == 0
+            || income.Members.Count == 0
+            || !string.Equals(revenue.Unit, income.Unit, StringComparison.Ordinal)
+        )
+            return new AxisSeries("%", [], []);
+
+        var incomeByMember = income
+            .Members.GroupBy(m => FoldMemberQName(m.Member), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var incomePeriodIndex = income
+            .PeriodEnds.Select((periodEnd, index) => (periodEnd, index))
+            .ToDictionary(p => p.periodEnd, p => p.index);
+
+        var members = new List<AxisMemberSeries>();
+        var usedPeriods = new bool[revenue.PeriodEnds.Count];
+        foreach (var revenueMember in revenue.Members)
+        {
+            if (
+                !incomeByMember.TryGetValue(
+                    FoldMemberQName(revenueMember.Member),
+                    out var incomeMember
+                )
+            )
+                continue;
+
+            var values = new List<decimal?>();
+            var any = false;
+            for (var i = 0; i < revenue.PeriodEnds.Count; i++)
+            {
+                decimal? margin = null;
+                if (
+                    incomePeriodIndex.TryGetValue(revenue.PeriodEnds[i], out var incomeIndex)
+                    && revenueMember.PeriodStartAt(i) == incomeMember.PeriodStartAt(incomeIndex)
+                    && revenueMember.Values[i] is { } revenueValue
+                    && revenueValue > 0m
+                    && incomeMember.Values[incomeIndex] is { } incomeValue
+                )
+                {
+                    margin = incomeValue / revenueValue * 100m;
+                    any = true;
+                    usedPeriods[i] = true;
+                }
+                values.Add(margin);
+            }
+
+            if (any)
+            {
+                members.Add(
+                    new AxisMemberSeries(revenueMember.Member, revenueMember.Label, values)
+                );
+            }
+        }
+
+        if (members.Count == 0)
+            return new AxisSeries("%", [], []);
+
+        var keptIndexes = Enumerable
+            .Range(0, revenue.PeriodEnds.Count)
+            .Where(i => usedPeriods[i])
+            .ToList();
+        return new AxisSeries(
+            "%",
+            keptIndexes.Select(i => revenue.PeriodEnds[i]).ToList(),
+            members
+                .Select(m => new AxisMemberSeries(
+                    m.Member,
+                    m.Label,
+                    keptIndexes.Select(i => m.Values[i]).ToList(),
+                    keptIndexes.Select(i => m.PeriodStartAt(i)).ToList()
+                ))
+                .ToList()
+        );
+    }
+
+    private static string FoldMemberQName(string member) =>
+        member?.Replace("_", "").ToLowerInvariant();
 
     // Display label from the XBRL member QName: ISO country members get their English
     // name; everything else drops the Member suffix and spaces the PascalCase local name.
@@ -873,6 +1000,24 @@ public class RevenueBreakdownTools
         DateOnly PeriodEnd,
         decimal Value,
         string Unit,
-        DateOnly FiledDate
+        DateOnly FiledDate,
+        DateOnly? PeriodStart = null
+    );
+
+    internal sealed record AxisMemberSeries(
+        string Member,
+        string Label,
+        List<decimal?> Values,
+        List<DateOnly?> PeriodStarts = null
+    )
+    {
+        internal DateOnly? PeriodStartAt(int index) =>
+            PeriodStarts != null && index < PeriodStarts.Count ? PeriodStarts[index] : null;
+    }
+
+    internal sealed record AxisSeries(
+        string Unit,
+        List<DateOnly> PeriodEnds,
+        List<AxisMemberSeries> Members
     );
 }

@@ -39,7 +39,7 @@ public class NCenTools
         ReadOnly = true
     )]
     [Description(
-        "Get operational data for a registered investment company from its SEC Form N-CEN annual reports. Resolves exchange-listed tickers only — ETFs, closed-end funds and unit investment trusts; an unlisted mutual-fund share-class ticker (e.g. VFIAX) will not resolve, so find that fund via SearchFunds/GetFundProfile instead. Each N-CEN shows the registrant's classification (e.g. N-1A open-end, N-2 closed-end, S-6 unit investment trust), Investment Company Act file number, reporting period, and whether it was the fund's first or last filing, followed by the service providers named on the most recent report only — investment advisers, sub-advisers, custodians, transfer agents, administrators, auditors and underwriters. Use this to see who runs and services a fund. Only registered funds file N-CEN; operating companies will return no data."
+        "Get operational data for a registered investment company from its SEC Form N-CEN annual reports. Resolves exchange-listed tickers only — ETFs, closed-end funds and unit investment trusts; an unlisted mutual-fund share-class ticker (e.g. VFIAX) will not resolve, so find that fund via SearchFunds/GetFundProfile instead. Each N-CEN shows the registrant's classification (e.g. N-1A open-end, N-2 closed-end, S-6 unit investment trust), Investment Company Act file number, reporting period, and whether it was the fund's first or last filing. The response shows the service providers named on the latest report and an exact filed-name history across the reports returned — investment advisers, sub-advisers, custodians, transfer agents, administrators, auditors and underwriters. Use this to see who runs and services a fund. Only registered funds file N-CEN; operating companies will return no data."
     )]
     public Task<string> GetFundOperations(
         [Description("Fund or ETF ticker symbol (e.g., MXF, SPY)")] string ticker,
@@ -58,6 +58,9 @@ public class NCenTools
                     .GetByStock(stock)
                     .Include(f => f.ServiceProviders)
                     .OrderByDescending(f => f.FilingDate)
+                    .ThenByDescending(f => f.IsAmendment)
+                    .ThenByDescending(f => f.AccessionNumber)
+                    .ThenByDescending(f => f.CreationTime)
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
@@ -77,7 +80,7 @@ public class NCenTools
                 );
 
                 AppendServiceProviders(result, filings[0]);
-                AppendServiceProviderChanges(result, filings);
+                AppendServiceProviderHistory(result, filings);
 
                 return result.ToString();
             },
@@ -111,15 +114,15 @@ public class NCenTools
         result.AppendRows(
             latest.ServiceProviders.OrderBy(p => p.ProviderType).ThenBy(p => p.Name),
             provider =>
-                $"| {provider.ProviderType.NameForHumans()} | {provider.Name} | {provider.Country ?? "-"} | {(provider.IsAffiliated ? "Yes" : "No")} |"
+                $"| {provider.ProviderType.NameForHumans()} | {MarkdownText(provider.Name)} | {MarkdownText(provider.Country) ?? "-"} | {(provider.IsAffiliated ? "Yes" : "No")} |"
         );
     }
 
-    // A changed auditor or custodian is the reason to read these reports at all, and it is
-    // invisible when only the newest report's providers are rendered. Repeating every report's
-    // full provider table would multiply the response for rows that are usually identical
-    // year over year, so only the transitions are listed — the diff IS the finding.
-    private static void AppendServiceProviderChanges(
+    // Historical provider rosters are the evidence needed to spot a changed auditor or custodian.
+    // Render the exact filed-name timeline and compress only consecutive IDENTICAL snapshots. An
+    // omitted role is an explicit "not reported" state, never a removal; punctuation differences
+    // stay visible rather than being heuristically collapsed into one provider identity.
+    private static void AppendServiceProviderHistory(
         System.Text.StringBuilder result,
         List<NCenFiling> filings
     )
@@ -127,77 +130,72 @@ public class NCenTools
         if (filings.Count < 2)
             return;
 
-        var oldestFirst = filings.OrderBy(f => f.FilingDate).ToList();
-        var changes = new List<string>();
-
+        var oldestFirst = filings
+            .OrderBy(f => f.FilingDate)
+            .ThenBy(f => f.IsAmendment)
+            .ThenBy(f => f.AccessionNumber)
+            .ThenBy(f => f.CreationTime)
+            .ToList();
+        var sameDateFilings = oldestFirst
+            .GroupBy(f => f.FilingDate)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet();
         var roles = oldestFirst
             .SelectMany(f => f.ServiceProviders.Select(p => p.ProviderType))
             .Distinct()
             .OrderBy(r => r.NameForHumans(), StringComparer.Ordinal);
 
+        result.AppendLine();
+        result.AppendLine(
+            $"Service-provider history across the {filings.Count} reports shown (exact filed names; consecutive identical snapshots compressed):"
+        );
+        result.AppendLine();
+
         foreach (var role in roles)
         {
-            for (var i = 1; i < oldestFirst.Count; i++)
+            string[] previous = null;
+            var timeline = new List<string>();
+            foreach (var filing in oldestFirst)
             {
-                var previous = NamesForRole(oldestFirst[i - 1], role);
-                var current = NamesForRole(oldestFirst[i], role);
-                // A role absent from a report is "not reported", not "dropped" — an N-CEN that
-                // omits the section would otherwise read as the fund firing its auditor.
-                if (previous.Length == 0 || current.Length == 0)
+                var current = NamesForRole(filing, role);
+                if (previous != null && previous.SequenceEqual(current, StringComparer.Ordinal))
                     continue;
-                if (
-                    ComparableNamesForRole(oldestFirst[i - 1], role)
-                    == ComparableNamesForRole(oldestFirst[i], role)
-                )
-                    continue;
-
-                changes.Add(
-                    $"- {role.NameForHumans()}: {previous} (filed {oldestFirst[i - 1].FilingDate:yyyy-MM-dd}) "
-                        + $"→ {current} (filed {oldestFirst[i].FilingDate:yyyy-MM-dd})"
+                timeline.Add(
+                    $"{TimelineLabel(filing, sameDateFilings.Contains(filing.FilingDate))}: "
+                        + (
+                            current.Length == 0
+                                ? "not reported"
+                                : string.Join(", ", current.Select(MarkdownText))
+                        )
                 );
+                previous = current;
             }
+            result.AppendLine($"- {role.NameForHumans()}: {string.Join("; ", timeline)}");
         }
-
-        result.AppendLine();
-        if (changes.Count == 0)
-        {
-            result.AppendLine(
-                $"No service-provider changes across the {filings.Count} reports shown."
-            );
-            return;
-        }
-
-        result.AppendLine($"Service-provider changes across the {filings.Count} reports shown:");
-        result.AppendLine();
-        foreach (var change in changes)
-            result.AppendLine(change);
     }
 
-    private static string NamesForRole(NCenFiling filing, NCenServiceProviderType role) =>
-        string.Join(
-            ", ",
-            filing
-                .ServiceProviders.Where(p => p.ProviderType == role)
-                .Select(p => p.Name)
-                .OrderBy(n => n, StringComparer.Ordinal)
-        );
+    private static string[] NamesForRole(NCenFiling filing, NCenServiceProviderType role) =>
+        filing
+            .ServiceProviders.Where(p => p.ProviderType == role)
+            .Select(p => p.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
 
-    // Filers re-punctuate and re-case the same firm between reports ("PricewaterhouseCoopers LLP"
-    // vs "PRICEWATERHOUSECOOPERS, LLP"). Comparing the raw strings reports those as a change of
-    // auditor, which is a false claim about the fund; the comparison runs on letters and digits
-    // only. Display still uses the filed spelling — this normalization never leaves the compare.
-    private static string ComparableNamesForRole(NCenFiling filing, NCenServiceProviderType role) =>
-        string.Join(
-            "|",
-            filing
-                .ServiceProviders.Where(p => p.ProviderType == role)
-                .Select(p => Squash(p.Name))
-                .Where(n => n.Length > 0)
-                .OrderBy(n => n, StringComparer.Ordinal)
-        );
+    private static string TimelineLabel(NCenFiling filing, bool disambiguate)
+    {
+        var date = filing.FilingDate.ToString("yyyy-MM-dd");
+        if (!disambiguate)
+            return date;
 
-    private static string Squash(string value) =>
-        value == null
-            ? ""
-            : new string(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        var kind = filing.IsAmendment ? "amendment" : "original";
+        var accession = MarkdownText(filing.AccessionNumber) ?? "accession unknown";
+        return $"{date} ({kind}; accession {accession})";
+    }
+
+    // SEC-filed text can carry pipes and line breaks. Flatten it before inserting it into a
+    // Markdown table or bullet so one provider cannot create a synthetic row or section.
+    private static string MarkdownText(string value) =>
+        value == null ? null : MarkdownTable.EscapeCell(value).Trim();
 }

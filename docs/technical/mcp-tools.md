@@ -26,7 +26,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetInstitutionPortfolio` — full portfolio of one institution for a `ReportDate`.
 - `SearchInstitutions` — name-search returning matching `InstitutionalHolder` rows.
 - `GetTopBuyersSellers` — biggest absolute share additions and reductions for a ticker vs. the prior `ReportDate`; flags new and sold-out positions.
-- `GetMarketWide13FActivity` — market-wide leaderboard for a quarter, selected by `bucket`: `top-buys`, `top-sells`, `new-positions`, `sold-out-positions`.
+- `GetMarketWide13FActivity` — market-wide leaderboard for a quarter, selected by `bucket`: `top-buys`, `top-sells`, `new-positions`, `sold-out-positions`; Δ value includes the quarter's price move on held shares, so Δ shares is the position-change measure.
 - `GetInstitutionSummary` — portfolio header for one filer at a `ReportDate`: AUM, position count, top-10 / top-25 concentration, QoQ turnover, latest / prior dates.
 - `GetInstitutionSectorAllocation` — one filer's portfolio grouped by industry / sector for its latest 13F report; stocks lacking a classification collapse into an "Unclassified" row.
 - `GetInstitutionQuarterlyActivity` — one filer's position changes vs. the prior quarter, bucketed into Initiated / Increased / Reduced / Exited; optional `bucket` filter to a single bucket.
@@ -42,7 +42,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetInsiderTransactions` — recent transactions for a ticker, filterable by transaction code.
 - `GetInsiderOwnership` — current insider ownership summary for a ticker.
 - `SearchInsiders` — search insiders by name / company / role.
-- `GetProposedSales` — recent proposed insider sales for a ticker from SEC Form 144 notices: seller, relationship to the company, shares and aggregate market value to be sold, approximate sale date, and broker.
+- `GetProposedSales` — recent proposed insider sales for a ticker from SEC Form 144 notices: seller, relationship to the company, shares and aggregate market value to be sold, percent of shares outstanding, approximate sale date, broker, and filer remarks such as a stated 10b5-1 plan.
 
 ### `mcp.AddSec()` — SEC filings
 
@@ -78,7 +78,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `NCenTools`:
 
-- `GetFundOperations` — operational data for a fund, ETF or closed-end fund from SEC Form N-CEN annual reports: registrant classification, Investment Company Act file number, reporting period, first/last-filing flags, and named service providers (advisers, sub-advisers, custodians, transfer agents, administrators, auditors, underwriters). Only registered funds file N-CEN.
+- `GetFundOperations` — operational data for a fund, ETF or closed-end fund from SEC Form N-CEN annual reports: registrant classification, Investment Company Act file number, reporting period, first/last-filing flags, the latest filing's named service providers, and an exact filed-name provider timeline across returned reports. Only registered funds file N-CEN.
 
 `InvestmentAdviserTools`:
 
@@ -98,14 +98,14 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `RevenueBreakdownTools`:
 
-- `GetRevenueBreakdown` — revenue disaggregated by business segment, geography, and product/service from the dimensional XBRL facts the issuer tags in its own filings: annual fiscal years only, latest restated values, one table per axis the company reports; as-reported, never estimated.
+- `GetRevenueBreakdown` — revenue disaggregated by business segment, geography, and product/service from the dimensional XBRL facts the issuer tags in its own filings, plus reported segment operating income and a mechanically derived same-folded-member/exact-period operating-margin table: annual fiscal years only, latest restated source values, one table per axis the company reports; missing cells are never estimated.
 
 ### `mcp.AddCongress()` — congressional trading
 
 `CongressTools`:
 
-- `GetCongressionalTrades` — trades for a ticker across all members.
-- `GetMemberTrades` — trades by one member of Congress.
+- `GetCongressionalTrades` — disclosed securities transactions for a ticker across all members; the Asset column identifies stock, option, bond, or another filed instrument.
+- `GetMemberTrades` — disclosed securities transactions by one member of Congress, including the filed Asset instrument.
 - `SearchCongressMembers` — search members by name / chamber / position.
 - `GetMemberNetWorth` — a member's net-worth history from annual financial disclosures, reported as yearly min–max bands (electronic filings only).
 
@@ -113,9 +113,9 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `FredTools`:
 
-- `GetEconomicIndicator` — observations for a FRED series (e.g. `DGS10`, `UNRATE`).
+- `GetEconomicIndicator` — observations for a FRED series (e.g. `DGS10`, `UNRATE`), with units, frequency, and seasonal-adjustment metadata.
 - `GetLatestEconomicData` — latest snapshot across the curated macro indicators.
-- `SearchEconomicIndicators` — keyword search across series titles / categories.
+- `SearchEconomicIndicators` — keyword search across series titles / categories; each result includes seasonal adjustment, latest observation date, and the exact UTC series-sync time.
 - `GetEconomicCalendar` — scheduled and recent US macro release dates (CPI, Employment Situation, GDP, …) and the FRED series each updates; defaults to the next 30 days.
 
 ### `mcp.AddStockPrices()` — Yahoo OHLCV + technical indicators
@@ -166,7 +166,7 @@ never substitutes `BRK-B`; dot share-class spelling such as `BRK.A` resolves to 
 
 `GovernmentContractsTools`:
 
-- `GetGovernmentContracts` — federal contract awards (USAspending.gov) won by one public company, with awarding agency, award amount, period dates, and description.
+- `GetGovernmentContracts` — federal contract awards (USAspending.gov) won by one public company, with the government-named recipient, awarding agency, total value, outlays when reported, period dates, and description.
 - `GetTopGovernmentContractors` — rank public companies by total federal contract dollars awarded over a date range.
 
 ### `mcp.AddFdaCatalysts()` — FDA advisory-committee meetings
@@ -198,5 +198,5 @@ never substitutes `BRK-B`; dot share-class spelling such as `BRK.A` resolves to 
 - Add the method to the existing `*Tools` class for that module (single tool class per module is the established pattern; only split when the surface grows past ~5 methods).
 - Apply `[McpServerTool(Name = "ToolName")]` + `[Description("…")]` on the method, `[Description("…")]` on every parameter.
 - Wrap the body in `McpToolExecutor.Execute(...)` so failures are logged + surfaced via `ErrorManager` instead of crashing the MCP request.
-- Return Markdown; keep tables compact (≤8 columns) so they render cleanly in chat clients.
+- Return Markdown; prefer ≤8 columns for chat readability, but retain required attribution or evidence fields when parity needs a wider table.
 - No host change required — `AssemblyMcpModule<TMarker>` discovers the new method via `WithToolsFromAssembly` on the next startup.

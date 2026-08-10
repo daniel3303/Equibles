@@ -20,7 +20,7 @@ For a single stock over a date range the assistant picks `GetStockPrices`; for t
 
 ## What you should see
 
-- **`GetStockPrices`** — a table of daily bars with one row per trading day: Date, Open, High, Low, Close, and Volume. Use it for charting, trend questions, or as the basis for the [technical indicators](how-to-ask-about-technical-indicators.md) Equibles computes on top of the same history.
+- **`GetStockPrices`** — a table of daily bars with one row per trading day: Date, Open, High, Low, Close, and Volume. When the stored auxiliary adjusted close differs, the table also includes `Adj Close`. It can be rewritten during full-history split reconciliation and is not guaranteed to be complete total return, so equality with or a difference from `Close` does not identify corporate actions. Use the bars for charting, trend questions, or as the basis for the [technical indicators](how-to-ask-about-technical-indicators.md) Equibles computes on top of the same history.
 - **`GetLatestPrices`** — the most recent closing price and volume for each ticker you named, ideal for a one-line portfolio or watchlist check.
 
 If the reply says there's no price data, the stock's prices probably haven't been imported yet — confirm the worker has run, then try a large, liquid ticker such as AAPL.

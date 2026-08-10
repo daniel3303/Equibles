@@ -15,7 +15,7 @@ Ask your assistant about a specific ticker:
 - "Show me Boeing's government contract awards since 2024-01-01."
 - "How much has RTX been awarded recently, and by which agencies?"
 
-The assistant calls the `GetGovernmentContracts` tool and replies with a table of awards. Each row shows the action date, awarding agency, award type, dollar amount, award ID, and a short description, ordered largest first — useful for gauging how much a company relies on federal spending.
+The assistant calls the `GetGovernmentContracts` tool and replies with a table of awards. Each row shows the action date, recipient named by the government, awarding agency, award type, total value, outlays when reported, award ID, and a short description, ordered largest first — useful for gauging how much a company relies on federal spending.
 
 To narrow the window, mention dates ("between 2024-01-01 and 2024-12-31"). When you don't, the assistant defaults to the last year.
 

@@ -25,7 +25,7 @@ Equibles scrapes several public and free-tier data sources automatically. Each s
 | **Yahoo Finance** | Historical stock prices (OHLCV) | Every 24 hours |
 | **FRED** | U.S. economic indicators (GDP, unemployment, CPI, …) | Every 24 hours (requires a [free API key](how-to-set-up-fred-api-key.md)) |
 | **FINRA** | Short-sale volume data | Every 24 hours (requires a [free API key](how-to-set-up-finra-api-key.md)) |
-| **U.S. Congress** | Congressional stock trades (House disclosures) | Every 12 hours |
+| **U.S. Congress** | Congressional securities transactions (House disclosures) | Every 12 hours |
 | **CBOE** | Options and volatility data | Every 24 hours |
 | **CFTC** | Commitments of Traders reports (futures positioning) | Every 24 hours |
 | **USAspending.gov** | Federal government contract awards won by public companies | Every 24 hours |

@@ -4,6 +4,21 @@ namespace Equibles.Mcp.Helpers;
 
 public static class MarkdownTable
 {
+    // A literal backslash immediately before an escaped pipe can reactivate the pipe under
+    // CommonMark's backslash rules. Double backslashes first, then escape pipes, so every pipe
+    // remains preceded by an odd-length escape run and cannot become a table delimiter.
+    public static string EscapeCell(string value, string emptyValue = "")
+    {
+        if (string.IsNullOrEmpty(value))
+            return emptyValue;
+
+        return value
+            .Replace("\\", "\\\\")
+            .Replace("|", "\\|")
+            .Replace("\r", " ")
+            .Replace("\n", " ");
+    }
+
     public static StringBuilder Start(string title, string headerRow, string separatorRow)
     {
         var sb = new StringBuilder();

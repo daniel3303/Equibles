@@ -15,7 +15,7 @@ namespace Equibles.CorporateActions.BusinessLogic;
 // its rate limiter) and upserts the returned splits through the existing
 // idempotent capture path — safe to re-run. Newly captured splits carry a null
 // PriceAdjustmentAppliedTime, so the price sync's split reconciliation re-pulls
-// those stocks' fully-adjusted history on its next cycles without further work.
+// those stocks' full provider-served history on its next cycles without further work.
 [Service]
 public class StockSplitBackfillManager
 {

@@ -92,10 +92,10 @@ public class YahooPriceImportService
             includeEnrichment ? "on" : "off"
         );
 
-        // Before the forward-only incremental append: reconcile any stock whose stored history is
-        // on a pre-split basis. GetSyncStartDate only appends, so a split that landed after the
-        // last sync leaves the old rows on the wrong basis (a discontinuity in the series). Re-pull
-        // those stocks' full, fully-adjusted history and overwrite the stored rows (#2879).
+        // Before the forward-only incremental append: reconcile any stock whose captured split is
+        // still pending for its listed series. GetSyncStartDate only appends and cannot revisit the
+        // old rows, so re-pull the full provider-served history and overwrite them (#2879). The
+        // provider can serve that history on different bases; the pending marker does not prove one.
         await ReconcilePendingSplits(DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken);
 
         // Crawl the recently-active stocks first, stalest-first within them, and the long-dormant
@@ -406,8 +406,8 @@ public class YahooPriceImportService
     }
 
     // Re-syncs the full price history of every exact listed series that has an unreconciled split,
-    // capped per cycle. Yahoo serves the whole history already split-adjusted, so the fix is to
-    // overwrite that series with a fresh pull rather than doing ratio arithmetic.
+    // capped per cycle. Yahoo's served basis can vary around recent splits, so copy the response
+    // exactly rather than guessing a ratio or labelling the replacement universally adjusted.
     private async Task ReconcilePendingSplits(DateOnly today, CancellationToken cancellationToken)
     {
         PendingSplitSelection selection;
@@ -424,7 +424,7 @@ public class YahooPriceImportService
             return;
 
         _logger.LogInformation(
-            "Re-syncing split-adjusted price history for {Count} listed series with pending splits",
+            "Re-syncing full price history for {Count} listed series with pending splits",
             selection.Series.Count
         );
         if (selection.Skipped > 0)
@@ -448,7 +448,7 @@ public class YahooPriceImportService
             {
                 _logger.LogWarning(
                     ex,
-                    "Failed to fetch split-adjusted history for {Ticker}; leaving its split(s) pending",
+                    "Failed to fetch full history for {Ticker}; leaving its split(s) pending",
                     series.ListedTicker
                 );
             }
@@ -462,7 +462,7 @@ public class YahooPriceImportService
             {
                 _logger.LogError(
                     ex,
-                    "Error reconciling split-adjusted history for {Ticker}",
+                    "Error reconciling full price history for {Ticker}",
                     series.ListedTicker
                 );
                 await _errorReporter.Report(
@@ -527,7 +527,7 @@ public class YahooPriceImportService
         );
     }
 
-    // Transactionally swaps a stock's stored rows in [floor, today] for the fresh fully-adjusted
+    // Transactionally swaps a stock's stored rows in [floor, today] for the fresh provider-served
     // series. Returns false without touching the stored rows when there is nothing usable to store
     // (all rows overflowed the numeric ceiling, or the parent CommonStock was removed) so a stock
     // is never left with an empty series.
@@ -748,7 +748,7 @@ public class YahooPriceImportService
             if (replaced)
             {
                 _logger.LogInformation(
-                    "Reconciled {Ticker}: replaced its split-adjusted listed price history",
+                    "Reconciled {Ticker}: replaced its full listed price history",
                     target.Ticker
                 );
                 await CaptureSplits(target, chartData.Splits, cancellationToken);

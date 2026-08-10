@@ -3,32 +3,29 @@ using Equibles.CorporateActions.Data.Models;
 namespace Equibles.CorporateActions.Data;
 
 /// <summary>
-/// Resolves the split factor between a historical as-of date and the present price basis.
+/// Resolves the factor implied by captured splits between a historical as-of date and today.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Stored daily prices are rewritten onto TODAY'S post-split basis whenever a split's price
-/// reconciliation runs, while historical figures quoted as-of a date (a 13F share count, a
-/// Form 4 per-share price) stay on that date's basis. Any comparison or product across the two
-/// is off by exactly the product of the intervening split ratios. The factor returned here
-/// restates between them: an as-of share count × factor lands on the present count basis, and
-/// a present-basis close × factor lands back on the as-of per-share price basis.
+/// Historical figures quoted as-of a date (a 13F share count, a Form 4 per-share price) stay on
+/// that date's basis. The factor returned here restates those figures across captured splits: an
+/// as-of share count × factor lands on the present share-count basis.
 /// </para>
 /// <para>
-/// The restatement is only trustworthy while the stored series really is on today's basis.
-/// Between a split being captured and its price reconciliation running, the series mixes both
-/// bases; that window — and a split whose series attribution cannot be established — is
-/// reported as unresolvable (<c>false</c>) instead of guessed at.
+/// This resolver checks split attribution and whether reconciliation was stamped applied. It does
+/// not inspect price values and cannot prove a raw stored Close is on today's basis: Yahoo can
+/// serve either basis during a full-history replacement. Do not use a successful resolution as
+/// evidence for a universal raw-price basis. A pending or unattributed split is reported as
+/// unresolvable (<c>false</c>) instead of guessed at.
 /// </para>
 /// </remarks>
 public static class SplitBasisResolver
 {
     /// <summary>
-    /// Resolves the factor between figures quoted as-of <paramref name="asOfDate"/> and the
-    /// stored price series' present basis. Returns <c>false</c> when a split that would move
-    /// the figure has not had its price adjustment applied yet — the stored prices then
-    /// straddle two bases and no honest restatement exists; <paramref name="factor"/> is then
-    /// 1 and must not be used.
+    /// Resolves the factor between figures quoted as-of <paramref name="asOfDate"/> and today's
+    /// share-count basis. Returns <c>false</c> when a split that would move the figure has not had
+    /// its price reconciliation stamped applied; <paramref name="factor"/> is then 1 and must not
+    /// be used. A successful result does not prove the basis of raw stored price rows.
     /// <para>
     /// <paramref name="listedTicker"/> names the exact security; null means the filer's
     /// primary (<paramref name="primaryTicker"/>). A PRIMARY figure uses every split captured

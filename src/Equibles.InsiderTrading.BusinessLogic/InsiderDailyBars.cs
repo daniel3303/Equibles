@@ -6,9 +6,9 @@ namespace Equibles.InsiderTrading.BusinessLogic;
 
 /// <summary>
 /// Builds the <see cref="DailyBarContext"/> a price evaluation runs against: the stored bar
-/// plus the split factor between the transaction date and the series' present basis. One
-/// implementation for all three persisting call sites (ingest, backfill, reprocess) so they
-/// can never disagree on the basis rules.
+/// plus the captured split factor since the transaction date. The factor does not prove the
+/// provider-served raw bar's basis. One implementation serves all three persisting call sites
+/// (ingest, backfill, reprocess) so they use the same attribution and pending-marker rules.
 /// </summary>
 public static class InsiderDailyBars
 {
