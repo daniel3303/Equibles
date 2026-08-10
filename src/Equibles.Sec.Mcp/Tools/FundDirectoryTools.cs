@@ -37,7 +37,7 @@ public class FundDirectoryTools
 
     [McpServerTool(Name = "SearchFunds", Title = "Search Funds and ETFs", ReadOnly = true)]
     [Description(
-        "Search the tracked SEC Form NPORT-P fund directory by fund name, ticker, or registrant. Search first requires every punctuation-independent query word anywhere across those fields, then broadens to any word only when no strict row matches. Verified share-class aliases such as VOO and VFIAX resolve to their SEC fund series even when N-PORT carries no class ticker. Returns profile id, ticker when present, registration type, net assets, stored holding count, and latest report date, largest funds first."
+        "Search the tracked SEC Form NPORT-P fund directory by fund name, ticker, or registrant. Search first requires every punctuation-independent query word anywhere across those fields, then broadens to any word only when no strict row matches. Verified share-class aliases such as VOO and VFIAX resolve to their SEC fund series even when N-PORT carries no class ticker. Returns profile id, ticker when present, registration type, net assets, stored holding count, the fund's full reported holding count when available, and latest report date, largest funds first. For multi-series trusts the stored count includes only positions whose CUSIPs match tracked stocks. Form NPORT-P covers registered management investment companies and ETFs organized as unit investment trusts; money market funds and small business investment companies do not file it. Fixed-income-only series can be absent because trust reports enter this tracked directory after a tracked-stock match."
     )]
     public Task<string> SearchFunds(
         [Description(
@@ -56,11 +56,12 @@ public class FundDirectoryTools
                 if (string.IsNullOrWhiteSpace(query))
                     return "Provide a fund name, ticker or registrant to search for.";
 
+                var safeQuery = MarkdownText(query);
                 var allMatches = _fundSeriesRepository.Search(query);
 
                 var totalCount = await allMatches.CountAsync();
                 if (totalCount == 0)
-                    return $"No match for '{query}' in the tracked Form NPORT-P fund directory. This does not assert that the fund does not exist or file with the SEC; try fewer words or list another identifier.";
+                    return $"No match for '{safeQuery}' in the tracked Form NPORT-P fund directory. Form NPORT-P covers registered management investment companies and ETFs organized as unit investment trusts; money market funds and small business investment companies do not file it. Operating companies, BDCs, unregistered private funds, and other filers outside that form are also out of scope; registered private-credit funds can be in scope. Fixed-income-only series can be absent because trust reports enter this directory after a tracked-stock match. This is a coverage result, not evidence that the fund does not exist; try fewer words or another identifier.";
 
                 var matches = await allMatches
                     .OrderByDescending(f => f.NetAssets)
@@ -68,19 +69,19 @@ public class FundDirectoryTools
                     .ToListAsync();
 
                 var result = MarkdownTable.Start(
-                    $"Registered funds matching '{query}', largest by net assets first (showing {matches.Count} of {totalCount}):",
+                    $"Registered funds matching '{safeQuery}', largest by net assets first (showing {matches.Count} of {totalCount}):",
                     // Sweep-discovered series only have their tracked-stock positions stored,
                     // so a bond fund's Holdings can read 0 beside real net assets — say so, or
                     // the count reads as "this fund holds nothing".
-                    "_Holdings = stored holding rows on the fund's latest report. For the large multi-series trusts only positions in stocks this platform tracks are stored, so the count can be a small subset of (or zero within) the real portfolio; Net Assets is always the fund's own reported total._",
-                    "| Fund | Profile id | Ticker | Type | Net Assets (USD) | Holdings | Latest Report |",
-                    "|------|-----------|--------|------|------------------|----------|---------------|"
+                    "_Stored = holding rows retained by this platform; for multi-series trusts that is only positions whose CUSIPs match tracked stocks. Reported = the full investment-row count in the fund's filing before that filter (`—` means parser replay is pending or EDGAR could not be re-fetched). Net Assets is always the fund's reported total._",
+                    "| Fund | Profile id | Ticker | Type | Net Assets (USD) | Stored | Reported | Latest Report |",
+                    "|------|-----------|--------|------|------------------|--------|----------|---------------|"
                 );
 
                 result.AppendRows(
                     matches,
                     f =>
-                        $"| {MarkdownTable.EscapeCell(f.SeriesName ?? f.RegistrantName, "-")} | {MarkdownTable.EscapeCell(f.Slug, "-")} | {MarkdownTable.EscapeCell(f.Ticker, "-")} | {MarkdownTable.EscapeCell(FundCodes.RegistrationType(f.FundType), "-")} | ${FormatAmount(f.NetAssets)} | {f.PositionCount} | {f.LatestReportPeriodDate:yyyy-MM-dd} |"
+                        $"| {MarkdownTable.EscapeCell(f.SeriesName ?? f.RegistrantName, "-")} | {MarkdownTable.EscapeCell(f.Slug, "-")} | {MarkdownTable.EscapeCell(f.Ticker, "-")} | {MarkdownTable.EscapeCell(FundCodes.RegistrationType(f.FundType), "-")} | ${FormatAmount(f.NetAssets)} | {f.PositionCount} | {FormatCount(f.ReportedHoldingCount)} | {f.LatestReportPeriodDate:yyyy-MM-dd} |"
                 );
 
                 TruncationNotes.Append(result, matches.Count, totalCount);
@@ -98,11 +99,11 @@ public class FundDirectoryTools
         ReadOnly = true
     )]
     [Description(
-        "Get a registered fund's profile and largest holdings from its most recent SEC Form NPORT-P report. Accepts a fund profile id from SearchFunds or a fund's own ticker. Returns the fund's registrant and series, reporting period, net and total assets, then its largest holdings — issuer name, CUSIP, position size, U.S.-dollar value, share of net assets and asset category. Prefer this after SearchFunds: the profile id reaches the many fund series that have no ticker of their own; GetFundHoldings is the equivalent view, and GetFundsHoldingStock answers the inverse question (which funds own a stock). For the large multi-series trusts only positions in tracked stocks are stored, so the holdings shown are the fund's tracked-stock positions; the net-asset totals are the fund's real totals."
+        "Get a registered fund's profile and largest stored holdings from its most recent SEC Form NPORT-P report. Accepts a profile id, stored series ticker, SEC series id, or verified share-class alias from SearchFunds. Returns the fund's registrant and series, reporting period, net and total assets, full reported holding count when available, stored holding count, then its largest stored holdings — issuer name, CUSIP, position size, U.S.-dollar value, share of net assets and asset category. Prefer this after SearchFunds; GetFundHoldings is the equivalent view, and GetFundsHoldingStock answers the inverse question. For large multi-series trusts only positions in tracked stocks are stored; the reported count and asset totals still describe the fund's full filing."
     )]
     public Task<string> GetFundProfile(
         [Description(
-            "Fund profile id from SearchFunds (e.g., 'ishares-russell-2000-etf-s000004344') or a fund's own ticker (e.g., 'IWM'). Share-class tickers of multi-class mutual funds (e.g. VOO, VFIAX) do not resolve — find the fund by name via SearchFunds."
+            "Fund profile id, SEC series id, stored series ticker, or verified share-class alias from SearchFunds (e.g., 'ishares-russell-2000-etf-s000004344', 'S000004344', 'IWM', or 'VOO')."
         )]
             string fund,
         [Description("Maximum number of holdings to return, largest first (default: 20, max: 500)")]
@@ -115,18 +116,14 @@ public class FundDirectoryTools
                 if (string.IsNullOrWhiteSpace(fund))
                     return "Provide a fund profile id or ticker.";
 
-                var key = fund.Trim();
-                var lowerKey = key.ToLower();
+                var safeFund = MarkdownText(fund);
                 var series = await _fundSeriesRepository
-                    .GetAll()
-                    .Where(f =>
-                        f.Slug == key || (f.Ticker != null && f.Ticker.ToLower() == lowerKey)
-                    )
+                    .ResolveIdentifier(fund)
                     .OrderByDescending(f => f.NetAssets)
                     .FirstOrDefaultAsync();
 
                 if (series == null)
-                    return $"No registered fund found for '{fund}'. Use SearchFunds to find a fund's profile id — share-class tickers of multi-class mutual funds (e.g. VOO, VFIAX) do not resolve, so search by fund name.";
+                    return $"No registered fund found for '{safeFund}' in the tracked Form NPORT-P directory. Use SearchFunds to find a profile id. Form NPORT-P covers registered management investment companies and ETFs organized as unit investment trusts; money market funds and small business investment companies do not file it. Fixed-income-only series and vehicles outside that filing regime may be absent. This is a coverage result, not evidence that the fund does not exist.";
 
                 var latest = await _nportRepository
                     .GetSeriesReportsByPeriod(
@@ -140,7 +137,7 @@ public class FundDirectoryTools
                     .FirstOrDefaultAsync();
 
                 if (latest == null)
-                    return $"No Form NPORT-P report is on record for {series.SeriesName ?? series.RegistrantName}.";
+                    return $"No stored Form NPORT-P report is on record for {MarkdownText(series.SeriesName ?? series.RegistrantName)}. This is a dataset coverage result, not evidence that no SEC filing exists; the report may be outside the filing scope or absent from this ingestion, fetch, or replay state.";
 
                 var holdings = latest
                     .Holdings.OrderByDescending(h => h.ValueUsd)
@@ -148,12 +145,14 @@ public class FundDirectoryTools
                     .ToList();
 
                 var header =
-                    $"{series.SeriesName ?? series.RegistrantName}"
-                    + (series.Ticker != null ? $" ({series.Ticker})" : "")
-                    + $" — registrant {series.RegistrantName ?? "-"}, "
+                    $"{MarkdownText(series.SeriesName ?? series.RegistrantName)}"
+                    + (series.Ticker != null ? $" ({MarkdownText(series.Ticker)})" : "")
+                    + $" — registrant {MarkdownText(series.RegistrantName) ?? "-"}, "
                     + $"reported {latest.ReportPeriodDate:yyyy-MM-dd}, "
                     + $"net assets ${FormatAmount(latest.NetAssets)}, total assets ${FormatAmount(latest.TotalAssets)}, "
-                    + $"{latest.Holdings.Count} holdings on record, showing the largest {holdings.Count}:";
+                    + $"{FormatCount(latest.ReportedHoldingCount)} holdings reported, {latest.Holdings.Count} stored"
+                    + (latest.CommonStockId == null ? " tracked-stock holdings" : " holdings")
+                    + $", showing the largest {holdings.Count} stored rows:";
 
                 var result = MarkdownTable.Start(
                     header,
@@ -164,7 +163,7 @@ public class FundDirectoryTools
                 result.AppendRows(
                     holdings,
                     h =>
-                        $"| {h.Name ?? "-"} | {h.Cusip ?? "-"} | {FundCodes.Balance(h.Balance)} | {FundCodes.Unit(h.Units)} | ${FormatAmount(h.ValueUsd)} | {FormatPercent(h.PercentValue)} | {FundCodes.AssetCategory(h.AssetCategory)} | {h.InvestmentCountry ?? "-"} |"
+                        $"| {MarkdownText(h.Name) ?? "-"} | {MarkdownText(h.Cusip) ?? "-"} | {FundCodes.Balance(h.Balance)} | {MarkdownText(FundCodes.Unit(h.Units))} | ${FormatAmount(h.ValueUsd)} | {FormatPercent(h.PercentValue)} | {MarkdownText(FundCodes.AssetCategory(h.AssetCategory))} | {MarkdownText(h.InvestmentCountry) ?? "-"} |"
                 );
 
                 TruncationNotes.Append(result, holdings.Count, latest.Holdings.Count);
@@ -179,4 +178,9 @@ public class FundDirectoryTools
     private static string FormatAmount(decimal value) => McpFormat.Invariant(value, "N2");
 
     private static string FormatPercent(decimal value) => McpFormat.Invariant(value, "N2") + "%";
+
+    private static string FormatCount(int? value) => McpFormat.OrDash(value, "N0");
+
+    private static string MarkdownText(string value) =>
+        value == null ? null : MarkdownTable.EscapeCell(value).Trim();
 }

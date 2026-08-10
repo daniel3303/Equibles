@@ -33,9 +33,10 @@ public class NportFiling
     /// <summary>
     /// Current holdings-parsing algorithm version. Bump this whenever the NPORT-P parse changes so
     /// the reprocess worker re-derives every filing's <see cref="Holdings"/> from EDGAR. Version 1
-    /// is the first that reads the portfolio schedule from the correct <c>formData</c> element.
+    /// is the first that reads the portfolio schedule from the correct <c>formData</c> element;
+    /// version 2 also preserves the pre-filter <see cref="ReportedHoldingCount"/>.
     /// </summary>
-    public const int CurrentParserVersion = 1;
+    public const int CurrentParserVersion = 2;
 
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -99,6 +100,13 @@ public class NportFiling
 
     /// <summary>True when the registrant marked this as the series' final NPORT-P report.</summary>
     public bool IsFinalFiling { get; set; }
+
+    /// <summary>
+    /// Number of non-blank investment rows reported in the filing before the trust sweep narrows
+    /// <see cref="Holdings"/> to positions whose CUSIPs match tracked stocks. Null only while a
+    /// legacy filing is waiting for parser-version replay or could not be re-fetched from EDGAR.
+    /// </summary>
+    public int? ReportedHoldingCount { get; set; }
 
     /// <summary>The series' schedule of portfolio investments reported on the filing.</summary>
     public virtual List<NportHolding> Holdings { get; set; } = [];

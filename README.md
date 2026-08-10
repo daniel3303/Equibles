@@ -317,13 +317,13 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 
 - SearchInvestmentAdvisers — strict-first tokenized adviser-name search (Form ADV)
 - GetInvestmentAdviser — ADV profile by CRD
-- GetFundOperations — fund ops from N-CEN
-- GetFundHoldings — fund holdings from NPORT-P
+- GetFundOperations — fund ops from N-CEN with exact directory-identifier resolution
+- GetFundHoldings — NPORT-P holdings with full reported versus stored counts; trust-series rows identify their tracked-stock subset
 - GetFundsHoldingStock — funds holding a stock
 - GetExemptOfferings — private placements (Form D)
 - GetFailsToDeliver — SEC FTD data
 - SearchFunds — strict-first tokenized fund/registrant/ticker search with verified share-class aliases
-- GetFundProfile — fund profile + largest holdings
+- GetFundProfile — fund profile + largest stored holdings with explicit coverage counts
 
 **Fundamentals (XBRL)**
 

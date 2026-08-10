@@ -30,6 +30,7 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
         _tools = new NCenTools(
             new NCenFilingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
+            new FundSeriesRepository(_dbContext),
             errorManager: null,
             NullLogger<NCenTools>.Instance
         );

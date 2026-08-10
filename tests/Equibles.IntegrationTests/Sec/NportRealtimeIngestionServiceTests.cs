@@ -61,6 +61,7 @@ public class NportRealtimeIngestionServiceTests
         stored.RegistrantName.Should().Be("VANGUARD INDEX FUNDS");
         // The bond is dropped; only the tracked-stock position is kept.
         stored.Holdings.Should().ContainSingle().Which.Cusip.Should().Be(AppleCusip);
+        stored.ReportedHoldingCount.Should().Be(2, "the pre-filter filing count stays visible");
     }
 
     [Fact]

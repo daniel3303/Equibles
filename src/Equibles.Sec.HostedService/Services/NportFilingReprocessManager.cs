@@ -257,6 +257,7 @@ public class NportFilingReprocessManager
         filing.TotalLiabilities = parsed.TotalLiabilities;
         filing.NetAssets = parsed.NetAssets;
         filing.IsFinalFiling = parsed.IsFinalFiling;
+        filing.ReportedHoldingCount = parsed.ReportedHoldingCount;
         filing.ParserVersion = NportFiling.CurrentParserVersion;
         filing.ReprocessAttempts = 0;
 

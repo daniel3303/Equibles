@@ -78,6 +78,7 @@ public class FundSeriesRefreshService
                 NetAssets = f.NetAssets,
                 TotalAssets = f.TotalAssets,
                 PositionCount = f.Holdings.Count(),
+                ReportedHoldingCount = f.ReportedHoldingCount,
             })
             .ToListAsync(cancellationToken);
 
@@ -114,6 +115,7 @@ public class FundSeriesRefreshService
                             NetAssets = incoming.NetAssets,
                             TotalAssets = incoming.TotalAssets,
                             PositionCount = incoming.PositionCount,
+                            ReportedHoldingCount = incoming.ReportedHoldingCount,
                             FundType = incoming.FundType,
                             ComputedAt = incoming.ComputedAt,
                         }
@@ -251,6 +253,7 @@ public class FundSeriesRefreshService
             NetAssets = a.NetAssets,
             TotalAssets = a.TotalAssets,
             PositionCount = a.PositionCount,
+            ReportedHoldingCount = a.ReportedHoldingCount,
             FundType = fundType,
             ComputedAt = computedAt,
         };
@@ -314,5 +317,6 @@ public class FundSeriesRefreshService
         public decimal NetAssets { get; set; }
         public decimal TotalAssets { get; set; }
         public int PositionCount { get; set; }
+        public int? ReportedHoldingCount { get; set; }
     }
 }
