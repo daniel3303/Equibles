@@ -69,7 +69,9 @@ public class Chunk
 
     /// <summary>
     /// Denormalized from <see cref="Document"/>.<see cref="Documents.Document.ReportingDate"/>.
-    /// Stored as DateTime (converted from DateOnly) so Tantivy can use native datetime range queries.
+    /// Stored as DateTime (converted from DateOnly) for the search index. This is a cache, not the
+    /// filing-date source of truth: retrieval filters and renderers use the parent document date so
+    /// a corrected document cannot leave stale transcript search metadata (#7049).
     /// </summary>
     public DateTime ReportingDate { get; set; }
 
