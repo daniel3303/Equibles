@@ -1,5 +1,6 @@
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.Repositories.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Repositories;
@@ -21,9 +22,16 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
 
     public IQueryable<InstitutionalHolder> Search(string search)
     {
-        // "Name contains the term"; escape so '%' / '_' / '\' match literally, matching SearchNameOrCik.
-        var pattern = LikePattern.Contains(search);
-        return GetAll().Where(h => EF.Functions.ILike(h.Name, pattern, LikePattern.EscapeChar));
+        var matches = SearchNameTokens(search, requireAll: true);
+        var aliasCik = InstitutionalHolderSearchAliases.ResolveCik(search);
+        var strict =
+            aliasCik == null
+                ? matches
+                : matches.Concat(GetAll().Where(h => h.Cik == aliasCik)).Distinct();
+        return SearchTerms.WithSparseAnyTokenFallback(
+            strict,
+            SearchNameTokens(search, requireAll: false)
+        );
     }
 
     // Typeahead variant: matches a CIK prefix as well as a name substring so the
@@ -32,14 +40,71 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
     // wildcards (e.g. "50%" would otherwise match every name).
     public IQueryable<InstitutionalHolder> SearchNameOrCik(string search)
     {
-        var escaped = EscapeLikePattern(search);
-        var namePattern = $"%{escaped}%";
-        var cikPrefix = $"{EscapeLikePattern(NormalizeCikQuery(search))}%";
-        return GetAll()
+        return SearchTerms.WithSparseAnyTokenFallback(
+            SearchNameOrCikStrict(search),
+            SearchNameTokens(search, requireAll: false)
+        );
+    }
+
+    // Resolution must never discard an unmatched word through discovery's any-token fallback:
+    // "wrong Berkshire" is not an exact or unique all-token identity. Scoped tools call this
+    // strict shape through ResolveNameOrCik and fail closed when it has multiple candidates.
+    private IQueryable<InstitutionalHolder> SearchNameOrCikStrict(string search)
+    {
+        var nameMatches = SearchNameTokens(search, requireAll: true);
+        var exactCik = NormalizeExactCikQuery(search);
+        var primaryCikPrefix = $"{EscapeLikePattern(exactCik ?? search ?? string.Empty)}%";
+        var alternateCik = AlternateCikSpelling(exactCik);
+        var alternateCikPrefix =
+            alternateCik == null ? null : $"{EscapeLikePattern(alternateCik)}%";
+        var identityMatches = GetAll()
             .Where(h =>
-                EF.Functions.ILike(h.Name, namePattern, LikePattern.EscapeChar)
-                || EF.Functions.ILike(h.Cik, cikPrefix, LikePattern.EscapeChar)
+                EF.Functions.ILike(h.Cik, primaryCikPrefix, LikePattern.EscapeChar)
+                || (
+                    alternateCikPrefix != null
+                    && EF.Functions.ILike(h.Cik, alternateCikPrefix, LikePattern.EscapeChar)
+                )
             );
+
+        var strict = nameMatches.Concat(identityMatches);
+        var aliasCik = InstitutionalHolderSearchAliases.ResolveCik(search);
+        if (aliasCik != null)
+            strict = strict.Concat(GetAll().Where(h => h.Cik == aliasCik));
+        return strict.Distinct();
+    }
+
+    private IQueryable<InstitutionalHolder> SearchNameTokens(string search, bool requireAll)
+    {
+        var tokens = SearchTerms.Tokenize(search);
+        if (tokens.Count == 0 && !string.IsNullOrWhiteSpace(search))
+            return GetAll().Where(_ => false);
+        if (tokens.Count == 0)
+            return requireAll ? GetAll() : GetAll().Where(_ => false);
+
+        if (requireAll)
+        {
+            var matches = GetAll();
+            foreach (var token in tokens)
+            {
+                var pattern = LikePattern.Contains(token);
+                matches = matches.Where(h =>
+                    EF.Functions.ILike(h.Name, pattern, LikePattern.EscapeChar)
+                );
+            }
+
+            return matches;
+        }
+
+        var anyTokenMatches = GetAll().Where(_ => false);
+        foreach (var token in tokens)
+        {
+            var pattern = LikePattern.Contains(token);
+            anyTokenMatches = anyTokenMatches.Concat(
+                GetAll().Where(h => EF.Functions.ILike(h.Name, pattern, LikePattern.EscapeChar))
+            );
+        }
+
+        return anyTokenMatches.Distinct();
     }
 
     // CIKs are stored unpadded but SEC-canonical form zero-pads them to 10 digits (EDGAR and
@@ -80,11 +145,24 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
         string search,
         int maxResults,
         CancellationToken cancellationToken = default
+    ) =>
+        (await SearchNameOrCikLargestFirstWithStats(search, maxResults, cancellationToken))
+            .Select(m => m.Holder)
+            .ToList();
+
+    public async Task<List<InstitutionalHolderSearchMatch>> SearchNameOrCikLargestFirstWithStats(
+        string search,
+        int maxResults,
+        CancellationToken cancellationToken = default
+    ) => await RankWithStats(SearchNameOrCik(search), maxResults, cancellationToken);
+
+    private async Task<List<InstitutionalHolderSearchMatch>> RankWithStats(
+        IQueryable<InstitutionalHolder> source,
+        int maxResults,
+        CancellationToken cancellationToken
     )
     {
-        var matches = await SearchNameOrCik(search)
-            .Select(h => new { h.Id, h.Name })
-            .ToListAsync(cancellationToken);
+        var matches = await source.Select(h => new { h.Id, h.Name }).ToListAsync(cancellationToken);
         if (matches.Count == 0)
             return [];
 
@@ -101,10 +179,11 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
                 ids.Contains(f.InstitutionalHolderId) && f.FilingType == FilingType.Form13F
             );
 
-        // One row per holder, aggregated in SQL: the newest reported quarter, and the size of
-        // the largest filing IN that quarter (an amendment and its original are separate rollup
-        // rows; the largest is the fuller picture). A grouped-subquery join keeps a broad match
-        // set from materialising every (holder, quarter) pair client-side.
+        // One row per holder, aggregated in SQL: the newest reported quarter, with every
+        // accession rollup in that quarter summed. A NEW HOLDINGS amendment deliberately leaves
+        // disjoint positions split between the original and amendment accessions, so taking one
+        // accession (or Max) understates both AUM and breadth. A grouped-subquery join keeps a
+        // broad match set from materialising every (holder, quarter) pair client-side.
         var latestQuarters = thirteenFRollups
             .GroupBy(f => f.InstitutionalHolderId)
             .Select(g => new { Id = g.Key, Latest = g.Max(f => f.ReportDate) });
@@ -121,13 +200,14 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
             {
                 Id = g.Key,
                 LatestReportDate = g.Max(f => f.ReportDate),
-                SizeAtLatest = g.Max(f => f.TotalValue),
+                SizeAtLatest = g.Sum(f => f.TotalValue),
+                PositionCountAtLatest = g.Sum(f => f.PositionCount),
             }
         ).ToListAsync(cancellationToken);
 
         var statsByHolder = stats.ToDictionary(
             s => s.Id,
-            s => (s.LatestReportDate, s.SizeAtLatest)
+            s => (s.LatestReportDate, s.SizeAtLatest, s.PositionCountAtLatest)
         );
 
         // The live window anchors on the newest quarter among the MATCHES, so an all-dormant
@@ -154,7 +234,169 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
         var holders = await GetAll()
             .Where(h => topIds.Contains(h.Id))
             .ToListAsync(cancellationToken);
-        return topIds.Select(id => holders.First(h => h.Id == id)).ToList();
+        var holdersById = holders.ToDictionary(h => h.Id);
+        return topIds
+            .Select(id =>
+            {
+                var hasStats = statsByHolder.TryGetValue(id, out var holderStats);
+                return new InstitutionalHolderSearchMatch
+                {
+                    Holder = holdersById[id],
+                    LatestReportDate = hasStats ? holderStats.LatestReportDate : null,
+                    ReportedAum = hasStats ? holderStats.SizeAtLatest : null,
+                    PositionCount = hasStats ? holderStats.PositionCountAtLatest : null,
+                };
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Resolves an exact legal name, exact CIK, or verified brand alias. A unique partial match
+    /// also resolves; multiple partial matches remain explicit candidates so callers cannot
+    /// silently run a portfolio query against the wrong filer.
+    /// </summary>
+    public async Task<InstitutionalHolderResolution> ResolveNameOrCik(
+        string search,
+        int maxCandidates = 5,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var normalized = SearchTerms.Normalize(search);
+        var exactCik = NormalizeExactCikQuery(search);
+        if (exactCik != null)
+        {
+            var identity = await RankWithStats(
+                GetAll().Where(h => h.Cik == exactCik),
+                2,
+                cancellationToken
+            );
+            if (identity.Count == 1)
+            {
+                return new InstitutionalHolderResolution
+                {
+                    Selected = identity[0],
+                    Candidates = identity,
+                };
+            }
+
+            var alternateCik = AlternateCikSpelling(exactCik);
+            if (alternateCik != null)
+            {
+                var alternate = await RankWithStats(
+                    GetAll().Where(h => h.Cik == alternateCik),
+                    2,
+                    cancellationToken
+                );
+                if (alternate.Count == 1)
+                {
+                    return new InstitutionalHolderResolution
+                    {
+                        Selected = alternate[0],
+                        Candidates = alternate,
+                    };
+                }
+            }
+        }
+
+        var nameCandidates = await SearchNameOrCikStrict(search ?? string.Empty)
+            .Select(h => new { h.Id, h.Name })
+            .ToListAsync(cancellationToken);
+        var trimmed = search?.Trim();
+        var literalExactIds = nameCandidates
+            .Where(m => string.Equals(m.Name?.Trim(), trimmed, StringComparison.OrdinalIgnoreCase))
+            .Select(m => m.Id)
+            .ToList();
+        if (literalExactIds.Count > 0)
+            return await BuildExactResolution(literalExactIds, maxCandidates, cancellationToken);
+
+        var normalizedExactIds = nameCandidates
+            .Where(m => SearchTerms.Normalize(m.Name) == normalized)
+            .Select(m => m.Id)
+            .ToList();
+        if (normalizedExactIds.Count > 0)
+            return await BuildExactResolution(normalizedExactIds, maxCandidates, cancellationToken);
+
+        var aliasCik = InstitutionalHolderSearchAliases.ResolveCik(search);
+        if (aliasCik != null)
+        {
+            var alias = await RankWithStats(
+                GetAll().Where(h => h.Cik == aliasCik),
+                2,
+                cancellationToken
+            );
+            if (alias.Count == 1)
+            {
+                return new InstitutionalHolderResolution
+                {
+                    Selected = alias[0],
+                    Candidates = alias,
+                };
+            }
+        }
+
+        var candidateIds = nameCandidates.Select(m => m.Id).ToList();
+        var ranked = await RankWithStats(
+            GetAll().Where(h => candidateIds.Contains(h.Id)),
+            Math.Max(25, maxCandidates),
+            cancellationToken
+        );
+        if (ranked.Count == 0)
+            return new InstitutionalHolderResolution();
+
+        if (ranked.Count == 1)
+        {
+            return new InstitutionalHolderResolution { Selected = ranked[0], Candidates = ranked };
+        }
+
+        return new InstitutionalHolderResolution
+        {
+            Candidates = ranked.Take(Math.Max(1, maxCandidates)).ToList(),
+        };
+    }
+
+    private async Task<InstitutionalHolderResolution> BuildExactResolution(
+        List<Guid> exactIds,
+        int maxCandidates,
+        CancellationToken cancellationToken
+    )
+    {
+        var exact = await RankWithStats(
+            GetAll().Where(h => exactIds.Contains(h.Id)),
+            Math.Max(1, maxCandidates),
+            cancellationToken
+        );
+        return new InstitutionalHolderResolution
+        {
+            Selected = exactIds.Count == 1 ? exact[0] : null,
+            Candidates = exact.Take(Math.Max(1, maxCandidates)).ToList(),
+        };
+    }
+
+    private static string NormalizeExactCikQuery(string search)
+    {
+        var trimmed = search?.Trim();
+        if (string.IsNullOrEmpty(trimmed) || !trimmed.All(char.IsAsciiDigit))
+            return null;
+        return trimmed;
+    }
+
+    // Both padded and unpadded CIK spellings exist in the holder table. Exact input wins;
+    // this alternate is consulted only when the exact spelling has no row.
+    private static string AlternateCikSpelling(string exactCik)
+    {
+        if (exactCik == null)
+            return null;
+
+        var unpadded = NormalizeCikQuery(exactCik);
+        if (unpadded != exactCik)
+            return unpadded;
+        if (exactCik.All(char.IsAsciiDigit) && exactCik.Any(c => c != '0'))
+        {
+            var padded = exactCik.PadLeft(10, '0');
+            return padded == exactCik ? null : padded;
+        }
+
+        return null;
     }
 
     // Local alias over the shared escaper, kept so SearchNameOrCik reads as one concept.
@@ -176,4 +418,27 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
         return GetAll()
             .Where(h => h.Classification == FundClassification.Unknown && h.Name != null);
     }
+}
+
+internal static class InstitutionalHolderSearchAliases
+{
+    private static readonly IReadOnlyDictionary<string, string> Ciks = new Dictionary<
+        string,
+        string
+    >(StringComparer.OrdinalIgnoreCase)
+    {
+        // Fidelity's flagship 13F filer is legally named FMR LLC, so the brand
+        // word does not occur in its filed name.
+        ["fidelity"] = "315066",
+        ["fmr fidelity"] = "315066",
+        ["fidelity fmr"] = "315066",
+        ["vanguard"] = "102909",
+        ["vanguard group"] = "102909",
+        ["vanguard group inc"] = "102909",
+        ["blackrock"] = "2012383",
+        ["blackrock inc"] = "2012383",
+    };
+
+    public static string ResolveCik(string query) =>
+        Ciks.GetValueOrDefault(SearchTerms.Normalize(query));
 }

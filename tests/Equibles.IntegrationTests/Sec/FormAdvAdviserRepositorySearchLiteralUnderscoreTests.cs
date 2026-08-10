@@ -7,10 +7,7 @@ using Xunit;
 namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
-/// Adversarial guard on <see cref="FormAdvAdviserRepository.Search"/>'s "name CONTAINS term"
-/// contract for the literal-underscore case. A term with an underscore must match a name that
-/// contains that literal underscore (the escape must not break legitimate matches) AND must
-/// exclude a name that only matches when "_" is honoured as a LIKE single-character wildcard.
+/// Pins punctuation-independent token-AND matching against both filed adviser names.
 /// Runs on ParadeDB because EF.Functions.ILike has no in-memory translation.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -20,7 +17,7 @@ public class FormAdvAdviserRepositorySearchLiteralUnderscoreTests : ParadeDbMcpT
         : base(fixture) { }
 
     [Fact]
-    public async Task Search_TermWithUnderscore_MatchesLiteralUnderscoreOnly()
+    public async Task Search_CommaSeparatedWords_MatchAcrossFiledPunctuation()
     {
         DbContext
             .Set<FormAdvAdviser>()
@@ -28,16 +25,16 @@ public class FormAdvAdviserRepositorySearchLiteralUnderscoreTests : ParadeDbMcpT
                 new FormAdvAdviser
                 {
                     Crd = 410,
-                    LegalName = "A_B CAPITAL",
-                    PrimaryBusinessName = "A_B",
+                    LegalName = "GRANTHAM, MAYO, VAN OTTERLOO & CO. LLC",
+                    PrimaryBusinessName = "GMO",
                     TotalRegulatoryAum = 1_000_000L,
                     ReportDate = new DateOnly(2022, 4, 1),
                 },
                 new FormAdvAdviser
                 {
                     Crd = 420,
-                    LegalName = "AXB CAPITAL",
-                    PrimaryBusinessName = "AXB",
+                    LegalName = "GRANTHAM CAPITAL LLC",
+                    PrimaryBusinessName = "GRANTHAM",
                     TotalRegulatoryAum = 2_000_000L,
                     ReportDate = new DateOnly(2022, 4, 1),
                 }
@@ -46,10 +43,8 @@ public class FormAdvAdviserRepositorySearchLiteralUnderscoreTests : ParadeDbMcpT
         DbContext.ChangeTracker.Clear();
         var sut = new FormAdvAdviserRepository(DbContext);
 
-        var results = await sut.Search("A_B").ToListAsync();
+        var results = await sut.Search("Mayo Grantham").ToListAsync();
 
-        // Contract is literal containment: the underscore matches only the name that literally
-        // contains it (CRD 410), never the wildcard-only match "AXB CAPITAL" (CRD 420).
         results.Select(a => a.Crd).Should().Equal(410);
     }
 }

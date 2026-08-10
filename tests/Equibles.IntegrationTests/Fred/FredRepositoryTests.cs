@@ -233,7 +233,7 @@ public class FredSeriesRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task Search_MatchesBothSeriesIdAndTitle_ReturnsAll()
+    public async Task Search_ExactSeriesId_OutranksTitleMatches()
     {
         _dbContext
             .Set<FredSeries>()
@@ -245,7 +245,7 @@ public class FredSeriesRepositoryTests : IDisposable
 
         var result = _repository.Search("RATE").ToList();
 
-        result.Should().HaveCount(2);
+        result.Should().ContainSingle().Which.SeriesId.Should().Be("RATE");
     }
 }
 

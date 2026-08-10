@@ -4,10 +4,10 @@ using Equibles.Holdings.Repositories;
 namespace Equibles.UnitTests.Holdings;
 
 /// <summary>
-/// Pins NormalizeCikQuery, the fix behind the MCP audit's unresolvable zero-padded CIK
-/// finding: CIKs are stored unpadded but the SEC-canonical form zero-pads them to 10 digits
+/// Pins NormalizeCikQuery, the alternate-spelling helper behind the MCP audit's CIK
+/// finding: CIKs can be stored padded or unpadded while the SEC form is always 10 digits
 /// ('0001067983' is the documented example on GetFundCloneBacktest and the form EDGAR hands
-/// an LLM), so an all-digit query strips its leading zeros before becoming the CIK prefix.
+/// an LLM), so an all-digit query can strip its leading zeros for the alternate CIK prefix.
 /// A non-digit query passes through untouched, and an all-zero query must NOT trim to an
 /// empty prefix — that would turn the CIK pattern into a match-everything '%'.
 /// (The companion largest-first ranking is pinned in the integration suite —

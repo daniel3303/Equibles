@@ -21,4 +21,4 @@ The assistant calls the `GetFundOverlap` tool. It picks the two filers' latest c
 
 A reply with two summary measures plus a side-by-side table. The measures are the Jaccard similarity (the share of stocks the two funds hold in common) and a dollar-weighted overlap (how aligned the portfolios are by position size, not just by name count). The table lists each stock with each fund's shares and the position as a percent of that fund's portfolio, so you can see both what they share and where they diverge.
 
-If the reply says it couldn't compare them, the most likely reasons are that one name didn't match a tracked filer (the tool takes the first match on a partial name — try a more specific name) or the two filers have no 13F report for a common quarter yet. Use large, well-known filers such as Berkshire Hathaway to confirm the data is flowing.
+If a partial name matches several tracked filers, the tool stops and returns candidate CIKs instead of selecting one silently; retry with the intended CIK from `SearchInstitutions`. Other failures mean a name has no match in the tracked filer set or the two filers share no 13F quarter.

@@ -71,7 +71,9 @@ public class InstitutionalHoldingsToolsGetConsensusHoldingsTests : ParadeDbMcpTe
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetConsensusHoldings("Consensus A, Consensus B, Consensus C");
+        var output = await sut.GetConsensusHoldings(
+            "Consensus A LP, Consensus B LP, Consensus C LP"
+        );
 
         output.Should().Contain("Consensus holdings — **3 funds**");
         output.Should().Contain("AAPL");
@@ -116,7 +118,7 @@ public class InstitutionalHoldingsToolsGetConsensusHoldingsTests : ParadeDbMcpTe
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetConsensusHoldings("Filter A, Filter B", minFunds: 2);
+        var output = await sut.GetConsensusHoldings("Filter A LP, Filter B LP", minFunds: 2);
 
         output.Should().Contain("AAPL");
         output.Should().NotContain("NVDA");
@@ -142,7 +144,7 @@ public class InstitutionalHoldingsToolsGetConsensusHoldingsTests : ParadeDbMcpTe
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetConsensusHoldings("Mismatch A, Mismatch B");
+        var output = await sut.GetConsensusHoldings("Mismatch A LP, Mismatch B LP");
 
         output.Should().Contain("share no common report dates");
     }

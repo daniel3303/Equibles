@@ -15,7 +15,7 @@ namespace Equibles.IntegrationTests.Mcp;
 /// <see cref="InstitutionalHoldingsTools"/> has four MCP tools and zero existing
 /// tests. Pins the simplest entry — <c>SearchInstitutions</c> — end-to-end:
 /// a lowercase query must surface institutions via ILike and render the
-/// MCP-formatted markdown table with CIK / City / State columns. A regression
+/// MCP-formatted markdown table with CIK, comparison fields, and location columns. A regression
 /// that swapped the column order or dropped a column would silently break MCP
 /// clients that parse the table by position.
 /// </summary>
@@ -26,17 +26,16 @@ public class InstitutionalHoldingsToolsSearchTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public async Task SearchInstitutions_LowercaseQuery_RendersMarkdownTableWithCikCityState()
+    public async Task SearchInstitutions_LowercaseQuery_RendersComparisonFieldsAndLocation()
     {
-        DbContext.Add(
-            new InstitutionalHolder
-            {
-                Cik = "0001067983",
-                Name = "Berkshire Hathaway Inc.",
-                City = "Omaha",
-                StateOrCountry = "NE",
-            }
-        );
+        var berkshire = new InstitutionalHolder
+        {
+            Cik = "0001067983",
+            Name = "Berkshire Hathaway Inc.",
+            City = "Omaha",
+            StateOrCountry = "NE",
+        };
+        DbContext.Add(berkshire);
         DbContext.Add(
             new InstitutionalHolder
             {
@@ -44,6 +43,18 @@ public class InstitutionalHoldingsToolsSearchTests : ParadeDbMcpTestBase
                 Name = "BlackRock Inc.",
                 City = "New York",
                 StateOrCountry = "NY",
+            }
+        );
+        DbContext.Add(
+            new InstitutionalFiling
+            {
+                AccessionNumber = "acc-berkshire-search",
+                InstitutionalHolderId = berkshire.Id,
+                FilingDate = new DateOnly(2026, 5, 13),
+                ReportDate = new DateOnly(2026, 3, 31),
+                FilingType = FilingType.Form13F,
+                PositionCount = 45,
+                TotalValue = 267_291_000_000L,
             }
         );
         await DbContext.SaveChangesAsync();
@@ -68,8 +79,15 @@ public class InstitutionalHoldingsToolsSearchTests : ParadeDbMcpTestBase
         output.Should().Contain("Berkshire Hathaway Inc.");
         output.Should().NotContain("BlackRock");
         // Pin the header order — MCP clients parse by column position.
-        output.Should().Contain("| Institution | CIK | City | State/Country |");
+        output
+            .Should()
+            .Contain(
+                "| Institution | CIK | Latest Report | Reported AUM | Positions | City | State/Country |"
+            );
         output.Should().Contain("0001067983");
+        output.Should().Contain("2026-03-31");
+        output.Should().Contain("$267,291,000,000");
+        output.Should().Contain("| 45 | Omaha | NE |");
         output.Should().Contain("Omaha");
     }
 }

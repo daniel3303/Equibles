@@ -34,7 +34,7 @@ public class InvestmentAdviserTools
         ReadOnly = true
     )]
     [Description(
-        "Search SEC-registered investment advisers (Form ADV) by firm name. Returns matching advisory firms with their CRD number, main office location, regulatory assets under management, employee count and the as-of date of their latest Form ADV data, largest by assets first. Use the CRD number with GetInvestmentAdviser for full detail."
+        "Search the tracked SEC Form ADV adviser set by firm name. Search first requires every punctuation-independent query word anywhere in the legal or business name, then broadens to any word only when no strict row matches. Returns CRD, main office, regulatory assets under management, employee count and as-of date, largest by assets first. Use the CRD with GetInvestmentAdviser."
     )]
     public Task<string> SearchInvestmentAdvisers(
         [Description(
@@ -61,7 +61,7 @@ public class InvestmentAdviserTools
 
                 var table = MarkdownTable.Render(
                     advisers,
-                    $"No investment advisers found matching \"{query}\".",
+                    $"No match for \"{query}\" in the tracked Form ADV adviser set. This result describes only the tracked set.",
                     $"Investment advisers matching \"{query}\" ({advisers.Count} of {totalMatches} matches shown, largest by assets first):",
                     "| CRD | Name | Location | Regulatory AUM | Employees | As of |",
                     "|-----|------|----------|----------------|-----------|-------|",

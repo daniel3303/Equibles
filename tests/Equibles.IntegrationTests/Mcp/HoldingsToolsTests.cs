@@ -420,7 +420,11 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
     {
         var result = await Sut().GetInstitutionPortfolio("NonExistent");
 
-        result.Should().Be("No institution found matching 'NonExistent'.");
+        result
+            .Should()
+            .Be(
+                "No match for 'NonExistent' in the tracked 13F filer set. Use SearchInstitutions to inspect the tracked set."
+            );
     }
 
     [Fact]
@@ -523,7 +527,11 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().SearchInstitutions("NonExistentFund");
 
-        result.Should().Be("No institutions found matching 'NonExistentFund'.");
+        result
+            .Should()
+            .Be(
+                "No match for 'NonExistentFund' in the tracked 13F filer set. This result describes only tracked filers."
+            );
     }
 
     [Fact]

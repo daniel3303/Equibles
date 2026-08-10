@@ -66,12 +66,61 @@ public class FundDirectoryToolsTests : IDisposable
     }
 
     [Fact]
-    public async Task SearchFunds_NoMatch_ExplainsShareClassTickerGap()
+    public async Task SearchFunds_NoMatch_StatesTrackedDirectoryBoundary()
     {
+        var result = await _tools.SearchFunds("Treasury");
+
+        result
+            .Should()
+            .Contain("No match for 'Treasury' in the tracked Form NPORT-P fund directory");
+        result.Should().Contain("does not assert that the fund does not exist");
+    }
+
+    [Fact]
+    public async Task SearchFunds_TokenOrderAndPunctuationDoNotHaveToMirrorStoredName()
+    {
+        SeedSeries("GRANTHAM, MAYO GLOBAL FUND", "S000010");
+        SeedSeries("GRANTHAM VALUE FUND", "S000011");
+
+        var result = await _tools.SearchFunds("Mayo Grantham");
+
+        result.Should().Contain("GRANTHAM, MAYO GLOBAL FUND");
+        result.Should().NotContain("GRANTHAM VALUE FUND");
+    }
+
+    [Fact]
+    public async Task SearchFunds_NoAllTokenMatch_BroadensToAnyToken()
+    {
+        SeedSeries("GRANTHAM, MAYO GLOBAL FUND", "S000010");
+
+        var result = await _tools.SearchFunds("Current Mayo Grantham");
+
+        result.Should().Contain("GRANTHAM, MAYO GLOBAL FUND");
+    }
+
+    [Fact]
+    public async Task SearchFunds_VerifiedShareClassAlias_ResolvesSecSeries()
+    {
+        SeedSeries("VANGUARD 500 INDEX FUND", "S000002839");
+        SeedSeries("VOO STRATEGY FUND", "S000009999");
+
         var result = await _tools.SearchFunds("VOO");
 
-        result.Should().Contain("No registered funds match 'VOO'");
-        result.Should().Contain("Share-class tickers");
+        result.Should().Contain("VANGUARD 500 INDEX FUND");
+        result.Should().Contain("vanguard-500-index-fund-s000002839");
+        result.Should().NotContain("VOO STRATEGY FUND");
+    }
+
+    [Fact]
+    public async Task SearchFunds_ExactStoredTicker_OutranksVerifiedAlias()
+    {
+        SeedSeries("VANGUARD 500 INDEX FUND", "S000002839");
+        SeedSeries("EXACT VOO FUND", "S000009999", ticker: "VOO");
+
+        var result = await _tools.SearchFunds("VOO");
+
+        result.Should().Contain("EXACT VOO FUND");
+        result.Should().NotContain("VANGUARD 500 INDEX FUND");
     }
 
     [Fact]
@@ -120,7 +169,8 @@ public class FundDirectoryToolsTests : IDisposable
         string name,
         string seriesId,
         decimal netAssets = 1_000_000m,
-        string fundType = null
+        string fundType = null,
+        string ticker = null
     )
     {
         var series = new FundSeries
@@ -130,6 +180,7 @@ public class FundDirectoryToolsTests : IDisposable
             RegistrantCik = "0000999999",
             SeriesId = seriesId,
             SeriesName = name,
+            Ticker = ticker,
             RegistrantName = "ACME TRUST",
             LatestReportPeriodDate = new DateOnly(2026, 3, 31),
             LatestFilingDate = new DateOnly(2026, 5, 15),

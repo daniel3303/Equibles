@@ -64,6 +64,17 @@ public class FormAdvAdviserRepositoryTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task Search_NoAllTokenMatch_BroadensToAnyToken()
+    {
+        await Seed();
+        var sut = new FormAdvAdviserRepository(DbContext);
+
+        var results = await sut.Search("current vanguard").ToListAsync();
+
+        results.Select(a => a.Crd).Should().Equal(100, 200);
+    }
+
+    [Fact]
     public async Task GetByCrd_ReturnsOnlyTheRequestedAdviser()
     {
         await Seed();

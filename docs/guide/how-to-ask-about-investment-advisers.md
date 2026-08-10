@@ -15,7 +15,7 @@ Name a firm:
 - "Look up Vanguard's advisory firm."
 - "Which advisers match 'Bridgewater'?"
 
-The assistant calls the `SearchInvestmentAdvisers` tool and replies with a table of matching firms, largest by regulatory assets under management first. Each row shows the firm name, its **CRD number** (the SEC's unique adviser id), main office location, regulatory assets under management, and employee count.
+The assistant calls `SearchInvestmentAdvisers`, which first requires every punctuation-independent query word somewhere across the SEC legal or business name, then broadens to any word only when no strict row matches. Results are largest by regulatory assets under management first and show the **CRD number** (the SEC's unique adviser id), main office, regulatory AUM, and employee count. A miss means no match in the tracked Form ADV set.
 
 ## Get an adviser's full profile
 

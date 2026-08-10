@@ -142,7 +142,7 @@ public class CongressTools
             {
                 var member = await ResolveMember(memberName.Trim());
                 if (member == null)
-                    return $"Member '{memberName}' not found. Use SearchCongressMembers to find the exact name.";
+                    return $"Member '{memberName}' not found in the tracked congressional roster. Use SearchCongressMembers to inspect the tracked roster and find the exact filed name.";
 
                 var (start, end, rangeError) = ParseTradeDateRange(startDate, endDate);
                 if (rangeError != null)
@@ -219,7 +219,7 @@ public class CongressTools
             {
                 var member = await ResolveMember(memberName.Trim());
                 if (member == null)
-                    return $"Member '{memberName}' not found. Use SearchCongressMembers to find the exact name.";
+                    return $"Member '{memberName}' not found in the tracked congressional roster. Use SearchCongressMembers to inspect the tracked roster and find the exact filed name.";
 
                 var query = _disclosureRepository.GetByMember(member);
                 var totalCount = await query.CountAsync();
@@ -268,7 +268,7 @@ public class CongressTools
         ReadOnly = true
     )]
     [Description(
-        "Search for members of Congress by name. Returns matching members with their position (Senator/Representative). Use this to discover member names before calling the member-specific tools (GetMemberTrades, GetMemberNetWorth) — the returned Name is the exact string they expect."
+        "Search the tracked congressional roster by name. Search first requires every punctuation-independent query word anywhere in the filed name, then broadens to any word only when no strict row matches. Verified public-name aliases such as Dan Crenshaw resolve to the roster name. Returns each match with its position; pass the returned exact Name to GetMemberTrades or GetMemberNetWorth."
     )]
     public Task<string> SearchCongressMembers(
         [Description("Search query — partial or full name (e.g., 'Pelosi', 'Cruz', 'Dan')")]
@@ -298,11 +298,12 @@ public class CongressTools
 
                 var table = MarkdownTable.Render(
                     members,
-                    $"No congress members found matching '{query}'.",
+                    $"No match for '{query}' in the tracked congressional roster. This result describes only the tracked roster.",
                     $"Congress members matching '{query}':",
                     "| Name | Position |",
                     "|------|----------|",
-                    m => $"| {m.Name} | {m.Position.NameForHumans()} |"
+                    m =>
+                        $"| {MarkdownTable.EscapeCell(m.Name, "-")} | {MarkdownTable.EscapeCell(m.Position.NameForHumans(), "-")} |"
                 );
                 return AppendTruncationNote(table, members.Count, totalCount);
             },

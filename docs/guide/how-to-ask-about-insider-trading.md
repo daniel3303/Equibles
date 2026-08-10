@@ -34,7 +34,7 @@ The assistant calls `GetProposedSales` and returns each Form 144 notice — the 
 
 ## Look up a specific insider
 
-- "Find the insider named Cook." — the assistant uses `SearchInsiders` to match insiders by name across every company they have filed for.
+- "Find the insider named Cook." — `SearchInsiders` first requires every whole query word in the SEC-filed legal name, independent of punctuation or order, then broadens to any whole word only when no strict row matches. A token inside a different word is not a match; verified public-name aliases such as Jensen Huang are recognized.
 
 ## What you should see
 

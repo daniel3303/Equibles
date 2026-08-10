@@ -42,4 +42,106 @@ public class FredSeriesRepositorySearchTests : ParadeDbMcpTestBase
         results.Should().ContainSingle();
         results[0].SeriesId.Should().Be("GDP");
     }
+
+    [Theory]
+    [InlineData("fed funds rate", "FEDFUNDS")]
+    [InlineData("jobless claims", "ICSA")]
+    [InlineData("payrolls", "PAYEMS")]
+    [InlineData("yield curve", "T10Y2Y")]
+    [InlineData("core CPI", "CPILFESL")]
+    public async Task Search_StandardMacroVocabulary_ResolvesTrackedSeries(
+        string query,
+        string expectedSeriesId
+    )
+    {
+        DbContext.AddRange(
+            new FredSeries { SeriesId = "FEDFUNDS", Title = "Federal Funds Effective Rate" },
+            new FredSeries { SeriesId = "ICSA", Title = "Initial Claims" },
+            new FredSeries { SeriesId = "PAYEMS", Title = "All Employees, Total Nonfarm" },
+            new FredSeries
+            {
+                SeriesId = "T10Y2Y",
+                Title =
+                    "10-Year Treasury Constant Maturity Minus 2-Year Treasury Constant Maturity",
+            },
+            new FredSeries
+            {
+                SeriesId = "CPILFESL",
+                Title =
+                    "Consumer Price Index for All Urban Consumers: All Items Less Food and Energy",
+            },
+            new FredSeries
+            {
+                SeriesId = "DISTRACTOR",
+                Title = "Fed Funds Rate Jobless Claims Payrolls Yield Curve Core CPI",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var results = await new FredSeriesRepository(verify)
+            .Search(query)
+            .AsNoTracking()
+            .ToListAsync();
+
+        results.Should().ContainSingle().Which.SeriesId.Should().Be(expectedSeriesId);
+    }
+
+    [Fact]
+    public async Task Search_ExactStoredSeriesId_OutranksVerifiedAlias()
+    {
+        DbContext.AddRange(
+            new FredSeries { SeriesId = "PAYROLLS", Title = "Exact stored series" },
+            new FredSeries { SeriesId = "PAYEMS", Title = "All Employees, Total Nonfarm" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var results = await new FredSeriesRepository(verify)
+            .Search("payrolls")
+            .AsNoTracking()
+            .ToListAsync();
+
+        results.Should().ContainSingle().Which.SeriesId.Should().Be("PAYROLLS");
+    }
+
+    [Fact]
+    public async Task Search_NoAllTokenMatch_BroadensToAnyToken()
+    {
+        DbContext.AddRange(
+            new FredSeries { SeriesId = "ICSA", Title = "Initial Claims" },
+            new FredSeries { SeriesId = "UNRATE", Title = "Unemployment Rate" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var results = await new FredSeriesRepository(verify)
+            .Search("current jobless claims")
+            .AsNoTracking()
+            .ToListAsync();
+
+        results.Select(s => s.SeriesId).Should().Contain("ICSA");
+    }
+
+    [Fact]
+    public async Task Search_AllTokenMatchExists_DoesNotIncludeAnyTokenOnlyRows()
+    {
+        DbContext.AddRange(
+            new FredSeries { SeriesId = "STRICT", Title = "Current Claims" },
+            new FredSeries { SeriesId = "ICSA", Title = "Initial Claims" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var results = await new FredSeriesRepository(verify)
+            .Search("current claims")
+            .AsNoTracking()
+            .ToListAsync();
+
+        results.Should().ContainSingle().Which.SeriesId.Should().Be("STRICT");
+    }
 }

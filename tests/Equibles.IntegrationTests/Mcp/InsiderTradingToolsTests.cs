@@ -475,7 +475,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().SearchInsiders("Nonexistent");
 
-        result.Should().Contain("No insiders found matching 'Nonexistent'");
+        result.Should().Contain("No match for 'Nonexistent' in the tracked SEC insider set");
     }
 
     [Fact]
@@ -703,16 +703,13 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task SearchInsiders_NaturalNameMiss_ExplainsFiledNameMatching()
+    public async Task SearchInsiders_PublicNameAlias_ResolvesFiledLegalName()
     {
-        // 'Jensen Huang' finds nothing because the SEC-filed legal name is
-        // 'HUANG JEN HSUN' and every query token must appear in the name. The
-        // empty state must teach the retry (surname alone), not read as "no data".
-        await SeedOwner(CreateOwner(cik: "0000555001", name: "HUANG JEN HSUN"));
+        await SeedOwner(CreateOwner(cik: "0001197649", name: "HUANG JEN HSUN"));
 
         var result = await Sut().SearchInsiders("Jensen Huang");
 
-        result.Should().Contain("No insiders found matching 'Jensen Huang'");
-        result.Should().Contain("retry with the surname alone");
+        result.Should().Contain("HUANG JEN HSUN");
+        result.Should().Contain("0001197649");
     }
 }

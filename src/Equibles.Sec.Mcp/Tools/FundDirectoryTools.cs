@@ -37,11 +37,11 @@ public class FundDirectoryTools
 
     [McpServerTool(Name = "SearchFunds", Title = "Search Funds and ETFs", ReadOnly = true)]
     [Description(
-        "Search the directory of registered investment companies (mutual funds and ETFs) that file SEC Form NPORT-P, by fund name, ticker or registrant. Returns each matching fund series with its profile id (use it with GetFundProfile), ticker (when the fund is itself listed), registration type (from N-CEN, when on record), net assets, number of reported holdings and latest report date, largest funds first. Covers the large multi-series trusts (iShares, Vanguard, Fidelity) that have no ticker of their own. Only a fund's own series-level ticker matches (e.g. IWM, SPY); share-class tickers of multi-class mutual funds (e.g. VOO, VFIAX) are not indexed — search those by fund name instead (e.g. 'Vanguard 500')."
+        "Search the tracked SEC Form NPORT-P fund directory by fund name, ticker, or registrant. Search first requires every punctuation-independent query word anywhere across those fields, then broadens to any word only when no strict row matches. Verified share-class aliases such as VOO and VFIAX resolve to their SEC fund series even when N-PORT carries no class ticker. Returns profile id, ticker when present, registration type, net assets, stored holding count, and latest report date, largest funds first."
     )]
     public Task<string> SearchFunds(
         [Description(
-            "Fund name, ticker or registrant to search for (e.g., 'Russell 2000', 'iShares', 'IWM'). Share-class tickers of multi-class mutual funds (e.g. VOO) do not match — use the fund's name."
+            "Fund name, ticker, registrant, or verified share-class alias (e.g., 'Russell 2000', 'iShares', 'IWM', 'VOO')."
         )]
             string query,
         [Description(
@@ -56,18 +56,11 @@ public class FundDirectoryTools
                 if (string.IsNullOrWhiteSpace(query))
                     return "Provide a fund name, ticker or registrant to search for.";
 
-                var term = query.Trim().ToLower();
-                var allMatches = _fundSeriesRepository
-                    .GetAll()
-                    .Where(f =>
-                        (f.SeriesName != null && f.SeriesName.ToLower().Contains(term))
-                        || (f.RegistrantName != null && f.RegistrantName.ToLower().Contains(term))
-                        || (f.Ticker != null && f.Ticker.ToLower().Contains(term))
-                    );
+                var allMatches = _fundSeriesRepository.Search(query);
 
                 var totalCount = await allMatches.CountAsync();
                 if (totalCount == 0)
-                    return $"No registered funds match '{query}'. Share-class tickers of multi-class mutual funds (e.g. VOO, VFIAX) are not searchable — try the fund's name instead.";
+                    return $"No match for '{query}' in the tracked Form NPORT-P fund directory. This does not assert that the fund does not exist or file with the SEC; try fewer words or list another identifier.";
 
                 var matches = await allMatches
                     .OrderByDescending(f => f.NetAssets)
@@ -87,7 +80,7 @@ public class FundDirectoryTools
                 result.AppendRows(
                     matches,
                     f =>
-                        $"| {f.SeriesName ?? f.RegistrantName ?? "-"} | {f.Slug} | {f.Ticker ?? "-"} | {FundCodes.RegistrationType(f.FundType)} | ${FormatAmount(f.NetAssets)} | {f.PositionCount} | {f.LatestReportPeriodDate:yyyy-MM-dd} |"
+                        $"| {MarkdownTable.EscapeCell(f.SeriesName ?? f.RegistrantName, "-")} | {MarkdownTable.EscapeCell(f.Slug, "-")} | {MarkdownTable.EscapeCell(f.Ticker, "-")} | {MarkdownTable.EscapeCell(FundCodes.RegistrationType(f.FundType), "-")} | ${FormatAmount(f.NetAssets)} | {f.PositionCount} | {f.LatestReportPeriodDate:yyyy-MM-dd} |"
                 );
 
                 TruncationNotes.Append(result, matches.Count, totalCount);

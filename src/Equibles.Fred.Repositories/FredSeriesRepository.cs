@@ -10,7 +10,11 @@ public class FredSeriesRepository : BaseRepository<FredSeries>
 
     public IQueryable<FredSeries> GetBySeriesId(string seriesId)
     {
-        return GetAll().Where(s => s.SeriesId == seriesId);
+        var canonical = seriesId?.Trim().ToUpperInvariant();
+        var alias = FredSeriesSearchAliases.Resolve(seriesId);
+        return GetAll()
+            .Where(s => s.SeriesId == canonical || (alias != null && s.SeriesId == alias))
+            .OrderBy(s => s.SeriesId == canonical ? 0 : 1);
     }
 
     public IQueryable<FredSeries> GetByCategory(FredSeriesCategory category)
@@ -20,22 +24,49 @@ public class FredSeriesRepository : BaseRepository<FredSeries>
 
     public IQueryable<FredSeries> Search(string query)
     {
-        var lower = (query ?? string.Empty).Trim().ToLower();
-        if (lower.Length == 0)
-            return GetAll();
+        var tokens = SearchTerms.Tokenize(query);
+        if (tokens.Count == 0)
+            return string.IsNullOrWhiteSpace(query) ? GetAll() : GetAll().Where(_ => false);
 
-        // Category-name matches widen recall: "inflation" must return the whole
-        // Inflation category (CPI, PCE, PPI, breakevens), not only the titles that
-        // happen to contain the word. Matched categories are computed client-side
-        // (the universe is a fixed enum) so the EF query stays a translatable
-        // Contains over SeriesId/Title plus a constant category list.
-        var matchedCategories = MatchCategories(lower);
-        return GetAll()
-            .Where(s =>
-                s.SeriesId.ToLower().Contains(lower)
-                || s.Title.ToLower().Contains(lower)
+        // Every natural-language token may occur anywhere in the id/title/category;
+        // punctuation and word order no longer have to mirror the stored title. If no row
+        // satisfies every token or an exact alias, the composable query broadens to any token.
+        // Category matches stay client-derived constants so each loop is translatable.
+        var matches = GetAll();
+        var anyTokenMatches = GetAll().Where(_ => false);
+        foreach (var token in tokens)
+        {
+            var matchedCategories = MatchCategories(token);
+            matches = matches.Where(s =>
+                s.SeriesId.ToLower().Contains(token)
+                || s.Title.ToLower().Contains(token)
                 || matchedCategories.Contains(s.Category)
             );
+            anyTokenMatches = anyTokenMatches.Concat(
+                GetAll()
+                    .Where(s =>
+                        s.SeriesId.ToLower().Contains(token)
+                        || s.Title.ToLower().Contains(token)
+                        || matchedCategories.Contains(s.Category)
+                    )
+            );
+        }
+
+        // Exact stored ids and the small verified vocabulary are authoritative resolution
+        // tiers. Ordinary token matches apply only when neither tier resolves a tracked row.
+        var canonical = query.Trim().ToUpperInvariant();
+        var exactIdentifier = GetAll().Where(s => s.SeriesId == canonical);
+        var aliasId = FredSeriesSearchAliases.Resolve(query);
+        var verifiedAlias =
+            aliasId == null
+                ? GetAll().Where(_ => false)
+                : GetAll().Where(s => s.SeriesId == aliasId);
+        return SearchTerms.WithExclusiveResolutionTiers(
+            exactIdentifier,
+            verifiedAlias,
+            matches,
+            anyTokenMatches
+        );
     }
 
     // A category matches when its name contains the query ("inflation" -> Inflation,
@@ -59,4 +90,27 @@ public class FredSeriesRepository : BaseRepository<FredSeries>
 
     private static string NormalizeForCategoryMatch(string text) =>
         new(text.Where(char.IsLetterOrDigit).ToArray());
+}
+
+internal static class FredSeriesSearchAliases
+{
+    private static readonly IReadOnlyDictionary<string, string> SeriesIds = new Dictionary<
+        string,
+        string
+    >(StringComparer.OrdinalIgnoreCase)
+    {
+        ["fed funds rate"] = "FEDFUNDS",
+        ["federal funds rate"] = "FEDFUNDS",
+        ["jobless claims"] = "ICSA",
+        ["initial jobless claims"] = "ICSA",
+        ["payrolls"] = "PAYEMS",
+        ["nonfarm payrolls"] = "PAYEMS",
+        ["non farm payrolls"] = "PAYEMS",
+        ["yield curve"] = "T10Y2Y",
+        ["treasury yield curve"] = "T10Y2Y",
+        ["core cpi"] = "CPILFESL",
+    };
+
+    public static string Resolve(string query) =>
+        SeriesIds.GetValueOrDefault(SearchTerms.Normalize(query));
 }

@@ -287,7 +287,7 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 - GetTopHolders — top institutional holders of a stock (13F-HR)
 - GetOwnershipHistory — institutional ownership trend across quarters
 - GetInstitutionPortfolio — an institution's 13F portfolio
-- SearchInstitutions — search institutions by name or CIK
+- SearchInstitutions — strict-first tokenized name/CIK search with filing date, 13F AUM, and position count
 - GetTopBuyersSellers — biggest adds/reductions on a stock this quarter
 - GetMarketWide13FActivity — market-wide 13F leaderboards
 - GetMostHeldStocks — stocks by institutional breadth
@@ -302,7 +302,7 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 - GetInsiderTransactions — insider transactions from Form 3/4/5
 - GetInsiderOwnership — insider ownership ranked by shares
 - GetProposedSales — proposed sales from Form 144
-- SearchInsiders — search insiders by name
+- SearchInsiders — strict-first whole-word filed-name search with verified public-name aliases
 
 **SEC filings search**
 
@@ -315,14 +315,14 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 
 **Funds, ETFs & advisers**
 
-- SearchInvestmentAdvisers — search advisers (Form ADV)
+- SearchInvestmentAdvisers — strict-first tokenized adviser-name search (Form ADV)
 - GetInvestmentAdviser — ADV profile by CRD
 - GetFundOperations — fund ops from N-CEN
 - GetFundHoldings — fund holdings from NPORT-P
 - GetFundsHoldingStock — funds holding a stock
 - GetExemptOfferings — private placements (Form D)
 - GetFailsToDeliver — SEC FTD data
-- SearchFunds — search registered funds/ETFs
+- SearchFunds — strict-first tokenized fund/registrant/ticker search with verified share-class aliases
 - GetFundProfile — fund profile + largest holdings
 
 **Fundamentals (XBRL)**
@@ -336,14 +336,14 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 
 - GetEconomicIndicator — a FRED series
 - GetLatestEconomicData — latest values by category
-- SearchEconomicIndicators — search curated series
+- SearchEconomicIndicators — strict-first tokenized curated-series search with standard macro aliases
 - GetEconomicCalendar — US macro release calendar
 
 **Futures (CFTC COT)**
 
 - GetCftcPositioning — COT positioning for a contract
 - GetLatestCftcData — latest COT snapshot
-- SearchCftcMarkets — search tracked contracts
+- SearchCftcMarkets — strict-first tokenized search by name, code, or standard futures symbol
 
 **Volatility (CBOE)**
 
@@ -359,7 +359,7 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 - GetCongressionalTrades — trades for a ticker
 - GetMemberTrades — a member's trades
 - GetMemberNetWorth — member net worth history
-- SearchCongressMembers — search members
+- SearchCongressMembers — strict-first tokenized roster search with verified public-name aliases
 
 **Short data (FINRA)**
 

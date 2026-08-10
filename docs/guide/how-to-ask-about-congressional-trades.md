@@ -23,7 +23,7 @@ To follow one member instead of one stock:
 - "What has Nancy Pelosi been trading?"
 - "Show me Tommy Tuberville's recent securities transactions."
 
-The assistant uses `GetMemberTrades` for that member, listing each transaction with its ticker, filed Asset instrument, transaction type, and amount. If it needs to confirm the exact name first, it calls `SearchCongressMembers` to look the member up.
+The assistant uses `GetMemberTrades` for that member, listing each transaction with its ticker, filed Asset instrument, transaction type, and amount. `SearchCongressMembers` tries all name tokens first, broadens to any token only when no strict row matches, and recognizes verified public-name aliases such as Dan Crenshaw → Daniel Crenshaw.
 
 ## What you should see
 
