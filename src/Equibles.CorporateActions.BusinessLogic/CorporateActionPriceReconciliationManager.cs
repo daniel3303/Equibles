@@ -290,7 +290,9 @@ public class CorporateActionPriceReconciliationManager
             .Where(split =>
                 split.CommonStockId == selectedSeries.CommonStockId
                 && split.PriceSeriesTicker == selectedSeries.ListedTicker
-                && split.PriceAdjustmentAppliedTime == null
+                // Keep the selection and stamping predicates identical so a legacy premature
+                // marker can be replaced with a post-effective marker after the provider fetch.
+                && !split.IsPriceAdjustmentApplied()
             )
             .Where(split =>
             {

@@ -174,6 +174,66 @@ public class CorporateActionPriceReconciliationManagerSelectionTests
         series.Dividends.Should().ContainSingle();
     }
 
+    [Theory]
+    [InlineData(10)]
+    [InlineData(12)]
+    public async Task SelectPendingSeries_PrematurelyStampedSplit_RequeuesAfterEffectiveDate(
+        int appliedDay
+    )
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var effectiveDate = new DateOnly(2026, 8, 12);
+        db.Add(Stock(stockId));
+        var split = PendingSplit(stockId, effectiveDate);
+        split.PriceAdjustmentAppliedTime = new DateTime(
+            2026,
+            8,
+            appliedDay,
+            12,
+            0,
+            0,
+            DateTimeKind.Utc
+        );
+        db.Add(split);
+        await db.SaveChangesAsync();
+
+        var manager = NewManager(db);
+
+        (await manager.SelectPendingSeries(50, effectiveDate)).Series.Should().BeEmpty();
+        var selected = (await manager.SelectPendingSeries(50, effectiveDate.AddDays(1)))
+            .Series.Should()
+            .ContainSingle()
+            .Which;
+
+        var correctedAppliedTime = new DateTime(2026, 8, 13, 12, 0, 0, DateTimeKind.Utc);
+        (await manager.StampApplied(selected, correctedAppliedTime)).Should().Be(1);
+        split.PriceAdjustmentAppliedTime.Should().Be(correctedAppliedTime);
+        (await manager.SelectPendingSeries(50, effectiveDate.AddDays(1))).Series.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SplitPendingPredicate_TranslatesForNpgsql()
+    {
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
+            .UseNpgsql("Host=localhost;Database=translation-only")
+            .EnableServiceProviderCaching(false)
+            .Options;
+        using var db = new EquiblesFinancialDbContext(
+            options,
+            new IModuleConfiguration[]
+            {
+                new CommonStocksModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
+            }
+        );
+
+        var sql = new StockSplitRepository(db).GetPendingPriceAdjustment().ToQueryString();
+
+        sql.Should().Contain("AT TIME ZONE 'UTC' AS date");
+        sql.Should().Contain("\"EffectiveDate\"");
+    }
+
     [Fact]
     public async Task SelectPendingSeries_IgnoresActionsWhoseAppliedSnapshotStillMatches()
     {

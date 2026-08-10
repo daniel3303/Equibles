@@ -17,7 +17,14 @@ public class StockSplitRepository : BaseRepository<StockSplit>
 
     public IQueryable<StockSplit> GetPendingPriceAdjustment()
     {
-        return GetAll().Where(s => s.PriceAdjustmentAppliedTime == null);
+        // SQL-translatable mirror of StockSplit.IsPriceAdjustmentApplied: a marker written on or
+        // before the effective date came from the old worker, which could stamp a future split.
+        return GetAll()
+            .Where(split =>
+                split.PriceAdjustmentAppliedTime == null
+                || DateOnly.FromDateTime(split.PriceAdjustmentAppliedTime.Value)
+                    <= split.EffectiveDate
+            );
     }
 
     /// <summary>
