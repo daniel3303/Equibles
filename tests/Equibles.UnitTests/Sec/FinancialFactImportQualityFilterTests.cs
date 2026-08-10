@@ -9,6 +9,16 @@ public class FinancialFactImportQualityFilterTests
 {
     private static readonly Guid StockId = Guid.NewGuid();
     private static readonly Guid ConceptId = Guid.NewGuid();
+    private static readonly Guid ProfitLossConceptId = Guid.NewGuid();
+    private static readonly Guid OperatingIncomeConceptId = Guid.NewGuid();
+
+    private static readonly IReadOnlyDictionary<(FactTaxonomy, string), Guid> ConceptIds =
+        new Dictionary<(FactTaxonomy, string), Guid>
+        {
+            [(FactTaxonomy.UsGaap, "NetIncomeLoss")] = ConceptId,
+            [(FactTaxonomy.UsGaap, "ProfitLoss")] = ProfitLossConceptId,
+            [(FactTaxonomy.UsGaap, "OperatingIncomeLoss")] = OperatingIncomeConceptId,
+        };
 
     [Fact]
     public void Apply_AmendmentExactlyOneThousandTimesPriorAnnualAndCorroboratedByQuarters_RejectsAmendment()
@@ -58,7 +68,8 @@ public class FinancialFactImportQualityFilterTests
         };
 
         var result = FinancialFactImportQualityFilter.Apply(
-            new[] { original, corruptAmendment }.Concat(quarters).ToList()
+            new[] { original, corruptAmendment }.Concat(quarters).ToList(),
+            ConceptIds
         );
 
         result.Rejected.Should().ContainSingle().Which.Should().BeSameAs(corruptAmendment);
@@ -86,7 +97,7 @@ public class FinancialFactImportQualityFilterTests
             "amendment"
         );
 
-        var result = FinancialFactImportQualityFilter.Apply([original, later]);
+        var result = FinancialFactImportQualityFilter.Apply([original, later], ConceptIds);
 
         result.Rejected.Should().BeEmpty();
         result.Accepted.Should().Equal(original, later);
@@ -112,7 +123,7 @@ public class FinancialFactImportQualityFilterTests
             "proxy"
         );
 
-        var result = FinancialFactImportQualityFilter.Apply([tenK, proxy]);
+        var result = FinancialFactImportQualityFilter.Apply([tenK, proxy], ConceptIds);
 
         result.Rejected.Should().ContainSingle().Which.Should().BeSameAs(proxy);
         result.Accepted.Should().ContainSingle().Which.Should().BeSameAs(tenK);
@@ -130,10 +141,127 @@ public class FinancialFactImportQualityFilterTests
             "proxy"
         );
 
-        var result = FinancialFactImportQualityFilter.Apply([proxy]);
+        var result = FinancialFactImportQualityFilter.Apply([proxy], ConceptIds);
 
         result.Rejected.Should().BeEmpty();
         result.Accepted.Should().ContainSingle().Which.Should().BeSameAs(proxy);
+    }
+
+    [Fact]
+    public void Apply_AmendmentCorroboratedByAliasConceptQuarters_RejectsAmendment()
+    {
+        var original = Fact(
+            new DateOnly(2022, 1, 1),
+            new DateOnly(2022, 12, 31),
+            -142_181_000m,
+            DocumentType.TenK,
+            new DateOnly(2023, 3, 7),
+            "original"
+        );
+        var corruptAmendment = Fact(
+            original.PeriodStart,
+            original.PeriodEnd,
+            -142_181_000_000m,
+            DocumentType.TenKa,
+            new DateOnly(2026, 4, 17),
+            "amendment"
+        );
+        var aliasQuarters = new[]
+        {
+            Fact(
+                new DateOnly(2022, 1, 1),
+                new DateOnly(2022, 3, 31),
+                -35_000_000m,
+                DocumentType.TenQ,
+                new DateOnly(2022, 5, 1),
+                "q1",
+                ProfitLossConceptId
+            ),
+            Fact(
+                new DateOnly(2022, 4, 1),
+                new DateOnly(2022, 6, 30),
+                -45_000_000m,
+                DocumentType.TenQ,
+                new DateOnly(2022, 8, 1),
+                "q2",
+                ProfitLossConceptId
+            ),
+            Fact(
+                new DateOnly(2022, 7, 1),
+                new DateOnly(2022, 9, 30),
+                -40_000_000m,
+                DocumentType.TenQ,
+                new DateOnly(2022, 11, 1),
+                "q3",
+                ProfitLossConceptId
+            ),
+        };
+
+        var result = FinancialFactImportQualityFilter.Apply(
+            new[] { original, corruptAmendment }.Concat(aliasQuarters).ToList(),
+            ConceptIds
+        );
+
+        result.Rejected.Should().ContainSingle().Which.Should().BeSameAs(corruptAmendment);
+    }
+
+    [Fact]
+    public void Apply_AmendmentWithUnrelatedConceptQuarters_KeepsAmendment()
+    {
+        var original = Fact(
+            new DateOnly(2022, 1, 1),
+            new DateOnly(2022, 12, 31),
+            -142_181_000m,
+            DocumentType.TenK,
+            new DateOnly(2023, 3, 7),
+            "original"
+        );
+        var corruptAmendment = Fact(
+            original.PeriodStart,
+            original.PeriodEnd,
+            -142_181_000_000m,
+            DocumentType.TenKa,
+            new DateOnly(2026, 4, 17),
+            "amendment"
+        );
+        var unrelatedQuarters = new[]
+        {
+            Fact(
+                new DateOnly(2022, 1, 1),
+                new DateOnly(2022, 3, 31),
+                -35_000_000m,
+                DocumentType.TenQ,
+                new DateOnly(2022, 5, 1),
+                "q1",
+                OperatingIncomeConceptId
+            ),
+            Fact(
+                new DateOnly(2022, 4, 1),
+                new DateOnly(2022, 6, 30),
+                -45_000_000m,
+                DocumentType.TenQ,
+                new DateOnly(2022, 8, 1),
+                "q2",
+                OperatingIncomeConceptId
+            ),
+            Fact(
+                new DateOnly(2022, 7, 1),
+                new DateOnly(2022, 9, 30),
+                -40_000_000m,
+                DocumentType.TenQ,
+                new DateOnly(2022, 11, 1),
+                "q3",
+                OperatingIncomeConceptId
+            ),
+        };
+
+        var result = FinancialFactImportQualityFilter.Apply(
+            new[] { original, corruptAmendment }.Concat(unrelatedQuarters).ToList(),
+            ConceptIds
+        );
+
+        result.Rejected.Should().BeEmpty();
+        result.Accepted.Should().Contain(corruptAmendment);
     }
 
     private static FinancialFact Fact(
@@ -142,12 +270,13 @@ public class FinancialFactImportQualityFilterTests
         decimal value,
         DocumentType form,
         DateOnly filed,
-        string accession
+        string accession,
+        Guid? conceptId = null
     ) =>
         new()
         {
             CommonStockId = StockId,
-            FinancialConceptId = ConceptId,
+            FinancialConceptId = conceptId ?? ConceptId,
             Unit = "USD",
             PeriodType = FactPeriodType.Duration,
             PeriodStart = start,

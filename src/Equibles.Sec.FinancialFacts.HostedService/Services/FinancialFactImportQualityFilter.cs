@@ -2,6 +2,7 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.Sec.FinancialFacts.HostedService.Services;
 
@@ -23,13 +24,22 @@ internal static class FinancialFactImportQualityFilter
 
     private static readonly decimal[] SuspectScaleFactors = [1_000m, 1_000_000m];
 
-    internal static FilterResult Apply(IReadOnlyCollection<FinancialFact> facts)
+    internal static FilterResult Apply(
+        IReadOnlyCollection<FinancialFact> facts,
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIds
+    )
     {
         var rejected = new HashSet<FinancialFact>();
+        var aliasFamilies = BuildAliasFamilies(conceptIds);
 
         foreach (
             var series in facts.GroupBy(f =>
-                (f.CommonStockId, f.FinancialConceptId, f.Unit, f.DimensionsKey)
+                (
+                    f.CommonStockId,
+                    ConceptFamily(f.FinancialConceptId, aliasFamilies),
+                    f.Unit,
+                    f.DimensionsKey
+                )
             )
         )
         {
@@ -69,6 +79,66 @@ internal static class FinancialFactImportQualityFilter
         );
     }
 
+    private static IReadOnlyDictionary<Guid, Guid> BuildAliasFamilies(
+        IReadOnlyDictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIds
+    )
+    {
+        var neighbours = new Dictionary<Guid, HashSet<Guid>>();
+        foreach (var alias in FinancialConceptAliases.SupportedAliases)
+        {
+            if (!FinancialConceptAliases.TryResolve(alias, out var concepts))
+                continue;
+
+            var ids = concepts
+                .Select(c => conceptIds.GetValueOrDefault((c.Taxonomy, c.Tag)))
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+            if (ids.Count < 2)
+                continue;
+
+            var first = ids[0];
+            foreach (var id in ids)
+            {
+                neighbours.TryAdd(id, []);
+                neighbours[id].Add(first);
+                neighbours[first].Add(id);
+            }
+        }
+
+        var familyByConcept = new Dictionary<Guid, Guid>();
+        foreach (var conceptId in neighbours.Keys)
+        {
+            if (familyByConcept.ContainsKey(conceptId))
+                continue;
+
+            var component = new List<Guid>();
+            var pending = new Stack<Guid>();
+            pending.Push(conceptId);
+            while (pending.TryPop(out var current))
+            {
+                if (familyByConcept.ContainsKey(current))
+                    continue;
+
+                familyByConcept[current] = Guid.Empty;
+                component.Add(current);
+                foreach (var neighbour in neighbours[current])
+                    pending.Push(neighbour);
+            }
+
+            var familyId = component.Min();
+            foreach (var member in component)
+                familyByConcept[member] = familyId;
+        }
+
+        return familyByConcept;
+    }
+
+    private static Guid ConceptFamily(
+        Guid conceptId,
+        IReadOnlyDictionary<Guid, Guid> aliasFamilies
+    ) => aliasFamilies.GetValueOrDefault(conceptId, conceptId);
+
     private static bool HasCorroboratedScaleError(
         FinancialFact candidate,
         IReadOnlyCollection<FinancialFact> series
@@ -88,8 +158,10 @@ internal static class FinancialFactImportQualityFilter
                 && FinancialFactSourcePriority.Rank(f.Form) == 0
                 && f.Value != 0
             )
-            .OrderByDescending(f => f.FiledDate)
+            .OrderBy(f => f.FinancialConceptId == candidate.FinancialConceptId ? 0 : 1)
+            .ThenByDescending(f => f.FiledDate)
             .ThenByDescending(f => f.AccessionNumber)
+            .ThenBy(f => f.FinancialConceptId)
             .ToList();
         if (earlierAnnuals.Count == 0)
             return false;
@@ -104,9 +176,11 @@ internal static class FinancialFactImportQualityFilter
             )
             .GroupBy(f => (f.PeriodStart, f.PeriodEnd))
             .Select(g =>
-                g.OrderBy(f => FinancialFactSourcePriority.Rank(f.Form))
+                g.OrderBy(f => f.FinancialConceptId == candidate.FinancialConceptId ? 0 : 1)
+                    .ThenBy(f => FinancialFactSourcePriority.Rank(f.Form))
                     .ThenByDescending(f => f.FiledDate)
                     .ThenByDescending(f => f.AccessionNumber)
+                    .ThenBy(f => f.FinancialConceptId)
                     .First()
             )
             .ToList();
