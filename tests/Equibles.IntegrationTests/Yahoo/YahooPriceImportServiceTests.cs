@@ -80,7 +80,10 @@ public class YahooPriceImportServiceTests : IDisposable
                 typeof(StockSplitCaptureManager),
                 new StockSplitCaptureManager(_splitRepo, _stockRepo)
             ),
-            (typeof(CashDividendCaptureManager), new CashDividendCaptureManager(_dividendRepo))
+            (
+                typeof(CashDividendCaptureManager),
+                new CashDividendCaptureManager(_dividendRepo, _stockRepo)
+            )
         );
 
         var tickerMapService = new TickerMapService(scopeFactory);
