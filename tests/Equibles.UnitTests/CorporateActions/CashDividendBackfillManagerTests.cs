@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
@@ -8,6 +9,7 @@ using Equibles.Data;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using NSubstitute;
 
 namespace Equibles.UnitTests.CorporateActions;
@@ -25,6 +27,7 @@ public class CashDividendBackfillManagerTests
         var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         var ctx = new EquiblesFinancialDbContext(
             options,
@@ -41,7 +44,22 @@ public class CashDividendBackfillManagerTests
     private static CashDividendBackfillManager NewManager(
         EquiblesFinancialDbContext db,
         IYahooFinanceClient yahooClient
-    ) => new(yahooClient, new CashDividendCaptureManager(new CashDividendRepository(db)));
+    ) =>
+        new(
+            yahooClient,
+            new CashDividendCaptureManager(
+                new CashDividendRepository(db),
+                new CommonStockRepository(db)
+            )
+        );
+
+    private static async Task<CommonStock> AddStock(EquiblesFinancialDbContext db)
+    {
+        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        db.Add(stock);
+        await db.SaveChangesAsync();
+        return stock;
+    }
 
     private static IYahooFinanceClient ClientReturning(params CashDividendEvent[] dividends)
     {
@@ -56,7 +74,7 @@ public class CashDividendBackfillManagerTests
     public async Task BackfillHistory_RequestsOneChartCoveringSinceThroughToday()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        var stock = await AddStock(db);
         var since = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-730);
         var client = ClientReturning();
 
@@ -74,7 +92,7 @@ public class CashDividendBackfillManagerTests
     public async Task BackfillHistory_UpsertsReturnedDividendsAsYahooSourced()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        var stock = await AddStock(db);
         var client = ClientReturning(
             new CashDividendEvent { Date = new DateOnly(2024, 2, 9), Amount = 0.24m },
             new CashDividendEvent { Date = new DateOnly(2024, 5, 9), Amount = 0.25m }
@@ -98,7 +116,7 @@ public class CashDividendBackfillManagerTests
     public async Task BackfillHistory_Rerun_IsIdempotentAndWritesNothing()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        var stock = await AddStock(db);
         var client = ClientReturning(
             new CashDividendEvent { Date = new DateOnly(2024, 2, 9), Amount = 0.24m }
         );
@@ -116,7 +134,7 @@ public class CashDividendBackfillManagerTests
     public async Task BackfillHistory_NoDividendsInWindow_WritesNothingAndReturnsZero()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        var stock = await AddStock(db);
 
         var captured = await NewManager(db, ClientReturning())
             .BackfillHistory(
@@ -133,7 +151,7 @@ public class CashDividendBackfillManagerTests
     public async Task BackfillHistory_AlreadyCancelled_ThrowsWithoutFetching()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        var stock = await AddStock(db);
         var client = ClientReturning();
         using var cts = new CancellationTokenSource();
         cts.Cancel();

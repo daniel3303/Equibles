@@ -1,19 +1,20 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Equibles.UnitTests.CorporateActions;
 
 /// <summary>
 /// Pins the upsert contract of <see cref="CashDividendCaptureManager"/>, mirroring the split
-/// capture manager: idempotent by (stock, ExDate) — a re-run with the same events writes nothing —
-/// a restated amount for an existing ex-date is updated in place, and a non-positive amount is
-/// dropped as unusable.
+/// capture manager: the exact current primary is locked and revalidated, idempotent events write
+/// nothing, a restated amount updates in place, and a non-positive amount is dropped as unusable.
 /// </summary>
 public class CashDividendCaptureManagerTests
 {
@@ -22,6 +23,7 @@ public class CashDividendCaptureManagerTests
         var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .EnableServiceProviderCaching(false)
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         var ctx = new EquiblesFinancialDbContext(
             options,
@@ -33,6 +35,20 @@ public class CashDividendCaptureManagerTests
         );
         ctx.Database.EnsureCreated();
         return ctx;
+    }
+
+    private static CashDividendCaptureManager NewManager(EquiblesFinancialDbContext context) =>
+        new(new CashDividendRepository(context), new CommonStockRepository(context));
+
+    private static async Task<CommonStock> AddStock(
+        EquiblesFinancialDbContext context,
+        string ticker = "AAPL"
+    )
+    {
+        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = ticker };
+        context.Add(stock);
+        await context.SaveChangesAsync();
+        return stock;
     }
 
     private static CapturedDividend Dividend(DateOnly exDate, decimal amount) =>
@@ -47,11 +63,12 @@ public class CashDividendCaptureManagerTests
     public async Task Capture_NewDividends_InsertsOneRowPerExDate()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid() };
-        var manager = new CashDividendCaptureManager(new CashDividendRepository(db));
+        var stock = await AddStock(db);
+        var manager = NewManager(db);
 
         var changes = await manager.Capture(
-            stock,
+            stock.Id,
+            stock.Ticker,
             [Dividend(new DateOnly(2024, 2, 9), 0.24m), Dividend(new DateOnly(2024, 5, 9), 0.25m)]
         );
 
@@ -68,13 +85,11 @@ public class CashDividendCaptureManagerTests
     public async Task Capture_SameEventsRerun_IsIdempotentAndWritesNothing()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid() };
+        var stock = await AddStock(db);
         var events = new[] { Dividend(new DateOnly(2024, 2, 9), 0.24m) };
 
-        await new CashDividendCaptureManager(new CashDividendRepository(db)).Capture(stock, events);
-        var secondPass = await new CashDividendCaptureManager(
-            new CashDividendRepository(db)
-        ).Capture(stock, events);
+        await NewManager(db).Capture(stock.Id, stock.Ticker, events);
+        var secondPass = await NewManager(db).Capture(stock.Id, stock.Ticker, events);
 
         secondPass.Should().Be(0);
         (await new CashDividendRepository(db).GetByStock(stock.Id).CountAsync()).Should().Be(1);
@@ -84,21 +99,16 @@ public class CashDividendCaptureManagerTests
     public async Task Capture_RestatedAmountForExistingExDate_UpdatesInPlace()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid() };
+        var stock = await AddStock(db);
         var exDate = new DateOnly(2024, 2, 9);
 
-        await new CashDividendCaptureManager(new CashDividendRepository(db)).Capture(
-            stock,
-            [Dividend(exDate, 0.24m)]
-        );
+        await NewManager(db).Capture(stock.Id, stock.Ticker, [Dividend(exDate, 0.24m)]);
         var original = await db.Set<CashDividend>().SingleAsync();
         original.PriceAdjustmentAppliedAmountPerShare = original.AmountPerShare;
         original.PriceAdjustmentAppliedTime = DateTime.UtcNow;
         await db.SaveChangesAsync();
-        var changes = await new CashDividendCaptureManager(new CashDividendRepository(db)).Capture(
-            stock,
-            [Dividend(exDate, 0.26m)]
-        );
+        var changes = await NewManager(db)
+            .Capture(stock.Id, stock.Ticker, [Dividend(exDate, 0.26m)]);
 
         changes.Should().Be(1);
         var stored = await new CashDividendRepository(db).GetByStock(stock.Id).ToListAsync();
@@ -112,11 +122,12 @@ public class CashDividendCaptureManagerTests
     public async Task Capture_NonPositiveAmount_IsDropped()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid() };
-        var manager = new CashDividendCaptureManager(new CashDividendRepository(db));
+        var stock = await AddStock(db);
+        var manager = NewManager(db);
 
         var changes = await manager.Capture(
-            stock,
+            stock.Id,
+            stock.Ticker,
             [Dividend(new DateOnly(2024, 2, 9), 0m), Dividend(new DateOnly(2024, 5, 9), -0.1m)]
         );
 
@@ -125,13 +136,40 @@ public class CashDividendCaptureManagerTests
     }
 
     [Fact]
+    public async Task Capture_StalePrimaryTargetAfterReorder_DoesNotWriteIssuerAction()
+    {
+        await using var db = NewDb();
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "GOOG",
+            SecondaryTickers = ["GOOGL"],
+        };
+        db.Add(stock);
+        await db.SaveChangesAsync();
+
+        // The fetch originally saw GOOGL as primary. By the write boundary it is secondary, so
+        // the issuer-level dividend must be skipped rather than attached to GOOG's price series.
+        var staleWrite = await NewManager(db)
+            .Capture(stock.Id, "GOOGL", [Dividend(new DateOnly(2024, 2, 9), 0.24m)]);
+
+        staleWrite.Should().Be(0);
+        (await db.Set<CashDividend>().ToListAsync()).Should().BeEmpty();
+
+        var currentWrite = await NewManager(db)
+            .Capture(stock.Id, "GOOG", [Dividend(new DateOnly(2024, 2, 9), 0.24m)]);
+
+        currentWrite.Should().Be(1);
+        (await db.Set<CashDividend>().SingleAsync()).CommonStockId.Should().Be(stock.Id);
+    }
+
+    [Fact]
     public async Task Capture_NullOrEmpty_ReturnsZero()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid() };
-        var manager = new CashDividendCaptureManager(new CashDividendRepository(db));
+        var manager = NewManager(db);
 
-        (await manager.Capture(stock, null)).Should().Be(0);
-        (await manager.Capture(stock, [])).Should().Be(0);
+        (await manager.Capture(Guid.NewGuid(), "AAPL", null)).Should().Be(0);
+        (await manager.Capture(Guid.NewGuid(), "AAPL", [])).Should().Be(0);
     }
 }

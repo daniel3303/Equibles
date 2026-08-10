@@ -1276,21 +1276,13 @@ public class YahooPriceImportService
             .ToList();
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-        await using var transaction = await stockRepo.CreateTransaction(
-            IsolationLevel.ReadCommitted,
+        var captureManager = scope.ServiceProvider.GetRequiredService<CashDividendCaptureManager>();
+        var count = await captureManager.Capture(
+            target.CommonStockId,
+            target.Ticker,
+            captured,
             cancellationToken
         );
-        var lockedSeries = await LockPriceSeries(stockRepo, target, cancellationToken);
-        if (lockedSeries is not { IsPrimary: true })
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            return;
-        }
-
-        var captureManager = scope.ServiceProvider.GetRequiredService<CashDividendCaptureManager>();
-        var count = await captureManager.Capture(lockedSeries.Value.Stock, captured);
-        await transaction.CommitAsync(cancellationToken);
         if (count > 0)
             _logger.LogInformation(
                 "Captured {Count} cash dividend(s) for {Ticker} on {StockId}",

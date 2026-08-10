@@ -120,7 +120,8 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     /// <summary>
     /// Loads and locks one stock until the caller's current transaction completes. Writers that
     /// key data by an authoritative listed ticker use this immediately before saving, so company
-    /// sync cannot change ticker ownership between validation and the write.
+    /// sync cannot change ticker ownership between validation and the write. An unchanged tracked
+    /// snapshot is refreshed after the lock; pending changes are rejected rather than discarded.
     /// </summary>
     public async Task<CommonStock> GetForUpdate(
         Guid commonStockId,
@@ -136,11 +137,30 @@ public class CommonStockRepository : BaseRepository<CommonStock>
         if (DbContext.Database.CurrentTransaction == null)
             throw new InvalidOperationException("GetForUpdate requires an active transaction.");
 
-        return await GetDbSet()
+        // A tracking raw-SQL query acquires the database lock but EF identity resolution returns
+        // an already-tracked instance without refreshing its values. Callers commonly preload a
+        // ticker snapshot before a provider fetch, so remember that state and reload only after
+        // FOR UPDATE has serialized us with a concurrent designation writer.
+        var trackedEntry = DbContext
+            .ChangeTracker.Entries<CommonStock>()
+            .FirstOrDefault(entry => entry.Entity.Id == commonStockId);
+        if (trackedEntry != null && trackedEntry.State != EntityState.Unchanged)
+        {
+            throw new InvalidOperationException(
+                $"GetForUpdate cannot refresh CommonStock {commonStockId} while its tracked state "
+                    + $"is {trackedEntry.State}; save, discard, or detach pending changes first."
+            );
+        }
+
+        var stock = await GetDbSet()
             .FromSqlInterpolated(
                 $"""SELECT * FROM "CommonStock" WHERE "Id" = {commonStockId} FOR UPDATE"""
             )
             .FirstOrDefaultAsync(cancellationToken);
+        if (stock != null && trackedEntry != null)
+            await DbContext.Entry(stock).ReloadAsync(cancellationToken);
+
+        return stock;
     }
 
     public IQueryable<string> GetAllTickers()
