@@ -90,6 +90,12 @@ public class FundSeries
     public int PositionCount { get; set; }
 
     /// <summary>
+    /// Investment rows reported on the latest NPORT-P before tracked-stock filtering. Null while
+    /// that filing is waiting for parser-version replay or could not be re-fetched from EDGAR.
+    /// </summary>
+    public int? ReportedHoldingCount { get; set; }
+
+    /// <summary>
     /// The N-CEN registration type of the fund (e.g. "N-1A" open-end/ETF, "N-2" closed-end), when
     /// an N-CEN filing is on record. Null for trusts and newly-launched funds with no N-CEN yet.
     /// </summary>

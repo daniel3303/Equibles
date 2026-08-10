@@ -68,17 +68,17 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `NportTools`:
 
-- `GetFundHoldings` — portfolio holdings of a fund or ETF from its latest SEC Form NPORT-P monthly report: series, reporting period, net assets, and largest positions (issuer, CUSIP, position size, USD value, share of net assets, asset category). Only registered funds file NPORT-P.
+- `GetFundHoldings` — largest stored holdings of a fund or ETF from its latest SEC Form NPORT-P monthly report: series, reporting period, net assets, full reported holding count when available, stored holding count, and position details. For multi-series trusts the stored rows are only positions whose CUSIPs match tracked stocks; the reported count and net assets still describe the full filing. Accepts a profile id, SEC series id, stored ticker, or verified share-class alias from `SearchFunds`.
 - `GetFundsHoldingStock` — reverse lookup: the registered funds and ETFs holding a given stock, matched by CUSIP against each fund series' most recent NPORT-P report (so an exited position never shows as current). Returns registrant and series, reporting period, position size, USD value, share of the fund's net assets, and payoff profile (Long/Short), largest positions first.
 
 `FundDirectoryTools`:
 
-- `SearchFunds` — punctuation-independent all-token search of the tracked registered-fund directory by series, ticker, or registrant, with a sparse any-token fallback; verified share-class aliases such as VOO/VFIAX resolve their SEC series. Returns profile id, net assets, stored-holding count, and latest report date, largest first. An empty result means no match in this tracked directory, not that the fund does not exist.
-- `GetFundProfile` — one registered fund's profile and largest holdings from its latest NPORT-P report, addressed by a profile id from `SearchFunds` or the fund's own ticker.
+- `SearchFunds` — punctuation-independent all-token search of the tracked registered-fund directory by series, ticker, or registrant, with a sparse any-token fallback; verified share-class aliases such as VOO/VFIAX resolve their SEC series. Returns profile id, net assets, stored holding count, full reported count when available, and latest report date, largest first; only multi-series trust rows limit the stored count to tracked-stock positions. An empty result is a coverage result: NPORT-P covers registered management investment companies and ETFs organized as unit investment trusts, money market funds and small business investment companies do not file it, and fixed-income-only trust series can be absent because directory entry requires a tracked-stock match.
+- `GetFundProfile` — one registered fund's profile and largest stored holdings from its latest NPORT-P report, addressed by the same exact identifiers and verified aliases as `SearchFunds`; reports the full filed count beside the stored count.
 
 `NCenTools`:
 
-- `GetFundOperations` — operational data for a fund, ETF or closed-end fund from SEC Form N-CEN annual reports: registrant classification, Investment Company Act file number, reporting period, first/last-filing flags, the latest filing's named service providers, and an exact filed-name provider timeline across returned reports. Only registered funds file N-CEN.
+- `GetFundOperations` — operational data for a fund, ETF or closed-end fund from SEC Form N-CEN annual reports: registrant classification, Investment Company Act file number, reporting period, first/last-filing flags, the latest filing's named service providers, and an exact filed-name provider timeline. Uses the same exact fund identifiers and verified aliases as the directory. N-CEN is registrant-level and currently ingested through tracked issuer feeds, so a series in an untracked multi-series trust can resolve but still have no N-CEN report on record.
 
 `InvestmentAdviserTools`:
 

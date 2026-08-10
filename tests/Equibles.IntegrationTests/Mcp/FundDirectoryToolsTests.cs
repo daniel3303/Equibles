@@ -73,7 +73,9 @@ public class FundDirectoryToolsTests : IDisposable
         result
             .Should()
             .Contain("No match for 'Treasury' in the tracked Form NPORT-P fund directory");
-        result.Should().Contain("does not assert that the fund does not exist");
+        result.Should().Contain("Fixed-income-only series can be absent");
+        result.Should().Contain("money market funds and small business investment companies");
+        result.Should().Contain("coverage result, not evidence that the fund does not exist");
     }
 
     [Fact]
@@ -124,6 +126,18 @@ public class FundDirectoryToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task SearchFunds_LabelsStoredAndReportedHoldingCountsSeparately()
+    {
+        SeedSeries("ACME BOND FUND", "S000001", reportedHoldingCount: 812);
+
+        var result = await _tools.SearchFunds("Acme");
+
+        result.Should().Contain("| Stored | Reported |");
+        result.Should().Contain("| 1 | 812 |");
+        result.Should().Contain("only positions whose CUSIPs match tracked stocks");
+    }
+
+    [Fact]
     public async Task GetFundProfile_GlossesUnitAndCategoryCodesAndDropsWholeShareDecimals()
     {
         var series = SeedSeries("ACME FUND", "S000001");
@@ -156,13 +170,69 @@ public class FundDirectoryToolsTests : IDisposable
     }
 
     [Fact]
-    public async Task GetFundProfile_UnknownFund_PointsAtSearchFundsAndNamesTheShareClassGap()
+    public async Task GetFundProfile_NoStoredReport_StatesDatasetCoverageBoundary()
     {
+        var series = SeedSeries("ACME FUND", "S000001");
+
+        var result = await _tools.GetFundProfile(series.Slug);
+
+        result.Should().Contain("No stored Form NPORT-P report is on record for ACME FUND");
+        result.Should().Contain("dataset coverage result, not evidence that no SEC filing exists");
+    }
+
+    [Fact]
+    public async Task GetFundProfile_FlattensAndEscapesFiledMarkdownBoundaries()
+    {
+        var series = SeedSeries("ACME FUND", "S000001");
+        series.SeriesName = "ACME\n# SYNTHETIC | FUND";
+        series.RegistrantName = "ACME\r\nTRUST | EXTRA";
+        var filing = MakeFiling(series, "acc-1", new DateOnly(2026, 5, 15));
+        var holding = MakeHolding("BIG\n# ROW | CO", 5_000_000m);
+        holding.Cusip = "12|34";
+        holding.Units = "N|S\nEXTRA";
+        holding.AssetCategory = "E|C\nEXTRA";
+        holding.InvestmentCountry = "U|S\nEXTRA";
+        filing.Holdings.Add(holding);
+        _dbContext.Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundProfile(series.Slug);
+
+        result.Should().Contain("ACME # SYNTHETIC \\| FUND");
+        result.Should().Contain("ACME  TRUST \\| EXTRA");
+        result.Should().Contain("BIG # ROW \\| CO");
+        result.Should().Contain("12\\|34");
+        result.Should().Contain("N\\|S EXTRA");
+        result.Should().Contain("E\\|C EXTRA");
+        result.Should().Contain("U\\|S EXTRA");
+        result.Should().NotContain("\n# SYNTHETIC");
+        result.Should().NotContain("\n# ROW");
+    }
+
+    [Fact]
+    public async Task GetFundProfile_VerifiedShareClassAlias_UsesDirectoryResolutionAndLabelsCoverage()
+    {
+        var series = SeedSeries("VANGUARD 500 INDEX FUND", "S000002839", reportedHoldingCount: 507);
+        var filing = MakeFiling(series, "acc-1", new DateOnly(2026, 5, 15));
+        filing.ReportedHoldingCount = 507;
+        filing.Holdings.Add(MakeHolding("TRACKED CO", 5_000_000m));
+        _dbContext.Set<NportFiling>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
         var result = await _tools.GetFundProfile("VOO");
 
-        result.Should().Contain("No registered fund found for 'VOO'");
+        result.Should().Contain("VANGUARD 500 INDEX FUND");
+        result.Should().Contain("507 holdings reported, 1 stored tracked-stock holdings");
+    }
+
+    [Fact]
+    public async Task GetFundProfile_UnknownFund_PointsAtSearchFundsAndStatesScope()
+    {
+        var result = await _tools.GetFundProfile("NOTAFUND");
+
+        result.Should().Contain("No registered fund found for 'NOTAFUND'");
         result.Should().Contain("SearchFunds");
-        result.Should().Contain("share-class tickers");
+        result.Should().Contain("Fixed-income-only series");
     }
 
     private FundSeries SeedSeries(
@@ -170,7 +240,8 @@ public class FundDirectoryToolsTests : IDisposable
         string seriesId,
         decimal netAssets = 1_000_000m,
         string fundType = null,
-        string ticker = null
+        string ticker = null,
+        int? reportedHoldingCount = 12
     )
     {
         var series = new FundSeries
@@ -187,6 +258,7 @@ public class FundDirectoryToolsTests : IDisposable
             NetAssets = netAssets,
             TotalAssets = netAssets,
             PositionCount = 1,
+            ReportedHoldingCount = reportedHoldingCount,
             FundType = fundType,
         };
         _dbContext.Set<FundSeries>().Add(series);
@@ -211,6 +283,7 @@ public class FundDirectoryToolsTests : IDisposable
             TotalAssets = 1_200_000_000m,
             TotalLiabilities = 50_000_000m,
             NetAssets = 1_150_000_000m,
+            ReportedHoldingCount = series.ReportedHoldingCount,
         };
     }
 

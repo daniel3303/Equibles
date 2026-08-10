@@ -15,8 +15,8 @@ namespace Equibles.IntegrationTests.Sec;
 /// Contract for <see cref="FundSeriesRefreshService"/>: after <c>RebuildAllAsync</c> the
 /// <see cref="FundSeries"/> directory holds one row per series taken from that series' latest NPORT
 /// report — tracked funds keyed by stock, sweep-discovered trusts keyed by registrant CIK + series
-/// id — with the report-header totals, the stored-holdings count, the N-CEN type when on record,
-/// and a unique route slug. Superseded reports never linger; rows the run doesn't touch are pruned.
+/// id — with the report-header totals, stored and reported holdings counts, the N-CEN type when on
+/// record, and a unique route slug. Superseded reports never linger; untouched rows are pruned.
 /// Exercised against ParadeDB because the service writes through FlexLabs <c>UpsertRange</c> and
 /// <c>ExecuteDeleteAsync</c>, neither of which the in-memory provider supports.
 /// </summary>
@@ -81,7 +81,8 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             registrantName: "Gabelli Equity Trust",
             reportPeriod: new DateOnly(2025, 3, 31),
             netAssets: 1_000m,
-            totalAssets: 1_100m
+            totalAssets: 1_100m,
+            reportedHoldingCount: 2
         );
         AddHolding(trackedFiling, "037833100", 600m);
         AddHolding(trackedFiling, "594918104", 400m);
@@ -95,7 +96,8 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             registrantName: "iShares Trust",
             reportPeriod: new DateOnly(2025, 3, 31),
             netAssets: 2_000m,
-            totalAssets: 2_050m
+            totalAssets: 2_050m,
+            reportedHoldingCount: 347
         );
         AddHolding(trustFiling, "037833100", 1_500m);
 
@@ -112,6 +114,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         tracked.NetAssets.Should().Be(1_000m);
         tracked.TotalAssets.Should().Be(1_100m);
         tracked.PositionCount.Should().Be(2);
+        tracked.ReportedHoldingCount.Should().Be(2);
         tracked.LatestReportPeriodDate.Should().Be(new DateOnly(2025, 3, 31));
 
         var trust = await read.Set<FundSeries>().SingleAsync(s => s.RegistrantCik == "0001100663");
@@ -121,6 +124,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         trust.Slug.Should().Be("ishares-russell-2000-etf-s000002277");
         trust.NetAssets.Should().Be(2_000m);
         trust.PositionCount.Should().Be(1, "only the tracked-CUSIP holding is stored for a trust");
+        trust.ReportedHoldingCount.Should().Be(347, "the full filing count survives filtering");
     }
 
     [Fact]
@@ -268,6 +272,47 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         rows[0].Slug.Should().Be("gabelli-equity-trust-gab");
     }
 
+    [Fact]
+    public async Task ResolveIdentifier_ExactTickerAndVerifiedAlias_TranslateOnPostgres()
+    {
+        await using var db = FreshContext();
+        db.AddRange(
+            new FundSeries
+            {
+                IdentityKey = "rc:1100663:S000004310",
+                Slug = "ishares-core-sp-500-etf-s000004310",
+                RegistrantCik = "1100663",
+                SeriesId = "S000004310",
+                SeriesName = "ISHARES CORE S&P 500 ETF",
+                RegistrantName = "ISHARES TRUST",
+                Ticker = "IVV",
+            },
+            new FundSeries
+            {
+                IdentityKey = "rc:0000102909:S000002839",
+                Slug = "vanguard-500-index-fund-s000002839",
+                RegistrantCik = "0000102909",
+                SeriesId = "S000002839",
+                SeriesName = "VANGUARD 500 INDEX FUND",
+                RegistrantName = "VANGUARD INDEX FUNDS",
+            }
+        );
+        await db.SaveChangesAsync();
+
+        var repository = new FundSeriesRepository(db);
+        var exact = await repository
+            .ResolveIdentifier("ivv")
+            .Select(f => f.SeriesName)
+            .ToListAsync();
+        var alias = await repository
+            .ResolveIdentifier("VOO")
+            .Select(f => f.SeriesName)
+            .ToListAsync();
+
+        exact.Should().ContainSingle().Which.Should().Be("ISHARES CORE S&P 500 ETF");
+        alias.Should().ContainSingle().Which.Should().Be("VANGUARD 500 INDEX FUND");
+    }
+
     private static async Task<CommonStock> SeedStock(
         EquiblesFinancialDbContext ctx,
         string ticker,
@@ -295,7 +340,8 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         string registrantName,
         DateOnly reportPeriod,
         decimal netAssets,
-        decimal totalAssets
+        decimal totalAssets,
+        int? reportedHoldingCount = null
     ) =>
         new()
         {
@@ -311,6 +357,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             ReportPeriodEnd = reportPeriod.AddMonths(9),
             TotalAssets = totalAssets,
             NetAssets = netAssets,
+            ReportedHoldingCount = reportedHoldingCount,
         };
 
     private static void AddHolding(NportFiling filing, string cusip, decimal valueUsd) =>

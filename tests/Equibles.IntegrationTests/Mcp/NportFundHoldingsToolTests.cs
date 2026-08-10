@@ -61,7 +61,8 @@ public class NportFundHoldingsToolTests : IDisposable
 
         var result = await _tools.GetFundHoldings("VOO");
 
-        result.Should().Contain("No Form NPORT-P portfolio reports found for VOO.");
+        result.Should().Contain("No stored Form NPORT-P portfolio report was found for VOO.");
+        result.Should().Contain("dataset coverage result, not evidence that no SEC filing exists");
     }
 
     [Fact]
@@ -151,6 +152,33 @@ public class NportFundHoldingsToolTests : IDisposable
     }
 
     [Fact]
+    public async Task GetFundHoldings_FlattensAndEscapesFiledMarkdownBoundaries()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2025, 1, 31));
+        filing.SeriesName = "VANGUARD\n# SYNTHETIC | FUND";
+        var holding = MakeHolding("BIG\n# ROW | CO", 5_000_000m);
+        holding.Cusip = "12|34";
+        holding.Units = "N|S\nEXTRA";
+        holding.AssetCategory = "E|C\nEXTRA";
+        holding.InvestmentCountry = "U|S\nEXTRA";
+        filing.Holdings.Add(holding);
+        _dbContext.Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundHoldings("VOO");
+
+        result.Should().Contain("VANGUARD # SYNTHETIC \\| FUND");
+        result.Should().Contain("BIG # ROW \\| CO");
+        result.Should().Contain("12\\|34");
+        result.Should().Contain("N\\|S EXTRA");
+        result.Should().Contain("E\\|C EXTRA");
+        result.Should().Contain("U\\|S EXTRA");
+        result.Should().NotContain("\n# SYNTHETIC");
+        result.Should().NotContain("\n# ROW");
+    }
+
+    [Fact]
     public async Task GetFundHoldings_TickerlessTrustSeries_ResolvesThroughFundDirectorySlug()
     {
         SeedTrustSeries();
@@ -161,6 +189,17 @@ public class NportFundHoldingsToolTests : IDisposable
 
         result.Should().Contain("VANGUARD 500 INDEX FUND");
         result.Should().Contain("TRACKED CO");
+    }
+
+    [Fact]
+    public async Task GetFundHoldings_ResolvedSeriesWithoutStoredReport_StatesCoverageBoundary()
+    {
+        SeedTrustSeries();
+
+        var result = await _tools.GetFundHoldings("vanguard-500-index-fund-s000002839");
+
+        result.Should().Contain("No stored Form NPORT-P report is on record");
+        result.Should().Contain("dataset coverage result, not evidence that no SEC filing exists");
     }
 
     [Fact]
@@ -177,12 +216,49 @@ public class NportFundHoldingsToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetFundHoldings_UnknownIdentifier_PointsAtSearchFunds()
+    public async Task GetFundHoldings_VerifiedShareClassAlias_ResolvesAndLabelsReportedVersusStored()
     {
+        SeedTrustSeries();
+        _dbContext.Set<NportFiling>().Add(MakeTrustFiling("acc-1", new DateOnly(2026, 5, 15)));
+        await _dbContext.SaveChangesAsync();
+
         var result = await _tools.GetFundHoldings("VOO");
 
-        result.Should().Contain("No fund or ETF found for 'VOO'");
+        result.Should().Contain("VANGUARD 500 INDEX FUND");
+        result.Should().Contain("200 holdings reported, 1 stored tracked-stock holdings");
+    }
+
+    [Fact]
+    public async Task GetFundHoldings_VerifiedAliasWinsOverConflictingTrackedStockTicker()
+    {
+        var conflictingStock = SeedStock();
+        var conflictingFiling = MakeFiling(
+            conflictingStock.Id,
+            "wrong-series",
+            new DateOnly(2026, 5, 16)
+        );
+        conflictingFiling.Holdings.Add(MakeHolding("WRONG SERIES CO", 99_000_000m));
+        _dbContext.Add(conflictingFiling);
+        SeedTrustSeries();
+        _dbContext.Add(MakeTrustFiling("right-series", new DateOnly(2026, 5, 15)));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundHoldings("VOO");
+
+        result.Should().Contain("VANGUARD 500 INDEX FUND");
+        result.Should().Contain("TRACKED CO");
+        result.Should().NotContain("WRONG SERIES CO");
+    }
+
+    [Fact]
+    public async Task GetFundHoldings_UnknownIdentifier_PointsAtSearchFundsAndStatesScope()
+    {
+        var result = await _tools.GetFundHoldings("NOTAFUND");
+
+        result.Should().Contain("No fund or ETF found for 'NOTAFUND'");
         result.Should().Contain("SearchFunds");
+        result.Should().Contain("Fixed-income-only series");
+        result.Should().Contain("money market funds and small business investment companies");
     }
 
     private void SeedTrustSeries(string ticker = null)
@@ -204,6 +280,7 @@ public class NportFundHoldingsToolTests : IDisposable
                     NetAssets = 1_400_000_000_000m,
                     TotalAssets = 1_450_000_000_000m,
                     PositionCount = 1,
+                    ReportedHoldingCount = 200,
                 }
             );
         _dbContext.SaveChanges();
@@ -226,6 +303,7 @@ public class NportFundHoldingsToolTests : IDisposable
             TotalAssets = 1_450_000_000_000m,
             TotalLiabilities = 50_000_000_000m,
             NetAssets = 1_400_000_000_000m,
+            ReportedHoldingCount = 200,
         };
         filing.Holdings.Add(MakeHolding("TRACKED CO", 10_000_000m));
         return filing;

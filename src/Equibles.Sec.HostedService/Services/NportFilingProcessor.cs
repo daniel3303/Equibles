@@ -108,6 +108,8 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
                 entity.Holdings.Add(holding);
         }
 
+        entity.ReportedHoldingCount = entity.Holdings.Count;
+
         return entity;
     }
 

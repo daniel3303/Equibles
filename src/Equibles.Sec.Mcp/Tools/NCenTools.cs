@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Extensions;
@@ -19,17 +20,20 @@ public class NCenTools
 {
     private readonly NCenFilingRepository _nCenRepository;
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly FundSeriesRepository _fundSeriesRepository;
     private readonly McpToolRunner _runner;
 
     public NCenTools(
         NCenFilingRepository nCenRepository,
         CommonStockRepository commonStockRepository,
+        FundSeriesRepository fundSeriesRepository,
         ErrorManager errorManager,
         ILogger<NCenTools> logger
     )
     {
         _nCenRepository = nCenRepository;
         _commonStockRepository = commonStockRepository;
+        _fundSeriesRepository = fundSeriesRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -39,10 +43,13 @@ public class NCenTools
         ReadOnly = true
     )]
     [Description(
-        "Get operational data for a registered investment company from its SEC Form N-CEN annual reports. Resolves exchange-listed tickers only — ETFs, closed-end funds and unit investment trusts; an unlisted mutual-fund share-class ticker (e.g. VFIAX) will not resolve, so find that fund via SearchFunds/GetFundProfile instead. Each N-CEN shows the registrant's classification (e.g. N-1A open-end, N-2 closed-end, S-6 unit investment trust), Investment Company Act file number, reporting period, and whether it was the fund's first or last filing. The response shows the service providers named on the latest report and an exact filed-name history across the reports returned — investment advisers, sub-advisers, custodians, transfer agents, administrators, auditors and underwriters. Use this to see who runs and services a fund. Only registered funds file N-CEN; operating companies will return no data."
+        "Get operational data for a registered investment company from its SEC Form N-CEN annual reports. Accepts an exchange-listed ticker or an exact fund identifier from SearchFunds, including a profile id, SEC series id, stored series ticker, or verified share-class alias. Each N-CEN shows the registrant's classification, Investment Company Act file number, reporting period, first/last-filing flags, latest service providers, and an exact filed-name provider history. N-CEN is filed at registrant level; this dataset currently ingests it through tracked issuer feeds, so a series inside an untracked multi-series trust can resolve correctly but still have no N-CEN report on record. Only registered funds file N-CEN; operating companies return no data."
     )]
     public Task<string> GetFundOperations(
-        [Description("Fund or ETF ticker symbol (e.g., MXF, SPY)")] string ticker,
+        [Description(
+            "Fund or ETF ticker, profile id, SEC series id, or verified share-class alias (e.g., MXF, IVV, S000004344, VOO)"
+        )]
+            string ticker,
         [Description("Maximum number of annual reports to return (default: 10, max: 500)")]
             int maxResults = 10
     )
@@ -50,9 +57,36 @@ public class NCenTools
         return _runner.Execute(
             async () =>
             {
-                var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
-                if (stockError != null)
-                    return stockError;
+                if (string.IsNullOrWhiteSpace(ticker))
+                    return "Provide a fund ticker or an exact identifier from SearchFunds.";
+
+                var safeTicker = MarkdownText(ticker);
+                var series = await _fundSeriesRepository
+                    .ResolveIdentifier(ticker)
+                    .OrderByDescending(f => f.NetAssets)
+                    .FirstOrDefaultAsync();
+                CommonStock stock = null;
+                if (series != null)
+                {
+                    if (series.CommonStockId == null)
+                    {
+                        return $"'{safeTicker}' resolves to {MarkdownText(series.SeriesName ?? series.RegistrantName)}"
+                            + (series.Ticker == null ? "" : $" ({MarkdownText(series.Ticker)})")
+                            + $", a series of {MarkdownText(series.RegistrantName) ?? "its registered-fund trust"}. Form N-CEN is filed at registrant level, but this dataset currently ingests N-CEN through tracked issuer feeds and has no registrant-level report on record for this untracked multi-series trust. This is a coverage result, not an identifier-resolution failure.";
+                    }
+
+                    stock = await _commonStockRepository
+                        .GetByIds([series.CommonStockId.Value])
+                        .FirstOrDefaultAsync();
+                    if (stock == null)
+                        return $"'{safeTicker}' resolves to {MarkdownText(series.SeriesName ?? series.RegistrantName)}, but its linked tracked issuer is no longer available; no Form N-CEN report can be selected. This is a coverage result, not evidence that the fund has no N-CEN filing.";
+                }
+                else
+                {
+                    (stock, _) = await _commonStockRepository.ResolveByTicker(ticker);
+                    if (stock == null)
+                        return $"No registered fund found for '{safeTicker}' in the tracked Form NPORT-P/N-CEN datasets. Use SearchFunds to find an exact profile id. Registered management investment companies and ETFs are in scope; vehicles outside those filing regimes may be absent, and fixed-income-only series can be missing from the tracked NPORT-P directory. This is a coverage result, not evidence that the fund does not exist.";
+                }
 
                 var filings = await _nCenRepository
                     .GetByStock(stock)
@@ -65,10 +99,10 @@ public class NCenTools
                     .ToListAsync();
 
                 if (filings.Count == 0)
-                    return $"No Form N-CEN annual reports found for {ticker}.";
+                    return $"No Form N-CEN annual reports found for {MarkdownText(series?.SeriesName ?? stock.Name)} ({MarkdownText(stock.Ticker)}). Form N-CEN is registrant-level and this dataset currently ingests it through tracked issuer feeds. This is a coverage result, not evidence that the fund has no N-CEN filing.";
 
                 var result = MarkdownTable.Start(
-                    $"Form N-CEN annual reports for {stock.Name} ({ticker}) — showing {filings.Count} most recent:",
+                    $"Form N-CEN annual reports for {MarkdownText(stock.Name)} ({safeTicker}) — showing {filings.Count} most recent:",
                     "| Filed | Period End | Type | File Number | Amendment | First Filing | Last Filing |",
                     "|-------|------------|------|-------------|-----------|--------------|-------------|"
                 );
@@ -76,7 +110,7 @@ public class NCenTools
                 result.AppendRows(
                     filings,
                     f =>
-                        $"| {f.FilingDate:yyyy-MM-dd} | {f.ReportEndingPeriod:yyyy-MM-dd} | {FundCodes.RegistrationType(f.InvestmentCompanyType)} | {f.InvestmentCompanyFileNumber ?? "-"} | {(f.IsAmendment ? "Yes" : "No")} | {(f.IsFirstFiling ? "Yes" : "No")} | {(f.IsLastFiling ? "Yes" : "No")} |"
+                        $"| {f.FilingDate:yyyy-MM-dd} | {f.ReportEndingPeriod:yyyy-MM-dd} | {MarkdownText(FundCodes.RegistrationType(f.InvestmentCompanyType))} | {MarkdownText(f.InvestmentCompanyFileNumber) ?? "-"} | {(f.IsAmendment ? "Yes" : "No")} | {(f.IsFirstFiling ? "Yes" : "No")} | {(f.IsLastFiling ? "Yes" : "No")} |"
                 );
 
                 AppendServiceProviders(result, filings[0]);

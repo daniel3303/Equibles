@@ -40,6 +40,7 @@ public class NportFilingReprocessManagerTests
         reprocessed.ParserVersion.Should().Be(NportFiling.CurrentParserVersion);
         reprocessed.Holdings.Should().HaveCount(2);
         reprocessed.Holdings.Should().Contain(h => h.Name == "AT&T Inc" && h.Cusip == "00206R102");
+        reprocessed.ReportedHoldingCount.Should().Be(2);
         reprocessed.NetAssets.Should().Be(93591793.29m);
     }
 

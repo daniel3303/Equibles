@@ -15,21 +15,23 @@ Ask your assistant to search by fund name, registrant, or ticker:
 - "Search the fund directory for Vanguard."
 - "What fund has the ticker VOO?"
 
-The assistant calls `SearchFunds`, which first requires every query word anywhere across the fund name, registrant, or ticker; punctuation and word order need not mirror the SEC row. If that strict search has no rows, it broadens to any query word. Verified share-class aliases such as VOO and VFIAX resolve their SEC series. The table is largest by net assets first and shows the **profile id**, ticker when present, fund type, net assets, stored holding rows, and latest report date. No result means no match in the tracked Form NPORT-P directory, not that the fund does not exist.
+The assistant calls `SearchFunds`, which first requires every query word anywhere across the fund name, registrant, or ticker; punctuation and word order need not mirror the SEC row. If that strict search has no rows, it broadens to any query word. Verified share-class aliases such as VOO and VFIAX resolve their SEC series. The table is largest by net assets first and shows the **profile id**, ticker when present, fund type, net assets, stored rows, the fund's full reported investment-row count when available, and latest report date. Only multi-series trust rows limit the stored count to tracked-stock positions.
+
+No result is a coverage result, not evidence that the fund does not exist. Form NPORT-P covers registered management investment companies and ETFs organized as unit investment trusts; money market funds and small business investment companies do not file it. Operating companies and vehicles outside that filing regime are also out of scope. Fixed-income-only series can be absent because reports from multi-series trusts enter this tracked directory after at least one holding matches a tracked stock.
 
 The profile id is the key to the next step — note it for the fund you care about. The big fund families (iShares, Vanguard, Fidelity) run many series under one registrant and often have no single ticker, so searching by name or registrant is the way to reach them.
 
 ## View a fund's profile and holdings
 
-Ask for one fund's details, using either its profile id from the search or its ticker:
+Ask for one fund's details using its profile id, SEC series id, stored ticker, or a verified share-class alias from the search:
 
 - "Show me the profile for ishares-russell-2000-etf-s000002277."
 - "What are VOO's largest holdings?"
 - "How much does the Fidelity Contrafund hold, and in what?"
 
-The assistant calls the `GetFundProfile` tool and replies with the fund's registrant and series, its latest reporting period, net and total assets, and a table of its largest holdings — issuer name, CUSIP, position size, U.S.-dollar value, share of net assets, and asset category, largest first.
+The assistant calls the `GetFundProfile` tool and replies with the fund's registrant and series, its latest reporting period, net and total assets, its full reported holding count when available, its stored holding count, and a table of its largest stored holdings — issuer name, CUSIP, position size, U.S.-dollar value, share of net assets, and asset category, largest first.
 
-For the large multi-series trusts, only positions in tracked stocks are stored, so the holdings table shows the fund's tracked-stock positions while the net-asset totals are the fund's real totals.
+For the large multi-series trusts, only positions whose CUSIPs match tracked stocks are stored. The reported count makes the omitted part explicit while the net-asset totals continue to describe the fund's full filing.
 
 ## What you should see
 

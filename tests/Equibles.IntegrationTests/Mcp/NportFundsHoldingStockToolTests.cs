@@ -51,7 +51,8 @@ public class NportFundsHoldingStockToolTests : IDisposable
 
         var result = await _tools.GetFundsHoldingStock("AAPL");
 
-        result.Should().Contain("No fund reports a position in AAPL");
+        result.Should().Contain("No current position in AAPL matched the ingested latest");
+        result.Should().Contain("dataset coverage result, not evidence that no fund reports one");
     }
 
     [Fact]
@@ -91,7 +92,8 @@ public class NportFundsHoldingStockToolTests : IDisposable
 
         var result = await _tools.GetFundsHoldingStock("AAPL");
 
-        result.Should().Contain("No fund reports a position in AAPL");
+        result.Should().Contain("No current position in AAPL matched the ingested latest");
+        result.Should().Contain("dataset coverage result, not evidence that no fund reports one");
     }
 
     [Fact]
@@ -118,6 +120,48 @@ public class NportFundsHoldingStockToolTests : IDisposable
 
         result.Should().Contain("VANGUARD INDEX FUNDS");
         result.Should().Contain("1 current fund positions");
+    }
+
+    [Fact]
+    public async Task GetFundsHoldingStock_FlattensAndEscapesExternalMarkdownBoundaries()
+    {
+        var stock = SeedStock("AAPL", HeldCusip);
+        stock.Name = "APPLE\n# SYNTHETIC | INC";
+        var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
+        var filing = MakeFiling(fund.Id, "acc-current", RecentFilingDate);
+        filing.RegistrantName = "VANGUARD\n# ROW | TRUST";
+        filing.SeriesName = "INDEX\r\nFUND | EXTRA";
+        var holding = MakeHolding(HeldCusip, 5_000_000m);
+        holding.Units = "N|S\nEXTRA";
+        holding.PayoffProfile = "Long\n# EXTRA | CELL";
+        filing.Holdings.Add(holding);
+        _dbContext.Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundsHoldingStock("AAPL");
+
+        result.Should().Contain("APPLE # SYNTHETIC \\| INC");
+        result.Should().Contain("VANGUARD # ROW \\| TRUST");
+        result.Should().Contain("INDEX  FUND \\| EXTRA");
+        result.Should().Contain("N\\|S EXTRA");
+        result.Should().Contain("Long # EXTRA \\| CELL");
+        result.Should().NotContain("\n# SYNTHETIC");
+        result.Should().NotContain("\n# ROW");
+    }
+
+    [Fact]
+    public async Task GetFundsHoldingStock_NoMatchFlattensAndEscapesCallerFilter()
+    {
+        SeedStock("AAPL", HeldCusip);
+
+        var result = await _tools.GetFundsHoldingStock(
+            "AAPL",
+            registrantOrSeries: "BAD\n# FILTER | VALUE"
+        );
+
+        result.Should().Contain("BAD # FILTER \\| VALUE");
+        result.Should().NotContain("\n# FILTER");
+        result.Should().Contain("dataset coverage result");
     }
 
     private CommonStock SeedStock(string ticker, string cusip, string cik = null)

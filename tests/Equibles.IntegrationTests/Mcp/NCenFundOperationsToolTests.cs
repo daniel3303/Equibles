@@ -24,6 +24,7 @@ public class NCenFundOperationsToolTests : IDisposable
         _tools = new NCenTools(
             new NCenFilingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
+            new FundSeriesRepository(_dbContext),
             errorManager: null,
             NullLogger<NCenTools>.Instance
         );
@@ -60,7 +61,8 @@ public class NCenFundOperationsToolTests : IDisposable
 
         var result = await _tools.GetFundOperations("MXF");
 
-        result.Should().Contain("No Form N-CEN annual reports found for MXF.");
+        result.Should().Contain("No Form N-CEN annual reports found for Mexico Fund Inc (MXF).");
+        result.Should().Contain("coverage result, not evidence that the fund has no N-CEN filing");
     }
 
     [Fact]
@@ -122,6 +124,110 @@ public class NCenFundOperationsToolTests : IDisposable
         var result = await _tools.GetFundOperations("MXF");
 
         result.Should().Contain("N-2 (closed-end fund)");
+    }
+
+    [Fact]
+    public async Task GetFundOperations_FlattensAndEscapesFiledTableCodes()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2025, 1, 15));
+        filing.InvestmentCompanyType = "N|2\n# TYPE";
+        filing.InvestmentCompanyFileNumber = "811|02409\n# FILE";
+        _dbContext.Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundOperations("MXF");
+
+        result.Should().Contain("N\\|2 # TYPE");
+        result.Should().Contain("811\\|02409 # FILE");
+        result.Should().NotContain("\n# TYPE");
+        result.Should().NotContain("\n# FILE");
+    }
+
+    [Fact]
+    public async Task GetFundOperations_SeriesTicker_ResolvesBeforeReportingRegistrantCoverageGap()
+    {
+        _dbContext.Add(
+            new FundSeries
+            {
+                IdentityKey = "rc:1100663:S000004310",
+                Slug = "ishares-core-sp-500-etf-s000004310",
+                RegistrantCik = "1100663",
+                SeriesId = "S000004310",
+                SeriesName = "ISHARES CORE S&P 500 ETF",
+                RegistrantName = "ISHARES TRUST",
+                Ticker = "IVV",
+                LatestReportPeriodDate = new DateOnly(2026, 3, 31),
+                LatestFilingDate = new DateOnly(2026, 5, 15),
+            }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundOperations("ivv");
+
+        result.Should().Contain("resolves to ISHARES CORE S&P 500 ETF (IVV)");
+        result.Should().Contain("coverage result, not an identifier-resolution failure");
+    }
+
+    [Fact]
+    public async Task GetFundOperations_VerifiedAliasWinsOverConflictingTrackedStockTicker()
+    {
+        var conflictingStock = SeedStock("VOO");
+        _dbContext.Add(MakeFiling(conflictingStock.Id, "wrong-series", new DateOnly(2026, 5, 16)));
+        _dbContext.Add(
+            new FundSeries
+            {
+                IdentityKey = "rc:0000102909:S000002839",
+                Slug = "vanguard-500-index-fund-s000002839",
+                RegistrantCik = "0000102909",
+                SeriesId = "S000002839",
+                SeriesName = "VANGUARD 500 INDEX FUND",
+                RegistrantName = "VANGUARD INDEX FUNDS",
+                LatestReportPeriodDate = new DateOnly(2026, 3, 31),
+                LatestFilingDate = new DateOnly(2026, 5, 15),
+            }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundOperations("VOO");
+
+        result.Should().Contain("resolves to VANGUARD 500 INDEX FUND");
+        result.Should().Contain("coverage result, not an identifier-resolution failure");
+        result.Should().NotContain("811-02409");
+    }
+
+    [Fact]
+    public async Task GetFundOperations_CoverageMessageFlattensFiledMarkdownBoundaries()
+    {
+        _dbContext.Add(
+            new FundSeries
+            {
+                IdentityKey = "rc:1100663:S000004310",
+                Slug = "unsafe-fund-s000004310",
+                RegistrantCik = "1100663",
+                SeriesId = "S000004310",
+                SeriesName = "ISHARES\n# SYNTHETIC | FUND",
+                RegistrantName = "ISHARES\r\nTRUST | EXTRA",
+                LatestReportPeriodDate = new DateOnly(2026, 3, 31),
+                LatestFilingDate = new DateOnly(2026, 5, 15),
+            }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundOperations("unsafe-fund-s000004310");
+
+        result.Should().Contain("ISHARES # SYNTHETIC \\| FUND");
+        result.Should().Contain("ISHARES  TRUST \\| EXTRA");
+        result.Should().NotContain("\n# SYNTHETIC");
+    }
+
+    [Fact]
+    public async Task GetFundOperations_UnknownIdentifierStatesDirectoryCoverageLimits()
+    {
+        var result = await _tools.GetFundOperations("UNKNOWN");
+
+        result.Should().Contain("fixed-income-only series");
+        result.Should().Contain("coverage result, not evidence that the fund does not exist");
     }
 
     private static NCenFiling MakeFiling(Guid stockId, string accession, DateOnly filingDate)

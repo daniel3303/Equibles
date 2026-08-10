@@ -69,6 +69,39 @@ public class FundSeriesRepository : BaseRepository<FundSeries>
             anyTokenMatches
         );
     }
+
+    /// <summary>
+    /// Resolves only a canonical profile id, SEC series id, stored series ticker, or verified
+    /// share-class alias. Unlike <see cref="Search"/>, this never treats a partial name match as
+    /// identity, so read tools can share the directory's authoritative resolution tiers without
+    /// silently choosing one row from an ambiguous discovery result.
+    /// </summary>
+    public IQueryable<FundSeries> ResolveIdentifier(string identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+            return GetAll().Where(_ => false);
+
+        var exact = identifier.Trim().ToLowerInvariant();
+        var exactIdentifier = GetAll()
+            .Where(f =>
+                f.SeriesId.ToLower() == exact
+                || (f.Ticker != null && f.Ticker.ToLower() == exact)
+                || f.Slug.ToLower() == exact
+            );
+        var aliasSeriesId = FundSeriesSearchAliases.ResolveSeriesId(identifier);
+        var verifiedAlias =
+            aliasSeriesId == null
+                ? GetAll().Where(_ => false)
+                : GetAll().Where(f => f.SeriesId == aliasSeriesId);
+        var empty = GetAll().Where(_ => false);
+
+        return SearchTerms.WithExclusiveResolutionTiers(
+            exactIdentifier,
+            verifiedAlias,
+            empty,
+            empty
+        );
+    }
 }
 
 internal static class FundSeriesSearchAliases

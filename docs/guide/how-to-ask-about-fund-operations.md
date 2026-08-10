@@ -9,16 +9,16 @@ Equibles ingests the SEC Form N-CEN annual reports that registered funds file an
 
 ## Ask about a fund's operations
 
-Name a fund by its ticker:
+Name a fund by its ticker or use an exact profile id, SEC series id, or verified alias from `SearchFunds`:
 
 - "Who is the custodian and auditor for SPY?"
 - "What service providers does VOO use?"
 - "Show me the operational filings for the Mexico Fund (MXF)."
 
-The assistant calls the `GetFundOperations` tool with the fund's ticker and returns up to 10 annual reports by default (ask for more or fewer), newest first.
+The assistant calls the `GetFundOperations` tool with that identifier and returns up to 10 annual reports by default (ask for more or fewer), newest first.
 
 ## What you should see
 
 For each N-CEN report, you see the fund's classification (for example N-1A open-end or N-2 closed-end), Investment Company Act file number, reporting period, and first/last-filing flags. The answer then separates the newest filing's named service providers from an exact filed-name timeline across the returned reports, so a changed or omitted adviser, custodian, transfer agent, administrator, auditor, or underwriter remains visible.
 
-If the reply comes back empty, the ticker may not belong to a registered fund — only mutual funds, ETFs, and closed-end funds file N-CEN, so an operating company returns no data — or its N-CEN may not have been imported yet. Try a large, well-known fund such as SPY to confirm the data is flowing.
+If the identifier resolves but the reply has no report, read the coverage note in the answer. N-CEN is filed at registrant level and this dataset currently ingests it through tracked issuer feeds, so a series inside an untracked multi-series trust can resolve while its registrant-level report remains unavailable. Operating companies are outside the N-CEN filing regime. Try a tracked listed fund such as MXF to confirm the data is flowing.
