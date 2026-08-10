@@ -46,8 +46,9 @@ public class GovernmentContractsTools
     )]
     [Description(
         "Get federal government contract awards (from USAspending.gov) won by a specific public company. "
-            + "Shows the award (action) date, awarding agency, total value (obligated dollars plus "
-            + "unexercised ceiling — not revenue received), period-of-performance end date, and description. "
+            + "Shows the award (action) date, recipient named by the government, awarding agency, total value "
+            + "(obligated dollars plus unexercised ceiling — not revenue received), outlays when reported, "
+            + "period-of-performance end date, and description. "
             + "Coverage: only prime contract awards of $1M or more that resolve to a listed company are "
             + "included, so sums understate total federal revenue. Useful for gauging a company's reliance "
             + "on federal spending; use GetTopGovernmentContractors to rank companies market-wide."
@@ -107,20 +108,42 @@ public class GovernmentContractsTools
                     : query.OrderByDescending(c => c.Amount);
                 var awards = await ordered.Take(maxResults).ToListAsync();
 
+                // USAspending reports outlays on only about a quarter of awards, so a permanent
+                // column would be mostly em-dashes; it renders when this answer actually carries
+                // the figure. Recipient is unconditional — it is the attribution evidence.
+                var hasOutlays = awards.Any(c => c.TotalOutlays != null);
+
                 var table = MarkdownTable.Render(
                     awards,
                     $"No federal contract awards found for {stock.Ticker} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
                     $"Federal contract awards for {stock.Ticker} ({stock.Name}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd} "
                         + $"— {totalCount} awards totaling {FormatUsd(totalValue)}:",
-                    "| Award Date | Agency | Type | Total Value (obligated + ceiling) | Period End | Award ID | Description |",
-                    "|------------|--------|------|-----------------------------------|------------|----------|-------------|",
+                    hasOutlays
+                        ? "| Award Date | Recipient | Agency | Type | Total Value (obligated + ceiling) | Outlays | Period End | Award ID | Description |"
+                        : "| Award Date | Recipient | Agency | Type | Total Value (obligated + ceiling) | Period End | Award ID | Description |",
+                    hasOutlays
+                        ? "|------------|-----------|--------|------|-----------------------------------|---------|------------|----------|-------------|"
+                        : "|------------|-----------|--------|------|-----------------------------------|------------|----------|-------------|",
                     c =>
-                        $"| {Format(c.ActionDate)} | {Escape(c.AwardingAgency)} | {AwardTypeLabel(c.AwardType)} "
-                        + $"| {FormatUsd(c.Amount)} | {Format(c.EndDate)} | {Escape(c.AwardId)} "
+                        $"| {Format(c.ActionDate)} | {Escape(c.RecipientName)} | {Escape(c.AwardingAgency)} | {AwardTypeLabel(c.AwardType)} "
+                        + $"| {FormatUsd(c.Amount)} "
+                        + (
+                            hasOutlays
+                                ? $"| {(c.TotalOutlays == null ? "—" : FormatUsd(c.TotalOutlays.Value))} "
+                                : ""
+                        )
+                        + $"| {Format(c.EndDate)} | {Escape(c.AwardId)} "
                         + $"| {Escape(Shorten(c.Description, 80))} |"
                 );
 
-                return await AppendFooters(table, awards.Count, totalCount, end);
+                return await AppendFooters(
+                    table,
+                    awards.Count,
+                    totalCount,
+                    end,
+                    hasOutlays,
+                    hasRecipient: true
+                );
             },
             "GetGovernmentContracts",
             $"ticker: {ticker}"
@@ -196,7 +219,14 @@ public class GovernmentContractsTools
                         $"| {++rank} | {Escape(r.Ticker)} | {Escape(r.Name)} | {FormatUsd(r.Total)} | {r.Count} |"
                 );
 
-                return await AppendFooters(table, ranked.Count, totalCompanies, end);
+                return await AppendFooters(
+                    table,
+                    ranked.Count,
+                    totalCompanies,
+                    end,
+                    hasOutlays: false,
+                    hasRecipient: false
+                );
             },
             "GetTopGovernmentContractors",
             $"range: {startDate}..{endDate}"
@@ -205,7 +235,14 @@ public class GovernmentContractsTools
 
     // Every result carries the dataset's coverage limits and its true recency, so a sparse
     // window reads as a data gap rather than as an absence of awards.
-    private async Task<string> AppendFooters(string table, int shown, int total, DateOnly rangeEnd)
+    private async Task<string> AppendFooters(
+        string table,
+        int shown,
+        int total,
+        DateOnly rangeEnd,
+        bool hasOutlays,
+        bool hasRecipient
+    )
     {
         var sb = new StringBuilder(table.TrimEnd('\n', '\r'));
         sb.AppendLine();
@@ -225,7 +262,17 @@ public class GovernmentContractsTools
 
         sb.AppendLine(
             "_Coverage: prime federal contract awards of $1M+ matched to listed companies; "
-                + "Total Value is obligated dollars plus unexercised option ceiling, not revenue received. "
+                + "Total Value is obligated dollars plus unexercised option ceiling, not revenue received"
+                + (
+                    hasOutlays
+                        ? "; Outlays is what the government has actually disbursed so far"
+                        : ""
+                )
+                + (
+                    hasRecipient
+                        ? ". Recipient is the awarded entity as the government named it — a subsidiary's own name there is how an award reaches this company. "
+                        : ". "
+                )
                 + $"Latest ingested award action date: {Format(latestIngested)}._"
         );
 
@@ -340,11 +387,5 @@ public class GovernmentContractsTools
         return trimmed.TruncateToFit(maxLength) + "…";
     }
 
-    // Markdown cells can't contain a raw pipe or newline without breaking the table.
-    private static string Escape(string value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return "";
-        return value.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
-    }
+    private static string Escape(string value) => MarkdownTable.EscapeCell(value);
 }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Equibles.Mcp.Helpers;
 
 namespace Equibles.Sec.FinancialFacts.Mcp.Helpers;
 
@@ -13,8 +14,7 @@ public static class FactMarkdown
     /// Escapes the Markdown table delimiters so a value containing '|' or a
     /// newline (e.g. some ADR/fund names) can't break the table the LLM reads.
     /// </summary>
-    public static string Cell(string value) =>
-        value == null ? "" : value.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
+    public static string Cell(string value) => MarkdownTable.EscapeCell(value);
 
     /// <summary>
     /// Strips control chars from untrusted args before they reach logs / the

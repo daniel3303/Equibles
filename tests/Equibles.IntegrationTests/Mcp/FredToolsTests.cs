@@ -55,6 +55,10 @@ public class FredToolsTests : ParadeDbMcpTestBase
             Frequency = "Quarterly",
             Units = "Billions of Dollars",
             SeasonalAdjustment = "Seasonally Adjusted Annual Rate",
+            ObservationEnd = new DateOnly(2025, 4, 1),
+            LastUpdated = new DateTime(2025, 5, 2, 14, 30, 45, DateTimeKind.Utc).AddTicks(
+                1_234_560
+            ),
         };
 
         DbContext.Set<FredSeries>().AddRange(_fedFundsSeries, _cpiSeries, _gdpSeries);
@@ -527,6 +531,26 @@ public class FredToolsTests : ParadeDbMcpTestBase
 
         result.Should().Contain("| Series ID | Title | Category | Frequency | Units |");
         result.Should().Contain("|-----------|-------|----------|-----------|-------|");
+    }
+
+    [Fact]
+    public async Task SearchEconomicIndicators_RendersObservationAndSyncFreshnessSeparately()
+    {
+        var result = await Sut().SearchEconomicIndicators("GDP");
+
+        result.Should().Contain("| Latest Observation | Last Synced (UTC) |");
+        result.Should().Contain("| 2025-04-01 | 2025-05-02T14:30:45.1234560Z |");
+    }
+
+    [Fact]
+    public async Task SearchEconomicIndicators_EscapesExternalTableCells()
+    {
+        _gdpSeries.Title = "Gross\\|Domestic\r\nProduct";
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().SearchEconomicIndicators("GDP");
+
+        result.Should().Contain(@"Gross\\\|Domestic  Product");
     }
 
     [Fact]

@@ -19,6 +19,6 @@ The assistant calls the `GetFundOperations` tool with the fund's ticker and retu
 
 ## What you should see
 
-For each N-CEN report, a summary of the fund's classification (for example N-1A open-end or N-2 closed-end), its Investment Company Act file number, the reporting period, and whether it was the fund's first or last filing — followed by the fund's named service providers: investment advisers and sub-advisers, custodians, transfer agents, administrators, auditors, and underwriters.
+For each N-CEN report, you see the fund's classification (for example N-1A open-end or N-2 closed-end), Investment Company Act file number, reporting period, and first/last-filing flags. The answer then separates the newest filing's named service providers from an exact filed-name timeline across the returned reports, so a changed or omitted adviser, custodian, transfer agent, administrator, auditor, or underwriter remains visible.
 
 If the reply comes back empty, the ticker may not belong to a registered fund — only mutual funds, ETFs, and closed-end funds file N-CEN, so an operating company returns no data — or its N-CEN may not have been imported yet. Try a large, well-known fund such as SPY to confirm the data is flowing.

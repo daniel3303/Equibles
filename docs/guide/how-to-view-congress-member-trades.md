@@ -1,6 +1,6 @@
 # View a member of Congress's trading profile
 
-This guide shows you how to open a member of Congress's profile and read their most recent reported stock trades.
+This guide shows you how to open a member of Congress's profile and read their most recent reported securities transactions.
 
 ## Find a member of Congress
 

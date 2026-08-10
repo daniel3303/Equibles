@@ -1,5 +1,16 @@
 using System.Reflection;
+using Equibles.CommonStocks.Data;
+using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
+using Equibles.Data;
+using Equibles.Errors.BusinessLogic;
+using Equibles.GovernmentContracts.Data;
+using Equibles.GovernmentContracts.Data.Models;
 using Equibles.GovernmentContracts.Mcp.Tools;
+using Equibles.GovernmentContracts.Repositories;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Equibles.UnitTests.GovernmentContracts;
 
@@ -32,6 +43,85 @@ public class GovernmentContractsToolsShortenSurrogateTests
         HasUnpairedSurrogate(result)
             .Should()
             .BeFalse("truncation must not split a surrogate pair into a lone surrogate");
+    }
+
+    [Fact]
+    public void Escape_BackslashBeforePipe_KeepsAwardCellInsideItsColumn()
+    {
+        var method = typeof(GovernmentContractsTools).GetMethod(
+            "Escape",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+
+        var result = (string)method!.Invoke(null, ["Subsidiary\\|Division"]);
+
+        result.Should().Be("Subsidiary\\\\\\|Division");
+    }
+
+    [Fact]
+    public async Task GetGovernmentContracts_RendersRecipientAndOutlaysWithSafeCells()
+    {
+        var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString(), new InMemoryDatabaseRoot())
+            .EnableServiceProviderCaching(false)
+            .Options;
+        await using var context = new EquiblesFinancialDbContext(
+            options,
+            new IModuleConfiguration[]
+            {
+                new CommonStocksModuleConfiguration(),
+                new GovernmentContractsModuleConfiguration(),
+            }
+        );
+        context.Database.EnsureCreated();
+        var stock = new CommonStock
+        {
+            Ticker = "RTX",
+            Name = "RTX Corp",
+            Cik = "0000101829",
+        };
+        context.Add(stock);
+        context.Add(
+            new GovernmentContract
+            {
+                CommonStockId = stock.Id,
+                AwardUniqueKey = "award-1",
+                AwardId = "W58RGZ26C0001",
+                RecipientName =
+                    @"RTX Defense Holdings International Systems and\|Missiles Division LLC",
+                AwardType = GovernmentContractAwardType.DefinitiveContract,
+                AwardingAgency = "Department of Defense",
+                Amount = 1_500_000m,
+                TotalOutlays = 250_000m,
+                ActionDate = new DateOnly(2026, 6, 1),
+                EndDate = new DateOnly(2028, 6, 1),
+                Description = "Missile systems",
+            }
+        );
+        await context.SaveChangesAsync();
+        var tools = new GovernmentContractsTools(
+            new GovernmentContractRepository(context),
+            new CommonStockRepository(context),
+            new ErrorManager(null!),
+            NullLogger<GovernmentContractsTools>.Instance
+        );
+
+        var result = await tools.GetGovernmentContracts("RTX", "2026-01-01", "2026-12-31");
+
+        result.Should().Contain("| Award Date | Recipient | Agency |");
+        result.Should().Contain("| Outlays |");
+        result
+            .Should()
+            .Contain(@"RTX Defense Holdings International Systems and\\\|Missiles Division LLC");
+        result.Should().Contain("$250,000");
+
+        var ranking = await tools.GetTopGovernmentContractors("2026-01-01", "2026-12-31");
+        ranking
+            .Should()
+            .NotContain(
+                "Recipient is the awarded entity",
+                "the market-wide ranking has no Recipient column"
+            );
     }
 
     private static bool HasUnpairedSurrogate(string value)

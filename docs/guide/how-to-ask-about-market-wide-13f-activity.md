@@ -22,9 +22,11 @@ The assistant picks the `GetMarketWide13FActivity` tool and selects the matching
 
 A ranked table for the leaderboard you asked about:
 
-- **Top buys** — stocks with the largest increase in institutional holdings, ranked by change in market value.
-- **Top sells** — stocks with the largest decrease, ranked by the size of the sell-down.
+- **Top buys** — positive share changes ranked by change in stored quarter-end position value.
+- **Top sells** — negative share changes ranked by change in stored quarter-end position value.
 - **New positions** — stocks ranked by how many filers initiated a position this quarter.
 - **Sold-out positions** — stocks ranked by how many filers exited entirely.
+
+For top buys and sells, `Δ Value` includes the quarter's stock-price move on shares merely held; it is the ranking key, not a pure trading-flow measure. Read `Δ Shares` to identify the position change itself.
 
 If the reply is empty, only one quarter of 13F data has likely been imported so far — there's nothing to compare against yet. Let the worker keep running and try again once a second quarter has loaded.

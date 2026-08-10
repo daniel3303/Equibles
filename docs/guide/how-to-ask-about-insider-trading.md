@@ -30,7 +30,7 @@ A Form 144 is an affiliate's declared intent to sell, filed before the trade —
 
 - "Are there any proposed insider sales pending at NVDA?"
 
-The assistant calls `GetProposedSales` and returns each Form 144 notice — the seller and their relationship to the company, the shares and aggregate market value to be sold, the approximate sale date, and the broker.
+The assistant calls `GetProposedSales` and returns each Form 144 notice — the seller and their relationship to the company, the shares and aggregate market value to be sold, the sale as a percent of shares outstanding, the approximate sale date, the broker, and filed remarks such as a stated 10b5-1 plan.
 
 ## Look up a specific insider
 

@@ -29,7 +29,7 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 | **Fund Filings** | SEC NPORT / N-CEN / Form D | ✅ | ✅ | Fund portfolio holdings, registered-fund operations (service providers), and exempt offerings (private placements) |
 | **Investment Advisers** | SEC Form ADV | ✅ | ✅ | SEC-registered advisers — assets under management, main office, employee count, fee structure |
 | **Insider Trading** | SEC Form 3/4/144 | ✅ | ✅ | Director, officer, and 10% owner transactions, plus proposed (Form 144) sales |
-| **Congressional Trading** | House/Senate disclosures | ✅ | ✅ | Stock trades by members of Congress |
+| **Congressional Trading** | House/Senate disclosures | ✅ | ✅ | Securities transactions by members of Congress, including the filed stock, option, bond, or other instrument |
 | **Short Data** | SEC / FINRA | ✅ | ✅ | Fails-to-deliver (SEC), daily short volume and short interest (FINRA) |
 | **Economic Indicators** | FRED (Federal Reserve) | ✅ | ✅ | Interest rates, inflation, employment, GDP, yield spreads, and more |
 | **Stock Prices** | Yahoo Finance | ✅ | ✅ | Daily OHLCV prices with technical indicators (SMA, RSI, MACD) |
@@ -330,7 +330,7 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 - GetFinancialStatement — income/balance/cash-flow statement by period
 - GetFinancialFact — one concept over time
 - CompareFinancialFact — a concept across companies
-- GetRevenueBreakdown — revenue by segment/geography/product
+- GetRevenueBreakdown — revenue by segment/geography/product plus reported segment operating income and derived margin
 
 **Economic data (FRED)**
 
@@ -372,7 +372,7 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 
 **Stock prices**
 
-- GetStockPrices — daily OHLCV (split-adjusted)
+- GetStockPrices — daily OHLCV plus the stored auxiliary adjusted close when it differs
 - GetLatestPrices — latest close/change/volume
 - GetStochasticOscillator — stochastic oscillator (%K/%D)
 - GetAverageTrueRange — average true range (ATR)

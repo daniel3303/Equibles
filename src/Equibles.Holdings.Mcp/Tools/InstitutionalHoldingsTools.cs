@@ -770,7 +770,7 @@ public class InstitutionalHoldingsTools
                 // Restate each quarter's share counts onto today's split basis (the two
                 // quarters sit on different bases if a split fell between them) so Δ Shares
                 // and the Prior → New column reflect a real position change, not the split.
-                // Δ Value is a dollar figure and is split-invariant — left as reported.
+                // Δ Value is a dollar figure and is split-invariant — leave the stored value.
                 var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
                 var currentFactor = SplitAdjustment.ShareCountFactor(targetDate, splits);
                 var previousFactor = previousDate.HasValue
@@ -923,7 +923,7 @@ public class InstitutionalHoldingsTools
 
         result.AppendLine();
         result.AppendLine(
-            "_Δ Position Value is the change in reported market value and includes price movement — a seller can show a positive Δ when the stock rose during the quarter._"
+            "_Δ Position Value is the change in stored quarter-end position value and includes price movement — a seller can show a positive Δ when the stock rose during the quarter._"
         );
 
         return result.ToString();
@@ -963,7 +963,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Use this to answer 'what's the consensus 13F move this quarter?'"
+        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Δ Value is the change in stored quarter-end position value and includes the quarter's price move on held shares, so use Δ Shares to read the position change itself. Use this to answer 'what's the consensus 13F move this quarter?'"
     )]
     public Task<string> GetMarketWide13FActivity(
         [Description("Bucket: top-buys, top-sells, new-positions, or sold-out-positions")]
@@ -1167,8 +1167,17 @@ public class InstitutionalHoldingsTools
                 return $"| {rank} | {ticker} | {name} | {FormatSignedShares(r.DeltaShares)} | {FormatSignedMillions(r.DeltaValue)} |";
             }
         );
+        result.AppendLine();
+        result.AppendLine(DeltaValueCaveat);
         return result.ToString();
     }
+
+    // Δ Value is the change in stored quarter-end position value, so it moves with the stock's own price on
+    // positions merely held through the quarter. Without this, the "most bought" stock reads as
+    // heavy accumulation when the share change was a rounding error and the price simply rose.
+    private const string DeltaValueCaveat =
+        "_Δ Value is the change in stored quarter-end position value and includes the quarter's price move on "
+        + "held positions, not just net buying or selling — read Δ Shares for the position change itself._";
 
     private async Task<string> RenderMarketActivityChurn(
         string normalizedBucket,
@@ -1676,7 +1685,7 @@ public class InstitutionalHoldingsTools
         }
 
         result.AppendLine(
-            "_Δ Value is the change in reported market value and includes price movement, not just trading — it also drives the per-bucket ordering._"
+            "_Δ Value is the change in stored quarter-end position value and includes price movement, not just trading — it also drives the per-bucket ordering._"
         );
         return result.ToString();
     }

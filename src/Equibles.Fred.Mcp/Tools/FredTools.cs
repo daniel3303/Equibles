@@ -251,7 +251,7 @@ public class FredTools
         ReadOnly = true
     )]
     [Description(
-        "Search the curated set of ~40 US macro FRED series Equibles tracks (rates, inflation, employment, GDP, housing, market indicators) — not the full FRED catalog. Matches series ID, title, and category name: a category query like 'inflation' returns that whole category (CPI, PCE, PPI, breakevens), and an empty query lists every tracked series. Use this to discover what economic data is available before calling GetEconomicIndicator."
+        "Search the curated set of ~40 US macro FRED series Equibles tracks (rates, inflation, employment, GDP, housing, market indicators) — not the full FRED catalog. Matches series ID, title, and category name: a category query like 'inflation' returns that whole category (CPI, PCE, PPI, breakevens), and an empty query lists every tracked series. Results include seasonal adjustment, the latest observation date, and the UTC time Equibles last synced the series. Use this to discover what economic data is available before calling GetEconomicIndicator."
     )]
     public Task<string> SearchEconomicIndicators(
         [Description(
@@ -283,9 +283,17 @@ public class FredTools
                     series,
                     $"No tracked series match '{query}'. Equibles tracks a curated ~40-series US macro set - FRED series outside it are not available. Try a category name (Inflation, Employment, InterestRates, ...) or an empty query to list all tracked series.",
                     title,
-                    "| Series ID | Title | Category | Frequency | Units |",
-                    "|-----------|-------|----------|-----------|-------|",
-                    s => $"| {s.SeriesId} | {s.Title} | {s.Category} | {s.Frequency} | {s.Units} |"
+                    // Seasonal adjustment decides whether two series are even comparable. The
+                    // ObservationEnd dates the newest data point; LastUpdated is the separate
+                    // Equibles import clock. Both REST fields are rendered with distinct labels
+                    // so a caller never mistakes ingestion freshness for publication recency.
+                    "| Series ID | Title | Category | Frequency | Units | Seasonal Adj | Latest Observation | Last Synced (UTC) |",
+                    "|-----------|-------|----------|-----------|-------|--------------|--------------------|-------------------|",
+                    s =>
+                        $"| {MarkdownTable.EscapeCell(s.SeriesId, "-")} | {MarkdownTable.EscapeCell(s.Title, "-")} | {MarkdownTable.EscapeCell(s.Category.ToString(), "-")} | {MarkdownTable.EscapeCell(s.Frequency, "-")} | {MarkdownTable.EscapeCell(s.Units, "-")} "
+                        + $"| {MarkdownTable.EscapeCell(s.SeasonalAdjustment, "-")} "
+                        + $"| {(s.ObservationEnd == null ? "-" : McpFormat.Invariant(s.ObservationEnd.Value, "yyyy-MM-dd"))} "
+                        + $"| {McpFormat.OrDash(s.LastUpdated?.ToUniversalTime(), "O")} |"
                 );
 
                 var truncation = McpOutput.TruncationNote(series.Count, total);

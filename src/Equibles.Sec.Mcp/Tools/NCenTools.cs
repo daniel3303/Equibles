@@ -39,7 +39,7 @@ public class NCenTools
         ReadOnly = true
     )]
     [Description(
-        "Get operational data for a registered investment company from its SEC Form N-CEN annual reports. Resolves exchange-listed tickers only — ETFs, closed-end funds and unit investment trusts; an unlisted mutual-fund share-class ticker (e.g. VFIAX) will not resolve, so find that fund via SearchFunds/GetFundProfile instead. Each N-CEN shows the registrant's classification (e.g. N-1A open-end, N-2 closed-end, S-6 unit investment trust), Investment Company Act file number, reporting period, and whether it was the fund's first or last filing, followed by the service providers named on the most recent report only — investment advisers, sub-advisers, custodians, transfer agents, administrators, auditors and underwriters. Use this to see who runs and services a fund. Only registered funds file N-CEN; operating companies will return no data."
+        "Get operational data for a registered investment company from its SEC Form N-CEN annual reports. Resolves exchange-listed tickers only — ETFs, closed-end funds and unit investment trusts; an unlisted mutual-fund share-class ticker (e.g. VFIAX) will not resolve, so find that fund via SearchFunds/GetFundProfile instead. Each N-CEN shows the registrant's classification (e.g. N-1A open-end, N-2 closed-end, S-6 unit investment trust), Investment Company Act file number, reporting period, and whether it was the fund's first or last filing. The response shows the service providers named on the latest report and an exact filed-name history across the reports returned — investment advisers, sub-advisers, custodians, transfer agents, administrators, auditors and underwriters. Use this to see who runs and services a fund. Only registered funds file N-CEN; operating companies will return no data."
     )]
     public Task<string> GetFundOperations(
         [Description("Fund or ETF ticker symbol (e.g., MXF, SPY)")] string ticker,
@@ -58,6 +58,9 @@ public class NCenTools
                     .GetByStock(stock)
                     .Include(f => f.ServiceProviders)
                     .OrderByDescending(f => f.FilingDate)
+                    .ThenByDescending(f => f.IsAmendment)
+                    .ThenByDescending(f => f.AccessionNumber)
+                    .ThenByDescending(f => f.CreationTime)
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
@@ -77,6 +80,7 @@ public class NCenTools
                 );
 
                 AppendServiceProviders(result, filings[0]);
+                AppendServiceProviderHistory(result, filings);
 
                 return result.ToString();
             },
@@ -110,7 +114,88 @@ public class NCenTools
         result.AppendRows(
             latest.ServiceProviders.OrderBy(p => p.ProviderType).ThenBy(p => p.Name),
             provider =>
-                $"| {provider.ProviderType.NameForHumans()} | {provider.Name} | {provider.Country ?? "-"} | {(provider.IsAffiliated ? "Yes" : "No")} |"
+                $"| {provider.ProviderType.NameForHumans()} | {MarkdownText(provider.Name)} | {MarkdownText(provider.Country) ?? "-"} | {(provider.IsAffiliated ? "Yes" : "No")} |"
         );
     }
+
+    // Historical provider rosters are the evidence needed to spot a changed auditor or custodian.
+    // Render the exact filed-name timeline and compress only consecutive IDENTICAL snapshots. An
+    // omitted role is an explicit "not reported" state, never a removal; punctuation differences
+    // stay visible rather than being heuristically collapsed into one provider identity.
+    private static void AppendServiceProviderHistory(
+        System.Text.StringBuilder result,
+        List<NCenFiling> filings
+    )
+    {
+        if (filings.Count < 2)
+            return;
+
+        var oldestFirst = filings
+            .OrderBy(f => f.FilingDate)
+            .ThenBy(f => f.IsAmendment)
+            .ThenBy(f => f.AccessionNumber)
+            .ThenBy(f => f.CreationTime)
+            .ToList();
+        var sameDateFilings = oldestFirst
+            .GroupBy(f => f.FilingDate)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet();
+        var roles = oldestFirst
+            .SelectMany(f => f.ServiceProviders.Select(p => p.ProviderType))
+            .Distinct()
+            .OrderBy(r => r.NameForHumans(), StringComparer.Ordinal);
+
+        result.AppendLine();
+        result.AppendLine(
+            $"Service-provider history across the {filings.Count} reports shown (exact filed names; consecutive identical snapshots compressed):"
+        );
+        result.AppendLine();
+
+        foreach (var role in roles)
+        {
+            string[] previous = null;
+            var timeline = new List<string>();
+            foreach (var filing in oldestFirst)
+            {
+                var current = NamesForRole(filing, role);
+                if (previous != null && previous.SequenceEqual(current, StringComparer.Ordinal))
+                    continue;
+                timeline.Add(
+                    $"{TimelineLabel(filing, sameDateFilings.Contains(filing.FilingDate))}: "
+                        + (
+                            current.Length == 0
+                                ? "not reported"
+                                : string.Join(", ", current.Select(MarkdownText))
+                        )
+                );
+                previous = current;
+            }
+            result.AppendLine($"- {role.NameForHumans()}: {string.Join("; ", timeline)}");
+        }
+    }
+
+    private static string[] NamesForRole(NCenFiling filing, NCenServiceProviderType role) =>
+        filing
+            .ServiceProviders.Where(p => p.ProviderType == role)
+            .Select(p => p.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+
+    private static string TimelineLabel(NCenFiling filing, bool disambiguate)
+    {
+        var date = filing.FilingDate.ToString("yyyy-MM-dd");
+        if (!disambiguate)
+            return date;
+
+        var kind = filing.IsAmendment ? "amendment" : "original";
+        var accession = MarkdownText(filing.AccessionNumber) ?? "accession unknown";
+        return $"{date} ({kind}; accession {accession})";
+    }
+
+    // SEC-filed text can carry pipes and line breaks. Flatten it before inserting it into a
+    // Markdown table or bullet so one provider cannot create a synthetic row or section.
+    private static string MarkdownText(string value) =>
+        value == null ? null : MarkdownTable.EscapeCell(value).Trim();
 }

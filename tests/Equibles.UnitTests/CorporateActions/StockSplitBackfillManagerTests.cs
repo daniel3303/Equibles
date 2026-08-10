@@ -115,7 +115,7 @@ public class StockSplitBackfillManagerTests
         split.Source.Should().Be(StockSplitSource.Yahoo);
         split.PriceSeriesTicker.Should().Be("AAPL");
         // Null marks the exact listed series pending for the price sync's split reconciliation,
-        // which re-pulls the fully-adjusted history — the backfill itself never
+        // which re-pulls the full provider-served history — the backfill itself never
         // touches stored prices.
         split.PriceAdjustmentAppliedTime.Should().BeNull();
     }

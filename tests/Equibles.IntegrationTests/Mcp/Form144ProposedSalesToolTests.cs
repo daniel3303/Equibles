@@ -200,6 +200,86 @@ public class Form144ProposedSalesToolTests : IDisposable
         result.Should().Contain("| - |");
     }
 
+    [Fact]
+    public async Task GetProposedSales_RemarksPreserveCompleteUnicodeText()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
+        filing.Remarks = new string('a', 89) + "😀 trailing text";
+        _dbContext.Set<Form144Filing>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales("AAPL");
+
+        result.Should().Contain(new string('a', 89) + "😀 trailing text");
+    }
+
+    [Fact]
+    public async Task GetProposedSales_RemarksPreserveCompleteEscapedPipeText()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
+        filing.Remarks = new string('a', 89) + "|trailing text";
+        _dbContext.Set<Form144Filing>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales("AAPL");
+
+        result.Should().Contain(new string('a', 89) + "\\|trailing text");
+    }
+
+    [Fact]
+    public async Task GetProposedSales_RemarksPreserveLateRule10b5OneDisclosure()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
+        filing.Remarks =
+            new string('a', 120) + " Sale will be made pursuant to a Rule 10b5-1 plan.";
+        _dbContext.Set<Form144Filing>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales("AAPL");
+
+        result.Should().Contain("Sale will be made pursuant to a Rule 10b5-1 plan.");
+    }
+
+    [Fact]
+    public async Task GetProposedSales_RemarksBackslashBeforePipe_KeepsPipeInsideCell()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
+        filing.Remarks = "Sale under plan A\\|renewed";
+        _dbContext.Set<Form144Filing>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales("AAPL");
+
+        result.Should().Contain("Sale under plan A\\\\\\|renewed");
+    }
+
+    [Fact]
+    public async Task GetProposedSales_AllFiledTextCellsStayInsideTheirColumns()
+    {
+        var stock = SeedStock();
+        var filing = MakeFiling(
+            stock.Id,
+            "acc",
+            new DateOnly(2026, 1, 5),
+            "SELLER\\|NAME\nSECOND",
+            1000
+        );
+        filing.RelationshipToIssuer = "Officer\\|Director\nAffiliate";
+        filing.BrokerName = "BROKER\\|DESK\nLLC";
+        _dbContext.Set<Form144Filing>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales("AAPL");
+
+        result.Should().Contain("SELLER\\\\\\|NAME SECOND");
+        result.Should().Contain("Officer\\\\\\|Director Affiliate");
+        result.Should().Contain("BROKER\\\\\\|DESK LLC");
+    }
+
     private static Form144Filing MakeFiling(
         Guid stockId,
         string accession,

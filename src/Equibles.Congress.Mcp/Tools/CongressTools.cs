@@ -46,7 +46,7 @@ public class CongressTools
         ReadOnly = true
     )]
     [Description(
-        "Get congressional stock trades for a specific ticker (newest first, last year by default). Shows which members of Congress bought or sold shares, with transaction and filing dates; amounts are the disclosed ranges, not exact values. Use GetMemberTrades for one member's trades across all tickers."
+        "Get congressional securities transactions for a specific ticker (newest first, last year by default). Shows which members of Congress reported a purchase or sale, with transaction and filing dates; amounts are disclosed ranges, not exact values, and Asset identifies the filed instrument (such as stock, option, or bond). Use GetMemberTrades for one member's transactions across all tickers."
     )]
     public Task<string> GetCongressionalTrades(
         [Description("Stock ticker symbol (e.g., AAPL, MSFT, NVDA)")] string ticker,
@@ -93,14 +93,17 @@ public class CongressTools
                     trades,
                     $"No congressional trades found for {stock.Ticker} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
                     $"Congressional trades for {stock.Ticker} ({stock.Name}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
-                    "| Date | Filed | Member | Position | Type | Amount Range | Owner |",
-                    "|------|-------|--------|----------|------|-------------|-------|",
+                    "| Date | Filed | Member | Position | Type | Amount Range | Asset | Owner |",
+                    "|------|-------|--------|----------|------|-------------|-------|-------|",
                     t =>
                     {
                         var position = t.CongressMember.Position.NameForHumans();
                         var type = t.TransactionType.NameForHumans();
                         var amount = FormatAmountRange(t);
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {FormatOwner(t.OwnerType)} |";
+                        // The asset as filed is the ONLY thing separating an option or bond trade
+                        // from a stock trade — "Purchase" alone reads as a bullish share buy even
+                        // when the filing says it was a put.
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {EscapeCell(t.AssetName)} | {FormatOwner(t.OwnerType)} |";
                     }
                 );
                 return AppendTruncationNote(table, trades.Count, totalCount);
@@ -112,7 +115,7 @@ public class CongressTools
 
     [McpServerTool(Name = "GetMemberTrades", Title = "Trades by Congress Member", ReadOnly = true)]
     [Description(
-        "Get a congress member's disclosed stock trades (newest first, last year by default). Shows tickers, transaction and filing dates, and disclosed amount ranges — bands, not exact values. Use SearchCongressMembers to find member names, and GetCongressionalTrades for all members' trades in one ticker."
+        "Get a congress member's disclosed securities transactions (newest first, last year by default). Shows tickers, transaction and filing dates, disclosed amount ranges, and the filed Asset identifying the instrument (such as stock, option, or bond). Use SearchCongressMembers to find member names, and GetCongressionalTrades for all members' transactions in one ticker."
     )]
     public Task<string> GetMemberTrades(
         [Description(
@@ -183,7 +186,7 @@ public class CongressTools
                     {
                         var type = t.TransactionType.NameForHumans();
                         var amount = FormatAmountRange(t);
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {t.AssetName} | {FormatOwner(t.OwnerType)} |";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {FormatOwner(t.OwnerType)} |";
                     }
                 );
                 var note = McpOutput.PagedTruncationNote(trades.Count, totalCount, offset);
@@ -330,6 +333,11 @@ public class CongressTools
     // House PTRs disclose raw owner codes (SP/JT/DC) while Senate rows arrive spelled out;
     // render one vocabulary — the Senate labels — so a table never mixes "SP" and "Spouse".
     // The stored value is untouched: OwnerType is part of the trade upsert key.
+    // The asset as filed is free text and is the field that separates an option or bond trade from
+    // a share trade, so an unescaped pipe would shift every later column and file Owner under
+    // Asset — a classification error, not just a cosmetic one.
+    private static string EscapeCell(string value) => MarkdownTable.EscapeCell(value, "—");
+
     private static string FormatOwner(string ownerType) =>
         string.IsNullOrEmpty(ownerType)
             ? "—"

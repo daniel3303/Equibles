@@ -1,6 +1,6 @@
-# Ask your AI assistant about congressional stock trades
+# Ask your AI assistant about congressional securities transactions
 
-Equibles collects the periodic transaction reports that members of the U.S. House and Senate file when they buy or sell stock, and exposes them through the MCP server, so you can ask your AI assistant which members traded a stock, or what a particular member has been trading.
+Equibles collects the periodic transaction reports that members of the U.S. House and Senate file when they transact in securities, and exposes them through the MCP server. You can ask which members traded a company's stock, option, bond, or another reported instrument, or what a particular member has been trading.
 
 ## Before you start
 
@@ -14,20 +14,20 @@ Name a company and ask which members traded it:
 - "Which members of Congress have traded NVDA?"
 - "Has anyone in Congress bought or sold Apple recently?"
 
-The assistant calls the `GetCongressionalTrades` tool and replies with each trade in that ticker — the member, the transaction type (buy or sell), the date, and the disclosed amount. Because disclosure rules report a dollar range rather than an exact figure, amounts appear as bands.
+The assistant calls the `GetCongressionalTrades` tool and replies with each disclosed transaction tied to that ticker — the member, transaction type, filed Asset instrument, date, and disclosed amount. Because disclosure rules report a dollar range rather than an exact figure, amounts appear as bands.
 
 ## Ask what a member has been trading
 
 To follow one member instead of one stock:
 
 - "What has Nancy Pelosi been trading?"
-- "Show me Tommy Tuberville's recent stock trades."
+- "Show me Tommy Tuberville's recent securities transactions."
 
-The assistant uses `GetMemberTrades` for that member, listing each trade with its ticker, transaction type, and amount. If it needs to confirm the exact name first, it calls `SearchCongressMembers` to look the member up.
+The assistant uses `GetMemberTrades` for that member, listing each transaction with its ticker, filed Asset instrument, transaction type, and amount. If it needs to confirm the exact name first, it calls `SearchCongressMembers` to look the member up.
 
 ## What you should see
 
-A list of trades drawn straight from the official House and Senate filings, each tagged with the transaction and filing dates. Disclosures are filed after the trade — often weeks later — and amounts are ranges, so treat the figures as the bands Congress reports rather than exact values.
+A list of securities transactions drawn straight from the official House and Senate filings, each tagged with the filed Asset instrument plus transaction and filing dates. Disclosures are filed after the transaction — often weeks later — and amounts are ranges, so treat the figures as the bands Congress reports rather than exact values.
 
 If the reply says there's no data, either the member or company has no disclosed trades on record, or the scraper hasn't imported the latest filings yet.
 

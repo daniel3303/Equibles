@@ -87,6 +87,9 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
             .IndexOf("AAPL", StringComparison.Ordinal)
             .Should()
             .BeLessThan(output.IndexOf("MSFT", StringComparison.Ordinal));
+        output.Should().Contain("Δ Value is the change in stored quarter-end position value");
+        output.Should().Contain("includes the quarter's price move on held positions");
+        output.Should().Contain("read Δ Shares for the position change itself");
     }
 
     [Fact]

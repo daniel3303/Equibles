@@ -70,7 +70,7 @@ Click **Fund Holdings**. For registered funds, this tab lists the individual sec
 
 ## Congressional Trades
 
-Click **Congressional Trades**. Members of the U.S. House of Representatives are required to disclose their stock trades. This tab shows any reported purchases or sales of this stock by members of Congress, including the estimated transaction amount and the disclosure date.
+Click **Congressional Trades**. Members of the U.S. House of Representatives disclose securities transactions. This tab shows reported transactions tied to the company, including the filed Asset instrument (such as stock, option, or bond), estimated transaction amount, and disclosure date.
 
 ## You're done
 

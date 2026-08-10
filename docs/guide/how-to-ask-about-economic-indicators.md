@@ -15,7 +15,7 @@ Name an indicator and ask for its history:
 - "Show me CPI inflation since 2020."
 - "How has the 10-year/2-year yield spread moved recently?"
 
-The assistant calls the `GetEconomicIndicator` tool and replies with the time series of observations. Common series include the fed funds rate, CPI, unemployment, GDP, the 10Y/2Y yield spread, and the 30-year mortgage rate. If it is unsure of the exact series, it uses `SearchEconomicIndicators` to look it up by name.
+The assistant calls the `GetEconomicIndicator` tool and replies with the time series of observations. Common series include the fed funds rate, CPI, unemployment, GDP, the 10Y/2Y yield spread, and the 30-year mortgage rate. If it is unsure of the exact series, it uses `SearchEconomicIndicators` to look it up by name. Each search result states the seasonal-adjustment basis, latest observation date, and exact UTC sync time; use those separately to judge comparability, publication recency, and pipeline freshness.
 
 ## Ask for a macro snapshot
 
