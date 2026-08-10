@@ -135,6 +135,31 @@ public class NportFundHoldingsToolTests : IDisposable
     }
 
     [Fact]
+    public async Task GetFundHoldings_SameDayAmendmentWinsTheTickerFallbackTie()
+    {
+        var stock = SeedStock();
+        var filingDate = new DateOnly(2025, 3, 15);
+        var reportPeriod = new DateOnly(2025, 2, 28);
+
+        var original = MakeFiling(stock.Id, "0000036405-25-000001", filingDate);
+        original.ReportPeriodDate = reportPeriod;
+        original.Holdings.Add(MakeHolding("ORIGINAL CO", 1_000_000m));
+        _dbContext.Set<NportFiling>().Add(original);
+
+        var amendment = MakeFiling(stock.Id, "0000036405-25-000099", filingDate);
+        amendment.ReportPeriodDate = reportPeriod;
+        amendment.IsAmendment = true;
+        amendment.Holdings.Add(MakeHolding("AMENDED CO", 2_000_000m));
+        _dbContext.Set<NportFiling>().Add(amendment);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundHoldings("VOO");
+
+        result.Should().Contain("AMENDED CO");
+        result.Should().NotContain("ORIGINAL CO");
+    }
+
+    [Fact]
     public async Task GetFundHoldings_GlossesUnitAndCategoryCodesAndDropsWholeShareDecimals()
     {
         var stock = SeedStock();
@@ -189,6 +214,35 @@ public class NportFundHoldingsToolTests : IDisposable
 
         result.Should().Contain("VANGUARD 500 INDEX FUND");
         result.Should().Contain("TRACKED CO");
+    }
+
+    [Fact]
+    public async Task GetFundHoldings_SeriesDirectoryUsesFilingDateThenAccessionTiebreakers()
+    {
+        SeedTrustSeries();
+
+        var older = MakeTrustFiling("0000102909-26-000999", new DateOnly(2026, 5, 14));
+        older.Holdings.Clear();
+        older.Holdings.Add(MakeHolding("OLDER FILED CO", 3_000_000m));
+        _dbContext.Set<NportFiling>().Add(older);
+
+        var original = MakeTrustFiling("0000102909-26-000001", new DateOnly(2026, 5, 15));
+        original.Holdings.Clear();
+        original.Holdings.Add(MakeHolding("SAME DAY ORIGINAL CO", 2_000_000m));
+        _dbContext.Set<NportFiling>().Add(original);
+
+        var amendment = MakeTrustFiling("0000102909-26-000099", new DateOnly(2026, 5, 15));
+        amendment.IsAmendment = true;
+        amendment.Holdings.Clear();
+        amendment.Holdings.Add(MakeHolding("SAME DAY AMENDMENT CO", 1_000_000m));
+        _dbContext.Set<NportFiling>().Add(amendment);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundHoldings("vanguard-500-index-fund-s000002839");
+
+        result.Should().Contain("SAME DAY AMENDMENT CO");
+        result.Should().NotContain("SAME DAY ORIGINAL CO");
+        result.Should().NotContain("OLDER FILED CO");
     }
 
     [Fact]
