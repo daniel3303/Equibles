@@ -272,6 +272,35 @@ public class CorporateActionPriceReconciliationManagerStampingTests
     }
 
     [Fact]
+    public async Task StampApplied_SelectedDividendOmittedFromPriceSeriesResponse_RemainsPending()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var exDate = new DateOnly(2024, 5, 9);
+        var split = PendingSplit(stockId, new DateOnly(2024, 6, 10));
+        var dividend = PendingDividend(stockId, exDate, 0.25m);
+        db.Add(Stock(stockId));
+        db.AddRange(split, dividend);
+        await db.SaveChangesAsync();
+
+        var manager = NewManager(db);
+        var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
+        var appliedTime = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc);
+
+        var stamped = await manager.StampApplied(selected, [], SettledBefore, appliedTime);
+
+        stamped.Should().Be(1);
+        split.PriceAdjustmentAppliedTime.Should().Be(appliedTime);
+        dividend.PriceAdjustmentAppliedAmountPerShare.Should().BeNull();
+        dividend.PriceAdjustmentAppliedTime.Should().BeNull();
+        (await manager.SelectPendingSeries(50, SettledBefore))
+            .Series.Should()
+            .ContainSingle()
+            .Which.Dividends.Should()
+            .ContainSingle(snapshot => snapshot.Id == dividend.Id);
+    }
+
+    [Fact]
     public async Task StampApplied_NewPriceSeriesDividendAfterSelection_StampsSameFetch()
     {
         await using var db = NewDb();

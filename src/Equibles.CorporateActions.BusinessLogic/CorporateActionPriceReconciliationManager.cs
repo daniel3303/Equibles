@@ -154,18 +154,45 @@ public class CorporateActionPriceReconciliationManager
         PendingPriceReconciliationSeries selectedSeries,
         DateTime appliedTime,
         CancellationToken cancellationToken = default
-    ) => StampApplied(selectedSeries, [], DateOnly.MinValue, appliedTime, cancellationToken);
+    ) =>
+        StampAppliedCore(
+            selectedSeries,
+            [],
+            false,
+            DateOnly.MinValue,
+            appliedTime,
+            cancellationToken
+        );
 
     /// <summary>
-    /// Stamps unchanged selected actions plus dividends whose current state exactly matches the
+    /// Stamps unchanged selected splits plus dividends whose current state exactly matches the
     /// same provider response that supplied the replacement adjusted-price series.
     /// </summary>
-    public async Task<int> StampApplied(
+    public Task<int> StampApplied(
         PendingPriceReconciliationSeries selectedSeries,
         IReadOnlyCollection<CapturedDividend> priceSeriesDividends,
         DateOnly settledBefore,
         DateTime appliedTime,
         CancellationToken cancellationToken = default
+    )
+    {
+        return StampAppliedCore(
+            selectedSeries,
+            priceSeriesDividends,
+            true,
+            settledBefore,
+            appliedTime,
+            cancellationToken
+        );
+    }
+
+    private async Task<int> StampAppliedCore(
+        PendingPriceReconciliationSeries selectedSeries,
+        IReadOnlyCollection<CapturedDividend> priceSeriesDividends,
+        bool requirePriceSeriesDividendMatch,
+        DateOnly settledBefore,
+        DateTime appliedTime,
+        CancellationToken cancellationToken
     )
     {
         await using var transaction = await _stockRepository.CreateTransaction(
@@ -188,22 +215,15 @@ public class CorporateActionPriceReconciliationManager
             selectedSeries.ListedTicker,
             StringComparison.OrdinalIgnoreCase
         );
-        var unchangedDividends = await LoadUnchangedDividends(
-            selectedSeries,
-            isStillPrimary,
-            cancellationToken
-        );
-        var responseMatchedDividends = await LoadResponseMatchedDividends(
-            selectedSeries,
-            priceSeriesDividends,
-            settledBefore,
-            isStillPrimary,
-            cancellationToken
-        );
-        var dividendsToStamp = unchangedDividends
-            .Concat(responseMatchedDividends)
-            .DistinctBy(dividend => dividend.Id)
-            .ToList();
+        var dividendsToStamp = requirePriceSeriesDividendMatch
+            ? await LoadResponseMatchedDividends(
+                selectedSeries,
+                priceSeriesDividends,
+                settledBefore,
+                isStillPrimary,
+                cancellationToken
+            )
+            : await LoadUnchangedDividends(selectedSeries, isStillPrimary, cancellationToken);
         ApplyMarkers(unchangedSplits, dividendsToStamp, appliedTime);
 
         var stamped = unchangedSplits.Count + dividendsToStamp.Count;
