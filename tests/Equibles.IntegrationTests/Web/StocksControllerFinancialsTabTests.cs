@@ -375,4 +375,98 @@ public class StocksControllerFinancialsTabTests : IDisposable
         // The dimensional row shares the period, so it must not add a phantom option.
         tab.AvailablePeriods.Should().ContainSingle();
     }
+
+    [Fact]
+    public async Task Financials_OverlongLatestStampDoesNotBecomeTheDefaultPeriod()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "NTAP",
+            Name = "NetApp, Inc.",
+            Cik = "0001002047",
+        };
+        var revenue = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "Revenues",
+            Label = "Revenue",
+        };
+        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<FinancialConcept>().Add(revenue);
+
+        FinancialFact Fact(
+            int fiscalYear,
+            DateOnly start,
+            DateOnly end,
+            decimal value,
+            string accession
+        ) =>
+            new()
+            {
+                CommonStockId = stock.Id,
+                FinancialConceptId = revenue.Id,
+                Unit = "USD",
+                PeriodType = FactPeriodType.Duration,
+                PeriodStart = start,
+                PeriodEnd = end,
+                Value = value,
+                FiscalYear = fiscalYear,
+                FiscalPeriod = SecFiscalPeriod.FullYear,
+                Form = DocumentType.TenK,
+                FiledDate = end.AddDays(30),
+                AccessionNumber = accession,
+            };
+
+        _dbContext
+            .Set<FinancialFact>()
+            .AddRange(
+                Fact(
+                    2024,
+                    new DateOnly(2024, 1, 1),
+                    new DateOnly(2024, 12, 31),
+                    120m,
+                    "valid-fy24"
+                ),
+                Fact(
+                    2025,
+                    new DateOnly(2003, 5, 13),
+                    new DateOnly(2025, 1, 24),
+                    9_999m,
+                    "overlong-fy25"
+                )
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var stockTabService = new StockTabService(
+            new InstitutionalHoldingRepository(_dbContext),
+            new InstitutionalHolderRepository(_dbContext),
+            new DailyShortVolumeRepository(_dbContext),
+            new ShortInterestRepository(_dbContext),
+            new FailToDeliverRepository(_dbContext),
+            new DocumentRepository(_dbContext),
+            new InsiderTransactionRepository(_dbContext),
+            new Form144FilingRepository(_dbContext),
+            new FormDFilingRepository(_dbContext),
+            new NCenFilingRepository(_dbContext),
+            new NportFilingRepository(_dbContext),
+            new CongressionalTradeRepository(_dbContext),
+            new DailyStockPriceRepository(_dbContext),
+            new FinancialFactRepository(_dbContext),
+            new FinancialConceptRepository(_dbContext),
+            new CommonStockRepository(_dbContext)
+        );
+
+        var tab = await stockTabService.LoadFinancialsTab(
+            stock,
+            FinancialStatementType.IncomeStatement,
+            year: null,
+            period: null
+        );
+
+        tab.AvailablePeriods.Should().ContainSingle(p => p.FiscalYear == 2024);
+        tab.SelectedYear.Should().Be(2024);
+        tab.Lines.Should().ContainSingle(l => l.Label == "Revenue" && l.Value == 120m);
+    }
 }

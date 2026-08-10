@@ -132,6 +132,14 @@ public class FinancialStatementTools
                         f.FiscalYear == selectedYear
                         && f.FiscalPeriod == selectedPeriod
                         && conceptIds.Contains(f.FinancialConceptId)
+                        && (
+                            f.PeriodType != FactPeriodType.Duration
+                            || f.PeriodEnd >= f.PeriodStart
+                                && f.PeriodEnd
+                                    <= f.PeriodStart.AddDays(
+                                        StatementLineFacts.MaxSupportedDurationDays
+                                    )
+                        )
                     )
                     .ToListAsync();
 
@@ -156,9 +164,10 @@ public class FinancialStatementTools
                 // then the instant ending latest, then the latest restatement — the same
                 // selection the web surfaces apply in
                 // FinancialStatementsHelper.PickCurrentlyReportedFact.
-                var latestByConcept = facts
-                    .GroupBy(f => f.FinancialConceptId)
-                    .ToDictionary(g => g.Key, g => PickCurrentlyReportedFact(g, selectedPeriod));
+                var latestByConcept = StatementLineFacts.PickCurrentlyReportedByConcept(
+                    facts,
+                    selectedPeriod
+                );
 
                 return RenderStatementTable(
                     stock,
@@ -273,7 +282,15 @@ public class FinancialStatementTools
         var statementName = statementType.NameForHumans().ToLowerInvariant();
         var availablePeriods = await _financialFactRepository
             .GetConsolidatedByStock(stock)
-            .Where(f => statementConceptIds.Contains(f.FinancialConceptId))
+            .Where(f =>
+                statementConceptIds.Contains(f.FinancialConceptId)
+                && (
+                    f.PeriodType != FactPeriodType.Duration
+                    || f.PeriodEnd >= f.PeriodStart
+                        && f.PeriodEnd
+                            <= f.PeriodStart.AddDays(StatementLineFacts.MaxSupportedDurationDays)
+                )
+            )
             .Select(f => new { f.FiscalYear, f.FiscalPeriod })
             .Distinct()
             .ToListAsync();

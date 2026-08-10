@@ -101,6 +101,44 @@ public class ReportedQuarterPromotionYearSliceTests
         promoted.Should().BeEmpty("a full-year total may never masquerade as a quarter");
     }
 
+    [Fact]
+    public void PromotedFourthQuartersForYearSlice_MultiYearDurationIsNotAnAnnualAnchor()
+    {
+        var stockId = Guid.NewGuid();
+        var periodEnd = new DateOnly(2025, 12, 31);
+        var slice = new List<FinancialFact>
+        {
+            MakeFullYearFlow(stockId, 25m, new DateOnly(2025, 10, 1), periodEnd),
+            MakeFullYearFlow(stockId, 999m, new DateOnly(2020, 1, 1), periodEnd),
+        };
+
+        var promoted = ReportedQuarterPromotion.PromotedFourthQuartersForYearSlice(slice);
+
+        promoted.Should().BeEmpty("an inception-to-date fact cannot choose the slice's year end");
+    }
+
+    [Fact]
+    public void PromotedFourthQuartersForYearSlice_LatestEndpointMustHaveItsOwnAnnualAnchor()
+    {
+        var stockId = Guid.NewGuid();
+        var priorEnd = new DateOnly(2024, 12, 31);
+        var currentEnd = new DateOnly(2025, 12, 31);
+        var slice = new List<FinancialFact>
+        {
+            MakeFullYearFlow(stockId, 25m, new DateOnly(2024, 10, 1), priorEnd),
+            MakeFullYearFlow(stockId, 120m, new DateOnly(2024, 1, 1), priorEnd),
+            MakeFullYearFlow(stockId, 9_999m, new DateOnly(2003, 5, 13), currentEnd),
+        };
+
+        var promoted = ReportedQuarterPromotion.PromotedFourthQuartersForYearSlice(slice);
+
+        promoted
+            .Should()
+            .BeEmpty(
+                "an older comparative annual cannot authenticate its Q4 when the slice's latest endpoint is overlong"
+            );
+    }
+
     private static FinancialFact MakeFullYearFlow(
         Guid stockId,
         decimal value,

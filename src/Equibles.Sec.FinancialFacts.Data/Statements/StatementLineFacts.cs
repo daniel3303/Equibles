@@ -34,6 +34,10 @@ public static class StatementLineFacts
     // calendar, with headroom for short transition years.
     private const int MinAnnualSpanDays = 350;
 
+    // Ordinary annual facts never span more than a 53-week fiscal year plus
+    // calendar drift. Longer durations are inception-to-date or multi-year.
+    public const int MaxSupportedDurationDays = 380;
+
     /// <summary>
     /// The currently-reported fact among a fiscal period's candidates. A 10-Q
     /// reports each flow line twice under that identity — the discrete quarter
@@ -51,12 +55,28 @@ public static class StatementLineFacts
     {
         var candidates = facts.ToList();
 
+        // A source-stamped duration remains the fallback when no ordinary span
+        // exists, but multi-year/inception durations cannot represent any one
+        // fiscal period — even when the source stamped them Q1..Q4.
+        candidates = candidates
+            .Where(f =>
+            {
+                if (f.PeriodType != FactPeriodType.Duration)
+                    return true;
+                var spanDays = f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber;
+                return spanDays is >= 0 and <= MaxSupportedDurationDays;
+            })
+            .ToList();
+        if (candidates.Count == 0)
+            return null;
+
         var preferred = candidates
             .Where(f =>
             {
                 var spanDays = f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber;
                 return fiscalPeriod == SecFiscalPeriod.FullYear
-                    ? spanDays == 0 || spanDays >= MinAnnualSpanDays
+                    ? spanDays == 0
+                        || spanDays >= MinAnnualSpanDays && spanDays <= MaxSupportedDurationDays
                     : spanDays <= MaxDiscreteQuarterDays;
             })
             .ToList();
@@ -68,7 +88,24 @@ public static class StatementLineFacts
             .ThenBy(f => FinancialFactSourcePriority.Rank(f.Form))
             .ThenByDescending(f => f.FiledDate)
             .ThenByDescending(f => f.AccessionNumber)
-            .First();
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// One renderable fact per concept. Concepts whose candidates do not prove
+    /// the requested period are omitted so a line can fall through to its next
+    /// declared tag variant.
+    /// </summary>
+    public static Dictionary<Guid, FinancialFact> PickCurrentlyReportedByConcept(
+        IEnumerable<FinancialFact> facts,
+        SecFiscalPeriod fiscalPeriod
+    )
+    {
+        return facts
+            .GroupBy(f => f.FinancialConceptId)
+            .Select(g => new { ConceptId = g.Key, Fact = PickCurrentlyReported(g, fiscalPeriod) })
+            .Where(x => x.Fact != null)
+            .ToDictionary(x => x.ConceptId, x => x.Fact!);
     }
 
     /// <summary>

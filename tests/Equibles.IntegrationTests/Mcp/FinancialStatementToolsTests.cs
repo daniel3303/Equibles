@@ -399,4 +399,123 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("| 10-K |");
         result.Should().NotContain("$383,000,000,000");
     }
+
+    [Fact]
+    public async Task GetFinancialStatement_OverlongLatestStampDoesNotBecomeTheDefaultPeriod()
+    {
+        var stock = Apple();
+        var revenue = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "Revenues",
+            Label = "Revenue",
+        };
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<FinancialConcept>().Add(revenue);
+        await SeedRevenue(
+            stock,
+            revenue,
+            2024,
+            SecFiscalPeriod.FullYear,
+            120m,
+            "USD",
+            "valid-fy24"
+        );
+        DbContext
+            .Set<FinancialFact>()
+            .Add(
+                new FinancialFact
+                {
+                    CommonStockId = stock.Id,
+                    FinancialConceptId = revenue.Id,
+                    Unit = "USD",
+                    PeriodType = FactPeriodType.Duration,
+                    PeriodStart = new DateOnly(2003, 5, 13),
+                    PeriodEnd = new DateOnly(2025, 1, 24),
+                    Value = 9_999m,
+                    FiscalYear = 2025,
+                    FiscalPeriod = SecFiscalPeriod.FullYear,
+                    Form = DocumentType.TenQ,
+                    FiledDate = new DateOnly(2025, 2, 1),
+                    AccessionNumber = "overlong-fy25",
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetFinancialStatement("AAPL", statement: "income");
+
+        result.Should().Contain("FY2024 FY:");
+        result.Should().Contain("| Revenue | $120 | USD |");
+        result.Should().NotContain("$9,999");
+    }
+
+    [Fact]
+    public async Task GetFinancialStatement_OverlongPreferredTagCannotHideAValidVariant()
+    {
+        var stock = Apple();
+        var preferred = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "ResearchAndDevelopmentExpense",
+        };
+        var variant = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "ResearchAndDevelopmentExpenseSoftwareExcludingAcquiredInProcessCost",
+        };
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<FinancialConcept>().AddRange(preferred, variant);
+
+        FinancialFact Fact(
+            FinancialConcept concept,
+            DateOnly start,
+            DateOnly end,
+            decimal value,
+            string accession
+        ) =>
+            new()
+            {
+                CommonStockId = stock.Id,
+                FinancialConceptId = concept.Id,
+                Unit = "USD",
+                PeriodType = FactPeriodType.Duration,
+                PeriodStart = start,
+                PeriodEnd = end,
+                Value = value,
+                FiscalYear = 2025,
+                FiscalPeriod = SecFiscalPeriod.FullYear,
+                Form = DocumentType.TenK,
+                FiledDate = new DateOnly(2026, 2, 1),
+                AccessionNumber = accession,
+            };
+
+        DbContext
+            .Set<FinancialFact>()
+            .AddRange(
+                Fact(
+                    preferred,
+                    new DateOnly(2003, 5, 13),
+                    new DateOnly(2025, 12, 31),
+                    9_999m,
+                    "overlong-preferred"
+                ),
+                Fact(
+                    variant,
+                    new DateOnly(2025, 1, 1),
+                    new DateOnly(2025, 12, 30),
+                    200m,
+                    "valid-variant"
+                )
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetFinancialStatement("AAPL", statement: "income", year: 2025, period: "FY");
+
+        result.Should().Contain("$200");
+        result.Should().NotContain("$9,999");
+    }
 }

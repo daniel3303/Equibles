@@ -572,7 +572,15 @@ public class StockTabService
         // keeping them separate avoids loading every fact just to list periods.
         var periodKeys = await _financialFactRepository
             .GetConsolidatedByStock(stock)
-            .Where(f => statementConceptIds.Contains(f.FinancialConceptId))
+            .Where(f =>
+                statementConceptIds.Contains(f.FinancialConceptId)
+                && (
+                    f.PeriodType != FactPeriodType.Duration
+                    || f.PeriodEnd >= f.PeriodStart
+                        && f.PeriodEnd
+                            <= f.PeriodStart.AddDays(StatementLineFacts.MaxSupportedDurationDays)
+                )
+            )
             .Select(f => new { f.FiscalYear, f.FiscalPeriod })
             .Distinct()
             .ToListAsync();
@@ -621,6 +629,12 @@ public class StockTabService
                 f.FiscalYear == fiscalYear
                 && f.FiscalPeriod == fiscalPeriod
                 && conceptIds.Contains(f.FinancialConceptId)
+                && (
+                    f.PeriodType != FactPeriodType.Duration
+                    || f.PeriodEnd >= f.PeriodStart
+                        && f.PeriodEnd
+                            <= f.PeriodStart.AddDays(StatementLineFacts.MaxSupportedDurationDays)
+                )
             )
             .ToListAsync();
 
@@ -628,12 +642,10 @@ public class StockTabService
         // shows the 10-Q's year-to-date figure, latest-ending so a comparative
         // column never stands in for the current one, latest-filed on
         // restatements — the same pick the MCP statement tool applies (#1546).
-        var latestByConcept = facts
-            .GroupBy(f => f.FinancialConceptId)
-            .ToDictionary(
-                g => g.Key,
-                g => StatementLineFacts.PickCurrentlyReported(g, fiscalPeriod)
-            );
+        var latestByConcept = StatementLineFacts.PickCurrentlyReportedByConcept(
+            facts,
+            fiscalPeriod
+        );
 
         // The catalog is deliberately broad (71 lines across sectors); lines
         // whose concepts the company has NEVER reported are hidden entirely,
@@ -641,7 +653,17 @@ public class StockTabService
         var everReportedConceptIds = (
             await _financialFactRepository
                 .GetConsolidatedByStock(stock)
-                .Where(f => conceptIds.Contains(f.FinancialConceptId))
+                .Where(f =>
+                    conceptIds.Contains(f.FinancialConceptId)
+                    && (
+                        f.PeriodType != FactPeriodType.Duration
+                        || f.PeriodEnd >= f.PeriodStart
+                            && f.PeriodEnd
+                                <= f.PeriodStart.AddDays(
+                                    StatementLineFacts.MaxSupportedDurationDays
+                                )
+                    )
+                )
                 .Select(f => f.FinancialConceptId)
                 .Distinct()
                 .ToListAsync()

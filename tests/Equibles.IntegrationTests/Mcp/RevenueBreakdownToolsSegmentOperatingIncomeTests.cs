@@ -140,6 +140,61 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     }
 
     [Fact]
+    public async Task GetRevenueBreakdown_MultiYearDurationsNeverRenderAsAnnualSegments()
+    {
+        var stock = AddStock("SPAN");
+        var revenue = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
+        var operatingIncome = AddConcept("OperatingIncomeLoss");
+
+        AddFact(stock, revenue, 2024, 100m);
+        AddFact(stock, revenue, 2024, 60m, (SegmentAxis, "span:CurrentMember"));
+        AddFact(stock, operatingIncome, 2024, 20m);
+        AddFact(stock, operatingIncome, 2024, 12m, (SegmentAxis, "span:CurrentMember"));
+
+        AddFactWithSpan(
+            stock,
+            revenue,
+            new DateOnly(2020, 1, 1),
+            new DateOnly(2025, 12, 31),
+            7_777m
+        );
+        AddFactWithSpan(
+            stock,
+            revenue,
+            new DateOnly(2020, 1, 1),
+            new DateOnly(2025, 12, 31),
+            9_999m,
+            (SegmentAxis, "span:InceptionToDateMember")
+        );
+        AddFactWithSpan(
+            stock,
+            operatingIncome,
+            new DateOnly(2020, 1, 1),
+            new DateOnly(2025, 12, 31),
+            6_666m
+        );
+        AddFactWithSpan(
+            stock,
+            operatingIncome,
+            new DateOnly(2020, 1, 1),
+            new DateOnly(2025, 12, 31),
+            8_888m,
+            (SegmentAxis, "span:InceptionToDateMember")
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetRevenueBreakdown("SPAN");
+
+        result.Should().Contain("Current");
+        result.Should().NotContain("Inception To Date");
+        result.Should().NotContain("2025-12-31");
+        result.Should().NotContain("7,777");
+        result.Should().NotContain("6,666");
+        result.Should().NotContain("9,999");
+        result.Should().NotContain("8,888");
+    }
+
+    [Fact]
     public async Task GetRevenueBreakdown_SegmentOperatingIncome_CarriesUnchangedMembersAcrossPartialAmendment()
     {
         // A partial amendment can restate one segment without repeating every unchanged member.
@@ -358,6 +413,44 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
             FiscalPeriod = SecFiscalPeriod.FullYear,
             Form = DocumentType.TenK,
             FiledDate = new DateOnly(fy + filedYearOffset, 2, 1),
+            AccessionNumber = $"acc-{Guid.NewGuid():N}"[..20],
+            DimensionsKey = DimensionsKeyOf(dimensions),
+        };
+        foreach (var (axis, member) in dimensions)
+            fact.Dimensions.Add(
+                new FinancialFactDimension
+                {
+                    FinancialFactId = fact.Id,
+                    Axis = axis,
+                    Member = member,
+                }
+            );
+        DbContext.Set<FinancialFact>().Add(fact);
+    }
+
+    private void AddFactWithSpan(
+        CommonStock stock,
+        FinancialConcept concept,
+        DateOnly periodStart,
+        DateOnly periodEnd,
+        decimal value,
+        params (string Axis, string Member)[] dimensions
+    )
+    {
+        var fact = new FinancialFact
+        {
+            Id = Guid.NewGuid(),
+            CommonStockId = stock.Id,
+            FinancialConceptId = concept.Id,
+            Unit = "USD",
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = periodStart,
+            PeriodEnd = periodEnd,
+            Value = value,
+            FiscalYear = periodEnd.Year,
+            FiscalPeriod = SecFiscalPeriod.FullYear,
+            Form = DocumentType.TenK,
+            FiledDate = periodEnd.AddDays(45),
             AccessionNumber = $"acc-{Guid.NewGuid():N}"[..20],
             DimensionsKey = DimensionsKeyOf(dimensions),
         };

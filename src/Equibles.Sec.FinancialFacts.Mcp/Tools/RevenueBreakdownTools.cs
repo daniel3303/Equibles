@@ -45,10 +45,6 @@ public class RevenueBreakdownTools
     private const string ConsolidationItemsAxis = "srt:ConsolidationItemsAxis";
     private const string OperatingSegmentsMember = "us-gaap:OperatingSegmentsMember";
 
-    // The shortest span a fiscal year can cover — 52 weeks on a 52/53-week calendar with
-    // headroom for short transition years (mirrors FinancialStatementsHelper).
-    private const int MinAnnualSpanDays = 350;
-
     // How close the latest filing's members must sum to consolidated total revenue to count
     // as a complete re-disaggregation (see ReconcileToTotal). Half a percent absorbs
     // rounding and minor unit scaling without admitting a partial amendment.
@@ -148,7 +144,10 @@ public class RevenueBreakdownTools
                     .Where(f =>
                         conceptIds.Contains(f.FinancialConceptId)
                         && f.PeriodType == FactPeriodType.Duration
-                        && f.PeriodStart.AddDays(MinAnnualSpanDays) <= f.PeriodEnd
+                        && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays)
+                            <= f.PeriodEnd
+                        && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays)
+                            >= f.PeriodEnd
                         && f.DimensionsKey != ""
                         && f.Dimensions.Count(d => AllAxes.Contains(d.Axis)) == 1
                         && f.Dimensions.All(d =>
@@ -181,7 +180,10 @@ public class RevenueBreakdownTools
                     .Where(f =>
                         conceptIds.Contains(f.FinancialConceptId)
                         && f.PeriodType == FactPeriodType.Duration
-                        && f.PeriodStart.AddDays(MinAnnualSpanDays) <= f.PeriodEnd
+                        && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays)
+                            <= f.PeriodEnd
+                        && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays)
+                            >= f.PeriodEnd
                     )
                     .Select(f => new
                     {
@@ -315,7 +317,8 @@ public class RevenueBreakdownTools
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration
-                && f.PeriodStart.AddDays(MinAnnualSpanDays) <= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays) <= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays) >= f.PeriodEnd
                 && f.DimensionsKey != ""
                 && f.Dimensions.Count(d => SegmentAxes.Contains(d.Axis)) == 1
                 && f.Dimensions.All(d =>
@@ -341,7 +344,8 @@ public class RevenueBreakdownTools
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration
-                && f.PeriodStart.AddDays(MinAnnualSpanDays) <= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays) <= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays) >= f.PeriodEnd
             )
             .Select(f => new
             {

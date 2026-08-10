@@ -25,14 +25,16 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
             conceptId,
             value: 186_662m,
             periodStart: new DateOnly(2025, 1, 1),
-            periodEnd: new DateOnly(2025, 6, 30)
+            periodEnd: new DateOnly(2025, 6, 30),
+            fiscalPeriod: SecFiscalPeriod.Q2
         );
         var discreteQuarter = MakeFact(
             stockId,
             conceptId,
             value: 96_428m,
             periodStart: new DateOnly(2025, 4, 1),
-            periodEnd: new DateOnly(2025, 6, 30)
+            periodEnd: new DateOnly(2025, 6, 30),
+            fiscalPeriod: SecFiscalPeriod.Q2
         );
         var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
 
@@ -47,12 +49,107 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
         result.Value.Should().Be(96_428m, "the discrete quarter wins over the year-to-date span");
     }
 
+    [Fact]
+    public void PickBestFact_FullYearRejectsAnOverlongDuration()
+    {
+        var stockId = Guid.NewGuid();
+        var conceptId = Guid.NewGuid();
+        var validAnnual = MakeFact(
+            stockId,
+            conceptId,
+            value: 120m,
+            periodStart: new DateOnly(2025, 1, 1),
+            periodEnd: new DateOnly(2025, 12, 31),
+            fiscalPeriod: SecFiscalPeriod.FullYear
+        );
+        var inceptionToDate = MakeFact(
+            stockId,
+            conceptId,
+            value: 9_999m,
+            periodStart: new DateOnly(2020, 1, 1),
+            periodEnd: new DateOnly(2025, 12, 31),
+            fiscalPeriod: SecFiscalPeriod.FullYear
+        );
+        var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
+        var method = typeof(FinancialFactsTools).GetMethod(
+            "PickBestFact",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+
+        var picked = (FinancialFact)
+            method!.Invoke(null, [new[] { inceptionToDate, validAnnual }, conceptPriority, false]);
+        var rejected = method.Invoke(null, [new[] { inceptionToDate }, conceptPriority, false]);
+
+        picked.Should().BeSameAs(validAnnual);
+        rejected.Should().BeNull("a multi-year duration is not a fiscal-year fact");
+    }
+
+    [Fact]
+    public void PickBestFact_QuarterStampRejectsAnOverlongDuration()
+    {
+        var stockId = Guid.NewGuid();
+        var conceptId = Guid.NewGuid();
+        var validQuarter = MakeFact(
+            stockId,
+            conceptId,
+            value: 25m,
+            periodStart: new DateOnly(2025, 4, 1),
+            periodEnd: new DateOnly(2025, 6, 30),
+            fiscalPeriod: SecFiscalPeriod.Q2
+        );
+        var inceptionToDate = MakeFact(
+            stockId,
+            conceptId,
+            value: 9_999m,
+            periodStart: new DateOnly(2003, 5, 13),
+            periodEnd: new DateOnly(2025, 6, 30),
+            fiscalPeriod: SecFiscalPeriod.Q2
+        );
+        var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
+        var method = typeof(FinancialFactsTools).GetMethod(
+            "PickBestFact",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+
+        var picked = (FinancialFact)
+            method!.Invoke(null, [new[] { inceptionToDate, validQuarter }, conceptPriority, false]);
+        var rejected = method.Invoke(null, [new[] { inceptionToDate }, conceptPriority, false]);
+
+        picked.Should().BeSameAs(validQuarter);
+        rejected.Should().BeNull("a fiscal stamp cannot turn an inception duration into a quarter");
+    }
+
+    [Fact]
+    public void PickBestFact_QuarterStampRejectsYearToDateFallback()
+    {
+        var stockId = Guid.NewGuid();
+        var conceptId = Guid.NewGuid();
+        var yearToDate = MakeFact(
+            stockId,
+            conceptId,
+            value: 60m,
+            periodStart: new DateOnly(2025, 1, 1),
+            periodEnd: new DateOnly(2025, 6, 30),
+            fiscalPeriod: SecFiscalPeriod.Q2
+        );
+        var conceptPriority = new Dictionary<Guid, int> { [conceptId] = 0 };
+        var method = typeof(FinancialFactsTools).GetMethod(
+            "PickBestFact",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
+
+        var rejected = method!.Invoke(null, [new[] { yearToDate }, conceptPriority, false]);
+
+        rejected.Should().BeNull("a six-month YTD span is not a discrete fiscal quarter");
+    }
+
     private static FinancialFact MakeFact(
         Guid stockId,
         Guid conceptId,
         decimal value,
         DateOnly periodStart,
-        DateOnly periodEnd
+        DateOnly periodEnd,
+        SecFiscalPeriod fiscalPeriod
     ) =>
         new()
         {
@@ -63,7 +160,7 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
             PeriodStart = periodStart,
             PeriodEnd = periodEnd,
             FiscalYear = 2025,
-            FiscalPeriod = SecFiscalPeriod.Q2,
+            FiscalPeriod = fiscalPeriod,
             PeriodType = FactPeriodType.Duration,
             Form = DocumentType.TenQ,
             FiledDate = new DateOnly(2025, 7, 24),
