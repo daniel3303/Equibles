@@ -14,7 +14,8 @@ namespace Equibles.UnitTests.CorporateActions;
 /// <summary>
 /// Pins the upsert contract of <see cref="CashDividendCaptureManager"/>, mirroring the split
 /// capture manager: the exact current primary is locked and revalidated, idempotent events write
-/// nothing, a restated amount updates in place, and a non-positive amount is dropped as unusable.
+/// nothing, same-date components are summed, a restated amount updates in place, and a
+/// non-positive amount is dropped as unusable.
 /// </summary>
 public class CashDividendCaptureManagerTests
 {
@@ -93,6 +94,48 @@ public class CashDividendCaptureManagerTests
 
         secondPass.Should().Be(0);
         (await new CashDividendRepository(db).GetByStock(stock.Id).CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Capture_MultipleCashComponentsOnSameExDate_StoresTheirTotalOnce()
+    {
+        await using var db = NewDb();
+        var stock = await AddStock(db);
+        var exDate = new DateOnly(2026, 8, 7);
+        var events = new[] { Dividend(exDate, 0.045m), Dividend(exDate, 0.775m) };
+
+        var changes = await NewManager(db).Capture(stock.Id, stock.Ticker, events);
+        var secondPass = await NewManager(db).Capture(stock.Id, stock.Ticker, events);
+
+        changes.Should().Be(1);
+        secondPass.Should().Be(0);
+        var stored = await new CashDividendRepository(db).GetByStock(stock.Id).SingleAsync();
+        stored.ExDate.Should().Be(exDate);
+        stored.AmountPerShare.Should().Be(0.82m);
+        stored.Source.Should().Be(CashDividendSource.Yahoo);
+    }
+
+    [Fact]
+    public async Task Capture_MixedSourcesOnSameExDate_ThrowsWithoutWriting()
+    {
+        await using var db = NewDb();
+        var stock = await AddStock(db);
+        var exDate = new DateOnly(2026, 8, 7);
+        var events = new[]
+        {
+            Dividend(exDate, 0.045m),
+            new CapturedDividend
+            {
+                ExDate = exDate,
+                AmountPerShare = 0.775m,
+                Source = CashDividendSource.External,
+            },
+        };
+
+        var capture = () => NewManager(db).Capture(stock.Id, stock.Ticker, events);
+
+        await capture.Should().ThrowAsync<InvalidOperationException>();
+        (await new CashDividendRepository(db).GetByStock(stock.Id).CountAsync()).Should().Be(0);
     }
 
     [Fact]
