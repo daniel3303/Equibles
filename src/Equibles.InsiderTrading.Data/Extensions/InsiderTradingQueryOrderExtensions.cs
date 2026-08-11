@@ -35,6 +35,7 @@ public static class InsiderTradingQueryOrderExtensions
                 o.Transactions.Max(t => (DateOnly?)t.TransactionDate) ?? DateOnly.MinValue
             )
             .ThenBy(o => o.Name)
-            .ThenBy(o => o.OwnerCik);
+            .ThenBy(o => o.OwnerCik)
+            .ThenBy(o => o.Id);
     }
 }

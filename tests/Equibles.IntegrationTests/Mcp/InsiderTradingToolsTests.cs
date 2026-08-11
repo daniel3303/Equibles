@@ -1,10 +1,12 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Repositories;
+using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Mcp.Tools;
 using Equibles.InsiderTrading.Repositories;
 using Equibles.IntegrationTests.Helpers;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Equibles.IntegrationTests.Mcp;
@@ -740,6 +742,26 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
             .Should()
             .BeLessThan(page2.IndexOf(ciks[3], StringComparison.Ordinal));
         page2.Should().Contain("Showing results 3-4 of 4 (the last page).");
+    }
+
+    [Fact]
+    public async Task OrderDiscoveryMatches_NullCikTie_EndsWithOwnerId()
+    {
+        var first = CreateOwner(cik: null, name: "Null CIK Insider");
+        first.Id = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var second = CreateOwner(cik: null, name: "Null CIK Insider");
+        second.Id = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        DbContext.Set<InsiderOwner>().AddRange(second, first);
+        await DbContext.SaveChangesAsync();
+
+        var orderedIds = await DbContext
+            .Set<InsiderOwner>()
+            .Where(o => o.Name == "Null CIK Insider")
+            .OrderDiscoveryMatches()
+            .Select(o => o.Id)
+            .ToListAsync();
+
+        orderedIds.Should().Equal(first.Id, second.Id);
     }
 
     [Fact]
