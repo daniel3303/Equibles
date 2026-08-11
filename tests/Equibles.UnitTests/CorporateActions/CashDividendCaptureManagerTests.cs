@@ -14,8 +14,8 @@ namespace Equibles.UnitTests.CorporateActions;
 /// <summary>
 /// Pins the upsert contract of <see cref="CashDividendCaptureManager"/>, mirroring the split
 /// capture manager: the exact current primary is locked and revalidated, idempotent events write
-/// nothing, same-date components are summed, a restated amount updates in place, and a
-/// non-positive amount is dropped as unusable.
+/// nothing, same-date components are summed, a higher-priority restatement updates in place,
+/// lower-priority sources cannot overwrite it, and a non-positive amount is dropped as unusable.
 /// </summary>
 public class CashDividendCaptureManagerTests
 {
@@ -52,12 +52,16 @@ public class CashDividendCaptureManagerTests
         return stock;
     }
 
-    private static CapturedDividend Dividend(DateOnly exDate, decimal amount) =>
+    private static CapturedDividend Dividend(
+        DateOnly exDate,
+        decimal amount,
+        CashDividendSource source = CashDividendSource.Yahoo
+    ) =>
         new()
         {
             ExDate = exDate,
             AmountPerShare = amount,
-            Source = CashDividendSource.Yahoo,
+            Source = source,
         };
 
     [Fact]
@@ -159,6 +163,119 @@ public class CashDividendCaptureManagerTests
         stored[0].AmountPerShare.Should().Be(0.26m);
         stored[0].PriceAdjustmentAppliedAmountPerShare.Should().BeNull();
         stored[0].PriceAdjustmentAppliedTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Capture_HigherPrioritySource_ReplacesAmountAndSource()
+    {
+        await using var db = NewDb();
+        var stock = await AddStock(db);
+        var exDate = new DateOnly(2024, 2, 9);
+
+        await NewManager(db)
+            .Capture(
+                stock.Id,
+                stock.Ticker,
+                [Dividend(exDate, 0.24m, CashDividendSource.External)]
+            );
+        var original = await db.Set<CashDividend>().SingleAsync();
+        original.PriceAdjustmentAppliedAmountPerShare = original.AmountPerShare;
+        original.PriceAdjustmentAppliedTime = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var changes = await NewManager(db)
+            .Capture(stock.Id, stock.Ticker, [Dividend(exDate, 0.26m)]);
+
+        changes.Should().Be(1);
+        var stored = await db.Set<CashDividend>().SingleAsync();
+        stored.AmountPerShare.Should().Be(0.26m);
+        stored.Source.Should().Be(CashDividendSource.Yahoo);
+        stored.PriceAdjustmentAppliedAmountPerShare.Should().BeNull();
+        stored.PriceAdjustmentAppliedTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Capture_LowerPrioritySource_DoesNotOverwriteAmountOrMarker()
+    {
+        await using var db = NewDb();
+        var stock = await AddStock(db);
+        var exDate = new DateOnly(2024, 2, 9);
+
+        await NewManager(db).Capture(stock.Id, stock.Ticker, [Dividend(exDate, 0.26m)]);
+        var original = await db.Set<CashDividend>().SingleAsync();
+        var appliedAt = DateTime.UtcNow;
+        original.PriceAdjustmentAppliedAmountPerShare = original.AmountPerShare;
+        original.PriceAdjustmentAppliedTime = appliedAt;
+        await db.SaveChangesAsync();
+
+        var changes = await NewManager(db)
+            .Capture(
+                stock.Id,
+                stock.Ticker,
+                [Dividend(exDate, 0.24m, CashDividendSource.External)]
+            );
+
+        changes.Should().Be(0);
+        var stored = await db.Set<CashDividend>().SingleAsync();
+        stored.AmountPerShare.Should().Be(0.26m);
+        stored.Source.Should().Be(CashDividendSource.Yahoo);
+        stored.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.26m);
+        stored.PriceAdjustmentAppliedTime.Should().Be(appliedAt);
+    }
+
+    [Fact]
+    public async Task Capture_HigherPrioritySourceWithSameAmount_PromotesWithoutInvalidatingMarker()
+    {
+        await using var db = NewDb();
+        var stock = await AddStock(db);
+        var exDate = new DateOnly(2024, 2, 9);
+
+        await NewManager(db)
+            .Capture(
+                stock.Id,
+                stock.Ticker,
+                [Dividend(exDate, 0.26m, CashDividendSource.External)]
+            );
+        var original = await db.Set<CashDividend>().SingleAsync();
+        var appliedAt = DateTime.UtcNow;
+        original.PriceAdjustmentAppliedAmountPerShare = original.AmountPerShare;
+        original.PriceAdjustmentAppliedTime = appliedAt;
+        await db.SaveChangesAsync();
+
+        var changes = await NewManager(db)
+            .Capture(stock.Id, stock.Ticker, [Dividend(exDate, 0.26m)]);
+
+        changes.Should().Be(1);
+        var stored = await db.Set<CashDividend>().SingleAsync();
+        stored.Source.Should().Be(CashDividendSource.Yahoo);
+        stored.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.26m);
+        stored.PriceAdjustmentAppliedTime.Should().Be(appliedAt);
+    }
+
+    [Fact]
+    public async Task Capture_AutomaticSources_DoNotOverwriteManualAmount()
+    {
+        await using var db = NewDb();
+        var stock = await AddStock(db);
+        var exDate = new DateOnly(2024, 2, 9);
+
+        await NewManager(db)
+            .Capture(stock.Id, stock.Ticker, [Dividend(exDate, 0.255m, CashDividendSource.Manual)]);
+
+        var yahooChanges = await NewManager(db)
+            .Capture(stock.Id, stock.Ticker, [Dividend(exDate, 0.26m)]);
+        var externalChanges = await NewManager(db)
+            .Capture(
+                stock.Id,
+                stock.Ticker,
+                [Dividend(exDate, 0.24m, CashDividendSource.External)]
+            );
+
+        yahooChanges.Should().Be(0);
+        externalChanges.Should().Be(0);
+        var stored = await db.Set<CashDividend>().SingleAsync();
+        stored.AmountPerShare.Should().Be(0.255m);
+        stored.Source.Should().Be(CashDividendSource.Manual);
     }
 
     [Fact]

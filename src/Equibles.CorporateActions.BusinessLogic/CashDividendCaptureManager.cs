@@ -79,11 +79,21 @@ public class CashDividendCaptureManager
                 );
                 changes++;
             }
-            else if (match.AmountPerShare != dividend.AmountPerShare)
+            else if (CanSupersede(match.Source, dividend.Source))
             {
-                match.AmountPerShare = dividend.AmountPerShare;
-                match.PriceAdjustmentAppliedAmountPerShare = null;
-                match.PriceAdjustmentAppliedTime = null;
+                var amountChanged = match.AmountPerShare != dividend.AmountPerShare;
+                var sourceChanged = match.Source != dividend.Source;
+                if (!amountChanged && !sourceChanged)
+                    continue;
+
+                if (amountChanged)
+                {
+                    match.AmountPerShare = dividend.AmountPerShare;
+                    match.PriceAdjustmentAppliedAmountPerShare = null;
+                    match.PriceAdjustmentAppliedTime = null;
+                }
+
+                match.Source = dividend.Source;
                 changes++;
             }
         }
@@ -94,6 +104,24 @@ public class CashDividendCaptureManager
         await transaction.CommitAsync(cancellationToken);
         return changes;
     }
+
+    // Manual values are operator-owned. Yahoo supplies the adjusted price history, so its
+    // dividend amount must remain stable against a later generic external-reference refresh.
+    private static bool CanSupersede(
+        CashDividendSource currentSource,
+        CashDividendSource incomingSource
+    ) =>
+        incomingSource == currentSource
+        || SourcePriority(incomingSource) > SourcePriority(currentSource);
+
+    private static int SourcePriority(CashDividendSource source) =>
+        source switch
+        {
+            CashDividendSource.External => 0,
+            CashDividendSource.Yahoo => 1,
+            CashDividendSource.Manual => 2,
+            _ => int.MinValue,
+        };
 
     internal static List<CapturedDividend> CombineSameDateDividends(
         IReadOnlyCollection<CapturedDividend> dividends
