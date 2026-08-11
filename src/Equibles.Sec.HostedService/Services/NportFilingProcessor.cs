@@ -124,22 +124,25 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
 
         var identifiers = El(element, "identifiers");
 
+        // Every bounded column is truncated to its MaxLength — a single malformed EDGAR line must
+        // surface as clipped text, not as a deterministic 22001 that fails the filing's insert on
+        // every reprocess attempt.
         return new NportHolding
         {
             Name = Truncate(name, 512),
             Title = Truncate(Clean(Val(element, "title")), 512),
-            Cusip = Clean(Val(element, "cusip")),
-            Isin = Clean(Attr(El(identifiers, "isin"), "value")),
-            Lei = Clean(Val(element, "lei")),
+            Cusip = Truncate(Clean(Val(element, "cusip")), 16),
+            Isin = Truncate(Clean(Attr(El(identifiers, "isin"), "value")), 32),
+            Lei = Truncate(Clean(Val(element, "lei")), 32),
             Balance = ParseDecimal(Val(element, "balance")),
-            Units = Clean(Val(element, "units")),
-            Currency = Clean(Val(element, "curCd")),
+            Units = Truncate(Clean(Val(element, "units")), 16),
+            Currency = Truncate(Clean(Val(element, "curCd")), 8),
             ValueUsd = valueUsd,
             PercentValue = ParseDecimal(Val(element, "pctVal")),
-            PayoffProfile = Clean(Val(element, "payoffProfile")),
-            AssetCategory = Clean(Val(element, "assetCat")),
-            IssuerCategory = ParseIssuerCategory(element),
-            InvestmentCountry = Clean(Val(element, "invCountry")),
+            PayoffProfile = Truncate(Clean(Val(element, "payoffProfile")), 16),
+            AssetCategory = Truncate(Clean(Val(element, "assetCat")), 16),
+            IssuerCategory = Truncate(ParseIssuerCategory(element), 16),
+            InvestmentCountry = Truncate(Clean(Val(element, "invCountry")), 8),
         };
     }
 

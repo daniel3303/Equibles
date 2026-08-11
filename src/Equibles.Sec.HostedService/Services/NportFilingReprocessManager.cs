@@ -10,6 +10,7 @@ using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace Equibles.Sec.HostedService.Services;
 
@@ -35,9 +36,10 @@ namespace Equibles.Sec.HostedService.Services;
 [Service]
 public class NportFilingReprocessManager
 {
-    // Cadence of the progress log line; each filing commits individually, so this is presentation
-    // only.
-    private const int ProgressLogInterval = 32;
+    // Page size of the id-only selection query and cadence of the progress log line. Each filing
+    // still loads, commits and releases individually — paging only avoids re-running the ordered
+    // selection (with its growing exclusion list) once per filing.
+    private const int BatchSize = 32;
 
     // After this many failed fetch/parse attempts a filing is advanced to the current version even
     // though its holdings were never re-derived, so a permanently-unfetchable filing (pulled
@@ -98,63 +100,100 @@ public class NportFilingReprocessManager
         var failedThisRun = new HashSet<Guid>();
         while (!cancellationToken.IsCancellationRequested)
         {
-            var filing = await _filingRepository
+            var page = await _filingRepository
                 .GetAll()
                 .Where(f => f.ParserVersion < NportFiling.CurrentParserVersion)
                 .Where(f => !failedThisRun.Contains(f.Id))
                 .OrderBy(f => f.FilingDate)
-                .Include(f => f.CommonStock)
-                .FirstOrDefaultAsync(cancellationToken);
+                .Select(f => f.Id)
+                .Take(BatchSize)
+                .ToListAsync(cancellationToken);
 
-            if (filing == null)
+            if (page.Count == 0)
                 break;
 
-            try
+            foreach (var filingId in page)
             {
-                result.HoldingsAdded += await ReprocessFiling(filing, cancellationToken);
-                result.Processed++;
-            }
-            catch (DbUpdateException ex)
-            {
-                // A concurrent ingest insert of the same filing or a similar conflict — the
-                // filing's replace rolled back; retry it next run without burning an attempt.
-                _logger.LogWarning(
-                    ex,
-                    "NPORT-P reprocess save failed for {AccessionNumber}; retrying next run",
-                    filing.AccessionNumber
-                );
-                failedThisRun.Add(filing.Id);
-                result.Failed++;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                // One bad filing (e.g. a transient EDGAR 429/timeout) must not abort the run.
-                // Drop whatever partial graph the failure left tracked, then record the attempt
-                // on a freshly-loaded row; at the ceiling the filing is stamped current so it
-                // stops re-selecting itself forever.
-                _dbContext.ChangeTracker.Clear();
-                await RecordFailedAttempt(filing.Id, ex);
-                failedThisRun.Add(filing.Id);
-                result.Failed++;
-            }
-            finally
-            {
-                // Release the filing's tracked graph before selecting the next one.
-                _dbContext.ChangeTracker.Clear();
-            }
+                if (cancellationToken.IsCancellationRequested)
+                    break;
 
-            if ((result.Processed + result.Failed) % ProgressLogInterval == 0)
-                _logger.LogInformation(
-                    "NPORT-P reprocess: {Processed}/{Total} filings, holdings added={HoldingsAdded}, failed={Failed}",
-                    result.Processed,
-                    result.Total,
-                    result.HoldingsAdded,
-                    result.Failed
-                );
+                var filing = await _filingRepository
+                    .GetAll()
+                    .Include(f => f.CommonStock)
+                    .FirstOrDefaultAsync(f => f.Id == filingId, cancellationToken);
+
+                // Deleted (or already advanced) by a concurrent ingest since the page was taken.
+                if (filing == null || filing.ParserVersion >= NportFiling.CurrentParserVersion)
+                    continue;
+
+                try
+                {
+                    result.HoldingsAdded += await ReprocessFiling(filing, cancellationToken);
+                    result.Processed++;
+                }
+                catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+                {
+                    // A concurrent ingest inserted the same rows — the filing's replace rolled
+                    // back; retry it next run without burning an attempt.
+                    _logger.LogWarning(
+                        ex,
+                        "NPORT-P reprocess hit a concurrent-write conflict on {AccessionNumber}; retrying next run",
+                        filing.AccessionNumber
+                    );
+                    failedThisRun.Add(filing.Id);
+                    result.Failed++;
+                }
+                catch (Exception ex)
+                    when (ex is not OperationCanceledException
+                        || !cancellationToken.IsCancellationRequested
+                    )
+                {
+                    // One bad filing must not abort the run OR the attempt ledger. This arm also
+                    // owns EDGAR's per-request HttpClient timeout: it surfaces as
+                    // TaskCanceledException while our token stays uncancelled (the fetch takes no
+                    // token), and letting it escape would restart the run with a fresh
+                    // failedThisRun — the same slow filing re-selected first, forever, with no
+                    // attempt burned. Only a genuine shutdown (our token cancelled) propagates.
+                    // Drop whatever partial graph the failure left tracked, then record the
+                    // attempt on a freshly-loaded row; at the ceiling the filing is stamped
+                    // current so it stops re-selecting itself.
+                    _dbContext.ChangeTracker.Clear();
+                    await RecordFailedAttempt(filing.Id, ex, cancellationToken);
+                    failedThisRun.Add(filing.Id);
+                    result.Failed++;
+                }
+                finally
+                {
+                    // Release the filing's tracked graph before loading the next one.
+                    _dbContext.ChangeTracker.Clear();
+                }
+
+                if ((result.Processed + result.Failed) % BatchSize == 0)
+                    _logger.LogInformation(
+                        "NPORT-P reprocess: {Processed}/{Total} filings, holdings added={HoldingsAdded}, failed={Failed}",
+                        result.Processed,
+                        result.Total,
+                        result.HoldingsAdded,
+                        result.Failed
+                    );
+            }
         }
 
+        _logger.LogInformation(
+            "NPORT-P reprocess pass complete: {Processed}/{Total} filings, holdings added={HoldingsAdded}, failed={Failed}",
+            result.Processed,
+            result.Total,
+            result.HoldingsAdded,
+            result.Failed
+        );
         return result;
     }
+
+    // Only a unique violation is trusted as "another writer got there first" and retried without
+    // burning an attempt; every other database failure (e.g. a length or constraint violation) is
+    // deterministic for the filing and must count toward the ceiling.
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     // Returns the number of holdings parsed onto the filing. Throws on any fetch/parse failure so
     // the caller can record the attempt and retry the filing on a later run. The EDGAR fetch and
@@ -237,10 +276,21 @@ public class NportFilingReprocessManager
         filing.ParserVersion = NportFiling.CurrentParserVersion;
         filing.ReprocessAttempts = 0;
 
-        // Replace the schedule without ever materializing the old rows: the set-based delete and
-        // the insert save commit together, so a failure rolls the filing back whole. The in-memory
-        // provider (tests) supports neither ExecuteDelete nor transactions; its fallback removes
-        // the tiny seeded schedule through the change tracker instead.
+        await ReplaceSchedule(filing, reparsedHoldings, cancellationToken);
+
+        return reparsedHoldings.Count;
+    }
+
+    // Replaces the stored schedule without ever materializing the old rows: the set-based delete
+    // and the insert save commit together, so a failure rolls the filing back whole. The in-memory
+    // provider (tests) supports neither ExecuteDelete nor transactions; its fallback removes the
+    // tiny seeded schedule through the change tracker instead.
+    private async Task ReplaceSchedule(
+        NportFiling filing,
+        List<NportHolding> reparsedHoldings,
+        CancellationToken cancellationToken
+    )
+    {
         if (_dbContext.Database.IsRelational())
         {
             await using var transaction = await _dbContext.Database.BeginTransactionAsync(
@@ -250,6 +300,8 @@ public class NportFilingReprocessManager
                 .Set<NportHolding>()
                 .Where(h => h.NportFilingId == filing.Id)
                 .ExecuteDeleteAsync(cancellationToken);
+            // The parser never sets the inverse NportFiling reference, so AddRange cannot reach
+            // (and mark Added) the untracked filing entity the parser built.
             _dbContext.Set<NportHolding>().AddRange(reparsedHoldings);
             await _filingRepository.SaveChanges();
             await transaction.CommitAsync(cancellationToken);
@@ -264,40 +316,61 @@ public class NportFilingReprocessManager
             _dbContext.Set<NportHolding>().AddRange(reparsedHoldings);
             await _filingRepository.SaveChanges();
         }
-
-        return reparsedHoldings.Count;
     }
 
     // Persists a failed attempt against a freshly-loaded filing row — the failed graph was just
     // dropped from the change tracker, so the stale instance must not be reused. At the attempt
     // ceiling the filing is advanced to the current version, keeping whatever holdings it already
-    // has, so it can't keep re-selecting itself.
-    private async Task RecordFailedAttempt(Guid filingId, Exception ex)
+    // has, so it can't keep re-selecting itself. Guarded so a failure while recording (row deleted
+    // concurrently, a save conflict) never aborts the run or masks the original exception.
+    private async Task RecordFailedAttempt(
+        Guid filingId,
+        Exception ex,
+        CancellationToken cancellationToken
+    )
     {
-        var filing = await _filingRepository.GetAll().FirstAsync(f => f.Id == filingId);
-
-        filing.ReprocessAttempts++;
-        if (filing.ReprocessAttempts >= MaxReprocessAttempts)
+        try
         {
-            filing.ParserVersion = NportFiling.CurrentParserVersion;
+            var filing = await _filingRepository
+                .GetAll()
+                .FirstOrDefaultAsync(f => f.Id == filingId, cancellationToken);
+            if (filing == null)
+                return;
+
+            filing.ReprocessAttempts++;
+            if (filing.ReprocessAttempts >= MaxReprocessAttempts)
+            {
+                filing.ParserVersion = NportFiling.CurrentParserVersion;
+                _logger.LogWarning(
+                    ex,
+                    "NPORT-P reprocess gave up on {AccessionNumber} after {Attempts} attempts; advancing it to the current version without re-deriving holdings",
+                    filing.AccessionNumber,
+                    filing.ReprocessAttempts
+                );
+            }
+            else
+            {
+                _logger.LogWarning(
+                    ex,
+                    "NPORT-P reprocess failed for {AccessionNumber} (attempt {Attempts}); retrying next run",
+                    filing.AccessionNumber,
+                    filing.ReprocessAttempts
+                );
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception recordEx)
+            when (recordEx is not OperationCanceledException
+                || !cancellationToken.IsCancellationRequested
+            )
+        {
             _logger.LogWarning(
-                ex,
-                "NPORT-P reprocess gave up on {AccessionNumber} after {Attempts} attempts; advancing it to the current version without re-deriving holdings",
-                filing.AccessionNumber,
-                filing.ReprocessAttempts
+                recordEx,
+                "NPORT-P reprocess could not record the failed attempt for filing {FilingId}",
+                filingId
             );
         }
-        else
-        {
-            _logger.LogWarning(
-                ex,
-                "NPORT-P reprocess failed for {AccessionNumber} (attempt {Attempts}); retrying next run",
-                filing.AccessionNumber,
-                filing.ReprocessAttempts
-            );
-        }
-
-        await _filingRepository.SaveChanges();
     }
 
     // The set of CUSIPs we track, loaded once per run and cached. Only consulted when a

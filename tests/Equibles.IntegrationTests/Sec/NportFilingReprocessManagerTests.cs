@@ -83,6 +83,32 @@ public class NportFilingReprocessManagerTests
     }
 
     [Fact]
+    public async Task Run_EdgarRequestTimeout_BurnsAnAttemptInsteadOfAbortingTheRun()
+    {
+        var (manager, dbContext, secClient) = CreateManagerWithDeps();
+        var stock = SeedStock(dbContext);
+        SeedFiling(dbContext, stock, parserVersion: 0);
+        // The EDGAR client's HttpClient timeout surfaces as TaskCanceledException while the run's
+        // own token stays live — it must burn an attempt like any other fetch failure, not escape
+        // and abort the run (which would re-select the same slow filing first, forever).
+        secClient
+            .GetDocumentContent(Arg.Any<string>(), Arg.Any<string>())
+            .Returns(
+                Task.FromException<string>(
+                    new TaskCanceledException("HttpClient.Timeout of 120 seconds elapsed")
+                )
+            );
+
+        var result = await manager.Run();
+
+        result.Processed.Should().Be(0);
+        result.Failed.Should().Be(1);
+        var filing = await dbContext.Set<NportFiling>().SingleAsync();
+        filing.ReprocessAttempts.Should().Be(1);
+        filing.ParserVersion.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Run_FilingAlreadyAtCurrentVersion_IsLeftUntouched()
     {
         var (manager, dbContext, secClient) = CreateManagerWithDeps();
