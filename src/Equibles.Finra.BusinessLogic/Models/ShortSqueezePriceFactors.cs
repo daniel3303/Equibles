@@ -7,8 +7,9 @@ namespace Equibles.Finra.BusinessLogic.Models;
 public class ShortSqueezePriceFactors
 {
     /// <summary>
-    /// How far the latest adjusted close sits above (positive) or below (negative)
-    /// the trailing volume-weighted average price, as a fraction of that average.
+    /// How far the latest raw close sits above (positive) or below (negative) the
+    /// trailing volume-weighted average price within one comparable captured-split
+    /// interval, as a fraction of that average.
     /// A proxy for the aggregate paper loss of open short positions — the deeper
     /// the price trades above the level where recent volume changed hands, the
     /// more of the short base is underwater. Null when the price history is too

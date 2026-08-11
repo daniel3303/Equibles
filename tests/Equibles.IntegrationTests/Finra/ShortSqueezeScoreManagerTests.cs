@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Finra.BusinessLogic;
@@ -367,6 +368,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                     new DailyStockPrice
                     {
                         CommonStockId = stock.Id,
+                        ListedTicker = stock.Ticker,
                         Date = today.AddDays(i - 64),
                         Open = close,
                         High = close,
@@ -384,6 +386,147 @@ public class ShortSqueezeScoreManagerTests : IDisposable
 
         scores.Single().PriceAboveVwap.Should().NotBeNull();
         scores.Single().PriceAboveVwap.Should().BeGreaterThan(0.25m);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Compute_CapturedPrimarySplit_ClipsPriceFactorsToPostSplitRawCloses(
+        bool legacyNullAttribution
+    )
+    {
+        var stock = SeedStock("SPLIT", sharesOutstanding: 1_000_000);
+        SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var splitDate = today.AddDays(-4);
+        for (var i = 0; i < 65; i++)
+        {
+            var date = today.AddDays(i - 64);
+            var close = date < splitDate ? 100m : 10m;
+            _dbContext
+                .Set<DailyStockPrice>()
+                .Add(
+                    new DailyStockPrice
+                    {
+                        CommonStockId = stock.Id,
+                        ListedTicker = stock.Ticker,
+                        Date = date,
+                        Open = close,
+                        High = close,
+                        Low = close,
+                        Close = close,
+                        // Deliberately plausible but uncertified: the score must neither use this
+                        // field nor retain the pre-split raw rows to meet its history minimum.
+                        AdjustedClose = 100m,
+                        Volume = 1_000,
+                    }
+                );
+        }
+
+        _dbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStockId = stock.Id,
+                    PriceSeriesTicker = legacyNullAttribution ? null : stock.Ticker,
+                    EffectiveDate = splitDate,
+                    Numerator = 10m,
+                    Denominator = 1m,
+                    Source = StockSplitSource.Yahoo,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var score = (await _manager.Compute()).Single();
+
+        score.PriceAboveVwap.Should().BeNull("only five comparable post-split bars exist");
+        score.HasPriceSpikeCatalyst.Should().BeFalse();
+        score.HasVolumeSurgeCatalyst.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Compute_FuturePrimarySplit_DoesNotClipCurrentPriceFactors()
+    {
+        var stock = SeedStock("FUTURE", sharesOutstanding: 1_000_000);
+        SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        for (var i = 0; i < 65; i++)
+        {
+            var close = i == 64 ? 130m : 100m;
+            _dbContext
+                .Set<DailyStockPrice>()
+                .Add(
+                    new DailyStockPrice
+                    {
+                        CommonStockId = stock.Id,
+                        ListedTicker = stock.Ticker,
+                        Date = today.AddDays(i - 64),
+                        Open = close,
+                        High = close,
+                        Low = close,
+                        Close = close,
+                        AdjustedClose = 1m,
+                        Volume = 1_000,
+                    }
+                );
+        }
+
+        _dbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStockId = stock.Id,
+                    PriceSeriesTicker = stock.Ticker,
+                    EffectiveDate = today.AddDays(1),
+                    Numerator = 10m,
+                    Denominator = 1m,
+                    Source = StockSplitSource.Yahoo,
+                }
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var score = (await _manager.Compute()).Single();
+
+        score.PriceAboveVwap.Should().NotBeNull("a split after the latest bar is not applicable");
+        score.PriceAboveVwap.Should().BeGreaterThan(0.25m);
+    }
+
+    [Fact]
+    public async Task Compute_SecondaryListingHistory_DoesNotSupplyPrimaryPriceFactors()
+    {
+        var stock = SeedStock("PRIMARY", sharesOutstanding: 1_000_000);
+        SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        for (var i = 0; i < 65; i++)
+        {
+            var close = i == 64 ? 130m : 100m;
+            _dbContext
+                .Set<DailyStockPrice>()
+                .Add(
+                    new DailyStockPrice
+                    {
+                        CommonStockId = stock.Id,
+                        ListedTicker = "SECONDARY",
+                        Date = today.AddDays(i - 64),
+                        Open = close,
+                        High = close,
+                        Low = close,
+                        Close = close,
+                        AdjustedClose = close,
+                        Volume = 1_000,
+                    }
+                );
+        }
+
+        await _dbContext.SaveChangesAsync();
+
+        var score = (await _manager.Compute()).Single();
+
+        score.PriceAboveVwap.Should().BeNull();
+        score.HasPriceSpikeCatalyst.Should().BeFalse();
+        score.HasVolumeSurgeCatalyst.Should().BeFalse();
     }
 
     [Fact]
