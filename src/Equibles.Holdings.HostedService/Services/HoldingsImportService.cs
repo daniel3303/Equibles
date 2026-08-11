@@ -1924,6 +1924,12 @@ public class HoldingsImportService
                         IsAmendment = incoming.IsAmendment,
                         ValuePending = incoming.ValuePending,
                         ValueUnavailable = incoming.ValueUnavailable,
+                        // The label must travel with the figure it describes: without it a
+                        // re-import that re-derives a previously Filed row keeps the stale Filed
+                        // label (shielding the new derivation from the implausible-derivation
+                        // reset), and one that publishes filed over a previously derived row
+                        // keeps Derived (exposing the filer's own figure to that same reset).
+                        ValueSource = incoming.ValueSource,
                     }
             )
             .RunAsync(cancellationToken);

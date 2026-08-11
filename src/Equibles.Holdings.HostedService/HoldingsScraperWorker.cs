@@ -128,17 +128,19 @@ public class HoldingsScraperWorker : BaseScraperWorker
         if (failedDataSets.Count > 0)
             await RetryFailedDataSets(failedDataSets, minReportDate, stoppingToken);
 
+        // Revise mis-published filed values, heal abandoned zero-value rows (publish the filed
+        // figure) and reset implausible derivations for honest repricing. Bounded per cycle;
+        // self-terminating once the backlog drains. Runs BEFORE the pending recalculation so a
+        // row a repair phase resets is republished in the same cycle instead of serving $0 for a
+        // full SleepInterval.
+        await RepairAbandonedValues(stoppingToken);
+
         // Recalculate holdings that were imported without a Yahoo price available
         await RecalculatePendingValues(stoppingToken);
 
         // Withdraw the derived value from stored positions bigger than their issuer. Self-
         // terminating once the back catalogue is clean, so it costs one query per cycle after that.
         await RepairImpossiblePositions(stoppingToken);
-
-        // Heal abandoned zero-value rows (publish the filed figure) and reset implausible
-        // derivations for honest repricing. Bounded per cycle; self-terminating like the pass
-        // above once the backlog drains.
-        await RepairAbandonedValues(stoppingToken);
 
         // Restamp FilingType on filing rollup rows written before the column existed. Self-
         // terminating like the pass above.
