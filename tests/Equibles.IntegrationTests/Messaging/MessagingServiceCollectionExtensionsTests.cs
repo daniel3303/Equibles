@@ -1,4 +1,5 @@
 using Equibles.Holdings.HostedService.Consumers;
+using Equibles.Messaging.Attributes;
 using Equibles.Messaging.Extensions;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
@@ -47,5 +48,40 @@ public class MessagingServiceCollectionExtensionsTests
                 d => d.ImplementationType == typeof(StockCusipChangedConsumer),
                 "the [Consumer] assembly scan auto-registered the real consumer"
             );
+    }
+
+    [Fact]
+    public void ResolveConsumerEndpointName_WithExplicitOverride_PreservesDurableQueueIdentity()
+    {
+        const string legacyEndpoint =
+            "equibles.web.portal.consumers-clientdailylimitreachedconsumer";
+        var attribute = new ConsumerAttribute { EndpointName = legacyEndpoint };
+
+        var endpoint = MessagingServiceCollectionExtensions.ResolveConsumerEndpointName(
+            typeof(StockCusipChangedConsumer),
+            attribute,
+            "replacement-host"
+        );
+
+        endpoint.Should().Be(legacyEndpoint);
+    }
+
+    [Fact]
+    public void ResolveConsumerEndpointName_WithFixedBroadcastEndpoint_RejectsAmbiguousIdentity()
+    {
+        var attribute = new ConsumerAttribute(allowMultiple: true)
+        {
+            EndpointName = "shared-endpoint",
+        };
+
+        var act = () => MessagingServiceCollectionExtensions.ResolveConsumerEndpointName(
+            typeof(StockCusipChangedConsumer),
+            attribute,
+            "worker"
+        );
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*cannot combine a fixed endpoint name with AllowMultiple*");
     }
 }
