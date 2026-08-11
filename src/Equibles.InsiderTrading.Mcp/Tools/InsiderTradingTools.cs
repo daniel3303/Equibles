@@ -176,10 +176,7 @@ public class InsiderTradingTools
                 }
 
                 var total = await query.CountAsync();
-                var transactions = await query
-                    .OrderByDescending(t => t.TransactionDate)
-                    .Take(maxResults)
-                    .ToListAsync();
+                var transactions = await query.OrderNewestFirst().Take(maxResults).ToListAsync();
 
                 if (transactions.Count == 0)
                     return filtered
@@ -288,14 +285,13 @@ public class InsiderTradingTools
                 // ranking: each row sits on its own split basis, and cutting on the raw
                 // counts would under-rank insiders whose last filing predates a large split
                 // (pre-split counts are smaller until restated).
+                var newestByStock = byStock.OrderNewestFirst();
                 var latestTransactions = await _transactionRepository
                     .GetByStockWithOwner(stock)
                     .Where(t =>
                         t.Id
-                        == byStock
+                        == newestByStock
                             .Where(t2 => t2.InsiderOwnerId == t.InsiderOwnerId)
-                            .OrderByDescending(t2 => t2.TransactionDate)
-                            .ThenByDescending(t2 => t2.FilingDate)
                             .Select(t2 => t2.Id)
                             .First()
                     )
@@ -426,7 +422,7 @@ public class InsiderTradingTools
                     return $"No Form 144 proposed sales found for {stock.Ticker}.";
 
                 var filings = await query
-                    .OrderByDescending(f => f.FilingDate)
+                    .OrderNewestFirst()
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
 
@@ -505,17 +501,8 @@ public class InsiderTradingTools
                 var matches = _ownerRepository.Search(query);
                 var total = await matches.CountAsync();
 
-                // Deterministic order: most recently active filers first (the insider the
-                // caller wants is far more likely among them than in an arbitrary
-                // Postgres-chosen subset of, say, 557 Smiths), then name/CIK as stable
-                // tie-breakers. The coalesce keeps never-filed owners last — Postgres
-                // sorts NULLs first on a DESC order.
                 var insiders = await matches
-                    .OrderByDescending(o =>
-                        o.Transactions.Max(t => (DateOnly?)t.TransactionDate) ?? DateOnly.MinValue
-                    )
-                    .ThenBy(o => o.Name)
-                    .ThenBy(o => o.OwnerCik)
+                    .OrderDiscoveryMatches()
                     .Skip(offset)
                     .Take(maxResults)
                     .ToListAsync();
@@ -530,14 +517,13 @@ public class InsiderTradingTools
                 // tools are keyed on.
                 var ownerIds = insiders.Select(i => i.Id).ToList();
                 var byOwners = _transactionRepository.GetByOwnerIds(ownerIds);
+                var newestByOwners = byOwners.OrderNewestFirst();
                 var latestByOwner = (
                     await byOwners
                         .Where(t =>
                             t.Id
-                            == byOwners
+                            == newestByOwners
                                 .Where(t2 => t2.InsiderOwnerId == t.InsiderOwnerId)
-                                .OrderByDescending(t2 => t2.TransactionDate)
-                                .ThenByDescending(t2 => t2.FilingDate)
                                 .Select(t2 => t2.Id)
                                 .First()
                         )
