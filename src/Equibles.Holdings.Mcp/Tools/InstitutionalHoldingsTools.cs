@@ -57,6 +57,7 @@ public class InstitutionalHoldingsTools
     private readonly CommonStockRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly StockCombinedQuarterService _combinedQuarterService;
+    private readonly HoldingsCorpusCoverage _corpusCoverage;
     private readonly McpToolRunner _runner;
 
     public InstitutionalHoldingsTools(
@@ -66,7 +67,8 @@ public class InstitutionalHoldingsTools
         StockSplitRepository stockSplitRepository,
         StockCombinedQuarterService combinedQuarterService,
         ErrorManager errorManager,
-        ILogger<InstitutionalHoldingsTools> logger
+        ILogger<InstitutionalHoldingsTools> logger,
+        HoldingsCorpusCoverage corpusCoverage = null
     )
     {
         _holdingRepository = holdingRepository;
@@ -74,6 +76,7 @@ public class InstitutionalHoldingsTools
         _commonStockRepository = commonStockRepository;
         _stockSplitRepository = stockSplitRepository;
         _combinedQuarterService = combinedQuarterService;
+        _corpusCoverage = corpusCoverage ?? HoldingsCorpusCoverage.Default;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -984,7 +987,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Δ Value is the change in stored quarter-end position value and includes the quarter's price move on held shares, so use Δ Shares to read the position change itself. Use this to answer 'what's the consensus 13F move this quarter?'"
+        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Δ Value is the change in stored quarter-end position value and includes the quarter's price move on held shares, so use Δ Shares to read the position change itself. The output publishes the first complete 13F report quarter and refuses comparisons that cross that corpus boundary. Use this to answer 'what's the consensus 13F move this quarter?'"
     )]
     public Task<string> GetMarketWide13FActivity(
         [Description("Bucket: top-buys, top-sells, new-positions, or sold-out-positions")]
@@ -1006,17 +1009,28 @@ public class InstitutionalHoldingsTools
 
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var (targetDate, previousDate, windowOpen, dateNote, error) =
+                var (targetDate, previousDate, windowOpen, dateNote, coverage, error) =
                     await ResolveMarketActivityDates(reportDate);
                 if (error != null)
                     return error;
+
+                if (!coverage.IsWithinCoverage || !coverage.ComparisonAvailable)
+                {
+                    return $"Market-wide 13F {normalizedBucket} for {FormatDate(targetDate)}\n"
+                        + $"_No ranking is available. {coverage.ComparisonUnavailableReason}_";
+                }
+
+                var comparisonDate = previousDate.Value;
 
                 // Headline + comparison subtitle.
                 var result = new StringBuilder();
                 result.AppendLine(
                     $"Market-wide 13F **{normalizedBucket}** for {FormatDate(targetDate)}"
                 );
-                result.AppendLine(PriorQuarterSubtitle(previousDate));
+                result.AppendLine(PriorQuarterSubtitle(comparisonDate));
+                result.AppendLine(
+                    $"Complete 13F coverage begins {FormatDate(coverage.CoverageStartDate)}"
+                );
                 if (dateNote != null)
                     result.AppendLine(dateNote);
                 if (windowOpen)
@@ -1031,7 +1045,7 @@ public class InstitutionalHoldingsTools
                     return await RenderMarketActivityMovers(
                         normalizedBucket,
                         targetDate,
-                        previousDate,
+                        comparisonDate,
                         windowOpen,
                         maxResults,
                         result
@@ -1042,7 +1056,7 @@ public class InstitutionalHoldingsTools
                     return await RenderMarketActivityChurn(
                         normalizedBucket,
                         targetDate,
-                        previousDate,
+                        comparisonDate,
                         windowOpen,
                         maxResults,
                         result
@@ -1056,9 +1070,10 @@ public class InstitutionalHoldingsTools
 
     private async Task<(
         DateOnly Target,
-        DateOnly Previous,
+        DateOnly? Previous,
         bool WindowOpen,
         string Note,
+        HoldingsCorpusStatus Coverage,
         string Error
     )> ResolveMarketActivityDates(string reportDate)
     {
@@ -1069,26 +1084,31 @@ public class InstitutionalHoldingsTools
         // 30s command timeout, so resolving off it cold timed out every first call.
         var reportDates = await _holdingRepository.Get13FAvailableReportDatesCached();
         if (reportDates.Count == 0)
-            return (default, default, false, null, "No 13F holdings data available.");
+            return (default, null, false, null, null, "No 13F holdings data available.");
 
         var (targetDate, note, error) = ResolveReportDateStrict(reportDate, reportDates);
         if (error != null)
-            return (default, default, false, null, error);
+            return (default, null, false, null, null, error);
 
         var targetIndex = IndexOfDate(reportDates, targetDate);
         if (targetIndex >= reportDates.Count - 1)
-            return (
-                default,
-                default,
-                false,
-                null,
-                $"No prior quarter to compare against for {FormatDate(targetDate)}."
-            );
+        {
+            var coverageWithoutPrior = _corpusCoverage.Evaluate(targetDate, null);
+            return (targetDate, null, false, note, coverageWithoutPrior, null);
+        }
 
         // While the newest quarter's filing window is open its leaderboards must use the
         // combined queries, or every fund that has not filed yet reads as a mass seller.
+        var previousDate = reportDates[targetIndex + 1];
         var windowOpen = targetIndex == 0 && CombinedQuarterHelper.IsFilingWindowOpen(targetDate);
-        return (targetDate, reportDates[targetIndex + 1], windowOpen, note, null);
+        return (
+            targetDate,
+            previousDate,
+            windowOpen,
+            note,
+            _corpusCoverage.Evaluate(targetDate, previousDate),
+            null
+        );
     }
 
     private static int IndexOfDate(IReadOnlyList<DateOnly> dates, DateOnly target)
@@ -1243,7 +1263,7 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetMostHeldStocks", Title = "Most Widely Held Stocks", ReadOnly = true)]
     [Description(
-        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a given quarter. Returns the stocks ranked by number of 13F filers reporting them as a holding (default), by quarter-over-quarter change in filer count (warming names — 'filersDelta' — or cooling names — 'filersDeltaAsc'), or by total reported dollar value. Includes Δ filers vs the prior quarter, total value, Δ value, and the stock's share of the 13F universe. Only currently-held stocks rank; fully-sold-out names live in GetMarketWide13FActivity's sold-out-positions bucket. While the newest quarter's filing window is open, funds that have not filed yet are carried at their prior-quarter positions (noted in the output). Use this to answer 'which stocks are most owned by institutions right now, and is breadth expanding or contracting?'"
+        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a given quarter. Returns the stocks ranked by number of 13F filers reporting them as a holding (default), by quarter-over-quarter change in filer count (warming names — 'filersDelta' — or cooling names — 'filersDeltaAsc'), or by total reported dollar value. Includes Δ filers vs the prior quarter, total value, Δ value, and the stock's share of the 13F universe. The output publishes the first complete 13F report quarter; earlier rankings are unavailable, and boundary-quarter deltas are withheld. Only currently-held stocks rank; fully-sold-out names live in GetMarketWide13FActivity's sold-out-positions bucket. While the newest quarter's filing window is open, funds that have not filed yet are carried at their prior-quarter positions (noted in the output). Use this to answer 'which stocks are most owned by institutions right now, and is breadth expanding or contracting?'"
     )]
     public Task<string> GetMostHeldStocks(
         [Description(
@@ -1269,17 +1289,34 @@ public class InstitutionalHoldingsTools
                         string.Join(", ", ValidMostHeldSorts)
                     );
 
-                var (targetDate, previousDate, windowOpen, dateNote, error) =
+                var (targetDate, previousDate, windowOpen, dateNote, coverage, error) =
                     await ResolveMarketActivityDates(reportDate);
                 if (error != null)
                     return error;
+
+                if (!coverage.IsWithinCoverage)
+                {
+                    return $"Most-held 13F ranking for {FormatDate(targetDate)} is unavailable. "
+                        + coverage.ComparisonUnavailableReason;
+                }
+
+                var deltaSort = normalizedSort is "filersdelta" or "filersdeltaasc";
+                if (deltaSort && !coverage.ComparisonAvailable)
+                {
+                    return $"Sort '{normalizedSort}' is unavailable for {FormatDate(targetDate)}. "
+                        + coverage.ComparisonUnavailableReason
+                        + " Use 'filers' or 'value' for the current-quarter ranking.";
+                }
+
+                var queryPreviousDate =
+                    previousDate ?? HoldingsCorpusCoverage.PreviousQuarterEnd(targetDate);
 
                 // Combined while the window is open — the as-filed ranking would order the
                 // whole market by which funds happened to file early. Snapshot-first like
                 // the movers/churn buckets; GetMostHeld's CurrentFilerCount > 0 filter and
                 // the sort run in memory over the ~6k mapped rows.
                 var ranking = (
-                    await LoadMarketActivity(targetDate, previousDate, windowOpen)
+                    await LoadMarketActivity(targetDate, queryPreviousDate, windowOpen)
                 ).Where(a => a.CurrentFilerCount > 0);
                 ranking = normalizedSort switch
                 {
@@ -1300,11 +1337,11 @@ public class InstitutionalHoldingsTools
                 if (rows.Count == 0)
                     return $"No stocks were held by 13F filers as of {FormatDate(targetDate)}.";
 
-                var universeFilers = await (
+                var universeFilers = await _holdingRepository.Get13FUniverseFilerCount(
+                    targetDate,
+                    queryPreviousDate,
                     windowOpen
-                        ? _holdingRepository.GetUniqueFilerIdsCombined(targetDate, previousDate)
-                        : _holdingRepository.GetUniqueFilerIds(targetDate)
-                ).CountAsync();
+                );
                 var stocks = await LoadStocksByIds(rows.Select(r => r.CommonStockId).ToList());
 
                 var table = RenderMostHeldStocksTable(
@@ -1312,11 +1349,16 @@ public class InstitutionalHoldingsTools
                     previousDate,
                     normalizedSort,
                     universeFilers,
+                    coverage.ComparisonAvailable,
                     rows,
                     stocks
                 );
                 var trailingNotes = JoinNotes(
                     dateNote,
+                    $"Coverage: complete 13F data begins {FormatDate(coverage.CoverageStartDate)}.",
+                    coverage.ComparisonAvailable
+                        ? null
+                        : $"Note: {coverage.ComparisonUnavailableReason} Delta columns are shown as —.",
                     windowOpen
                         ? $"Note: the {FormatDate(targetDate)} filing window is still open — "
                             + "funds that have not filed yet carry their prior-quarter positions."
@@ -1331,17 +1373,22 @@ public class InstitutionalHoldingsTools
 
     private static string RenderMostHeldStocksTable(
         DateOnly targetDate,
-        DateOnly previousDate,
+        DateOnly? previousDate,
         string sort,
         int universeFilers,
+        bool comparisonAvailable,
         List<MarketWideStockActivity> rows,
         IDictionary<Guid, CommonStock> stocks
     )
     {
         var result = new StringBuilder();
         result.AppendLine($"Most-held 13F stocks as of {FormatDate(targetDate)}");
+        var comparisonNote =
+            comparisonAvailable && previousDate.HasValue
+                ? PriorQuarterSubtitle(previousDate.Value)
+                : "No prior report quarter is available within complete coverage";
         result.AppendLine(
-            $"{PriorQuarterSubtitle(previousDate)} · {McpFormat.WholeNumber(universeFilers)} filers in the 13F universe"
+            $"{comparisonNote} · {McpFormat.WholeNumber(universeFilers)} filers in the 13F universe"
         );
         result.AppendLine($"Sorted by: {sort}");
         result.AppendLine();
@@ -1353,8 +1400,11 @@ public class InstitutionalHoldingsTools
             {
                 var (ticker, name) = ResolveStockCells(stocks, r.CommonStockId);
                 var pct = Percentage.Of(r.CurrentFilerCount, universeFilers);
-                var deltaFilers = r.CurrentFilerCount - r.PreviousFilerCount;
-                return $"| {rank} | {ticker} | {name} | {McpFormat.WholeNumber(r.CurrentFilerCount)} | {FormatSignedShares(deltaFilers)} | {FormatMillions(r.CurrentValue)} | {FormatSignedMillions(r.DeltaValue)} | {FormatPercent(pct)}% |";
+                var deltaFilers = comparisonAvailable
+                    ? FormatSignedShares(r.CurrentFilerCount - r.PreviousFilerCount)
+                    : "—";
+                var deltaValue = comparisonAvailable ? FormatSignedMillions(r.DeltaValue) : "—";
+                return $"| {rank} | {ticker} | {name} | {McpFormat.WholeNumber(r.CurrentFilerCount)} | {deltaFilers} | {FormatMillions(r.CurrentValue)} | {deltaValue} | {FormatPercent(pct)}% |";
             }
         );
         return result.ToString();

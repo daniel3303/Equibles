@@ -337,6 +337,33 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Distinct();
     }
 
+    // Snapshot-first denominator for public most-held rankings. Closed-quarter AUM snapshots
+    // already materialise the exact 13F filer universe, avoiding a corpus-wide DISTINCT that
+    // measured tens of seconds and could hit the command timeout. Missing, dirty, and zero-valued
+    // stubs fall back to the exact count until their snapshot rebuild completes. An open filing
+    // window still needs the combined universe because non-filers are carried forward.
+    public async Task<int> Get13FUniverseFilerCount(
+        DateOnly current,
+        DateOnly previous,
+        bool combined,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!combined)
+        {
+            var snapshot = await DbContext
+                .Set<AumQuarterlySnapshot>()
+                .AsNoTracking()
+                .Where(s => s.ReportDate == current)
+                .Select(s => new { s.FilerCount, s.DirtyAt })
+                .SingleOrDefaultAsync(cancellationToken);
+            if (snapshot is { DirtyAt: null, FilerCount: > 0 })
+                return snapshot.FilerCount;
+        }
+
+        return await GetUniqueFilerIds(current, previous, combined).CountAsync(cancellationToken);
+    }
+
     // Earliest 13F quarter each of the given holders appears on — the "is this the
     // filer's first 13F?" test behind the new-filer annotation on the buyers/sellers
     // table. A brand-new filer entity (often a CIK migration of an existing manager)

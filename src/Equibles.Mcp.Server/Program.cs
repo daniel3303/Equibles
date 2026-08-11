@@ -87,6 +87,9 @@ public partial class Program
         builder.Services.Configure<Equibles.Media.BusinessLogic.Configuration.FileStorageOptions>(
             builder.Configuration.GetSection("FileStorage")
         );
+        builder.Services.Configure<Equibles.Core.Configuration.WorkerOptions>(
+            builder.Configuration.GetSection("Worker")
+        );
 
         builder.Services.AddEquiblesMcp(mcp =>
         {
