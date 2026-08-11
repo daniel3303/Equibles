@@ -1,5 +1,12 @@
+using Equibles.Core.Configuration;
+using Equibles.Core.Contracts;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using NSubstitute;
 
 namespace Equibles.UnitTests.Holdings;
 
@@ -43,6 +50,65 @@ public class HoldingsImportServiceBuildLatestSubmissionByCikTests
         var result = HoldingsImportService.BuildLatestSubmissionByCik([noCik]);
 
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BuildLatestSubmissionByCanonicalCik_MixedSpellings_PicksLatestFiled()
+    {
+        var olderExact = Submission("0000000000-25-000021", "29-JAN-2025", "0001067983");
+        var latestAlternate = Submission("0000000000-25-000022", "14-FEB-2025", "1067983");
+
+        var result = HoldingsImportService.BuildLatestSubmissionByCanonicalCik([
+            olderExact,
+            latestAlternate,
+        ]);
+
+        result.Should().ContainSingle();
+        result["1067983"].Should().BeSameAs(latestAlternate);
+    }
+
+    [Fact]
+    public void RefreshExistingHolderConfidentialTreatment_MixedSpellings_UsesLatestFiledFlag()
+    {
+        var olderExact = Submission("0000000000-25-000023", "29-JAN-2025", "0001067983");
+        var latestAlternate = Submission("0000000000-25-000024", "14-FEB-2025", "1067983");
+        var context = new ImportContext
+        {
+            Submissions = new Dictionary<string, SubmissionRow>
+            {
+                [olderExact.AccessionNumber] = olderExact,
+                [latestAlternate.AccessionNumber] = latestAlternate,
+            },
+            CoverPages = new Dictionary<string, CoverPageRow>
+            {
+                [olderExact.AccessionNumber] = new()
+                {
+                    AccessionNumber = olderExact.AccessionNumber,
+                    ConfidentialTreatment = "N",
+                },
+                [latestAlternate.AccessionNumber] = new()
+                {
+                    AccessionNumber = latestAlternate.AccessionNumber,
+                    ConfidentialTreatment = "Y",
+                },
+            },
+        };
+        var holder = new InstitutionalHolder
+        {
+            Cik = olderExact.Cik,
+            ConfidentialTreatmentRequested = false,
+        };
+        var service = new HoldingsImportService(
+            Substitute.For<IServiceScopeFactory>(),
+            NullLogger<HoldingsImportService>.Instance,
+            Options.Create(new WorkerOptions()),
+            Substitute.For<IStockPriceProvider>(),
+            Substitute.For<MassTransit.IBus>()
+        );
+
+        service.RefreshExistingHolderConfidentialTreatment(context, [holder]);
+
+        holder.ConfidentialTreatmentRequested.Should().BeTrue();
     }
 
     private static SubmissionRow Submission(string accession, string filingDate, string cik) =>

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
@@ -863,7 +864,7 @@ public class HoldingsImportService
             .Distinct()
             .ToList();
 
-        var existingHolders = await holderRepo.GetByCiks(allCiks).ToListAsync(cancellationToken);
+        var existingHolders = await holderRepo.GetByCiks(allCiks, cancellationToken);
         foreach (var holder in existingHolders)
         {
             cikToHolderId[holder.Cik] = holder.Id;
@@ -880,25 +881,51 @@ public class HoldingsImportService
 
     // Refresh the confidential-treatment flag on holders we already track from
     // their latest filing's cover page; their identity columns stay as first seen.
-    // Keyed by CIK up front: a linear scan per holder is O(holders × submissions),
+    // Keyed by canonical CIK up front: a linear scan per holder is O(holders × submissions),
     // which a quarterly bulk data set (~8k of each) turns into tens of millions of
     // comparisons — and its first-match pick was import-order-arbitrary when a
     // filer has several submissions (multiple quarters) in one data set.
-    private void RefreshExistingHolderConfidentialTreatment(
+    internal void RefreshExistingHolderConfidentialTreatment(
         ImportContext context,
         List<InstitutionalHolder> existingHolders
     )
     {
-        var latestByCik = BuildLatestSubmissionByCik(context.Submissions.Values);
+        var latestByCanonicalCik = BuildLatestSubmissionByCanonicalCik(context.Submissions.Values);
 
         foreach (var holder in existingHolders)
         {
-            if (!latestByCik.TryGetValue(holder.Cik, out var submission))
+            var canonicalCik = CikNormalizer.Canonicalize(holder.Cik);
+            if (
+                canonicalCik == null
+                || !latestByCanonicalCik.TryGetValue(canonicalCik, out var submission)
+            )
                 continue;
             context.CoverPages.TryGetValue(submission.AccessionNumber, out var cp);
             if (cp != null)
                 holder.ConfidentialTreatmentRequested = IsYes(cp.ConfidentialTreatment);
         }
+    }
+
+    internal static Dictionary<string, SubmissionRow> BuildLatestSubmissionByCanonicalCik(
+        IEnumerable<SubmissionRow> submissions
+    )
+    {
+        var latestByCik = new Dictionary<string, SubmissionRow>(StringComparer.Ordinal);
+        foreach (var submission in submissions)
+        {
+            var canonicalCik = CikNormalizer.Canonicalize(submission.Cik);
+            if (canonicalCik == null)
+                continue;
+            if (
+                !latestByCik.TryGetValue(canonicalCik, out var current)
+                || CompareByFilingDateThenAccession(submission, current) > 0
+            )
+            {
+                latestByCik[canonicalCik] = submission;
+            }
+        }
+
+        return latestByCik;
     }
 
     // The most recently filed submission per CIK — same ordering contract as
@@ -942,14 +969,30 @@ public class HoldingsImportService
         Dictionary<string, Guid> cikToHolderId
     )
     {
-        var existingCiks = existingHolders
-            .Select(h => h.Cik)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingByCik = existingHolders.ToDictionary(
+            holder => holder.Cik,
+            StringComparer.Ordinal
+        );
 
         foreach (var submission in context.Submissions.Values)
         {
-            if (string.IsNullOrEmpty(submission.Cik) || existingCiks.Contains(submission.Cik))
+            if (string.IsNullOrEmpty(submission.Cik))
                 continue;
+
+            existingByCik.TryGetValue(submission.Cik, out var existingHolder);
+            if (existingHolder == null)
+            {
+                var alternateCik = InstitutionalHolderRepository.AlternateCikSpelling(
+                    submission.Cik
+                );
+                if (alternateCik != null)
+                    existingByCik.TryGetValue(alternateCik, out existingHolder);
+            }
+            if (existingHolder != null)
+            {
+                cikToHolderId[submission.Cik] = existingHolder.Id;
+                continue;
+            }
 
             context.CoverPages.TryGetValue(submission.AccessionNumber, out var coverPage);
 
@@ -970,7 +1013,8 @@ public class HoldingsImportService
 
             holderRepo.Add(holder);
             cikToHolderId[submission.Cik] = holder.Id;
-            existingCiks.Add(submission.Cik);
+            existingHolders.Add(holder);
+            existingByCik[holder.Cik] = holder;
         }
     }
 

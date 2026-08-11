@@ -592,6 +592,45 @@ public class InstitutionalHolderRepositorySearchNameOrCikLargestFirstTests : Par
     }
 
     [Fact]
+    public async Task GetByCik_UnpaddedInputFallsBackToPaddedStorage()
+    {
+        DbContext.Add(
+            new InstitutionalHolder { Cik = "0007654321", Name = "Padded Storage Holder" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var holder = await new InstitutionalHolderRepository(verify).GetByCik("7654321");
+
+        holder.Should().NotBeNull();
+        holder.Cik.Should().Be("0007654321");
+    }
+
+    [Fact]
+    public async Task GetByCiks_UsesExactSpellingBeforePerRequestAlternateFallback()
+    {
+        DbContext.AddRange(
+            new InstitutionalHolder { Cik = "0008765432", Name = "Exact Padded Holder" },
+            new InstitutionalHolder { Cik = "8765432", Name = "Alternate Unpadded Holder" },
+            new InstitutionalHolder { Cik = "0007654320", Name = "Fallback Padded Holder" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var holders = await new InstitutionalHolderRepository(verify).GetByCiks([
+            "0008765432",
+            "7654320",
+        ]);
+
+        holders
+            .Select(holder => holder.Name)
+            .Should()
+            .Equal("Exact Padded Holder", "Fallback Padded Holder");
+    }
+
+    [Fact]
     public async Task ResolveNameOrCik_PaddedOnlyStorageResolvesExactSpelling()
     {
         DbContext.Add(new InstitutionalHolder { Cik = "0009999999", Name = "Padded Only Holder" });

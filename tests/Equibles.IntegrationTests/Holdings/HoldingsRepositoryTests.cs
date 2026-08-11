@@ -115,7 +115,7 @@ public class InstitutionalHolderRepositoryTests : IDisposable
             );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByCiks(["0001067983", "0001364742"]).ToListAsync();
+        var result = await _repository.GetByCiks(["0001067983", "0001364742"]);
 
         result.Should().HaveCount(2);
         result.Select(h => h.Name).Should().BeEquivalentTo("Berkshire Hathaway", "Vanguard Group");
@@ -127,7 +127,7 @@ public class InstitutionalHolderRepositoryTests : IDisposable
         _dbContext.Set<InstitutionalHolder>().Add(CreateHolder(cik: "0001067983"));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByCiks(["9999999999", "8888888888"]).ToListAsync();
+        var result = await _repository.GetByCiks(["9999999999", "8888888888"]);
 
         result.Should().BeEmpty();
     }
@@ -138,7 +138,7 @@ public class InstitutionalHolderRepositoryTests : IDisposable
         _dbContext.Set<InstitutionalHolder>().Add(CreateHolder());
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByCiks([]).ToListAsync();
+        var result = await _repository.GetByCiks([]);
 
         result.Should().BeEmpty();
     }
@@ -154,7 +154,7 @@ public class InstitutionalHolderRepositoryTests : IDisposable
             );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByCiks(["0001067983", "9999999999"]).ToListAsync();
+        var result = await _repository.GetByCiks(["0001067983", "9999999999"]);
 
         result.Should().ContainSingle().Which.Name.Should().Be("Berkshire Hathaway");
     }
@@ -165,7 +165,7 @@ public class InstitutionalHolderRepositoryTests : IDisposable
         _dbContext.Set<InstitutionalHolder>().Add(CreateHolder(cik: "0001067983"));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByCiks(["0001067983", "0000000000"]).ToListAsync();
+        var result = await _repository.GetByCiks(["0001067983", "0000000000"]);
 
         result.Should().BeEmpty();
     }

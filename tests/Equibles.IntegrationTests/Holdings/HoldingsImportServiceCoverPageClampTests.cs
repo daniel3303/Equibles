@@ -84,4 +84,41 @@ public class HoldingsImportServiceCoverPageClampTests : IDisposable
                 "an over-length cover-page city must be clamped to the varchar(128) column or the batch flush aborts with 22001"
             );
     }
+
+    [Fact]
+    public void CreateMissingHolders_UnpaddedSubmissionReusesPaddedExistingHolder()
+    {
+        var service = new HoldingsImportService(
+            Substitute.For<IServiceScopeFactory>(),
+            NullLogger<HoldingsImportService>.Instance,
+            Options.Create(new WorkerOptions()),
+            Substitute.For<IStockPriceProvider>(),
+            Substitute.For<IBus>()
+        );
+        var existing = new InstitutionalHolder
+        {
+            Id = Guid.NewGuid(),
+            Cik = "0001067983",
+            Name = "Existing padded holder",
+        };
+        var context = new ImportContext
+        {
+            Submissions = new Dictionary<string, SubmissionRow>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ACC-ALTERNATE-CIK"] = new SubmissionRow
+                {
+                    AccessionNumber = "ACC-ALTERNATE-CIK",
+                    Cik = "1067983",
+                    FormType = "13F-HR",
+                },
+            },
+        };
+        var holderRepo = new InstitutionalHolderRepository(_dbContext);
+        var cikToHolderId = new Dictionary<string, Guid>();
+
+        service.CreateMissingHolders(context, [existing], holderRepo, cikToHolderId);
+
+        cikToHolderId.Should().Contain("1067983", existing.Id);
+        _dbContext.ChangeTracker.Entries<InstitutionalHolder>().Should().BeEmpty();
+    }
 }
