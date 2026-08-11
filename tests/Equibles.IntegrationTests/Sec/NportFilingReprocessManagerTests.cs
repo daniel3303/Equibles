@@ -45,6 +45,44 @@ public class NportFilingReprocessManagerTests
     }
 
     [Fact]
+    public async Task Run_FilingWithExistingHoldings_ReplacesTheStoredSchedule()
+    {
+        var (manager, dbContext, secClient) = CreateManagerWithDeps();
+        var stock = SeedStock(dbContext);
+        var filing = SeedFiling(dbContext, stock, parserVersion: 1);
+        // A schedule left by the previous parser version — reprocess must replace it, not append
+        // to it or keep it.
+        dbContext.Add(
+            new NportHolding
+            {
+                Id = Guid.NewGuid(),
+                NportFilingId = filing.Id,
+                Name = "Stale Holding Corp",
+                Cusip = "STALE0001",
+                Balance = 1m,
+                ValueUsd = 1m,
+            }
+        );
+        dbContext.SaveChanges();
+        dbContext.ChangeTracker.Clear();
+        secClient
+            .GetDocumentContent(filing.AccessionNumber, Arg.Any<string>())
+            .Returns(ValidNportSubmission);
+
+        var result = await manager.Run();
+
+        result.Processed.Should().Be(1);
+        result.HoldingsAdded.Should().Be(2);
+        result.Failed.Should().Be(0);
+
+        var reprocessed = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
+        reprocessed.ParserVersion.Should().Be(NportFiling.CurrentParserVersion);
+        reprocessed.Holdings.Should().HaveCount(2);
+        reprocessed.Holdings.Should().NotContain(h => h.Name == "Stale Holding Corp");
+        reprocessed.Holdings.Should().Contain(h => h.Name == "Microsoft Corp");
+    }
+
+    [Fact]
     public async Task Run_FilingAlreadyAtCurrentVersion_IsLeftUntouched()
     {
         var (manager, dbContext, secClient) = CreateManagerWithDeps();
