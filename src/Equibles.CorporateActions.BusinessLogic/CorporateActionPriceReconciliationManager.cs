@@ -150,10 +150,49 @@ public class CorporateActionPriceReconciliationManager
     /// <summary>
     /// Stamps only selected actions whose source state is unchanged after the provider fetch.
     /// </summary>
-    public async Task<int> StampApplied(
+    public Task<int> StampApplied(
         PendingPriceReconciliationSeries selectedSeries,
         DateTime appliedTime,
         CancellationToken cancellationToken = default
+    ) =>
+        StampAppliedCore(
+            selectedSeries,
+            [],
+            false,
+            DateOnly.MinValue,
+            appliedTime,
+            cancellationToken
+        );
+
+    /// <summary>
+    /// Stamps unchanged selected splits plus dividends whose current state exactly matches the
+    /// same provider response that supplied the replacement adjusted-price series.
+    /// </summary>
+    public Task<int> StampApplied(
+        PendingPriceReconciliationSeries selectedSeries,
+        IReadOnlyCollection<CapturedDividend> priceSeriesDividends,
+        DateOnly settledBefore,
+        DateTime appliedTime,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return StampAppliedCore(
+            selectedSeries,
+            priceSeriesDividends,
+            true,
+            settledBefore,
+            appliedTime,
+            cancellationToken
+        );
+    }
+
+    private async Task<int> StampAppliedCore(
+        PendingPriceReconciliationSeries selectedSeries,
+        IReadOnlyCollection<CapturedDividend> priceSeriesDividends,
+        bool requirePriceSeriesDividendMatch,
+        DateOnly settledBefore,
+        DateTime appliedTime,
+        CancellationToken cancellationToken
     )
     {
         await using var transaction = await _stockRepository.CreateTransaction(
@@ -171,18 +210,23 @@ public class CorporateActionPriceReconciliationManager
         }
 
         var unchangedSplits = await LoadUnchangedSplits(selectedSeries, cancellationToken);
-        var unchangedDividends = await LoadUnchangedDividends(
-            selectedSeries,
-            string.Equals(
-                stock.Ticker,
-                selectedSeries.ListedTicker,
-                StringComparison.OrdinalIgnoreCase
-            ),
-            cancellationToken
+        var isStillPrimary = string.Equals(
+            stock.Ticker,
+            selectedSeries.ListedTicker,
+            StringComparison.OrdinalIgnoreCase
         );
-        ApplyMarkers(unchangedSplits, unchangedDividends, appliedTime);
+        var dividendsToStamp = requirePriceSeriesDividendMatch
+            ? await LoadResponseMatchedDividends(
+                selectedSeries,
+                priceSeriesDividends,
+                settledBefore,
+                isStillPrimary,
+                cancellationToken
+            )
+            : await LoadUnchangedDividends(selectedSeries, isStillPrimary, cancellationToken);
+        ApplyMarkers(unchangedSplits, dividendsToStamp, appliedTime);
 
-        var stamped = unchangedSplits.Count + unchangedDividends.Count;
+        var stamped = unchangedSplits.Count + dividendsToStamp.Count;
         if (stamped > 0)
             await _stockRepository.SaveChanges();
 
@@ -336,6 +380,44 @@ public class CorporateActionPriceReconciliationManager
                     && dividend.AmountPerShare == selected.AmountPerShare
                     && dividend.Source == selected.Source;
             })
+            .ToList();
+    }
+
+    private async Task<List<CashDividend>> LoadResponseMatchedDividends(
+        PendingPriceReconciliationSeries selectedSeries,
+        IReadOnlyCollection<CapturedDividend> priceSeriesDividends,
+        DateOnly settledBefore,
+        bool isStillPrimary,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!isStillPrimary || priceSeriesDividends.Count == 0)
+            return [];
+
+        var expectedByDate = CashDividendCaptureManager
+            .CombineSameDateDividends(priceSeriesDividends)
+            .Where(dividend => dividend.ExDate < settledBefore)
+            .ToDictionary(dividend => dividend.ExDate, dividend => dividend.AmountPerShare);
+        if (expectedByDate.Count == 0)
+            return [];
+
+        var expectedDates = expectedByDate.Keys.ToList();
+        var candidateIds = await _dividendRepository
+            .GetByStock(selectedSeries.CommonStockId)
+            .Where(dividend => expectedDates.Contains(dividend.ExDate))
+            .Select(dividend => dividend.Id)
+            .ToListAsync(cancellationToken);
+        var locked = await _dividendRepository.GetForUpdate(candidateIds, cancellationToken);
+
+        return locked
+            .Where(dividend =>
+                dividend.PriceAdjustmentAppliedTime == null
+                || dividend.PriceAdjustmentAppliedAmountPerShare != dividend.AmountPerShare
+            )
+            .Where(dividend =>
+                expectedByDate.TryGetValue(dividend.ExDate, out var expectedAmount)
+                && dividend.AmountPerShare == expectedAmount
+            )
             .ToList();
     }
 

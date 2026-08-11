@@ -418,7 +418,7 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_PendingDividend_ReplacesWholeSeriesWithProviderAdjustedCloses()
+    public async Task Import_RequestVariantPendingDividend_StampsSameProviderResponse()
     {
         var apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
@@ -464,7 +464,7 @@ public class YahooPriceImportServiceTests : IDisposable
                             Volume = 1_100_000,
                         },
                     ],
-                    Dividends = [new CashDividendEvent { Date = exDate, Amount = 0.27m }],
+                    Dividends = [new CashDividendEvent { Date = exDate, Amount = 0.2701m }],
                 }
             );
 
@@ -472,7 +472,8 @@ public class YahooPriceImportServiceTests : IDisposable
 
         var stored = _priceRepo.GetByStock(apple, "AAPL").OrderBy(price => price.Date).ToList();
         stored.Select(price => price.AdjustedClose).Should().Equal(99.73m, 105m);
-        dividend.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.27m);
+        dividend.AmountPerShare.Should().Be(0.2701m);
+        dividend.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.2701m);
         dividend.PriceAdjustmentAppliedTime.Should().NotBeNull();
         await _yahooClient
             .Received()

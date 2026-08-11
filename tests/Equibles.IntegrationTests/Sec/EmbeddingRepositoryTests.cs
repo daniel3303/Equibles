@@ -113,6 +113,101 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
             .Be(chunkZ.chunk.Id, "the z-axis vector is the farthest (orthogonal to the query)");
     }
 
+    [Fact]
+    public async Task SearchSimilarChunks_DateWindowUsesDocumentDateWhenChunkCacheDisagrees()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+        };
+        var insideFile = MakeFile("inside");
+        var beforeFile = MakeFile("before");
+        var afterFile = MakeFile("after");
+        var insideDocument = new Document
+        {
+            Id = Guid.NewGuid(),
+            CommonStockId = stock.Id,
+            ContentId = insideFile.Id,
+            DocumentType = DocumentType.TenK,
+            ReportingDate = new DateOnly(2023, 9, 30),
+            ReportingForDate = new DateOnly(2023, 6, 30),
+            LineCount = 1,
+        };
+        var beforeDocument = new Document
+        {
+            Id = Guid.NewGuid(),
+            CommonStockId = stock.Id,
+            ContentId = beforeFile.Id,
+            DocumentType = DocumentType.TenK,
+            ReportingDate = new DateOnly(2023, 6, 30),
+            ReportingForDate = new DateOnly(2023, 3, 31),
+            LineCount = 1,
+        };
+        var afterDocument = new Document
+        {
+            Id = Guid.NewGuid(),
+            CommonStockId = stock.Id,
+            ContentId = afterFile.Id,
+            DocumentType = DocumentType.TenK,
+            ReportingDate = new DateOnly(2023, 12, 31),
+            ReportingForDate = new DateOnly(2023, 9, 30),
+            LineCount = 1,
+        };
+        var inside = MakeChunkWithEmbedding(
+            insideDocument,
+            content: "inside",
+            index: 0,
+            vector: new Vector(new ReadOnlyMemory<float>([1f, 0f, 0f]))
+        );
+        var before = MakeChunkWithEmbedding(
+            beforeDocument,
+            content: "before",
+            index: 0,
+            vector: new Vector(new ReadOnlyMemory<float>([1f, 0f, 0f]))
+        );
+        var after = MakeChunkWithEmbedding(
+            afterDocument,
+            content: "after",
+            index: 0,
+            vector: new Vector(new ReadOnlyMemory<float>([1f, 0f, 0f]))
+        );
+        inside.chunk.ReportingDate = new DateTime(2023, 12, 31, 0, 0, 0, DateTimeKind.Utc);
+        before.chunk.ReportingDate = new DateTime(2023, 9, 30, 0, 0, 0, DateTimeKind.Utc);
+        after.chunk.ReportingDate = new DateTime(2023, 9, 30, 0, 0, 0, DateTimeKind.Utc);
+
+        DbContext.Add(stock);
+        DbContext.AddRange(insideFile, beforeFile, afterFile);
+        DbContext.AddRange(insideDocument, beforeDocument, afterDocument);
+        DbContext.AddRange(inside.chunk, before.chunk, after.chunk);
+        DbContext.AddRange(inside.embedding, before.embedding, after.embedding);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var date = new DateTime(2023, 9, 30, 0, 0, 0, DateTimeKind.Utc);
+        var results = await new EmbeddingRepository(DbContext).SearchSimilarChunks(
+            [1f, 0f, 0f],
+            Model,
+            maxResults: 10,
+            startUtc: date,
+            endUtc: date
+        );
+
+        results.Should().ContainSingle().Which.Should().Be(inside.chunk.Id);
+    }
+
+    private static File MakeFile(string name) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            Extension = "html",
+            ContentType = "text/html",
+            Size = 1,
+            FileContent = new FileContent { Bytes = [0x01] },
+        };
+
     private static (Chunk chunk, Embedding embedding) MakeChunkWithEmbedding(
         Document document,
         string content,

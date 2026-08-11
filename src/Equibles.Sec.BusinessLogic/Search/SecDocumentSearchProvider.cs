@@ -101,11 +101,33 @@ public class SecDocumentSearchProvider : ISearchProvider
             cancellationToken: cancellationToken
         );
 
-        return chunks
+        var documentChunks = chunks
             .GroupBy(chunk => chunk.DocumentId)
             .Select(group => group.First())
             .Take(request.MaxPerProvider)
-            .Select(ProjectChunk)
+            .ToList();
+
+        if (documentChunks.Count == 0)
+        {
+            return [];
+        }
+
+        // Hybrid search materializes chunks without their parent documents. Load the authoritative
+        // filing dates in one batch: dereferencing chunk.Document here would issue one synchronous
+        // lazy-load query per hit and can exhaust the global search provider's five-second budget.
+        var documentIds = documentChunks.Select(chunk => chunk.DocumentId).ToList();
+        var reportingDates = await _documentRepository
+            .GetAll()
+            .Where(document => documentIds.Contains(document.Id))
+            .Select(document => new { document.Id, document.ReportingDate })
+            .ToDictionaryAsync(
+                document => document.Id,
+                document => document.ReportingDate,
+                cancellationToken
+            );
+
+        return documentChunks
+            .Select(chunk => ProjectChunk(chunk, reportingDates[chunk.DocumentId]))
             .ToList();
     }
 
@@ -123,13 +145,13 @@ public class SecDocumentSearchProvider : ISearchProvider
             },
         };
 
-    private static SearchHit ProjectChunk(Chunk chunk) =>
+    private static SearchHit ProjectChunk(Chunk chunk, DateOnly reportingDate) =>
         new()
         {
             Title = $"{chunk.DocumentType.DisplayName} · {chunk.Ticker}",
-            Subtitle = chunk.ReportingDate.ToString("yyyy-MM-dd"),
+            Subtitle = reportingDate.ToString("yyyy-MM-dd"),
             Kind = "Filing",
-            Date = DateOnly.FromDateTime(chunk.ReportingDate),
+            Date = reportingDate,
             RouteValues = { ["ticker"] = chunk.Ticker, ["id"] = chunk.DocumentId.ToString() },
         };
 }

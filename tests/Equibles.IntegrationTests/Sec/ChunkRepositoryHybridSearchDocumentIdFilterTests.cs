@@ -59,6 +59,51 @@ public class ChunkRepositoryHybridSearchDocumentIdFilterTests : ParadeDbMcpTestB
         results.Should().AllSatisfy(c => c.DocumentId.Should().Be(doc1.Id));
     }
 
+    [Fact]
+    public async Task HybridSearch_DateWindowUsesDocumentDateWhenChunkCacheDisagrees()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
+        DbContext.Add(stock);
+
+        var inside = SeedDocument(stock, new DateOnly(2023, 9, 30));
+        var before = SeedDocument(stock, new DateOnly(2023, 6, 30));
+        var after = SeedDocument(stock, new DateOnly(2023, 12, 31));
+        SeedChunk(
+            inside,
+            "zzqxfiscal transcript supply chain concentration.",
+            stock.Ticker,
+            new DateOnly(2023, 12, 31)
+        );
+        SeedChunk(
+            before,
+            "zzqxfiscal transcript supply chain concentration.",
+            stock.Ticker,
+            new DateOnly(2023, 9, 30)
+        );
+        SeedChunk(
+            after,
+            "zzqxfiscal transcript supply chain concentration.",
+            stock.Ticker,
+            new DateOnly(2023, 9, 30)
+        );
+        await DbContext.SaveChangesAsync();
+
+        var sut = new ChunkRepository(DbContext);
+        var results = await sut.HybridSearch(
+            searchText: "zzqxfiscal",
+            maxResults: 10,
+            startDate: new DateOnly(2023, 9, 30),
+            endDate: new DateOnly(2023, 9, 30)
+        );
+
+        results.Should().ContainSingle().Which.DocumentId.Should().Be(inside.Id);
+    }
+
     private Document SeedDocument(CommonStock stock, DateOnly reportingDate)
     {
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
@@ -88,7 +133,12 @@ public class ChunkRepositoryHybridSearchDocumentIdFilterTests : ParadeDbMcpTestB
         return document;
     }
 
-    private void SeedChunk(Document document, string content, string ticker)
+    private void SeedChunk(
+        Document document,
+        string content,
+        string ticker,
+        DateOnly? cachedReportingDate = null
+    )
     {
         DbContext.Add(
             new Chunk
@@ -103,7 +153,7 @@ public class ChunkRepositoryHybridSearchDocumentIdFilterTests : ParadeDbMcpTestB
                 DocumentType = document.DocumentType,
                 Ticker = ticker,
                 ReportingDate = DateTime.SpecifyKind(
-                    document.ReportingDate.ToDateTime(TimeOnly.MinValue),
+                    (cachedReportingDate ?? document.ReportingDate).ToDateTime(TimeOnly.MinValue),
                     DateTimeKind.Utc
                 ),
             }

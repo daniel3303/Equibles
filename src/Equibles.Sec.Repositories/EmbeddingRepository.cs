@@ -89,11 +89,19 @@ public class EmbeddingRepository : BaseRepository<Embedding>
         if (documentType != null)
             query = query.Where(e => e.Chunk.DocumentType == documentType);
 
+        // Match the BM25 arm's source-of-truth date. Chunk.ReportingDate is a denormalized cache;
+        // legacy transcript chunks can carry an obsolete calendar-quarter date (#7049).
         if (startUtc.HasValue)
-            query = query.Where(e => e.Chunk.ReportingDate >= startUtc.Value);
+        {
+            var startDate = DateOnly.FromDateTime(startUtc.Value);
+            query = query.Where(e => e.Chunk.Document.ReportingDate >= startDate);
+        }
 
         if (endUtc.HasValue)
-            query = query.Where(e => e.Chunk.ReportingDate <= endUtc.Value);
+        {
+            var endDate = DateOnly.FromDateTime(endUtc.Value);
+            query = query.Where(e => e.Chunk.Document.ReportingDate <= endDate);
+        }
 
         var originalTimeout = DbContext.Database.GetCommandTimeout();
         DbContext.Database.SetCommandTimeout(CorpusSearchCommandTimeoutSeconds);

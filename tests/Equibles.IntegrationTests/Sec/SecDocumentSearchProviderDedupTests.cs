@@ -6,6 +6,7 @@ using Equibles.Sec.BusinessLogic.Search;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 using File = Equibles.Media.Data.Models.File;
 
@@ -47,9 +48,12 @@ public class SecDocumentSearchProviderDedupTests : ParadeDbMcpTestBase
 
         await DbContext.SaveChangesAsync();
 
+        await using var searchContext = Fixture.CreateDbContext(options =>
+            options.UseLazyLoadingProxies(false)
+        );
         var sut = new SecDocumentSearchProvider(
-            HybridChunkSearcherFactory.Bm25Only(DbContext),
-            new DocumentRepository(DbContext)
+            HybridChunkSearcherFactory.Bm25Only(searchContext),
+            new DocumentRepository(searchContext)
         );
 
         // "zzqxquantum" is no company's ticker, so the exact-ticker path finds nothing and the
@@ -66,6 +70,40 @@ public class SecDocumentSearchProviderDedupTests : ParadeDbMcpTestBase
             .Should()
             .BeEquivalentTo([doc1.Id.ToString(), doc2.Id.ToString()]);
         group.Hits.Should().AllSatisfy(h => h.Kind.Should().Be("Filing"));
+    }
+
+    [Fact]
+    public async Task Search_ContentHitProjectsTheDocumentDateWhenChunkCacheDisagrees()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
+        DbContext.Add(stock);
+        var document = SeedDocument(stock, new DateOnly(2023, 9, 30));
+        SeedChunk(
+            document,
+            0,
+            "zzqxoffcalendar transcript supply chain concentration.",
+            stock.Ticker,
+            new DateOnly(2023, 12, 31)
+        );
+        await DbContext.SaveChangesAsync();
+
+        var sut = new SecDocumentSearchProvider(
+            HybridChunkSearcherFactory.Bm25Only(DbContext),
+            new DocumentRepository(DbContext)
+        );
+        var group = await sut.Search(
+            new SearchRequest { Query = "zzqxoffcalendar", MaxPerProvider = 5 },
+            CancellationToken.None
+        );
+
+        group.Hits.Should().ContainSingle();
+        group.Hits[0].Date.Should().Be(new DateOnly(2023, 9, 30));
+        group.Hits[0].Subtitle.Should().Be("2023-09-30");
     }
 
     private Document SeedDocument(CommonStock stock, DateOnly reportingDate)
@@ -97,7 +135,13 @@ public class SecDocumentSearchProviderDedupTests : ParadeDbMcpTestBase
         return document;
     }
 
-    private void SeedChunk(Document document, int index, string content, string ticker)
+    private void SeedChunk(
+        Document document,
+        int index,
+        string content,
+        string ticker,
+        DateOnly? cachedReportingDate = null
+    )
     {
         DbContext.Add(
             new Chunk
@@ -112,7 +156,7 @@ public class SecDocumentSearchProviderDedupTests : ParadeDbMcpTestBase
                 DocumentType = document.DocumentType,
                 Ticker = ticker,
                 ReportingDate = DateTime.SpecifyKind(
-                    document.ReportingDate.ToDateTime(TimeOnly.MinValue),
+                    (cachedReportingDate ?? document.ReportingDate).ToDateTime(TimeOnly.MinValue),
                     DateTimeKind.Utc
                 ),
             }
