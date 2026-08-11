@@ -33,6 +33,9 @@ public static class SecondaryTickerPolicy
             return null;
 
         var requested = TickerNormalizer.Normalize(requestedTicker);
+        if (requested == null)
+            return null;
+
         var candidates = requested.Contains('.')
             ? new[] { requested, requested.Replace('.', '-') }
             : new[] { requested };

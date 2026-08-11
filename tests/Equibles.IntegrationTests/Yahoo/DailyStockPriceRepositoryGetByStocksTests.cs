@@ -63,12 +63,41 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
         result.Select(p => p.Date).Should().BeEquivalentTo([start, end]);
     }
 
-    private static DailyStockPrice Price(Guid stockId, string listedTicker, DateOnly date) =>
+    [Fact]
+    public async Task GetTradedByStocks_ExcludesCarryForwardAndInvalidVolumeRows()
+    {
+        var stockId = Guid.NewGuid();
+        var start = new DateOnly(2026, 8, 7);
+        var end = new DateOnly(2026, 8, 11);
+        _dbContext.Set<CommonStock>().Add(new CommonStock { Id = stockId, Ticker = "THIN" });
+        _dbContext
+            .Set<DailyStockPrice>()
+            .AddRange(
+                Price(stockId, "THIN", start, 10),
+                Price(stockId, "THIN", start.AddDays(1), 0),
+                Price(stockId, "THIN", end, -1)
+            );
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+        var result = await _repository
+            .GetTradedByStocks([stockId], start, end)
+            .ToListAsync(CancellationToken.None);
+
+        result.Should().ContainSingle().Which.Date.Should().Be(start);
+    }
+
+    private static DailyStockPrice Price(
+        Guid stockId,
+        string listedTicker,
+        DateOnly date,
+        long volume = 100
+    ) =>
         new()
         {
             CommonStockId = stockId,
             ListedTicker = listedTicker,
             Date = date,
             Close = 100m,
+            Volume = volume,
         };
 }

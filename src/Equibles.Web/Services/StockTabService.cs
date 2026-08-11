@@ -429,7 +429,7 @@ public class StockTabService
     public async Task<PriceTabViewModel> LoadPriceTab(CommonStock stock, string listedTicker)
     {
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, listedTicker);
-        var priceQuery = _dailyStockPriceRepository.GetByStock(stock, resolvedTicker);
+        var priceQuery = _dailyStockPriceRepository.GetTradedByStock(stock, resolvedTicker);
         if (_minSyncDate is { } minDate)
         {
             // Clamp the indicators too: derived series (SMA, RSI, MACD) over
@@ -499,7 +499,7 @@ public class StockTabService
 
         var latestDate = stockPrices[^1].Date;
         var benchmarkPrices = await _dailyStockPriceRepository
-            .GetByStock(benchmark, latestDate.AddDays(-BenchmarkLookbackDays), latestDate)
+            .GetTradedByStock(benchmark, latestDate.AddDays(-BenchmarkLookbackDays), latestDate)
             .OrderBy(p => p.Date)
             .ToListAsync();
 
@@ -715,7 +715,7 @@ public class StockTabService
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, listedTicker);
 
         var recentPrices = await _dailyStockPriceRepository
-            .GetByStock(stock, resolvedTicker)
+            .GetTradedByStock(stock, resolvedTicker)
             .OrderByDescending(p => p.Date)
             .Take(252)
             .ToListAsync();

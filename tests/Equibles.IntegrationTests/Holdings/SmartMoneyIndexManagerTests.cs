@@ -266,6 +266,7 @@ public class SmartMoneyIndexManagerTests : IDisposable
                     Low = close,
                     Close = close,
                     AdjustedClose = close,
+                    Volume = 1_000,
                 }
             );
     }

@@ -53,17 +53,30 @@ public class HoldingsCloneBacktestProvider
         string benchmark
     )
     {
+        var validatedCik = CikNormalizer.Validate(cik);
+        var normalizedBenchmark = string.IsNullOrWhiteSpace(benchmark)
+            ? DefaultBenchmark
+            : TickerNormalizer.NormalizeDashListed(benchmark);
         var outcome = new CloneBacktestOutcome
         {
-            Cik = cik,
-            Benchmark = string.IsNullOrWhiteSpace(benchmark)
-                ? DefaultBenchmark
-                : TickerNormalizer.Normalize(benchmark),
+            Cik = validatedCik ?? cik,
+            Benchmark = normalizedBenchmark,
             RequestedFrom = from,
             RequestedTo = to,
         };
 
-        var holder = await _holderRepository.GetByCik(cik);
+        if (validatedCik == null)
+        {
+            outcome.HolderNotFound = true;
+            return outcome;
+        }
+        if (normalizedBenchmark == null)
+        {
+            outcome.BenchmarkNotFound = true;
+            return outcome;
+        }
+
+        var holder = await _holderRepository.GetByCik(validatedCik);
         if (holder == null)
         {
             outcome.HolderNotFound = true;

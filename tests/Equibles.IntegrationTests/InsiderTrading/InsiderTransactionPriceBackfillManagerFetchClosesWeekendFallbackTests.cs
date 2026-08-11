@@ -66,6 +66,7 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
                     ListedTicker = "WKND",
                     Date = thursday,
                     Close = 48m,
+                    Volume = 1_000,
                 },
                 new DailyStockPrice
                 {
@@ -73,6 +74,7 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
                     ListedTicker = "WKND",
                     Date = friday,
                     Close = 50m,
+                    Volume = 1_000,
                 }
             );
         await _dbContext.SaveChangesAsync(CancellationToken.None);

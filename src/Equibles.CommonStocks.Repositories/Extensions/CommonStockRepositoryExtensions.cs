@@ -11,8 +11,42 @@ public static class CommonStockRepositoryExtensions
         string ticker
     )
     {
-        var stock = await repository.GetByTicker(TickerNormalizer.Normalize(ticker));
+        var normalized = TickerNormalizer.Normalize(ticker);
+        if (normalized == null)
+            return (null, $"Stock '{ticker}' not found.");
+
+        var stock = await repository.GetByTicker(normalized);
         return stock == null ? (null, $"Stock '{ticker}' not found.") : (stock, null);
+    }
+
+    // SEC CIKs appear padded and unpadded, while a surviving filer can also own a predecessor's
+    // CIK through SecondaryCiks. Resolve the canonical identity across both fields and fail closed
+    // when corrupted ownership maps the same CIK to more than one CommonStock.
+    public static async Task<CommonStock> GetByCikTolerant(
+        this CommonStockRepository repository,
+        string cik,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var validated = CikNormalizer.Validate(cik);
+        var canonical = CikNormalizer.Canonicalize(validated);
+        if (canonical == null)
+            return null;
+
+        var padded = canonical.PadLeft(10, '0');
+        var matches = await repository
+            .GetAll()
+            .Where(stock =>
+                stock.Cik == validated
+                || stock.Cik == canonical
+                || stock.Cik == padded
+                || stock.SecondaryCiks.Contains(validated)
+                || stock.SecondaryCiks.Contains(canonical)
+                || stock.SecondaryCiks.Contains(padded)
+            )
+            .Take(2)
+            .ToListAsync(cancellationToken);
+        return matches.Count == 1 ? matches[0] : null;
     }
 
     // Returns the subset of the given ids whose CommonStock still exists. Importers

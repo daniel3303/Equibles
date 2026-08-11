@@ -626,4 +626,36 @@ public class InstitutionalHolderRepositorySearchNameOrCikLargestFirstTests : Par
         resolution.Selected.Should().BeNull();
         resolution.Candidates.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task ResolveNameOrCik_InvalidCikSpellings_DoNotResolveIdentifierRows()
+    {
+        var invalidCiks = new[] { "12345678901234567", "１２３", "0000" };
+        DbContext.AddRange(
+            invalidCiks
+                .Skip(1)
+                .Select(
+                    (cik, index) =>
+                        new InstitutionalHolder
+                        {
+                            Cik = cik,
+                            Name = $"Invalid identifier row {index}",
+                        }
+                )
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var repository = new InstitutionalHolderRepository(verify);
+        foreach (var invalidCik in invalidCiks)
+        {
+            var resolution = await repository.ResolveNameOrCik(invalidCik);
+            var discovery = await repository.SearchNameOrCik(invalidCik).ToListAsync();
+
+            resolution.Selected.Should().BeNull();
+            resolution.Candidates.Should().BeEmpty();
+            discovery.Should().BeEmpty();
+        }
+    }
 }

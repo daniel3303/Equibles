@@ -3,6 +3,7 @@ using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Equibles.CommonStocks.BusinessLogic;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
@@ -78,12 +79,24 @@ public class CompanySyncService : ICompanySyncService
                 );
             }
 
+            using var listingSync = await CommonStockListingSyncLock.Acquire();
             using var scope = _serviceScopeFactory.CreateScope();
             var state = await BuildSyncState(secCompanies, scope);
 
             foreach (var secCompany in secCompanies)
             {
-                if (state.SecondaryCikToParent.TryGetValue(secCompany.Cik, out var parent))
+                var canonicalCik = CikNormalizer.Canonicalize(secCompany.Cik);
+                if (canonicalCik == null)
+                {
+                    _logger.LogWarning(
+                        "Company {CompanyName} has an invalid CIK {Cik}, skipping",
+                        secCompany.Name,
+                        secCompany.Cik
+                    );
+                    continue;
+                }
+
+                if (state.SecondaryCikToParent.TryGetValue(canonicalCik, out var parent))
                 {
                     _logger.LogDebug(
                         "Skipping subsidiary CIK {Cik} ({Name}) — already attached to parent {ParentTicker} (CIK: {ParentCik})",
@@ -95,7 +108,14 @@ public class CompanySyncService : ICompanySyncService
                     continue;
                 }
 
-                var primaryTicker = secCompany.Tickers.FirstOrDefault();
+                var normalizedTickers = secCompany
+                    .Tickers.Select(TickerNormalizer.NormalizeListed)
+                    .Where(ticker => ticker != null)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                var primaryTicker = normalizedTickers.FirstOrDefault(ticker =>
+                    ticker.Length <= TickerNormalizer.MaxPrimaryLength
+                );
                 if (string.IsNullOrEmpty(primaryTicker))
                 {
                     _logger.LogWarning(
@@ -106,9 +126,13 @@ public class CompanySyncService : ICompanySyncService
                     continue;
                 }
 
-                var secondaryTickers = secCompany.Tickers.Skip(1).ToList();
+                var secondaryTickers = normalizedTickers
+                    .Where(ticker =>
+                        !string.Equals(ticker, primaryTicker, StringComparison.OrdinalIgnoreCase)
+                    )
+                    .ToList();
 
-                if (state.ExistingCiks.Contains(secCompany.Cik))
+                if (state.ExistingCiks.Contains(canonicalCik))
                 {
                     await UpdateExistingStock(secCompany, primaryTicker, secondaryTickers, state);
                 }
@@ -146,15 +170,23 @@ public class CompanySyncService : ICompanySyncService
             scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-        var secCiks = secCompanies.Select(c => c.Cik).ToHashSet();
+        var secCiks = secCompanies
+            .Select(company => CikNormalizer.Canonicalize(company.Cik))
+            .Where(cik => cik != null)
+            .ToHashSet(StringComparer.Ordinal);
 
         // Load every existing stock so we can detect subsidiaries already attached
         // as SecondaryCiks on prior syncs. We can't filter by SEC CIKs alone because
         // the subsidiary's CIK won't match any incoming primary CIK — it lives only
         // inside another stock's SecondaryCiks list.
         var allExistingStocks = await commonStockRepository.GetAll().ToListAsync();
-        var existingStocks = allExistingStocks.Where(cs => secCiks.Contains(cs.Cik)).ToList();
-        var existingCiks = existingStocks.Select(cs => cs.Cik).ToHashSet();
+        var existingStocks = allExistingStocks
+            .Where(stock => secCiks.Contains(CikNormalizer.Canonicalize(stock.Cik)))
+            .ToList();
+        var existingCiks = existingStocks
+            .Select(stock => CikNormalizer.Canonicalize(stock.Cik))
+            .Where(cik => cik != null)
+            .ToHashSet(StringComparer.Ordinal);
 
         // Build the ticker → stock lookup over every row so ReplaceObsoleteStock can find
         // a ticker holder whose own CIK dropped out of SEC's feed but who still owns the
@@ -197,8 +229,16 @@ public class CompanySyncService : ICompanySyncService
         StockSyncState state
     )
     {
-        var existingStock = state.ExistingStocks.First(cs => cs.Cik == secCompany.Cik);
+        var canonicalCik = CikNormalizer.Canonicalize(secCompany.Cik);
+        var existingStock = state.ExistingStocks.First(stock =>
+            CikNormalizer.Canonicalize(stock.Cik) == canonicalCik
+        );
         var normalizedName = NormalizeCompanyName(secCompany.Name);
+        var combinedSecondaryTickers = MergeSecondaryTickers(
+            primaryTicker,
+            secondaryTickers,
+            existingStock.ReferenceTickers
+        );
         // Empty string counts as missing: the SEC metadata website field is blank for most
         // companies, and rows that captured that blank must stay eligible for a refill —
         // but only re-ask EDGAR once per recheck interval, not once per 15s cycle.
@@ -208,7 +248,7 @@ public class CompanySyncService : ICompanySyncService
         var needsUpdate =
             existingStock.Ticker != primaryTicker
             || existingStock.Name != normalizedName
-            || !(existingStock.SecondaryTickers ?? []).SequenceEqual(secondaryTickers)
+            || !(existingStock.SecondaryTickers ?? []).SequenceEqual(combinedSecondaryTickers)
             || missingWebsite;
 
         if (!needsUpdate)
@@ -230,7 +270,7 @@ public class CompanySyncService : ICompanySyncService
 
             existingStock.Ticker = primaryTicker;
             existingStock.Name = normalizedName;
-            existingStock.SecondaryTickers = secondaryTickers;
+            existingStock.SecondaryTickers = combinedSecondaryTickers;
 
             if (
                 existingStock.Ticker == oldTicker
@@ -252,6 +292,8 @@ public class CompanySyncService : ICompanySyncService
             {
                 state.ExistingPrimaryTickers.Remove(oldTicker);
                 state.ExistingPrimaryTickers.Add(primaryTicker);
+                state.PrimaryTickerToStock.Remove(oldTicker);
+                state.PrimaryTickerToStock[primaryTicker] = existingStock;
             }
 
             _logger.LogDebug(
@@ -328,8 +370,22 @@ public class CompanySyncService : ICompanySyncService
         // unreachable. PrimaryTickerToStock exists for exactly this (see its
         // construction comment) and is what ReplaceObsoleteStock uses.
         state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var tickerHolder);
-        if (tickerHolder != null && !state.SecCiks.Contains(tickerHolder.Cik))
+        if (
+            tickerHolder != null
+            && !state.SecCiks.Contains(CikNormalizer.Canonicalize(tickerHolder.Cik))
+        )
         {
+            if (HasReferenceCoverage(tickerHolder))
+            {
+                _logger.LogWarning(
+                    "Cannot assign SEC ticker {Ticker} to CIK {IncomingCik}: its incumbent CIK {IncumbentCik} has active reference-directory coverage; preserving the incumbent and its price history",
+                    primaryTicker,
+                    secCompany.Cik,
+                    tickerHolder.Cik
+                );
+                return false;
+            }
+
             try
             {
                 await DeleteAndUntrack(tickerHolder, state);
@@ -378,7 +434,10 @@ public class CompanySyncService : ICompanySyncService
         // own CIK dropped out of the feed.
         state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var obsoleteStock);
 
-        if (obsoleteStock != null && state.SecCiks.Contains(obsoleteStock.Cik))
+        if (
+            obsoleteStock != null
+            && state.SecCiks.Contains(CikNormalizer.Canonicalize(obsoleteStock.Cik))
+        )
         {
             // Both CIKs are active in SEC's feed — this is the legitimate parent/subsidiary
             // case (e.g. ATAI Life Sciences + AtaiBeckley sharing ATAI). Resolve which one
@@ -395,6 +454,17 @@ public class CompanySyncService : ICompanySyncService
                 secCompany.Name,
                 secCompany.Cik,
                 primaryTicker
+            );
+            return;
+        }
+
+        if (HasReferenceCoverage(obsoleteStock))
+        {
+            _logger.LogWarning(
+                "Cannot replace ticker {Ticker} with SEC CIK {IncomingCik}: incumbent CIK {IncumbentCik} has active reference-directory coverage; preserving the incumbent and its price history",
+                primaryTicker,
+                secCompany.Cik,
+                obsoleteStock.Cik
             );
             return;
         }
@@ -565,7 +635,15 @@ public class CompanySyncService : ICompanySyncService
         StockSyncState state
     )
     {
-        if (incumbent.SecondaryCiks.Contains(incoming.Cik))
+        var canonicalIncomingCik = CikNormalizer.Canonicalize(incoming.Cik);
+        if (canonicalIncomingCik == null)
+            return;
+
+        if (
+            incumbent.SecondaryCiks.Any(cik =>
+                CikNormalizer.Canonicalize(cik) == canonicalIncomingCik
+            )
+        )
             return;
 
         incumbent.SecondaryCiks = [.. incumbent.SecondaryCiks, incoming.Cik];
@@ -573,7 +651,7 @@ public class CompanySyncService : ICompanySyncService
         // uniqueness validation against the incumbent's own Ticker/CIK, which is
         // an unnecessary round-trip for a SecondaryCiks-only mutation.
         await state.CommonStockRepository.SaveChanges();
-        state.SecondaryCikToParent[incoming.Cik] = incumbent;
+        state.SecondaryCikToParent[canonicalIncomingCik] = incumbent;
 
         // Same signal the operator attach publishes (root bus, after the commit):
         // without it the financial-facts checkpoint is never reset, so the newly
@@ -710,15 +788,19 @@ public class CompanySyncService : ICompanySyncService
         {
             foreach (var subCik in stock.SecondaryCiks)
             {
-                if (!secondaryCikToParent.TryAdd(subCik, stock))
+                var canonicalCik = CikNormalizer.Canonicalize(subCik);
+                if (canonicalCik == null)
+                    continue;
+
+                if (!secondaryCikToParent.TryAdd(canonicalCik, stock))
                 {
                     _logger.LogWarning(
                         "Subsidiary CIK {Cik} is attached to multiple parents ({ExistingParent} and {DuplicateParent}); "
                             + "keeping {ExistingParent}. Manual cleanup required.",
                         subCik,
-                        secondaryCikToParent[subCik].Ticker,
+                        secondaryCikToParent[canonicalCik].Ticker,
                         stock.Ticker,
-                        secondaryCikToParent[subCik].Ticker
+                        secondaryCikToParent[canonicalCik].Ticker
                     );
                 }
             }
@@ -781,6 +863,29 @@ public class CompanySyncService : ICompanySyncService
             }
         );
 
+    internal static List<string> MergeSecondaryTickers(
+        string primaryTicker,
+        IEnumerable<string> secTickers,
+        IEnumerable<string> referenceTickers
+    )
+    {
+        return (secTickers ?? [])
+            .Concat(referenceTickers ?? [])
+            .Select(TickerNormalizer.NormalizeListed)
+            .Where(ticker => ticker != null)
+            .Where(ticker =>
+                !string.Equals(ticker, primaryTicker, StringComparison.OrdinalIgnoreCase)
+            )
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(ticker => ticker, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool HasReferenceCoverage(CommonStock stock) =>
+        (stock.ReferenceTickers ?? []).Any(ticker =>
+            TickerNormalizer.NormalizeListed(ticker) != null
+        );
+
     private static void AddAndTrack(
         CommonStock newStock,
         string cik,
@@ -788,9 +893,12 @@ public class CompanySyncService : ICompanySyncService
         StockSyncState state
     )
     {
-        state.ExistingCiks.Add(cik);
+        var canonicalCik = CikNormalizer.Canonicalize(cik);
+        if (canonicalCik != null)
+            state.ExistingCiks.Add(canonicalCik);
         state.ExistingPrimaryTickers.Add(primaryTicker);
         state.ExistingStocks.Add(newStock);
+        state.PrimaryTickerToStock[primaryTicker] = newStock;
     }
 
     private static async Task DeleteAndUntrack(CommonStock stock, StockSyncState state)
@@ -833,9 +941,16 @@ public class CompanySyncService : ICompanySyncService
             await state.CommonStockRepository.SaveChanges();
         }
 
-        state.ExistingCiks.Remove(stock.Cik);
+        var canonicalCik = CikNormalizer.Canonicalize(stock.Cik);
+        if (canonicalCik != null)
+            state.ExistingCiks.Remove(canonicalCik);
         state.ExistingPrimaryTickers.Remove(stock.Ticker);
         state.ExistingStocks.Remove(stock);
+        if (
+            state.PrimaryTickerToStock.TryGetValue(stock.Ticker, out var mapped)
+            && mapped.Id == stock.Id
+        )
+            state.PrimaryTickerToStock.Remove(stock.Ticker);
     }
 
     private Task ReportError(string operation, Exception ex, string context) =>

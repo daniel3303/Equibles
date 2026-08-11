@@ -154,9 +154,20 @@ public class InstitutionalHolderRepositoryTests : IDisposable
             );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByCiks(["0001067983", "0000000000"]).ToListAsync();
+        var result = await _repository.GetByCiks(["0001067983", "9999999999"]).ToListAsync();
 
         result.Should().ContainSingle().Which.Name.Should().Be("Berkshire Hathaway");
+    }
+
+    [Fact]
+    public async Task GetByCiks_InvalidMember_RejectsTheWholeBatch()
+    {
+        _dbContext.Set<InstitutionalHolder>().Add(CreateHolder(cik: "0001067983"));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.GetByCiks(["0001067983", "0000000000"]).ToListAsync();
+
+        result.Should().BeEmpty();
     }
 
     // ── Search ──────────────────────────────────────────────────────────

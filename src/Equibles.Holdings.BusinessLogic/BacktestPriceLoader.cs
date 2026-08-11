@@ -128,7 +128,10 @@ public class BacktestPriceLoader
                     .GetAllSeries()
                     .Where(ListingPredicate(listingBatch))
                     .Where(price =>
-                        price.Date >= priceWindowFrom && price.Date <= to && price.Close > 0
+                        price.Date >= priceWindowFrom
+                        && price.Date <= to
+                        && price.Close > 0
+                        && price.Volume > 0
                     )
                     .Select(price => new LoadedPriceRow
                     {

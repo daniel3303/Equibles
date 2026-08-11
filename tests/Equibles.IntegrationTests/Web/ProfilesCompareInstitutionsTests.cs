@@ -127,14 +127,15 @@ public class ProfilesCompareInstitutionsTests
         });
 
         // Fund A exists, Fund B does not.
+        const string missingCik = "9999999999";
         var response = await _fixture.Client.GetAsync(
-            $"/Institutions/Compare?ciks={fundACik}&ciks=does-not-exist"
+            $"/Institutions/Compare?ciks={fundACik}&ciks={missingCik}"
         );
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();
         html.Should().Contain("Could not resolve CIKs");
-        html.Should().Contain("does-not-exist");
+        html.Should().Contain(missingCik);
     }
 
     private static InstitutionalHolding MakeHolding(

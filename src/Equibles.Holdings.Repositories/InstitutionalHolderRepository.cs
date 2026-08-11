@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories.Models;
@@ -12,12 +13,19 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
 
     public async Task<InstitutionalHolder> GetByCik(string cik)
     {
-        return await GetAll().FirstOrDefaultAsync(h => h.Cik == cik);
+        var validatedCik = CikNormalizer.Validate(cik);
+        return validatedCik == null
+            ? null
+            : await GetAll().FirstOrDefaultAsync(h => h.Cik == validatedCik);
     }
 
     public IQueryable<InstitutionalHolder> GetByCiks(IEnumerable<string> ciks)
     {
-        return GetAll().Where(h => ciks.Contains(h.Cik));
+        var rawCiks = ciks?.ToList() ?? [];
+        var validatedCiks = rawCiks.Select(CikNormalizer.Validate).ToList();
+        return validatedCiks.Any(cik => cik == null)
+            ? GetAll().Where(_ => false)
+            : GetAll().Where(h => validatedCiks.Contains(h.Cik));
     }
 
     public IQueryable<InstitutionalHolder> Search(string search)
@@ -53,18 +61,22 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
     {
         var nameMatches = SearchNameTokens(search, requireAll: true);
         var exactCik = NormalizeExactCikQuery(search);
-        var primaryCikPrefix = $"{EscapeLikePattern(exactCik ?? search ?? string.Empty)}%";
-        var alternateCik = AlternateCikSpelling(exactCik);
-        var alternateCikPrefix =
-            alternateCik == null ? null : $"{EscapeLikePattern(alternateCik)}%";
-        var identityMatches = GetAll()
-            .Where(h =>
-                EF.Functions.ILike(h.Cik, primaryCikPrefix, LikePattern.EscapeChar)
-                || (
-                    alternateCikPrefix != null
-                    && EF.Functions.ILike(h.Cik, alternateCikPrefix, LikePattern.EscapeChar)
-                )
-            );
+        var identityMatches = GetAll().Where(_ => false);
+        if (exactCik != null)
+        {
+            var primaryCikPrefix = $"{EscapeLikePattern(exactCik)}%";
+            var alternateCik = AlternateCikSpelling(exactCik);
+            var alternateCikPrefix =
+                alternateCik == null ? null : $"{EscapeLikePattern(alternateCik)}%";
+            identityMatches = GetAll()
+                .Where(h =>
+                    EF.Functions.ILike(h.Cik, primaryCikPrefix, LikePattern.EscapeChar)
+                    || (
+                        alternateCikPrefix != null
+                        && EF.Functions.ILike(h.Cik, alternateCikPrefix, LikePattern.EscapeChar)
+                    )
+                );
+        }
 
         var strict = nameMatches.Concat(identityMatches);
         var aliasCik = InstitutionalHolderSearchAliases.ResolveCik(search);
@@ -372,13 +384,7 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
         };
     }
 
-    private static string NormalizeExactCikQuery(string search)
-    {
-        var trimmed = search?.Trim();
-        if (string.IsNullOrEmpty(trimmed) || !trimmed.All(char.IsAsciiDigit))
-            return null;
-        return trimmed;
-    }
+    private static string NormalizeExactCikQuery(string search) => CikNormalizer.Validate(search);
 
     // Both padded and unpadded CIK spellings exist in the holder table. Exact input wins;
     // this alternate is consulted only when the exact spelling has no row.

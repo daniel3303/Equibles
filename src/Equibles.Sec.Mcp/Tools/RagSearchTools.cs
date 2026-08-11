@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -19,6 +20,8 @@ namespace Equibles.Sec.Mcp.Tools;
 [McpServerToolType]
 public class RagSearchTools
 {
+    private const int MaxExcludedTickers = 25;
+
     // Attribute descriptions are compile-time constants, so they cannot enumerate types
     // registered at host startup (DocumentType.Register). They name the built-in filing
     // values plus the most useful registered example, and the strict rejection below
@@ -95,6 +98,9 @@ public class RagSearchTools
                 if (!TryParseDocumentTypes(documentType, out var parsedTypes, out var typeError))
                     return typeError;
 
+                if (!TryParseTickers(excludeTickers, out var parsedTickers, out var tickerError))
+                    return tickerError;
+
                 maxResults = McpLimit.Clamp(maxResults);
                 var chunks = await _ragManager.SearchRelevantChunks(
                     query,
@@ -102,7 +108,7 @@ public class RagSearchTools
                     parsedTypes,
                     ToDateOnly(startDate),
                     ToDateOnly(endDate),
-                    ParseTickers(excludeTickers),
+                    parsedTickers,
                     Math.Max(maxResultsPerCompany, 0),
                     // BM25 ANDs every query token, so one non-matching word in a wordy
                     // natural-language query hides fully indexed filings; top up with
@@ -155,9 +161,11 @@ public class RagSearchTools
                 // An unknown ticker must not fall through to a search that is guaranteed
                 // empty: "No relevant financial documents found." would read as "this
                 // company's filings say nothing about the topic".
-                var stock = await _commonStockRepository.GetByTicker(
-                    McpToolExecutor.NormalizeTicker(ticker)
-                );
+                var normalizedTicker = McpToolExecutor.NormalizeTicker(ticker);
+                if (normalizedTicker == null)
+                    return McpToolExecutor.StockNotFound(ticker);
+
+                var stock = await _commonStockRepository.GetByTicker(normalizedTicker);
                 if (stock == null)
                     return McpToolExecutor.StockNotFound(ticker);
 
@@ -291,9 +299,11 @@ public class RagSearchTools
                         return UnknownDocumentType(documentType);
                 }
 
-                var stock = await _commonStockRepository.GetByTicker(
-                    McpToolExecutor.NormalizeTicker(ticker)
-                );
+                var normalizedTicker = McpToolExecutor.NormalizeTicker(ticker);
+                if (normalizedTicker == null)
+                    return McpToolExecutor.StockNotFound(ticker);
+
+                var stock = await _commonStockRepository.GetByTicker(normalizedTicker);
                 if (stock == null)
                     return McpToolExecutor.StockNotFound(ticker);
 
@@ -420,17 +430,42 @@ public class RagSearchTools
                 )
         );
 
-    // Comma-separated tickers for the exclusion filter; null when nothing usable.
-    private static IReadOnlyCollection<string> ParseTickers(string tickers)
+    // Comma-separated tickers for the exclusion filter; null when omitted.
+    private static bool TryParseTickers(
+        string tickers,
+        out IReadOnlyCollection<string> parsed,
+        out string error
+    )
     {
+        parsed = null;
+        error = null;
         if (string.IsNullOrWhiteSpace(tickers))
-            return null;
+            return true;
 
-        var parsed = tickers
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        return parsed.Count > 0 ? parsed : null;
+        var segments = tickers.Split(',').Select(ticker => ticker.Trim()).ToList();
+        if (segments.Count > MaxExcludedTickers)
+        {
+            error = $"Maximum {MaxExcludedTickers} excluded tickers per request.";
+            return false;
+        }
+
+        var normalized = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var segment in segments)
+        {
+            var ticker = TickerNormalizer.NormalizeDashListed(segment);
+            if (ticker == null)
+            {
+                error =
+                    $"Invalid excluded ticker '{segment}'. Use 1-32 ASCII letters, digits, dots, or dashes.";
+                return false;
+            }
+            if (seen.Add(ticker))
+                normalized.Add(ticker);
+        }
+
+        parsed = normalized;
+        return true;
     }
 
     // A contradictory window (start after end) must error instead of returning the generic

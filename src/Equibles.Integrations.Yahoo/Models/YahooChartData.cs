@@ -5,6 +5,7 @@ namespace Equibles.Integrations.Yahoo.Models;
 // callers get all three without a second HTTP round-trip.
 public class YahooChartData
 {
+    public DateOnly? FirstTradeDate { get; set; }
     public List<HistoricalPrice> Prices { get; set; } = [];
     public List<StockSplitEvent> Splits { get; set; } = [];
     public List<CashDividendEvent> Dividends { get; set; } = [];

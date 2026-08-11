@@ -97,7 +97,7 @@ public class CompanySyncServiceReplaceObsoleteCaseMismatchTests : ParadeDbMcpTes
             .Should()
             .ContainSingle("the obsolete holder must be replaced, not kept alongside a duplicate");
         stocks[0].Cik.Should().Be("0000000111");
-        stocks[0].Ticker.Should().Be("reused");
+        stocks[0].Ticker.Should().Be("REUSED", "listed tickers are persisted canonically");
         stocks[0].Name.Should().Be("Acquirer Inc.");
     }
 }

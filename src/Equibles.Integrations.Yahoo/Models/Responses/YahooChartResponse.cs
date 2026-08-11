@@ -70,6 +70,9 @@ public class ChartSplit
 
 public class ChartMeta
 {
+    [JsonProperty("firstTradeDate")]
+    public long? FirstTradeDate { get; set; }
+
     // Exchange UTC offset in seconds. Yahoo stamps daily-bar timestamps in the
     // exchange's local time; this is how a UTC epoch maps back to the trading
     // day. Defaults to 0 when absent (UTC).

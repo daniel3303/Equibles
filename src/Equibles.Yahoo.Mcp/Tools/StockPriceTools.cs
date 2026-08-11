@@ -56,7 +56,8 @@ public class StockPriceTools
             + "differs from Close. Captured corporate-action changes trigger a full-history "
             + "refresh of the exact listed series, but the stored rows do not certify which split "
             + "basis the provider returned. Do not treat reconciliation status alone as proof that "
-            + "a window is a consistent total-return series."
+            + "a window is a consistent total-return series. Zero-volume carry-forward candles are "
+            + "excluded because they do not establish a traded market price."
     )]
     public Task<string> GetStockPrices(
         [Description(
@@ -94,7 +95,7 @@ public class StockPriceTools
 
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var rangeQuery = _priceRepository.GetByStock(stock, priceTicker, start, end);
+                var rangeQuery = _priceRepository.GetTradedByStock(stock, priceTicker, start, end);
                 var total = await rangeQuery.CountAsync();
 
                 var records = await rangeQuery
@@ -153,7 +154,8 @@ public class StockPriceTools
             + "or watchlist. The change columns are a ONE-SESSION move: they are shown only "
             + "when the stored series holds the trading day immediately before the date on the "
             + "row, and are \"—\" otherwise, so a change is never a multi-session move in "
-            + "disguise. Each row is that ticker's newest SETTLED daily bar and the Date column "
+            + "disguise. Each row is that ticker's newest TRADED, SETTLED daily bar; zero-volume "
+            + "carry-forward candles are excluded. The Date column "
             + "names its session: for a few hours after a US close some tickers still show the "
             + "prior session while the fresh bar settles, so dates within one response can "
             + "differ — anchor on the Date column, never the wall clock. 52W High/Low are the "
@@ -175,19 +177,25 @@ public class StockPriceTools
         return _runner.Execute(
             async () =>
             {
-                var tickerList = tickers
-                    .Split(
-                        ',',
-                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-                    )
-                    .Select(t => t.ToUpperInvariant())
-                    .Distinct()
-                    .ToList();
-
-                if (tickerList.Count == 0)
+                if (string.IsNullOrWhiteSpace(tickers))
                     return "No tickers provided.";
-                if (tickerList.Count > 25)
+
+                var segments = tickers.Split(',').Select(ticker => ticker.Trim()).ToList();
+                if (segments.All(string.IsNullOrWhiteSpace))
+                    return "No tickers provided.";
+                if (segments.Count > 25)
                     return "Maximum 25 tickers per request. Please split into multiple calls.";
+
+                var tickerList = new List<string>();
+                var seenTickers = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var segment in segments)
+                {
+                    var normalizedTicker = TickerNormalizer.NormalizeDashListed(segment);
+                    if (normalizedTicker == null)
+                        return $"Invalid ticker '{segment}'. Use 1-32 ASCII letters, digits, dots, or dashes.";
+                    if (seenTickers.Add(normalizedTicker))
+                        tickerList.Add(normalizedTicker);
+                }
 
                 var result = StartTable(
                     "Latest prices:",
@@ -226,7 +234,7 @@ public class StockPriceTools
                     // Newest two bars in one query: the latest row plus the prior close
                     // needed for the day-over-day change columns.
                     var latestTwo = await _priceRepository
-                        .GetByStock(stock, priceTicker)
+                        .GetTradedByStock(stock, priceTicker)
                         .OrderByDescending(p => p.Date)
                         .Take(2)
                         .ToListAsync();
@@ -320,7 +328,7 @@ public class StockPriceTools
                         gapped = true;
                     }
                     var range = await _priceRepository
-                        .GetByStock(stock, priceTicker)
+                        .GetTradedByStock(stock, priceTicker)
                         .Where(p => p.Date >= comparableWindow.Start && p.Close > 0)
                         .GroupBy(p => 1)
                         .Select(g => new
@@ -835,7 +843,7 @@ public class StockPriceTools
             return (stock, priceTicker, null, 0, rangeError);
 
         var records = await _priceRepository
-            .GetByStock(stock, priceTicker, start, end)
+            .GetTradedByStock(stock, priceTicker, start, end)
             .OrderBy(p => p.Date)
             .ToListAsync();
 
@@ -855,7 +863,7 @@ public class StockPriceTools
         if (warmupBars > 0)
         {
             var warmup = await _priceRepository
-                .GetByStock(stock, priceTicker)
+                .GetTradedByStock(stock, priceTicker)
                 .Where(p => p.Date < start)
                 .OrderByDescending(p => p.Date)
                 .Take(warmupBars)

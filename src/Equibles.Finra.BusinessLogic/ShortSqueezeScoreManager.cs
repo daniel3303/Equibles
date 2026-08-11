@@ -521,7 +521,7 @@ public class ShortSqueezeScoreManager
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var cutoff = today.AddDays(-PriceHistoryCalendarDays);
         var bars = await _dailyStockPriceRepository
-            .GetByStocks(stockIds, cutoff, today)
+            .GetTradedByStocks(stockIds, cutoff, today)
             .Select(p => new
             {
                 p.CommonStockId,

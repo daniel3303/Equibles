@@ -64,7 +64,7 @@ public class SmartMoneyIndexManager
     )
     {
         topFunds = Math.Max(1, topFunds);
-        benchmarkTicker = TickerNormalizer.Normalize(benchmarkTicker);
+        benchmarkTicker = TickerNormalizer.NormalizeDashListed(benchmarkTicker);
 
         var result = new SmartMoneyIndexResult
         {
@@ -75,6 +75,12 @@ public class SmartMoneyIndexManager
             BenchmarkTicker = benchmarkTicker,
             AsOf = asOf,
         };
+
+        if (benchmarkTicker == null)
+        {
+            result.Reason = "Benchmark ticker is invalid.";
+            return result;
+        }
 
         var benchmarkStock = await _stockRepository.GetByTicker(benchmarkTicker);
         if (benchmarkStock == null)

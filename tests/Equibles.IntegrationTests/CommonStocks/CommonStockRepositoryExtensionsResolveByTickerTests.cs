@@ -46,4 +46,65 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
         stock.Ticker.Should().Be("AAPL");
         error.Should().BeNull();
     }
+
+    [Fact]
+    public async Task GetByCikTolerant_UnpaddedInputResolvesPaddedPrimaryCik()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc",
+            Cik = "0000320193",
+        };
+        _dbContext.Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var resolved = await _repository.GetByCikTolerant("320193");
+
+        resolved.Should().BeSameAs(stock);
+    }
+
+    [Fact]
+    public async Task GetByCikTolerant_PaddedInputResolvesUnpaddedSecondaryCik()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "SURV",
+            Name = "Surviving filer",
+            Cik = "10",
+            SecondaryCiks = ["320193"],
+        };
+        _dbContext.Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var resolved = await _repository.GetByCikTolerant("0000320193");
+
+        resolved.Should().BeSameAs(stock);
+    }
+
+    [Fact]
+    public async Task GetByCikTolerant_CanonicalCollisionFailsClosed()
+    {
+        _dbContext.AddRange(
+            new CommonStock
+            {
+                Id = Guid.NewGuid(),
+                Ticker = "PAD",
+                Name = "Padded",
+                Cik = "0000320193",
+            },
+            new CommonStock
+            {
+                Id = Guid.NewGuid(),
+                Ticker = "PLAIN",
+                Name = "Plain",
+                Cik = "320193",
+            }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        (await _repository.GetByCikTolerant("0000320193")).Should().BeNull();
+    }
 }

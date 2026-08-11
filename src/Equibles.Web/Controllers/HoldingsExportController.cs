@@ -38,10 +38,11 @@ public class HoldingsExportController : BaseController
     [HttpGet("~/holdings/export/holders")]
     public async Task<IActionResult> Holders(string ticker, DateOnly? date)
     {
-        if (string.IsNullOrWhiteSpace(ticker))
+        var normalizedTicker = TickerNormalizer.NormalizeDashListed(ticker);
+        if (normalizedTicker == null)
             return NotFound();
 
-        var stock = await _stockRepository.GetByTicker(TickerNormalizer.Normalize(ticker));
+        var stock = await _stockRepository.GetByTicker(normalizedTicker);
         if (stock == null)
             return NotFound();
 
@@ -102,10 +103,11 @@ public class HoldingsExportController : BaseController
     [HttpGet("~/holdings/export/institution")]
     public async Task<IActionResult> Institution(string cik, DateOnly? date)
     {
-        if (string.IsNullOrWhiteSpace(cik))
+        var validatedCik = CikNormalizer.Validate(cik);
+        if (validatedCik == null)
             return NotFound();
 
-        var holder = await _holderRepository.GetByCik(cik);
+        var holder = await _holderRepository.GetByCik(validatedCik);
         if (holder == null)
             return NotFound();
 

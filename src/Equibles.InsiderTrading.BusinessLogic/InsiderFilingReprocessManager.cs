@@ -475,7 +475,9 @@ public class InsiderFilingReprocessManager
 
         var prices = await _dailyStockPriceRepository
             .GetAll()
-            .Where(p => p.CommonStockId == stockId && p.Date >= minDate && p.Date <= maxDate)
+            .Where(p =>
+                p.CommonStockId == stockId && p.Date >= minDate && p.Date <= maxDate && p.Volume > 0
+            )
             .Select(p => new
             {
                 p.Date,

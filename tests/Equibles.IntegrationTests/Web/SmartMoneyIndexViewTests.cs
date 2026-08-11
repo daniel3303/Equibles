@@ -130,6 +130,7 @@ public class SmartMoneyIndexViewTests
             Low = close,
             Close = close,
             AdjustedClose = close,
+            Volume = 1_000,
         };
 
     private static InstitutionalHolding MakeHolding(Guid stockId, Guid holderId) =>

@@ -790,7 +790,12 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         var prices = await dailyStockPriceRepository
             .GetAll()
-            .Where(p => p.CommonStockId == companyId && p.Date >= minDate && p.Date <= maxDate)
+            .Where(p =>
+                p.CommonStockId == companyId
+                && p.Date >= minDate
+                && p.Date <= maxDate
+                && p.Volume > 0
+            )
             .Select(p => new
             {
                 p.Date,

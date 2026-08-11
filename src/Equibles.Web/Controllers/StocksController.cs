@@ -287,6 +287,9 @@ public class StocksController : BaseController
     private async Task<Equibles.CommonStocks.Data.Models.CommonStock> LoadStock(string ticker)
     {
         var normalizedTicker = TickerNormalizer.Normalize(ticker);
+        if (normalizedTicker == null)
+            return null;
+
         var stock = await _commonStockRepository.GetByTicker(normalizedTicker);
         if (stock != null || !normalizedTicker.Contains('.'))
             return stock;
@@ -318,11 +321,15 @@ public class StocksController : BaseController
     [HttpGet("~/stocks/{ticker}/documents/{id:guid}")]
     public async Task<IActionResult> ShowDocument(string ticker, Guid id)
     {
+        var normalizedTicker = TickerNormalizer.NormalizeDashListed(ticker);
+        if (normalizedTicker == null)
+            return NotFound();
+
         var document = await _documentRepository.GetWithContent(id);
         if (document == null)
             return NotFound();
 
-        if (!string.Equals(document.CommonStock.Ticker, ticker, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(document.CommonStock.Ticker, normalizedTicker, StringComparison.Ordinal))
         {
             return NotFound();
         }
@@ -339,27 +346,32 @@ public class StocksController : BaseController
         {
             Document = document,
             Content = content,
-            Ticker = ticker.ToUpperInvariant(),
+            Ticker = normalizedTicker,
         };
 
-        ViewData["Title"] = $"{document.DocumentType.DisplayName} - {ticker.ToUpperInvariant()}";
+        ViewData["Title"] = $"{document.DocumentType.DisplayName} - {normalizedTicker}";
         return View(viewModel);
     }
 
     [HttpGet("~/stocks/{ticker}/holders/{cik}")]
     public async Task<IActionResult> ShowHolder(string ticker, string cik)
     {
-        var stock = await _commonStockRepository.GetByTicker(TickerNormalizer.Normalize(ticker));
+        var normalizedTicker = TickerNormalizer.NormalizeDashListed(ticker);
+        var validatedCik = CikNormalizer.Validate(cik);
+        if (normalizedTicker == null || validatedCik == null)
+            return NotFound();
+
+        var stock = await _commonStockRepository.GetByTicker(normalizedTicker);
         if (stock == null)
             return NotFound();
 
-        var holder = await _institutionalHolderRepository.GetByCik(cik);
+        var holder = await _institutionalHolderRepository.GetByCik(validatedCik);
         if (holder == null)
             return NotFound();
 
         var viewModel = await _stockTabService.LoadHolderDetail(stock, holder);
 
-        ViewData["Title"] = $"{holder.Name} - {ticker.ToUpperInvariant()}";
+        ViewData["Title"] = $"{holder.Name} - {normalizedTicker}";
         return View(viewModel);
     }
 }

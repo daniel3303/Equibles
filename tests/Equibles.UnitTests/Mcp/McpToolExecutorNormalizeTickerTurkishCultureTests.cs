@@ -40,4 +40,13 @@ public class McpToolExecutorNormalizeTickerTurkishCultureTests
             CultureInfo.CurrentCulture = original;
         }
     }
+
+    [Theory]
+    [InlineData("ſPY")]
+    [InlineData("AAPL/../../x")]
+    [InlineData("ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567")]
+    public void NormalizeTicker_InvalidOriginalText_ReturnsNull(string ticker)
+    {
+        McpToolExecutor.NormalizeTicker(ticker).Should().BeNull();
+    }
 }

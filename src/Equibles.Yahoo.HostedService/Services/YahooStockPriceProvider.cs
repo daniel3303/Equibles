@@ -62,6 +62,7 @@ public class YahooStockPriceProvider : IStockPriceProvider
                     )
                     && p.Date >= minDate
                     && p.Date <= date
+                    && p.Volume > 0
                 )
                 .Select(p => new
                 {

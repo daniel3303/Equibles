@@ -111,6 +111,26 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("Too many tickers (30). The maximum is 25.");
     }
 
+    [Theory]
+    [InlineData("ſPY")]
+    [InlineData("AAPL/../../x")]
+    [InlineData("ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567")]
+    [InlineData("AAPL,,MSFT")]
+    public async Task CompareFinancialFact_InvalidBatchFailsBeforeRepositoryAccess(string tickers)
+    {
+        var sut = new FinancialFactsTools(
+            new FinancialFactRepository(null),
+            new FinancialConceptRepository(null),
+            new CommonStockRepository(null),
+            new Equibles.Errors.BusinessLogic.ErrorManager(null),
+            NullLogger<FinancialFactsTools>()
+        );
+
+        var result = await sut.CompareFinancialFact(tickers, "revenue", 2023);
+
+        result.Should().Contain("Invalid ticker");
+    }
+
     [Fact]
     public async Task CompareFinancialFact_PeerSet_RendersRowsLatestRestatedAndListsSkipped()
     {

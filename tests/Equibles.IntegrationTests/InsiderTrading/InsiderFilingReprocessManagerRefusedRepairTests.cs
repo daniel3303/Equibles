@@ -108,6 +108,7 @@ public class InsiderFilingReprocessManagerRefusedRepairTests : ParadeDbMcpTestBa
                 CommonStockId = stock.Id,
                 Date = date,
                 Close = 50m,
+                Volume = 1_000,
             }
         );
         DbContext.Add(stale);

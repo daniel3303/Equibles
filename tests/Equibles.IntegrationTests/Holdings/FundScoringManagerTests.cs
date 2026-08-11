@@ -392,6 +392,7 @@ public class FundScoringManagerTests : IDisposable
                     Low = close,
                     Close = close,
                     AdjustedClose = adjustedClose ?? close,
+                    Volume = 1_000,
                 }
             );
     }
