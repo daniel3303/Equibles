@@ -9,6 +9,12 @@ public class ConsumerAttribute : Attribute
 {
     public bool AllowMultiple { get; }
 
+    /// <summary>
+    /// Exact durable receive-endpoint name. Set this when a consumer moves namespaces or hosts so
+    /// the existing SQL transport queue remains the single canonical subscription.
+    /// </summary>
+    public string EndpointName { get; set; }
+
     public ConsumerAttribute(bool allowMultiple = false)
     {
         AllowMultiple = allowMultiple;

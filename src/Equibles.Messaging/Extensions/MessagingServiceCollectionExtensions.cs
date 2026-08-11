@@ -94,9 +94,11 @@ public static class MessagingServiceCollectionExtensions
                 x.AddConsumer(consumerType)
                     .Endpoint(e =>
                     {
-                        e.Name = attribute.AllowMultiple
-                            ? $"{mainAssemblyName}-{consumerType.Namespace}-{consumerType.Name}".ToLowerInvariant()
-                            : $"{consumerType.Namespace}-{consumerType.Name}".ToLowerInvariant();
+                        e.Name = ResolveConsumerEndpointName(
+                            consumerType,
+                            attribute,
+                            mainAssemblyName
+                        );
                     });
             }
 
@@ -128,6 +130,36 @@ public static class MessagingServiceCollectionExtensions
             {
                 options.ConnectionString = configuration.GetConnectionString("TransportConnection");
             });
+    }
+
+    internal static string ResolveConsumerEndpointName(
+        Type consumerType,
+        ConsumerAttribute attribute,
+        string mainAssemblyName
+    )
+    {
+        if (attribute.EndpointName != null)
+        {
+            if (string.IsNullOrWhiteSpace(attribute.EndpointName))
+            {
+                throw new InvalidOperationException(
+                    $"Consumer {consumerType.FullName} has an empty endpoint-name override."
+                );
+            }
+
+            if (attribute.AllowMultiple)
+            {
+                throw new InvalidOperationException(
+                    $"Consumer {consumerType.FullName} cannot combine a fixed endpoint name with AllowMultiple."
+                );
+            }
+
+            return attribute.EndpointName;
+        }
+
+        return attribute.AllowMultiple
+            ? $"{mainAssemblyName}-{consumerType.Namespace}-{consumerType.Name}".ToLowerInvariant()
+            : $"{consumerType.Namespace}-{consumerType.Name}".ToLowerInvariant();
     }
 
     private static bool IsSystemAssembly(Assembly assembly)

@@ -801,14 +801,15 @@ public class StockTabService
     // Report dates for the holdings tab, newest first, clamped to the sync
     // floor: quarters before it hold partial filings, so their dates must not
     // appear in the selector, the stats, or the combined view's quarter pair.
-    private Task<List<DateOnly>> LoadClampedReportDates(CommonStock stock)
+    private async Task<List<DateOnly>> LoadClampedReportDates(CommonStock stock)
     {
-        var datesQuery = _institutionalHoldingRepository.Get13FReportDatesByStock(stock);
+        IEnumerable<DateOnly> dates =
+            await _institutionalHoldingRepository.Get13FReportDatesByStockSnapshotBacked(stock);
         if (_minSyncDate is { } minDate)
         {
-            datesQuery = datesQuery.Where(d => d >= minDate);
+            dates = dates.Where(d => d >= minDate);
         }
-        return datesQuery.ToListAsync();
+        return dates.ToList();
     }
 
     // Mirrors the header-stat semantics per report date: Shares summed over every

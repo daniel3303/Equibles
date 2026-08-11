@@ -233,6 +233,55 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     public IQueryable<DateOnly> Get13FReportDatesByStock(CommonStock stock) =>
         Get13FHistoryByStock(stock).DistinctReportDatesDescending();
 
+    // Snapshot-backed twin for request paths. The live DISTINCT above scans every historical
+    // position for a heavily held stock; under ingest pressure that scan exhausted the 30-second
+    // command timeout on NVDA, MU and MPWR. StockQuarterlyActivity already materialises exactly
+    // one 13F row per (stock, quarter), so rows with current holders are the authoritative cheap
+    // date spine once present. Sold-out rows remain in the snapshot to describe the exit but cannot
+    // be offered as a holdings quarter because they intentionally have no current positions.
+    //
+    // The newest live holding is checked separately because aggregate refresh follows ingestion:
+    // during that short lag, prepend the new quarter instead of serving a stale selector. A stock
+    // with no snapshot rows falls back to the live query so a newly listed company never loses its
+    // prior quarters while the aggregate backfill catches up.
+    public async Task<List<DateOnly>> Get13FReportDatesByStockSnapshotBacked(
+        CommonStock stock,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var latestLiveDate = await Get13FHistoryByStock(stock)
+            .OrderByDescending(h => h.ReportDate)
+            .Select(h => (DateOnly?)h.ReportDate)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latestLiveDate is not { } latest)
+        {
+            return [];
+        }
+
+        var dates = await DbContext
+            .Set<StockQuarterlyActivity>()
+            .Where(s =>
+                s.CommonStockId == stock.Id
+                && s.CurrentFilerCount > 0
+                && s.ReportDate <= latest
+            )
+            .OrderByDescending(s => s.ReportDate)
+            .Select(s => s.ReportDate)
+            .ToListAsync(cancellationToken);
+
+        if (dates.Count == 0)
+        {
+            return await Get13FReportDatesByStock(stock).ToListAsync(cancellationToken);
+        }
+
+        if (latest > dates[0])
+        {
+            dates.Insert(0, latest);
+        }
+
+        return dates;
+    }
+
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
     public IQueryable<DateOnly> GetReportDatesByHolder(InstitutionalHolder holder) =>
         GetHistoryByHolder(holder).DistinctReportDatesDescending();
