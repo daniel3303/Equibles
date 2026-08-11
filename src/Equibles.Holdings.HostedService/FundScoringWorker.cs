@@ -153,16 +153,16 @@ public class FundScoringWorker : BackgroundService
         var staleBefore = DateTime.UtcNow - MaxScoreAge;
         var pending = holders
             .Where(h =>
-                IsScoreDue(
-                    scoreStates.TryGetValue(h.HolderId, out var scoreState)
-                        ? scoreState.CreationTime
-                        : null,
+            {
+                scoreStates.TryGetValue(h.HolderId, out var scoreState);
+                return IsScoreDue(
+                    scoreState?.CreationTime,
                     scoreState?.CalculationVersion,
                     h.LastImported,
                     h.LastFiled,
                     staleBefore
-                )
-            )
+                );
+            })
             .Select(h => h.HolderId)
             .ToList();
 
