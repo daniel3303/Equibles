@@ -101,8 +101,9 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var reportDates =
-                    await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(stock);
+                var reportDates = await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(
+                    stock
+                );
                 if (reportDates.Count == 0)
                     return $"No institutional holdings data available for {ticker}.";
 
@@ -724,8 +725,9 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var reportDates =
-                    await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(stock);
+                var reportDates = await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(
+                    stock
+                );
                 if (reportDates.Count == 0)
                     return $"No institutional holdings data available for {ticker}.";
 

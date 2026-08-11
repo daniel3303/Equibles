@@ -261,9 +261,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var dates = await DbContext
             .Set<StockQuarterlyActivity>()
             .Where(s =>
-                s.CommonStockId == stock.Id
-                && s.CurrentFilerCount > 0
-                && s.ReportDate <= latest
+                s.CommonStockId == stock.Id && s.CurrentFilerCount > 0 && s.ReportDate <= latest
             )
             .OrderByDescending(s => s.ReportDate)
             .Select(s => s.ReportDate)
