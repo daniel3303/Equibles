@@ -58,10 +58,11 @@ public class SearchController : BaseController
     // secondary. Returns null for company-name or partial queries so they fall through to search.
     private async Task<Equibles.CommonStocks.Data.Models.CommonStock> ResolveExactTicker(string q)
     {
-        if (string.IsNullOrWhiteSpace(q))
+        var normalizedTicker = TickerNormalizer.NormalizeListed(q);
+        if (normalizedTicker == null)
             return null;
 
-        return await _commonStockRepository.GetByTicker(TickerNormalizer.Normalize(q));
+        return await _commonStockRepository.GetByTicker(normalizedTicker);
     }
 
     // Results-only fragment for instant (as-you-type) search. instant-search.js fetches this

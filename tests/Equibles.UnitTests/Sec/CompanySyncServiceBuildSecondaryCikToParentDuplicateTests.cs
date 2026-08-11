@@ -1,4 +1,5 @@
 using System.Reflection;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
@@ -52,7 +53,7 @@ public class CompanySyncServiceBuildSecondaryCikToParentDuplicateTests
                     [new List<CommonStock> { apple, microsoft }]
                 );
 
-        result["0000999999"].Should().BeSameAs(apple);
+        result[CikNormalizer.Canonicalize("0000999999")].Should().BeSameAs(apple);
     }
 
     private static CompanySyncService CreateService()

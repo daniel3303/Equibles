@@ -64,7 +64,10 @@ public class FundScoringManager
         string benchmarkTicker = DefaultBenchmark
     )
     {
-        benchmarkTicker = TickerNormalizer.Normalize(benchmarkTicker);
+        benchmarkTicker = TickerNormalizer.NormalizeDashListed(benchmarkTicker);
+
+        if (benchmarkTicker == null)
+            return null;
 
         var benchmarkStock = await _stockRepository.GetByTicker(benchmarkTicker);
         if (benchmarkStock == null)

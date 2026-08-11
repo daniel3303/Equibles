@@ -18,7 +18,7 @@ public class YahooSplitParsingTests
           "chart": {
             "result": [
               {
-                "meta": { "gmtoffset": 0, "exchangeTimezoneName": "UTC" },
+                "meta": { "firstTradeDate": 1609459200, "gmtoffset": 0, "exchangeTimezoneName": "UTC" },
                 "timestamp": [1719532800, 1719792000],
                 "events": {
                   "splits": {
@@ -56,6 +56,7 @@ public class YahooSplitParsingTests
 
         var chart = await client.GetChart("NVDA", WindowStart, WindowEnd);
 
+        chart.FirstTradeDate.Should().Be(new DateOnly(2021, 1, 1));
         chart.Splits.Should().HaveCount(2);
 
         var forward = chart.Splits.Single(s => s.Date == new DateOnly(2021, 7, 20));

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Equibles.CommonStocks.Data.Helpers;
 using Microsoft.Extensions.Logging;
 
 namespace Equibles.Mcp;
@@ -34,7 +35,8 @@ public static class McpToolExecutor
 
     public static string StockNotFound(string ticker) => $"Stock '{ticker}' not found.";
 
-    public static string NormalizeTicker(string ticker) => ticker.Trim().ToUpperInvariant();
+    public static string NormalizeTicker(string ticker) =>
+        TickerNormalizer.NormalizeDashListed(ticker);
 
     public static async Task<string> Execute(
         Func<Task<string>> action,

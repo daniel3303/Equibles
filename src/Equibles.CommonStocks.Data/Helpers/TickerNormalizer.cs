@@ -2,7 +2,42 @@ namespace Equibles.CommonStocks.Data.Helpers;
 
 public static class TickerNormalizer
 {
-    // Canonical ticker form for case-insensitive lookups. Upper-cases with the invariant
-    // culture so a host's locale (e.g. Turkish dotless-i) can't fork the mapping.
-    public static string Normalize(string ticker) => ticker.Trim().ToUpperInvariant();
+    public const int MaxListedLength = 32;
+    public const int MaxPrimaryLength = 16;
+
+    // Canonical ticker form for case-insensitive lookups. Invalid or oversized symbols fail
+    // closed so request-facing resolvers never query arbitrary text as a security identifier.
+    public static string Normalize(string ticker) => NormalizeListed(ticker);
+
+    /// <summary>
+    /// Canonical exact-listing symbol accepted from authoritative directories. Every symbol is
+    /// bounded to the database/API contract and contains only ASCII letters, digits, dots, and
+    /// dashes with at least one alphanumeric character.
+    /// </summary>
+    public static string NormalizeListed(string ticker)
+    {
+        if (string.IsNullOrWhiteSpace(ticker))
+            return null;
+
+        var trimmed = ticker.Trim();
+        if (
+            trimmed.Length > MaxListedLength
+            || !trimmed.Any(character => char.IsAsciiLetterOrDigit(character))
+            || trimmed.Any(character =>
+                !char.IsAsciiLetterOrDigit(character) && character != '-' && character != '.'
+            )
+        )
+            return null;
+
+        return trimmed.ToUpperInvariant();
+    }
+
+    public static string NormalizeDashListed(string ticker) =>
+        NormalizeListed(ticker)?.Replace('.', '-');
+
+    public static string NormalizePrimary(string ticker)
+    {
+        var normalized = NormalizeListed(ticker);
+        return normalized?.Length <= MaxPrimaryLength ? normalized : null;
+    }
 }

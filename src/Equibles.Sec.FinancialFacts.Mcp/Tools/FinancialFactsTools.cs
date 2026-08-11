@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
@@ -262,19 +263,22 @@ public class FinancialFactsTools
                 if (string.IsNullOrWhiteSpace(tickers))
                     return "At least one ticker is required.";
 
-                var requested = tickers
-                    .Split(
-                        ',',
-                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-                    )
-                    .Select(t => t.ToUpperInvariant())
-                    .Distinct()
-                    .ToList();
-
-                if (requested.Count == 0)
+                var segments = tickers.Split(',').Select(ticker => ticker.Trim()).ToList();
+                if (segments.All(string.IsNullOrWhiteSpace))
                     return "At least one ticker is required.";
-                if (requested.Count > MaxTickers)
-                    return $"Too many tickers ({requested.Count}). The maximum is {MaxTickers}.";
+                if (segments.Count > MaxTickers)
+                    return $"Too many tickers ({segments.Count}). The maximum is {MaxTickers}.";
+
+                var requested = new List<string>();
+                var seenTickers = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var segment in segments)
+                {
+                    var normalizedTicker = TickerNormalizer.NormalizeDashListed(segment);
+                    if (normalizedTicker == null)
+                        return $"Invalid ticker '{segment}'. Use 1-32 ASCII letters, digits, dots, or dashes.";
+                    if (seenTickers.Add(normalizedTicker))
+                        requested.Add(normalizedTicker);
+                }
 
                 var conceptPriority = await ResolveConceptPriority(conceptRefs);
                 if (conceptPriority.Count == 0)

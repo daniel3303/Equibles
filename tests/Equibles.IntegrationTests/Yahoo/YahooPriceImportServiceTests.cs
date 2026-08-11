@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.Core.Calendars;
 using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data.Models;
@@ -210,6 +211,93 @@ public class YahooPriceImportServiceTests : IDisposable
         prices.Should().HaveCount(3);
         prices.Should().AllSatisfy(p => p.CommonStockId.Should().Be(apple.Id));
         prices.Select(p => p.Close).Should().BeEquivalentTo([180m, 182m, 185m]);
+    }
+
+    [Fact]
+    public async Task Import_ReferenceSeriesWithTwoGroupedRows_RetriesShortResponseThenCommitsFullHistory()
+    {
+        _workerOptions.MinSyncDate = new DateTime(2020, 1, 1);
+        var stock = CreateStock("OWNER", "Reference Owner");
+        stock.SecondaryTickers = ["REF"];
+        stock.ReferenceTickers = ["REF"];
+        await SeedStocks(stock);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
+        var priorSettled = UsMarketCalendar.PreviousTradingDay(latestSettled);
+        var firstBootstrap = CreatePrice(stock, priorSettled, 100m, "REF");
+        var secondBootstrap = CreatePrice(stock, latestSettled, 101m, "REF");
+        await SeedPrices(firstBootstrap, secondBootstrap);
+
+        var requestedStarts = new List<DateOnly>();
+        var floor = new DateOnly(2020, 1, 1);
+        var firstExpectedSession = new DateOnly(2020, 1, 2);
+        var completeHistory = Enumerable
+            .Range(0, latestSettled.DayNumber - floor.DayNumber + 1)
+            .Select(offset => floor.AddDays(offset))
+            .Where(UsMarketCalendar.IsTradingDay)
+            .Select(
+                (date, index) =>
+                    new HistoricalPrice
+                    {
+                        Date = date,
+                        Open = 20m + index,
+                        High = 22m + index,
+                        Low = 19m + index,
+                        Close = 21m + index,
+                        AdjustedClose = 21m + index,
+                        Volume = 500_000,
+                    }
+            )
+            .ToList();
+        _yahooClient
+            .GetChart("REF", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(
+                call =>
+                {
+                    requestedStarts.Add(call.ArgAt<DateOnly>(1));
+                    return CreateChartData((firstExpectedSession, 20m), (latestSettled, 102m));
+                },
+                call =>
+                {
+                    requestedStarts.Add(call.ArgAt<DateOnly>(1));
+                    return new YahooChartData { Prices = completeHistory };
+                }
+            );
+        _yahooClient
+            .GetChart("OWNER", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+
+        await _service.Import(CancellationToken.None);
+
+        requestedStarts.Should().Equal(floor);
+        _priceRepo.GetAllSeries().Should().Contain(price => price.Id == firstBootstrap.Id);
+        _priceRepo.GetAllSeries().Should().Contain(price => price.Id == secondBootstrap.Id);
+        _stockRepo
+            .GetAll()
+            .Single(stockRow => stockRow.Id == stock.Id)
+            .PriceHistoryBackfilledTickers.Should()
+            .BeEmpty();
+
+        await _service.Import(CancellationToken.None);
+
+        requestedStarts.Should().Equal(floor, floor);
+        var stored = _priceRepo
+            .GetAllSeries()
+            .Where(price => price.CommonStockId == stock.Id && price.ListedTicker == "REF")
+            .OrderBy(price => price.Date)
+            .ToList();
+        stored
+            .Select(price => price.Date)
+            .Should()
+            .Equal(completeHistory.Select(price => price.Date));
+        stored.Should().NotContain(price => price.Id == firstBootstrap.Id);
+        stored.Should().NotContain(price => price.Id == secondBootstrap.Id);
+        _stockRepo
+            .GetAll()
+            .Single(stockRow => stockRow.Id == stock.Id)
+            .PriceHistoryBackfilledTickers.Should()
+            .Equal("REF");
     }
 
     [Fact]
@@ -1013,6 +1101,29 @@ public class YahooPriceImportServiceTests : IDisposable
 
         var updated = _stockRepo.GetAll().Single(s => s.Ticker == "CEF");
         updated.SharesOutStanding.Should().Be(50_000_000);
+        updated.MarketCapitalization.Should().Be(50_000_000d * 40d);
+    }
+
+    [Fact]
+    public async Task Import_MarketCapFallback_UsesLatestTradedClose()
+    {
+        var stock = CreateStock("TRD", "Traded Close Co.");
+        await SeedStocks(stock);
+        var traded = CreatePrice(stock, new DateOnly(2024, 1, 2), close: 40m);
+        var carryForward = CreatePrice(stock, new DateOnly(2024, 1, 3), close: 90m);
+        carryForward.Volume = 0;
+        await SeedPrices(traded, carryForward);
+
+        _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(50_000_000L);
+        _sharesProvider.IsForeignPrivateIssuer(stock).Returns(false);
+        _yahooClient
+            .GetChart("TRD", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(new YahooChartData());
+        _yahooClient.GetKeyStatistics("TRD").Returns((KeyStatistics)null);
+
+        await _service.Import(CancellationToken.None);
+
+        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "TRD");
         updated.MarketCapitalization.Should().Be(50_000_000d * 40d);
     }
 

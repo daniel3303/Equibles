@@ -25,7 +25,12 @@ namespace Equibles.Yahoo.HostedService.Services;
 
 internal readonly record struct PriceSeriesKey(Guid CommonStockId, string ListedTicker);
 
-internal readonly record struct PriceSeriesTarget(string Ticker, Guid CommonStockId, bool IsPrimary)
+internal readonly record struct PriceSeriesTarget(
+    string Ticker,
+    Guid CommonStockId,
+    bool IsPrimary,
+    bool RequiresFullHistory = false
+)
 {
     public PriceSeriesKey Key => new(CommonStockId, Ticker);
 }
@@ -35,6 +40,7 @@ internal readonly record struct LockedPriceSeries(CommonStock Stock, bool IsPrim
 [Service]
 public class YahooPriceImportService
 {
+    private const double MinimumReferenceHistoryCoverageShare = 0.90;
     private const int InsertBatchSize = 500;
     private const decimal MaxPriceValue = 99_999_999_999_999.9999m; // numeric(18,4) ceiling
 
@@ -144,6 +150,8 @@ public class YahooPriceImportService
                 stock.Id,
                 stock.Ticker,
                 stock.SecondaryTickers,
+                stock.ReferenceTickers,
+                stock.PriceHistoryBackfilledTickers,
             })
             .ToListAsync(cancellationToken);
 
@@ -153,18 +161,47 @@ public class YahooPriceImportService
             if (string.IsNullOrWhiteSpace(stock.Ticker))
                 continue;
 
-            var primaryTicker = TickerNormalizer.Normalize(stock.Ticker);
-            targets.Add(new PriceSeriesTarget(primaryTicker, stock.Id, IsPrimary: true));
+            var primaryTicker = TickerNormalizer.NormalizePrimary(stock.Ticker);
+            if (primaryTicker == null)
+                continue;
+
+            var referenceTickers = (stock.ReferenceTickers ?? [])
+                .Select(TickerNormalizer.NormalizeListed)
+                .Where(ticker => ticker != null)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var backfilledTickers = (stock.PriceHistoryBackfilledTickers ?? [])
+                .Select(TickerNormalizer.NormalizeListed)
+                .Where(ticker => ticker != null)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            targets.Add(
+                new PriceSeriesTarget(
+                    primaryTicker,
+                    stock.Id,
+                    IsPrimary: true,
+                    RequiresFullHistory: referenceTickers.Contains(primaryTicker)
+                        && !backfilledTickers.Contains(primaryTicker)
+                )
+            );
 
             foreach (
                 var secondaryTicker in (stock.SecondaryTickers ?? [])
+                    .Concat(stock.ReferenceTickers ?? [])
                     .Where(ticker => !string.IsNullOrWhiteSpace(ticker))
-                    .Select(TickerNormalizer.Normalize)
-                    .Where(ticker => ticker != primaryTicker)
-                    .Distinct(StringComparer.Ordinal)
+                    .Select(TickerNormalizer.NormalizeListed)
+                    .Where(ticker => ticker != null && ticker != primaryTicker)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
             )
             {
-                targets.Add(new PriceSeriesTarget(secondaryTicker, stock.Id, IsPrimary: false));
+                targets.Add(
+                    new PriceSeriesTarget(
+                        secondaryTicker,
+                        stock.Id,
+                        IsPrimary: false,
+                        RequiresFullHistory: referenceTickers.Contains(secondaryTicker)
+                            && !backfilledTickers.Contains(secondaryTicker)
+                    )
+                );
             }
         }
 
@@ -618,7 +655,8 @@ public class YahooPriceImportService
         );
         try
         {
-            if (await LockPriceSeries(stockRepo, target, cancellationToken) == null)
+            var lockedSeries = await LockPriceSeries(stockRepo, target, cancellationToken);
+            if (lockedSeries == null)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return false;
@@ -641,6 +679,18 @@ public class YahooPriceImportService
             {
                 repo.AddRange(batch);
                 await repo.SaveChanges();
+            }
+
+            if (target.RequiresFullHistory)
+            {
+                lockedSeries.Value.Stock.PriceHistoryBackfilledTickers = lockedSeries
+                    .Value.Stock.PriceHistoryBackfilledTickers.Append(target.Ticker)
+                    .Select(TickerNormalizer.NormalizeListed)
+                    .Where(ticker => ticker != null)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(ticker => ticker, StringComparer.Ordinal)
+                    .ToList();
+                await stockRepo.SaveChanges();
             }
 
             await transaction.CommitAsync(cancellationToken);
@@ -743,6 +793,39 @@ public class YahooPriceImportService
         // HTTP.
         var chartData = await _yahooClient.GetChart(target.Ticker, startDate, today);
 
+        if (target.RequiresFullHistory)
+        {
+            if (!IsCompleteReferenceHistory(chartData, PriceHistoryFloor(), today))
+            {
+                _logger.LogWarning(
+                    "Yahoo returned incomplete full history for reference listing {Ticker}; keeping its grouped bootstrap rows pending",
+                    target.Ticker
+                );
+                return new TickerImportResult(Fetched: true, Inserted: 0);
+            }
+
+            var replaced = await ReplaceStoredPrices(
+                target,
+                PriceHistoryFloor(),
+                today,
+                chartData.Prices,
+                cancellationToken
+            );
+            if (replaced)
+            {
+                _logger.LogInformation(
+                    "Replaced grouped bootstrap rows with full Yahoo history for reference listing {Ticker}",
+                    target.Ticker
+                );
+                await CaptureSplits(target, chartData.Splits, cancellationToken);
+                await CaptureDividends(target, chartData.Dividends, cancellationToken);
+            }
+            return new TickerImportResult(
+                Fetched: true,
+                Inserted: replaced ? chartData.Prices.Count : 0
+            );
+        }
+
         // Every exact listing needs a full-history rebase when its chart reports a split: Yahoo
         // retroactively adjusts old bars while the ordinary importer only appends. Doing this for
         // both the snapshotted primary and secondaries makes a concurrent designation change
@@ -794,6 +877,46 @@ public class YahooPriceImportService
         _workerOptions.MinSyncDate.HasValue
             ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
             : new DateOnly(2020, 1, 1);
+
+    private static bool IsCompleteReferenceHistory(
+        YahooChartData chartData,
+        DateOnly floor,
+        DateOnly today
+    )
+    {
+        var storableDates = chartData
+            .Prices.Where(price => !HasOverflowPrice(price))
+            .Where(price => !IsInvalidOhlc(price))
+            .Where(price => IsSettledDailyBar(price.Date, today))
+            .Select(price => price.Date)
+            .ToList();
+        if (storableDates.Count == 0)
+            return false;
+
+        var firstTradeDate = chartData.FirstTradeDate ?? floor;
+        var expectedFirst = firstTradeDate > floor ? firstTradeDate : floor;
+        while (!UsMarketCalendar.IsTradingDay(expectedFirst))
+            expectedFirst = expectedFirst.AddDays(1);
+        if (expectedFirst >= today)
+            return false;
+
+        var expectedLast = UsMarketCalendar.PreviousTradingDay(today);
+        if (storableDates.Min() > expectedFirst || storableDates.Max() < expectedLast)
+            return false;
+
+        var expectedSessions = 0;
+        for (var date = expectedFirst; date <= expectedLast; date = date.AddDays(1))
+        {
+            if (UsMarketCalendar.IsTradingDay(date))
+                expectedSessions++;
+        }
+        var coveredSessions = storableDates
+            .Where(date => date >= expectedFirst && date <= expectedLast)
+            .Distinct()
+            .Count();
+        return coveredSessions
+            >= (int)Math.Ceiling(expectedSessions * MinimumReferenceHistoryCoverageShare);
+    }
 
     private async Task<int> PersistPrices(
         PriceSeriesTarget target,
@@ -1450,7 +1573,7 @@ public class YahooPriceImportService
         {
             var priceRepo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
             currentPrice = await priceRepo
-                .GetByStock(stock)
+                .GetTradedByStock(stock)
                 .OrderByDescending(p => p.Date)
                 .Select(p => (decimal?)p.Close)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -1697,6 +1820,9 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
+        if (target.RequiresFullHistory)
+            return PriceHistoryFloor();
+
         var forwardOnly = await GetSyncStartDate(target, cancellationToken);
 
         // The heal only ever RIDES a fetch the forward-only date already demands — it must never

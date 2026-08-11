@@ -58,6 +58,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
                 CommonStockId = stock.Id,
                 Date = date,
                 Close = 50m,
+                Volume = 1_000,
             }
         );
         DbContext.Add(implausible);
@@ -142,6 +143,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
                 CommonStockId = priced.Id,
                 Date = date,
                 Close = 50m,
+                Volume = 1_000,
             }
         );
         DbContext.Add(unrepairable);

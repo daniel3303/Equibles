@@ -139,6 +139,11 @@ public class FundScoringWorker : BackgroundService
             .ToListAsync(cancellationToken);
 
         var benchmark = TickerNormalizer.Normalize(BenchmarkTicker);
+        if (benchmark == null)
+            throw new InvalidOperationException(
+                "The configured fund-scoring benchmark is invalid."
+            );
+
         var scoreStates = await dbContext
             .Set<FundScore>()
             .Where(s => s.WindowYears == WindowYears && s.BenchmarkTicker == benchmark)

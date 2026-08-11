@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Data;
 using Equibles.InsiderTrading.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -12,12 +13,19 @@ public class InsiderOwnerRepository : BaseRepository<InsiderOwner>
 
     public async Task<InsiderOwner> GetByOwnerCik(string ownerCik)
     {
-        return await GetAll().FirstOrDefaultAsync(o => o.OwnerCik == ownerCik);
+        var validatedCik = CikNormalizer.Validate(ownerCik);
+        return validatedCik == null
+            ? null
+            : await GetAll().FirstOrDefaultAsync(o => o.OwnerCik == validatedCik);
     }
 
     public IQueryable<InsiderOwner> GetByOwnerCiks(IEnumerable<string> ownerCiks)
     {
-        return GetAll().Where(o => ownerCiks.Contains(o.OwnerCik));
+        var rawCiks = ownerCiks?.ToList() ?? [];
+        var validatedCiks = rawCiks.Select(CikNormalizer.Validate).ToList();
+        return validatedCiks.Any(cik => cik == null)
+            ? GetAll().Where(_ => false)
+            : GetAll().Where(o => validatedCiks.Contains(o.OwnerCik));
     }
 
     public IQueryable<InsiderOwner> Search(string search)

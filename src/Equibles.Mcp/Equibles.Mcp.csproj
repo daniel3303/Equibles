@@ -9,4 +9,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.CommonStocks.Data\Equibles.CommonStocks.Data.csproj" />
+  </ItemGroup>
 </Project>

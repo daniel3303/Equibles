@@ -118,4 +118,79 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
             .Should()
             .BeEmpty("the authorized parent cascade removes the obsolete listing's exact rows");
     }
+
+    [Fact]
+    public async Task SyncCompaniesFromSecApi_TickerHeldByReferenceOwner_PreservesOwnerAndHistory()
+    {
+        var referenceOwner = new CommonStock
+        {
+            Cik = "0000000999",
+            Ticker = "REUSED",
+            Name = "Reference-owned ETF",
+            ReferenceTickers = ["REUSED"],
+        };
+        var exactPriceId = Guid.NewGuid();
+        DbContext.AddRange(
+            referenceOwner,
+            new DailyStockPrice
+            {
+                Id = exactPriceId,
+                CommonStockId = referenceOwner.Id,
+                ListedTicker = "REUSED",
+                Date = new DateOnly(2026, 8, 3),
+                Open = 10m,
+                High = 11m,
+                Low = 9m,
+                Close = 10m,
+                AdjustedClose = 10m,
+                Volume = 1_000,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient
+            .GetActiveCompanies()
+            .Returns([
+                new CompanyInfo
+                {
+                    Cik = "0000000111",
+                    Name = "Incoming SEC Company",
+                    Tickers = ["REUSED"],
+                    EntityType = "operating",
+                },
+            ]);
+
+        var scopeFactory = ServiceScopeSubstitute.Create(
+            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (
+                typeof(CommonStockManager),
+                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+            ),
+            (typeof(EquiblesFinancialDbContext), DbContext)
+        );
+        var sut = new CompanySyncService(
+            scopeFactory,
+            secEdgarClient,
+            Options.Create(new WorkerOptions { TickersToSync = [] }),
+            Substitute.For<ILogger<CompanySyncService>>(),
+            new ErrorReporter(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Substitute.For<IBus>()
+        );
+
+        await sut.SyncCompaniesFromSecApi();
+
+        await using var verify = Fixture.CreateDbContext();
+        var stock = await verify.Set<CommonStock>().AsNoTracking().SingleAsync();
+        stock.Id.Should().Be(referenceOwner.Id);
+        stock.Cik.Should().Be("0000000999");
+        stock.ReferenceTickers.Should().Equal("REUSED");
+        (await verify.Set<DailyStockPrice>().AsNoTracking().SingleAsync())
+            .Id.Should()
+            .Be(exactPriceId);
+    }
 }

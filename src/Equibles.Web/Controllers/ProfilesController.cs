@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Congress.Repositories;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
@@ -60,7 +61,11 @@ public class ProfilesController : BaseController
     [HttpGet("~/institutions/{cik}")]
     public async Task<IActionResult> Institution(string cik, DateOnly? activityDate = null)
     {
-        var holder = await _institutionalHolderRepository.GetByCik(cik);
+        var validatedCik = CikNormalizer.Validate(cik);
+        if (validatedCik == null)
+            return NotFound();
+
+        var holder = await _institutionalHolderRepository.GetByCik(validatedCik);
         if (holder == null)
             return NotFound();
 
@@ -227,6 +232,10 @@ public class ProfilesController : BaseController
     )
     {
         var distinctCiks = NormalizeCiks(ciks);
+        if (distinctCiks == null)
+            return BadRequest(
+                "Every CIK must contain only ASCII digits and be at most 16 characters."
+            );
         if (distinctCiks.Count > InstitutionCompareViewModel.MaxCiks)
             return BadRequest(
                 $"At most {InstitutionCompareViewModel.MaxCiks} CIKs may be compared."
@@ -260,6 +269,10 @@ public class ProfilesController : BaseController
             .SelectMany(c => c.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries))
             .ToArray();
         var distinctCiks = NormalizeCiks(splitCiks);
+        if (distinctCiks == null)
+            return BadRequest(
+                "Every CIK must contain only ASCII digits and be at most 16 characters."
+            );
         if (distinctCiks.Count > InstitutionOverlapMatrixViewModel.MaxCiks)
             return BadRequest(
                 $"At most {InstitutionOverlapMatrixViewModel.MaxCiks} CIKs may be compared."
@@ -288,6 +301,10 @@ public class ProfilesController : BaseController
     )
     {
         var distinctCiks = NormalizeCiks(ciks);
+        if (distinctCiks == null)
+            return BadRequest(
+                "Every CIK must contain only ASCII digits and be at most 16 characters."
+            );
         if (distinctCiks.Count > InstitutionCombinedViewModel.MaxCiks)
             return BadRequest(
                 $"At most {InstitutionCombinedViewModel.MaxCiks} CIKs may be combined."
@@ -328,7 +345,11 @@ public class ProfilesController : BaseController
     [HttpGet("~/insiders/{ownerCik}")]
     public async Task<IActionResult> Insider(string ownerCik)
     {
-        var owner = await _insiderOwnerRepository.GetByOwnerCik(ownerCik);
+        var validatedCik = CikNormalizer.Validate(ownerCik);
+        if (validatedCik == null)
+            return NotFound();
+
+        var owner = await _insiderOwnerRepository.GetByOwnerCik(validatedCik);
         if (owner == null)
             return NotFound();
 
@@ -499,18 +520,19 @@ public class ProfilesController : BaseController
     private static DateOnly ResolveSelectedDate(DateOnly? requested, List<DateOnly> available) =>
         available.ResolveSelectedDateOrFirst(requested);
 
-    private static List<string> NormalizeCiks(string[] ciks) =>
-        (ciks ?? [])
-            .Where(c => !string.IsNullOrWhiteSpace(c))
-            .Select(c => c.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+    private static List<string> NormalizeCiks(string[] ciks)
+    {
+        var rawCiks = (ciks ?? []).Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
+        var validatedCiks = rawCiks.Select(CikNormalizer.Validate).ToList();
+        if (validatedCiks.Any(c => c == null))
+            return null;
+
+        return validatedCiks.Distinct(StringComparer.Ordinal).ToList();
+    }
 
     // Resolves the picker chips for first render — preserves the order the user
-    // submitted CIKs in, and leaves Name == null for CIKs that aren't in the DB so
-    // the view can flag them as missing. Case-insensitive comparer matches
-    // NormalizeCiks above; otherwise a lowercase `?ciks=cik123` in the URL would
-    // miss the row stored as "CIK123" and render as "(name unknown)".
+    // submitted valid numeric CIKs in, and leaves Name == null for CIKs that aren't
+    // in the DB so the view can flag them as missing.
     private async Task<List<InstitutionPick>> ResolvePicks(List<string> ciks)
     {
         if (ciks.Count == 0)

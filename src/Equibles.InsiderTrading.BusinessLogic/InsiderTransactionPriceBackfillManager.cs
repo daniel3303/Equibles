@@ -213,7 +213,10 @@ public class InsiderTransactionPriceBackfillManager
         var rawPrices = await _dailyStockPriceRepository
             .GetAll()
             .Where(p =>
-                stockIds.Contains(p.CommonStockId) && p.Date >= minDate && p.Date <= maxDate
+                stockIds.Contains(p.CommonStockId)
+                && p.Date >= minDate
+                && p.Date <= maxDate
+                && p.Volume > 0
             )
             .Select(p => new
             {

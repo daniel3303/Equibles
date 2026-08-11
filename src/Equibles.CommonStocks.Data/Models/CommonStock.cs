@@ -61,6 +61,29 @@ public class CommonStock
         set;
     } = [];
 
+    /// <summary>
+    /// Active listed symbols established by an authoritative reference directory outside the
+    /// SEC company-ticker feed. The SEC sync folds these into <see cref="SecondaryTickers"/>
+    /// without owning or deleting them, so exchange-traded fund series survive its hourly
+    /// refresh while every existing ticker resolver continues to use one materialized list.
+    /// </summary>
+    public List<string> ReferenceTickers
+    {
+        get => field ?? [];
+        set;
+    } = [];
+
+    /// <summary>
+    /// Exact listed symbols whose full Yahoo history has been committed atomically. A reference
+    /// symbol absent from this set is still a grouped-daily bootstrap and must retry the deep
+    /// history fetch even after more forward bars arrive.
+    /// </summary>
+    public List<string> PriceHistoryBackfilledTickers
+    {
+        get => field ?? [];
+        set;
+    } = [];
+
     public List<string> SecondaryCiks
     {
         get => field ?? [];

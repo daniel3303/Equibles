@@ -67,6 +67,49 @@ public class DailyStockPriceRepository : BaseRepository<DailyStockPrice>
         return GetByStock(stock, ticker).Where(p => p.Date >= startDate && p.Date <= endDate);
     }
 
+    /// <summary>
+    /// Exact-listing rows backed by at least one reported trade. Upstream daily feeds can emit
+    /// zero-volume carry-forward candles for a dormant symbol; customer-facing price surfaces
+    /// must not present those synthetic rows as a newly settled market price.
+    /// </summary>
+    public IQueryable<DailyStockPrice> GetTradedByStock(CommonStock stock, string ticker)
+    {
+        return GetByStock(stock, ticker).Where(p => p.Volume > 0);
+    }
+
+    public IQueryable<DailyStockPrice> GetTradedByStock(CommonStock stock)
+    {
+        return GetByStock(stock).Where(p => p.Volume > 0);
+    }
+
+    public IQueryable<DailyStockPrice> GetTradedByStock(
+        CommonStock stock,
+        string ticker,
+        DateOnly startDate,
+        DateOnly endDate
+    )
+    {
+        return GetTradedByStock(stock, ticker).Where(p => p.Date >= startDate && p.Date <= endDate);
+    }
+
+    public IQueryable<DailyStockPrice> GetTradedByStock(
+        CommonStock stock,
+        DateOnly startDate,
+        DateOnly endDate
+    )
+    {
+        return GetTradedByStock(stock).Where(p => p.Date >= startDate && p.Date <= endDate);
+    }
+
+    public IQueryable<DailyStockPrice> GetTradedByStocks(
+        IEnumerable<Guid> stockIds,
+        DateOnly startDate,
+        DateOnly endDate
+    )
+    {
+        return GetByStocks(stockIds, startDate, endDate).Where(p => p.Volume > 0);
+    }
+
     public IQueryable<DailyStockPrice> GetByStocks(
         IEnumerable<Guid> stockIds,
         DateOnly startDate,

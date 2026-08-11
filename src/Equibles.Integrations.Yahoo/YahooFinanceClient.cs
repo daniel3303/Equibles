@@ -91,6 +91,9 @@ public class YahooFinanceClient : IYahooFinanceClient
 
         return new YahooChartData
         {
+            FirstTradeDate = result.Meta?.FirstTradeDate is > 0
+                ? FromUnixTimestamp(result.Meta.FirstTradeDate.Value + offsetSeconds)
+                : null,
             Prices = BuildPrices(result, ticker, offsetSeconds, startDate, endDate),
             Splits = BuildSplits(result.Events?.Splits, offsetSeconds, startDate, endDate),
             Dividends = BuildDividends(result.Events?.Dividends, offsetSeconds, startDate, endDate),

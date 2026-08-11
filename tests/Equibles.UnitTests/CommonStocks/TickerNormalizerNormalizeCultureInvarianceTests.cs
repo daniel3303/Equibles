@@ -27,4 +27,23 @@ public class TickerNormalizerNormalizeCultureInvarianceTests
             CultureInfo.CurrentCulture = original;
         }
     }
+
+    [Theory]
+    [InlineData("brk.b", "BRK.B")]
+    [InlineData(" BRK-B ", "BRK-B")]
+    public void NormalizeListed_AcceptsBoundedExchangeSpelling(string ticker, string expected)
+    {
+        TickerNormalizer.NormalizeListed(ticker).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("@@@")]
+    [InlineData("AAPL/../../x")]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
+    [InlineData("ſPY")]
+    public void NormalizeListed_RejectsMalformedOrOversizedSymbols(string ticker)
+    {
+        TickerNormalizer.NormalizeListed(ticker).Should().BeNull();
+        TickerNormalizer.Normalize(ticker).Should().BeNull();
+    }
 }

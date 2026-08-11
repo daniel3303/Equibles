@@ -106,6 +106,26 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetStockPrices_ExcludesZeroVolumeCarryForwardRows()
+    {
+        var stock = AaplStock();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext
+            .Set<DailyStockPrice>()
+            .AddRange(
+                PriceFor(stock, new DateOnly(2026, 4, 1), close: 175.50m),
+                PriceFor(stock, new DateOnly(2026, 4, 2), close: 175.50m, volume: 0)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetStockPrices("AAPL", startDate: "2026-04-01", endDate: "2026-04-30");
+
+        result.Should().Contain("2026-04-01");
+        result.Should().NotContain("2026-04-02");
+    }
+
+    [Fact]
     public async Task GetStockPrices_MaxResultsLimitsRows()
     {
         var stock = AaplStock();
@@ -167,6 +187,26 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         result.Should().Be("No tickers provided.");
     }
 
+    [Theory]
+    [InlineData("ſPY")]
+    [InlineData("AAPL/../../x")]
+    [InlineData("ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567")]
+    [InlineData("AAPL,,MSFT")]
+    public async Task GetLatestPrices_InvalidBatchFailsBeforeRepositoryAccess(string tickers)
+    {
+        var sut = new StockPriceTools(
+            new DailyStockPriceRepository(null),
+            new CommonStockRepository(null),
+            new Equibles.CorporateActions.Repositories.StockSplitRepository(null),
+            new Equibles.Errors.BusinessLogic.ErrorManager(null),
+            NullLogger<StockPriceTools>()
+        );
+
+        var result = await sut.GetLatestPrices(tickers);
+
+        result.Should().Contain("Invalid ticker");
+    }
+
     [Fact]
     public async Task GetLatestPrices_KnownTickers_ReturnsLatestRow()
     {
@@ -199,6 +239,25 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
                 "| MSFT | 2026-04-05 | 425.75 | — | — | 22,000,000 | 425.75\\* | 425.75\\* | 0.00% | 0.00% |"
             );
         result.Should().NotContain("| AAPL | 2026-04-01");
+    }
+
+    [Fact]
+    public async Task GetLatestPrices_ExcludesZeroVolumeCarryForwardFromLatestAndRange()
+    {
+        var stock = AaplStock();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext
+            .Set<DailyStockPrice>()
+            .AddRange(
+                PriceFor(stock, new DateOnly(2026, 4, 1), close: 175.50m),
+                PriceFor(stock, new DateOnly(2026, 4, 2), close: 999.00m, volume: 0)
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLatestPrices("AAPL");
+
+        result.Should().Contain("| AAPL | 2026-04-01 | 175.50 |");
+        result.Should().NotContain("999.00");
     }
 
     [Theory]

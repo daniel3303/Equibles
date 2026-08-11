@@ -23,7 +23,6 @@ public class RepairChunkReportingDatesMigrationTests : ParadeDbMcpTestBase
     public async Task Up_ReplacesAStaleChunkCacheWithItsDocumentReportingDate()
     {
         var migrator = DbContext.Database.GetService<IMigrator>();
-        await migrator.MigrateAsync(PreviousMigration);
 
         try
         {
@@ -64,6 +63,12 @@ public class RepairChunkReportingDatesMigrationTests : ParadeDbMcpTestBase
             };
             DbContext.Add(chunk);
             await DbContext.SaveChangesAsync();
+            DbContext.ChangeTracker.Clear();
+
+            // Seed through the current EF model first, then recreate the historical schema.
+            // Future additive columns must not make this migration-transition test write through
+            // a model that is newer than the database it deliberately downgraded.
+            await migrator.MigrateAsync(PreviousMigration);
 
             await migrator.MigrateAsync(RepairMigration);
             DbContext.ChangeTracker.Clear();
@@ -75,7 +80,7 @@ public class RepairChunkReportingDatesMigrationTests : ParadeDbMcpTestBase
         }
         finally
         {
-            await migrator.MigrateAsync(RepairMigration);
+            await migrator.MigrateAsync();
         }
     }
 }
