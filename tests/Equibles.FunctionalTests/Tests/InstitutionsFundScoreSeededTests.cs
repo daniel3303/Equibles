@@ -72,7 +72,7 @@ public class InstitutionsFundScoreSeededTests
 
         var card = page.Locator("[data-testid='institution-fund-score']");
         await Assertions.Expect(card).ToBeVisibleAsync();
-        await Assertions.Expect(card).ToContainTextAsync("3-year performance vs SPY");
+        await Assertions.Expect(card).ToContainTextAsync("3-year price performance vs SPY");
         await Assertions
             .Expect(card.Locator("[data-testid='fund-score-alpha']"))
             .ToContainTextAsync("12.30%");

@@ -110,7 +110,7 @@ public class FundScoreWebViewTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await response.Content.ReadAsStringAsync();
         html.Should().Contain("institution-fund-score");
-        html.Should().Contain("3-year performance vs SPY");
+        html.Should().Contain("3-year price performance vs SPY");
         html.Should().Contain("fund-score-alpha");
         // Positive alpha renders green; the leading "+" is HTML-encoded, so assert the number only.
         html.Should().Contain("7.50%");
