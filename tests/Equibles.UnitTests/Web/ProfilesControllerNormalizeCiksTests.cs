@@ -46,4 +46,12 @@ public class ProfilesControllerNormalizeCiksTests
         result.Should().ContainSingle();
         result[0].Trim().Should().Be("1234567");
     }
+
+    [Fact]
+    public void NormalizeCiks_AlternatePaddingOfOneFiler_CollapsesToSingleEntry()
+    {
+        var result = Normalize(["0001067983", "1067983"]);
+
+        result.Should().Equal("0001067983");
+    }
 }

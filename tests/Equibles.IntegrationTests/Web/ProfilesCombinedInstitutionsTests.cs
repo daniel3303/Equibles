@@ -31,6 +31,32 @@ public class ProfilesCombinedInstitutionsTests
     }
 
     [Fact]
+    public async Task GetCombined_AlternateSpellingsOfOneHolder_DoNotCountAsTwoFunds()
+    {
+        await _fixture.ResetAndSeedAsync(async db =>
+        {
+            db.Add(
+                new InstitutionalHolder
+                {
+                    Id = Guid.NewGuid(),
+                    Cik = "0001067983",
+                    Name = "One Holder",
+                }
+            );
+            await Task.CompletedTask;
+        });
+
+        var response = await _fixture.Client.GetAsync(
+            "/Institutions/Combined?ciks=0001067983&ciks=1067983"
+        );
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("Pick at least 2 institutions");
+        html.Should().NotContain("data-testid=\"combined-summary\"");
+    }
+
+    [Fact]
     public async Task GetCombined_TooManyCiks_Returns400()
     {
         await _fixture.ResetAndSeedAsync(_ => Task.CompletedTask);

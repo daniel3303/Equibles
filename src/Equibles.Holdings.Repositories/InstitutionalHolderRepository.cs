@@ -14,18 +14,76 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
     public async Task<InstitutionalHolder> GetByCik(string cik)
     {
         var validatedCik = CikNormalizer.Validate(cik);
-        return validatedCik == null
+        if (validatedCik == null)
+            return null;
+
+        var exact = await GetAll().FirstOrDefaultAsync(h => h.Cik == validatedCik);
+        if (exact != null)
+            return exact;
+
+        var alternateCik = AlternateCikSpelling(validatedCik);
+        return alternateCik == null
             ? null
-            : await GetAll().FirstOrDefaultAsync(h => h.Cik == validatedCik);
+            : await GetAll().FirstOrDefaultAsync(h => h.Cik == alternateCik);
     }
 
-    public IQueryable<InstitutionalHolder> GetByCiks(IEnumerable<string> ciks)
+    public async Task<List<InstitutionalHolder>> GetByCiks(
+        IEnumerable<string> ciks,
+        CancellationToken cancellationToken = default
+    )
     {
-        var rawCiks = ciks?.ToList() ?? [];
-        var validatedCiks = rawCiks.Select(CikNormalizer.Validate).ToList();
-        return validatedCiks.Any(cik => cik == null)
-            ? GetAll().Where(_ => false)
-            : GetAll().Where(h => validatedCiks.Contains(h.Cik));
+        var requestedCiks = (ciks ?? [])
+            .Select(CikNormalizer.Validate)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (requestedCiks.Count == 0 || requestedCiks.Any(cik => cik == null))
+            return [];
+
+        var candidateCiks = requestedCiks
+            .SelectMany(cik => new[] { cik, AlternateCikSpelling(cik) })
+            .Where(cik => cik != null)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var candidates = await GetAll()
+            .Where(holder => candidateCiks.Contains(holder.Cik))
+            .ToListAsync(cancellationToken);
+        var byCik = candidates.ToDictionary(holder => holder.Cik, StringComparer.Ordinal);
+
+        var selected = new List<InstitutionalHolder>(requestedCiks.Count);
+        var selectedIds = new HashSet<Guid>();
+        foreach (var requestedCik in requestedCiks)
+        {
+            if (!byCik.TryGetValue(requestedCik, out var holder))
+            {
+                var alternateCik = AlternateCikSpelling(requestedCik);
+                if (alternateCik == null || !byCik.TryGetValue(alternateCik, out holder))
+                    continue;
+            }
+
+            if (selectedIds.Add(holder.Id))
+                selected.Add(holder);
+        }
+
+        return selected;
+    }
+
+    public static InstitutionalHolder MatchRequestedCik(
+        IReadOnlyList<InstitutionalHolder> holders,
+        string cik
+    )
+    {
+        var validatedCik = CikNormalizer.Validate(cik);
+        if (validatedCik == null)
+            return null;
+
+        var exact = holders.FirstOrDefault(holder => holder.Cik == validatedCik);
+        if (exact != null)
+            return exact;
+
+        var alternateCik = AlternateCikSpelling(validatedCik);
+        return alternateCik == null
+            ? null
+            : holders.FirstOrDefault(holder => holder.Cik == alternateCik);
     }
 
     public IQueryable<InstitutionalHolder> Search(string search)
@@ -388,7 +446,7 @@ public class InstitutionalHolderRepository : BaseRepository<InstitutionalHolder>
 
     // Both padded and unpadded CIK spellings exist in the holder table. Exact input wins;
     // this alternate is consulted only when the exact spelling has no row.
-    private static string AlternateCikSpelling(string exactCik)
+    public static string AlternateCikSpelling(string exactCik)
     {
         if (exactCik == null)
             return null;

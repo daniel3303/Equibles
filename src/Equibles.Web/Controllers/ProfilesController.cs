@@ -464,13 +464,15 @@ public class ProfilesController : BaseController
         List<string> missingCikSink
     )
     {
+        var candidates = await _institutionalHolderRepository.GetByCiks(distinctCiks);
         var holders = new List<InstitutionalHolder>();
+        var seenHolderIds = new HashSet<Guid>();
         foreach (var cik in distinctCiks)
         {
-            var holder = await _institutionalHolderRepository.GetByCik(cik);
+            var holder = InstitutionalHolderRepository.MatchRequestedCik(candidates, cik);
             if (holder == null)
                 missingCikSink.Add(cik);
-            else
+            else if (seenHolderIds.Add(holder.Id))
                 holders.Add(holder);
         }
         return holders;
@@ -527,7 +529,15 @@ public class ProfilesController : BaseController
         if (validatedCiks.Any(c => c == null))
             return null;
 
-        return validatedCiks.Distinct(StringComparer.Ordinal).ToList();
+        var normalized = new List<string>(validatedCiks.Count);
+        var seenCanonicalCiks = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var cik in validatedCiks)
+        {
+            if (seenCanonicalCiks.Add(CikNormalizer.Canonicalize(cik)))
+                normalized.Add(cik);
+        }
+
+        return normalized;
     }
 
     // Resolves the picker chips for first render — preserves the order the user
@@ -538,17 +548,12 @@ public class ProfilesController : BaseController
         if (ciks.Count == 0)
             return [];
 
-        var byCik = (
-            await _institutionalHolderRepository
-                .GetByCiks(ciks)
-                .Select(h => new { h.Cik, h.Name })
-                .ToListAsync()
-        ).ToDictionary(x => x.Cik, x => x.Name, StringComparer.OrdinalIgnoreCase);
+        var holders = await _institutionalHolderRepository.GetByCiks(ciks);
 
         return ciks.Select(cik => new InstitutionPick
             {
                 Cik = cik,
-                Name = byCik.GetValueOrDefault(cik),
+                Name = InstitutionalHolderRepository.MatchRequestedCik(holders, cik)?.Name,
             })
             .ToList();
     }

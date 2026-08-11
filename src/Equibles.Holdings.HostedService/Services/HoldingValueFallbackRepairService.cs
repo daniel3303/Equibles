@@ -143,11 +143,7 @@ public class HoldingValueFallbackRepairService
 
     public async Task<int> Repair(CancellationToken cancellationToken)
     {
-        var revisedFiled = await RunPhase(
-            "revise-filed",
-            ReviseFiledPublishes,
-            cancellationToken
-        );
+        var revisedFiled = await RunPhase("revise-filed", ReviseFiledPublishes, cancellationToken);
         var healedZeros = await RunPhase("stuck-zeros", HealStuckZeros, cancellationToken);
         var resetImplausible = await RunPhase(
             "implausible-derivations",
