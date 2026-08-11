@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.Congress.Data.Extensions;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.Repositories;
 using Equibles.Core.Extensions;
@@ -85,7 +86,7 @@ public class CongressTools
 
                 var trades = await query
                     .Include(t => t.CongressMember)
-                    .OrderByDescending(t => t.TransactionDate)
+                    .OrderNewestFirst()
                     .Take(maxResults)
                     .ToListAsync();
 
@@ -162,14 +163,9 @@ public class CongressTools
                 offset = McpLimit.ClampOffset(offset);
                 var totalCount = await query.CountAsync();
 
-                // Same-day trades tie constantly, so the ordering ends on the row id — an
-                // offset over a partial order would silently repeat or skip trades between
-                // pages.
                 var trades = await query
                     .Include(t => t.CommonStock)
-                    .OrderByDescending(t => t.TransactionDate)
-                    .ThenByDescending(t => t.FilingDate)
-                    .ThenBy(t => t.Id)
+                    .OrderNewestFirst()
                     .Skip(offset)
                     .Take(maxResults)
                     .ToListAsync();

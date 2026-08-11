@@ -215,6 +215,39 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         result.IndexOf("2026-03-15").Should().BeLessThan(result.IndexOf("2026-01-10"));
     }
 
+    [Fact]
+    public async Task GetCongressionalTrades_TiedDates_UseRowIdentityBeforeTheLimit()
+    {
+        var stock = NvdaStock();
+        var pelosi = PelosiMember();
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<CongressMember>().Add(pelosi);
+        var day = new DateOnly(2026, 3, 15);
+        var alpha = TradeFor(pelosi, stock, day, assetName: "Alpha Lot");
+        var bravo = TradeFor(pelosi, stock, day, assetName: "Bravo Lot");
+        var charlie = TradeFor(pelosi, stock, day, assetName: "Charlie Lot");
+        var delta = TradeFor(pelosi, stock, day, assetName: "Delta Lot");
+        alpha.Id = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        bravo.Id = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        charlie.Id = Guid.Parse("00000000-0000-0000-0000-000000000003");
+        delta.Id = Guid.Parse("00000000-0000-0000-0000-000000000004");
+        DbContext.Set<CongressionalTrade>().AddRange(delta, charlie, bravo, alpha);
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetCongressionalTrades(
+                "NVDA",
+                startDate: "2026-01-01",
+                endDate: "2026-04-30",
+                maxResults: 2
+            );
+
+        result.Should().Contain("Alpha Lot");
+        result.Should().Contain("Bravo Lot");
+        result.Should().NotContain("Charlie Lot");
+        result.Should().NotContain("Delta Lot");
+    }
+
     // ── GetMemberTrades ──────────────────────────────────────────────────
 
     [Fact]

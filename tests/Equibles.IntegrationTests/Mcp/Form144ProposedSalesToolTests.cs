@@ -96,6 +96,29 @@ public class Form144ProposedSalesToolTests : IDisposable
     }
 
     [Fact]
+    public async Task GetProposedSales_TiedDates_UseAccessionBeforeTheLimit()
+    {
+        var stock = SeedStock();
+        var day = new DateOnly(2026, 5, 27);
+        _dbContext
+            .Set<Form144Filing>()
+            .AddRange(
+                MakeFiling(stock.Id, "0004", day, "DELTA SELLER", 400),
+                MakeFiling(stock.Id, "0003", day, "CHARLIE SELLER", 300),
+                MakeFiling(stock.Id, "0002", day, "BRAVO SELLER", 200),
+                MakeFiling(stock.Id, "0001", day, "ALPHA SELLER", 100)
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales("AAPL", maxResults: 2);
+
+        result.Should().Contain("ALPHA SELLER");
+        result.Should().Contain("BRAVO SELLER");
+        result.Should().NotContain("CHARLIE SELLER");
+        result.Should().NotContain("DELTA SELLER");
+    }
+
+    [Fact]
     public async Task GetProposedSales_RespectsMaxResults()
     {
         var stock = SeedStock();

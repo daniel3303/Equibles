@@ -216,6 +216,39 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetInsiderTransactions_TiedDates_UseFilingIdentityBeforeTheLimit()
+    {
+        var stock = CreateStock("TIE", "Tie Corp.");
+        var alpha = CreateOwner("0001111101", "Alpha Insider");
+        var bravo = CreateOwner("0001111102", "Bravo Insider");
+        var charlie = CreateOwner("0001111103", "Charlie Insider");
+        var delta = CreateOwner("0001111104", "Delta Insider");
+        await SeedStock(stock);
+        await SeedOwner(alpha);
+        await SeedOwner(bravo);
+        await SeedOwner(charlie);
+        await SeedOwner(delta);
+
+        var day = new DateOnly(2026, 4, 23);
+        DbContext
+            .Set<InsiderTransaction>()
+            .AddRange(
+                CreateTransaction(stock, delta, day, day, accessionNumber: "0001-26-000004"),
+                CreateTransaction(stock, charlie, day, day, accessionNumber: "0001-26-000003"),
+                CreateTransaction(stock, bravo, day, day, accessionNumber: "0001-26-000002"),
+                CreateTransaction(stock, alpha, day, day, accessionNumber: "0001-26-000001")
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetInsiderTransactions("TIE", maxResults: 2);
+
+        result.Should().Contain("Alpha Insider");
+        result.Should().Contain("Bravo Insider");
+        result.Should().NotContain("Charlie Insider");
+        result.Should().NotContain("Delta Insider");
+    }
+
+    [Fact]
     public async Task GetInsiderTransactions_RespectsMaxResults()
     {
         var stock = CreateStock("AAPL", "Apple Inc.");
@@ -685,9 +718,10 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         // Four owners tied on the name sort key so only the CIK tiebreak orders them —
         // exactly where a partial order would repeat or skip rows between offset pages.
         var ciks = new[] { "0000555001", "0000555002", "0000555003", "0000555004" };
+        var insertionOrder = new[] { ciks[3], ciks[1], ciks[0], ciks[2] };
         DbContext
             .Set<InsiderOwner>()
-            .AddRange(ciks.Select(cik => CreateOwner(cik: cik, name: "Paged Insider")));
+            .AddRange(insertionOrder.Select(cik => CreateOwner(cik: cik, name: "Paged Insider")));
         await DbContext.SaveChangesAsync();
 
         var page1 = await Sut().SearchInsiders("Paged", maxResults: 2);
@@ -695,10 +729,16 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
 
         var onPage1 = ciks.Where(c => page1.Contains(c)).ToList();
         var onPage2 = ciks.Where(c => page2.Contains(c)).ToList();
-        onPage1.Should().HaveCount(2);
-        onPage2.Should().HaveCount(2);
-        onPage1.Intersect(onPage2).Should().BeEmpty();
-        onPage1.Concat(onPage2).Should().BeEquivalentTo(ciks);
+        onPage1.Should().Equal(ciks[0], ciks[1]);
+        onPage2.Should().Equal(ciks[2], ciks[3]);
+        page1
+            .IndexOf(ciks[0], StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(page1.IndexOf(ciks[1], StringComparison.Ordinal));
+        page2
+            .IndexOf(ciks[2], StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(page2.IndexOf(ciks[3], StringComparison.Ordinal));
         page2.Should().Contain("Showing results 3-4 of 4 (the last page).");
     }
 
