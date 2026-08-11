@@ -49,10 +49,14 @@ public class StockCombinedQuarterService
         CancellationToken cancellationToken = default
     )
     {
-        var dates = (await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(
-            stock,
-            cancellationToken
-        )).Take(2).ToList();
+        var dates = (
+            await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(
+                stock,
+                cancellationToken
+            )
+        )
+            .Take(2)
+            .ToList();
         if (dates.Count == 0)
             return null;
 

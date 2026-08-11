@@ -87,21 +87,25 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         var q2 = new DateOnly(2024, 6, 30);
 
         _dbContext.AddRange(stock, holder);
-        _dbContext.Set<StockQuarterlyActivity>().AddRange(
-            new StockQuarterlyActivity {
-                CommonStockId = stock.Id,
-                ReportDate = q1,
-                CurrentFilerCount = 1,
-            },
-            new StockQuarterlyActivity {
-                CommonStockId = stock.Id,
-                ReportDate = q2,
-                CurrentFilerCount = 1,
-            }
-        );
-        _dbContext.Set<InstitutionalHolding>().Add(
-            Holding(stock.Id, holder.Id, q2, FilingType.Form13F, "13F-Q2")
-        );
+        _dbContext
+            .Set<StockQuarterlyActivity>()
+            .AddRange(
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = q1,
+                    CurrentFilerCount = 1,
+                },
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = q2,
+                    CurrentFilerCount = 1,
+                }
+            );
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .Add(Holding(stock.Id, holder.Id, q2, FilingType.Form13F, "13F-Q2"));
         await _dbContext.SaveChangesAsync(CancellationToken.None);
 
         var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
@@ -118,17 +122,19 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         var liveQuarter = new DateOnly(2024, 9, 30);
 
         _dbContext.AddRange(stock, holder);
-        _dbContext.Set<StockQuarterlyActivity>().Add(
-            new StockQuarterlyActivity
-            {
-                CommonStockId = stock.Id,
-                ReportDate = snapshotQuarter,
-                CurrentFilerCount = 1,
-            }
-        );
-        _dbContext.Set<InstitutionalHolding>().Add(
-            Holding(stock.Id, holder.Id, liveQuarter, FilingType.Form13F, "13F-LIVE")
-        );
+        _dbContext
+            .Set<StockQuarterlyActivity>()
+            .Add(
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = snapshotQuarter,
+                    CurrentFilerCount = 1,
+                }
+            );
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .Add(Holding(stock.Id, holder.Id, liveQuarter, FilingType.Form13F, "13F-LIVE"));
         await _dbContext.SaveChangesAsync(CancellationToken.None);
 
         var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
@@ -145,23 +151,27 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         var soldOutQuarter = new DateOnly(2024, 6, 30);
 
         _dbContext.AddRange(stock, holder);
-        _dbContext.Set<StockQuarterlyActivity>().AddRange(
-            new StockQuarterlyActivity {
-                CommonStockId = stock.Id,
-                ReportDate = heldQuarter,
-                CurrentFilerCount = 1,
-            },
-            new StockQuarterlyActivity {
-                CommonStockId = stock.Id,
-                ReportDate = soldOutQuarter,
-                CurrentFilerCount = 0,
-                PreviousFilerCount = 1,
-                SoldOutFilerCount = 1,
-            }
-        );
-        _dbContext.Set<InstitutionalHolding>().Add(
-            Holding(stock.Id, holder.Id, heldQuarter, FilingType.Form13F, "13F-HELD")
-        );
+        _dbContext
+            .Set<StockQuarterlyActivity>()
+            .AddRange(
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = heldQuarter,
+                    CurrentFilerCount = 1,
+                },
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = soldOutQuarter,
+                    CurrentFilerCount = 0,
+                    PreviousFilerCount = 1,
+                    SoldOutFilerCount = 1,
+                }
+            );
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .Add(Holding(stock.Id, holder.Id, heldQuarter, FilingType.Form13F, "13F-HELD"));
         await _dbContext.SaveChangesAsync(CancellationToken.None);
 
         var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
@@ -179,21 +189,25 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         var staleSnapshotQuarter = new DateOnly(2024, 9, 30);
 
         _dbContext.AddRange(stock, holder);
-        _dbContext.Set<StockQuarterlyActivity>().AddRange(
-            new StockQuarterlyActivity {
-                CommonStockId = stock.Id,
-                ReportDate = q1,
-                CurrentFilerCount = 1,
-            },
-            new StockQuarterlyActivity {
-                CommonStockId = stock.Id,
-                ReportDate = staleSnapshotQuarter,
-                CurrentFilerCount = 1,
-            }
-        );
-        _dbContext.Set<InstitutionalHolding>().Add(
-            Holding(stock.Id, holder.Id, liveQuarter, FilingType.Form13F, "13F-LIVE-Q2")
-        );
+        _dbContext
+            .Set<StockQuarterlyActivity>()
+            .AddRange(
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = q1,
+                    CurrentFilerCount = 1,
+                },
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = staleSnapshotQuarter,
+                    CurrentFilerCount = 1,
+                }
+            );
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .Add(Holding(stock.Id, holder.Id, liveQuarter, FilingType.Form13F, "13F-LIVE-Q2"));
         await _dbContext.SaveChangesAsync(CancellationToken.None);
 
         var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
@@ -206,13 +220,16 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     {
         var stock = Stock("EMPTY");
         _dbContext.Add(stock);
-        _dbContext.Set<StockQuarterlyActivity>().Add(
-            new StockQuarterlyActivity {
-                CommonStockId = stock.Id,
-                ReportDate = new DateOnly(2024, 9, 30),
-                CurrentFilerCount = 1,
-            }
-        );
+        _dbContext
+            .Set<StockQuarterlyActivity>()
+            .Add(
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = new DateOnly(2024, 9, 30),
+                    CurrentFilerCount = 1,
+                }
+            );
         await _dbContext.SaveChangesAsync(CancellationToken.None);
 
         var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
@@ -230,11 +247,13 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         var schedule13GDate = new DateOnly(2024, 8, 12);
 
         _dbContext.AddRange(stock, holder);
-        _dbContext.Set<InstitutionalHolding>().AddRange(
-            Holding(stock.Id, holder.Id, q1, FilingType.Form13F, "13F-Q1"),
-            Holding(stock.Id, holder.Id, q2, FilingType.Form13F, "13F-Q2"),
-            Holding(stock.Id, holder.Id, schedule13GDate, FilingType.Schedule13G, "13G")
-        );
+        _dbContext
+            .Set<InstitutionalHolding>()
+            .AddRange(
+                Holding(stock.Id, holder.Id, q1, FilingType.Form13F, "13F-Q1"),
+                Holding(stock.Id, holder.Id, q2, FilingType.Form13F, "13F-Q2"),
+                Holding(stock.Id, holder.Id, schedule13GDate, FilingType.Schedule13G, "13G")
+            );
         await _dbContext.SaveChangesAsync(CancellationToken.None);
 
         var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);

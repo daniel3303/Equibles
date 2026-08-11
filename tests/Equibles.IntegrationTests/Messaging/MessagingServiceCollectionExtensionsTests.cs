@@ -74,11 +74,12 @@ public class MessagingServiceCollectionExtensionsTests
             EndpointName = "shared-endpoint",
         };
 
-        var act = () => MessagingServiceCollectionExtensions.ResolveConsumerEndpointName(
-            typeof(StockCusipChangedConsumer),
-            attribute,
-            "worker"
-        );
+        var act = () =>
+            MessagingServiceCollectionExtensions.ResolveConsumerEndpointName(
+                typeof(StockCusipChangedConsumer),
+                attribute,
+                "worker"
+            );
 
         act.Should()
             .Throw<InvalidOperationException>()
