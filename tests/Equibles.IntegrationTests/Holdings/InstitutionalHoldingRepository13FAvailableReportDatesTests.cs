@@ -78,6 +78,187 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         dates.Should().Equal(q3, q2, q1);
     }
 
+    [Fact]
+    public async Task Get13FReportDatesByStockSnapshotBacked_ReturnsSnapshotDatesNewestFirst()
+    {
+        var stock = Stock("MSFT");
+        var holder = Holder("0000000005");
+        var q1 = new DateOnly(2024, 3, 31);
+        var q2 = new DateOnly(2024, 6, 30);
+
+        _dbContext.AddRange(stock, holder);
+        _dbContext.Set<StockQuarterlyActivity>().AddRange(
+            new StockQuarterlyActivity {
+                CommonStockId = stock.Id,
+                ReportDate = q1,
+                CurrentFilerCount = 1,
+            },
+            new StockQuarterlyActivity {
+                CommonStockId = stock.Id,
+                ReportDate = q2,
+                CurrentFilerCount = 1,
+            }
+        );
+        _dbContext.Set<InstitutionalHolding>().Add(
+            Holding(stock.Id, holder.Id, q2, FilingType.Form13F, "13F-Q2")
+        );
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+        var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
+
+        dates.Should().Equal(q2, q1);
+    }
+
+    [Fact]
+    public async Task Get13FReportDatesByStockSnapshotBacked_PrependsNewestLiveQuarterDuringRefreshLag()
+    {
+        var stock = Stock("NVDA");
+        var holder = Holder("0000000002");
+        var snapshotQuarter = new DateOnly(2024, 6, 30);
+        var liveQuarter = new DateOnly(2024, 9, 30);
+
+        _dbContext.AddRange(stock, holder);
+        _dbContext.Set<StockQuarterlyActivity>().Add(
+            new StockQuarterlyActivity
+            {
+                CommonStockId = stock.Id,
+                ReportDate = snapshotQuarter,
+                CurrentFilerCount = 1,
+            }
+        );
+        _dbContext.Set<InstitutionalHolding>().Add(
+            Holding(stock.Id, holder.Id, liveQuarter, FilingType.Form13F, "13F-LIVE")
+        );
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+        var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
+
+        dates.Should().Equal(liveQuarter, snapshotQuarter);
+    }
+
+    [Fact]
+    public async Task Get13FReportDatesByStockSnapshotBacked_ExcludesSoldOutSnapshotQuarter()
+    {
+        var stock = Stock("EXIT");
+        var holder = Holder("0000000004");
+        var heldQuarter = new DateOnly(2024, 3, 31);
+        var soldOutQuarter = new DateOnly(2024, 6, 30);
+
+        _dbContext.AddRange(stock, holder);
+        _dbContext.Set<StockQuarterlyActivity>().AddRange(
+            new StockQuarterlyActivity {
+                CommonStockId = stock.Id,
+                ReportDate = heldQuarter,
+                CurrentFilerCount = 1,
+            },
+            new StockQuarterlyActivity {
+                CommonStockId = stock.Id,
+                ReportDate = soldOutQuarter,
+                CurrentFilerCount = 0,
+                PreviousFilerCount = 1,
+                SoldOutFilerCount = 1,
+            }
+        );
+        _dbContext.Set<InstitutionalHolding>().Add(
+            Holding(stock.Id, holder.Id, heldQuarter, FilingType.Form13F, "13F-HELD")
+        );
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+        var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
+
+        dates.Should().Equal(heldQuarter);
+    }
+
+    [Fact]
+    public async Task Get13FReportDatesByStockSnapshotBacked_DropsSnapshotNewerThanLiveHistory()
+    {
+        var stock = Stock("STALE");
+        var holder = Holder("0000000006");
+        var q1 = new DateOnly(2024, 3, 31);
+        var liveQuarter = new DateOnly(2024, 6, 30);
+        var staleSnapshotQuarter = new DateOnly(2024, 9, 30);
+
+        _dbContext.AddRange(stock, holder);
+        _dbContext.Set<StockQuarterlyActivity>().AddRange(
+            new StockQuarterlyActivity {
+                CommonStockId = stock.Id,
+                ReportDate = q1,
+                CurrentFilerCount = 1,
+            },
+            new StockQuarterlyActivity {
+                CommonStockId = stock.Id,
+                ReportDate = staleSnapshotQuarter,
+                CurrentFilerCount = 1,
+            }
+        );
+        _dbContext.Set<InstitutionalHolding>().Add(
+            Holding(stock.Id, holder.Id, liveQuarter, FilingType.Form13F, "13F-LIVE-Q2")
+        );
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+        var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
+
+        dates.Should().Equal(liveQuarter, q1);
+    }
+
+    [Fact]
+    public async Task Get13FReportDatesByStockSnapshotBacked_ReturnsEmptyWhenSnapshotHasNoLiveHoldings()
+    {
+        var stock = Stock("EMPTY");
+        _dbContext.Add(stock);
+        _dbContext.Set<StockQuarterlyActivity>().Add(
+            new StockQuarterlyActivity {
+                CommonStockId = stock.Id,
+                ReportDate = new DateOnly(2024, 9, 30),
+                CurrentFilerCount = 1,
+            }
+        );
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+        var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
+
+        dates.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Get13FReportDatesByStockSnapshotBacked_FallsBackToLive13FHistoryWithoutSnapshot()
+    {
+        var stock = Stock("MU");
+        var holder = Holder("0000000003");
+        var q1 = new DateOnly(2024, 3, 31);
+        var q2 = new DateOnly(2024, 6, 30);
+        var schedule13GDate = new DateOnly(2024, 8, 12);
+
+        _dbContext.AddRange(stock, holder);
+        _dbContext.Set<InstitutionalHolding>().AddRange(
+            Holding(stock.Id, holder.Id, q1, FilingType.Form13F, "13F-Q1"),
+            Holding(stock.Id, holder.Id, q2, FilingType.Form13F, "13F-Q2"),
+            Holding(stock.Id, holder.Id, schedule13GDate, FilingType.Schedule13G, "13G")
+        );
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+        var dates = await _repository.Get13FReportDatesByStockSnapshotBacked(stock);
+
+        dates.Should().Equal(q2, q1);
+    }
+
+    private static CommonStock Stock(string ticker) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            Ticker = ticker,
+            Name = $"{ticker} Inc.",
+            Cik = Guid.NewGuid().ToString("N")[..10],
+        };
+
+    private static InstitutionalHolder Holder(string cik) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            Cik = cik,
+            Name = $"Holder {cik}",
+        };
+
     private static InstitutionalHolding Holding(
         Guid stockId,
         Guid holderId,

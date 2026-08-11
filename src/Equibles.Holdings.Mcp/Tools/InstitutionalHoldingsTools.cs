@@ -101,9 +101,8 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var reportDates = await _holdingRepository
-                    .Get13FReportDatesByStock(stock)
-                    .ToListAsync();
+                var reportDates =
+                    await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(stock);
                 if (reportDates.Count == 0)
                     return $"No institutional holdings data available for {ticker}.";
 
@@ -270,10 +269,11 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var reportDates = await _holdingRepository
-                    .Get13FReportDatesByStock(stock)
+                var reportDates = (
+                    await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(stock)
+                )
                     .Take(McpLimit.Clamp(maxPeriods))
-                    .ToListAsync();
+                    .ToList();
 
                 if (reportDates.Count == 0)
                     return $"No institutional holdings history available for {ticker}.";
@@ -724,9 +724,8 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var reportDates = await _holdingRepository
-                    .Get13FReportDatesByStock(stock)
-                    .ToListAsync();
+                var reportDates =
+                    await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(stock);
                 if (reportDates.Count == 0)
                     return $"No institutional holdings data available for {ticker}.";
 
