@@ -19,6 +19,6 @@ The assistant calls the `GetFundCloneBacktest` tool. It reconstructs the filer's
 
 ## What you should see
 
-A reply comparing the cloned portfolio with the benchmark: total return, annualized return (CAGR), and maximum drawdown for each, plus the alpha between them.
+A reply comparing the cloned portfolio with the benchmark: raw-closing-price return, annualized price return (CAGR), and maximum drawdown for each, plus the price-return alpha between them. Dividends are excluded, and a captured split can shorten the comparable window.
 
 A few things shape the result. The simulation only sees holdings as of each 13F filing (quarterly, after the filing lag), so it captures the filer's disclosed long U.S.-equity positions, not intra-quarter trades, options, or short positions. If the reply says it couldn't run, the filer's holdings or the price history for the window probably haven't been imported yet — try a large, long-tenured filer such as Berkshire Hathaway to confirm the data is flowing.

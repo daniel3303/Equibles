@@ -10,6 +10,9 @@ public class SmartMoneyIndexConstituent
 {
     public Guid CommonStockId { get; set; }
 
+    /// <summary>Exact sibling listing; null means the issuer's primary security.</summary>
+    public string ListedTicker { get; set; }
+
     public string Ticker { get; set; }
 
     public string Name { get; set; }

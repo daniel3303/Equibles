@@ -63,6 +63,22 @@ public class FundScoreRepositoryTests : IDisposable
         result.AlphaPercent.Should().Be(4.2m);
     }
 
+    [Fact]
+    public async Task CustomerQueries_ExcludeScoresFromAnOlderCalculationBasis()
+    {
+        var holder = new InstitutionalHolder { Cik = "0001234567", Name = "Test Capital" };
+        var legacy = MakeScore(alpha: 99m);
+        legacy.InstitutionalHolderId = holder.Id;
+        legacy.CalculationVersion = FundScore.CurrentCalculationVersion - 1;
+        _repository.Add(legacy);
+        await _repository.SaveChanges();
+
+        (await _repository.GetByHolder(holder, 3, "SPY")).Should().BeNull();
+        _repository.GetByHolder(holder).Should().BeEmpty();
+        _repository.GetRankedByAlpha(3, "SPY").Should().BeEmpty();
+        (await _repository.GetByHolderForUpdate(holder, 3, "SPY")).Should().BeSameAs(legacy);
+    }
+
     private static FundScore MakeScore(
         decimal alpha,
         int windowYears = 3,

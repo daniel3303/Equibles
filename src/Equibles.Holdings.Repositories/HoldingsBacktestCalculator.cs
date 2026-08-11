@@ -44,6 +44,25 @@ public static class HoldingsBacktestCalculator
         DateOnly to,
         Func<Guid, DateOnly, decimal?> priceOf,
         Func<DateOnly, decimal?> benchmarkPriceOf
+    ) =>
+        CalculateByListing(
+            snapshots,
+            from,
+            to,
+            (stockId, _, date) => priceOf(stockId, date),
+            benchmarkPriceOf
+        );
+
+    /// <summary>
+    /// Listing-aware simulation used by production loaders. A sibling share class is priced from
+    /// its own exact series; null <see cref="BacktestPosition.ListedTicker"/> means the primary.
+    /// </summary>
+    public static BacktestResult CalculateByListing(
+        IReadOnlyList<BacktestQuarterSnapshot> snapshots,
+        DateOnly from,
+        DateOnly to,
+        Func<Guid, string, DateOnly, decimal?> priceOf,
+        Func<DateOnly, decimal?> benchmarkPriceOf
     )
     {
         var result = new BacktestResult { StartDate = from, EndDate = to };
@@ -109,7 +128,7 @@ public static class HoldingsBacktestCalculator
             return result;
         }
 
-        var holdings = new Dictionary<Guid, decimal>();
+        var holdings = new Dictionary<BacktestSecurityKey, decimal>();
         var portfolioValue = InitialValue;
 
         Rebalance(holdings, ordered[snapshotIdx].Snapshot, startDate, portfolioValue, priceOf);
@@ -157,52 +176,52 @@ public static class HoldingsBacktestCalculator
     }
 
     private static void Rebalance(
-        Dictionary<Guid, decimal> holdings,
+        Dictionary<BacktestSecurityKey, decimal> holdings,
         BacktestQuarterSnapshot snapshot,
         DateOnly date,
         decimal currentValue,
-        Func<Guid, DateOnly, decimal?> priceOf
+        Func<Guid, string, DateOnly, decimal?> priceOf
     )
     {
         holdings.Clear();
         if (currentValue <= 0)
             return;
 
-        // Aggregate per stock — a holder may report a single stock across multiple rows
-        // when multiple managers share discretion. Options rows are notional and skipped.
+        // Aggregate per exact listing — a holder may report one class across multiple rows when
+        // several managers share discretion. Sibling classes never share a price series.
         var positions = snapshot
             .Positions.Where(p => !p.IsOption && p.Value > 0)
-            .GroupBy(p => p.CommonStockId)
-            .Select(g => (StockId: g.Key, Value: g.Sum(p => p.Value)))
+            .GroupBy(p => new BacktestSecurityKey(p.CommonStockId, p.ListedTicker))
+            .Select(g => (Security: g.Key, Value: g.Sum(p => p.Value)))
             .ToList();
         var totalValue = positions.Sum(p => p.Value);
         if (totalValue <= 0)
             return;
 
-        foreach (var (stockId, value) in positions)
+        foreach (var (security, value) in positions)
         {
-            var price = priceOf(stockId, date);
+            var price = priceOf(security.CommonStockId, security.ListedTicker, date);
             if (price is null || price.Value <= 0)
                 continue;
             var weight = (decimal)value / totalValue;
             var allocation = currentValue * weight;
-            holdings[stockId] = allocation / price.Value;
+            holdings[security] = allocation / price.Value;
         }
     }
 
     private static decimal MarkToMarket(
-        Dictionary<Guid, decimal> holdings,
+        Dictionary<BacktestSecurityKey, decimal> holdings,
         DateOnly date,
-        Func<Guid, DateOnly, decimal?> priceOf,
+        Func<Guid, string, DateOnly, decimal?> priceOf,
         decimal fallback
     )
     {
         if (holdings.Count == 0)
             return fallback;
         decimal sum = 0;
-        foreach (var (stockId, shares) in holdings)
+        foreach (var (security, shares) in holdings)
         {
-            var price = priceOf(stockId, date);
+            var price = priceOf(security.CommonStockId, security.ListedTicker, date);
             if (price is null || price.Value <= 0)
                 continue;
             sum += shares * price.Value;
@@ -311,4 +330,6 @@ public static class HoldingsBacktestCalculator
         }
         return maxDrawdown;
     }
+
+    public readonly record struct BacktestSecurityKey(Guid CommonStockId, string ListedTicker);
 }

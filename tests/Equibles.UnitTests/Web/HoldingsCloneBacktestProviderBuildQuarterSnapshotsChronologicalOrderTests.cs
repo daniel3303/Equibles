@@ -57,7 +57,7 @@ public class HoldingsCloneBacktestProviderBuildQuarterSnapshotsChronologicalOrde
         {
             var instance = Activator.CreateInstance(
                 RowType,
-                [r.ReportDate, r.StockId, r.Shares, r.Value, r.OptionType]
+                [r.ReportDate, r.StockId, null, r.Shares, r.Value, r.OptionType]
             );
             list.Add(instance);
         }

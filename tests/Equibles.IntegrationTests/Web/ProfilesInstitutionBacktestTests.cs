@@ -111,7 +111,8 @@ public class ProfilesInstitutionBacktestTests
         html.Should().Contain("data-testid=\"backtest-portfolio-summary\"");
         html.Should().Contain("data-testid=\"backtest-benchmark-summary\"");
         html.Should().Contain("data-testid=\"backtest-chart-card\"");
-        html.Should().Contain("Total return");
+        html.Should().Contain("Price return");
+        html.Should().Contain("dividends excluded");
         html.Should().Contain("Max drawdown");
         // The Chart.js bootstrap script serializes the portfolio + benchmark series with
         // Newtonsoft's default culture-invariant formatting; the flat-100 fixture should

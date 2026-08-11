@@ -150,7 +150,11 @@ public class InstitutionsController : BaseController
         // an untranslatable join-of-a-join.
         var scoresQuery = _dbContext
             .Set<FundScore>()
-            .Where(s => s.WindowYears == ScoreWindowYears && s.BenchmarkTicker == ScoreBenchmark);
+            .Where(s =>
+                s.WindowYears == ScoreWindowYears
+                && s.BenchmarkTicker == ScoreBenchmark
+                && s.CalculationVersion == FundScore.CurrentCalculationVersion
+            );
 
         var ordered = sort switch
         {

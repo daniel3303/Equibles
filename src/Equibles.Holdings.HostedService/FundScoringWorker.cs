@@ -139,28 +139,30 @@ public class FundScoringWorker : BackgroundService
             .ToListAsync(cancellationToken);
 
         var benchmark = TickerNormalizer.Normalize(BenchmarkTicker);
-        var scoredAt = await dbContext
+        var scoreStates = await dbContext
             .Set<FundScore>()
             .Where(s => s.WindowYears == WindowYears && s.BenchmarkTicker == benchmark)
-            .Select(s => new { s.InstitutionalHolderId, s.CreationTime })
-            .ToDictionaryAsync(
-                s => s.InstitutionalHolderId,
-                s => s.CreationTime,
-                cancellationToken
-            );
+            .Select(s => new
+            {
+                s.InstitutionalHolderId,
+                s.CreationTime,
+                s.CalculationVersion,
+            })
+            .ToDictionaryAsync(s => s.InstitutionalHolderId, cancellationToken);
 
         var staleBefore = DateTime.UtcNow - MaxScoreAge;
         var pending = holders
             .Where(h =>
-                IsScoreDue(
-                    scoredAt.TryGetValue(h.HolderId, out var lastScored)
-                        ? lastScored
-                        : (DateTime?)null,
+            {
+                scoreStates.TryGetValue(h.HolderId, out var scoreState);
+                return IsScoreDue(
+                    scoreState?.CreationTime,
+                    scoreState?.CalculationVersion,
                     h.LastImported,
                     h.LastFiled,
                     staleBefore
-                )
-            )
+                );
+            })
             .Select(h => h.HolderId)
             .ToList();
 
@@ -180,11 +182,13 @@ public class FundScoringWorker : BackgroundService
     // the score has aged past the staleness floor. Internal so tests can pin the rule.
     internal static bool IsScoreDue(
         DateTime? lastScoredAt,
+        int? calculationVersion,
         DateTime lastImportedAt,
         DateOnly lastFiledOn,
         DateTime staleBefore
     ) =>
-        lastScoredAt is not { } lastScored
+        calculationVersion != FundScore.CurrentCalculationVersion
+        || lastScoredAt is not { } lastScored
         || lastScored < staleBefore
         || lastImportedAt > lastScored
         || lastFiledOn.ToDateTime(TimeOnly.MaxValue) > lastScored;

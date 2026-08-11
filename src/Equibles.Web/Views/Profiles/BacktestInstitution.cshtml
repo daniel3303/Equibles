@@ -9,7 +9,7 @@
     <div class="mb-6">
         <h1 class="text-3xl font-bold mb-1" data-testid="backtest-heading">@Model.HolderName Backtest</h1>
         <p class="text-base-content/60 text-sm">
-            Simulates cloning the institution's quarterly 13F portfolio · rebalanced 45 days after each ReportDate (the latest legal filing deadline) · option positions skipped.
+            Simulates cloning the institution's quarterly 13F portfolio · rebalanced 45 days after each ReportDate (the latest legal filing deadline) · raw closing-price return, dividends excluded · option positions skipped.
         </p>
     </div>
 
@@ -63,9 +63,9 @@
                     <div class="card-body p-4">
                         <h2 class="text-base font-medium mb-2">@row.Label</h2>
                         <stats-row breakpoint="sm">
-                            <stat-tile title="Total return">@row.Summary.TotalReturnPercent.ToString("F2")%</stat-tile>
+                            <stat-tile title="Price return">@row.Summary.TotalReturnPercent.ToString("F2")%</stat-tile>
                             @* CAGR is null when the window is too short to annualize meaningfully. *@
-                            <stat-tile title="CAGR">@(row.Summary.CagrPercent is decimal cagr ? cagr.ToString("F2") + "%" : "—")</stat-tile>
+                            <stat-tile title="Annualized price return">@(row.Summary.CagrPercent is decimal cagr ? cagr.ToString("F2") + "%" : "—")</stat-tile>
                             <stat-tile title="Max drawdown">@row.Summary.MaxDrawdownPercent.ToString("F2")%</stat-tile>
                         </stats-row>
                     </div>
@@ -80,11 +80,11 @@
         <div class="card bg-base-100 shadow-sm mb-6" data-testid="backtest-chart-card">
             <div class="card-body p-4">
                 <div class="flex items-baseline justify-between mb-3">
-                    <h2 class="text-base font-medium m-0">Cumulative return (=100)</h2>
+                    <h2 class="text-base font-medium m-0">Cumulative price return (=100)</h2>
                     <span class="text-xs text-base-content/60">@Model.Result.StartDate.ToString("yyyy-MM-dd") → @Model.Result.EndDate.ToString("yyyy-MM-dd") · @Model.Result.Points.Count.ToString("N0") days</span>
                 </div>
                 <div class="h-[360px]">
-                    <canvas id="backtest-chart" data-testid="backtest-chart" role="img" aria-label="Backtest cumulative return"></canvas>
+                    <canvas id="backtest-chart" data-testid="backtest-chart" role="img" aria-label="Backtest cumulative price return, dividends excluded"></canvas>
                 </div>
             </div>
         </div>

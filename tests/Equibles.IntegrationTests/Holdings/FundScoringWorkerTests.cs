@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data;
@@ -67,6 +68,32 @@ public class FundScoringWorkerTests : IDisposable
         persisted.Should().HaveCount(1);
         persisted[0].AlphaPercent.Should().BeGreaterThan(0m);
         persisted[0].BenchmarkTicker.Should().Be("SPY");
+        persisted[0].CalculationVersion.Should().Be(FundScore.CurrentCalculationVersion);
+    }
+
+    [Fact]
+    public async Task ScoreAllHolders_RecomputesAFreshScoreFromAnOlderCalculationBasis()
+    {
+        var holder = SeedDoublingPortfolioAgainstFlatBenchmark();
+        _fundScoreRepository.Add(
+            new FundScore
+            {
+                InstitutionalHolderId = holder.Id,
+                BenchmarkTicker = "SPY",
+                WindowYears = FundScoringManager.DefaultWindowYears,
+                CalculationVersion = FundScore.CurrentCalculationVersion - 1,
+                AlphaPercent = -99m,
+                CreationTime = DateTime.UtcNow.AddYears(1),
+            }
+        );
+        await _fundScoreRepository.SaveChanges();
+
+        var scored = await _worker.ScoreAllHolders(CancellationToken.None);
+
+        scored.Should().Be(1);
+        var persisted = _fundScoreRepository.GetByHolder(holder).Should().ContainSingle().Subject;
+        persisted.CalculationVersion.Should().Be(FundScore.CurrentCalculationVersion);
+        persisted.AlphaPercent.Should().BeGreaterThan(0m);
     }
 
     [Fact]
@@ -99,7 +126,11 @@ public class FundScoringWorkerTests : IDisposable
                     .Returns(_ => new FundScoringManager(
                         new InstitutionalHoldingRepository(_dbContext),
                         new CommonStockRepository(_dbContext),
-                        new DailyStockPriceRepository(_dbContext),
+                        new BacktestPriceLoader(
+                            new DailyStockPriceRepository(_dbContext),
+                            new CommonStockRepository(_dbContext),
+                            new StockSplitRepository(_dbContext)
+                        ),
                         new FundScoreRepository(_dbContext)
                     ));
                 var scope = Substitute.For<IServiceScope>();
@@ -167,6 +198,7 @@ public class FundScoringWorkerTests : IDisposable
                 new DailyStockPrice
                 {
                     CommonStockId = stock.Id,
+                    ListedTicker = stock.Ticker,
                     Date = date,
                     Open = close,
                     High = close,

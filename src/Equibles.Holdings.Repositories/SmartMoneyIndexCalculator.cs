@@ -8,9 +8,10 @@ namespace Equibles.Holdings.Repositories;
 /// least <c>minConsensus</c> of the funds — ranks them by consensus count then by average
 /// portfolio weight, caps the list at <c>maxConstituents</c>, and equal-weights what remains.
 /// <para>
-/// Pure and id-based: each input snapshot is one fund's latest portfolio (option rows and
+/// Pure and listing-based: each input snapshot is one fund's latest portfolio (option rows and
 /// non-positive values ignored, the same convention <see cref="HoldingsBacktestCalculator"/>
-/// uses). The caller resolves tickers/names and runs the backtest.
+/// uses). The caller canonicalizes legacy-null primary attribution, resolves tickers/names, and
+/// runs the backtest.
 /// </para>
 /// </summary>
 public static class SmartMoneyIndexCalculator
@@ -33,34 +34,34 @@ public static class SmartMoneyIndexCalculator
         maxConstituents = Math.Max(1, maxConstituents);
         minConsensus = Math.Max(1, minConsensus);
 
-        // Per stock: how many funds hold it, and the running sum of its per-fund portfolio weight.
-        var accumulator = new Dictionary<Guid, ConvictionAccumulator>();
+        // Per exact listing: how many funds hold it, and the running sum of its per-fund weight.
+        var accumulator = new Dictionary<SecurityKey, ConvictionAccumulator>();
 
         foreach (var fund in fundPortfolios)
         {
-            // Collapse a fund's multiple discretion rows for the same stock into one position,
+            // Collapse a fund's multiple discretion rows for the same listing into one position,
             // dropping options (notional) and non-positive values before weighting.
             var positions = fund
                 .Positions.Where(p => !p.IsOption && p.Value > 0)
-                .GroupBy(p => p.CommonStockId)
-                .Select(g => (StockId: g.Key, Value: g.Sum(p => p.Value)))
+                .GroupBy(p => new SecurityKey(p.CommonStockId, p.ListedTicker))
+                .Select(g => (Security: g.Key, Value: g.Sum(p => p.Value)))
                 .ToList();
 
             var totalValue = positions.Sum(p => p.Value);
             if (totalValue <= 0)
                 continue;
 
-            foreach (var (stockId, value) in positions)
+            foreach (var (security, value) in positions)
             {
                 var weightPercent = (decimal)value / totalValue * 100m;
-                if (accumulator.TryGetValue(stockId, out var current))
+                if (accumulator.TryGetValue(security, out var current))
                 {
                     current.HeldByCount++;
                     current.WeightSum += weightPercent;
                 }
                 else
                 {
-                    accumulator[stockId] = new ConvictionAccumulator
+                    accumulator[security] = new ConvictionAccumulator
                     {
                         HeldByCount = 1,
                         WeightSum = weightPercent,
@@ -73,7 +74,8 @@ public static class SmartMoneyIndexCalculator
             .Where(entry => entry.Value.HeldByCount >= minConsensus)
             .OrderByDescending(entry => entry.Value.HeldByCount)
             .ThenByDescending(entry => entry.Value.WeightSum / entry.Value.HeldByCount)
-            .ThenBy(entry => entry.Key) // deterministic tie-break so ties don't reorder run to run
+            .ThenBy(entry => entry.Key.CommonStockId)
+            .ThenBy(entry => entry.Key.ListedTicker, StringComparer.Ordinal)
             .Take(maxConstituents)
             .ToList();
 
@@ -85,7 +87,8 @@ public static class SmartMoneyIndexCalculator
         return selected
             .Select(entry => new SmartMoneyIndexConstituent
             {
-                CommonStockId = entry.Key,
+                CommonStockId = entry.Key.CommonStockId,
+                ListedTicker = entry.Key.ListedTicker,
                 HeldByCount = entry.Value.HeldByCount,
                 AverageWeightPercent = Math.Round(
                     entry.Value.WeightSum / entry.Value.HeldByCount,
@@ -101,4 +104,6 @@ public static class SmartMoneyIndexCalculator
         public int HeldByCount { get; set; }
         public decimal WeightSum { get; set; }
     }
+
+    private readonly record struct SecurityKey(Guid CommonStockId, string ListedTicker);
 }

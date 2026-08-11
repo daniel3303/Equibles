@@ -5,7 +5,6 @@ using Equibles.Core.AutoWiring;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
-using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.BusinessLogic;
@@ -33,19 +32,19 @@ public class FundScoringManager
 
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly CommonStockRepository _stockRepository;
-    private readonly DailyStockPriceRepository _priceRepository;
+    private readonly BacktestPriceLoader _priceLoader;
     private readonly FundScoreRepository _fundScoreRepository;
 
     public FundScoringManager(
         InstitutionalHoldingRepository holdingRepository,
         CommonStockRepository stockRepository,
-        DailyStockPriceRepository priceRepository,
+        BacktestPriceLoader priceLoader,
         FundScoreRepository fundScoreRepository
     )
     {
         _holdingRepository = holdingRepository;
         _stockRepository = stockRepository;
-        _priceRepository = priceRepository;
+        _priceLoader = priceLoader;
         _fundScoreRepository = fundScoreRepository;
     }
 
@@ -75,7 +74,8 @@ public class FundScoringManager
             holder,
             asOf,
             windowYears,
-            benchmarkStock
+            benchmarkStock,
+            benchmarkTicker
         );
         if (result == null || result.Points.Count == 0 || !IsStorable(result))
         {
@@ -98,7 +98,8 @@ public class FundScoringManager
         InstitutionalHolder holder,
         DateOnly asOf,
         int windowYears,
-        CommonStock benchmarkStock
+        CommonStock benchmarkStock,
+        string benchmarkListedTicker
     )
     {
         var reportDates = await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync();
@@ -121,6 +122,7 @@ public class FundScoringManager
             .Select(h => new HoldingRow(
                 h.ReportDate,
                 h.CommonStockId,
+                h.ListedTicker,
                 h.Shares,
                 h.Value,
                 h.OptionType
@@ -129,17 +131,10 @@ public class FundScoringManager
 
         var snapshots = BuildSnapshots(holdings);
 
-        var stockIds = holdings
-            .Where(h => h.OptionType == null && h.Value > 0)
-            .Select(h => h.CommonStockId)
-            .Distinct()
-            .ToList();
-
-        var backtest = await BacktestPriceLoader.RunBacktest(
-            _priceRepository,
+        var backtest = await _priceLoader.RunBacktest(
             snapshots,
-            stockIds,
             benchmarkStock,
+            benchmarkListedTicker,
             from,
             to
         );
@@ -153,7 +148,11 @@ public class FundScoringManager
         BacktestResult result
     )
     {
-        var score = await _fundScoreRepository.GetByHolder(holder, windowYears, benchmarkTicker);
+        var score = await _fundScoreRepository.GetByHolderForUpdate(
+            holder,
+            windowYears,
+            benchmarkTicker
+        );
         if (score == null)
         {
             score = new FundScore
@@ -174,6 +173,7 @@ public class FundScoringManager
         score.BenchmarkCagrPercent = result.BenchmarkSummary.CagrPercent.Value;
         score.AlphaPercent = score.PortfolioCagrPercent - score.BenchmarkCagrPercent;
         score.MaxDrawdownPercent = result.PortfolioSummary.MaxDrawdownPercent;
+        score.CalculationVersion = FundScore.CurrentCalculationVersion;
         score.CreationTime = DateTime.UtcNow;
 
         await _fundScoreRepository.SaveChanges();
@@ -186,7 +186,11 @@ public class FundScoringManager
         string benchmarkTicker
     )
     {
-        var existing = await _fundScoreRepository.GetByHolder(holder, windowYears, benchmarkTicker);
+        var existing = await _fundScoreRepository.GetByHolderForUpdate(
+            holder,
+            windowYears,
+            benchmarkTicker
+        );
         if (existing == null)
             return;
 
@@ -229,6 +233,7 @@ public class FundScoringManager
                 Positions = g.Select(h => new BacktestPosition
                     {
                         CommonStockId = h.CommonStockId,
+                        ListedTicker = h.ListedTicker,
                         Shares = h.Shares,
                         Value = h.Value,
                         IsOption = h.OptionType != null,
@@ -268,6 +273,7 @@ public class FundScoringManager
     private readonly record struct HoldingRow(
         DateOnly ReportDate,
         Guid CommonStockId,
+        string ListedTicker,
         long Shares,
         long Value,
         OptionType? OptionType

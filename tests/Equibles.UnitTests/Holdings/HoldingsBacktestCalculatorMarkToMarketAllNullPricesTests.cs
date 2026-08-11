@@ -40,12 +40,12 @@ public class HoldingsBacktestCalculatorMarkToMarketAllNullPricesTests
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        var holdings = new Dictionary<Guid, decimal>
+        var holdings = new Dictionary<HoldingsBacktestCalculator.BacktestSecurityKey, decimal>
         {
-            [Guid.NewGuid()] = 100m,
-            [Guid.NewGuid()] = 250m,
+            [new(Guid.NewGuid(), null)] = 100m,
+            [new(Guid.NewGuid(), "SECONDARY")] = 250m,
         };
-        Func<Guid, DateOnly, decimal?> priceOf = (_, _) => null;
+        Func<Guid, string, DateOnly, decimal?> priceOf = (_, _, _) => null;
         const decimal fallback = 42_000m;
 
         var result = (decimal)

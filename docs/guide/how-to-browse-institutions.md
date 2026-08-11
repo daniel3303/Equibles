@@ -42,9 +42,9 @@ Click **Download CSV** at the top of the institution profile to export the full 
 
 2. The backtest page simulates what would have happened if you had cloned the institution's 13F portfolio at each quarterly rebalance date. It shows:
 
-   - A cumulative return chart plotting the cloned portfolio against a benchmark (S&P 500 by default).
+   - A cumulative raw-closing-price return chart against a benchmark (S&P 500 by default); dividends are excluded.
    - Quarter-by-quarter returns for both the clone and the benchmark.
-   - Summary statistics: total return, annualised return, and maximum drawdown.
+   - Summary statistics: raw-closing-price return, annualised price return, and maximum drawdown; dividends are excluded and captured splits can shorten the comparable window.
 
 3. Use the date-range controls to narrow the simulation window if you want to focus on a specific period.
 

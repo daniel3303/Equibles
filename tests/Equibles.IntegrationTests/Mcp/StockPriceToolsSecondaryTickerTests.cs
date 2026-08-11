@@ -132,6 +132,48 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetLatestPrices_LegacyNullSplit_ClipsPrimaryRange()
+    {
+        var stock = await SeedBerkshire();
+        DbContext
+            .Set<DailyStockPrice>()
+            .Add(
+                new DailyStockPrice
+                {
+                    CommonStockId = stock.Id,
+                    ListedTicker = "BRK-B",
+                    Date = new DateOnly(2025, 8, 1),
+                    Open = 600m,
+                    High = 600m,
+                    Low = 600m,
+                    Close = 600m,
+                    AdjustedClose = 600m,
+                    Volume = 100,
+                }
+            );
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStockId = stock.Id,
+                    PriceSeriesTicker = null,
+                    EffectiveDate = new DateOnly(2026, 1, 2),
+                    Numerator = 2m,
+                    Denominator = 1m,
+                    Source = StockSplitSource.Yahoo,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetLatestPrices("BRK-B");
+
+        result.Should().Contain("| 511.54\\* | 511.54\\* |");
+        result.Should().NotContain("600.00");
+        result.Should().Contain("latest recorded split");
+    }
+
+    [Fact]
     public async Task GetLatestPrices_SecondarySplit_ClipsOnlyThatSecondaryRange()
     {
         var stock = await SeedBerkshire();

@@ -6,6 +6,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Calendars;
 using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
@@ -210,13 +211,15 @@ public class StockPriceTools
                 // Sessions of the rendered rows: more than one means the newest session is
                 // still settling for part of the batch, which earns its own footnote.
                 var rowDates = new HashSet<DateOnly>();
+                var latestByTicker = new Dictionary<string, LatestPriceSelection>();
+                var placeholderByTicker = new Dictionary<string, string>();
 
                 foreach (var ticker in tickerList)
                 {
                     var (stock, priceTicker, _) = await ResolveTicker(ticker);
                     if (stock == null)
                     {
-                        result.AppendLine(PlaceholderRow(ticker, "Not found"));
+                        placeholderByTicker[ticker] = "Not found";
                         continue;
                     }
 
@@ -229,23 +232,68 @@ public class StockPriceTools
                         .ToListAsync();
                     if (latestTwo.Count == 0)
                     {
-                        result.AppendLine(PlaceholderRow(ticker, "No data"));
+                        placeholderByTicker[ticker] = "No data";
                         continue;
                     }
 
-                    var price = latestTwo[0];
-                    var previous = latestTwo.Count > 1 ? latestTwo[1] : null;
+                    latestByTicker[ticker] = new LatestPriceSelection(
+                        stock,
+                        priceTicker,
+                        latestTwo[0],
+                        latestTwo.Count > 1 ? latestTwo[1] : null
+                    );
+                }
+
+                // One split query for the whole batch. The price/range reads remain scoped to
+                // exact listings, while split attribution is resolved in memory per listing.
+                var batchSplits = new List<StockSplit>();
+                if (latestByTicker.Count > 0)
+                {
+                    var stockIds = latestByTicker
+                        .Values.Select(selection => selection.Stock.Id)
+                        .Distinct()
+                        .ToArray();
+                    var earliestCutoff = latestByTicker.Values.Min(selection =>
+                        selection.Price.Date.AddDays(-365)
+                    );
+                    var latestEnd = latestByTicker.Values.Max(selection => selection.Price.Date);
+                    batchSplits = await _stockSplitRepository
+                        .GetAll()
+                        .Where(split =>
+                            stockIds.Contains(split.CommonStockId)
+                            && split.EffectiveDate > earliestCutoff
+                            && split.EffectiveDate <= latestEnd
+                        )
+                        .ToListAsync();
+                }
+
+                foreach (var ticker in tickerList)
+                {
+                    if (!latestByTicker.TryGetValue(ticker, out var selection))
+                    {
+                        result.AppendLine(PlaceholderRow(ticker, placeholderByTicker[ticker]));
+                        continue;
+                    }
+
+                    var stock = selection.Stock;
+                    var priceTicker = selection.PriceTicker;
+                    var price = selection.Price;
+                    var previous = selection.Previous;
 
                     // Trailing 52-week close range, anchored on the row's own session so a
                     // stock that stopped trading doesn't fabricate a fresh range. A completed
                     // provider refresh cannot certify the basis of raw rows, so a captured split
                     // inside the requested year moves the comparison start to that split date.
                     var cutoff = price.Date.AddDays(-365);
-                    var comparableWindow = await LoadComparablePriceWindow(
-                        stock,
-                        priceTicker,
+                    var applicableSplits = PriceSeriesSplitScope.ForListing(
+                        batchSplits.Where(split => split.CommonStockId == stock.Id),
+                        stock.Ticker,
+                        priceTicker
+                    );
+                    var comparableWindow = ComparablePriceWindow.Resolve(
                         cutoff,
-                        price.Date
+                        price.Date,
+                        applicableSplits
                     );
                     var previousClose = DayChangeBasis(
                         price,
@@ -971,28 +1019,12 @@ public class StockPriceTools
         );
     }
 
-    private async Task<ComparablePriceWindow> LoadComparablePriceWindow(
-        CommonStock stock,
-        string priceTicker,
-        DateOnly requestedStart,
-        DateOnly end
-    )
-    {
-        var primary = string.Equals(priceTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase);
-        var applicableSplits = await _stockSplitRepository
-            .GetByStock(stock.Id)
-            .Where(split =>
-                split.EffectiveDate > requestedStart
-                && split.EffectiveDate <= end
-                && (
-                    split.PriceSeriesTicker == priceTicker
-                    || (primary && split.PriceSeriesTicker == null)
-                )
-            )
-            .ToListAsync();
-
-        return ComparablePriceWindow.Resolve(requestedStart, end, applicableSplits);
-    }
+    private sealed record LatestPriceSelection(
+        CommonStock Stock,
+        string PriceTicker,
+        DailyStockPrice Price,
+        DailyStockPrice Previous
+    );
 
     // Placeholder row for a ticker with no price to show (unknown symbol or no data),
     // keeping the em-dash columns identical across the per-ticker fallback branches.

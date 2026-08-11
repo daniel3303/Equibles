@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data;
@@ -37,7 +38,11 @@ public class FundScoringManagerTests : IDisposable
         _manager = new FundScoringManager(
             new InstitutionalHoldingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new BacktestPriceLoader(
+                new DailyStockPriceRepository(_dbContext),
+                new CommonStockRepository(_dbContext),
+                new StockSplitRepository(_dbContext)
+            ),
             _fundScoreRepository
         );
     }
@@ -60,7 +65,7 @@ public class FundScoringManagerTests : IDisposable
         );
 
         score.Should().NotBeNull();
-        // The single held stock doubles over the window held buy-and-hold => ~+100% total return.
+        // The single held stock doubles over the window => ~+100% raw-closing-price return.
         score.PortfolioTotalReturnPercent.Should().BeApproximately(100m, 0.5m);
         // Flat benchmark => ~0% return, so the portfolio's whole CAGR is alpha.
         score.BenchmarkTotalReturnPercent.Should().BeApproximately(0m, 0.01m);
@@ -139,8 +144,63 @@ public class FundScoringManagerTests : IDisposable
         );
 
         score.Should().NotBeNull();
-        // Same result as without the 13D row: the 13F portfolio doubles => ~+100% total return.
+        // Same result as without the 13D row: the 13F portfolio doubles => ~+100% price return.
         score.PortfolioTotalReturnPercent.Should().BeApproximately(100m, 0.5m);
+    }
+
+    [Fact]
+    public async Task ScoreHolder_CapturedSplit_AdvancesToFirstPostSplitCloseWithoutDroppingHolding()
+    {
+        SeedBenchmark();
+        var held = new CommonStock { Ticker = "SPLT", Name = "Split Co" };
+        _dbContext.Set<CommonStock>().Add(held);
+        var splitDate = new DateOnly(2025, 1, 2);
+        var firstComparableClose = splitDate.AddDays(1);
+        AddPrice(held, firstComparableClose, close: 50m, adjustedClose: 500m);
+        AddPrice(held, AsOf, close: 75m, adjustedClose: 1m);
+        _dbContext
+            .Set<Equibles.CorporateActions.Data.Models.StockSplit>()
+            .Add(
+                new Equibles.CorporateActions.Data.Models.StockSplit
+                {
+                    CommonStockId = held.Id,
+                    PriceSeriesTicker = held.Ticker,
+                    EffectiveDate = splitDate,
+                    Numerator = 2m,
+                    Denominator = 1m,
+                }
+            );
+
+        var holder = new InstitutionalHolder { Cik = "0002222222", Name = "Split Fund" };
+        _dbContext.Set<InstitutionalHolder>().Add(holder);
+        for (
+            var reportDate = new DateOnly(2022, 9, 30);
+            reportDate <= AsOf;
+            reportDate = reportDate.AddMonths(3)
+        )
+        {
+            _dbContext
+                .Set<InstitutionalHolding>()
+                .Add(
+                    new InstitutionalHolding
+                    {
+                        InstitutionalHolderId = holder.Id,
+                        CommonStockId = held.Id,
+                        ListedTicker = held.Ticker,
+                        ReportDate = reportDate,
+                        FilingDate = reportDate.AddDays(41),
+                        Shares = 1_000,
+                        Value = 100_000,
+                    }
+                );
+        }
+        _dbContext.SaveChanges();
+
+        var score = await _manager.ScoreHolder(holder, AsOf, benchmarkTicker: "SPY");
+
+        score.Should().NotBeNull();
+        score.WindowStart.Should().Be(firstComparableClose);
+        score.PortfolioTotalReturnPercent.Should().BeApproximately(50m, 0.01m);
     }
 
     [Fact]
@@ -312,7 +372,12 @@ public class FundScoringManagerTests : IDisposable
         _dbContext.SaveChanges();
     }
 
-    private void AddPrice(CommonStock stock, DateOnly date, decimal close)
+    private void AddPrice(
+        CommonStock stock,
+        DateOnly date,
+        decimal close,
+        decimal? adjustedClose = null
+    )
     {
         _dbContext
             .Set<DailyStockPrice>()
@@ -320,12 +385,13 @@ public class FundScoringManagerTests : IDisposable
                 new DailyStockPrice
                 {
                     CommonStockId = stock.Id,
+                    ListedTicker = stock.Ticker,
                     Date = date,
                     Open = close,
                     High = close,
                     Low = close,
                     Close = close,
-                    AdjustedClose = close,
+                    AdjustedClose = adjustedClose ?? close,
                 }
             );
     }
