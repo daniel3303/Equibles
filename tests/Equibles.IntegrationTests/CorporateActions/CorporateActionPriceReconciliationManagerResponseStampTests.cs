@@ -37,7 +37,7 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
                     CommonStockId = stockId,
                     ExDate = exDate,
                     AmountPerShare = 0.21222556m,
-                    Source = CashDividendSource.Yahoo,
+                    Source = CashDividendSource.External,
                 }
             );
             await seed.SaveChangesAsync();
@@ -53,9 +53,22 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
 
         await using (var capture = _fixture.CreateDbContext())
         {
-            var dividend = await capture.Set<CashDividend>().SingleAsync();
-            dividend.AmountPerShare = 0.21219057m;
-            await capture.SaveChangesAsync();
+            var changes = await new CashDividendCaptureManager(
+                new CashDividendRepository(capture),
+                new CommonStockRepository(capture)
+            ).Capture(
+                stockId,
+                "GRTUF",
+                [
+                    new CapturedDividend
+                    {
+                        ExDate = exDate,
+                        AmountPerShare = 0.21219057m,
+                        Source = CashDividendSource.Yahoo,
+                    },
+                ]
+            );
+            changes.Should().Be(1);
         }
 
         var appliedTime = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc);
@@ -81,8 +94,32 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
 
         await using var verification = _fixture.CreateDbContext();
         var stored = await verification.Set<CashDividend>().SingleAsync();
+        stored.Source.Should().Be(CashDividendSource.Yahoo);
         stored.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.21219057m);
         stored.PriceAdjustmentAppliedTime.Should().Be(appliedTime);
+
+        var externalReplay = await new CashDividendCaptureManager(
+            new CashDividendRepository(verification),
+            new CommonStockRepository(verification)
+        ).Capture(
+            stockId,
+            "GRTUF",
+            [
+                new CapturedDividend
+                {
+                    ExDate = exDate,
+                    AmountPerShare = 0.21222556m,
+                    Source = CashDividendSource.External,
+                },
+            ]
+        );
+        externalReplay.Should().Be(0);
+
+        var afterReplay = await verification.Set<CashDividend>().SingleAsync();
+        afterReplay.AmountPerShare.Should().Be(0.21219057m);
+        afterReplay.Source.Should().Be(CashDividendSource.Yahoo);
+        afterReplay.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.21219057m);
+        afterReplay.PriceAdjustmentAppliedTime.Should().Be(appliedTime);
     }
 
     private static CorporateActionPriceReconciliationManager NewManager(
