@@ -76,7 +76,10 @@ internal static class HoldingValueSanityGuard
     /// otherwise land inside the band. Residual, accepted: rows this rule cannot see (a
     /// thousands filer whose price never arrives, published via the ladder-exhaust or
     /// stuck-zero filed fallbacks) still serve the thousands-scale figure — there is no scale
-    /// signal without a derivation to compare against.
+    /// signal without a derivation to compare against. Decision-site publishes are NOT part of
+    /// that residual: their price can arrive (or change) after the decision, so
+    /// <see cref="HoldingValueFallbackRepairService"/> re-examines them against current prices
+    /// and resets the ones this band identifies.
     /// </summary>
     internal static bool FiledLooksThousandsScaled(
         decimal derivedValue,

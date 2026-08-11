@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Core.Contracts;
 using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
@@ -32,6 +33,13 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         ILogger<HoldingValueFallbackRepairService>
     >();
     private readonly List<EquiblesFinancialDbContext> _contexts = [];
+
+    // The revise-filed phase consults this map exactly like the recalculator consults the
+    // provider: an absent pair means "price has not arrived", never zero.
+    private readonly Dictionary<
+        (Guid CommonStockId, string ListedTicker, DateOnly Date),
+        decimal
+    > _prices = [];
 
     public void Dispose()
     {
@@ -74,7 +82,18 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         return scopeFactory;
     }
 
-    private HoldingValueFallbackRepairService CreateService() => new(CreateScopeFactory(), _logger);
+    private HoldingValueFallbackRepairService CreateService()
+    {
+        var priceProvider = Substitute.For<IStockPriceProvider>();
+        priceProvider
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(_ => new Dictionary<(Guid, string, DateOnly), decimal>(_prices));
+
+        return new HoldingValueFallbackRepairService(CreateScopeFactory(), priceProvider, _logger);
+    }
 
     private async Task<InstitutionalHolding> SeedHolding(
         long value,
@@ -84,7 +103,8 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         bool valueUnavailable = false,
         ValueSource valueSource = ValueSource.Derived,
         string accession = null,
-        int valueRetryCount = 0
+        int valueRetryCount = 0,
+        DateTime? valueLastRetryAt = null
     )
     {
         var seedContext = CreateSharedContext();
@@ -114,6 +134,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
             ValueUnavailable = valueUnavailable,
             ValueSource = valueSource,
             ValueRetryCount = valueRetryCount,
+            ValueLastRetryAt = valueLastRetryAt,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
             AccessionNumber = accession ?? Guid.NewGuid().ToString()[..20],
@@ -145,7 +166,236 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
             .FirstAsync(h => h.Id == holdingId);
     }
 
-    // ── Phase 1: stuck zeros ───────────────────────────────────────────
+    private void PriceAt(InstitutionalHolding holding, decimal close) =>
+        _prices[(holding.CommonStockId, holding.ListedTicker, holding.ReportDate)] = close;
+
+    // The production signature (SG Americas / AAPL, 2026-06-30): the filer reports the VALUE
+    // column in thousands, the close arrived after the publish decision, and every row froze
+    // serving $6.7M for a $6.7B position — shares × close ÷ filed lands dead on 1,000×. The
+    // revision phase needs the signature corroborated across the accession, so most tests seed
+    // a filing of several such rows.
+    private async Task<List<InstitutionalHolding>> SeedThousandsFiling(
+        int count,
+        string accession = null
+    )
+    {
+        accession ??= Guid.NewGuid().ToString()[..20];
+        var holdings = new List<InstitutionalHolding>();
+        for (var i = 0; i < count; i++)
+        {
+            var holding = await SeedHolding(
+                value: 6_701_245L,
+                filedValue: 6_701_245L,
+                shares: 23_158_850,
+                valueSource: ValueSource.Filed,
+                accession: accession
+            );
+            PriceAt(holding, 289.36m);
+            holdings.Add(holding);
+        }
+        return holdings;
+    }
+
+    // ── Phase 1: mis-published thousands-scale filed values ────────────
+
+    [Fact]
+    public async Task Repair_CorroboratedThousandsScaleFiling_IsResetForRepricing()
+    {
+        var holdings = await SeedThousandsFiling(count: 3);
+
+        var repaired = await CreateService().Repair(CancellationToken.None);
+
+        repaired.Should().Be(3);
+        foreach (var holding in holdings)
+        {
+            var updated = await Reload(holding.Id);
+            updated.ValuePending.Should().BeTrue("the recalculator republishes it under the guard");
+            updated.Value.Should().Be(0L);
+            updated.ValueSource.Should().Be(ValueSource.Derived);
+            updated.ValueRetryCount.Should().Be(0);
+            updated.ValueLastRetryAt.Should().BeNull();
+            updated.ManagerEntries.Single().Value.Should().Be(0L);
+        }
+    }
+
+    [Fact]
+    public async Task Repair_UncorroboratedInBandRow_IsStampedNotReset()
+    {
+        // One in-band row alone can also be a legitimately-Filed depositary row whose stored
+        // price basis error lands the recomputation inside the band — resetting it would make
+        // the recalculator publish ~1,000× the filer's own figure, terminally. Below the
+        // corroboration bar the row keeps the filer's figure and the bulk re-import stays its
+        // healer.
+        var holding = (await SeedThousandsFiling(count: 1)).Single();
+
+        var repaired = await CreateService().Repair(CancellationToken.None);
+
+        repaired.Should().Be(0);
+        var updated = await Reload(holding.Id);
+        updated.Value.Should().Be(6_701_245L);
+        updated.ValueSource.Should().Be(ValueSource.Filed);
+        updated.ValueLastRetryAt.Should().NotBeNull("an examined ambiguous row must retire");
+    }
+
+    [Fact]
+    public async Task Repair_CorroboratedFiling_StampsItsOutOfBandRowInstead()
+    {
+        // Four in-band legs corroborate the filing; the fifth priced row is out of band (a
+        // depositary-basis publish, derived ~40× filed) and must keep the filer's figure.
+        var accession = "0001313360-26-000003";
+        await SeedThousandsFiling(count: 4, accession: accession);
+        var depositary = await SeedHolding(
+            value: 2_000_000L,
+            filedValue: 2_000_000L,
+            shares: 800_000,
+            valueSource: ValueSource.Filed,
+            accession: accession
+        );
+        PriceAt(depositary, 100m);
+
+        var repaired = await CreateService().Repair(CancellationToken.None);
+
+        repaired.Should().Be(4);
+        var updated = await Reload(depositary.Id);
+        updated.Value.Should().Be(2_000_000L);
+        updated.ValueSource.Should().Be(ValueSource.Filed);
+        updated.ValuePending.Should().BeFalse();
+        updated.ValueLastRetryAt.Should().NotBeNull("an examined legitimate publish must retire");
+    }
+
+    [Fact]
+    public async Task Repair_FiledPublishWithoutPrice_StaysUnstampedForALaterCycle()
+    {
+        // No usable price yet (series still backfilling). The row must stay in the candidate
+        // set — stamping it would close the exact price-arrives-later race this phase exists
+        // to close.
+        var holding = await SeedHolding(
+            value: 6_701_245L,
+            filedValue: 6_701_245L,
+            shares: 23_158_850,
+            valueSource: ValueSource.Filed
+        );
+
+        var repaired = await CreateService().Repair(CancellationToken.None);
+
+        repaired.Should().Be(0);
+        var updated = await Reload(holding.Id);
+        updated.Value.Should().Be(6_701_245L);
+        updated.ValueLastRetryAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Repair_FiledPublishWithZeroClose_StaysUnstampedForALaterCycle()
+    {
+        // A stored zero close derives 0 — out of band — and would retire a genuinely broken row
+        // forever if it were allowed to stamp. A non-positive close must defer, never examine.
+        var holdings = await SeedThousandsFiling(count: 3);
+        foreach (var holding in holdings)
+        {
+            PriceAt(holding, 0m);
+        }
+
+        var repaired = await CreateService().Repair(CancellationToken.None);
+
+        repaired.Should().Be(0);
+        foreach (var holding in holdings)
+        {
+            var updated = await Reload(holding.Id);
+            updated.Value.Should().Be(6_701_245L);
+            updated.ValueLastRetryAt.Should().BeNull();
+        }
+    }
+
+    [Fact]
+    public async Task Repair_LadderExhaustFiledPublish_IsOutsideThisPhase()
+    {
+        // The retry ladder stamps ValueLastRetryAt on every advance, so an exhaust publish is
+        // outside this phase by construction — it is the guard's documented accepted residual.
+        var holding = await SeedHolding(
+            value: 6_701_245L,
+            filedValue: 6_701_245L,
+            shares: 23_158_850,
+            valueSource: ValueSource.Filed,
+            valueRetryCount: 4,
+            valueLastRetryAt: DateTime.UtcNow
+        );
+        PriceAt(holding, 289.36m);
+
+        var repaired = await CreateService().Repair(CancellationToken.None);
+
+        repaired.Should().Be(0);
+        (await Reload(holding.Id)).Value.Should().Be(6_701_245L);
+    }
+
+    [Fact]
+    public async Task Repair_UnavailableFiledRow_IsNeverRevived()
+    {
+        // A multi-leg merge can leave ValueUnavailable and a Filed label on one row; the
+        // valuation was deliberately withheld (ImpossiblePositionGuard) and no phase may hand
+        // it back to the repricing lane.
+        var holding = await SeedHolding(
+            value: 6_701_245L,
+            filedValue: 6_701_245L,
+            shares: 23_158_850,
+            valueSource: ValueSource.Filed,
+            valueUnavailable: true
+        );
+        PriceAt(holding, 289.36m);
+
+        var repaired = await CreateService().Repair(CancellationToken.None);
+
+        repaired.Should().Be(0);
+        var updated = await Reload(holding.Id);
+        updated.ValuePending.Should().BeFalse();
+        updated.ValueLastRetryAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Repair_ThousandsScaleReset_RealignsTheFilingRollup()
+    {
+        var accession = "0001313360-26-000003";
+        var holdings = await SeedThousandsFiling(count: 3, accession: accession);
+
+        var seedContext = CreateSharedContext();
+        seedContext
+            .Set<InstitutionalFiling>()
+            .Add(
+                new InstitutionalFiling
+                {
+                    Id = Guid.NewGuid(),
+                    AccessionNumber = accession,
+                    InstitutionalHolderId = holdings[0].InstitutionalHolderId,
+                    FilingDate = holdings[0].FilingDate,
+                    ReportDate = holdings[0].ReportDate,
+                    PositionCount = 3,
+                    TotalValue = 3 * 6_701_245L,
+                }
+            );
+        await seedContext.SaveChangesAsync();
+
+        await CreateService().Repair(CancellationToken.None);
+
+        var verifyContext = CreateSharedContext();
+        var filing = await verifyContext
+            .Set<InstitutionalFiling>()
+            .FirstAsync(f => f.AccessionNumber == accession);
+        filing.TotalValue.Should().Be(0L, "the reset must not leave the thousands figure summed");
+    }
+
+    [Fact]
+    public async Task Repair_ThousandsScaleReset_SecondRunIsANoOp()
+    {
+        await SeedThousandsFiling(count: 3);
+
+        var service = CreateService();
+        var firstRun = await service.Repair(CancellationToken.None);
+        var secondRun = await service.Repair(CancellationToken.None);
+
+        firstRun.Should().Be(3);
+        secondRun.Should().Be(0, "a reset row is pending and outside every candidate set");
+    }
+
+    // ── Phase 2: stuck zeros ───────────────────────────────────────────
 
     [Fact]
     public async Task Repair_AbandonedZeroWithFiledValue_PublishesFiledValue()
@@ -199,7 +449,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         updated.ValueUnavailable.Should().BeFalse();
     }
 
-    // ── Phase 3: abandoned zeros with no filed figure ──────────────────
+    // ── Phase 4: abandoned zeros with no filed figure ──────────────────
 
     [Fact]
     public async Task Repair_AbandonedZeroWithoutFiledValue_IsMarkedUnavailable()
@@ -223,7 +473,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         updated.ValuePending.Should().BeFalse();
     }
 
-    // ── Phase 2: implausible derivations ───────────────────────────────
+    // ── Phase 3: implausible derivations ───────────────────────────────
 
     [Fact]
     public async Task Repair_ImplausibleImpliedPrice_ResetsRowForRepricing()
