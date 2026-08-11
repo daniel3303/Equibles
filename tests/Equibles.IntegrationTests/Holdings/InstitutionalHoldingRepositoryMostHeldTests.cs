@@ -191,6 +191,67 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
         priorCount.Should().Be(1);
     }
 
+    [Fact]
+    public async Task Get13FUniverseFilerCount_ClosedQuarter_UsesMaterializedSnapshot()
+    {
+        await using var seed = FreshContext();
+        seed.Add(new AumQuarterlySnapshot { ReportDate = Current, FilerCount = 5_320 });
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+
+        var count = await sut.Get13FUniverseFilerCount(Current, Prior, combined: false);
+
+        count.Should().Be(5_320);
+    }
+
+    [Fact]
+    public async Task Get13FUniverseFilerCount_MissingSnapshot_FallsBackToExactDistinctCount()
+    {
+        await using var seed = FreshContext();
+        var stock = await SeedStock(seed, "AAPL");
+        var h1 = await SeedHolder(seed, "h1");
+        var h2 = await SeedHolder(seed, "h2");
+        seed.Add(MakeHolding(stock, h1, Current, shares: 100, value: 100_000));
+        seed.Add(MakeHolding(stock, h2, Current, shares: 100, value: 100_000));
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+
+        var count = await sut.Get13FUniverseFilerCount(Current, Prior, combined: false);
+
+        count.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Get13FUniverseFilerCount_DirtyZeroStub_FallsBackToExactDistinctCount()
+    {
+        await using var seed = FreshContext();
+        var stock = await SeedStock(seed, "MSFT");
+        var h1 = await SeedHolder(seed, "dirty-h1");
+        var h2 = await SeedHolder(seed, "dirty-h2");
+        seed.Add(MakeHolding(stock, h1, Current, shares: 100, value: 100_000));
+        seed.Add(MakeHolding(stock, h2, Current, shares: 100, value: 100_000));
+        seed.Add(
+            new AumQuarterlySnapshot
+            {
+                ReportDate = Current,
+                FilerCount = 0,
+                DirtyAt = DateTime.UtcNow,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+
+        var count = await sut.Get13FUniverseFilerCount(Current, Prior, combined: false);
+
+        count.Should().Be(2);
+    }
+
     private static async Task<CommonStock> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker

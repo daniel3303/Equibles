@@ -39,7 +39,7 @@ public class InstitutionalHoldingsToolsRenderMostHeldStocksTableCultureInvarianc
             },
         };
         var stocks = new Dictionary<Guid, CommonStock>();
-        object[] args = [targetDate, previousDate, "filers", 1_234, rows, stocks];
+        object[] args = [targetDate, previousDate, "filers", 1_234, true, rows, stocks];
 
         var original = CultureInfo.CurrentCulture;
         string invariantOutput;

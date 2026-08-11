@@ -12,15 +12,9 @@ using NSubstitute;
 namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
-/// Pins the "No prior quarter to compare against" arm of
-/// <c>ResolveMarketActivityDates</c> — the shared helper used by every
-/// market-activity MCP tool (GetMarketWide13FActivity, GetMostHeldStocks).
-/// When the database has exactly one report date, the helper must surface
-/// a user-friendly error rather than silently picking the same date for
-/// both `targetDate` and `previousDate` (which would dump a meaningless
-/// zero-delta table). A regression that removed the
-/// `targetIndex >= reportDates.Count - 1` guard would either index out of
-/// range (current crash) or, worse, produce phantom zero-delta output.
+/// Pins the clean-corpus boundary where the first covered report quarter is
+/// also the oldest available row. Current-quarter breadth remains valid, but
+/// no prior row exists and comparison columns must stay unavailable.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class InstitutionalHoldingsToolsResolveMarketActivityDatesNoPriorQuarterTests
@@ -32,7 +26,7 @@ public class InstitutionalHoldingsToolsResolveMarketActivityDatesNoPriorQuarterT
         : base(fixture) { }
 
     [Fact]
-    public async Task GetMostHeldStocks_OnlyOneReportDateExists_ReturnsNoPriorQuarterError()
+    public async Task GetMostHeldStocks_OnlyCoveredReportDateExists_ServesRankingWithoutDeltas()
     {
         var current = new DateOnly(2024, 12, 31);
         var aapl = new CommonStock
@@ -63,8 +57,11 @@ public class InstitutionalHoldingsToolsResolveMarketActivityDatesNoPriorQuarterT
 
         var output = await sut.GetMostHeldStocks();
 
-        output.Should().Contain("No prior quarter to compare against");
-        output.Should().Contain("2024-12-31");
+        output.Should().Contain("Most-held 13F stocks as of 2024-12-31");
+        output.Should().Contain("AAPL");
+        output.Should().Contain("No prior report quarter is available within complete coverage");
+        output.Should().Contain("Delta columns are shown as —");
+        output.Should().NotContain("No prior quarter to compare against");
     }
 
     private static InstitutionalHolding MakeHolding(
