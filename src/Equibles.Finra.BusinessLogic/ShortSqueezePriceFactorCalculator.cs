@@ -82,13 +82,13 @@ public static class ShortSqueezePriceFactorCalculator
         var recentStart = bars.Count - RecentWindowBars;
         var baselineStart = recentStart - baselineCount;
 
-        var entryClose = bars[recentStart - 1].AdjustedClose;
+        var entryClose = bars[recentStart - 1].Close;
         if (entryClose <= 0)
         {
             return factors;
         }
 
-        var recentReturn = (double)(last.AdjustedClose / entryClose - 1);
+        var recentReturn = (double)(last.Close / entryClose - 1);
         if (recentReturn <= 0)
         {
             // Both catalysts require price moving AGAINST the shorts; a volume or
@@ -110,7 +110,7 @@ public static class ShortSqueezePriceFactorCalculator
     }
 
     /// <summary>
-    /// The latest close versus the volume-weighted average adjusted close over the
+    /// The latest close versus the volume-weighted average raw close over the
     /// trailing window (up to baseline + recent bars). Falls back to the simple
     /// mean when the window traded no volume at all.
     /// </summary>
@@ -131,13 +131,13 @@ public static class ShortSqueezePriceFactorCalculator
         decimal closeSum = 0;
         for (var i = windowStart; i < bars.Count; i++)
         {
-            priceVolumeSum += bars[i].AdjustedClose * bars[i].Volume;
+            priceVolumeSum += bars[i].Close * bars[i].Volume;
             volumeSum += bars[i].Volume;
-            closeSum += bars[i].AdjustedClose;
+            closeSum += bars[i].Close;
         }
 
         var vwap = volumeSum > 0 ? priceVolumeSum / volumeSum : closeSum / windowCount;
-        return vwap > 0 ? last.AdjustedClose / vwap - 1 : null;
+        return vwap > 0 ? last.Close / vwap - 1 : null;
     }
 
     /// <summary>
@@ -154,13 +154,13 @@ public static class ShortSqueezePriceFactorCalculator
         var returns = new List<double>(recentStart - baselineStart);
         for (var i = baselineStart + 1; i < recentStart; i++)
         {
-            var previous = bars[i - 1].AdjustedClose;
-            if (previous <= 0 || bars[i].AdjustedClose <= 0)
+            var previous = bars[i - 1].Close;
+            if (previous <= 0 || bars[i].Close <= 0)
             {
                 return 0;
             }
 
-            returns.Add((double)(bars[i].AdjustedClose / previous - 1));
+            returns.Add((double)(bars[i].Close / previous - 1));
         }
 
         if (returns.Count < 2)

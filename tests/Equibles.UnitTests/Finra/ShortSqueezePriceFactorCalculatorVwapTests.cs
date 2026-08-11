@@ -94,8 +94,7 @@ public class ShortSqueezePriceFactorCalculatorVwapTests
         factors.HasVolumeSurgeCatalyst.Should().BeFalse();
     }
 
-    // Consecutive daily bars ending 2026-07-01; adjusted and raw close are equal so
-    // the tests read naturally.
+    // Consecutive daily bars ending 2026-07-01.
     private static List<ShortSqueezeDailyBar> Series(
         int count,
         Func<int, decimal> close,
@@ -105,12 +104,7 @@ public class ShortSqueezePriceFactorCalculatorVwapTests
         var end = new DateOnly(2026, 7, 1);
         return Enumerable
             .Range(0, count)
-            .Select(i => new ShortSqueezeDailyBar(
-                end.AddDays(i - count + 1),
-                close(i),
-                close(i),
-                volume(i)
-            ))
+            .Select(i => new ShortSqueezeDailyBar(end.AddDays(i - count + 1), close(i), volume(i)))
             .ToList();
     }
 }

@@ -279,7 +279,8 @@ public class ShortSqueezeScoreManager
 
         var scoredStockIds = stocks.Keys.ToList();
         var failsToDeliver = await LoadFailsToDeliver(scoredStockIds, cancellationToken);
-        var priceFactors = await LoadPriceFactors(scoredStockIds, cancellationToken);
+        var primaryTickers = stocks.ToDictionary(pair => pair.Key, pair => pair.Value.Ticker);
+        var priceFactors = await LoadPriceFactors(primaryTickers, splitsByStock, cancellationToken);
         var nearEarnings = await LoadStocksNearEarnings(scoredStockIds, cancellationToken);
 
         var scores = new List<ShortSqueezeScore>();
@@ -511,10 +512,12 @@ public class ShortSqueezeScoreManager
     /// no price factors instead of factors about the past.
     /// </summary>
     private async Task<Dictionary<Guid, ShortSqueezePriceFactors>> LoadPriceFactors(
-        List<Guid> stockIds,
+        IReadOnlyDictionary<Guid, string> primaryTickers,
+        IReadOnlyDictionary<Guid, IReadOnlyList<StockSplit>> splitsByStock,
         CancellationToken cancellationToken
     )
     {
+        var stockIds = primaryTickers.Keys.ToList();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var cutoff = today.AddDays(-PriceHistoryCalendarDays);
         var bars = await _dailyStockPriceRepository
@@ -522,25 +525,42 @@ public class ShortSqueezeScoreManager
             .Select(p => new
             {
                 p.CommonStockId,
+                p.ListedTicker,
                 p.Date,
-                p.AdjustedClose,
                 p.Close,
                 p.Volume,
             })
             .ToListAsync(cancellationToken);
 
         var result = new Dictionary<Guid, ShortSqueezePriceFactors>();
-        if (bars.Count == 0)
+        var primaryBars = bars.Where(bar =>
+                primaryTickers.TryGetValue(bar.CommonStockId, out var ticker)
+                && string.Equals(bar.ListedTicker, ticker, StringComparison.OrdinalIgnoreCase)
+            )
+            .ToList();
+        if (primaryBars.Count == 0)
         {
             return result;
         }
 
-        var universeLatestDate = bars.Max(b => b.Date);
-        foreach (var group in bars.GroupBy(b => b.CommonStockId))
+        var universeLatestDate = primaryBars.Max(b => b.Date);
+        foreach (var group in primaryBars.GroupBy(b => b.CommonStockId))
         {
+            var ticker = primaryTickers[group.Key];
+            var latestDate = group.Max(bar => bar.Date);
+            var applicableSplits = PriceSeriesSplitScope.ForListing(
+                splitsByStock.GetValueOrDefault(group.Key) ?? [],
+                ticker,
+                ticker
+            );
+            var splitBoundary = applicableSplits
+                .Where(split => split.EffectiveDate <= latestDate)
+                .Select(split => (DateOnly?)split.EffectiveDate)
+                .Max();
             var series = group
+                .Where(bar => splitBoundary == null || bar.Date >= splitBoundary.Value)
                 .OrderBy(b => b.Date)
-                .Select(b => new ShortSqueezeDailyBar(b.Date, b.AdjustedClose, b.Close, b.Volume))
+                .Select(b => new ShortSqueezeDailyBar(b.Date, b.Close, b.Volume))
                 .ToList();
             result[group.Key] = ShortSqueezePriceFactorCalculator.Compute(
                 series,

@@ -89,17 +89,16 @@ public class ShortSqueezePriceFactorCalculatorCatalystTests
         for (var i = 0; i < baselineBars; i++)
         {
             var close = i % 2 == 0 ? 100m : 100.5m;
-            bars.Add(new ShortSqueezeDailyBar(end.AddDays(i - total + 1), close, close, 1_000));
+            bars.Add(new ShortSqueezeDailyBar(end.AddDays(i - total + 1), close, 1_000));
         }
 
-        var start = bars[^1].AdjustedClose;
+        var start = bars[^1].Close;
         for (var i = 0; i < 5; i++)
         {
             var close = start + (finalWeekClose - start) * (i + 1) / 5;
             bars.Add(
                 new ShortSqueezeDailyBar(
                     end.AddDays(baselineBars + i - total + 1),
-                    close,
                     close,
                     finalWeekVolume
                 )
