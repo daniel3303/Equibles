@@ -92,6 +92,8 @@ public class HoldingsScraperWorker : BaseScraperWorker
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
+        await ApplyPendingCusipRescan(stoppingToken);
+
         await BackfillHolderClassifications(stoppingToken);
 
         var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
@@ -145,6 +147,78 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // Restamp FilingType on filing rollup rows written before the column existed. Self-
         // terminating like the pass above.
         await BackfillFilingRollupTypes(stoppingToken);
+    }
+
+    /// <summary>
+    /// Applies a rescan queued by <see cref="Consumers.StockCusipChangedConsumer"/>:
+    /// clears the quarterly <see cref="Holdings.Data.Models.ProcessedDataSet"/> ledger (keeping the
+    /// backfill guard so an empty table is not re-seeded as processed) and the open
+    /// filing season's realtime <see cref="ProcessedFiling"/> rows. Runs at cycle
+    /// START so a mid-walk CUSIP discovery never restarts the in-flight walk — the
+    /// starvation that kept the newest quarters from healing
+    /// (EquiblesCommercial#7163).
+    ///
+    /// The realtime clear is season-scoped: the bulk walk can only restate filings
+    /// a PUBLISHED quarterly data set covers, and the open season's submissions
+    /// exist only behind the realtime per-accession ledger — without this they
+    /// keep their pre-discovery holes until the season's data set publishes months
+    /// later. The realtime sweep re-imports the cleared accessions chronologically
+    /// (originals before amendments) and the import upserts, so re-processing is
+    /// idempotent. Any accession processed since the latest completed quarter end
+    /// is in scope; amendments are always processed after their originals, so a
+    /// cleared original's amendment is always cleared with it.
+    /// </summary>
+    // Internal for the integration pins on the sentinel/guard/season semantics.
+    internal async Task ApplyPendingCusipRescan(CancellationToken cancellationToken)
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var dataSets = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
+
+        var rows = await dataSets.GetAll().ToListAsync(cancellationToken);
+        var pending = rows.FirstOrDefault(r =>
+            r.FileName == Holdings.Data.Models.ProcessedDataSet.RescanPendingFileName
+        );
+        if (pending == null)
+            return;
+
+        var realRows = rows.Where(r =>
+                r.FileName != Holdings.Data.Models.ProcessedDataSet.BackfillGuardFileName
+                && r.FileName != Holdings.Data.Models.ProcessedDataSet.RescanPendingFileName
+            )
+            .ToList();
+
+        dataSets.Delete(pending);
+        foreach (var row in realRows)
+            dataSets.Delete(row);
+        if (
+            rows.All(r => r.FileName != Holdings.Data.Models.ProcessedDataSet.BackfillGuardFileName)
+        )
+        {
+            dataSets.Add(
+                new Holdings.Data.Models.ProcessedDataSet
+                {
+                    FileName = Holdings.Data.Models.ProcessedDataSet.BackfillGuardFileName,
+                }
+            );
+        }
+
+        await dataSets.SaveChanges();
+
+        var processedFilings =
+            scope.ServiceProvider.GetRequiredService<ProcessedFilingRepository>();
+        var seasonStart = Holdings13FRealtimeWorker
+            .LatestQuarterEnd(DateOnly.FromDateTime(DateTime.UtcNow))
+            .ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var clearedFilings = await processedFilings
+            .GetAll()
+            .Where(f => f.CreationTime >= seasonStart)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        Logger.LogInformation(
+            "Applied queued CUSIP-identity rescan: cleared {DataSets} quarterly data set marker(s) and {Filings} open-season realtime accession(s)",
+            realRows.Count,
+            clearedFilings
+        );
     }
 
     private async Task BackfillFilingRollupTypes(CancellationToken cancellationToken)

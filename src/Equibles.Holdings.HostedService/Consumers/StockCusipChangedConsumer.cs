@@ -8,15 +8,23 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService.Consumers;
 
 /// <summary>
-/// When a CommonStock's CUSIP is set/changed (typically FTD seeding a
-/// previously-null CUSIP), the quarterly 13F data sets that were already
-/// marked processed while the stock was unresolvable hold no holdings for it.
-/// This consumer clears the <see cref="ProcessedDataSet"/> ledger (keeping a
-/// guard sentinel so the worker's first-boot backfill seeding doesn't re-skip
-/// history) so <c>HoldingsScraperWorker</c> re-imports every data set on its
-/// next cycle and backfills the now-resolvable stock. Reprocessing is
-/// idempotent (upsert), so over-invalidation is safe; the FTD cold-start
-/// burst of events collapses to a no-op once already cleared.
+/// When a CommonStock's CUSIP identity grows (FTD seeding a previously-null
+/// CUSIP, a retired-CUSIP alias, or a listed-ticker CUSIP), the quarterly 13F
+/// data sets that were already marked processed while the identity was
+/// unresolvable hold no holdings for it. This consumer QUEUES a rescan by
+/// adding the <see cref="ProcessedDataSet.RescanPendingFileName"/> sentinel;
+/// <c>HoldingsScraperWorker</c> applies it at the start of its next cycle —
+/// clearing the <see cref="ProcessedDataSet"/> ledger (keeping the backfill
+/// guard) plus the open filing season's realtime <see cref="ProcessedFiling"/>
+/// rows — and then re-imports everything.
+///
+/// The clear is deferred rather than applied here on purpose: an inline clear
+/// restarts the scraper's multi-hour oldest-first walk from scratch, and the
+/// FTD sweeps discover identities near-daily, so the walk was starved and the
+/// newest quarters never healed (EquiblesCommercial#7163). Queuing lets the
+/// in-flight walk complete; events arriving mid-walk coalesce into one pending
+/// rescan that the next walk applies with every identity known by then.
+/// Reprocessing is idempotent (upsert), so over-invalidation is safe.
 /// </summary>
 [Consumer]
 public class StockCusipChangedConsumer : IConsumer<StockCusipChanged>
@@ -38,43 +46,43 @@ public class StockCusipChangedConsumer : IConsumer<StockCusipChanged>
 
     public async Task Consume(ConsumeContext<StockCusipChanged> context)
     {
-        var rows = await _processedDataSetRepository
+        var alreadyQueued = await _processedDataSetRepository
             .GetAll()
-            .ToListAsync(context.CancellationToken);
-
-        var realRows = rows.Where(r => r.FileName != ProcessedDataSet.BackfillGuardFileName)
-            .ToList();
-        var hasGuard = rows.Any(r => r.FileName == ProcessedDataSet.BackfillGuardFileName);
-
-        if (realRows.Count == 0 && hasGuard)
+            .AnyAsync(
+                r => r.FileName == ProcessedDataSet.RescanPendingFileName,
+                context.CancellationToken
+            );
+        if (alreadyQueued)
         {
-            // Already invalidated (e.g. a prior event in the FTD seeding burst).
+            // Coalesce: the pending rescan has not been applied yet, so it will
+            // run with this event's identity too. No signal either — the event
+            // that queued the sentinel already woke the worker.
             return;
         }
 
-        if (realRows.Count > 0)
+        _processedDataSetRepository.Add(
+            new ProcessedDataSet { FileName = ProcessedDataSet.RescanPendingFileName }
+        );
+        try
         {
-            _processedDataSetRepository.Delete(realRows);
+            await _processedDataSetRepository.SaveChanges();
         }
-
-        if (!hasGuard)
+        catch (DbUpdateException)
         {
-            _processedDataSetRepository.Add(
-                new ProcessedDataSet { FileName = ProcessedDataSet.BackfillGuardFileName }
-            );
+            // A concurrent event queued the sentinel between the check and the
+            // save (FileName is unique). The rescan is pending and that
+            // consumer signalled the worker — nothing left to do.
+            return;
         }
-
-        await _processedDataSetRepository.SaveChanges();
 
         // Wake the Holdings worker now (GH-852) instead of waiting up to its
-        // 24h cycle / risking a same-cycle skip.
+        // 24h cycle; it applies the queued rescan at the start of that cycle.
         _rescanSignal.RequestRescan();
 
         _logger.LogInformation(
-            "CUSIP change for {Ticker} ({Cusip}) invalidated {Count} processed 13F data set(s); signalled the holdings worker to re-import and backfill now",
+            "CUSIP change for {Ticker} ({Cusip}) queued a deferred 13F rescan; the holdings worker clears the ledgers and re-imports at its next cycle start",
             context.Message.Ticker,
-            context.Message.Cusip,
-            realRows.Count
+            context.Message.Cusip
         );
     }
 }
