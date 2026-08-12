@@ -1113,20 +1113,24 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         CancellationToken cancellationToken = default
     )
     {
-        async Task<List<MarketWideStockActivity>> Load()
+        async Task<List<MarketWideStockActivity>> Load(CancellationToken operationCancellationToken)
         {
-            var snapshot = await GetMarketActivitySnapshots(current, combined, cancellationToken);
+            var snapshot = await GetMarketActivitySnapshots(
+                current,
+                combined,
+                operationCancellationToken
+            );
             if (snapshot.Count > 0)
                 return snapshot;
 
             var activity = await GetQuarterlyActivity(current, previous, combined)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(operationCancellationToken);
             var listings = await GetLiveListingShareActivity(
                 current,
                 previous,
                 combined,
                 activity.Select(row => row.CommonStockId).ToArray(),
-                cancellationToken
+                operationCancellationToken
             );
             var byStock = listings
                 .GroupBy(row => row.CommonStockId)
@@ -1142,15 +1146,22 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         }
 
         if (!DbContext.Database.IsRelational() || DbContext.Database.CurrentTransaction != null)
-            return await Load();
+            return await Load(cancellationToken);
 
-        await using var transaction = await DbContext.Database.BeginTransactionAsync(
-            System.Data.IsolationLevel.RepeatableRead,
+        var strategy = DbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(
+            async operationCancellationToken =>
+            {
+                await using var transaction = await DbContext.Database.BeginTransactionAsync(
+                    System.Data.IsolationLevel.RepeatableRead,
+                    operationCancellationToken
+                );
+                var result = await Load(operationCancellationToken);
+                await transaction.CommitAsync(operationCancellationToken);
+                return result;
+            },
             cancellationToken
         );
-        var result = await Load();
-        await transaction.CommitAsync(cancellationToken);
-        return result;
     }
 
     // Exact listing grain for the rare live fallback while a snapshot generation is absent.
