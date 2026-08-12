@@ -13,6 +13,41 @@ public static class InstitutionPortfolioSummaryCalculator
         DateOnly? previousReportDate
     )
     {
+        var current = currentQuarterHoldings
+            .GroupBy(h => h.CommonStockId)
+            .Select(g => new InstitutionPortfolioPosition
+            {
+                CommonStockId = g.Key,
+                Shares = g.Sum(h => h.Shares),
+                Value = g.Sum(h => h.Value),
+            })
+            .ToList();
+        var previous = previousQuarterHoldings
+            .GroupBy(h => h.CommonStockId)
+            .Select(g => new InstitutionPortfolioPosition
+            {
+                CommonStockId = g.Key,
+                Shares = g.Sum(h => h.Shares),
+                Value = g.Sum(h => h.Value),
+            })
+            .ToList();
+        return CalculatePositions(
+            current,
+            previous,
+            quartersReported,
+            latestReportDate,
+            previousReportDate
+        );
+    }
+
+    public static InstitutionPortfolioSummary CalculatePositions(
+        IReadOnlyList<InstitutionPortfolioPosition> currentQuarterPositions,
+        IReadOnlyList<InstitutionPortfolioPosition> previousQuarterPositions,
+        int quartersReported,
+        DateOnly? latestReportDate,
+        DateOnly? previousReportDate
+    )
+    {
         var summary = new InstitutionPortfolioSummary
         {
             QuartersReported = quartersReported,
@@ -20,21 +55,16 @@ public static class InstitutionPortfolioSummaryCalculator
             PreviousReportDate = previousReportDate,
         };
 
-        if (currentQuarterHoldings.Count == 0)
+        if (currentQuarterPositions.Count == 0)
             return summary;
 
-        // Aggregate per stock — a filer may report a stock across multiple rows when
-        // multiple managers share discretion; only the aggregated per-stock figures
-        // are meaningful for AUM / concentration / turnover.
-        var byStock = currentQuarterHoldings
-            .GroupBy(h => h.CommonStockId)
-            .Select(g => new { Shares = g.Sum(h => h.Shares), Value = g.Sum(h => h.Value) })
+        summary.ReportedAum = currentQuarterPositions.Sum(p => p.Value);
+        summary.PositionCount = currentQuarterPositions.Count;
+
+        var valuesDesc = currentQuarterPositions
+            .OrderByDescending(p => p.Value)
+            .Select(p => p.Value)
             .ToList();
-
-        summary.ReportedAum = byStock.Sum(p => p.Value);
-        summary.PositionCount = byStock.Count;
-
-        var valuesDesc = byStock.OrderByDescending(p => p.Value).Select(p => p.Value).ToList();
         if (summary.ReportedAum > 0)
         {
             summary.Top10ConcentrationPercent =
@@ -43,11 +73,11 @@ public static class InstitutionPortfolioSummaryCalculator
                 (double)valuesDesc.Take(25).Sum() / summary.ReportedAum * 100.0;
         }
 
-        if (previousQuarterHoldings.Count > 0 && summary.ReportedAum > 0)
+        if (previousQuarterPositions.Count > 0 && summary.ReportedAum > 0)
         {
             summary.QoQTurnoverPercent = ComputeQoQTurnoverPercent(
-                currentQuarterHoldings,
-                previousQuarterHoldings,
+                currentQuarterPositions,
+                previousQuarterPositions,
                 summary.ReportedAum
             );
         }
@@ -56,23 +86,19 @@ public static class InstitutionPortfolioSummaryCalculator
     }
 
     private static double ComputeQoQTurnoverPercent(
-        IReadOnlyList<InstitutionalHolding> currentQuarterHoldings,
-        IReadOnlyList<InstitutionalHolding> previousQuarterHoldings,
+        IReadOnlyList<InstitutionPortfolioPosition> currentQuarterPositions,
+        IReadOnlyList<InstitutionPortfolioPosition> previousQuarterPositions,
         long reportedAum
     )
     {
         // Current-quarter price proxy = Value / Shares per stock. For each stock that
         // appears in either quarter, |Δ shares × current price proxy| is the absolute
         // dollar movement; the canonical turnover formula then divides by 2 × AUM.
-        var currentByStock = currentQuarterHoldings
-            .GroupBy(h => h.CommonStockId)
-            .ToDictionary(
-                g => g.Key,
-                g => new { Shares = g.Sum(h => h.Shares), Value = g.Sum(h => h.Value) }
-            );
-        var previousByStock = previousQuarterHoldings
-            .GroupBy(h => h.CommonStockId)
-            .ToDictionary(g => g.Key, g => g.Sum(h => h.Shares));
+        var currentByStock = currentQuarterPositions.ToDictionary(p => p.CommonStockId);
+        var previousByStock = previousQuarterPositions.ToDictionary(
+            p => p.CommonStockId,
+            p => p.Shares
+        );
 
         var allStockIds = currentByStock.Keys.Union(previousByStock.Keys);
         decimal turnoverDollars = 0m;

@@ -8,6 +8,7 @@ using Equibles.Core.Configuration;
 using Equibles.Core.Extensions;
 using Equibles.Data.Extensions;
 using Equibles.Finra.Repositories;
+using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.InsiderTrading.Data.Extensions;
@@ -46,6 +47,7 @@ public class StockTabService
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly MarketActivityShareRestater _marketActivityShareRestater;
 
     // Data before the configured sync floor is partial — the scrapers only
     // backfill from it — so historical series clamp to it rather than render
@@ -77,7 +79,8 @@ public class StockTabService
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
         CommonStockRepository commonStockRepository,
-        IOptions<WorkerOptions> workerOptions = null
+        IOptions<WorkerOptions> workerOptions = null,
+        MarketActivityShareRestater marketActivityShareRestater = null
     )
     {
         _minSyncDate = workerOptions?.Value.MinSyncDate is { } floor
@@ -99,6 +102,7 @@ public class StockTabService
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
+        _marketActivityShareRestater = marketActivityShareRestater;
     }
 
     // Whether the holdings tab should OPEN in the combined view: the newest quarter's filing
@@ -817,30 +821,29 @@ public class StockTabService
     // latest point matches the stats shown for the latest quarter.
     private async Task<List<OwnershipTrendPoint>> LoadOwnershipTrend(CommonStock stock)
     {
-        var holdingsQuery = _institutionalHoldingRepository.Get13FHistoryByStock(stock);
+        var snapshotActivity =
+            await _institutionalHoldingRepository.GetStockActivitySnapshotsByStockSnapshotBacked(
+                stock
+            );
+        if (_marketActivityShareRestater != null)
+            await _marketActivityShareRestater.RestateStockActivity(stock, snapshotActivity);
+        IEnumerable<StockQuarterlyActivity> activity = snapshotActivity;
         if (_minSyncDate is { } trendFloor)
         {
-            holdingsQuery = holdingsQuery.Where(h => h.ReportDate >= trendFloor);
+            activity = activity.Where(a => a.ReportDate >= trendFloor);
         }
-        var points = await holdingsQuery
-            .GroupBy(h => h.ReportDate)
-            .Select(g => new
+        var points = activity
+            .Where(a => a.CurrentFilerCount > 0)
+            .OrderBy(a => a.ReportDate)
+            .Select(a => new OwnershipTrendPoint
             {
-                ReportDate = g.Key,
-                TotalShares = g.Sum(h => h.Shares),
-                HolderCount = g.Select(h => h.InstitutionalHolderId).Distinct().Count(),
-            })
-            .OrderBy(p => p.ReportDate)
-            .ToListAsync();
-
-        return points
-            .Select(p => new OwnershipTrendPoint
-            {
-                ReportDate = p.ReportDate,
-                TotalShares = p.TotalShares,
-                HolderCount = p.HolderCount,
+                ReportDate = a.ReportDate,
+                TotalShares = a.CurrentShares,
+                HolderCount = a.CurrentFilerCount,
             })
             .ToList();
+
+        return points;
     }
 
     // Narrow the Sold-Out filter to only holders who were in the previous

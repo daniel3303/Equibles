@@ -63,6 +63,7 @@ public class HybridChunkSearcher
     // still lets the degrade succeed while bounding what one search can pin a database
     // connection for — the pair can never burn more than one full budget plus this.
     private const int DegradedPassTimeoutSeconds = 3;
+    private const int TickerScopedPassTimeoutSeconds = 3;
 
     public async Task<List<Chunk>> Search(
         string query,
@@ -113,6 +114,7 @@ public class HybridChunkSearcher
 
         List<Chunk> bm25;
         ChunkSearchTimeoutException bm25Timeout = null;
+        var companyFallbackAnswered = false;
         try
         {
             bm25 = await _chunkRepository.HybridSearch(
@@ -124,6 +126,7 @@ public class HybridChunkSearcher
                 documentTypes,
                 startDate,
                 endDate,
+                commandTimeoutSeconds: ticker != null ? TickerScopedPassTimeoutSeconds : null,
                 cancellationToken: cancellationToken
             );
         }
@@ -138,6 +141,40 @@ public class HybridChunkSearcher
             _logger.LogWarning(exception, "Conjunctive BM25 pass timed out; degrading");
             bm25 = [];
             bm25Timeout = exception;
+
+            if (ticker != null)
+            {
+                try
+                {
+                    bm25 = await _chunkRepository.HybridSearchCompanyFallback(
+                        query,
+                        bm25Limit,
+                        ticker,
+                        documentId,
+                        documentTypes,
+                        startDate,
+                        endDate,
+                        cancellationToken
+                    );
+                    if (bm25.Count > 0)
+                    {
+                        companyFallbackAnswered = true;
+                        bm25Timeout = null;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception fallbackException)
+                    when (!cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogWarning(
+                        fallbackException,
+                        "Company-local full-text fallback failed; continuing search degradation"
+                    );
+                }
+            }
         }
 
         // Opt-in recall fallback: BM25 ANDs every query token, so a wordy natural-language
@@ -145,7 +182,7 @@ public class HybridChunkSearcher
         // excludes every on-point chunk. When the conjunctive pass can't fill the request,
         // top up from a disjunctive (any-token) pass — conjunctive hits keep their rank and
         // the broader hits only append after them, so precise matches never lose position.
-        if (disjunctiveFallback && bm25.Count < maxResults)
+        if (!companyFallbackAnswered && disjunctiveFallback && bm25.Count < maxResults)
         {
             try
             {
@@ -192,6 +229,16 @@ public class HybridChunkSearcher
             if (results.Count == 0 && bm25Timeout != null)
                 ExceptionDispatchInfo.Capture(bm25Timeout).Throw();
             return results;
+        }
+
+        // The company-local fallback already returned proven full-text matches from a bounded
+        // ticker slice. Return them immediately instead of spending another statement budget on
+        // the index or semantic arms that just failed under the same load.
+        if (companyFallbackAnswered)
+        {
+            return ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
+                .Take(maxResults)
+                .ToList();
         }
 
         // With only the pool re-rank available, an empty BM25 pool leaves the semantic arm

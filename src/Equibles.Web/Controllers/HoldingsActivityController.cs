@@ -289,33 +289,37 @@ public class HoldingsActivityController : BaseController
         var selectedDate = viewModel.SelectedDate;
         var priorForRepo = viewModel.PreviousDate ?? selectedDate;
 
-        var rankingQuery = _holdingRepository.GetMostHeld(
+        var (activityRows, _) = await LoadActivityAndChurn(
+            selectedDate,
+            priorForRepo,
+            viewModel.IsCombinedSelected
+        );
+        var ranking = activityRows.Where(a => a.CurrentFilerCount > 0).ToList();
+
+        viewModel.TotalRows = ranking.Count;
+        viewModel.TotalUniverseFilers = await _holdingRepository.Get13FUniverseFilerCount(
             selectedDate,
             priorForRepo,
             viewModel.IsCombinedSelected
         );
 
-        viewModel.TotalRows = await rankingQuery.CountAsync();
-        viewModel.TotalUniverseFilers = await _holdingRepository
-            .GetUniqueFilerIds(selectedDate, priorForRepo, viewModel.IsCombinedSelected)
-            .CountAsync();
-
-        var orderedQuery = normalizedSort switch
+        var ordered = normalizedSort switch
         {
-            HoldingsMostHeldViewModel.SortFilersDelta => rankingQuery
+            HoldingsMostHeldViewModel.SortFilersDelta => ranking
                 .OrderByDescending(a => a.CurrentFilerCount - a.PreviousFilerCount)
                 .ThenByDescending(a => a.CurrentFilerCount),
-            HoldingsMostHeldViewModel.SortValue => rankingQuery
+            HoldingsMostHeldViewModel.SortValue => ranking
                 .OrderByDescending(a => a.CurrentValue)
                 .ThenByDescending(a => a.CurrentFilerCount),
-            _ => rankingQuery
+            _ => ranking
                 .OrderByDescending(a => a.CurrentFilerCount)
                 .ThenByDescending(a => a.CurrentValue),
         };
 
-        var pageRows = await orderedQuery
-            .Page(viewModel.Page, HoldingsMostHeldViewModel.PageSize)
-            .ToListAsync();
+        var pageRows = ordered
+            .Skip((viewModel.Page - 1) * HoldingsMostHeldViewModel.PageSize)
+            .Take(HoldingsMostHeldViewModel.PageSize)
+            .ToList();
 
         var stockIds = pageRows.Select(r => r.CommonStockId).ToList();
         var stocks = await LoadStockLabels(stockIds);
@@ -393,66 +397,28 @@ public class HoldingsActivityController : BaseController
         var selectedDate = viewModel.SelectedDate;
         var previousDate = viewModel.PreviousDate.Value;
 
-        var totalFilers = await _holdingRepository
-            .GetUniqueFilerIds(selectedDate, previousDate, viewModel.IsCombinedSelected)
-            .CountAsync();
+        var totalFilers = await _holdingRepository.Get13FUniverseFilerCount(
+            selectedDate,
+            previousDate,
+            viewModel.IsCombinedSelected
+        );
         viewModel.TotalUniverseFilers = totalFilers;
 
-        List<HeatMapPoint> points;
-        if (viewModel.IsCombinedSelected)
-        {
-            // The combined view (still-open quarter + prior-quarter carry-forward for
-            // non-filers) reads its materialised lane, kept fresh by the same drain
-            // that maintains the plain snapshot. Live derivation remains only as the
-            // fallback for an empty lane — the window just opened and the first
-            // combined rebuild has not drained yet.
-            var combinedSnapshot = await _holdingRepository
-                .GetStockActivitySnapshotsCombined(selectedDate)
-                .Where(a => a.CurrentFilerCount >= MinHeatMapFilers)
-                .ToListAsync();
-
-            List<MarketWideStockActivity> activity;
-            Dictionary<Guid, MarketWideStockChurn> churnLookup;
-            if (combinedSnapshot.Count > 0)
+        var (allActivity, churnRows) = await LoadActivityAndChurn(
+            selectedDate,
+            previousDate,
+            viewModel.IsCombinedSelected
+        );
+        var activity = allActivity.Where(a => a.CurrentFilerCount >= MinHeatMapFilers).ToList();
+        var churnLookup = churnRows.ToDictionary(c => c.CommonStockId);
+        var stocks = await LoadStockLabels(activity.Select(a => a.CommonStockId).ToList());
+        var points = activity
+            .Select(a =>
             {
-                activity = combinedSnapshot.Select(s => s.ToActivity()).ToList();
-                churnLookup = combinedSnapshot.ToDictionary(s => s.CommonStockId, s => s.ToChurn());
-            }
-            else
-            {
-                activity = await _holdingRepository
-                    .GetQuarterlyActivity(selectedDate, previousDate, combined: true)
-                    .Where(a => a.CurrentFilerCount >= MinHeatMapFilers)
-                    .ToListAsync();
-                churnLookup = (
-                    await _holdingRepository
-                        .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate, combined: true)
-                        .ToListAsync()
-                ).ToDictionary(c => c.CommonStockId);
-            }
-
-            var stocks = await LoadStockLabels(activity.Select(a => a.CommonStockId).ToList());
-            points = activity
-                .Select(a =>
-                {
-                    churnLookup.TryGetValue(a.CommonStockId, out var churn);
-                    return BuildHeatMapPoint(a, churn, totalFilers, stocks);
-                })
-                .ToList();
-        }
-        else
-        {
-            // Single-quarter view reads the pre-aggregated StockQuarterlyActivity
-            // snapshot — filer counts and new/sold-out churn are already
-            // materialised, so this avoids the ~30s two-quarter live scan (#1262).
-            var activity = await _holdingRepository
-                .GetStockActivitySnapshots(selectedDate)
-                .Where(a => a.CurrentFilerCount >= MinHeatMapFilers)
-                .ToListAsync();
-
-            var stocks = await LoadStockLabels(activity.Select(a => a.CommonStockId).ToList());
-            points = activity.Select(a => BuildHeatMapPoint(a, totalFilers, stocks)).ToList();
-        }
+                churnLookup.TryGetValue(a.CommonStockId, out var churn);
+                return BuildHeatMapPoint(a, churn, totalFilers, stocks);
+            })
+            .ToList();
 
         viewModel.Points = points
             .OrderByDescending(p => p.ConvictionScore)

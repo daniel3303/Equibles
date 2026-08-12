@@ -186,6 +186,17 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
             onRebuild: async ct =>
             {
                 await using var mutate = FreshContext();
+                var activeClaim = await mutate
+                    .Set<AumQuarterlySnapshot>()
+                    .Where(s => s.ReportDate == Q4)
+                    .Select(s => s.DirtyAt)
+                    .SingleAsync(ct);
+                activeClaim
+                    .Should()
+                    .NotBeNull("request paths must see the snapshot as dirty during rebuild")
+                    .And.Subject.As<DateTime?>()
+                    .Value.Should()
+                    .BeAfter(DateTime.UtcNow, "the drain owns a recoverable future-dated lease");
                 await mutate
                     .Set<AumQuarterlySnapshot>()
                     .Where(s => s.ReportDate == Q4)
@@ -212,6 +223,132 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
                 TimeSpan.FromSeconds(1),
                 "drain saw DirtyAt changed and skipped clear"
             );
+    }
+
+    [Fact]
+    public async Task DrainOnce_LongRebuildRenewsClaimAndClearsDirtyAt()
+    {
+        var dirtyAt = DateTime.UtcNow.AddHours(-2);
+        await using (var seed = FreshContext())
+        {
+            seed.Add(new AumQuarterlySnapshot { ReportDate = Q4, DirtyAt = dirtyAt });
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = BuildScopeFactory();
+        var worker = new TestableDrainWorker(
+            scopeFactory,
+            new DelayedRefreshService(
+                scopeFactory,
+                NullLogger<HoldingsAggregateRefreshService>.Instance,
+                TimeSpan.FromMilliseconds(180)
+            ),
+            NullLogger<AumSnapshotDrainWorker>.Instance,
+            cooldown: TimeSpan.Zero,
+            claimLease: TimeSpan.FromMilliseconds(80),
+            claimRenewInterval: TimeSpan.FromMilliseconds(15)
+        );
+
+        await worker.DrainOnce(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var snapshot = await read.Set<AumQuarterlySnapshot>().SingleAsync();
+        snapshot.DirtyAt.Should().BeNull("the renewed lease remained active through completion");
+    }
+
+    [Fact]
+    public async Task DrainOnce_ExpiredUnrenewedClaimIsRearmedInsteadOfCleared()
+    {
+        var dirtyAt = DateTime.UtcNow.AddHours(-2);
+        await using (var seed = FreshContext())
+        {
+            seed.Add(new AumQuarterlySnapshot { ReportDate = Q4, DirtyAt = dirtyAt });
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = BuildScopeFactory();
+        var worker = new TestableDrainWorker(
+            scopeFactory,
+            new DelayedRefreshService(
+                scopeFactory,
+                NullLogger<HoldingsAggregateRefreshService>.Instance,
+                TimeSpan.FromMilliseconds(80)
+            ),
+            NullLogger<AumSnapshotDrainWorker>.Instance,
+            cooldown: TimeSpan.Zero,
+            claimLease: TimeSpan.FromMilliseconds(20),
+            claimRenewInterval: TimeSpan.FromSeconds(5)
+        );
+
+        await worker.DrainOnce(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var snapshot = await read.Set<AumQuarterlySnapshot>().SingleAsync();
+        snapshot
+            .DirtyAt.Should()
+            .NotBeNull("an expired claim is never cleared")
+            .And.Subject.As<DateTime?>()
+            .Value.Should()
+            .BeCloseTo(dirtyAt, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task DrainOnce_LateRenewalCannotResurrectExpiredClaimAfterEvent()
+    {
+        await SeedHoldings();
+        var dirtyAt = DateTime.UtcNow.AddHours(-2);
+        await using (var seed = FreshContext())
+        {
+            seed.Add(new AumQuarterlySnapshot { ReportDate = Q4, DirtyAt = dirtyAt });
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = BuildScopeFactory();
+        var racingRefresh = new RacingRefreshService(
+            scopeFactory,
+            NullLogger<HoldingsAggregateRefreshService>.Instance,
+            onRebuild: async ct =>
+            {
+                // Let the lease expire, then simulate the consumer's keep-the-first-event
+                // expression. An expired marker sorts before the new event and therefore stays
+                // in place; the drain must not resurrect it when the delayed renewal runs.
+                await Task.Delay(TimeSpan.FromMilliseconds(130), ct);
+                var incoming = DateTime.UtcNow;
+                await using var mutate = FreshContext();
+                await mutate
+                    .Set<AumQuarterlySnapshot>()
+                    .Where(s => s.ReportDate == Q4)
+                    .ExecuteUpdateAsync(
+                        s =>
+                            s.SetProperty(
+                                x => x.DirtyAt,
+                                x =>
+                                    x.DirtyAt == null || x.DirtyAt > incoming ? incoming : x.DirtyAt
+                            ),
+                        ct
+                    );
+                await Task.Delay(TimeSpan.FromMilliseconds(150), ct);
+            }
+        );
+        var worker = new TestableDrainWorker(
+            scopeFactory,
+            racingRefresh,
+            NullLogger<AumSnapshotDrainWorker>.Instance,
+            cooldown: TimeSpan.Zero,
+            claimLease: TimeSpan.FromMilliseconds(100),
+            claimRenewInterval: TimeSpan.FromMilliseconds(200)
+        );
+
+        await worker.DrainOnce(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var snapshot = await read.Set<AumQuarterlySnapshot>().SingleAsync();
+        snapshot
+            .DirtyAt.Should()
+            .NotBeNull("an expired claim can only be rearmed, never renewed and cleared")
+            .And.Subject.As<DateTime?>()
+            .Value.Should()
+            .BeCloseTo(dirtyAt, TimeSpan.FromSeconds(1));
     }
 
     [Fact]
@@ -258,21 +395,50 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
     private sealed class TestableDrainWorker : AumSnapshotDrainWorker
     {
         private readonly TimeSpan _cooldown;
+        private readonly TimeSpan? _claimLease;
+        private readonly TimeSpan? _claimRenewInterval;
 
         public TestableDrainWorker(
             IServiceScopeFactory scopeFactory,
             HoldingsAggregateRefreshService refreshService,
             ILogger<AumSnapshotDrainWorker> logger,
-            TimeSpan cooldown
+            TimeSpan cooldown,
+            TimeSpan? claimLease = null,
+            TimeSpan? claimRenewInterval = null
         )
             : base(scopeFactory, refreshService, logger)
         {
             _cooldown = cooldown;
+            _claimLease = claimLease;
+            _claimRenewInterval = claimRenewInterval;
         }
 
         protected override TimeSpan StartupDelay => TimeSpan.Zero;
         protected override TimeSpan TickInterval => TimeSpan.FromMilliseconds(1);
         protected override TimeSpan Cooldown => _cooldown;
+        protected override TimeSpan ClaimLease => _claimLease ?? base.ClaimLease;
+        protected override TimeSpan ClaimRenewInterval =>
+            _claimRenewInterval ?? base.ClaimRenewInterval;
+    }
+
+    private sealed class DelayedRefreshService : HoldingsAggregateRefreshService
+    {
+        private readonly TimeSpan _delay;
+
+        public DelayedRefreshService(
+            IServiceScopeFactory scopeFactory,
+            ILogger<HoldingsAggregateRefreshService> logger,
+            TimeSpan delay
+        )
+            : base(scopeFactory, logger)
+        {
+            _delay = delay;
+        }
+
+        public override Task RebuildQuarterAsync(
+            DateOnly reportDate,
+            CancellationToken cancellationToken
+        ) => Task.Delay(_delay, cancellationToken);
     }
 
     /// <summary>

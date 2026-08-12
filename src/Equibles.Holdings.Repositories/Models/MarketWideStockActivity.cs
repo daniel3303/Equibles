@@ -1,3 +1,5 @@
+using Equibles.Holdings.Data.Models;
+
 namespace Equibles.Holdings.Repositories.Models;
 
 public class MarketWideStockActivity
@@ -9,6 +11,8 @@ public class MarketWideStockActivity
     public long PreviousValue { get; set; }
     public int CurrentFilerCount { get; set; }
     public int PreviousFilerCount { get; set; }
+
+    public IReadOnlyList<StockQuarterlyListingActivity> ListingShares { get; set; } = [];
 
     public long DeltaShares => CurrentShares - PreviousShares;
     public long DeltaValue => CurrentValue - PreviousValue;

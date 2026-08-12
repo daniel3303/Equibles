@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Data.Models;
@@ -37,4 +38,7 @@ public class StockQuarterlyActivityCombined
     public int SoldOutFilerCount { get; set; }
 
     public DateTime ComputedAt { get; set; } = DateTime.UtcNow;
+
+    [NotMapped]
+    public IReadOnlyList<StockQuarterlyListingActivity> ListingShares { get; set; } = [];
 }

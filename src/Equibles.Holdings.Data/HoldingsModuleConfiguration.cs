@@ -155,6 +155,10 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         // a separate table rather than a lane column.
         builder.Entity<StockQuarterlyActivityCombined>();
 
+        // Exact listing-series share breakdown shared by the closed and combined snapshots.
+        // Its attribute-declared key includes IsCombined so both generations can coexist.
+        builder.Entity<StockQuarterlyListingActivity>();
+
         // HolderQuarterlySnapshot likewise declares its composite
         // (InstitutionalHolderId, ReportDate) key and ReportDate index as
         // attributes.

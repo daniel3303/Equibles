@@ -126,6 +126,45 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
         row.SoldOutFilerCount.Should().Be(0, "no 13F filer left between the quarters");
     }
 
+    [Fact]
+    public async Task RebuildQuarterAsync_PreservesExactListingShareBreakdown()
+    {
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        var stock = await SeedStock(seed, "ACME", industry);
+        var holder = await SeedHolder(seed, "H001");
+        seed.AddRange(
+            MakeHolding(stock, holder, QPrev, 10_000, "primary-prev"),
+            MakeHolding(stock, holder, QPrev, 1_000, "sibling-prev", listedTicker: "ACME.B"),
+            MakeHolding(stock, holder, QCur, 12_000, "primary-cur"),
+            MakeHolding(stock, holder, QCur, 2_000, "sibling-cur", listedTicker: "ACME.B")
+        );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildQuarterAsync(QCur, CancellationToken.None);
+
+        await using var read = FreshContext();
+        var rows = await read.Set<StockQuarterlyListingActivity>()
+            .Where(row => row.CommonStockId == stock.Id && row.ReportDate == QCur)
+            .OrderBy(row => row.PriceSeriesTicker)
+            .ToListAsync();
+
+        rows.Should().HaveCount(2);
+        rows.Should()
+            .ContainSingle(row =>
+                row.PriceSeriesTicker == "ACME"
+                && row.CurrentShares == 120
+                && row.PreviousShares == 100
+            );
+        rows.Should()
+            .ContainSingle(row =>
+                row.PriceSeriesTicker == "ACME.B"
+                && row.CurrentShares == 20
+                && row.PreviousShares == 10
+            );
+        rows.Should().OnlyContain(row => !row.IsCombined);
+    }
+
     private static async Task<Guid> SeedTaxonomy(Equibles.Data.EquiblesFinancialDbContext ctx)
     {
         var sector = new Sector { Name = "Technology" };
@@ -172,7 +211,8 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
         DateOnly reportDate,
         long value,
         string accession,
-        FilingType filingType = FilingType.Form13F
+        FilingType filingType = FilingType.Form13F,
+        string listedTicker = null
     ) =>
         new()
         {
@@ -186,6 +226,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
             InvestmentDiscretion = InvestmentDiscretion.Sole,
             AccessionNumber = accession,
             FilingType = filingType,
+            ListedTicker = listedTicker,
             // CUSIP column is varchar(9); a deterministic per-accession value keeps
             // the holding-row unique key disambiguated across the seeds.
             Cusip =

@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Extensions;
+using Equibles.Holdings.Repositories.Models;
 using Equibles.Web.Controllers.Abstract;
 using Equibles.Web.Extensions;
 using Equibles.Web.Services;
@@ -111,7 +112,7 @@ public class HoldingsExportController : BaseController
         if (holder == null)
             return NotFound();
 
-        var reportDates = await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync();
+        var reportDates = await _holdingRepository.Get13FReportDatesByHolderSnapshotBacked(holder);
         if (reportDates.Count == 0)
             return NotFound();
 
@@ -178,19 +179,21 @@ public class HoldingsExportController : BaseController
         var selectedDate = reportDates.ResolveSelectedDateOrFirst(date);
         if (reportDates.PreviousFrom(selectedDate) is not { } previousDate)
             return NotFound();
+        var windowOpen =
+            selectedDate == reportDates[0]
+            && CombinedQuarterHelper.IsFilingWindowOpen(selectedDate);
 
         // Per-stock buy/sell movers (CSV has no row cap — analysts expect the full set).
-        var activity = await _holdingRepository
-            .GetQuarterlyActivity(selectedDate, previousDate)
-            .Where(a => a.CurrentShares != a.PreviousShares)
-            .ToListAsync();
+        var (activityRows, churnRows) = await LoadActivityAndChurn(
+            selectedDate,
+            previousDate,
+            windowOpen
+        );
+        var activity = activityRows.Where(a => a.CurrentShares != a.PreviousShares).ToList();
         var topBuys = activity.TopBuyers().ToList();
         var topSells = activity.TopSellers().ToList();
 
-        var churn = await _holdingRepository
-            .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate)
-            .Where(c => c.NewFilerCount > 0 || c.SoldOutFilerCount > 0)
-            .ToListAsync();
+        var churn = churnRows.Where(c => c.NewFilerCount > 0 || c.SoldOutFilerCount > 0).ToList();
         var newPositions = churn.NewPositions().ToList();
         var soldOut = churn.SoldOutPositions().ToList();
 
@@ -232,6 +235,50 @@ public class HoldingsExportController : BaseController
 
         var csv = CsvExportService.BuildCsv(headers, rows);
         return CsvFile(csv, $"13F-activity-{selectedDate:yyyy-MM-dd}.csv");
+    }
+
+    private async Task<(
+        List<MarketWideStockActivity> Activity,
+        List<MarketWideStockChurn> Churn
+    )> LoadActivityAndChurn(DateOnly selectedDate, DateOnly previousDate, bool combined)
+    {
+        if (combined)
+        {
+            var lane = await _holdingRepository
+                .GetStockActivitySnapshotsCombined(selectedDate)
+                .AsNoTracking()
+                .ToListAsync();
+            if (lane.Count > 0)
+            {
+                return (
+                    lane.Select(s => s.ToActivity()).ToList(),
+                    lane.Select(s => s.ToChurn()).ToList()
+                );
+            }
+        }
+        else
+        {
+            var snapshots = await _holdingRepository
+                .GetStockActivitySnapshots(selectedDate)
+                .AsNoTracking()
+                .ToListAsync();
+            if (snapshots.Count > 0)
+            {
+                return (
+                    snapshots.Select(s => s.ToActivity()).ToList(),
+                    snapshots.Select(s => s.ToChurn()).ToList()
+                );
+            }
+        }
+
+        return (
+            await _holdingRepository
+                .GetQuarterlyActivity(selectedDate, previousDate, combined)
+                .ToListAsync(),
+            await _holdingRepository
+                .GetQuarterlyNewSoldOutPositions(selectedDate, previousDate, combined)
+                .ToListAsync()
+        );
     }
 
     private FileContentResult CsvFile(string csv, string filename)

@@ -16,6 +16,7 @@ public class ChunkRepository : BaseRepository<Chunk>
     // happily runs the chunk search for minutes after the aggregator has
     // already returned Empty, pinning the Npgsql connection (issue #1026).
     private const int HybridSearchCommandTimeoutSeconds = 5;
+    private const int CompanyFallbackCommandTimeoutSeconds = 3;
 
     public ChunkRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
@@ -152,6 +153,84 @@ public class ChunkRepository : BaseRepository<Chunk>
         {
             DbContext.Database.SetCommandTimeout(originalTimeout);
         }
+    }
+
+    // Bounded degrade for a ticker-scoped search whose ParadeDB pass timed out. The ticker btree
+    // narrows this PostgreSQL full-text scan to one company's chunks before Content is parsed, so
+    // a cold or contended BM25 index can still return proven matches instead of a 500. This is not
+    // used for corpus-wide search: generating tsvectors over the whole Chunk table would recreate
+    // the same unbounded work the fallback is meant to avoid.
+    public virtual async Task<List<Chunk>> HybridSearchCompanyFallback(
+        string searchText,
+        int maxResults,
+        string ticker,
+        Guid? documentId = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
+        DateOnly? startDate = null,
+        DateOnly? endDate = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var originalTimeout = DbContext.Database.GetCommandTimeout();
+        DbContext.Database.SetCommandTimeout(CompanyFallbackCommandTimeoutSeconds);
+        try
+        {
+            return await BuildCompanyFallbackQuery(
+                    searchText,
+                    maxResults,
+                    ticker,
+                    documentId,
+                    documentTypes,
+                    startDate,
+                    endDate
+                )
+                .ToListAsync(cancellationToken);
+        }
+        finally
+        {
+            DbContext.Database.SetCommandTimeout(originalTimeout);
+        }
+    }
+
+    internal IQueryable<Chunk> BuildCompanyFallbackQuery(
+        string searchText,
+        int maxResults,
+        string ticker,
+        Guid? documentId = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
+        DateOnly? startDate = null,
+        DateOnly? endDate = null
+    )
+    {
+        var normalizedTicker = ticker.ToUpperInvariant();
+        var query = DbContext
+            .Set<Chunk>()
+            .Where(c => c.Ticker == normalizedTicker)
+            .Where(c =>
+                EF.Functions.ToTsVector("english", c.Content)
+                    .Matches(EF.Functions.WebSearchToTsQuery("english", searchText))
+            );
+
+        if (documentId.HasValue)
+            query = query.Where(c => c.DocumentId == documentId.Value);
+
+        if (documentTypes is { Count: > 0 })
+        {
+            var types = documentTypes.ToList();
+            query = query.Where(c => types.Contains(c.DocumentType));
+        }
+
+        // Match the primary search path's filing-date source of truth; the denormalized chunk
+        // date can trail a corrected parent document date.
+        if (startDate is { } windowStart)
+            query = query.Where(c => c.Document.ReportingDate >= windowStart);
+        if (endDate is { } windowEnd)
+            query = query.Where(c => c.Document.ReportingDate <= windowEnd);
+
+        return query
+            .OrderByDescending(c => c.Document.ReportingDate)
+            .ThenBy(c => c.StartPosition)
+            .Take(maxResults);
     }
 
     // How far past the statement budget an elapsed run may land and still be attributed to

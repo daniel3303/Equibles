@@ -116,6 +116,16 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
         row.NewFilerCount.Should().Be(1, "only C initiated");
         row.SoldOutFilerCount.Should()
             .Be(1, "D filed this quarter without AAPL — a proven exit; B is assumed to hold");
+        var listing = await read.Set<StockQuarterlyListingActivity>()
+            .SingleAsync(snapshot =>
+                snapshot.CommonStockId == aapl.Id
+                && snapshot.ReportDate == OpenCur
+                && snapshot.IsCombined
+            );
+        listing.PriceSeriesTicker.Should().Be("AAPL");
+        listing.CurrentShares.Should().Be(2_000);
+        listing.PreviousShares.Should().Be(1_600);
+        listing.ComputedAt.Should().Be(row.ComputedAt);
     }
 
     [Fact]
@@ -189,6 +199,71 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
         rows.Should().ContainSingle(r => r.CommonStockId == aapl.Id);
     }
 
+    [Fact]
+    public async Task RebuildQuarterAsync_PublishesHolderAndCombinedSnapshotsAtomically()
+    {
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        var stock = await SeedStock(seed, "AAPL", industry);
+        var holderA = await SeedHolder(seed, "H001");
+        var holderB = await SeedHolder(seed, "H002");
+        seed.AddRange(
+            MakeHolding(stock, holderA, OpenPrev, 100_000, "acc-a-prev"),
+            MakeHolding(stock, holderA, OpenCur, 120_000, "acc-a-cur")
+        );
+        await seed.SaveChangesAsync();
+        await BuildService().RebuildQuarterAsync(OpenCur, CancellationToken.None);
+
+        await using (var import = FreshContext())
+        {
+            import.Add(MakeHolding(stock, holderB, OpenCur, 30_000, "acc-b-cur"));
+            await import.SaveChangesAsync();
+        }
+
+        var blocking = BuildBlockingService();
+        var rebuild = blocking.RebuildQuarterAsync(OpenCur, CancellationToken.None);
+        await blocking.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            await using var during = FreshContext();
+            var visibleHolders = await during
+                .Set<HolderQuarterlySnapshot>()
+                .CountAsync(row => row.ReportDate == OpenCur);
+            var visibleActivity = await during
+                .Set<StockQuarterlyActivityCombined>()
+                .SingleAsync(row => row.CommonStockId == stock.Id && row.ReportDate == OpenCur);
+
+            visibleHolders.Should().Be(1, "the new holder generation is still uncommitted");
+            visibleActivity
+                .CurrentFilerCount.Should()
+                .Be(1, "the old activity generation remains visible");
+        }
+        finally
+        {
+            blocking.Release.TrySetResult(true);
+        }
+        await rebuild;
+
+        await using var after = FreshContext();
+        (await after.Set<HolderQuarterlySnapshot>().CountAsync(row => row.ReportDate == OpenCur))
+            .Should()
+            .Be(2);
+        (
+            await after
+                .Set<StockQuarterlyActivityCombined>()
+                .SingleAsync(row => row.CommonStockId == stock.Id && row.ReportDate == OpenCur)
+        )
+            .CurrentFilerCount.Should()
+            .Be(2);
+    }
+
+    private BlockingRefreshService BuildBlockingService()
+    {
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory.CreateScope().Returns(_ => CreateScopeFromFixture());
+        return new BlockingRefreshService(scopeFactory);
+    }
+
     private static async Task<Guid> SeedTaxonomy(Equibles.Data.EquiblesFinancialDbContext ctx)
     {
         var sector = new Sector { Name = "Technology" };
@@ -254,4 +329,25 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
                     ..9
                 ],
         };
+
+    private sealed class BlockingRefreshService : HoldingsAggregateRefreshService
+    {
+        public BlockingRefreshService(IServiceScopeFactory scopeFactory)
+            : base(scopeFactory, NullLogger<HoldingsAggregateRefreshService>.Instance) { }
+
+        public TaskCompletionSource<bool> Entered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> Release { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task BeforeCombinedLaneRefresh(
+            DateOnly reportDate,
+            CancellationToken cancellationToken
+        )
+        {
+            Entered.TrySetResult(true);
+            await Release.Task.WaitAsync(cancellationToken);
+        }
+    }
 }

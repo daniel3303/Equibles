@@ -47,10 +47,16 @@ public class InstitutionalHoldingRepositoryUniqueFilerIdsCombinedTests : IDispos
             Cik = "0000000002",
             Name = "Carried Forward",
         };
+        var eventOnlyHolder = new InstitutionalHolder
+        {
+            Id = Guid.NewGuid(),
+            Cik = "0000000003",
+            Name = "Schedule 13G Only",
+        };
         var previous = new DateOnly(2024, 3, 31);
         var current = new DateOnly(2024, 6, 30);
 
-        _dbContext.Set<InstitutionalHolder>().AddRange(filer, nonFiler);
+        _dbContext.Set<InstitutionalHolder>().AddRange(filer, nonFiler, eventOnlyHolder);
         _dbContext
             .Set<InstitutionalHolding>()
             .AddRange(
@@ -58,7 +64,9 @@ public class InstitutionalHoldingRepositoryUniqueFilerIdsCombinedTests : IDispos
                 Holding(stockX, filer.Id, current, "F-X-Q2"),
                 Holding(stockY, filer.Id, current, "F-Y-Q2"),
                 // Non-filer held last quarter only — carried into the combined view.
-                Holding(stockX, nonFiler.Id, previous, "N-X-Q1")
+                Holding(stockX, nonFiler.Id, previous, "N-X-Q1"),
+                // A Schedule 13G event on the quarter end is not a 13F filer.
+                Holding(stockX, eventOnlyHolder.Id, current, "E-X-Q2", FilingType.Schedule13G)
             );
         await _dbContext.SaveChangesAsync(CancellationToken.None);
 
@@ -73,7 +81,8 @@ public class InstitutionalHoldingRepositoryUniqueFilerIdsCombinedTests : IDispos
         Guid stockId,
         Guid holderId,
         DateOnly reportDate,
-        string accession
+        string accession,
+        FilingType filingType = FilingType.Form13F
     ) =>
         new()
         {
@@ -85,5 +94,6 @@ public class InstitutionalHoldingRepositoryUniqueFilerIdsCombinedTests : IDispos
             Shares = 100,
             Value = 1000,
             AccessionNumber = accession,
+            FilingType = filingType,
         };
 }

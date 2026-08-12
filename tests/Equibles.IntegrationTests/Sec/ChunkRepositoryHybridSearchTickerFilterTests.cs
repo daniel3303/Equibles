@@ -60,6 +60,52 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task HybridSearchCompanyFallback_UsesTickerTypeAndParentDocumentDate()
+    {
+        var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        var microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
+        var insideWindow = SeedDocument(apple);
+        insideWindow.ReportingDate = new DateOnly(2026, 1, 15);
+        var expected = SeedChunk(
+            insideWindow,
+            "Orbital revenue acceleration improved operating margin.",
+            "AAPL"
+        );
+        expected.ReportingDate = new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+
+        var wrongTickerDocument = SeedDocument(microsoft);
+        wrongTickerDocument.ReportingDate = insideWindow.ReportingDate;
+        SeedChunk(
+            wrongTickerDocument,
+            "Orbital revenue acceleration improved operating margin.",
+            "MSFT"
+        );
+
+        var outsideWindow = SeedDocument(apple);
+        outsideWindow.ReportingDate = new DateOnly(2024, 1, 15);
+        var staleCache = SeedChunk(
+            outsideWindow,
+            "Orbital revenue acceleration improved operating margin.",
+            "AAPL"
+        );
+        staleCache.ReportingDate = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        await DbContext.SaveChangesAsync();
+
+        var sut = new ChunkRepository(DbContext);
+
+        var results = await sut.HybridSearchCompanyFallback(
+            "orbital revenue acceleration",
+            maxResults: 10,
+            ticker: "aapl",
+            documentTypes: [DocumentType.TenK],
+            startDate: new DateOnly(2025, 1, 1),
+            endDate: new DateOnly(2026, 12, 31)
+        );
+
+        results.Should().ContainSingle().Which.Id.Should().Be(expected.Id);
+    }
+
+    [Fact]
     public async Task HybridSearch_WithSeparatorTicker_StillMatchesViaRawTokenizer()
     {
         // The default BM25 tokenizer splits "BRK-B" into "brk"/"b", which would make a
@@ -147,26 +193,26 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
         return document;
     }
 
-    private void SeedChunk(Document document, string content, string ticker)
+    private Chunk SeedChunk(Document document, string content, string ticker)
     {
-        DbContext.Add(
-            new Chunk
-            {
-                Document = document,
-                DocumentId = document.Id,
-                Index = 0,
-                StartPosition = 0,
-                EndPosition = content.Length,
-                StartLineNumber = 1,
-                Content = content,
-                DocumentType = document.DocumentType,
-                Ticker = ticker,
-                ReportingDate = DateTime.SpecifyKind(
-                    document.ReportingDate.ToDateTime(TimeOnly.MinValue),
-                    DateTimeKind.Utc
-                ),
-            }
-        );
+        var chunk = new Chunk
+        {
+            Document = document,
+            DocumentId = document.Id,
+            Index = 0,
+            StartPosition = 0,
+            EndPosition = content.Length,
+            StartLineNumber = 1,
+            Content = content,
+            DocumentType = document.DocumentType,
+            Ticker = ticker,
+            ReportingDate = DateTime.SpecifyKind(
+                document.ReportingDate.ToDateTime(TimeOnly.MinValue),
+                DateTimeKind.Utc
+            ),
+        };
+        DbContext.Add(chunk);
+        return chunk;
     }
 
     private sealed class CapturingCommandInterceptor : DbCommandInterceptor
