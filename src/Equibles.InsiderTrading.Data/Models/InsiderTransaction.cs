@@ -35,9 +35,12 @@ public class InsiderTransaction
     /// instead of <see cref="TransactionCode.Other"/>, so the reprocess re-tags
     /// every historical holding row and transaction lists can exclude them; v6
     /// re-derives transaction dates after implausible-date validation was added,
-    /// anchoring source typos to the filing's period of report.
+    /// anchoring source typos to the filing's period of report; v7 re-copies the
+    /// Rule 10b5-1 checkbox during reprocess — the v4 capture parsed it but the
+    /// reprocess copy-loop never wrote it, so pre-capture rows (1.4M checkbox-era
+    /// rows) stayed null (#7164, EquiblesCommercial).
     /// </summary>
-    public const int CurrentParserVersion = 6;
+    public const int CurrentParserVersion = 7;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 

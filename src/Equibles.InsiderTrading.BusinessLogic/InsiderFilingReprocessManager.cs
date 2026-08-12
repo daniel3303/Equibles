@@ -183,12 +183,13 @@ public class InsiderFilingReprocessManager
             }
 
             _logger.LogInformation(
-                "Insider filing reprocess: {Processed}/{Total} filings, reclassified={Reclassified}, repaired={Repaired}, dates corrected={DatesCorrected}, failed={Failed}",
+                "Insider filing reprocess: {Processed}/{Total} filings, reclassified={Reclassified}, repaired={Repaired}, dates corrected={DatesCorrected}, 10b5-1 stamped={Rule10b5Stamped}, failed={Failed}",
                 result.Processed,
                 result.Total,
                 result.Reclassified,
                 result.Repaired,
                 result.DatesCorrected,
+                result.Rule10b5Stamped,
                 result.Failed
             );
 
@@ -306,6 +307,15 @@ public class InsiderFilingReprocessManager
                 {
                     row.TransactionCode = reparsed.TransactionCode;
                     result.Reclassified++;
+                }
+                // Re-copy the Rule 10b5-1 checkbox (parsed since v4, but never copied
+                // here until v7 — so pre-capture rows stayed null through every
+                // reprocess). The parse is authoritative; count actual changes so a
+                // backlog run reports how many rows the copy actually flagged.
+                if (row.IsRule10b5One != reparsed.IsRule10b5One)
+                {
+                    row.IsRule10b5One = reparsed.IsRule10b5One;
+                    result.Rule10b5Stamped++;
                 }
                 // Re-derive footnotes (added in parser v2); cheap to always copy.
                 row.Notes = reparsed.Notes;

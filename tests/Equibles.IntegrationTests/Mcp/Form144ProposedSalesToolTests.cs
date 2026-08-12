@@ -1,6 +1,8 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.InsiderTrading.Data;
@@ -21,6 +23,9 @@ public class Form144ProposedSalesToolTests : IDisposable
     {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
+            // GetProposedSales restates the percent numerator onto today's split
+            // basis, so the tool now reads StockSplit rows.
+            new CorporateActionsModuleConfiguration(),
             new InsiderTradingModuleConfiguration()
         );
         _tools = new InsiderTradingTools(
@@ -36,7 +41,11 @@ public class Form144ProposedSalesToolTests : IDisposable
 
     public void Dispose() => _dbContext.Dispose();
 
-    private CommonStock SeedStock(string ticker = "AAPL", string cik = "0000320193")
+    private CommonStock SeedStock(
+        string ticker = "AAPL",
+        string cik = "0000320193",
+        long sharesOutstanding = 0
+    )
     {
         var stock = new CommonStock
         {
@@ -44,6 +53,7 @@ public class Form144ProposedSalesToolTests : IDisposable
             Ticker = ticker,
             Name = "Apple Inc.",
             Cik = cik,
+            SharesOutStanding = sharesOutstanding,
         };
         _dbContext.Set<CommonStock>().Add(stock);
         _dbContext.SaveChanges();
@@ -194,33 +204,69 @@ public class Form144ProposedSalesToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetProposedSales_RendersPercentOfSharesOutstanding()
+    public async Task GetProposedSales_RendersPercentOfIssuerSharesOutstanding()
     {
-        var stock = SeedStock();
+        var stock = SeedStock(sharesOutstanding: 2_000_000_000);
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1_000_000);
+        // Filer typed their own sale count into noOfUnitsOutstanding (the MSFT
+        // "100% of outstanding" bug, #7164 EquiblesCommercial) — the notice's field
+        // must NOT be the denominator.
+        filing.SharesOutstanding = 1_000_000;
+        _dbContext.Set<Form144Filing>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetProposedSales("AAPL");
+
+        // 1,000,000 / 2,000,000,000 (the issuer record's share count) = 0.05%.
+        result.Should().Contain("% Outstanding");
+        result.Should().Contain("| 0.05% |");
+        result.Should().NotContain("| 100% |");
+    }
+
+    [Fact]
+    public async Task GetProposedSales_NoIssuerShareCount_RendersDash()
+    {
+        // Issuer record carries no share count — serve "-" rather than trusting the
+        // notice's self-reported field.
+        var stock = SeedStock(sharesOutstanding: 0);
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
         filing.SharesOutstanding = 2_000_000_000;
         _dbContext.Set<Form144Filing>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
         var result = await _tools.GetProposedSales("AAPL");
 
-        // 1,000,000 / 2,000,000,000 = 0.05% — the notice's own share base, as filed.
-        result.Should().Contain("% Outstanding");
-        result.Should().Contain("| 0.05% |");
+        result.Should().Contain("| - |");
     }
 
     [Fact]
-    public async Task GetProposedSales_NoSharesOutstandingOnNotice_RendersDash()
+    public async Task GetProposedSales_NoticeBeforeSplit_PercentUsesTheSplitAdjustedShareCount()
     {
-        var stock = SeedStock();
-        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
-        filing.SharesOutstanding = 0;
+        // The filed share count sits on the pre-split basis while the issuer record's
+        // count is current — restate the numerator so the ratio compares like with like
+        // (10,000 pre-split shares = 100,000 post-split ÷ 2,000,000,000 = 0.005%).
+        var stock = SeedStock(sharesOutstanding: 2_000_000_000);
+        _dbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStockId = stock.Id,
+                    EffectiveDate = new DateOnly(2026, 3, 1),
+                    Numerator = 10,
+                    Denominator = 1,
+                    Source = StockSplitSource.Yahoo,
+                }
+            );
+        var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 10_000);
         _dbContext.Set<Form144Filing>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
         var result = await _tools.GetProposedSales("AAPL");
 
-        result.Should().Contain("| - |");
+        // The Shares column stays as filed; only the percent numerator is restated.
+        result.Should().Contain("| 10,000 |");
+        result.Should().Contain("| 0.005% |");
     }
 
     [Fact]

@@ -73,7 +73,9 @@ public class InsiderTradingToolsOwnershipRankingTests
         DateOnly transactionDate,
         long sharesOwnedAfter,
         string accessionNumber,
-        TransactionCode code = TransactionCode.Sale
+        TransactionCode code = TransactionCode.Sale,
+        int transactionOrder = 0,
+        InsiderSecurityKind securityKind = InsiderSecurityKind.NonDerivative
     ) =>
         new()
         {
@@ -91,6 +93,8 @@ public class InsiderTradingToolsOwnershipRankingTests
             OwnershipNature = OwnershipNature.Direct,
             SecurityTitle = "Common Stock",
             AccessionNumber = accessionNumber,
+            TransactionOrder = transactionOrder,
+            SecurityKind = securityKind,
         };
 
     [Fact]
@@ -157,6 +161,128 @@ public class InsiderTradingToolsOwnershipRankingTests
         output.Should().Contain("Pre Split Holder");
         output.Should().Contain("3,443,200");
         output.Should().NotContain("Post Split Holder");
+    }
+
+    [Fact]
+    public async Task GetInsiderOwnership_MultiRowFiling_UsesTheLastRowsEndOfDayBalance()
+    {
+        // A multi-row Form 4 lists a SEQUENCE of same-day transactions whose
+        // SharesOwnedAfter are intermediate balances — only the last row (max
+        // TransactionOrder) is the end-of-day position. The old OrderNewestFirst pick
+        // (TransactionOrder ASC) returned the FIRST row, publishing an intermediate
+        // balance as the insider's current position (#7164, EquiblesCommercial).
+        await using var db = NewDb();
+        var stock = new CommonStock
+        {
+            Ticker = "MSFT",
+            Name = "Microsoft Corp.",
+            Cik = "0000789019",
+        };
+        var owner = new InsiderOwner
+        {
+            OwnerCik = "0000000041",
+            Name = "Sequential Seller",
+            IsDirector = true,
+        };
+        db.AddRange(stock, owner);
+        // Older filing that must NOT win.
+        db.Add(
+            NewTransaction(
+                stock,
+                owner,
+                new DateOnly(2024, 1, 10),
+                sharesOwnedAfter: 500,
+                accessionNumber: "acc-old-1"
+            )
+        );
+        // Same-day 3-row filing: 100 → 50 → 10; the end-of-day position is 10.
+        foreach (var (balance, order) in new (long, int)[] { (100, 0), (50, 1), (10, 2) })
+        {
+            db.Add(
+                NewTransaction(
+                    stock,
+                    owner,
+                    new DateOnly(2024, 6, 3),
+                    sharesOwnedAfter: balance,
+                    accessionNumber: "acc-new-1",
+                    transactionOrder: order
+                )
+            );
+        }
+        await db.SaveChangesAsync();
+
+        var output = await Sut(db).GetInsiderOwnership("MSFT");
+
+        output.Should().Contain("| Sequential Seller | Director | 10 |");
+        output.Should().NotContain("| 100 |");
+        output.Should().NotContain("| 50 |");
+        output.Should().NotContain("| 500 |");
+    }
+
+    [Fact]
+    public async Task GetInsiderOwnership_DerivativeRows_NeverCarryTheSharesOwnedBalance()
+    {
+        // Shares Owned must come from the non-derivative (actual shares) table. A newer
+        // derivative row (an option grant's running balance) must not displace the
+        // actual-share position, and a derivative-only insider has no share position to
+        // report.
+        await using var db = NewDb();
+        var stock = new CommonStock
+        {
+            Ticker = "TSM",
+            Name = "Taiwan Semiconductor",
+            Cik = "0001046179",
+        };
+        var mixed = new InsiderOwner
+        {
+            OwnerCik = "0000000051",
+            Name = "Mixed Holder",
+            IsDirector = true,
+        };
+        var derivativeOnly = new InsiderOwner
+        {
+            OwnerCik = "0000000052",
+            Name = "Options Only Holder",
+            IsDirector = true,
+        };
+        db.AddRange(stock, mixed, derivativeOnly);
+        db.Add(
+            NewTransaction(
+                stock,
+                mixed,
+                new DateOnly(2024, 5, 1),
+                sharesOwnedAfter: 7_000,
+                accessionNumber: "acc-mixed-nd"
+            )
+        );
+        // Newer derivative row for the same insider — must not become the position.
+        db.Add(
+            NewTransaction(
+                stock,
+                mixed,
+                new DateOnly(2024, 6, 1),
+                sharesOwnedAfter: 99_999,
+                accessionNumber: "acc-mixed-d",
+                securityKind: InsiderSecurityKind.Derivative
+            )
+        );
+        db.Add(
+            NewTransaction(
+                stock,
+                derivativeOnly,
+                new DateOnly(2024, 6, 1),
+                sharesOwnedAfter: 12_345,
+                accessionNumber: "acc-deriv-only",
+                securityKind: InsiderSecurityKind.Derivative
+            )
+        );
+        await db.SaveChangesAsync();
+
+        var output = await Sut(db).GetInsiderOwnership("TSM");
+
+        output.Should().Contain("| Mixed Holder | Director | 7,000 |");
+        output.Should().NotContain("99,999");
+        output.Should().NotContain("Options Only Holder");
     }
 
     [Fact]
