@@ -1,4 +1,4 @@
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.BusinessLogic.RevenueBreakdown;
 using FluentAssertions;
 
 namespace Equibles.UnitTests.Sec;
@@ -26,7 +26,7 @@ public class RevenueBreakdownToolsCollapseOverlappingSchemesTests
     [Fact]
     public void BuildAxisSeries_TwoOverlappingSchemesEachSummingToTotal_KeepsMostGranularScheme()
     {
-        var rows = new List<RevenueBreakdownTools.DimensionalRevenueRow>
+        var rows = new List<DimensionalRevenueRow>
         {
             // Region scheme — 3 members, sums to 63,887.
             new(Geo, "avgo:AmericasMember", Fy2025, 18939m, "USD", Filed),
@@ -40,7 +40,7 @@ public class RevenueBreakdownToolsCollapseOverlappingSchemesTests
             new(Geo, "avgo:AllOtherMember", Fy2025, 18979m, "USD", Filed),
         };
 
-        var (unit, periodEnds, members) = RevenueBreakdownTools.BuildAxisSeries(
+        var (unit, periodEnds, members) = RevenueBreakdownCore.BuildAxisSeries(
             rows,
             [Geo],
             maxYears: 8,
@@ -67,7 +67,7 @@ public class RevenueBreakdownToolsCollapseOverlappingSchemesTests
     [Fact]
     public void BuildAxisSeries_RegionAndUsNonUsSchemes_KeepsFourMemberRegionScheme()
     {
-        var rows = new List<RevenueBreakdownTools.DimensionalRevenueRow>
+        var rows = new List<DimensionalRevenueRow>
         {
             // Region scheme — 4 members summing to 67,589.
             new(Geo, "cat:NorthAmericaMember", Fy2025, 38000m, "USD", Filed),
@@ -79,7 +79,7 @@ public class RevenueBreakdownToolsCollapseOverlappingSchemesTests
             new(Geo, "cat:NonUsMember", Fy2025, 33589m, "USD", Filed),
         };
 
-        var (_, _, members) = RevenueBreakdownTools.BuildAxisSeries(
+        var (_, _, members) = RevenueBreakdownCore.BuildAxisSeries(
             rows,
             [Geo],
             maxYears: 8,
@@ -99,14 +99,14 @@ public class RevenueBreakdownToolsCollapseOverlappingSchemesTests
     [Fact]
     public void BuildAxisSeries_SingleSchemeSummingToTotal_LeftIntact()
     {
-        var rows = new List<RevenueBreakdownTools.DimensionalRevenueRow>
+        var rows = new List<DimensionalRevenueRow>
         {
             new(Geo, "country:US", Fy2025, 40m, "USD", Filed),
             new(Geo, "country:CN", Fy2025, 35m, "USD", Filed),
             new(Geo, "country:SG", Fy2025, 25m, "USD", Filed),
         };
 
-        var (_, _, members) = RevenueBreakdownTools.BuildAxisSeries(
+        var (_, _, members) = RevenueBreakdownCore.BuildAxisSeries(
             rows,
             [Geo],
             maxYears: 8,
@@ -123,7 +123,7 @@ public class RevenueBreakdownToolsCollapseOverlappingSchemesTests
     [Fact]
     public void BuildAxisSeries_NoCleanSecondFullTotalSubset_LeftUnchanged()
     {
-        var rows = new List<RevenueBreakdownTools.DimensionalRevenueRow>
+        var rows = new List<DimensionalRevenueRow>
         {
             new(Geo, "country:US", Fy2025, 40m, "USD", Filed),
             new(Geo, "country:CN", Fy2025, 35m, "USD", Filed),
@@ -131,7 +131,7 @@ public class RevenueBreakdownToolsCollapseOverlappingSchemesTests
             new(Geo, "country:TW", Fy2025, 10m, "USD", Filed),
         };
 
-        var (_, _, members) = RevenueBreakdownTools.BuildAxisSeries(
+        var (_, _, members) = RevenueBreakdownCore.BuildAxisSeries(
             rows,
             [Geo],
             maxYears: 8,
