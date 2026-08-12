@@ -5,8 +5,8 @@ namespace Equibles.Holdings.HostedService;
 
 /// <summary>
 /// In-process wake signal so <see cref="StockCusipChangedConsumer"/> can make
-/// <see cref="HoldingsScraperWorker"/> re-run promptly after it invalidates the
-/// ProcessedDataSet ledger — instead of the backfill waiting up to the worker's
+/// <see cref="HoldingsScraperWorker"/> re-run promptly after it queues a
+/// pending rescan — instead of the backfill waiting up to the worker's
 /// 24h <c>SleepInterval</c> (and risking a same-cycle skip). Singleton so the
 /// scoped consumer and the singleton hosted worker share one instance.
 /// Requests coalesce: many CUSIP-change events in one FTD burst trigger a

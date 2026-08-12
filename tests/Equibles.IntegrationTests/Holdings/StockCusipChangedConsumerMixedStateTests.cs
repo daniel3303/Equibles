@@ -13,13 +13,14 @@ using Xunit;
 namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
-/// Adversarial sibling: the feature's pins cover "real rows + no guard" and
-/// "guard only". The MIXED state — guard sentinel AND fresh real rows — is real
-/// and untested: a prior CUSIP change invalidated + added the guard, the worker
-/// re-imported quarterly sets, then another FTD-seeded CUSIP change arrives. A
-/// second CUSIP change must re-invalidate the new real rows WITHOUT inserting a
-/// duplicate guard (FileName has a unique index → duplicate insert throws and
-/// permanently breaks the consumer).
+/// Adversarial sibling: the feature's pins cover "real rows only" and
+/// "sentinel only". The MIXED state — backfill guard AND fresh real rows — is
+/// the steady state after a completed rescan: the worker applied a previous
+/// sentinel (leaving the guard), re-imported quarterly sets, and then another
+/// FTD-seeded CUSIP change arrives. The event must queue a new rescan sentinel
+/// WITHOUT touching the guard, the real rows, or throwing (FileName has a
+/// unique index → a duplicate guard insert would permanently break the
+/// consumer).
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class StockCusipChangedConsumerMixedStateTests : IAsyncLifetime
@@ -41,14 +42,14 @@ public class StockCusipChangedConsumerMixedStateTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Consume_GuardAndFreshRealRowsBothPresent_ReInvalidatesWithoutDuplicatingGuard()
+    public async Task Consume_GuardAndFreshRealRowsBothPresent_QueuesSentinelAndTouchesNothingElse()
     {
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<ProcessedDataSet>()
                 .AddRange(
                     new ProcessedDataSet { FileName = ProcessedDataSet.BackfillGuardFileName },
-                    // Worker re-imported these after the previous invalidation.
+                    // Worker re-imported these after the previous rescan.
                     new ProcessedDataSet
                     {
                         FileName = "01mar2025-31may2025_form13f.zip",
@@ -79,8 +80,11 @@ public class StockCusipChangedConsumerMixedStateTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var rows = await verify.Set<ProcessedDataSet>().Select(r => r.FileName).ToListAsync();
         rows.Should()
-            .ContainSingle("real rows re-invalidated; exactly one guard, never duplicated")
-            .Which.Should()
-            .Be(ProcessedDataSet.BackfillGuardFileName);
+            .BeEquivalentTo(
+                ProcessedDataSet.BackfillGuardFileName,
+                "01mar2025-31may2025_form13f.zip",
+                "01dec2025-28feb2026_form13f.zip",
+                ProcessedDataSet.RescanPendingFileName
+            );
     }
 }
