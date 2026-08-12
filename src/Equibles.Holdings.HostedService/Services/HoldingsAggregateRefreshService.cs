@@ -209,12 +209,18 @@ public class HoldingsAggregateRefreshService
 
         async Task PublishSnapshotGeneration()
         {
-            await UpsertAumSnapshot(dbContext, reportDate, cancellationToken);
             await UpsertSectorSnapshots(dbContext, reportDate, cancellationToken);
             await UpsertStockActivitySnapshots(dbContext, reportDate, cancellationToken);
             await UpsertHolderSnapshots(dbContext, reportDate, cancellationToken);
             await BeforeCombinedLaneRefresh(reportDate, cancellationToken);
             await RefreshCombinedLane(dbContext, reportDate, cancellationToken);
+
+            // AumQuarterlySnapshot also carries the drain's renewable DirtyAt lease.
+            // Write it last so the transaction does not lock that row while the
+            // expensive aggregate families are still being rebuilt; otherwise the
+            // separate renewal connection blocks behind this transaction and a valid
+            // long rebuild inevitably outlives its lease.
+            await UpsertAumSnapshot(dbContext, reportDate, cancellationToken);
         }
 
         if (!dbContext.Database.IsRelational())

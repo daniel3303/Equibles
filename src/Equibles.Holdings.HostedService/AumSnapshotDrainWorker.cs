@@ -96,6 +96,16 @@ public class AumSnapshotDrainWorker : BackgroundService
             due = await dbContext
                 .Set<AumQuarterlySnapshot>()
                 .Where(s => s.DirtyAt != null && s.DirtyAt < cutoff)
+                // A newly introduced snapshot family is empty until its first rebuild.
+                // Prioritize those quarters so public reads stop falling back to the
+                // holdings corpus before routine dirty generations are refreshed.
+                .OrderBy(s =>
+                    dbContext
+                        .Set<StockQuarterlyListingActivity>()
+                        .Any(a => a.ReportDate == s.ReportDate && !a.IsCombined)
+                )
+                .ThenBy(s => s.DirtyAt)
+                .ThenBy(s => s.ReportDate)
                 .Select(s => new DueRebuild
                 {
                     ReportDate = s.ReportDate,
