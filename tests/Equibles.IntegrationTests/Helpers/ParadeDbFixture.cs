@@ -91,7 +91,8 @@ public class ParadeDbFixture : IAsyncLifetime
     /// and the migrations assembly so any future <c>MigrateAsync</c> call (e.g., reset)
     /// uses the same migration set.
     /// </summary>
-    public EquiblesFinancialDbContext CreateDbContext() => CreateDbContext(configure: null);
+    public EquiblesFinancialDbContext CreateDbContext() =>
+        CreateDbContext(configure: null, configureNpgsql: null);
 
     /// <summary>
     /// Returns a fresh <see cref="EquiblesFinancialDbContext"/> after applying the
@@ -101,7 +102,9 @@ public class ParadeDbFixture : IAsyncLifetime
     /// without duplicating the full production-mirror setup.
     /// </summary>
     public EquiblesFinancialDbContext CreateDbContext(
-        Action<DbContextOptionsBuilder<EquiblesFinancialDbContext>> configure
+        Action<DbContextOptionsBuilder<EquiblesFinancialDbContext>> configure,
+        Action<Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder> configureNpgsql =
+            null
     )
     {
         var optionsBuilder = new DbContextOptionsBuilder<EquiblesFinancialDbContext>();
@@ -115,6 +118,7 @@ public class ParadeDbFixture : IAsyncLifetime
                 npgsql.MigrationsAssembly(
                     typeof(Equibles.Migrations.DesignTimeDbContextFactory).Assembly
                 );
+                configureNpgsql?.Invoke(npgsql);
             }
         );
         optionsBuilder.UseLazyLoadingProxies();

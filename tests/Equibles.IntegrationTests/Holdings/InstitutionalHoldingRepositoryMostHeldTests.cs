@@ -392,6 +392,53 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
         count.Should().Be(0, "an existing combined generation owns its zero denominator");
     }
 
+    [Fact]
+    public async Task GetMarketActivitySnapshotBacked_WithRetryStrategy_ReadsVersionedGeneration()
+    {
+        await using var seed = FreshContext();
+        var stock = await SeedStock(seed, "RETRY");
+        var computedAt = DateTime.UtcNow;
+        seed.AddRange(
+            new StockQuarterlyActivity
+            {
+                CommonStockId = stock.Id,
+                ReportDate = Current,
+                PreviousReportDate = Prior,
+                CurrentShares = 1_200,
+                PreviousShares = 1_000,
+                CurrentValue = 120_000,
+                PreviousValue = 100_000,
+                CurrentFilerCount = 12,
+                PreviousFilerCount = 10,
+                ComputedAt = computedAt,
+            },
+            new StockQuarterlyListingActivity
+            {
+                CommonStockId = stock.Id,
+                ReportDate = Current,
+                PriceSeriesTicker = stock.Ticker,
+                CurrentShares = 1_200,
+                PreviousShares = 1_000,
+                ComputedAt = computedAt,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        await using var read = _fixture.CreateDbContext(
+            configure: null,
+            configureNpgsql: npgsql => npgsql.EnableRetryOnFailure()
+        );
+        var sut = new InstitutionalHoldingRepository(read);
+
+        var rows = await sut.GetMarketActivitySnapshotBacked(Current, Prior, combined: false);
+
+        rows.Should().ContainSingle();
+        rows[0].CommonStockId.Should().Be(stock.Id);
+        rows[0].CurrentShares.Should().Be(1_200);
+        rows[0].ListingShares.Should().ContainSingle();
+        rows[0].ListingShares[0].PriceSeriesTicker.Should().Be(stock.Ticker);
+    }
+
     private static async Task<CommonStock> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker
