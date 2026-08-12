@@ -54,10 +54,14 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
     private readonly List<Chunk> _conjunctiveResults;
     private readonly List<Chunk> _disjunctiveResults;
     private readonly List<Chunk> _allChunks;
+    private readonly List<Chunk> _companyFallbackResults;
+    private readonly Exception _companyFallbackError;
 
     public List<int?> ConjunctiveBudgets { get; } = [];
 
     public List<int?> DisjunctiveBudgets { get; } = [];
+
+    public int CompanyFallbackCalls { get; private set; }
 
     public TimeoutChunkRepository(
         bool conjunctiveTimesOut = false,
@@ -65,6 +69,8 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         Exception conjunctiveError = null,
         List<Chunk> conjunctiveResults = null,
         List<Chunk> disjunctiveResults = null,
+        List<Chunk> companyFallbackResults = null,
+        Exception companyFallbackError = null,
         List<Chunk> allChunks = null
     )
         : base(null)
@@ -74,6 +80,8 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         _conjunctiveError = conjunctiveError;
         _conjunctiveResults = conjunctiveResults ?? [];
         _disjunctiveResults = disjunctiveResults ?? [];
+        _companyFallbackResults = companyFallbackResults ?? [];
+        _companyFallbackError = companyFallbackError;
         _allChunks = allChunks ?? [];
     }
 
@@ -100,6 +108,23 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
                 new TimeoutException()
             );
         return Task.FromResult(conjunctive ? _conjunctiveResults : _disjunctiveResults);
+    }
+
+    public override Task<List<Chunk>> HybridSearchCompanyFallback(
+        string searchText,
+        int maxResults,
+        string ticker,
+        Guid? documentId = null,
+        IReadOnlyCollection<DocumentType> documentTypes = null,
+        DateOnly? startDate = null,
+        DateOnly? endDate = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        CompanyFallbackCalls++;
+        if (_companyFallbackError != null)
+            throw _companyFallbackError;
+        return Task.FromResult(_companyFallbackResults);
     }
 
     public override IQueryable<Chunk> GetAll() => new TestAsyncEnumerable<Chunk>(_allChunks);

@@ -12,7 +12,7 @@ namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
 /// Contract for <see cref="Filings13FImportedConsumer"/>: marks the AUM
-/// snapshot for the affected quarter dirty in a single atomic upsert. Brand-new
+/// snapshot for the affected quarter and its following quarter dirty in one atomic upsert. Brand-new
 /// quarters land as a stub row with <c>DirtyAt</c> set; the drain worker fills
 /// in the aggregates on its next cooldown-expired tick.
 /// </summary>
@@ -146,5 +146,55 @@ public class Filings13FImportedConsumerTests : IAsyncLifetime
         var aum = await read.Set<AumQuarterlySnapshot>().SingleAsync(s => s.ReportDate == Q4);
         aum.DirtyAt.Should().NotBeNull();
         aum.DirtyAt!.Value.Should().BeCloseTo(firstEventAt, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task Consume_ActiveDrainClaim_ReplacesLeaseWithEventTimestamp()
+    {
+        var activeLease = DateTime.UtcNow.AddMinutes(5);
+        await using (var seed = FreshContext())
+        {
+            seed.Add(
+                new AumQuarterlySnapshot
+                {
+                    ReportDate = Q4,
+                    TotalValue = 1L,
+                    DirtyAt = activeLease,
+                }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        var before = DateTime.UtcNow;
+        await BuildConsumer().Consume(Context(new Filings13FImported(Q4, FilingCount: 1)));
+        var after = DateTime.UtcNow;
+
+        await using var read = FreshContext();
+        var aum = await read.Set<AumQuarterlySnapshot>().SingleAsync(s => s.ReportDate == Q4);
+        aum.DirtyAt.Should().NotBeNull();
+        aum.DirtyAt!.Value.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
+    }
+
+    [Fact]
+    public async Task Consume_HistoricalQuarterAlsoDirtiesFollowingComparisonSnapshot()
+    {
+        var amended = new DateOnly(2024, 9, 30);
+        await using (var seed = FreshContext())
+        {
+            seed.AddRange(
+                new AumQuarterlySnapshot { ReportDate = amended },
+                new AumQuarterlySnapshot { ReportDate = Q4 }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        await BuildConsumer().Consume(Context(new Filings13FImported(amended, FilingCount: 1)));
+
+        await using var read = FreshContext();
+        var snapshots = await read.Set<AumQuarterlySnapshot>()
+            .OrderBy(snapshot => snapshot.ReportDate)
+            .ToListAsync();
+        snapshots.Should().HaveCount(2);
+        snapshots.Should().OnlyContain(snapshot => snapshot.DirtyAt != null);
     }
 }

@@ -19,8 +19,8 @@ namespace Equibles.Holdings.HostedService.Services;
 /// </para>
 /// <para>
 /// Idempotent and re-entrant: re-summing an already-correct filing writes nothing, and the dirty
-/// stamp is an insert-or-set-when-null upsert (the same statement
-/// <c>Filings13FImportedConsumer</c> uses), so concurrent stampers converge.
+/// stamp is an atomic insert-or-preserve-first-event upsert (the same lease-aware
+/// semantics <c>Filings13FImportedConsumer</c> uses), so concurrent stampers converge.
 /// </para>
 /// </remarks>
 internal static class HoldingsRollupRefresher
@@ -98,7 +98,9 @@ internal static class HoldingsRollupRefresher
     }
 
     /// <summary>
-    /// Stamps the quarters' AUM snapshots dirty so the drain worker rebuilds them.
+    /// Stamps the quarters' AUM snapshots and their immediate successors dirty so the drain
+    /// worker rebuilds both the changed current values and the successor comparisons that embed
+    /// them as prior-quarter values.
     /// </summary>
     internal static async Task MarkAumSnapshotsDirty(
         EquiblesFinancialDbContext dbContext,
@@ -106,10 +108,28 @@ internal static class HoldingsRollupRefresher
         CancellationToken cancellationToken
     )
     {
-        var quarters = reportDates.Distinct().ToList();
-        if (quarters.Count == 0)
+        var changedQuarters = reportDates.Distinct().ToList();
+        if (changedQuarters.Count == 0)
         {
             return;
+        }
+
+        // The snapshot table is one bounded row per 13F quarter. Resolve the immediate successor
+        // from that spine once, then stamp the union so a repaired prior-quarter value cannot
+        // leave StockQuarterlyActivity's embedded comparison permanently stale.
+        var snapshotDates = await dbContext
+            .Set<AumQuarterlySnapshot>()
+            .OrderBy(snapshot => snapshot.ReportDate)
+            .Select(snapshot => snapshot.ReportDate)
+            .ToListAsync(cancellationToken);
+        var quarters = changedQuarters.ToHashSet();
+        foreach (var changed in changedQuarters)
+        {
+            var successor = snapshotDates.FirstOrDefault(date => date > changed);
+            if (successor != default)
+            {
+                quarters.Add(successor);
+            }
         }
 
         var now = DateTime.UtcNow;
@@ -141,7 +161,10 @@ internal static class HoldingsRollupRefresher
             {
                 if (existingByDate.TryGetValue(stub.ReportDate, out var existing))
                 {
-                    existing.DirtyAt ??= now;
+                    if (existing.DirtyAt == null || existing.DirtyAt > now)
+                    {
+                        existing.DirtyAt = now;
+                    }
                 }
                 else
                 {
@@ -158,7 +181,13 @@ internal static class HoldingsRollupRefresher
             .On(s => s.ReportDate)
             .WhenMatched(
                 (existing, incoming) =>
-                    new AumQuarterlySnapshot { DirtyAt = existing.DirtyAt ?? incoming.DirtyAt }
+                    new AumQuarterlySnapshot
+                    {
+                        DirtyAt =
+                            existing.DirtyAt == null || existing.DirtyAt > incoming.DirtyAt
+                                ? incoming.DirtyAt
+                                : existing.DirtyAt,
+                    }
             )
             .RunAsync(cancellationToken);
     }

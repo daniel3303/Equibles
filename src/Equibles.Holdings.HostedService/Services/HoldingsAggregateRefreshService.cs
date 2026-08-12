@@ -207,12 +207,39 @@ public class HoldingsAggregateRefreshService
             dbContext.Database.SetCommandTimeout(commandTimeout.Value);
         }
 
-        await UpsertAumSnapshot(dbContext, reportDate, cancellationToken);
-        await UpsertSectorSnapshots(dbContext, reportDate, cancellationToken);
-        await UpsertStockActivitySnapshots(dbContext, reportDate, cancellationToken);
-        await UpsertHolderSnapshots(dbContext, reportDate, cancellationToken);
-        await RefreshCombinedLane(dbContext, reportDate, cancellationToken);
+        async Task PublishSnapshotGeneration()
+        {
+            await UpsertAumSnapshot(dbContext, reportDate, cancellationToken);
+            await UpsertSectorSnapshots(dbContext, reportDate, cancellationToken);
+            await UpsertStockActivitySnapshots(dbContext, reportDate, cancellationToken);
+            await UpsertHolderSnapshots(dbContext, reportDate, cancellationToken);
+            await BeforeCombinedLaneRefresh(reportDate, cancellationToken);
+            await RefreshCombinedLane(dbContext, reportDate, cancellationToken);
+        }
+
+        if (!dbContext.Database.IsRelational())
+        {
+            await PublishSnapshotGeneration();
+            return;
+        }
+
+        // Activity rows and the holder-union denominator are one published generation.
+        // Without this transaction, readers can observe the new combined activity between
+        // statements while HolderQuarterlySnapshot still represents the prior rebuild.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
+        await PublishSnapshotGeneration();
+        await transaction.CommitAsync(cancellationToken);
     }
+
+    // Test seam for observing the generation between the holder and combined calculations. The
+    // relational transaction must keep every write invisible until the latter finishes and the
+    // whole generation commits.
+    protected virtual Task BeforeCombinedLaneRefresh(
+        DateOnly reportDate,
+        CancellationToken cancellationToken
+    ) => Task.CompletedTask;
 
     // Maintains the open filing window's combined-lane snapshot
     // (StockQuarterlyActivityCombined). While the newest quarter's 45-day window is
@@ -248,6 +275,10 @@ public class HoldingsAggregateRefreshService
             await dbContext
                 .Set<StockQuarterlyActivityCombined>()
                 .ExecuteDeleteAsync(cancellationToken);
+            await dbContext
+                .Set<StockQuarterlyListingActivity>()
+                .Where(row => row.IsCombined)
+                .ExecuteDeleteAsync(cancellationToken);
             return;
         }
 
@@ -262,6 +293,13 @@ public class HoldingsAggregateRefreshService
             // First quarter on record: there is nothing to carry forward, so the
             // combined view degenerates to the plain snapshot — leave the lane empty
             // and let consumers fall back.
+            await dbContext
+                .Set<StockQuarterlyActivityCombined>()
+                .ExecuteDeleteAsync(cancellationToken);
+            await dbContext
+                .Set<StockQuarterlyListingActivity>()
+                .Where(row => row.IsCombined)
+                .ExecuteDeleteAsync(cancellationToken);
             return;
         }
 
@@ -288,6 +326,50 @@ public class HoldingsAggregateRefreshService
                 .ToListAsync(cancellationToken)
         ).ToDictionary(c => c.CommonStockId);
 
+        var combinedListingShares = await repository
+            .GetCombinedQuarter(latest, previous)
+            .Join(
+                dbContext.Set<CommonStock>(),
+                holding => holding.CommonStockId,
+                stock => stock.Id,
+                (holding, stock) => new { Holding = holding, stock.Ticker }
+            )
+            .GroupBy(row => new
+            {
+                row.Holding.CommonStockId,
+                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
+            })
+            .Select(group => new
+            {
+                group.Key.CommonStockId,
+                group.Key.PriceSeriesTicker,
+                Shares = group.Sum(row => row.Holding.Shares),
+            })
+            .ToListAsync(cancellationToken);
+        var previousListingShares = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(holding =>
+                holding.ReportDate == previous && holding.FilingType == FilingType.Form13F
+            )
+            .Join(
+                dbContext.Set<CommonStock>(),
+                holding => holding.CommonStockId,
+                stock => stock.Id,
+                (holding, stock) => new { Holding = holding, stock.Ticker }
+            )
+            .GroupBy(row => new
+            {
+                row.Holding.CommonStockId,
+                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
+            })
+            .Select(group => new
+            {
+                group.Key.CommonStockId,
+                group.Key.PriceSeriesTicker,
+                Shares = group.Sum(row => row.Holding.Shares),
+            })
+            .ToListAsync(cancellationToken);
+
         var computedAt = DateTime.UtcNow;
         var rows = activity
             .Select(a =>
@@ -308,6 +390,27 @@ public class HoldingsAggregateRefreshService
                     SoldOutFilerCount = c?.SoldOutFilerCount ?? 0,
                     ComputedAt = computedAt,
                 };
+            })
+            .ToList();
+        var currentListingLookup = combinedListingShares.ToDictionary(
+            row => (row.CommonStockId, row.PriceSeriesTicker),
+            row => row.Shares
+        );
+        var previousListingLookup = previousListingShares.ToDictionary(
+            row => (row.CommonStockId, row.PriceSeriesTicker),
+            row => row.Shares
+        );
+        var listingRows = currentListingLookup
+            .Keys.Union(previousListingLookup.Keys)
+            .Select(key => new StockQuarterlyListingActivity
+            {
+                CommonStockId = key.CommonStockId,
+                ReportDate = latest,
+                IsCombined = true,
+                PriceSeriesTicker = key.PriceSeriesTicker,
+                CurrentShares = currentListingLookup.GetValueOrDefault(key),
+                PreviousShares = previousListingLookup.GetValueOrDefault(key),
+                ComputedAt = computedAt,
             })
             .ToList();
 
@@ -344,6 +447,18 @@ public class HoldingsAggregateRefreshService
             .Set<StockQuarterlyActivityCombined>()
             .Where(s => s.ReportDate != latest || !currentStockIds.Contains(s.CommonStockId))
             .ExecuteDeleteAsync(cancellationToken);
+
+        await dbContext
+            .Set<StockQuarterlyListingActivity>()
+            .Where(row => row.IsCombined && row.ReportDate != latest)
+            .ExecuteDeleteAsync(cancellationToken);
+        await ReplaceListingActivitySnapshots(
+            dbContext,
+            latest,
+            isCombined: true,
+            listingRows,
+            cancellationToken
+        );
     }
 
     // Per-(holder, quarter) AUM aggregates for the institutions browse ranking
@@ -632,6 +747,36 @@ public class HoldingsAggregateRefreshService
             })
             .ToListAsync(cancellationToken);
 
+        var listingActivity = await dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
+                && h.FilingType == FilingType.Form13F
+            )
+            .Join(
+                dbContext.Set<CommonStock>(),
+                holding => holding.CommonStockId,
+                stock => stock.Id,
+                (holding, stock) => new { Holding = holding, stock.Ticker }
+            )
+            .GroupBy(row => new
+            {
+                row.Holding.CommonStockId,
+                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
+            })
+            .Select(group => new
+            {
+                group.Key.CommonStockId,
+                group.Key.PriceSeriesTicker,
+                CurrentShares = group.Sum(row =>
+                    row.Holding.ReportDate == reportDate ? row.Holding.Shares : 0L
+                ),
+                PreviousShares = group.Sum(row =>
+                    row.Holding.ReportDate == previousReportDate ? row.Holding.Shares : 0L
+                ),
+            })
+            .ToListAsync(cancellationToken);
+
         var churn = (
             await BuildChurnQuery(dbContext, reportDate, previousReportDate)
                 .ToListAsync(cancellationToken)
@@ -692,6 +837,63 @@ public class HoldingsAggregateRefreshService
             .Set<StockQuarterlyActivity>()
             .Where(s => s.ReportDate == reportDate && !currentStockIds.Contains(s.CommonStockId))
             .ExecuteDeleteAsync(cancellationToken);
+
+        await ReplaceListingActivitySnapshots(
+            dbContext,
+            reportDate,
+            isCombined: false,
+            listingActivity
+                .Select(row => new StockQuarterlyListingActivity
+                {
+                    CommonStockId = row.CommonStockId,
+                    ReportDate = reportDate,
+                    IsCombined = false,
+                    PriceSeriesTicker = row.PriceSeriesTicker,
+                    CurrentShares = row.CurrentShares,
+                    PreviousShares = row.PreviousShares,
+                    ComputedAt = computedAt,
+                })
+                .ToList(),
+            cancellationToken
+        );
+    }
+
+    private static async Task ReplaceListingActivitySnapshots(
+        EquiblesFinancialDbContext dbContext,
+        DateOnly reportDate,
+        bool isCombined,
+        List<StockQuarterlyListingActivity> rows,
+        CancellationToken cancellationToken
+    )
+    {
+        await dbContext
+            .Set<StockQuarterlyListingActivity>()
+            .Where(row => row.ReportDate == reportDate && row.IsCombined == isCombined)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        if (rows.Count == 0)
+            return;
+
+        await dbContext
+            .Set<StockQuarterlyListingActivity>()
+            .UpsertRange(rows)
+            .On(row => new
+            {
+                row.CommonStockId,
+                row.ReportDate,
+                row.IsCombined,
+                row.PriceSeriesTicker,
+            })
+            .WhenMatched(
+                (_, incoming) =>
+                    new StockQuarterlyListingActivity
+                    {
+                        CurrentShares = incoming.CurrentShares,
+                        PreviousShares = incoming.PreviousShares,
+                        ComputedAt = incoming.ComputedAt,
+                    }
+            )
+            .RunAsync(cancellationToken);
     }
 
     // Per-stock churn: the same numbers GetQuarterlyNewSoldOutPositions defines ("new" =

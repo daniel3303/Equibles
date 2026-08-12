@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
@@ -75,11 +76,81 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
         output.Should().Contain("10.00%");
     }
 
+    [Fact]
+    public async Task GetTopHolders_SiblingListingSplit_RestatesBeforeRankingAndPercentage()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "ACME",
+            Name = "Acme Inc.",
+            Cik = "0000000100",
+        };
+        var primaryHolder = new InstitutionalHolder { Cik = "101", Name = "Primary Fund" };
+        var siblingHolder = new InstitutionalHolder { Cik = "102", Name = "Sibling Fund" };
+        var reportDate = new DateOnly(2024, 12, 31);
+        DbContext.AddRange(stock, primaryHolder, siblingHolder);
+        DbContext.Add(MakeHolding(stock, primaryHolder, reportDate, shares: 100));
+        DbContext.Add(
+            MakeHolding(stock, siblingHolder, reportDate, shares: 100, listedTicker: "ACME.B")
+        );
+        DbContext
+            .Set<StockSplit>()
+            .AddRange(
+                new StockSplit
+                {
+                    CommonStock = stock,
+                    CommonStockId = stock.Id,
+                    EffectiveDate = new DateOnly(2025, 1, 15),
+                    Numerator = 2m,
+                    Denominator = 1m,
+                    Source = StockSplitSource.Manual,
+                },
+                new StockSplit
+                {
+                    CommonStock = stock,
+                    CommonStockId = stock.Id,
+                    PriceSeriesTicker = "ACME.B",
+                    EffectiveDate = new DateOnly(2025, 2, 15),
+                    Numerator = 10m,
+                    Denominator = 1m,
+                    Source = StockSplitSource.Manual,
+                }
+            );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new CommonStockRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        var output = await sut.GetTopHolders("ACME");
+
+        var siblingIndex = output.IndexOf("Sibling Fund", StringComparison.Ordinal);
+        var primaryIndex = output.IndexOf("Primary Fund", StringComparison.Ordinal);
+        siblingIndex.Should().BeGreaterThan(0);
+        primaryIndex.Should().BeGreaterThan(siblingIndex);
+        output.Should().Contain("1,200 shares");
+        output.Should().Contain("| Common (ACME.B) | 1,000 |");
+        output.Should().Contain("83.33%");
+        output.Should().Contain("16.67%");
+    }
+
     private static InstitutionalHolding MakeHolding(
         CommonStock stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
-        long shares
+        long shares,
+        string listedTicker = null
     ) =>
         new()
         {
@@ -91,6 +162,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
             Value = shares * 100,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
+            ListedTicker = listedTicker,
             AccessionNumber = $"acc-{holder.Cik}",
         };
 }

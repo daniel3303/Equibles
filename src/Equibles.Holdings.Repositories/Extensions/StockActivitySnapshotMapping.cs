@@ -20,6 +20,7 @@ public static class StockActivitySnapshotMapping
             PreviousValue = s.PreviousValue,
             CurrentFilerCount = s.CurrentFilerCount,
             PreviousFilerCount = s.PreviousFilerCount,
+            ListingShares = s.ListingShares,
         };
 
     public static MarketWideStockChurn ToChurn(this StockQuarterlyActivity s) =>
@@ -40,6 +41,7 @@ public static class StockActivitySnapshotMapping
             PreviousValue = s.PreviousValue,
             CurrentFilerCount = s.CurrentFilerCount,
             PreviousFilerCount = s.PreviousFilerCount,
+            ListingShares = s.ListingShares,
         };
 
     public static MarketWideStockChurn ToChurn(this StockQuarterlyActivityCombined s) =>

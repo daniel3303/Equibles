@@ -34,6 +34,7 @@ public class ProfilesController : BaseController
     private readonly CongressMemberRepository _congressMemberRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
     private readonly HoldingsBacktestService _holdingsBacktestService;
+    private readonly InstitutionPortfolioSummaryProvider _institutionPortfolioSummaryProvider;
 
     public ProfilesController(
         InstitutionalHolderRepository institutionalHolderRepository,
@@ -44,6 +45,7 @@ public class ProfilesController : BaseController
         CongressMemberRepository congressMemberRepository,
         CongressionalTradeRepository congressionalTradeRepository,
         HoldingsBacktestService holdingsBacktestService,
+        InstitutionPortfolioSummaryProvider institutionPortfolioSummaryProvider,
         ILogger<ProfilesController> logger
     )
         : base(logger)
@@ -56,6 +58,7 @@ public class ProfilesController : BaseController
         _congressMemberRepository = congressMemberRepository;
         _congressionalTradeRepository = congressionalTradeRepository;
         _holdingsBacktestService = holdingsBacktestService;
+        _institutionPortfolioSummaryProvider = institutionPortfolioSummaryProvider;
     }
 
     [HttpGet("~/institutions/{cik}")]
@@ -84,9 +87,8 @@ public class ProfilesController : BaseController
 
         // Header strip + industry allocation — pulled with extra per-quarter
         // materializations so the existing recent-rows list keeps its top-50 shape.
-        var distinctDates = await _institutionalHoldingRepository
-            .Get13FReportDatesByHolder(holder)
-            .ToListAsync();
+        var distinctDates =
+            await _institutionalHoldingRepository.Get13FReportDatesByHolderSnapshotBacked(holder);
         var (summary, industryAllocation) = await BuildSummaryAndAllocation(holder, distinctDates);
         var (quarterlyActivity, activityResolved, activityPrior) = await BuildQuarterlyActivity(
             holder,
@@ -197,30 +199,20 @@ public class ProfilesController : BaseController
 
         var latest = distinctReportDates[0];
         var previous = distinctReportDates.Count > 1 ? distinctReportDates[1] : (DateOnly?)null;
-        // Current quarter loaded twice — shallow for the summary calculator and again with
-        // the Industry navigation for the allocation calculator. Kept separate so the
-        // summary path doesn't pay the Industry join cost.
-        var currentHoldings = await _institutionalHoldingRepository
-            .GetByHolder(holder, latest)
-            .ToListAsync();
+        var summary = await _institutionPortfolioSummaryProvider.Get(
+            holder,
+            latest,
+            previous,
+            distinctReportDates.Count
+        );
+
+        // Industry allocation still needs the stock/industry navigation, but the summary above
+        // reads grouped scalar projections and no longer materializes current + prior holdings.
         var currentHoldingsWithIndustry = await _institutionalHoldingRepository
-            .GetByHolder(holder, latest)
+            .Get13FByHolder(holder, latest)
             .Include(h => h.CommonStock)
                 .ThenInclude(s => s.Industry)
             .ToListAsync();
-        var previousHoldings = previous.HasValue
-            ? await _institutionalHoldingRepository
-                .GetByHolder(holder, previous.Value)
-                .ToListAsync()
-            : [];
-
-        var summary = InstitutionPortfolioSummaryCalculator.Calculate(
-            currentHoldings,
-            previousHoldings,
-            distinctReportDates.Count,
-            latest,
-            previous
-        );
         var allocation = IndustryAllocationCalculator.Calculate(currentHoldingsWithIndustry);
         return (summary, allocation);
     }
@@ -486,9 +478,10 @@ public class ProfilesController : BaseController
         var perHolderDates = new List<List<DateOnly>>();
         foreach (var holder in holders)
         {
-            var dates = await _institutionalHoldingRepository
-                .Get13FReportDatesByHolder(holder)
-                .ToListAsync();
+            var dates =
+                await _institutionalHoldingRepository.Get13FReportDatesByHolderSnapshotBacked(
+                    holder
+                );
             perHolderDates.Add(dates);
         }
         return perHolderDates

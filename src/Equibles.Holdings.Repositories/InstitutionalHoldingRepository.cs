@@ -55,6 +55,46 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return Get13FByStock(stock, reportDate).Include(h => h.InstitutionalHolder);
     }
 
+    // Lightweight two-quarter holder/listing projection for the per-stock movers surface. The prior
+    // implementation materialised every holding entity and holder navigation from both quarters
+    // before grouping in memory; popular stocks turned that into thousands of wide rows per call.
+    public IQueryable<HolderStockActivity> Get13FHolderActivityByStock(
+        CommonStock stock,
+        DateOnly currentReportDate,
+        DateOnly? previousReportDate
+    )
+    {
+        return GetAll()
+            .Where(Is13F)
+            .Where(h => h.CommonStockId == stock.Id)
+            .Where(h =>
+                h.ReportDate == currentReportDate
+                || (previousReportDate.HasValue && h.ReportDate == previousReportDate.Value)
+            )
+            .GroupBy(h => new { h.InstitutionalHolderId, h.ListedTicker })
+            .Select(g => new HolderStockActivity
+            {
+                InstitutionalHolderId = g.Key.InstitutionalHolderId,
+                ListedTicker = g.Key.ListedTicker,
+                CurrentShares = g.Sum(h => h.ReportDate == currentReportDate ? h.Shares : 0L),
+                PreviousShares = g.Sum(h =>
+                    previousReportDate.HasValue && h.ReportDate == previousReportDate.Value
+                        ? h.Shares
+                        : 0L
+                ),
+                CurrentValue = g.Sum(h => h.ReportDate == currentReportDate ? h.Value : 0L),
+                PreviousValue = g.Sum(h =>
+                    previousReportDate.HasValue && h.ReportDate == previousReportDate.Value
+                        ? h.Value
+                        : 0L
+                ),
+                CurrentPositionCount = g.Count(h => h.ReportDate == currentReportDate),
+                PreviousPositionCount = g.Count(h =>
+                    previousReportDate.HasValue && h.ReportDate == previousReportDate.Value
+                ),
+            });
+    }
+
     public IQueryable<InstitutionalHolding> GetByHolder(
         InstitutionalHolder holder,
         DateOnly reportDate
@@ -94,6 +134,24 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         return Get13FByHolder(holder, reportDate).Include(h => h.CommonStock);
+    }
+
+    // Minimal per-stock projection for portfolio-summary maths. Loading thousands of full
+    // tracked holding entities for two quarters made a cold summary proportional to the raw
+    // filing row count even though concentration and turnover only use these three fields.
+    public IQueryable<InstitutionPortfolioPosition> Get13FPositionAggregatesByHolder(
+        InstitutionalHolder holder,
+        DateOnly reportDate
+    )
+    {
+        return Get13FByHolder(holder, reportDate)
+            .GroupBy(h => h.CommonStockId)
+            .Select(g => new InstitutionPortfolioPosition
+            {
+                CommonStockId = g.Key,
+                Shares = g.Sum(h => h.Shares),
+                Value = g.Sum(h => h.Value),
+            });
     }
 
     public IQueryable<InstitutionalHolding> GetLatestByStock(CommonStock stock)
@@ -154,15 +212,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     public IQueryable<DateOnly> Get13FAvailableReportDates() =>
         GetAll().Where(Is13F).DistinctReportDatesDescending();
 
-    // The DISTINCT behind Get13FAvailableReportDates scans the whole holdings index (~32M
-    // entries) to produce fewer than a hundred quarter-end dates and measures ~28s warm —
-    // right at the 30s command timeout, so every surface that resolves its comparison
-    // window off the live list (market-wide MCP leaderboards, the activity / export /
-    // screener pages) fails on a cold cache. The list gains at most one date per filing
-    // day, so a short-lived process-wide cache removes the scan from every request except
-    // the first after boot / expiry. Keyed by connection string so parallel databases
-    // (test fixtures) never see each other's lists; a null connection string (e.g. the
-    // EF InMemory provider) bypasses the cache entirely.
+    // The live DISTINCT behind Get13FAvailableReportDates scans the whole holdings index
+    // (~34M rows) to produce fewer than a hundred quarter ends and measures ~28s warm. The
+    // worker-maintained AumQuarterlySnapshot table is the bounded one-row-per-quarter date spine
+    // for request paths; the process cache below is retained only for a fresh/unbackfilled
+    // database whose snapshot table is still empty.
     private static readonly TimeSpan ReportDatesCacheTtl = TimeSpan.FromHours(1);
     private static readonly object ReportDatesCacheLock = new();
     private static readonly Dictionary<
@@ -186,6 +240,29 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         CancellationToken cancellationToken = default
     )
     {
+        var latestLiveDate = await GetAll()
+            .Where(Is13F)
+            .OrderByDescending(h => h.ReportDate)
+            .Select(h => (DateOnly?)h.ReportDate)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latestLiveDate is not { } latest)
+            return [];
+
+        var snapshotDates = await DbContext
+            .Set<AumQuarterlySnapshot>()
+            .Where(s => s.ReportDate <= latest)
+            .Select(s => s.ReportDate)
+            .OrderByDescending(date => date)
+            .ToListAsync(cancellationToken);
+        if (snapshotDates.Count > 0)
+        {
+            // Aggregate refresh follows ingestion. Keep the just-opened quarter selectable
+            // during that short lag without falling back to the corpus-wide DISTINCT.
+            if (latest > snapshotDates[0])
+                snapshotDates.Insert(0, latest);
+            return snapshotDates;
+        }
+
         // GetConnectionString throws on non-relational providers (the EF InMemory tests),
         // which also want no cross-instance caching — so they bypass the cache entirely.
         var cacheKey = DbContext.Database.IsRelational()
@@ -203,11 +280,8 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             }
         }
 
-        // The DISTINCT scan behind this list measures ~28s warm and can cross Npgsql's
-        // default 30s command timeout cold — verified in production: the first
-        // market-activity request after a container recreate (or a cache-TTL expiry)
-        // 500s here before any aggregate even runs. Same headroom as the market-wide
-        // aggregates, so a cold resolve becomes a slow success instead of a failure.
+        // Fresh databases have no aggregate spine yet. Preserve the exact live fallback with
+        // extra timeout headroom until the first snapshot rebuild completes.
         ExtendCommandTimeoutForMarketWideAggregates();
         var dates = await Get13FAvailableReportDates().ToListAsync(cancellationToken);
 
@@ -289,6 +363,162 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     public IQueryable<DateOnly> Get13FReportDatesByHolder(InstitutionalHolder holder) =>
         Get13FHistoryByHolder(holder).DistinctReportDatesDescending();
 
+    // Request-path twin of Get13FReportDatesByHolder. A large filer can carry thousands of
+    // positions per quarter, so DISTINCT over its full history turns a one-row-per-quarter
+    // lookup into a multi-second cold scan. HolderQuarterlySnapshot is maintained in the same
+    // dirty-quarter transaction as the market aggregates. The newest live row bounds stale
+    // snapshots and is prepended while the refresh worker trails ingestion.
+    public async Task<List<DateOnly>> Get13FReportDatesByHolderSnapshotBacked(
+        InstitutionalHolder holder,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var latestLiveDate = await Get13FHistoryByHolder(holder)
+            .OrderByDescending(h => h.ReportDate)
+            .Select(h => (DateOnly?)h.ReportDate)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latestLiveDate is not { } latest)
+            return [];
+
+        var dates = await DbContext
+            .Set<HolderQuarterlySnapshot>()
+            .Where(s => s.InstitutionalHolderId == holder.Id && s.ReportDate <= latest)
+            .OrderByDescending(s => s.ReportDate)
+            .Select(s => s.ReportDate)
+            .ToListAsync(cancellationToken);
+        if (dates.Count == 0)
+            return await Get13FReportDatesByHolder(holder).ToListAsync(cancellationToken);
+
+        if (latest > dates[0])
+            dates.Insert(0, latest);
+        return dates;
+    }
+
+    public IQueryable<HolderQuarterlySnapshot> GetHolderQuarterlySnapshots(
+        InstitutionalHolder holder
+    ) => DbContext.Set<HolderQuarterlySnapshot>().Where(s => s.InstitutionalHolderId == holder.Id);
+
+    // Snapshot-first holder trend source. A holder with no materialized rows can exist on a
+    // fresh database or during the first aggregate refresh, so only that missing holder falls
+    // back to a holder-scoped GROUP BY. Existing snapshot slices remain authoritative while
+    // dirty and never trigger the expensive live path.
+    public async Task<List<HolderQuarterlySnapshot>> GetHolderQuarterlySnapshotsSnapshotBacked(
+        IReadOnlyCollection<Guid> holderIds,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (holderIds.Count == 0)
+            return [];
+
+        var snapshots = await DbContext
+            .Set<HolderQuarterlySnapshot>()
+            .AsNoTracking()
+            .Where(s => holderIds.Contains(s.InstitutionalHolderId))
+            .ToListAsync(cancellationToken);
+        var coveredHolderIds = snapshots.Select(s => s.InstitutionalHolderId).ToHashSet();
+        var missingHolderIds = holderIds.Where(id => !coveredHolderIds.Contains(id)).ToList();
+        if (missingHolderIds.Count == 0)
+            return snapshots;
+
+        var live = await GetAll()
+            .Where(Is13F)
+            .Where(h => missingHolderIds.Contains(h.InstitutionalHolderId))
+            .GroupBy(h => new { h.InstitutionalHolderId, h.ReportDate })
+            .Select(g => new
+            {
+                g.Key.InstitutionalHolderId,
+                g.Key.ReportDate,
+                FilingDate = g.Max(h => h.FilingDate),
+                Aum = g.Sum(h => h.Value),
+                PositionCount = g.Count(),
+                StockCount = g.Select(h => h.CommonStockId).Distinct().Count(),
+            })
+            .ToListAsync(cancellationToken);
+        snapshots.AddRange(
+            live.Select(row => new HolderQuarterlySnapshot
+            {
+                InstitutionalHolderId = row.InstitutionalHolderId,
+                ReportDate = row.ReportDate,
+                FilingDate = row.FilingDate,
+                Aum = row.Aum,
+                PositionCount = row.PositionCount,
+                StockCount = row.StockCount,
+            })
+        );
+        return snapshots;
+    }
+
+    public Task<List<HolderQuarterlySnapshot>> GetHolderQuarterlySnapshotsSnapshotBacked(
+        InstitutionalHolder holder,
+        CancellationToken cancellationToken = default
+    ) => GetHolderQuarterlySnapshotsSnapshotBacked([holder.Id], cancellationToken);
+
+    // Version stamp for process-local market-aggregate caches. DirtyAt is set in the import
+    // transaction and cleared only after every quarter snapshot has rebuilt, so callers bypass
+    // the process cache during the ingest-to-refresh gap while still serving the bounded existing
+    // snapshot. ComputedAt changes on every completed rebuild and invalidates the fixed cache key
+    // without an inter-process signal.
+    public async Task<HoldingsSnapshotState> GetMarketActivitySnapshotState(
+        DateOnly reportDate,
+        DateOnly previousReportDate,
+        bool combined,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var dates = new[] { reportDate, previousReportDate };
+        var dirty = await DbContext
+            .Set<AumQuarterlySnapshot>()
+            .AnyAsync(s => dates.Contains(s.ReportDate) && s.DirtyAt != null, cancellationToken);
+        var computedAt = combined
+            ? await DbContext
+                .Set<StockQuarterlyActivityCombined>()
+                .Where(s => s.ReportDate == reportDate)
+                .Select(s => (DateTime?)s.ComputedAt)
+                .MaxAsync(cancellationToken)
+            : await DbContext
+                .Set<StockQuarterlyActivity>()
+                .Where(s => s.ReportDate == reportDate)
+                .Select(s => (DateTime?)s.ComputedAt)
+                .MaxAsync(cancellationToken);
+        return new HoldingsSnapshotState(dirty, computedAt);
+    }
+
+    // Per-holder counterpart used by InstitutionPortfolioSummaryProvider. Both quarter stamps
+    // participate because turnover reads current and prior positions; a rebuild of either side
+    // must produce a new cache identity.
+    public async Task<HolderSummarySnapshotState> GetHolderSummarySnapshotState(
+        Guid holderId,
+        DateOnly currentReportDate,
+        DateOnly? previousReportDate,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var dates = previousReportDate is { } previous
+            ? new[] { currentReportDate, previous }
+            : new[] { currentReportDate };
+        var dirty = await DbContext
+            .Set<AumQuarterlySnapshot>()
+            .AnyAsync(s => dates.Contains(s.ReportDate) && s.DirtyAt != null, cancellationToken);
+        var versions = await DbContext
+            .Set<HolderQuarterlySnapshot>()
+            .Where(s => s.InstitutionalHolderId == holderId && dates.Contains(s.ReportDate))
+            .Select(s => new { s.ReportDate, s.ComputedAt })
+            .ToListAsync(cancellationToken);
+        return new HolderSummarySnapshotState(
+            dirty,
+            versions
+                .Where(s => s.ReportDate == currentReportDate)
+                .Select(s => (DateTime?)s.ComputedAt)
+                .SingleOrDefault(),
+            previousReportDate is { } prior
+                ? versions
+                    .Where(s => s.ReportDate == prior)
+                    .Select(s => (DateTime?)s.ComputedAt)
+                    .SingleOrDefault()
+                : null
+        );
+    }
+
     public IQueryable<InstitutionalHolding> GetByAccessionNumber(string accessionNumber)
     {
         return GetAll().Where(h => h.AccessionNumber == accessionNumber);
@@ -299,12 +529,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // and the churn / combined forms add correlated NOT-EXISTS probes — which sits
     // exactly at Npgsql's default 30s command timeout, so a cache miss intermittently
     // dies mid-stream with "Timeout during reading attempt". Closed quarters read the
-    // StockQuarterlyActivity snapshot instead, but the open filing window has no
-    // materialised view yet, so its combined lane must run these live. Raising the
-    // scope's timeout when such a query is composed gives that lane headroom; the
-    // DbContext is scoped, so the raise lives and dies with the current request / tool
-    // call, and an already-higher caller value (e.g. the snapshot rebuild worker's) is
-    // kept.
+    // StockQuarterlyActivity snapshots instead. These live queries remain only as the
+    // fresh-database fallback while the matching closed or combined snapshot is empty.
+    // Raising the scope's timeout when such a fallback is composed gives it headroom;
+    // the DbContext is scoped, so the raise lives and dies with the current request, and
+    // an already-higher caller value (e.g. the snapshot rebuild worker's) is kept.
     private static readonly TimeSpan MarketWideAggregateCommandTimeout = TimeSpan.FromSeconds(120);
 
     private void ExtendCommandTimeoutForMarketWideAggregates()
@@ -386,9 +615,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
     // Snapshot-first denominator for public most-held rankings. Closed-quarter AUM snapshots
     // already materialise the exact 13F filer universe, avoiding a corpus-wide DISTINCT that
-    // measured tens of seconds and could hit the command timeout. Missing, dirty, and zero-valued
-    // stubs fall back to the exact count until their snapshot rebuild completes. An open filing
-    // window still needs the combined universe because non-filers are carried forward.
+    // measured tens of seconds and could hit the command timeout. A positive dirty snapshot is
+    // served uncached until its rebuild lands; only a missing/zero stub falls back to the exact
+    // count. During an open filing window, the matching combined activity snapshot proves that
+    // the bounded holder-quarter slices are available; their distinct union is the exact
+    // carry-forward universe. Only a genuinely empty snapshot falls back to the live corpus.
     public async Task<int> Get13FUniverseFilerCount(
         DateOnly current,
         DateOnly previous,
@@ -396,16 +627,33 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         CancellationToken cancellationToken = default
     )
     {
-        if (!combined)
+        if (combined)
+        {
+            var hasCombinedSnapshot = await DbContext
+                .Set<StockQuarterlyActivityCombined>()
+                .AsNoTracking()
+                .AnyAsync(s => s.ReportDate == current, cancellationToken);
+            if (hasCombinedSnapshot)
+            {
+                return await DbContext
+                    .Set<HolderQuarterlySnapshot>()
+                    .AsNoTracking()
+                    .Where(s => s.ReportDate == current || s.ReportDate == previous)
+                    .Select(s => s.InstitutionalHolderId)
+                    .Distinct()
+                    .CountAsync(cancellationToken);
+            }
+        }
+        else
         {
             var snapshot = await DbContext
                 .Set<AumQuarterlySnapshot>()
                 .AsNoTracking()
                 .Where(s => s.ReportDate == current)
-                .Select(s => new { s.FilerCount, s.DirtyAt })
+                .Select(s => (int?)s.FilerCount)
                 .SingleOrDefaultAsync(cancellationToken);
-            if (snapshot is { DirtyAt: null, FilerCount: > 0 })
-                return snapshot.FilerCount;
+            if (snapshot is > 0)
+                return snapshot.Value;
         }
 
         return await GetUniqueFilerIds(current, previous, combined).CountAsync(cancellationToken);
@@ -478,6 +726,199 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     public IQueryable<StockQuarterlyActivity> GetStockActivitySnapshots(DateOnly reportDate) =>
         DbContext.Set<StockQuarterlyActivity>().Where(s => s.ReportDate == reportDate);
 
+    public IQueryable<StockQuarterlyActivity> GetStockActivitySnapshotsByStock(CommonStock stock) =>
+        DbContext.Set<StockQuarterlyActivity>().Where(s => s.CommonStockId == stock.Id);
+
+    // Snapshot-first stock trend source. The newest live row bounds stale snapshot history and
+    // is appended while refresh lags; the stock-scoped live GROUP BY remains bootstrap-only.
+    public async Task<List<StockQuarterlyActivity>> GetStockActivitySnapshotsByStockSnapshotBacked(
+        CommonStock stock,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var latestLiveDate = await Get13FHistoryByStock(stock)
+            .OrderByDescending(h => h.ReportDate)
+            .Select(h => (DateOnly?)h.ReportDate)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latestLiveDate is not { } latest)
+        {
+            return [];
+        }
+
+        var snapshots = await GetStockActivitySnapshotsByStock(stock)
+            .Where(s => s.ReportDate <= latest)
+            .AsNoTracking()
+            .OrderBy(s => s.ReportDate)
+            .ToListAsync(cancellationToken);
+        if (snapshots.Count == 0)
+            return await GetLiveStockActivity(stock, cancellationToken);
+
+        var snapshotDates = snapshots.Select(row => row.ReportDate).ToArray();
+        var listingRows = await DbContext
+            .Set<StockQuarterlyListingActivity>()
+            .AsNoTracking()
+            .Where(row =>
+                row.CommonStockId == stock.Id
+                && !row.IsCombined
+                && snapshotDates.Contains(row.ReportDate)
+            )
+            .ToListAsync(cancellationToken);
+        var listingByDate = listingRows
+            .GroupBy(row => row.ReportDate)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<StockQuarterlyListingActivity>)group.ToList()
+            );
+        if (
+            snapshots.Any(row =>
+                !listingByDate.TryGetValue(row.ReportDate, out var listings)
+                || listings.Any(listing => listing.ComputedAt != row.ComputedAt)
+            )
+        )
+            return await GetLiveStockActivity(stock, cancellationToken);
+
+        foreach (var snapshot in snapshots)
+            snapshot.ListingShares = listingByDate[snapshot.ReportDate];
+        if (latest > snapshots[^1].ReportDate)
+        {
+            snapshots.Add(await GetLiveStockActivityPoint(stock, latest, cancellationToken));
+        }
+        return snapshots;
+    }
+
+    // Refresh-lag fallback for one just-opened quarter. Its comparison is bounded to that
+    // quarter and the immediately preceding live quarter instead of regrouping the stock's
+    // entire filing history whenever the aggregate worker trails ingestion.
+    private async Task<StockQuarterlyActivity> GetLiveStockActivityPoint(
+        CommonStock stock,
+        DateOnly currentReportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        var previousReportDate = await Get13FHistoryByStock(stock)
+            .Where(holding => holding.ReportDate < currentReportDate)
+            .OrderByDescending(holding => holding.ReportDate)
+            .Select(holding => (DateOnly?)holding.ReportDate)
+            .FirstOrDefaultAsync(cancellationToken);
+        var activity = await Get13FHolderActivityByStock(
+                stock,
+                currentReportDate,
+                previousReportDate
+            )
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var currentHolders = activity
+            .Where(row => row.CurrentPositionCount > 0)
+            .Select(row => row.InstitutionalHolderId)
+            .ToHashSet();
+        var previousHolders = activity
+            .Where(row => row.PreviousPositionCount > 0)
+            .Select(row => row.InstitutionalHolderId)
+            .ToHashSet();
+        var listingShares = activity
+            .GroupBy(row => row.ListedTicker ?? stock.Ticker)
+            .Select(group => new StockQuarterlyListingActivity
+            {
+                CommonStockId = stock.Id,
+                ReportDate = currentReportDate,
+                IsCombined = false,
+                PriceSeriesTicker = group.Key,
+                CurrentShares = group.Sum(row => row.CurrentShares),
+                PreviousShares = group.Sum(row => row.PreviousShares),
+            })
+            .ToList();
+        return new StockQuarterlyActivity
+        {
+            CommonStockId = stock.Id,
+            ReportDate = currentReportDate,
+            PreviousReportDate = previousReportDate,
+            CurrentShares = activity.Sum(row => row.CurrentShares),
+            PreviousShares = activity.Sum(row => row.PreviousShares),
+            CurrentValue = activity.Sum(row => row.CurrentValue),
+            PreviousValue = activity.Sum(row => row.PreviousValue),
+            CurrentFilerCount = currentHolders.Count,
+            PreviousFilerCount = previousHolders.Count,
+            NewFilerCount = currentHolders.Except(previousHolders).Count(),
+            SoldOutFilerCount = previousHolders.Except(currentHolders).Count(),
+            ListingShares = listingShares,
+        };
+    }
+
+    private async Task<List<StockQuarterlyActivity>> GetLiveStockActivity(
+        CommonStock stock,
+        CancellationToken cancellationToken
+    )
+    {
+        var aggregates = await Get13FHistoryByStock(stock)
+            .GroupBy(holding => holding.ReportDate)
+            .Select(group => new
+            {
+                ReportDate = group.Key,
+                Shares = group.Sum(holding => holding.Shares),
+                Value = group.Sum(holding => holding.Value),
+                FilerCount = group
+                    .Select(holding => holding.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+            })
+            .OrderBy(row => row.ReportDate)
+            .ToListAsync(cancellationToken);
+        var exact = await Get13FHistoryByStock(stock)
+            .GroupBy(holding => new { holding.ReportDate, holding.ListedTicker })
+            .Select(group => new
+            {
+                group.Key.ReportDate,
+                PriceSeriesTicker = group.Key.ListedTicker ?? stock.Ticker,
+                Shares = group.Sum(holding => holding.Shares),
+            })
+            .ToListAsync(cancellationToken);
+        var exactByDate = exact
+            .GroupBy(row => row.ReportDate)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToDictionary(row => row.PriceSeriesTicker, row => row.Shares)
+            );
+
+        var result = new List<StockQuarterlyActivity>(aggregates.Count);
+        for (var index = 0; index < aggregates.Count; index++)
+        {
+            var current = aggregates[index];
+            var previous = index > 0 ? aggregates[index - 1] : null;
+            var currentSeries = exactByDate[current.ReportDate];
+            var previousSeries = previous is null
+                ? new Dictionary<string, long>()
+                : exactByDate[previous.ReportDate];
+            var listingShares = currentSeries
+                .Keys.Union(previousSeries.Keys)
+                .Select(ticker => new StockQuarterlyListingActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = current.ReportDate,
+                    IsCombined = false,
+                    PriceSeriesTicker = ticker,
+                    CurrentShares = currentSeries.GetValueOrDefault(ticker),
+                    PreviousShares = previousSeries.GetValueOrDefault(ticker),
+                })
+                .ToList();
+            result.Add(
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = current.ReportDate,
+                    PreviousReportDate = previous?.ReportDate,
+                    CurrentShares = current.Shares,
+                    PreviousShares = previous?.Shares ?? 0,
+                    CurrentValue = current.Value,
+                    PreviousValue = previous?.Value ?? 0,
+                    CurrentFilerCount = current.FilerCount,
+                    PreviousFilerCount = previous?.FilerCount ?? 0,
+                    ListingShares = listingShares,
+                }
+            );
+        }
+        return result;
+    }
+
     // Combined-lane twin for the open filing window: the same per-stock figures with
     // non-filers carried forward at their prior-quarter positions, materialised by
     // HoldingsAggregateRefreshService while the window is open and deleted when it
@@ -487,6 +928,232 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     public IQueryable<StockQuarterlyActivityCombined> GetStockActivitySnapshotsCombined(
         DateOnly reportDate
     ) => DbContext.Set<StockQuarterlyActivityCombined>().Where(s => s.ReportDate == reportDate);
+
+    public IQueryable<StockQuarterlyListingActivity> GetStockListingActivitySnapshots(
+        DateOnly reportDate,
+        bool combined
+    ) =>
+        DbContext
+            .Set<StockQuarterlyListingActivity>()
+            .Where(row => row.ReportDate == reportDate && row.IsCombined == combined);
+
+    // Loads one complete materialized market generation. Listing-share rows are part of the
+    // snapshot contract: an older deployment can leave the new breakdown table empty while the
+    // stock-level rows already exist, in which case callers must use the exact live fallback
+    // until the one-time backfill publishes both tables atomically.
+    public async Task<List<MarketWideStockActivity>> GetMarketActivitySnapshots(
+        DateOnly reportDate,
+        bool combined,
+        CancellationToken cancellationToken = default
+    )
+    {
+        List<MarketWideStockActivity> activity;
+        Dictionary<Guid, DateTime> versions;
+        if (combined)
+        {
+            var rows = await GetStockActivitySnapshotsCombined(reportDate)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+            activity = rows.Select(row => row.ToActivity()).ToList();
+            versions = rows.ToDictionary(row => row.CommonStockId, row => row.ComputedAt);
+        }
+        else
+        {
+            var rows = await GetStockActivitySnapshots(reportDate)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+            activity = rows.Select(row => row.ToActivity()).ToList();
+            versions = rows.ToDictionary(row => row.CommonStockId, row => row.ComputedAt);
+        }
+        if (activity.Count == 0)
+            return [];
+
+        var listingRows = await GetStockListingActivitySnapshots(reportDate, combined)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var byStock = listingRows
+            .GroupBy(row => row.CommonStockId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<StockQuarterlyListingActivity>)group.ToList()
+            );
+        if (
+            activity.Any(row =>
+                !byStock.TryGetValue(row.CommonStockId, out var listings)
+                || listings.Any(listing => listing.ComputedAt != versions[row.CommonStockId])
+            )
+        )
+            return [];
+
+        foreach (var row in activity)
+            row.ListingShares = byStock[row.CommonStockId];
+        return activity;
+    }
+
+    // Snapshot-first complete market activity. Both the stock aggregate and exact-listing
+    // breakdown are read under one repeatable snapshot; if either materialized slice is absent
+    // (fresh database or additive-migration backfill), the same transaction supplies the bounded
+    // two-quarter live fallback without mixing concurrent filing imports between statements.
+    public async Task<List<MarketWideStockActivity>> GetMarketActivitySnapshotBacked(
+        DateOnly current,
+        DateOnly previous,
+        bool combined,
+        CancellationToken cancellationToken = default
+    )
+    {
+        async Task<List<MarketWideStockActivity>> Load()
+        {
+            var snapshot = await GetMarketActivitySnapshots(current, combined, cancellationToken);
+            if (snapshot.Count > 0)
+                return snapshot;
+
+            var activity = await GetQuarterlyActivity(current, previous, combined)
+                .ToListAsync(cancellationToken);
+            var listings = await GetLiveListingShareActivity(
+                current,
+                previous,
+                combined,
+                activity.Select(row => row.CommonStockId).ToArray(),
+                cancellationToken
+            );
+            var byStock = listings
+                .GroupBy(row => row.CommonStockId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<StockQuarterlyListingActivity>)group.ToList()
+                );
+            if (activity.Any(row => !byStock.ContainsKey(row.CommonStockId)))
+                return [];
+            foreach (var row in activity)
+                row.ListingShares = byStock[row.CommonStockId];
+            return activity;
+        }
+
+        if (!DbContext.Database.IsRelational() || DbContext.Database.CurrentTransaction != null)
+            return await Load();
+
+        await using var transaction = await DbContext.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead,
+            cancellationToken
+        );
+        var result = await Load();
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
+
+    // Exact listing grain for the rare live fallback while a snapshot generation is absent.
+    // The query remains bounded to the requested quarter pair; normal request traffic reads the
+    // much smaller StockQuarterlyListingActivity table instead.
+    public async Task<List<StockQuarterlyListingActivity>> GetLiveListingShareActivity(
+        DateOnly current,
+        DateOnly previous,
+        bool combined,
+        IReadOnlyCollection<Guid> commonStockIds,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (commonStockIds.Count == 0)
+            return [];
+
+        if (!combined)
+        {
+            return await GetAll()
+                .Where(Is13F)
+                .Where(holding =>
+                    commonStockIds.Contains(holding.CommonStockId)
+                    && (holding.ReportDate == current || holding.ReportDate == previous)
+                )
+                .Join(
+                    DbContext.Set<CommonStock>(),
+                    holding => holding.CommonStockId,
+                    stock => stock.Id,
+                    (holding, stock) => new { Holding = holding, stock.Ticker }
+                )
+                .GroupBy(row => new
+                {
+                    row.Holding.CommonStockId,
+                    PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
+                })
+                .Select(group => new StockQuarterlyListingActivity
+                {
+                    CommonStockId = group.Key.CommonStockId,
+                    ReportDate = current,
+                    IsCombined = false,
+                    PriceSeriesTicker = group.Key.PriceSeriesTicker,
+                    CurrentShares = group.Sum(row =>
+                        row.Holding.ReportDate == current ? row.Holding.Shares : 0L
+                    ),
+                    PreviousShares = group.Sum(row =>
+                        row.Holding.ReportDate == previous ? row.Holding.Shares : 0L
+                    ),
+                })
+                .ToListAsync(cancellationToken);
+        }
+
+        var currentRows = await GetCombinedQuarter(current, previous)
+            .Where(holding => commonStockIds.Contains(holding.CommonStockId))
+            .Join(
+                DbContext.Set<CommonStock>(),
+                holding => holding.CommonStockId,
+                stock => stock.Id,
+                (holding, stock) => new { Holding = holding, stock.Ticker }
+            )
+            .GroupBy(row => new
+            {
+                row.Holding.CommonStockId,
+                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
+            })
+            .Select(group => new
+            {
+                group.Key.CommonStockId,
+                group.Key.PriceSeriesTicker,
+                Shares = group.Sum(row => row.Holding.Shares),
+            })
+            .ToListAsync(cancellationToken);
+        var previousRows = await GetAll()
+            .Where(Is13F)
+            .Where(holding =>
+                commonStockIds.Contains(holding.CommonStockId) && holding.ReportDate == previous
+            )
+            .Join(
+                DbContext.Set<CommonStock>(),
+                holding => holding.CommonStockId,
+                stock => stock.Id,
+                (holding, stock) => new { Holding = holding, stock.Ticker }
+            )
+            .GroupBy(row => new
+            {
+                row.Holding.CommonStockId,
+                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
+            })
+            .Select(group => new
+            {
+                group.Key.CommonStockId,
+                group.Key.PriceSeriesTicker,
+                Shares = group.Sum(row => row.Holding.Shares),
+            })
+            .ToListAsync(cancellationToken);
+        var currentLookup = currentRows.ToDictionary(
+            row => (row.CommonStockId, row.PriceSeriesTicker),
+            row => row.Shares
+        );
+        var previousLookup = previousRows.ToDictionary(
+            row => (row.CommonStockId, row.PriceSeriesTicker),
+            row => row.Shares
+        );
+        return currentLookup
+            .Keys.Union(previousLookup.Keys)
+            .Select(key => new StockQuarterlyListingActivity
+            {
+                CommonStockId = key.CommonStockId,
+                ReportDate = current,
+                IsCombined = true,
+                PriceSeriesTicker = key.PriceSeriesTicker,
+                CurrentShares = currentLookup.GetValueOrDefault(key),
+                PreviousShares = previousLookup.GetValueOrDefault(key),
+            })
+            .ToList();
+    }
 
     // Double-down report: per-(holder, stock) positions where the share-count
     // increase from the prior quarter exceeds a given percentage threshold,
@@ -941,11 +1608,13 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
     public IQueryable<Guid> GetUniqueFilerIdsCombined(DateOnly current, DateOnly previous)
     {
-        // Full-quarter DISTINCT over the combined view (incl. its NOT-EXISTS probe) —
-        // the one market-wide aggregate not built on BothQuarters, so it opts into the
-        // extended timeout itself.
-        ExtendCommandTimeoutForMarketWideAggregates();
-        return GetCombinedQuarter(current, previous)
+        // The distinct filer universe of the combined view is exactly the union of
+        // current- and previous-quarter 13F filers. Applying the per-row carry-forward
+        // NOT-EXISTS predicate before DISTINCT does not change that set, but it turns a
+        // sub-second indexed union into a corpus-wide correlated scan at production scale.
+        return GetAll()
+            .Where(Is13F)
+            .Where(h => h.ReportDate == current || h.ReportDate == previous)
             .Select(h => h.InstitutionalHolderId)
             .Distinct();
     }

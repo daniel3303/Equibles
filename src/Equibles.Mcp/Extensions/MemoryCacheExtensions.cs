@@ -14,9 +14,9 @@ public static class MemoryCacheExtensions
     // abandon the wait with its own request; cancelling never aborts the in-flight
     // factory, which keeps running for whoever owns the lock.
     //
-    // Keys must come from a bounded, program-controlled set (compile-time
-    // constants) — never per-request input: lock entries are kept for the process
-    // lifetime, so an unbounded key space grows the table forever.
+    // Keys must come from a bounded, program-controlled set (compile-time constants or
+    // resolved quarter dates) — never raw request input: lock entries are kept for the
+    // process lifetime, so an unbounded key space grows the table forever.
     public static async Task<T> GetOrCreateSafeAsync<T>(
         this IMemoryCache cache,
         string key,

@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
@@ -270,6 +271,45 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
     }
 
     [Fact]
+    public async Task GetTopBuyersSellers_CurrentZeroShareRowStillProvesAReportedExit()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "META",
+            Name = "Meta Platforms Inc.",
+            Cik = "0001326801",
+        };
+        var holder = new InstitutionalHolder { Cik = "31", Name = "Zero Row Capital" };
+        DbContext.AddRange(stock, holder);
+
+        var prior = new DateOnly(2024, 9, 30);
+        var latest = new DateOnly(2024, 12, 31);
+        DbContext.Add(MakeHolding(stock, holder, prior, shares: 1_000));
+        DbContext.Add(MakeHolding(stock, holder, latest, shares: 0));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new CommonStockRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        var output = await sut.GetTopBuyersSellers("META");
+
+        output.Should().Contain("Zero Row Capital");
+        output.Should().Contain("-1,000");
+    }
+
+    [Fact]
     public async Task GetTopBuyersSellers_ExplicitReportDate_HonorsArgument()
     {
         var stock = new CommonStock
@@ -309,6 +349,54 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
         output.Should().Contain("as of 2024-12-31");
         output.Should().Contain("vs prior quarter 2024-09-30");
         output.Should().Contain("+400");
+    }
+
+    [Fact]
+    public async Task GetTopBuyersSellers_PrimaryRowsIgnoreSiblingListingSplits()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "GOOGL",
+            Name = "Alphabet Inc.",
+            Cik = "0001652044",
+        };
+        var holder = new InstitutionalHolder { Cik = "21", Name = "Class A Capital" };
+        var prior = new DateOnly(2024, 9, 30);
+        var latest = new DateOnly(2024, 12, 31);
+        DbContext.AddRange(
+            stock,
+            holder,
+            MakeHolding(stock, holder, prior, shares: 1_000),
+            MakeHolding(stock, holder, latest, shares: 1_000),
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                EffectiveDate = new DateOnly(2024, 10, 1),
+                Numerator = 20,
+                Denominator = 1,
+                PriceSeriesTicker = "GOOG",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new CommonStockRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        var output = await sut.GetTopBuyersSellers("GOOGL");
+
+        output.Should().Contain("No quarter-over-quarter movement found");
     }
 
     private static InstitutionalHolding MakeHolding(

@@ -37,4 +37,7 @@ public class StockQuarterlyActivity
     public int SoldOutFilerCount { get; set; }
 
     public DateTime ComputedAt { get; set; } = DateTime.UtcNow;
+
+    [NotMapped]
+    public IReadOnlyList<StockQuarterlyListingActivity> ListingShares { get; set; } = [];
 }

@@ -141,9 +141,9 @@ public class AumSnapshotRebuildWorker : BackgroundService
         var snapshotQuarters = await dbContext
             .Set<AumQuarterlySnapshot>()
             .CountAsync(cancellationToken);
-        // RebuildQuarter also materialises StockQuarterlyActivity and
-        // HolderQuarterlySnapshot, so a quarter isn't fully covered until all
-        // three snapshots exist for it — otherwise a newly-added snapshot
+        // RebuildQuarter also materialises stock, exact-listing and holder activity, so a
+        // quarter isn't fully covered until every snapshot family exists for it. Otherwise a
+        // newly-added snapshot
         // table would never backfill once AUM is complete.
         var activityQuarters = await dbContext
             .Set<StockQuarterlyActivity>()
@@ -155,19 +155,27 @@ public class AumSnapshotRebuildWorker : BackgroundService
             .Select(s => s.ReportDate)
             .Distinct()
             .CountAsync(cancellationToken);
+        var listingQuarters = await dbContext
+            .Set<StockQuarterlyListingActivity>()
+            .Where(s => !s.IsCombined)
+            .Select(s => s.ReportDate)
+            .Distinct()
+            .CountAsync(cancellationToken);
         if (
             snapshotQuarters >= form13FQuarters
             && activityQuarters >= form13FQuarters
             && holderQuarters >= form13FQuarters
+            && listingQuarters >= form13FQuarters
         )
         {
             return;
         }
 
         _logger.LogInformation(
-            "Holdings snapshot coverage incomplete (AUM {Snapshots}, activity {Activity}, holder {HolderQuarters} of {Form13FQuarters} 13F quarters) — running backfill with {Timeout}s command timeout",
+            "Holdings snapshot coverage incomplete (AUM {Snapshots}, activity {Activity}, listing {ListingQuarters}, holder {HolderQuarters} of {Form13FQuarters} 13F quarters) — running backfill with {Timeout}s command timeout",
             snapshotQuarters,
             activityQuarters,
+            listingQuarters,
             holderQuarters,
             form13FQuarters,
             BackfillCommandTimeout.TotalSeconds

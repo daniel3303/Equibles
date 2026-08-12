@@ -207,6 +207,28 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Get13FUniverseFilerCount_DirtyPositiveSnapshot_UsesMaterializedValue()
+    {
+        await using var seed = FreshContext();
+        seed.Add(
+            new AumQuarterlySnapshot
+            {
+                ReportDate = Current,
+                FilerCount = 5_320,
+                DirtyAt = DateTime.UtcNow,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+
+        var count = await sut.Get13FUniverseFilerCount(Current, Prior, combined: false);
+
+        count.Should().Be(5_320, "dirty request paths still use the bounded snapshot");
+    }
+
+    [Fact]
     public async Task Get13FUniverseFilerCount_MissingSnapshot_FallsBackToExactDistinctCount()
     {
         await using var seed = FreshContext();
@@ -250,6 +272,124 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
         var count = await sut.Get13FUniverseFilerCount(Current, Prior, combined: false);
 
         count.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Get13FUniverseFilerCount_CombinedDirtyWindowUsesMaterializedHolderUnion()
+    {
+        await using var seed = FreshContext();
+        var stock = await SeedStock(seed, "AAPL");
+        var currentFiler = await SeedHolder(seed, "current-filer");
+        var carryForwardFiler = await SeedHolder(seed, "carry-filer");
+        var newlyImportedFiler = await SeedHolder(seed, "new-filer");
+        seed.AddRange(
+            MakeHolding(stock, currentFiler, Current, shares: 100, value: 100_000),
+            MakeHolding(stock, carryForwardFiler, Prior, shares: 100, value: 100_000),
+            MakeHolding(stock, newlyImportedFiler, Current, shares: 100, value: 100_000),
+            new HolderQuarterlySnapshot
+            {
+                InstitutionalHolderId = currentFiler.Id,
+                ReportDate = Current,
+                FilingDate = Current.AddDays(45),
+                Aum = 100_000,
+                PositionCount = 1,
+                StockCount = 1,
+            },
+            new HolderQuarterlySnapshot
+            {
+                InstitutionalHolderId = carryForwardFiler.Id,
+                ReportDate = Prior,
+                FilingDate = Prior.AddDays(45),
+                Aum = 100_000,
+                PositionCount = 1,
+                StockCount = 1,
+            },
+            new StockQuarterlyActivityCombined
+            {
+                CommonStockId = stock.Id,
+                ReportDate = Current,
+                PreviousReportDate = Prior,
+                CurrentShares = 200,
+                PreviousShares = 100,
+                CurrentValue = 200_000,
+                PreviousValue = 100_000,
+                CurrentFilerCount = 2,
+                PreviousFilerCount = 1,
+            },
+            new AumQuarterlySnapshot
+            {
+                ReportDate = Current,
+                FilerCount = 2,
+                DirtyAt = DateTime.UtcNow,
+            },
+            new AumQuarterlySnapshot { ReportDate = Prior, FilerCount = 1 }
+        );
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+
+        var count = await sut.Get13FUniverseFilerCount(Current, Prior, combined: true);
+
+        count
+            .Should()
+            .Be(
+                2,
+                "dirty requests must keep the activity and denominator on the same bounded snapshot"
+            );
+    }
+
+    [Fact]
+    public async Task Get13FUniverseFilerCount_MissingCombinedSnapshotFallsBackToExactUnion()
+    {
+        await using var seed = FreshContext();
+        var stock = await SeedStock(seed, "MSFT");
+        var bothQuarters = await SeedHolder(seed, "both-quarters");
+        var priorOnly = await SeedHolder(seed, "prior-only");
+        seed.AddRange(
+            MakeHolding(stock, bothQuarters, Current, shares: 100, value: 100_000),
+            MakeHolding(stock, bothQuarters, Prior, shares: 100, value: 100_000),
+            MakeHolding(stock, priorOnly, Prior, shares: 100, value: 100_000)
+        );
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+
+        var count = await sut.Get13FUniverseFilerCount(Current, Prior, combined: true);
+
+        count.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Get13FUniverseFilerCount_ExistingCombinedSnapshotReturnsZeroHolderUnion()
+    {
+        await using var seed = FreshContext();
+        var stock = await SeedStock(seed, "ZERO");
+        var liveHolder = await SeedHolder(seed, "live-holder");
+        seed.Add(MakeHolding(stock, liveHolder, Current, shares: 100, value: 100_000));
+        seed.Add(
+            new StockQuarterlyActivityCombined
+            {
+                CommonStockId = stock.Id,
+                ReportDate = Current,
+                PreviousReportDate = Prior,
+                CurrentShares = 0,
+                PreviousShares = 0,
+                CurrentValue = 0,
+                PreviousValue = 0,
+                CurrentFilerCount = 0,
+                PreviousFilerCount = 0,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+
+        var count = await sut.Get13FUniverseFilerCount(Current, Prior, combined: true);
+
+        count.Should().Be(0, "an existing combined generation owns its zero denominator");
     }
 
     private static async Task<CommonStock> SeedStock(

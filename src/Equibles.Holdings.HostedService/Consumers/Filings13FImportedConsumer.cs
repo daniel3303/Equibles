@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.HostedService.Consumers;
 
 /// <summary>
-/// Marks the AUM snapshot for the affected ReportDate dirty so
+/// Marks the AUM snapshot for the affected ReportDate and its following 13F quarter dirty so
 /// <see cref="AumSnapshotDrainWorker"/> rebuilds it after the cooldown
 /// elapses. The expensive multi-distinct rebuild used to run inline here —
 /// during 13F filing-season burst windows (Feb / May / Aug / Nov) hundreds
@@ -21,10 +21,11 @@ namespace Equibles.Holdings.HostedService.Consumers;
 /// (FlexLabs UpsertRange). For a brand-new quarter that has no snapshot row
 /// yet, the row is inserted with <c>DirtyAt = UtcNow</c> and zero aggregates —
 /// the dashboard sees an empty quarter for at most one drain cooldown until
-/// the rebuild lands. For an existing row, <c>DirtyAt</c> is set only when
-/// currently null (preserving the first event's timestamp so the drain
-/// schedules the rebuild from the start of the burst, not the latest event);
-/// aggregate columns are untouched. Doing both branches atomically removes
+/// the rebuild lands. For an existing row, the first ordinary event timestamp
+/// is preserved so a filing burst cannot postpone the rebuild indefinitely.
+/// A future-dated drain claim is replaced by the incoming event timestamp, so
+/// an import during a rebuild stays scheduled for a follow-up refresh. Aggregate
+/// columns are untouched. Doing both branches atomically removes
 /// the consumer→AnyAsync→Rebuild TOCTOU race between parallel consumers.
 /// </summary>
 [Consumer]
@@ -50,38 +51,69 @@ public class Filings13FImportedConsumer : IConsumer<Filings13FImported>
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
-        var now = DateTime.UtcNow;
-        var stub = new AumQuarterlySnapshot
-        {
-            ReportDate = reportDate,
-            TotalValue = 0L,
-            FilerCount = 0,
-            PositionCount = 0,
-            StockCount = 0,
-            FilingCount = 0,
-            // ComputedAt = DateTime.UtcNow by C# default, but the row is a
-            // stub: the drain worker overwrites every column on rebuild.
-            ComputedAt = now,
-            DirtyAt = now,
-        };
+        var nextReportDate = await dbContext
+            .Set<AumQuarterlySnapshot>()
+            .Where(snapshot => snapshot.ReportDate > reportDate)
+            .OrderBy(snapshot => snapshot.ReportDate)
+            .Select(snapshot => (DateOnly?)snapshot.ReportDate)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        // Single atomic statement: INSERT new stub OR set DirtyAt only when
-        // currently null. WhenMatched assignments overwrite only the listed
-        // columns, so aggregate values and ComputedAt on an existing row are
-        // untouched (rebuilds, not the consumer, set those).
+        var now = DateTime.UtcNow;
+        var dirtySnapshots = new List<AumQuarterlySnapshot>
+        {
+            new()
+            {
+                ReportDate = reportDate,
+                TotalValue = 0L,
+                FilerCount = 0,
+                PositionCount = 0,
+                StockCount = 0,
+                FilingCount = 0,
+                // ComputedAt = DateTime.UtcNow by C# default, but the row is a
+                // stub: the drain worker overwrites every column on rebuild.
+                ComputedAt = now,
+                DirtyAt = now,
+            },
+        };
+        if (nextReportDate is { } following)
+        {
+            // StockQuarterlyActivity for a quarter embeds its prior-quarter columns. A late
+            // amendment therefore invalidates both the amended quarter and its immediate
+            // successor; marking the successor here prevents a permanently stale comparison.
+            dirtySnapshots.Add(
+                new AumQuarterlySnapshot
+                {
+                    ReportDate = following,
+                    ComputedAt = now,
+                    DirtyAt = now,
+                }
+            );
+        }
+
+        // Single atomic statement: INSERT a stub or retain the first ordinary event time.
+        // A future DirtyAt is the drain's active claim lease; replace it so an import
+        // during the rebuild cannot be cleared with that lease. Aggregate values and
+        // ComputedAt on an existing row stay untouched.
         await dbContext
             .Set<AumQuarterlySnapshot>()
-            .UpsertRange(stub)
+            .UpsertRange(dirtySnapshots)
             .On(s => s.ReportDate)
             .WhenMatched(
                 (existing, incoming) =>
-                    new AumQuarterlySnapshot { DirtyAt = existing.DirtyAt ?? incoming.DirtyAt }
+                    new AumQuarterlySnapshot
+                    {
+                        DirtyAt =
+                            existing.DirtyAt == null || existing.DirtyAt > incoming.DirtyAt
+                                ? incoming.DirtyAt
+                                : existing.DirtyAt,
+                    }
             )
             .RunAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Marked AUM snapshot dirty for {ReportDate} ({FilingCount} filing(s))",
+            "Marked AUM snapshots dirty for {ReportDate} and {FollowingReportDate} ({FilingCount} filing(s))",
             reportDate,
+            nextReportDate,
             context.Message.FilingCount
         );
     }

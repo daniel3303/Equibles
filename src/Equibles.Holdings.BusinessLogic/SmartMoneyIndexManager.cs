@@ -154,7 +154,7 @@ public class SmartMoneyIndexManager
     {
         // 13F dates only: a fund's latest filing can be a Schedule 13D/G event date, whose single
         // disclosed stake would otherwise replace the real portfolio as a 100%-weight "holding".
-        var reportDates = await _holdingRepository.Get13FReportDatesByHolder(holder).ToListAsync();
+        var reportDates = await _holdingRepository.Get13FReportDatesByHolderSnapshotBacked(holder);
         if (reportDates.Count == 0)
             return null;
 
