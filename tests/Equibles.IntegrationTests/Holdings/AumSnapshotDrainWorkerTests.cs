@@ -257,6 +257,81 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DrainOnce_TransactionalRebuildDoesNotBlockClaimRenewal()
+    {
+        await SeedHoldings();
+        var dirtyAt = DateTime.UtcNow.AddHours(-2);
+        await using (var seed = FreshContext())
+        {
+            seed.Add(new AumQuarterlySnapshot { ReportDate = Q4, DirtyAt = dirtyAt });
+            await seed.SaveChangesAsync();
+        }
+
+        var scopeFactory = BuildScopeFactory();
+        var worker = new TestableDrainWorker(
+            scopeFactory,
+            new DelayedBeforeCombinedRefreshService(
+                scopeFactory,
+                NullLogger<HoldingsAggregateRefreshService>.Instance,
+                TimeSpan.FromMilliseconds(180)
+            ),
+            NullLogger<AumSnapshotDrainWorker>.Instance,
+            cooldown: TimeSpan.Zero,
+            claimLease: TimeSpan.FromMilliseconds(80),
+            claimRenewInterval: TimeSpan.FromMilliseconds(15)
+        );
+
+        await worker.DrainOnce(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var snapshot = await read.Set<AumQuarterlySnapshot>().SingleAsync();
+        snapshot
+            .DirtyAt.Should()
+            .BeNull("the transaction leaves the lease row unlocked until publication");
+    }
+
+    [Fact]
+    public async Task DrainOnce_MissingListingGenerationRunsBeforeMaterializedQuarter()
+    {
+        await SeedHoldings();
+        var missingDate = new DateOnly(2025, 3, 31);
+        var dirtyAt = DateTime.UtcNow.AddHours(-2);
+        await using (var seed = FreshContext())
+        {
+            var stockId = await seed.Set<CommonStock>().Select(s => s.Id).FirstAsync();
+            seed.AddRange(
+                new AumQuarterlySnapshot { ReportDate = Q4, DirtyAt = dirtyAt },
+                new AumQuarterlySnapshot { ReportDate = missingDate, DirtyAt = dirtyAt },
+                new StockQuarterlyListingActivity
+                {
+                    CommonStockId = stockId,
+                    ReportDate = Q4,
+                    PriceSeriesTicker = "AAPL",
+                    CurrentShares = 1,
+                }
+            );
+            await seed.SaveChangesAsync();
+        }
+
+        var rebuildOrder = new List<DateOnly>();
+        var scopeFactory = BuildScopeFactory();
+        var worker = new TestableDrainWorker(
+            scopeFactory,
+            new RecordingRefreshService(
+                scopeFactory,
+                NullLogger<HoldingsAggregateRefreshService>.Instance,
+                rebuildOrder
+            ),
+            NullLogger<AumSnapshotDrainWorker>.Instance,
+            cooldown: TimeSpan.Zero
+        );
+
+        await worker.DrainOnce(CancellationToken.None);
+
+        rebuildOrder.Should().Equal(missingDate, Q4);
+    }
+
+    [Fact]
     public async Task DrainOnce_ExpiredUnrenewedClaimIsRearmedInsteadOfCleared()
     {
         var dirtyAt = DateTime.UtcNow.AddHours(-2);
@@ -439,6 +514,50 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
             DateOnly reportDate,
             CancellationToken cancellationToken
         ) => Task.Delay(_delay, cancellationToken);
+    }
+
+    private sealed class DelayedBeforeCombinedRefreshService : HoldingsAggregateRefreshService
+    {
+        private readonly TimeSpan _delay;
+
+        public DelayedBeforeCombinedRefreshService(
+            IServiceScopeFactory scopeFactory,
+            ILogger<HoldingsAggregateRefreshService> logger,
+            TimeSpan delay
+        )
+            : base(scopeFactory, logger)
+        {
+            _delay = delay;
+        }
+
+        protected override Task BeforeCombinedLaneRefresh(
+            DateOnly reportDate,
+            CancellationToken cancellationToken
+        ) => Task.Delay(_delay, cancellationToken);
+    }
+
+    private sealed class RecordingRefreshService : HoldingsAggregateRefreshService
+    {
+        private readonly List<DateOnly> _rebuildOrder;
+
+        public RecordingRefreshService(
+            IServiceScopeFactory scopeFactory,
+            ILogger<HoldingsAggregateRefreshService> logger,
+            List<DateOnly> rebuildOrder
+        )
+            : base(scopeFactory, logger)
+        {
+            _rebuildOrder = rebuildOrder;
+        }
+
+        public override Task RebuildQuarterAsync(
+            DateOnly reportDate,
+            CancellationToken cancellationToken
+        )
+        {
+            _rebuildOrder.Add(reportDate);
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>
