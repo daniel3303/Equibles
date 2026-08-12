@@ -21,8 +21,7 @@ public class StocksControllerShowDocumentHappyTests
     [Fact]
     public async Task ShowDocument_TickerMatchesAndContentPresent_ReturnsViewWithDecodedUtf8Body()
     {
-        // The only existing ShowDocument test pins the cross-ticker *guard*
-        // (mismatched ticker -> NotFound). The success branch — everything
+        // The existing cross-ticker tests pin canonical redirects. The success branch — everything
         // after the guard at lines 205-218 — has no test at all:
         //   var content = document.Content?.FileContent?.Bytes != null
         //       ? Encoding.UTF8.GetString(document.Content.FileContent.Bytes)

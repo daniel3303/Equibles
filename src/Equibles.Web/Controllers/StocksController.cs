@@ -331,7 +331,13 @@ public class StocksController : BaseController
 
         if (!string.Equals(document.CommonStock.Ticker, normalizedTicker, StringComparison.Ordinal))
         {
-            return NotFound();
+            // The GUID identifies one public filing globally. Stock ownership can move when
+            // duplicate companies are reconciled, so an old ticker prefix must converge on the
+            // filing's current canonical owner instead of stranding the still-valid document URL.
+            return RedirectToActionPermanent(
+                nameof(ShowDocument),
+                new { ticker = document.CommonStock.Ticker, id }
+            );
         }
 
         var content = string.Empty;
