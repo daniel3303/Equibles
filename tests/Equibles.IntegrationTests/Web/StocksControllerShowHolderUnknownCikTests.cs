@@ -17,7 +17,7 @@ using NSubstitute;
 namespace Equibles.IntegrationTests.Web;
 
 /// <summary>
-/// Sibling to the existing ShowDocument NotFound / CrossTicker pins. ShowHolder
+/// Sibling to the existing ShowDocument missing-id and canonical-ticker pins. ShowHolder
 /// has two guards: stock not found → 404, holder not found → 404. The second
 /// guard (HoldingsExportController.cs:284-285) protects the very next line
 /// `_stockTabService.LoadHolderDetail(stock, holder)` and the title

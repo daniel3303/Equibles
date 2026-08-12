@@ -18,12 +18,10 @@ namespace Equibles.IntegrationTests.Web;
 public class StocksControllerShowDocumentCrossTickerTests
 {
     [Fact]
-    public async Task ShowDocument_ExistingDocumentRequestedUnderDifferentTicker_ReturnsNotFound()
+    public async Task ShowDocument_ExistingDocumentRequestedUnderDifferentTicker_RedirectsToOwner()
     {
-        // Security-relevant scoping contract: a document that exists but belongs
-        // to stock A must NOT be served under stock B's ticker URL. A regression
-        // that dropped the ticker guard would leak any stock's filing through
-        // any other stock's route (IDOR by enumerable GUID).
+        // The public document is never rendered under the wrong stock. Its globally unique ID
+        // sends stale ticker paths to the owning stock's canonical route.
         using var ctx = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
             new MediaModuleConfiguration(),
@@ -72,6 +70,10 @@ public class StocksControllerShowDocumentCrossTickerTests
         // Apple's document id, requested under a different ticker.
         var result = await sut.ShowDocument("MSFT", appleDocument.Id);
 
-        result.Should().BeOfType<NotFoundResult>();
+        var redirect = result.Should().BeOfType<RedirectToActionResult>().Subject;
+        redirect.Permanent.Should().BeTrue();
+        redirect.ActionName.Should().Be(nameof(StocksController.ShowDocument));
+        redirect.RouteValues.Should().ContainKey("ticker").WhoseValue.Should().Be("AAPL");
+        redirect.RouteValues.Should().ContainKey("id").WhoseValue.Should().Be(appleDocument.Id);
     }
 }

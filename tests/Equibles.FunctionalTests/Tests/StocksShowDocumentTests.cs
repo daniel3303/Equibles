@@ -24,13 +24,10 @@ public class StocksShowDocumentTests
     }
 
     [Fact]
-    public async Task ShowDocument_GetWithIdBelongingToDifferentTicker_Returns404()
+    public async Task ShowDocument_GetWithIdBelongingToDifferentTicker_RedirectsToCanonicalOwner()
     {
-        // StocksController.ShowDocument enforces a cross-ticker guard — when the URL's ticker
-        // does not match the document's owning stock it returns NotFound, even though the
-        // Guid resolves to a real document. Dropping that comparison would let anyone with
-        // a guessed (or leaked) document id pull SEC filings under any ticker prefix. The
-        // test seeds a 10-K under AAPL and requests it under MSFT to pin the 404 boundary.
+        // A document GUID remains stable when its owning stock identity is reconciled. The old
+        // ticker path must converge on the current canonical owner instead of becoming a 404.
         var docId = Guid.NewGuid();
         await _web.ResetAndSeedAsync(async db =>
         {
@@ -82,11 +79,7 @@ public class StocksShowDocumentTests
         var response = await page.GotoAsync($"/stocks/msft/documents/{docId}");
 
         response.Should().NotBeNull();
-        response!
-            .Status.Should()
-            .Be(
-                404,
-                "ShowDocument must reject mismatched ticker even when the document id resolves"
-            );
+        response!.Status.Should().Be(200);
+        page.Url.Should().EndWith($"/stocks/aapl/documents/{docId}");
     }
 }
