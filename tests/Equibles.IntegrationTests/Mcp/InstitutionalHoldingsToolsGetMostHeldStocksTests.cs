@@ -138,6 +138,40 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksTests : ParadeDbMcpTestB
         output.Should().NotContain("NVDA");
     }
 
+    [Fact]
+    public async Task GetMostHeldStocks_ExactMetricTies_OrderByStockId()
+    {
+        var reportDate = new DateOnly(2024, 12, 31);
+        var first = new CommonStock
+        {
+            Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            Ticker = "ZZZZ",
+            Name = "First by identifier",
+            Cik = "C1",
+        };
+        var second = new CommonStock
+        {
+            Id = Guid.Parse("00000000-0000-0000-0000-000000000002"),
+            Ticker = "AAAA",
+            Name = "Second by identifier",
+            Cik = "C2",
+        };
+        var holder = new InstitutionalHolder { Cik = "H1", Name = "Filer 1" };
+        DbContext.AddRange(first, second, holder);
+        DbContext.Add(MakeHolding(first, holder, reportDate, shares: 100, value: 100_000));
+        DbContext.Add(MakeHolding(second, holder, reportDate, shares: 100, value: 100_000));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var output = await NewSut(verify).GetMostHeldStocks();
+
+        output
+            .IndexOf("ZZZZ", StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(output.IndexOf("AAAA", StringComparison.Ordinal));
+    }
+
     private async Task SeedThreeStockUniverse()
     {
         var prior = new DateOnly(2024, 9, 30);

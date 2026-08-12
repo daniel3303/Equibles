@@ -145,6 +145,59 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
         output.Should().Contain("16.67%");
     }
 
+    [Fact]
+    public async Task GetTopHolders_CombinedViewRestatesCarriedRowsFromTheirSourceDate()
+    {
+        var previous = new DateOnly(2026, 3, 31);
+        var current = new DateOnly(2026, 6, 30);
+        var stock = new CommonStock
+        {
+            Ticker = "CARR",
+            Name = "Carried Position Corp.",
+            Cik = "0000000101",
+        };
+        var currentFiler = new InstitutionalHolder { Cik = "103", Name = "Current Fund" };
+        var carriedFiler = new InstitutionalHolder { Cik = "104", Name = "Carried Fund" };
+        DbContext.AddRange(stock, currentFiler, carriedFiler);
+        DbContext.Add(MakeHolding(stock, currentFiler, current, shares: 100));
+        DbContext.Add(
+            MakeHolding(stock, carriedFiler, previous, shares: 10, listedTicker: "CARR.B")
+        );
+        DbContext.Add(
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                PriceSeriesTicker = "CARR.B",
+                EffectiveDate = new DateOnly(2026, 5, 15),
+                Numerator = 10m,
+                Denominator = 1m,
+                Source = StockSplitSource.Manual,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var sut = new InstitutionalHoldingsTools(
+            new InstitutionalHoldingRepository(verify),
+            new InstitutionalHolderRepository(verify),
+            new CommonStockRepository(verify),
+            new StockSplitRepository(verify),
+            new StockCombinedQuarterService(
+                new InstitutionalHoldingRepository(verify),
+                new StockSplitRepository(verify)
+            ),
+            ErrorManager,
+            Substitute.For<ILogger<InstitutionalHoldingsTools>>()
+        );
+
+        var output = await sut.GetTopHolders(stock.Ticker);
+
+        output.Should().Contain("Combined view");
+        output.Should().Contain("200 shares");
+        output.Should().Contain("| Carried Fund | Common (CARR.B) | 100 |");
+    }
+
     private static InstitutionalHolding MakeHolding(
         CommonStock stock,
         InstitutionalHolder holder,

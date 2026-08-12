@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Holdings.Data.Models;
@@ -379,6 +380,65 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
 
         result.Should().Contain("15,000");
         result.Should().Contain("1.5");
+    }
+
+    [Fact]
+    public async Task GetOwnershipHistory_UsesSnapshotAndRestatesEachExactListing()
+    {
+        var stock = CreateStock("GOOGL", "Alphabet Inc");
+        var holder = CreateHolder("0000000021", "Raw Holder");
+        var reportDate = new DateOnly(2024, 12, 31);
+        var computedAt = DateTime.UtcNow;
+        DbContext.AddRange(stock, holder);
+        DbContext.Add(CreateHolding(stock, holder, reportDate, shares: 99_999, value: 9_999_999));
+        DbContext.Add(
+            new StockQuarterlyActivity
+            {
+                CommonStockId = stock.Id,
+                ReportDate = reportDate,
+                CurrentShares = 1_150,
+                CurrentValue = 115_000,
+                CurrentFilerCount = 2,
+                ComputedAt = computedAt,
+            }
+        );
+        DbContext
+            .Set<StockQuarterlyListingActivity>()
+            .AddRange(
+                new StockQuarterlyListingActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = reportDate,
+                    PriceSeriesTicker = stock.Ticker,
+                    CurrentShares = 1_000,
+                    ComputedAt = computedAt,
+                },
+                new StockQuarterlyListingActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = reportDate,
+                    PriceSeriesTicker = "GOOG",
+                    CurrentShares = 150,
+                    ComputedAt = computedAt,
+                }
+            );
+        DbContext.Add(
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                PriceSeriesTicker = "GOOG",
+                EffectiveDate = new DateOnly(2025, 1, 15),
+                Numerator = 10,
+                Denominator = 1,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetOwnershipHistory("GOOGL");
+
+        result.Should().Contain("| 2024-12-31 | 2 | 2,500 | 0.1 | — |");
+        result.Should().NotContain("99,999");
     }
 
     // ── GetInstitutionPortfolio ──────────────────────────────────────────
