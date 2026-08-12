@@ -60,6 +60,15 @@ public class ShortInterestImportService
 
         var trackedStockIds = tickerMap.Values.ToHashSet();
         var reverseMap = tickerMap.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+        // FINRA's consolidated short-interest API spells class shares compressed ("BRKB" for
+        // BRK-B), so a raw ticker lookup dropped every class-share record — whole issuers had
+        // zero rows across all history (#4369). The per-date missing-stock check below makes
+        // the heal automatic once resolution works: every stored date re-fetches its missing
+        // stocks on the next cycle.
+        var compressedIndex = FinraClassShareSymbols.BuildCompressedIndex(
+            tickerMap,
+            StringComparer.OrdinalIgnoreCase
+        );
 
         HashSet<DateOnly> knownDates;
         using (var scope = _scopeFactory.CreateScope())
@@ -144,6 +153,7 @@ public class ShortInterestImportService
             var imported = await ImportDate(
                 date,
                 tickerMap,
+                compressedIndex,
                 reverseMap,
                 trackedStockIds,
                 filteredFetchThreshold,
@@ -167,6 +177,7 @@ public class ShortInterestImportService
     private async Task<int> ImportDate(
         DateOnly date,
         Dictionary<string, Guid> tickerMap,
+        Dictionary<string, Guid> compressedIndex,
         Dictionary<Guid, string> reverseMap,
         HashSet<Guid> trackedStockIds,
         int filteredFetchThreshold,
@@ -204,20 +215,29 @@ public class ShortInterestImportService
             }
 
             var items = records
-                .Where(r =>
-                    !string.IsNullOrEmpty(r.Symbol)
-                    && tickerMap.TryGetValue(r.Symbol, out var stockId)
-                    && missingStockIds.Contains(stockId)
+                .Select(r =>
+                    (
+                        Record: r,
+                        StockId: FinraClassShareSymbols.TryResolve(
+                            tickerMap,
+                            compressedIndex,
+                            r.Symbol,
+                            out var stockId
+                        )
+                            ? (Guid?)stockId
+                            : null
+                    )
                 )
-                .Select(r => new ShortInterest
+                .Where(x => x.StockId is { } id && missingStockIds.Contains(id))
+                .Select(x => new ShortInterest
                 {
-                    CommonStockId = tickerMap[r.Symbol],
+                    CommonStockId = x.StockId.Value,
                     SettlementDate = date,
-                    CurrentShortPosition = r.CurrentShortPosition ?? 0,
-                    PreviousShortPosition = r.PreviousShortPosition ?? 0,
-                    ChangeInShortPosition = r.ChangeInShortPosition ?? 0,
-                    AverageDailyVolume = r.AverageDailyVolume,
-                    DaysToCover = r.DaysToCover,
+                    CurrentShortPosition = x.Record.CurrentShortPosition ?? 0,
+                    PreviousShortPosition = x.Record.PreviousShortPosition ?? 0,
+                    ChangeInShortPosition = x.Record.ChangeInShortPosition ?? 0,
+                    AverageDailyVolume = x.Record.AverageDailyVolume,
+                    DaysToCover = x.Record.DaysToCover,
                 });
 
             var inserted = await BatchPersister.Persist(
@@ -270,9 +290,14 @@ public class ShortInterestImportService
         if (useBulkFetch)
             return _finraClient.GetShortInterest(date);
 
+        // Request every spelling FINRA may use for a class share ("BRK-B" is "BRKB" in this
+        // API) — an unmatched filter returns nothing, and responses map back through the
+        // compressed index, so over-asking is harmless while under-asking silently returns
+        // zero rows for exactly the stocks being healed.
         var missingSymbols = missingStockIds
             .Where(id => reverseMap.ContainsKey(id))
-            .Select(id => reverseMap[id])
+            .SelectMany(id => FinraClassShareSymbols.RequestSpellings(reverseMap[id]))
+            .Distinct()
             .ToList();
         return _finraClient.GetShortInterest(date, missingSymbols);
     }

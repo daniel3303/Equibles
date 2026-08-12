@@ -40,7 +40,7 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockMergeAtsAndOtcTest
             },
         };
 
-        var result = OffExchangeVolumeMerger.Merge(records, tickerMap, new DateOnly(2024, 3, 4));
+        var result = OffExchangeVolumeMerger.Merge(records, tickerMap, new Dictionary<string, Guid>(), new DateOnly(2024, 3, 4));
 
         result.Should().HaveCount(1);
         var merged = result[stockId];

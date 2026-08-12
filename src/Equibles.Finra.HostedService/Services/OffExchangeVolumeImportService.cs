@@ -22,7 +22,10 @@ public class OffExchangeVolumeImportService
     // markers so every week still inside FINRA's rolling publication window (~1 year)
     // re-imports and the upsert replaces the corrupted totals; weeks that have aged out of the
     // window cannot be re-fetched and stay as stored.
-    private const string Dataset = "off-exchange-weekly-v2";
+    // v3: class-share symbol resolution (dot/compressed spellings onto stored dash tickers,
+    // #4369) — the bump re-imports every week FINRA still publishes so dual-class weeks fill
+    // in; weeks aged out of the ~1-year rolling window are unhealable and stay as stored.
+    private const string Dataset = "off-exchange-weekly-v3";
     private const int CorrectionLookbackWeeks = 8;
     private static readonly TimeSpan RecentPartitionRefreshInterval = TimeSpan.FromHours(24);
     private static readonly HashSet<string> CompletePublicationTiers = new(
@@ -107,10 +110,21 @@ public class OffExchangeVolumeImportService
             cancellationToken,
             StringComparer.Ordinal
         );
+        var compressedIndex = FinraClassShareSymbols.BuildCompressedIndex(
+            tickerMap,
+            StringComparer.Ordinal
+        );
         foreach (var week in weeks)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await ImportWeek(week, tickerMap, scopeKey, now.UtcDateTime, cancellationToken);
+            await ImportWeek(
+                week,
+                tickerMap,
+                compressedIndex,
+                scopeKey,
+                now.UtcDateTime,
+                cancellationToken
+            );
         }
     }
 
@@ -140,6 +154,7 @@ public class OffExchangeVolumeImportService
     private async Task ImportWeek(
         DateOnly weekStartDate,
         IReadOnlyDictionary<string, Guid> tickerMap,
+        IReadOnlyDictionary<string, Guid> compressedIndex,
         string scopeKey,
         DateTime importedAt,
         CancellationToken cancellationToken
@@ -164,7 +179,12 @@ public class OffExchangeVolumeImportService
                 return;
             }
 
-            var merged = OffExchangeVolumeMerger.Merge(records, tickerMap, weekStartDate);
+            var merged = OffExchangeVolumeMerger.Merge(
+                records,
+                tickerMap,
+                compressedIndex,
+                weekStartDate
+            );
             await UpsertWeek(merged.Values, weekStartDate, cancellationToken);
             await _partitionTracker.MarkImported(
                 Dataset,

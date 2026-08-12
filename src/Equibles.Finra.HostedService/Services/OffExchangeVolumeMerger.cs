@@ -11,15 +11,24 @@ internal static class OffExchangeVolumeMerger
     public static Dictionary<Guid, OffExchangeVolume> Merge(
         IEnumerable<OffExchangeWeeklyRecord> records,
         IReadOnlyDictionary<string, Guid> tickerMap,
+        IReadOnlyDictionary<string, Guid> compressedIndex,
         DateOnly weekStartDate
     )
     {
         var merged = new Dictionary<Guid, OffExchangeVolume>();
         foreach (var record in records)
         {
+            // The weekly feed spells class shares with a dot ("BRK.B"); resolution bridges
+            // FINRA's spellings onto the stored dash tickers so class-share weeks stop
+            // dropping silently (#4369). Casing stays Ordinal — a lowercase suffix is a
+            // different security.
             if (
-                string.IsNullOrEmpty(record.Symbol)
-                || !tickerMap.TryGetValue(record.Symbol, out var commonStockId)
+                !FinraClassShareSymbols.TryResolve(
+                    tickerMap,
+                    compressedIndex,
+                    record.Symbol,
+                    out var commonStockId
+                )
             )
             {
                 continue;
