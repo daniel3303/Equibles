@@ -28,7 +28,13 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockNullQuantityTests
             },
         };
 
-        var act = () => OffExchangeVolumeMerger.Merge(records, tickerMap, new Dictionary<string, Guid>(), new DateOnly(2024, 3, 4));
+        var act = () =>
+            OffExchangeVolumeMerger.Merge(
+                records,
+                tickerMap,
+                new Dictionary<string, Guid>(),
+                new DateOnly(2024, 3, 4)
+            );
 
         var result = act.Should().NotThrow().Subject;
         result.Should().ContainKey(stockId);
