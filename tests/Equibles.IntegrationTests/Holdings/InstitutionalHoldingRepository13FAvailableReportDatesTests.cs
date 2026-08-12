@@ -427,6 +427,70 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     }
 
     [Fact]
+    public async Task GetCombinedStockActivitySnapshotBacked_LoadsOneVersionedListingGeneration()
+    {
+        var stock = Stock("TREND-COMBINED");
+        var previous = new DateOnly(2024, 9, 30);
+        var current = new DateOnly(2024, 12, 31);
+        var computedAt = DateTime.UtcNow;
+        _dbContext.Add(stock);
+        _dbContext.Add(
+            new StockQuarterlyActivityCombined
+            {
+                CommonStockId = stock.Id,
+                ReportDate = current,
+                PreviousReportDate = previous,
+                CurrentShares = 2_500,
+                PreviousShares = 2_100,
+                CurrentValue = 250_000,
+                PreviousValue = 210_000,
+                CurrentFilerCount = 8,
+                PreviousFilerCount = 7,
+                ComputedAt = computedAt,
+            }
+        );
+        _dbContext
+            .Set<StockQuarterlyListingActivity>()
+            .AddRange(
+                new StockQuarterlyListingActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = current,
+                    IsCombined = true,
+                    PriceSeriesTicker = stock.Ticker,
+                    CurrentShares = 1_000,
+                    PreviousShares = 900,
+                    ComputedAt = computedAt,
+                },
+                new StockQuarterlyListingActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = current,
+                    IsCombined = true,
+                    PriceSeriesTicker = "TREND-COMBINED.B",
+                    CurrentShares = 1_500,
+                    PreviousShares = 1_200,
+                    ComputedAt = computedAt,
+                }
+            );
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+        var row = await _repository.GetCombinedStockActivitySnapshotBacked(
+            stock,
+            current,
+            previous
+        );
+
+        row.Should().NotBeNull();
+        row.CurrentShares.Should().Be(2_500);
+        row.CurrentValue.Should().Be(250_000);
+        row.CurrentFilerCount.Should().Be(8);
+        row.ListingShares.Select(listing => listing.PriceSeriesTicker)
+            .Should()
+            .BeEquivalentTo(stock.Ticker, "TREND-COMBINED.B");
+    }
+
+    [Fact]
     public async Task GetHolderQuarterlySnapshotsSnapshotBacked_FallsBackOnlyForMissingHolder()
     {
         var stock = Stock("FUNDS");

@@ -326,62 +326,43 @@ public class HoldingsAggregateRefreshService
                 .ToListAsync(cancellationToken)
         ).ToDictionary(c => c.CommonStockId);
 
-        var combinedListingShares = await repository
-            .GetCombinedQuarter(latest, previous)
-            .Join(
-                dbContext.Set<CommonStock>(),
-                holding => holding.CommonStockId,
-                stock => stock.Id,
-                (holding, stock) => new { Holding = holding, stock.Ticker }
-            )
-            .GroupBy(row => new
-            {
-                row.Holding.CommonStockId,
-                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
-            })
-            .Select(group => new
-            {
-                group.Key.CommonStockId,
-                group.Key.PriceSeriesTicker,
-                Shares = group.Sum(row => row.Holding.Shares),
-            })
-            .ToListAsync(cancellationToken);
-        var previousListingShares = await dbContext
-            .Set<InstitutionalHolding>()
-            .Where(holding =>
-                holding.ReportDate == previous && holding.FilingType == FilingType.Form13F
-            )
-            .Join(
-                dbContext.Set<CommonStock>(),
-                holding => holding.CommonStockId,
-                stock => stock.Id,
-                (holding, stock) => new { Holding = holding, stock.Ticker }
-            )
-            .GroupBy(row => new
-            {
-                row.Holding.CommonStockId,
-                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
-            })
-            .Select(group => new
-            {
-                group.Key.CommonStockId,
-                group.Key.PriceSeriesTicker,
-                Shares = group.Sum(row => row.Holding.Shares),
-            })
-            .ToListAsync(cancellationToken);
-
         var computedAt = DateTime.UtcNow;
+        var listingRows = await repository.GetLiveListingShareActivity(
+            latest,
+            previous,
+            combined: true,
+            activity.Select(row => row.CommonStockId).ToArray(),
+            cancellationToken
+        );
+        foreach (var listing in listingRows)
+            listing.ComputedAt = computedAt;
+        var listingTotalsByStock = listingRows
+            .GroupBy(row => row.CommonStockId)
+            .ToDictionary(
+                group => group.Key,
+                group => new
+                {
+                    CurrentShares = group.Sum(row => row.CurrentShares),
+                    PreviousShares = group.Sum(row => row.PreviousShares),
+                }
+            );
         var rows = activity
             .Select(a =>
             {
+                if (!listingTotalsByStock.TryGetValue(a.CommonStockId, out var listingTotals))
+                {
+                    throw new InvalidOperationException(
+                        $"Combined holdings activity for stock {a.CommonStockId} has no listing-share rows."
+                    );
+                }
                 churn.TryGetValue(a.CommonStockId, out var c);
                 return new StockQuarterlyActivityCombined
                 {
                     CommonStockId = a.CommonStockId,
                     ReportDate = latest,
                     PreviousReportDate = previous,
-                    CurrentShares = a.CurrentShares,
-                    PreviousShares = a.PreviousShares,
+                    CurrentShares = listingTotals.CurrentShares,
+                    PreviousShares = listingTotals.PreviousShares,
                     CurrentValue = a.CurrentValue,
                     PreviousValue = a.PreviousValue,
                     CurrentFilerCount = a.CurrentFilerCount,
@@ -390,27 +371,6 @@ public class HoldingsAggregateRefreshService
                     SoldOutFilerCount = c?.SoldOutFilerCount ?? 0,
                     ComputedAt = computedAt,
                 };
-            })
-            .ToList();
-        var currentListingLookup = combinedListingShares.ToDictionary(
-            row => (row.CommonStockId, row.PriceSeriesTicker),
-            row => row.Shares
-        );
-        var previousListingLookup = previousListingShares.ToDictionary(
-            row => (row.CommonStockId, row.PriceSeriesTicker),
-            row => row.Shares
-        );
-        var listingRows = currentListingLookup
-            .Keys.Union(previousListingLookup.Keys)
-            .Select(key => new StockQuarterlyListingActivity
-            {
-                CommonStockId = key.CommonStockId,
-                ReportDate = latest,
-                IsCombined = true,
-                PriceSeriesTicker = key.PriceSeriesTicker,
-                CurrentShares = currentListingLookup.GetValueOrDefault(key),
-                PreviousShares = previousListingLookup.GetValueOrDefault(key),
-                ComputedAt = computedAt,
             })
             .ToList();
 

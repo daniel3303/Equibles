@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Models.Taxonomies;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.IntegrationTests.Helpers;
@@ -126,6 +127,50 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
         listing.CurrentShares.Should().Be(2_000);
         listing.PreviousShares.Should().Be(1_600);
         listing.ComputedAt.Should().Be(row.ComputedAt);
+    }
+
+    [Fact]
+    public async Task RebuildQuarterAsync_WindowOpen_NormalizesCarriedSharesToCurrentBasis()
+    {
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        var stock = await SeedStock(seed, "SPLT", industry);
+        var reporter = await SeedHolder(seed, "H010");
+        var nonFiler = await SeedHolder(seed, "H011");
+        seed.AddRange(
+            MakeHolding(stock, reporter, OpenPrev, 100_000, "acc-reporter-prev"),
+            MakeHolding(stock, nonFiler, OpenPrev, 50_000, "acc-carried-prev"),
+            MakeHolding(stock, reporter, OpenCur, 120_000, "acc-reporter-cur"),
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                EffectiveDate = OpenPrev.AddDays(30),
+                Numerator = 2,
+                Denominator = 1,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildQuarterAsync(OpenCur, CancellationToken.None);
+
+        await using var read = FreshContext();
+        var row = await read.Set<StockQuarterlyActivityCombined>()
+            .SingleAsync(snapshot =>
+                snapshot.CommonStockId == stock.Id && snapshot.ReportDate == OpenCur
+            );
+        var listing = await read.Set<StockQuarterlyListingActivity>()
+            .SingleAsync(snapshot =>
+                snapshot.CommonStockId == stock.Id
+                && snapshot.ReportDate == OpenCur
+                && snapshot.IsCombined
+            );
+
+        row.CurrentShares.Should()
+            .Be(2_200, "the filed 1,200 is already post-split and the carried 500 becomes 1,000");
+        row.PreviousShares.Should().Be(1_500);
+        listing.CurrentShares.Should().Be(2_200);
+        listing.PreviousShares.Should().Be(1_500);
     }
 
     [Fact]

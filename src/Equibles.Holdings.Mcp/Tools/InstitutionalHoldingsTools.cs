@@ -352,27 +352,51 @@ public class InstitutionalHoldingsTools
                 if (stockError != null)
                     return stockError;
 
-                var reportDates = (
-                    await _holdingRepository.Get13FReportDatesByStockSnapshotBacked(stock)
-                )
-                    .Take(McpLimit.Clamp(maxPeriods))
-                    .ToList();
-
-                if (reportDates.Count == 0)
+                var activity =
+                    await _holdingRepository.GetStockActivitySnapshotsByStockSnapshotBacked(stock);
+                if (activity.All(row => row.CurrentFilerCount <= 0))
                     return $"No institutional holdings history available for {ticker}.";
 
                 var anchor = await _combinedQuarterService.Resolve(stock);
-                return await RenderOwnershipHistory(stock, ticker, reportDates, anchor);
+                if (anchor is { IsCombined: true })
+                {
+                    var combined = await _holdingRepository.GetCombinedStockActivitySnapshotBacked(
+                        stock,
+                        anchor.ReportDate,
+                        anchor.PreviousReportDate.Value
+                    );
+                    if (combined == null)
+                    {
+                        throw new InvalidOperationException(
+                            $"Combined holdings activity is unavailable for {stock.Ticker} on {anchor.ReportDate:yyyy-MM-dd}."
+                        );
+                    }
+
+                    var index = activity.FindIndex(row => row.ReportDate == anchor.ReportDate);
+                    if (index >= 0)
+                        activity[index] = combined;
+                    else
+                        activity.Add(combined);
+                }
+
+                var selected = activity
+                    .Where(row => row.CurrentFilerCount > 0)
+                    .OrderByDescending(row => row.ReportDate)
+                    .Take(McpLimit.Clamp(maxPeriods))
+                    .OrderBy(row => row.ReportDate)
+                    .ToList();
+                await _marketActivityShareRestater.RestateStockActivity(stock, selected);
+                return RenderOwnershipHistory(stock, ticker, selected, anchor);
             },
             "GetOwnershipHistory",
             $"ticker: {ticker}"
         );
     }
 
-    private async Task<string> RenderOwnershipHistory(
+    private static string RenderOwnershipHistory(
         CommonStock stock,
         string ticker,
-        List<DateOnly> reportDates,
+        IReadOnlyList<StockQuarterlyActivity> activity,
         StockQuarterAnchor anchor
     )
     {
@@ -382,44 +406,20 @@ public class InstitutionalHoldingsTools
             "|------------|-------------|-------------|-----------------|--------|"
         );
 
-        // Restate each quarter's total shares onto today's split basis before the
-        // quarter-over-quarter change so a split between two report dates does not read as a
-        // real change in institutional ownership (a 2:1 split would otherwise show +100%).
-        var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
-
         long previousShares = 0;
         var combinedRowShown = false;
-        foreach (var date in reportDates.OrderBy(d => d))
+        foreach (var row in activity)
         {
-            // The newest quarter is presented as the combined view while its filing window is
-            // open — its as-filed totals would only cover the early filers and the trend would
-            // end on a fabricated collapse.
-            var isCombinedRow = anchor is { IsCombined: true } && date == anchor.ReportDate;
-            var holdings = isCombinedRow
-                ? await _holdingRepository
-                    .GetCombinedQuarterByStock(
-                        stock,
-                        anchor.ReportDate,
-                        anchor.PreviousReportDate.Value
-                    )
-                    .ToListAsync()
-                : await _holdingRepository.Get13FByStock(stock, date).ToListAsync();
+            var isCombinedRow =
+                anchor is { IsCombined: true } && row.ReportDate == anchor.ReportDate;
             combinedRowShown |= isCombinedRow;
-            var totalShares = SplitAdjustment.AdjustShareCount(
-                holdings.Sum(h => h.Shares),
-                date,
-                splits
-            );
-            var totalValue = holdings.Sum(h => h.Value);
-            var institutionCount = holdings.Select(h => h.InstitutionalHolderId).Distinct().Count();
-
-            var change = FormatShareChange(totalShares, previousShares);
+            var change = FormatShareChange(row.CurrentShares, previousShares);
 
             result.AppendLine(
-                $"| {FormatDate(date)}{(isCombinedRow ? " \\*" : "")} | {McpFormat.WholeNumber(institutionCount)} | {McpFormat.WholeNumber(totalShares)} | {FormatMillions(totalValue)} | {change} |"
+                $"| {FormatDate(row.ReportDate)}{(isCombinedRow ? " \\*" : "")} | {McpFormat.WholeNumber(row.CurrentFilerCount)} | {McpFormat.WholeNumber(row.CurrentShares)} | {FormatMillions(row.CurrentValue)} | {change} |"
             );
 
-            previousShares = totalShares;
+            previousShares = row.CurrentShares;
         }
 
         if (combinedRowShown)
