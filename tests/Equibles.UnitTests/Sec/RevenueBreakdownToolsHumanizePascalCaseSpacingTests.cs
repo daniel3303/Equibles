@@ -1,9 +1,9 @@
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.BusinessLogic.RevenueBreakdown;
 
 namespace Equibles.UnitTests.Sec;
 
 /// <summary>
-/// Contract (RevenueBreakdownTools.cs:221-223): the "everything else" branch
+/// Contract (RevenueBreakdownCore.cs:221-223): the "everything else" branch
 /// of Humanize drops the "Member" suffix and spaces the PascalCase local
 /// name. A non-country QName with three PascalCase words and no "Member"
 /// suffix is the diagnostic input — it exercises the regex (lower→upper
@@ -15,7 +15,7 @@ public class RevenueBreakdownToolsHumanizePascalCaseSpacingTests
     [Fact]
     public void Humanize_NonCountryQNameWithoutMemberSuffix_SpacesPascalCaseLocalName()
     {
-        var result = RevenueBreakdownTools.Humanize("us-gaap:StatementGeographicalAxis");
+        var result = RevenueBreakdownCore.Humanize("us-gaap:StatementGeographicalAxis");
 
         result.Should().Be("Statement Geographical Axis");
     }

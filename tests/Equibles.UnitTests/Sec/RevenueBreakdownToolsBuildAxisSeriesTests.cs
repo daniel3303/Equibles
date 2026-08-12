@@ -1,4 +1,4 @@
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.BusinessLogic.RevenueBreakdown;
 using FluentAssertions;
 
 namespace Equibles.UnitTests.Sec;
@@ -15,7 +15,7 @@ public class RevenueBreakdownToolsBuildAxisSeriesTests
         // requested axes contribute, the latest-filed fact wins a restated
         // (member, period) cell, columns read oldest-first, and a member missing a
         // year carries null (rendered as a dash) — never a fabricated zero.
-        var rows = new List<RevenueBreakdownTools.DimensionalRevenueRow>
+        var rows = new List<DimensionalRevenueRow>
         {
             new(
                 "us-gaap:StatementBusinessSegmentsAxis",
@@ -62,7 +62,7 @@ public class RevenueBreakdownToolsBuildAxisSeriesTests
             ),
         };
 
-        var (unit, periodEnds, members) = RevenueBreakdownTools.BuildAxisSeries(
+        var (unit, periodEnds, members) = RevenueBreakdownCore.BuildAxisSeries(
             rows,
             ["us-gaap:StatementBusinessSegmentsAxis"],
             maxYears: 8,

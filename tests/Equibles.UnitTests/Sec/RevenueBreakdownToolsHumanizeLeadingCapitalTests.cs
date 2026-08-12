@@ -1,4 +1,4 @@
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.BusinessLogic.RevenueBreakdown;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -16,18 +16,18 @@ public class RevenueBreakdownToolsHumanizeLeadingCapitalTests
     [InlineData("aapl:MacMember", "Mac")]
     public void Humanize_LoneLeadingCapital_StaysAttachedToItsWord(string qname, string expected)
     {
-        RevenueBreakdownTools.Humanize(qname).Should().Be(expected);
+        RevenueBreakdownCore.Humanize(qname).Should().Be(expected);
     }
 
     [Fact]
     public void Humanize_AcronymPrefixDeeperInName_StillSplits()
     {
-        RevenueBreakdownTools.Humanize("x:USSegmentMember").Should().Be("US Segment");
+        RevenueBreakdownCore.Humanize("x:USSegmentMember").Should().Be("US Segment");
     }
 
     [Fact]
     public void Humanize_PlainPascalCase_StillSplits()
     {
-        RevenueBreakdownTools.Humanize("nvda:DataCenterMember").Should().Be("Data Center");
+        RevenueBreakdownCore.Humanize("nvda:DataCenterMember").Should().Be("Data Center");
     }
 }

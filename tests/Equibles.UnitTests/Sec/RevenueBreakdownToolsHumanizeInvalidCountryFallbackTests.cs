@@ -1,9 +1,9 @@
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.BusinessLogic.RevenueBreakdown;
 
 namespace Equibles.UnitTests.Sec;
 
 /// <summary>
-/// Contract (RevenueBreakdownTools.cs country arm): a "country:" member resolves to its English
+/// Contract (RevenueBreakdownCore.cs country arm): a "country:" member resolves to its English
 /// region name, but an unrecognised code must fall back to the raw local part rather than throw —
 /// the RegionInfo constructor raises ArgumentException for a non-ISO code and the catch returns
 /// `local`. Asserting the fallback (not a valid code's EnglishName) keeps the test independent of
@@ -14,7 +14,7 @@ public class RevenueBreakdownToolsHumanizeInvalidCountryFallbackTests
     [Fact]
     public void Humanize_CountryQNameWithInvalidRegionCode_FallsBackToLocalName()
     {
-        var result = RevenueBreakdownTools.Humanize("country:Atlantis");
+        var result = RevenueBreakdownCore.Humanize("country:Atlantis");
 
         result
             .Should()

@@ -1,4 +1,4 @@
-using Equibles.Sec.FinancialFacts.Mcp.Tools;
+using Equibles.Sec.FinancialFacts.BusinessLogic.RevenueBreakdown;
 using FluentAssertions;
 
 namespace Equibles.UnitTests.Sec;
@@ -21,7 +21,7 @@ public class RevenueBreakdownToolsReconcileToTotalTests
     [Fact]
     public void BuildAxisSeries_LaterFilingDropsMemberReconcilingToTotal_DropsStaleMember()
     {
-        var rows = new List<RevenueBreakdownTools.DimensionalRevenueRow>
+        var rows = new List<DimensionalRevenueRow>
         {
             // Older filing: A, B, C, Singapore reconcile to 100 in total.
             new(Geo, "country:US", Fy2024, 30m, "USD", OldFiling),
@@ -34,7 +34,7 @@ public class RevenueBreakdownToolsReconcileToTotalTests
             new(Geo, "country:CN", Fy2024, 30m, "USD", NewFiling),
         };
 
-        var (unit, periodEnds, members) = RevenueBreakdownTools.BuildAxisSeries(
+        var (unit, periodEnds, members) = RevenueBreakdownCore.BuildAxisSeries(
             rows,
             [Geo],
             maxYears: 8,
@@ -60,7 +60,7 @@ public class RevenueBreakdownToolsReconcileToTotalTests
     [Fact]
     public void BuildAxisSeries_PartialAmendmentNotReconcilingToTotal_KeepsCarriedForwardMembers()
     {
-        var rows = new List<RevenueBreakdownTools.DimensionalRevenueRow>
+        var rows = new List<DimensionalRevenueRow>
         {
             // Older filing: two members reconcile to 100.
             new(Geo, "country:US", Fy2024, 60m, "USD", OldFiling),
@@ -69,7 +69,7 @@ public class RevenueBreakdownToolsReconcileToTotalTests
             new(Geo, "country:US", Fy2024, 70m, "USD", NewFiling),
         };
 
-        var (_, _, members) = RevenueBreakdownTools.BuildAxisSeries(
+        var (_, _, members) = RevenueBreakdownCore.BuildAxisSeries(
             rows,
             [Geo],
             maxYears: 8,
@@ -80,12 +80,12 @@ public class RevenueBreakdownToolsReconcileToTotalTests
         // Identify members by the same label the code derives, so the assertion does not depend
         // on the runtime's ICU/CLDR English name for a country (e.g. "China mainland" vs "China").
         members
-            .Single(m => m.Label == RevenueBreakdownTools.Humanize("country:US"))
+            .Single(m => m.Label == RevenueBreakdownCore.Humanize("country:US"))
             .Values[0]
             .Should()
             .Be(70m, "the restated value wins for the amended member");
         members
-            .Single(m => m.Label == RevenueBreakdownTools.Humanize("country:CN"))
+            .Single(m => m.Label == RevenueBreakdownCore.Humanize("country:CN"))
             .Values[0]
             .Should()
             .Be(40m, "the un-amended member carries forward from the prior filing");
@@ -98,7 +98,7 @@ public class RevenueBreakdownToolsReconcileToTotalTests
     [Fact]
     public void BuildAxisSeries_ReconcilesToOneOfSeveralConceptTotals_DropsStaleMember()
     {
-        var rows = new List<RevenueBreakdownTools.DimensionalRevenueRow>
+        var rows = new List<DimensionalRevenueRow>
         {
             // Older filing: members sum to the ASC 606 subtotal of 80, including a stale member.
             new(Geo, "country:US", Fy2024, 30m, "USD", OldFiling),
@@ -110,7 +110,7 @@ public class RevenueBreakdownToolsReconcileToTotalTests
         };
 
         // Two candidate totals for the period: total Revenues 100 and the ASC 606 subtotal 80.
-        var (_, _, members) = RevenueBreakdownTools.BuildAxisSeries(
+        var (_, _, members) = RevenueBreakdownCore.BuildAxisSeries(
             rows,
             [Geo],
             maxYears: 8,

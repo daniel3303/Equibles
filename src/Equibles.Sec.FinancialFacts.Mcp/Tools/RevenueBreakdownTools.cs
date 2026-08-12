@@ -1,7 +1,5 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
@@ -9,6 +7,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
+using Equibles.Sec.FinancialFacts.BusinessLogic.RevenueBreakdown;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Mcp.Helpers;
@@ -19,37 +18,13 @@ using ModelContextProtocol.Server;
 
 namespace Equibles.Sec.FinancialFacts.Mcp.Tools;
 
+// Selection rules (axes, reconciliation, cross-cut roll-up, member fold, rollup-member
+// filter) live in RevenueBreakdownCore — the ONE lane shared with the commercial REST
+// endpoint and portal, so the transports can never disagree on a company's member sets
+// (EquiblesCommercial#7166). This class owns only the queries and the markdown rendering.
 [McpServerToolType]
 public class RevenueBreakdownTools
 {
-    // Issuers moved geography/product from us-gaap to the srt taxonomy in 2018; both
-    // QNames identify the same axis, so each bucket accepts both spellings.
-    private static readonly string[] SegmentAxes = ["us-gaap:StatementBusinessSegmentsAxis"];
-    private static readonly string[] GeographyAxes =
-    [
-        "srt:StatementGeographicalAxis",
-        "us-gaap:StatementGeographicalAxis",
-    ];
-    private static readonly string[] ProductAxes =
-    [
-        "srt:ProductOrServiceAxis",
-        "us-gaap:ProductOrServiceAxis",
-    ];
-    private static readonly string[] AllAxes = [.. SegmentAxes, .. GeographyAxes, .. ProductAxes];
-
-    // srt:ConsolidationItemsAxis = us-gaap:OperatingSegmentsMember is a transparent
-    // qualifier ("this figure is a pure operating-segment total"), not a second slice of
-    // the value. A fact carrying it alongside one real axis still partitions total revenue,
-    // so it must not be discarded as a cross-cut. Issuers such as Apple tag every operating
-    // segment this way from FY2025 on, which otherwise drops the latest fiscal year (#3628).
-    private const string ConsolidationItemsAxis = "srt:ConsolidationItemsAxis";
-    private const string OperatingSegmentsMember = "us-gaap:OperatingSegmentsMember";
-
-    // How close the latest filing's members must sum to consolidated total revenue to count
-    // as a complete re-disaggregation (see ReconcileToTotal). Half a percent absorbs
-    // rounding and minor unit scaling without admitting a partial amendment.
-    private const decimal ReconciliationTolerance = 0.005m;
-
     private const int DefaultYears = 8;
     private const int MaxYearsCap = 12;
 
@@ -134,47 +109,18 @@ public class RevenueBreakdownTools
                     .ToDictionary(c => c.Id, c => priorityByPair[(c.Taxonomy, c.Tag)]);
                 var conceptIds = priorityById.Keys.ToList();
 
-                // Annual revenue facts carrying exactly one dimension on a known axis.
-                // Cross-cut facts (e.g. segment × geography) are excluded — including
-                // them in a single-axis mix would double-count the revenue they slice.
-                // The OperatingSegments qualifier (see above) is the one allowed extra
-                // dimension: it tags the fact as a pure segment total without slicing it.
-                var rows = await _financialFactRepository
-                    .GetByStock(stock)
-                    .Where(f =>
-                        conceptIds.Contains(f.FinancialConceptId)
-                        && f.PeriodType == FactPeriodType.Duration
-                        && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays)
-                            <= f.PeriodEnd
-                        && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays)
-                            >= f.PeriodEnd
-                        && f.DimensionsKey != ""
-                        && f.Dimensions.Count(d => AllAxes.Contains(d.Axis)) == 1
-                        && f.Dimensions.All(d =>
-                            AllAxes.Contains(d.Axis)
-                            || (
-                                d.Axis == ConsolidationItemsAxis
-                                && d.Member == OperatingSegmentsMember
-                            )
-                        )
-                    )
-                    .Select(f => new DimensionalRevenueRow(
-                        f.Dimensions.First(d => AllAxes.Contains(d.Axis)).Axis,
-                        f.Dimensions.First(d => AllAxes.Contains(d.Axis)).Member,
-                        f.PeriodEnd,
-                        f.Value,
-                        f.Unit,
-                        f.FiledDate,
-                        f.PeriodStart
-                    ))
-                    .ToListAsync();
+                var rows = await LoadSingleAxisRows(
+                    stock,
+                    conceptIds,
+                    RevenueBreakdownCore.AllAxes
+                );
 
                 // Consolidated (no-dimension) total revenue — the figure each axis's members
                 // must add up to, used to detect a complete re-disaggregation so a member a
-                // later filing drops doesn't linger (see ReconcileToTotal). Several revenue
-                // concepts can be tagged (e.g. Revenues plus the ASC 606 tag), so we keep one
-                // candidate total per (period, unit, concept) — latest-filed wins — and the
-                // members need only reconcile to any one of them.
+                // later filing drops doesn't linger (see RevenueBreakdownCore.ReconcileToTotal).
+                // Several revenue concepts can be tagged (e.g. Revenues plus the ASC 606 tag),
+                // so we keep one candidate total per (period, unit, concept) — latest-filed
+                // wins — and the members need only reconcile to any one of them.
                 var consolidated = await _financialFactRepository
                     .GetConsolidatedByStock(stock)
                     .Where(f =>
@@ -206,6 +152,22 @@ public class RevenueBreakdownTools
                                     )
                                     .ToList()
                     );
+
+                // Filers can move a cut to TWO-dimensional tagging entirely (SoFi tags every
+                // product fact product × segment from FY2023; XOM tags segments and
+                // geographies only in cross-cuts after its 2022 reorganisation) — the
+                // single-axis query rightly excludes those as cross-cuts, which froze the
+                // axis at the last single-axis fiscal year. Roll the cross-cuts up per axis
+                // family, only for periods with no single-axis cut; the core picks ONE
+                // partner family per period against the consolidated totals so the same
+                // revenue is never counted once per partner axis.
+                var crossCuts = await LoadCrossCutRows(stock, conceptIds);
+                foreach (var family in RevenueBreakdownCore.AxisFamilies)
+                {
+                    rows.AddRange(
+                        RevenueBreakdownCore.RollUpCrossCuts(crossCuts, family, rows, totals)
+                    );
+                }
 
                 // One display figure per (period, unit) for the tables' total
                 // row: the alias's primary tag wins, then the latest filing —
@@ -245,7 +207,7 @@ public class RevenueBreakdownTools
                         result,
                         "By segment",
                         rows,
-                        SegmentAxes,
+                        RevenueBreakdownCore.SegmentAxes,
                         years,
                         totals,
                         displayTotals
@@ -254,7 +216,7 @@ public class RevenueBreakdownTools
                         result,
                         "By geography",
                         rows,
-                        GeographyAxes,
+                        RevenueBreakdownCore.GeographyAxes,
                         years,
                         totals,
                         displayTotals
@@ -263,7 +225,7 @@ public class RevenueBreakdownTools
                         result,
                         "By product & service",
                         rows,
-                        ProductAxes,
+                        RevenueBreakdownCore.ProductAxes,
                         years,
                         totals,
                         displayTotals
@@ -286,6 +248,102 @@ public class RevenueBreakdownTools
             "GetRevenueBreakdown",
             $"ticker: {FactMarkdown.Clean(ticker)}"
         );
+    }
+
+    // Annual facts carrying exactly one dimension on a requested axis. Cross-cut facts
+    // (e.g. segment × geography) are excluded — including them in a single-axis mix
+    // would double-count the revenue they slice. The OperatingSegments qualifier is the
+    // one allowed extra dimension: it tags the fact as a pure segment total without
+    // slicing it.
+    private async Task<List<DimensionalRevenueRow>> LoadSingleAxisRows(
+        CommonStock stock,
+        List<Guid> conceptIds,
+        string[] axes
+    )
+    {
+        return await _financialFactRepository
+            .GetByStock(stock)
+            .Where(f =>
+                conceptIds.Contains(f.FinancialConceptId)
+                && f.PeriodType == FactPeriodType.Duration
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays) <= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays) >= f.PeriodEnd
+                && f.DimensionsKey != ""
+                && f.Dimensions.Count(d => axes.Contains(d.Axis)) == 1
+                && f.Dimensions.All(d =>
+                    axes.Contains(d.Axis)
+                    || (
+                        d.Axis == RevenueBreakdownCore.ConsolidationItemsAxis
+                        && d.Member == RevenueBreakdownCore.OperatingSegmentsMember
+                    )
+                )
+            )
+            .Select(f => new DimensionalRevenueRow(
+                f.Dimensions.First(d => axes.Contains(d.Axis)).Axis,
+                f.Dimensions.First(d => axes.Contains(d.Axis)).Member,
+                f.PeriodEnd,
+                f.Value,
+                f.Unit,
+                f.FiledDate,
+                f.PeriodStart,
+                f.FiscalYear
+            ))
+            .ToListAsync();
+    }
+
+    // Annual facts carrying exactly TWO dimensions on known breakdown axes (a cross-cut
+    // like product × segment), qualifier tolerated like the single-axis query.
+    private async Task<List<CrossCutRevenueRow>> LoadCrossCutRows(
+        CommonStock stock,
+        List<Guid> conceptIds
+    )
+    {
+        var facts = await _financialFactRepository
+            .GetByStock(stock)
+            .Where(f =>
+                conceptIds.Contains(f.FinancialConceptId)
+                && f.PeriodType == FactPeriodType.Duration
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays) <= f.PeriodEnd
+                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays) >= f.PeriodEnd
+                && f.DimensionsKey != ""
+                && f.Dimensions.Count(d => RevenueBreakdownCore.AllAxes.Contains(d.Axis)) == 2
+                && f.Dimensions.All(d =>
+                    RevenueBreakdownCore.AllAxes.Contains(d.Axis)
+                    || (
+                        d.Axis == RevenueBreakdownCore.ConsolidationItemsAxis
+                        && d.Member == RevenueBreakdownCore.OperatingSegmentsMember
+                    )
+                )
+            )
+            .Select(f => new
+            {
+                f.PeriodEnd,
+                f.Value,
+                f.Unit,
+                f.FiledDate,
+                f.PeriodStart,
+                f.FiscalYear,
+                Dims = f
+                    .Dimensions.Where(d => RevenueBreakdownCore.AllAxes.Contains(d.Axis))
+                    .Select(d => new { d.Axis, d.Member })
+                    .ToList(),
+            })
+            .ToListAsync();
+        return facts
+            .Where(f => f.Dims.Count == 2)
+            .Select(f => new CrossCutRevenueRow(
+                f.Dims[0].Axis,
+                f.Dims[0].Member,
+                f.Dims[1].Axis,
+                f.Dims[1].Member,
+                f.PeriodEnd,
+                f.Value,
+                f.Unit,
+                f.FiledDate,
+                f.PeriodStart,
+                f.FiscalYear
+            ))
+            .ToList();
     }
 
     // The profitability view of the segment cut: operating income tagged on the same
@@ -312,30 +370,7 @@ public class RevenueBreakdownTools
         if (conceptIds.Count == 0)
             return false;
 
-        var rows = await _financialFactRepository
-            .GetByStock(stock)
-            .Where(f =>
-                conceptIds.Contains(f.FinancialConceptId)
-                && f.PeriodType == FactPeriodType.Duration
-                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MinAnnualSpanDays) <= f.PeriodEnd
-                && f.PeriodStart.AddDays(FiscalPeriodSpanDays.MaxAnnualSpanDays) >= f.PeriodEnd
-                && f.DimensionsKey != ""
-                && f.Dimensions.Count(d => SegmentAxes.Contains(d.Axis)) == 1
-                && f.Dimensions.All(d =>
-                    SegmentAxes.Contains(d.Axis)
-                    || (d.Axis == ConsolidationItemsAxis && d.Member == OperatingSegmentsMember)
-                )
-            )
-            .Select(f => new DimensionalRevenueRow(
-                f.Dimensions.First(d => SegmentAxes.Contains(d.Axis)).Axis,
-                f.Dimensions.First(d => SegmentAxes.Contains(d.Axis)).Member,
-                f.PeriodEnd,
-                f.Value,
-                f.Unit,
-                f.FiledDate,
-                f.PeriodStart
-            ))
-            .ToListAsync();
+        var rows = await LoadSingleAxisRows(stock, conceptIds, RevenueBreakdownCore.SegmentAxes);
         if (rows.Count == 0)
             return false;
 
@@ -371,7 +406,12 @@ public class RevenueBreakdownTools
             .GroupBy(f => (f.PeriodEnd, f.Unit))
             .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.FiledDate).First().Value);
 
-        var incomeSeries = BuildAxisSeries(rows, SegmentAxes, years, totals);
+        var incomeSeries = RevenueBreakdownCore.BuildAxisSeries(
+            rows,
+            RevenueBreakdownCore.SegmentAxes,
+            years,
+            totals
+        );
         if (incomeSeries.Members.Count == 0)
             return false;
 
@@ -379,7 +419,7 @@ public class RevenueBreakdownTools
             result,
             "Segment operating income",
             rows,
-            SegmentAxes,
+            RevenueBreakdownCore.SegmentAxes,
             years,
             totals,
             displayTotals,
@@ -392,8 +432,16 @@ public class RevenueBreakdownTools
                 + "consolidated operating income._"
         );
 
-        var revenueSeries = BuildAxisSeries(revenueRows, SegmentAxes, years, revenueTotals);
-        var marginSeries = BuildSegmentMarginSeries(revenueSeries, incomeSeries);
+        var revenueSeries = RevenueBreakdownCore.BuildAxisSeries(
+            revenueRows,
+            RevenueBreakdownCore.SegmentAxes,
+            years,
+            revenueTotals
+        );
+        var marginSeries = RevenueBreakdownCore.BuildSegmentMarginSeries(
+            revenueSeries,
+            incomeSeries
+        );
         if (marginSeries.Members.Count > 0)
         {
             AppendSeriesTable(result, "Segment operating margin", marginSeries);
@@ -430,7 +478,7 @@ public class RevenueBreakdownTools
         bool checkOverlap = true
     )
     {
-        var series = BuildAxisSeries(rows, axes, maxYears, totals);
+        var series = RevenueBreakdownCore.BuildAxisSeries(rows, axes, maxYears, totals);
         if (series.Members.Count == 0)
             return;
 
@@ -451,11 +499,11 @@ public class RevenueBreakdownTools
             result.AppendLine($"| **{totalLabel}** | " + string.Join(" | ", totalCells) + " |");
 
         // An issuer can tag a parent level alongside its components on the same
-        // axis (AAPL's Product/Service next to iPhone/Mac/iPad; NVDA's Data
-        // Center next to Compute/Networking). Those rows survive the disjoint-
-        // scheme collapse because the schemes share or nest members, so the
-        // column sums to well over consolidated revenue — say so rather than
-        // let a consumer double-count.
+        // axis (XOM's Canada highlight inside Non-US; NVDA's Data Center next to
+        // Compute/Networking). Those rows survive the disjoint-scheme collapse
+        // because the schemes share or nest members, so the column sums to well
+        // over consolidated revenue — say so rather than let a consumer
+        // double-count.
         var overlaps = false;
         for (var i = 0; i < periodEnds.Count && !overlaps && checkOverlap; i++)
         {
@@ -508,520 +556,4 @@ public class RevenueBreakdownTools
             );
         }
     }
-
-    // Resolve the surviving (member, period) facts for one axis, one row per cell — all in a
-    // single pinned unit. The default rule keeps the latest-filed fact per (member, period) —
-    // correct for a restatement that re-reports a member with a new value. It is wrong when a
-    // later filing instead *drops* a member it has reclassified away (NVDA's Singapore, AMD's
-    // Japan/Europe, KO/CAT renames): nothing supersedes the dropped member, so it lingers from
-    // the older filing and the axis double-counts it.
-    //
-    // The fix is arithmetic, not pattern-matching: for each period, if the latest filing's own
-    // members already reconcile to a consolidated total revenue (in the same unit), that filing
-    // is a complete re-disaggregation — use only its members and discard anything carried over
-    // from older filings. Otherwise the latest filing only restated some members (a partial
-    // amendment), so fall back to the latest-filed-per-member merge that carries un-amended
-    // members forward.
-    private static List<DimensionalRevenueRow> ReconcileToTotal(
-        IEnumerable<DimensionalRevenueRow> axisRowsInUnit,
-        string unit,
-        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> totals
-    )
-    {
-        var result = new List<DimensionalRevenueRow>();
-        foreach (var period in axisRowsInUnit.GroupBy(r => r.PeriodEnd))
-        {
-            var latestFiled = period.Max(r => r.FiledDate);
-            var latestFiling = period.Where(r => r.FiledDate == latestFiled).ToList();
-            var latestSum = latestFiling.Sum(r => r.Value);
-
-            // Compared against the consolidated total in the SAME unit as the pinned members.
-            // Several revenue concepts may each report a total; the members complete the period
-            // if they reconcile to any one of them (e.g. ASC 606 revenue vs. total Revenues).
-            var candidates = totals.TryGetValue((period.Key, unit), out var totalsForPeriod)
-                ? totalsForPeriod
-                : [];
-            var complete = candidates.Any(total =>
-                total != 0m
-                && Math.Abs(latestSum - total) <= Math.Abs(total) * ReconciliationTolerance
-            );
-
-            List<DimensionalRevenueRow> periodRows;
-            if (complete)
-            {
-                // Latest filing re-disaggregates the whole period — keep only its members,
-                // collapsing any duplicate member within the same filing to its first fact.
-                periodRows = latestFiling.GroupBy(r => r.Member).Select(g => g.First()).ToList();
-            }
-            else
-            {
-                // Partial amendment — latest-filed fact wins per member, older members carried.
-                periodRows = period
-                    .GroupBy(r => r.Member)
-                    .Select(g => g.OrderByDescending(r => r.FiledDate).First())
-                    .ToList();
-            }
-
-            // An issuer can tag two overlapping disaggregation schemes on the same axis in one
-            // filing (e.g. a regional partition AND a by-country partition), each summing to
-            // consolidated total revenue. Both survive the merge above, so the axis would show
-            // ~2x actual revenue (#3897). Collapse to one scheme when the members partition
-            // cleanly into 2+ full-total subsets; otherwise leave the period untouched.
-            result.AddRange(CollapseOverlappingSchemes(periodRows, candidates));
-        }
-        return result;
-    }
-
-    // When the members of one period partition into 2+ DISJOINT subsets that EACH reconcile to
-    // a consolidated total revenue (with no member left over), the issuer tagged multiple
-    // overlapping schemes on the same axis. Keep only the MOST GRANULAR full-total subset (the
-    // most members — the most informative view); every full-total subset is individually
-    // correct, so this only chooses which correct view to show, never alters a number.
-    //
-    // Pure arithmetic, no member-name matching. The guard is strict: act only when the members
-    // FULLY partition into >=2 disjoint full-total subsets. A single scheme, or a partial
-    // overlap with no clean second full-total subset, is left unchanged — nothing is dropped.
-    private static List<DimensionalRevenueRow> CollapseOverlappingSchemes(
-        List<DimensionalRevenueRow> periodRows,
-        IReadOnlyList<decimal> candidates
-    )
-    {
-        if (periodRows.Count < 2)
-        {
-            return periodRows;
-        }
-
-        foreach (var total in candidates.Where(t => t != 0m).Distinct())
-        {
-            var tolerance = Math.Abs(total) * ReconciliationTolerance;
-
-            // Skip the trivial case where the whole member set already equals the total — that
-            // is one scheme, not an overlap of two.
-            if (Math.Abs(periodRows.Sum(r => r.Value) - total) <= tolerance)
-            {
-                continue;
-            }
-
-            var partition = FindFullTotalPartition(periodRows, total, tolerance);
-            if (partition != null && partition.Count >= 2)
-            {
-                // Keep the most granular subset; ties broken by the larger summed value, then a
-                // stable member ordering, so the choice is deterministic.
-                return partition
-                    .OrderByDescending(subset => subset.Count)
-                    .ThenByDescending(subset => subset.Sum(r => r.Value))
-                    .ThenBy(subset => string.Join("|", subset.Select(r => r.Member).Order()))
-                    .First();
-            }
-        }
-
-        return periodRows;
-    }
-
-    // Partition the members into disjoint subsets that each sum to `total` (within tolerance),
-    // covering every member exactly once. Returns the cover that minimises the total deviation
-    // from `total` across its subsets — so the genuine schemes (each summing to the exact
-    // consolidated figure) win over a tolerance-admitted near-miss that stitches members from
-    // different schemes together. Returns null when no full cover exists (not a clean overlap)
-    // or when any combinatorial bound trips — the period then passes through exactly as
-    // reported, the search's existing fail-safe.
-    //
-    // The bounds are load-bearing, not defensive fluff. The walk is exhaustive (~2^n), and the
-    // product axis breaks the "well under 15 members" assumption geography axes satisfy: a
-    // pharma issuer tags one member per drug (PFE 76, JNJ 46, LLY 40 on
-    // srt:ProductOrServiceAxis). Unbounded, one such call burned a CPU core indefinitely — and
-    // past 32 members the `1 << i` bitmasks alias (the shift count wraps), which corrupted the
-    // cover search into a literal non-terminating loop.
-    private const int MaxCollapseMembers = 31;
-    private const int MaxSubsetSearchNodes = 200_000;
-    private const int MaxCoverSubsets = 4_096;
-
-    private static List<List<DimensionalRevenueRow>> FindFullTotalPartition(
-        List<DimensionalRevenueRow> periodRows,
-        decimal total,
-        decimal tolerance
-    )
-    {
-        // Bitmask-width guard: 31 keeps every index inside the 32 bits the masks address. It
-        // deliberately does not try to bound cost — mid-size axes are cheap to search and the
-        // collapse is load-bearing for them — the node budget below is the cost bound.
-        if (periodRows.Count > MaxCollapseMembers)
-        {
-            return null;
-        }
-
-        // Order once so every subset and the final cover are produced deterministically.
-        var members = periodRows
-            .OrderByDescending(r => r.Value)
-            .ThenBy(r => r.Member, StringComparer.Ordinal)
-            .ToList();
-
-        // All subsets summing to total within tolerance, each as a bitmask over `members`.
-        // The subset-count cap keeps the cover search's input no larger than it ever was under
-        // the original assumption; a genuine overlap yields a handful of full-total subsets.
-        var fullTotalSubsets = new List<(int Mask, decimal Deviation)>();
-        var budget = MaxSubsetSearchNodes;
-        EnumerateFullTotalSubsets(
-            members,
-            0,
-            0,
-            0m,
-            total,
-            tolerance,
-            fullTotalSubsets,
-            ref budget
-        );
-        if (fullTotalSubsets.Count == 0 || budget <= 0 || fullTotalSubsets.Count > MaxCoverSubsets)
-        {
-            return null;
-        }
-
-        var (bestMasks, found) = FindBestCover(members.Count, fullTotalSubsets, total);
-        if (!found)
-        {
-            return null;
-        }
-
-        return bestMasks
-            .Select(mask =>
-                Enumerable
-                    .Range(0, members.Count)
-                    .Where(i => (mask & (1 << i)) != 0)
-                    .Select(i => members[i])
-                    .ToList()
-            )
-            .ToList();
-    }
-
-    // Depth-first enumeration of every subset of members[startIndex..] whose running sum reaches
-    // `total` within tolerance, recorded as a bitmask plus its absolute deviation from total.
-    //
-    // `budget` counts down the visited nodes across the whole recursion: a set of near-equal
-    // members can explore a large share of 2^n even under the member cap, so the budget stops
-    // the walk in bounded time regardless of shape. An exhausted budget means the enumeration
-    // is incomplete, so the caller must discard the result rather than act on a partial list.
-    private static void EnumerateFullTotalSubsets(
-        List<DimensionalRevenueRow> members,
-        int startIndex,
-        int mask,
-        decimal sum,
-        decimal total,
-        decimal tolerance,
-        List<(int Mask, decimal Deviation)> output,
-        ref int budget
-    )
-    {
-        if (budget <= 0)
-        {
-            return;
-        }
-        budget--;
-
-        if (mask != 0 && Math.Abs(sum - total) <= tolerance)
-        {
-            output.Add((mask, Math.Abs(sum - total)));
-            // A superset only adds positive values, moving further from total — so stop here.
-            return;
-        }
-        if (sum - total > tolerance)
-        {
-            return;
-        }
-
-        for (var i = startIndex; i < members.Count; i++)
-        {
-            EnumerateFullTotalSubsets(
-                members,
-                i + 1,
-                mask | (1 << i),
-                sum + members[i].Value,
-                total,
-                tolerance,
-                output,
-                ref budget
-            );
-            if (budget <= 0)
-            {
-                return;
-            }
-        }
-    }
-
-    // Choose the disjoint cover of all members (each index used once) built from the full-total
-    // subsets, minimising summed deviation, then preferring more subsets. Anchors each step on
-    // the lowest uncovered index so the search is forced and bounded.
-    private static (List<int> Masks, bool Found) FindBestCover(
-        int memberCount,
-        List<(int Mask, decimal Deviation)> subsets,
-        decimal total
-    )
-    {
-        var allCovered = (1 << memberCount) - 1;
-        List<int> best = null;
-        var bestDeviation = decimal.MaxValue;
-
-        void Search(int covered, List<int> chosen, decimal deviation)
-        {
-            if (deviation >= bestDeviation)
-            {
-                return;
-            }
-            if (covered == allCovered)
-            {
-                if (
-                    best == null
-                    || deviation < bestDeviation
-                    || (deviation == bestDeviation && chosen.Count > best.Count)
-                )
-                {
-                    best = [.. chosen];
-                    bestDeviation = deviation;
-                }
-                return;
-            }
-
-            var anchor = 0;
-            while ((covered & (1 << anchor)) != 0)
-            {
-                anchor++;
-            }
-
-            foreach (var (mask, dev) in subsets)
-            {
-                if ((mask & (1 << anchor)) != 0 && (mask & covered) == 0)
-                {
-                    chosen.Add(mask);
-                    Search(covered | mask, chosen, deviation + dev);
-                    chosen.RemoveAt(chosen.Count - 1);
-                }
-            }
-        }
-
-        Search(0, [], 0m);
-        return (best ?? [], best != null);
-    }
-
-    // Pivot one axis's rows into period-end columns (oldest first) × member rows. Each cell also
-    // retains its exact duration start so a downstream ratio cannot join same-end/different-span
-    // facts. Filings
-    // re-report comparative prior years, so the latest-filed fact wins per (member,
-    // period-end); the axis is pinned to the latest-filed fact's unit so a reporting-
-    // currency change can't mix currencies in one series. ReconcileToTotal then runs on the
-    // single-unit rows — when a later filing completely re-disaggregates a period, members it
-    // dropped must not linger from an older filing.
-    internal static AxisSeries BuildAxisSeries(
-        List<DimensionalRevenueRow> rows,
-        string[] axes,
-        int maxYears,
-        IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> totals
-    )
-    {
-        var axisRows = rows.Where(r => axes.Contains(r.Axis)).ToList();
-        if (axisRows.Count == 0)
-            return new AxisSeries(null, [], []);
-
-        // Pin the unit first (latest-filed fact's unit) so the reconciliation sum and the
-        // consolidated total are always in the same currency.
-        var unit = axisRows.OrderByDescending(r => r.FiledDate).First().Unit;
-        var inUnit = axisRows.Where(r => r.Unit == unit);
-        var current = ReconcileToTotal(inUnit, unit, totals);
-        if (current.Count == 0)
-            return new AxisSeries(null, [], []);
-
-        var periodEnds = current
-            .Select(r => r.PeriodEnd)
-            .Distinct()
-            .OrderByDescending(d => d)
-            .Take(maxYears)
-            .OrderBy(d => d)
-            .ToList();
-
-        var latest = periodEnds[^1];
-        // Fold before pivoting, not only when revenue and income are joined. An issuer can respell
-        // one member across filings (amd:DatacenterMember / amd:DataCenterMember); exact grouping
-        // would produce two half-series and make one side of a later margin join disappear. The
-        // latest-filed spelling fronts the merged series, and the latest-filed fact wins when two
-        // spellings survive for the same period.
-        var members = current
-            .GroupBy(r => FoldMemberQName(r.Member), StringComparer.Ordinal)
-            .Select(g => new
-            {
-                Key = g.OrderByDescending(r => r.FiledDate)
-                    .ThenByDescending(r => r.PeriodEnd)
-                    .First()
-                    .Member,
-                ByPeriod = g.GroupBy(r => r.PeriodEnd)
-                    .ToDictionary(
-                        pg => pg.Key,
-                        pg => pg.OrderByDescending(r => r.FiledDate).First()
-                    ),
-            })
-            .Select(m => new
-            {
-                m.Key,
-                Latest = m.ByPeriod.TryGetValue(latest, out var latestRow)
-                    ? latestRow.Value
-                    : (decimal?)null,
-                Values = periodEnds
-                    .Select(p =>
-                        m.ByPeriod.TryGetValue(p, out var row) ? row.Value : (decimal?)null
-                    )
-                    .ToList(),
-                PeriodStarts = periodEnds
-                    .Select(p =>
-                        m.ByPeriod.TryGetValue(p, out var row) ? row.PeriodStart : (DateOnly?)null
-                    )
-                    .ToList(),
-            })
-            .Where(m => m.Values.Any(v => v.HasValue))
-            .OrderByDescending(m => m.Latest ?? decimal.MinValue)
-            .ThenBy(m => m.Key)
-            .Select(m => new AxisMemberSeries(m.Key, Humanize(m.Key), m.Values, m.PeriodStarts))
-            .ToList();
-        return new AxisSeries(unit, periodEnds, members);
-    }
-
-    // REST parity for the derived margin axis: join the two independently selected axes by
-    // issuer member QName, exact duration, and unit, never by display label or row position. The fold is
-    // the corpus-backed XBRL identifier rule shared by the REST provider (case and underscores
-    // drift across filings); it retains the namespace prefix, so equal-looking labels from two
-    // different members cannot be combined.
-    internal static AxisSeries BuildSegmentMarginSeries(AxisSeries revenue, AxisSeries income)
-    {
-        if (
-            revenue.Members.Count == 0
-            || income.Members.Count == 0
-            || !string.Equals(revenue.Unit, income.Unit, StringComparison.Ordinal)
-        )
-            return new AxisSeries("%", [], []);
-
-        var incomeByMember = income
-            .Members.GroupBy(m => FoldMemberQName(m.Member), StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        var incomePeriodIndex = income
-            .PeriodEnds.Select((periodEnd, index) => (periodEnd, index))
-            .ToDictionary(p => p.periodEnd, p => p.index);
-
-        var members = new List<AxisMemberSeries>();
-        var usedPeriods = new bool[revenue.PeriodEnds.Count];
-        foreach (var revenueMember in revenue.Members)
-        {
-            if (
-                !incomeByMember.TryGetValue(
-                    FoldMemberQName(revenueMember.Member),
-                    out var incomeMember
-                )
-            )
-                continue;
-
-            var values = new List<decimal?>();
-            var any = false;
-            for (var i = 0; i < revenue.PeriodEnds.Count; i++)
-            {
-                decimal? margin = null;
-                if (
-                    incomePeriodIndex.TryGetValue(revenue.PeriodEnds[i], out var incomeIndex)
-                    && revenueMember.PeriodStartAt(i) == incomeMember.PeriodStartAt(incomeIndex)
-                    && revenueMember.Values[i] is { } revenueValue
-                    && revenueValue > 0m
-                    && incomeMember.Values[incomeIndex] is { } incomeValue
-                )
-                {
-                    margin = incomeValue / revenueValue * 100m;
-                    any = true;
-                    usedPeriods[i] = true;
-                }
-                values.Add(margin);
-            }
-
-            if (any)
-            {
-                members.Add(
-                    new AxisMemberSeries(revenueMember.Member, revenueMember.Label, values)
-                );
-            }
-        }
-
-        if (members.Count == 0)
-            return new AxisSeries("%", [], []);
-
-        var keptIndexes = Enumerable
-            .Range(0, revenue.PeriodEnds.Count)
-            .Where(i => usedPeriods[i])
-            .ToList();
-        return new AxisSeries(
-            "%",
-            keptIndexes.Select(i => revenue.PeriodEnds[i]).ToList(),
-            members
-                .Select(m => new AxisMemberSeries(
-                    m.Member,
-                    m.Label,
-                    keptIndexes.Select(i => m.Values[i]).ToList(),
-                    keptIndexes.Select(i => m.PeriodStartAt(i)).ToList()
-                ))
-                .ToList()
-        );
-    }
-
-    private static string FoldMemberQName(string member) =>
-        member?.Replace("_", "").ToLowerInvariant();
-
-    // Display label from the XBRL member QName: ISO country members get their English
-    // name; everything else drops the Member suffix and spaces the PascalCase local name.
-    internal static string Humanize(string memberQName)
-    {
-        var colon = memberQName.IndexOf(':');
-        var prefix = colon > 0 ? memberQName[..colon] : "";
-        var local = colon > 0 ? memberQName[(colon + 1)..] : memberQName;
-
-        if (prefix == "country")
-        {
-            try
-            {
-                return new RegionInfo(local).EnglishName;
-            }
-            catch (ArgumentException)
-            {
-                return local;
-            }
-        }
-
-        if (local.EndsWith("Member", StringComparison.Ordinal) && local.Length > "Member".Length)
-            local = local[..^"Member".Length];
-        // The (?<!^[A-Z]) guard keeps a lone leading capital attached to the word
-        // that follows: Apple's IPhoneMember reads "IPhone", never "I Phone".
-        // Boundaries deeper in the name still split ("USSegment" → "US Segment").
-        return Regex.Replace(
-            local,
-            "(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?<!^[A-Z])(?=[A-Z][a-z])",
-            " "
-        );
-    }
-
-    internal sealed record DimensionalRevenueRow(
-        string Axis,
-        string Member,
-        DateOnly PeriodEnd,
-        decimal Value,
-        string Unit,
-        DateOnly FiledDate,
-        DateOnly? PeriodStart = null
-    );
-
-    internal sealed record AxisMemberSeries(
-        string Member,
-        string Label,
-        List<decimal?> Values,
-        List<DateOnly?> PeriodStarts = null
-    )
-    {
-        internal DateOnly? PeriodStartAt(int index) =>
-            PeriodStarts != null && index < PeriodStarts.Count ? PeriodStarts[index] : null;
-    }
-
-    internal sealed record AxisSeries(
-        string Unit,
-        List<DateOnly> PeriodEnds,
-        List<AxisMemberSeries> Members
-    );
 }
