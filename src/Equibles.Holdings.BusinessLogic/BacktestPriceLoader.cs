@@ -13,9 +13,14 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.BusinessLogic;
 
 /// <summary>
-/// Loads raw-close price-return series and runs the look-ahead-safe holdings backtests. Every
-/// exact listing is bounded at its latest captured split; the whole simulation begins at the
-/// latest such boundary so it never compares raw bars from opposite sides of a split.
+/// Loads raw-close price-return series and runs the look-ahead-safe holdings backtests. A
+/// captured split no longer truncates the window: closes before a listing's split are restated
+/// onto the current basis with the captured ratio (price factor = Denominator/Numerator, the
+/// inverse of the share factor), so returns span the boundary. Bounding every listing at its
+/// latest boundary — and flooring the WHOLE simulation at the latest boundary across the book —
+/// meant one recent split in any single holding collapsed a five-year request to weeks. Only a
+/// split with an unusable ratio still excludes that listing's pre-boundary closes (absent beats
+/// wrong), and then only that listing is affected.
 /// </summary>
 [Service]
 public class BacktestPriceLoader
@@ -101,22 +106,16 @@ public class BacktestPriceLoader
             )
             .ToListAsync(cancellationToken);
 
-        var boundaryByListing = new Dictionary<ListingKey, DateOnly?>();
-        var comparableFrom = from;
+        var splitScopeByListing = new Dictionary<ListingKey, ListingSplitScope>();
         foreach (var key in listingKeys)
         {
             var primaryTicker = primaryTickers.GetValueOrDefault(key.CommonStockId);
-            var boundary = PriceSeriesSplitScope
-                .ForListing(
-                    splits.Where(split => split.CommonStockId == key.CommonStockId),
-                    primaryTicker,
-                    key.ListedTicker
-                )
-                .Select(split => (DateOnly?)split.EffectiveDate)
-                .Max();
-            boundaryByListing[key] = boundary;
-            if (boundary is { } splitDate && splitDate > comparableFrom)
-                comparableFrom = splitDate;
+            var scoped = PriceSeriesSplitScope.ForListing(
+                splits.Where(split => split.CommonStockId == key.CommonStockId),
+                primaryTicker,
+                key.ListedTicker
+            );
+            splitScopeByListing[key] = ListingSplitScope.Of(scoped);
         }
 
         var requestedKeys = listingKeys.ToHashSet();
@@ -152,7 +151,10 @@ public class BacktestPriceLoader
             })
             .Where(row =>
                 requestedKeys.Contains(row.Key)
-                && (boundaryByListing[row.Key] == null || row.Date >= boundaryByListing[row.Key])
+                && (
+                    splitScopeByListing[row.Key].UnusableBoundary is not { } unusable
+                    || row.Date >= unusable
+                )
             )
             .GroupBy(row => row.Key)
             .ToDictionary(
@@ -160,7 +162,11 @@ public class BacktestPriceLoader
                 group =>
                     group
                         .OrderBy(row => row.Date)
-                        .Select(row => new PriceRow(row.Key.CommonStockId, row.Date, row.Close))
+                        .Select(row => new PriceRow(
+                            row.Key.CommonStockId,
+                            row.Date,
+                            splitScopeByListing[row.Key].RestateClose(row.Close, row.Date)
+                        ))
                         .ToArray()
             );
 
@@ -169,7 +175,7 @@ public class BacktestPriceLoader
 
         var usableFrom = ResolveUsableStart(
             snapshots,
-            comparableFrom,
+            from,
             to,
             pricesByListing,
             primaryTickers,
@@ -179,7 +185,7 @@ public class BacktestPriceLoader
         {
             return new BacktestResult
             {
-                StartDate = comparableFrom,
+                StartDate = from,
                 EndDate = to,
                 Reason = "no common comparable price date for the active portfolio and benchmark",
             };
@@ -275,10 +281,10 @@ public class BacktestPriceLoader
         return Expression.Lambda<Func<DailyStockPrice, bool>>(body, price);
     }
 
-    // A split can be effective on a weekend or holiday. Starting the calculator on that date while
-    // every pre-boundary close is excluded makes Rebalance silently skip a holding whose first
-    // comparable close arrives on the next session. Advance until the benchmark and every security
-    // in the then-active snapshot can be priced; repeat when that advance crosses a later rebalance.
+    // A listing's series can start late (new listing, or closes dropped behind an
+    // unusable-ratio split boundary), and a first usable close can land after a weekend or
+    // holiday. Advance until the benchmark and every security in the then-active snapshot can
+    // be priced; repeat when that advance crosses a later rebalance.
     private static DateOnly? ResolveUsableStart(
         IReadOnlyList<BacktestQuarterSnapshot> snapshots,
         DateOnly requestedFrom,
