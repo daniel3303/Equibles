@@ -44,7 +44,7 @@ public class CloneBacktestTools
         ReadOnly = true
     )]
     [Description(
-        "Backtest how cloning an institutional filer's reported 13F portfolio would have performed against a market benchmark, either over a trailing window (windowYears) or an explicit fromDate/toDate range. Reconstructs the filer's portfolio at each quarterly 13F snapshot, rebalances on the SEC filing lag (so the simulation uses only information available at the time), and values each exact listed security on raw closing prices. Returns price return (dividends excluded), annualized price return (CAGR), and max drawdown for both the cloned portfolio and the benchmark, plus the price-return alpha between them. A captured split can move the usable start date forward so raw bars from opposite sides are never compared. Use this to answer 'how would cloning fund X have performed against the market'."
+        "Backtest how cloning an institutional filer's reported 13F portfolio would have performed against a market benchmark, either over a trailing window (windowYears) or an explicit fromDate/toDate range. Reconstructs the filer's portfolio at each quarterly 13F snapshot, rebalances on the SEC filing lag (so the simulation uses only information available at the time), and values each exact listed security on raw closing prices. Returns price return (dividends excluded), annualized price return (CAGR), and max drawdown for both the cloned portfolio and the benchmark, plus the price-return alpha between them. Closes on opposite sides of a captured split are restated onto one basis with the captured ratio, so a split never shortens the window. Use this to answer 'how would cloning fund X have performed against the market'."
     )]
     public Task<string> GetFundCloneBacktest(
         [Description(
@@ -210,8 +210,8 @@ public class CloneBacktestTools
                 + $"{result.Points.Count} daily points simulated."
         );
         output.AppendLine(
-            "Raw closing prices are used, so dividends are excluded. A captured split can "
-                + "shorten the comparable window."
+            "Raw closing prices are used, so dividends are excluded; closes are restated "
+                + "across captured splits so a split never shortens the window."
         );
 
         // A clone is long-only, so a filer who expresses its thesis in options is only partly
