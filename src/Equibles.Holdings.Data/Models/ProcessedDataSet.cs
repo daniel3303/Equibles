@@ -74,8 +74,17 @@ public class ProcessedDataSet
     /// realtime-swept accessions are behind the realtime watermark, not this
     /// ledger, so the current quarter's affected rows stay understated until
     /// its bulk quarterly data set lands and re-imports them.
+    /// Version 9: stop deduplicating away an original superseded only by a
+    /// "NEW HOLDINGS" amendment (EquiblesCommercial#7163). That amendment type
+    /// only ADDS positions, but the dedup kept just the latest submission per
+    /// (CIK, period) — so a filer whose newest filing was a NEW HOLDINGS
+    /// amendment had its entire original book skipped on every bulk import
+    /// (48 filers in the 2026 Q2 data set alone, including all three
+    /// restructured Vanguard entities, whose Q1 2026 XOM/BRK-B positions could
+    /// never heal). The re-import walks history with the original + additive
+    /// amendments both retained.
     /// </summary>
-    public const int CurrentParserVersion = 8;
+    public const int CurrentParserVersion = 9;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 

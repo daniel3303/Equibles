@@ -73,10 +73,12 @@ public class HoldingsImportService
             return new ImportResult(0, IsComplete: false);
         if (parseResult == false)
             return new ImportResult(0, IsComplete: true);
+        // Cover pages must parse BEFORE the dedup: whether a later filing supersedes
+        // its original depends on the amendment type, which lives on the cover page.
+        if (!await ParseCoverPages(context, cancellationToken))
+            return new ImportResult(context.Submissions.Count, IsComplete: false);
         DeduplicateSubmissions(context);
         var submissionCount = context.Submissions.Count;
-        if (!await ParseCoverPages(context, cancellationToken))
-            return new ImportResult(submissionCount, IsComplete: false);
         await ParseSummaryPages(context, cancellationToken);
         var cusipResult = await BuildCusipMapping(context, cancellationToken);
         if (cusipResult == CusipMappingOutcome.NoInfoTable)
@@ -257,16 +259,32 @@ public class HoldingsImportService
             // can still tie on the parsed date; break those ties by accession
             // number — SEC assigns these monotonically per filer agent, so the
             // lexicographically greatest accession is the later submission.
-            var latest = group
-                .OrderByDescending(s =>
+            var ordered = group
+                .OrderBy(s =>
                     TryParseDateOnly(s.FilingDate, out var filingDate)
                         ? filingDate
                         : DateOnly.MinValue
                 )
-                .ThenByDescending(s => s.AccessionNumber, StringComparer.Ordinal)
-                .First();
+                .ThenBy(s => s.AccessionNumber, StringComparer.Ordinal)
+                .ToList();
 
-            foreach (var s in group.Where(s => s.AccessionNumber != latest.AccessionNumber))
+            // A submission is superseded only by a later filing that REPLACES the
+            // whole book: the newest original or RESTATEMENT amendment is the base,
+            // and everything before it is dropped. A "NEW HOLDINGS" amendment only
+            // ADDS positions, so it supersedes nothing — dropping its original
+            // discarded the filer's entire book from every bulk import (all three
+            // restructured Vanguard entities filed one for 2026-03-31, and the bulk
+            // re-import could never heal what the realtime pass had missed —
+            // EquiblesCommercial#7163). An amendment without a typed cover page
+            // keeps the historical behaviour and counts as a restatement, matching
+            // HandleAmendments' delete rule.
+            var baseIndex = ordered.FindLastIndex(s =>
+                !IsNewHoldingsAmendment(s.AccessionNumber, context)
+            );
+            if (baseIndex <= 0)
+                continue;
+
+            foreach (var s in ordered.Take(baseIndex))
             {
                 superseded.Add(s.AccessionNumber);
             }
@@ -1452,7 +1470,8 @@ public class HoldingsImportService
 
     private static bool IsNewHoldingsAmendment(string accession, ImportContext context)
     {
-        return context.CoverPages.TryGetValue(accession, out var coverPage)
+        return context.CoverPages != null
+            && context.CoverPages.TryGetValue(accession, out var coverPage)
             && string.Equals(
                 coverPage.AmendmentType,
                 "NEW HOLDINGS",
