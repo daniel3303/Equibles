@@ -141,7 +141,7 @@ public class InstitutionalHoldingsTools
                     ? _holdingRepository.GetCombinedQuarterByStockWithHolder(
                         stock,
                         anchor.ReportDate,
-                        anchor.PreviousReportDate.Value
+                        RequirePreviousReportDate(anchor)
                     )
                     : _holdingRepository.Get13FByStockWithHolder(stock, targetDate);
                 // Materialise one compact projection. Exact-listing split factors can change
@@ -156,6 +156,7 @@ public class InstitutionalHoldingsTools
                         InstitutionName = h.InstitutionalHolder.Name,
                         Shares = h.Shares,
                         Value = h.Value,
+                        ReportDate = h.ReportDate,
                         ListedTicker = h.ListedTicker,
                         OptionType = h.OptionType,
                     })
@@ -169,7 +170,7 @@ public class InstitutionalHoldingsTools
                     var listing = holding.ListedTicker ?? stock.Ticker;
                     holding.Shares = SplitAdjustment.AdjustShareCount(
                         holding.Shares,
-                        targetDate,
+                        holding.ReportDate,
                         PriceSeriesSplitScope.ForListing(splits, stock.Ticker, listing)
                     );
                 }
@@ -220,7 +221,13 @@ public class InstitutionalHoldingsTools
     private static string CombinedViewNote(DateOnly targetDate, StockQuarterAnchor anchor) =>
         $"Note: the {FormatDate(targetDate)} filing window is still open (13Fs are due 45 days "
         + $"after quarter end). Combined view: funds that have not filed yet carry their "
-        + $"{FormatDate(anchor.PreviousReportDate.Value)} positions.";
+        + $"{FormatDate(RequirePreviousReportDate(anchor))} positions.";
+
+    private static DateOnly RequirePreviousReportDate(StockQuarterAnchor anchor) =>
+        anchor.PreviousReportDate
+        ?? throw new InvalidOperationException(
+            "A combined-quarter anchor must include its previous report date."
+        );
 
     // Stable pure rendering seam retained for the culture/date/zero-denominator contracts.
     // The request path above uses exact-listing adjusted rows because sibling classes can
@@ -246,6 +253,7 @@ public class InstitutionalHoldingsTools
                 InstitutionName = h.InstitutionalHolder?.Name ?? "Unknown",
                 Shares = SplitAdjustment.AdjustShareCount(h.Shares, shareFactor),
                 Value = h.Value,
+                ReportDate = h.ReportDate,
                 ListedTicker = h.ListedTicker,
                 OptionType = h.OptionType,
             })
@@ -325,6 +333,7 @@ public class InstitutionalHoldingsTools
         public string InstitutionName { get; set; }
         public long Shares { get; set; }
         public long Value { get; set; }
+        public DateOnly ReportDate { get; set; }
         public string ListedTicker { get; set; }
         public OptionType? OptionType { get; set; }
     }
@@ -363,7 +372,7 @@ public class InstitutionalHoldingsTools
                     var combined = await _holdingRepository.GetCombinedStockActivitySnapshotBacked(
                         stock,
                         anchor.ReportDate,
-                        anchor.PreviousReportDate.Value
+                        RequirePreviousReportDate(anchor)
                     );
                     if (combined == null)
                     {
@@ -1523,16 +1532,22 @@ public class InstitutionalHoldingsTools
                 {
                     "filersdelta" => ranking
                         .OrderByDescending(a => a.CurrentFilerCount - a.PreviousFilerCount)
-                        .ThenByDescending(a => a.CurrentFilerCount),
+                        .ThenByDescending(a => a.CurrentFilerCount)
+                        .ThenByDescending(a => a.CurrentValue)
+                        .ThenBy(a => a.CommonStockId),
                     "filersdeltaasc" => ranking
                         .OrderBy(a => a.CurrentFilerCount - a.PreviousFilerCount)
-                        .ThenByDescending(a => a.CurrentFilerCount),
+                        .ThenByDescending(a => a.CurrentFilerCount)
+                        .ThenByDescending(a => a.CurrentValue)
+                        .ThenBy(a => a.CommonStockId),
                     "value" => ranking
                         .OrderByDescending(a => a.CurrentValue)
-                        .ThenByDescending(a => a.CurrentFilerCount),
+                        .ThenByDescending(a => a.CurrentFilerCount)
+                        .ThenBy(a => a.CommonStockId),
                     _ => ranking
                         .OrderByDescending(a => a.CurrentFilerCount)
-                        .ThenByDescending(a => a.CurrentValue),
+                        .ThenByDescending(a => a.CurrentValue)
+                        .ThenBy(a => a.CommonStockId),
                 };
                 var rows = ranking.Take(McpLimit.Clamp(maxResults)).ToList();
                 if (rows.Count == 0)

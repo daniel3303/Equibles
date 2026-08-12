@@ -80,7 +80,7 @@ public class StockCombinedQuarterService
             ? _holdingRepository.GetCombinedQuarterByStock(
                 stock,
                 anchor.ReportDate,
-                anchor.PreviousReportDate.Value
+                RequirePreviousReportDate(anchor)
             )
             : _holdingRepository.Get13FByStock(stock, anchor.ReportDate);
     }
@@ -95,7 +95,7 @@ public class StockCombinedQuarterService
             ? _holdingRepository.GetCombinedQuarterByStockWithHolder(
                 stock,
                 anchor.ReportDate,
-                anchor.PreviousReportDate.Value
+                RequirePreviousReportDate(anchor)
             )
             : _holdingRepository.Get13FByStockWithHolder(stock, anchor.ReportDate);
     }
@@ -118,6 +118,7 @@ public class StockCombinedQuarterService
                 "Reported activity is only defined for a combined anchor (open filing window "
                     + "with a previous quarter to compare against)."
             );
+        var previousReportDate = RequirePreviousReportDate(anchor);
 
         var asFiled = (
             await _holdingRepository.GetStockActivitySnapshotsByStockSnapshotBacked(
@@ -128,7 +129,7 @@ public class StockCombinedQuarterService
         var combined = await _holdingRepository.GetCombinedStockActivitySnapshotBacked(
             stock,
             anchor.ReportDate,
-            anchor.PreviousReportDate.Value,
+            previousReportDate,
             cancellationToken
         );
         if (asFiled == null || combined == null)
@@ -152,7 +153,7 @@ public class StockCombinedQuarterService
         var previousShares = MarketActivityShareRestater.RestateListingTotal(
             combined.ListingShares,
             listing => listing.PreviousShares,
-            anchor.PreviousReportDate.Value,
+            previousReportDate,
             stock.Ticker,
             splits
         );
@@ -171,4 +172,10 @@ public class StockCombinedQuarterService
             CombinedValue = combined.CurrentValue,
         };
     }
+
+    private static DateOnly RequirePreviousReportDate(StockQuarterAnchor anchor) =>
+        anchor.PreviousReportDate
+        ?? throw new InvalidOperationException(
+            "A combined-quarter anchor must include its previous report date."
+        );
 }
