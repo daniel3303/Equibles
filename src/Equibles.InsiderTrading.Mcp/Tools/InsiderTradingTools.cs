@@ -195,7 +195,7 @@ public class InsiderTradingTools
                 sb.AppendLine($"Recent insider transactions for {stock.Name} ({stock.Ticker}):");
                 sb.AppendLine($"Showing {transactions.Count} most recent transactions");
                 sb.AppendLine(
-                    "_Shares/Price/Value are as filed; Owned After is the post-transaction balance restated onto today's split basis. Balances are tracked per security kind and ownership form (see Security/Ownership), not as one running total per insider. 10b5-1 '-' means the filing predates the 2023 checkbox._"
+                    "_Shares/Price/Value are as filed; Owned After is the post-transaction balance restated onto today's split basis. Security is the filed security title (kind when the filing names none) — balances are tracked per security and ownership form (see Security/Ownership), not as one running total per insider, so an issuer with several listed securities (e.g. ordinary shares and ADS) shows separate balances. 10b5-1 '-' means the filing predates the 2023 checkbox._"
                 );
                 sb.AppendLine();
                 sb.AppendLine(
@@ -232,7 +232,14 @@ public class InsiderTradingTools
                             false => "No",
                             null => "-",
                         };
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(t.Shares)} | ${McpFormat.Invariant(t.PricePerShare, "N2")} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(ownedAfter)} | {t.SecurityKind.NameForHumans()} | {t.OwnershipNature.NameForHumans()} | {plan} |";
+                        // The filed security title distinguishes several securities of the
+                        // same kind (e.g. TSM common shares vs ADS); the kind is the
+                        // fallback when a filing names no title.
+                        var security = MarkdownTable.EscapeCell(
+                            t.SecurityTitle,
+                            t.SecurityKind.NameForHumans()
+                        );
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.InsiderOwner.Name} | {role} | {type} | {McpFormat.WholeNumber(t.Shares)} | ${McpFormat.Invariant(t.PricePerShare, "N2")} | ${McpFormat.WholeNumber(value)} | {McpFormat.WholeNumber(ownedAfter)} | {security} | {t.OwnershipNature.NameForHumans()} | {plan} |";
                     }
                 );
 
@@ -256,7 +263,7 @@ public class InsiderTradingTools
         ReadOnly = true
     )]
     [Description(
-        "Get a summary of insider ownership for a stock, ranked by shares held. Each row is as-of that insider's most recent SEC Form 3/4/5 filing (former insiders may linger with stale dates or zero shares), and share counts are restated onto today's split basis, so they can differ from the raw figures in older filings. Returns at most maxResults insiders (default 30). Use this to understand the insider ownership structure of a company; use GetInsiderTransactions for the underlying trades."
+        "Get a summary of insider ownership for a stock, ranked by shares held. Shares Owned is each insider's actual-share (non-derivative) position — options and other derivative holdings are excluded. Each row is as-of the last line of that insider's most recent SEC Form 3/4/5 filing (former insiders may linger with stale dates or zero shares), and share counts are restated onto today's split basis, so they can differ from the raw figures in older filings. Returns at most maxResults insiders (default 30). Use this to understand the insider ownership structure of a company; use GetInsiderTransactions for the underlying trades."
     )]
     public Task<string> GetInsiderOwnership(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -279,18 +286,27 @@ public class InsiderTradingTools
 
                 maxResults = McpLimit.Clamp(maxResults);
 
-                var byStock = _transactionRepository.GetByStock(stock);
+                // An ownership summary's Shares Owned must come from the non-derivative
+                // (actual shares) table — an options/derivative row is a different balance,
+                // and the pre-v6 "no securities owned" sentinels (SecurityKind Unknown) are
+                // zero positions by construction.
+                var byStock = _transactionRepository
+                    .GetByStock(stock)
+                    .Where(t => t.SecurityKind == InsiderSecurityKind.NonDerivative);
 
-                // One row per insider (their latest filing). Materialize them ALL before
-                // ranking: each row sits on its own split basis, and cutting on the raw
-                // counts would under-rank insiders whose last filing predates a large split
-                // (pre-split counts are smaller until restated).
-                var newestByStock = byStock.OrderNewestFirst();
+                // One row per insider — the LAST row of their newest filing, which carries
+                // the end-of-day balance (earlier rows of a multi-row Form 4 are intermediate
+                // balances). Materialize them ALL before ranking: each row sits on its own
+                // split basis, and cutting on the raw counts would under-rank insiders whose
+                // last filing predates a large split (pre-split counts are smaller until
+                // restated).
+                var currentByStock = byStock.OrderCurrentPositionFirst();
                 var latestTransactions = await _transactionRepository
                     .GetByStockWithOwner(stock)
+                    .Where(t => t.SecurityKind == InsiderSecurityKind.NonDerivative)
                     .Where(t =>
                         t.Id
-                        == newestByStock
+                        == currentByStock
                             .Where(t2 => t2.InsiderOwnerId == t.InsiderOwnerId)
                             .Select(t2 => t2.Id)
                             .First()
@@ -328,7 +344,7 @@ public class InsiderTradingTools
                 sb.AppendLine($"Insider ownership summary for {stock.Name} ({stock.Ticker}):");
                 sb.AppendLine($"Showing {ranked.Count} insiders with most recent data");
                 sb.AppendLine(
-                    "_Each row is as-of that insider's most recent filing; Shares Owned is restated onto today's split basis. Former insiders may linger with stale dates or zero shares._"
+                    "_Each row is as-of that insider's most recent filing; Shares Owned is the actual-share (non-derivative) end-of-filing balance restated onto today's split basis. Former insiders may linger with stale dates or zero shares._"
                 );
                 sb.AppendLine();
                 sb.AppendLine("| Insider | Role | Shares Owned | Last Transaction | Last Date |");
@@ -374,7 +390,7 @@ public class InsiderTradingTools
         ReadOnly = true
     )]
     [Description(
-        "Get recent proposed insider sales for a stock from SEC Form 144 notices. Each Form 144 is an affiliate's declaration of intent to sell restricted or control securities, showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the proposed sale as a share of shares outstanding, the approximate sale date, the broker, and the filer's remarks (including any stated 10b5-1 plan). Results are the most recent notices first and a note flags when more exist than were returned; use fromDate/toDate to scope a period (heavy 10b5-1 filers can flood the recency window with small daily notices). Use this to anticipate upcoming insider selling before it shows up as an executed Form 4."
+        "Get recent proposed insider sales for a stock from SEC Form 144 notices. Each Form 144 is an affiliate's declaration of intent to sell restricted or control securities, showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the proposed sale as a share of the issuer's current shares outstanding, the approximate sale date, the broker, and the filer's remarks (including any stated 10b5-1 plan). Results are the most recent notices first and a note flags when more exist than were returned; use fromDate/toDate to scope a period (heavy 10b5-1 filers can flood the recency window with small daily notices). Use this to anticipate upcoming insider selling before it shows up as an executed Form 4."
     )]
     public Task<string> GetProposedSales(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -429,8 +445,13 @@ public class InsiderTradingTools
                 // Each Form 144 is an as-filed notice: the proposed Shares pair with the
                 // notice's own Aggregate Market Value, so both stay exactly as reported. The
                 // list is ordered by filing date, not by an adjusted quantity, so a filed share
-                // count is never compared across a split here. % Outstanding likewise divides
-                // two figures reported on the same notice, so it is split-consistent per row.
+                // count is never compared across a split here. % Outstanding divides by the
+                // ISSUER record's share count, not the notice's own field — filers sometimes
+                // type their sale count into noOfUnitsOutstanding, which rendered absurd
+                // "100% of outstanding" figures (#7164, EquiblesCommercial). The filed share
+                // count is restated onto today's split basis first so the ratio compares like
+                // with like against the current issuer count.
+                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
                 var result = MarkdownTable.Start(
                     $"Recent proposed sales (Form 144) for {stock.Name} ({stock.Ticker}):",
                     $"Showing {filings.Count} of {totalCount} most recent notices",
@@ -448,7 +469,15 @@ public class InsiderTradingTools
                         // Remarks is where a filer states the sale runs under a 10b5-1 plan, which
                         // is the difference between pre-scheduled and discretionary selling. Keep
                         // the complete filed text — a plan disclosure can occur at the end.
-                        return $"| {f.FilingDate:yyyy-MM-dd} | {MarkdownTable.EscapeCell(f.SellerName, "-")} | {MarkdownTable.EscapeCell(f.RelationshipToIssuer, "-")} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {FormatPercentOfOutstanding(f.SharesToBeSold, f.SharesOutstanding)} | {approxSaleDate} | {MarkdownTable.EscapeCell(f.BrokerName, "-")} | {MarkdownTable.EscapeCell(f.Remarks, "-")} |";
+                        var percentOfOutstanding = FormatPercentOfOutstanding(
+                            SplitAdjustment.AdjustShareCount(
+                                f.SharesToBeSold,
+                                f.FilingDate,
+                                splits
+                            ),
+                            stock.SharesOutStanding
+                        );
+                        return $"| {f.FilingDate:yyyy-MM-dd} | {MarkdownTable.EscapeCell(f.SellerName, "-")} | {MarkdownTable.EscapeCell(f.RelationshipToIssuer, "-")} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {percentOfOutstanding} | {approxSaleDate} | {MarkdownTable.EscapeCell(f.BrokerName, "-")} | {MarkdownTable.EscapeCell(f.Remarks, "-")} |";
                     }
                 );
 
@@ -466,8 +495,9 @@ public class InsiderTradingTools
         );
     }
 
-    // The standard Form 144 materiality signal: the proposed sale as a share of the notice's own
-    // reported shares outstanding. "-" when the filing reported no share count.
+    // The standard Form 144 materiality signal: the proposed sale as a share of the ISSUER
+    // record's shares outstanding (the notice's own noOfUnitsOutstanding field is not trusted —
+    // filers sometimes type their sale count there). "-" when the issuer share count is unknown.
     private static string FormatPercentOfOutstanding(long sharesToBeSold, long sharesOutstanding)
     {
         if (sharesOutstanding <= 0)
@@ -517,7 +547,7 @@ public class InsiderTradingTools
                 // tools are keyed on.
                 var ownerIds = insiders.Select(i => i.Id).ToList();
                 var byOwners = _transactionRepository.GetByOwnerIds(ownerIds);
-                var newestByOwners = byOwners.OrderNewestFirst();
+                var newestByOwners = byOwners.OrderCurrentPositionFirst();
                 var latestByOwner = (
                     await byOwners
                         .Where(t =>

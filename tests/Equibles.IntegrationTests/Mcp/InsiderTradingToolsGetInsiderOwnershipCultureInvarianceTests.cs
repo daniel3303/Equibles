@@ -64,6 +64,7 @@ public class InsiderTradingToolsGetInsiderOwnershipCultureInvarianceTests : Para
             OwnershipNature = OwnershipNature.Direct,
             SecurityTitle = "Common Stock",
             AccessionNumber = "0001234567-24-000001",
+            SecurityKind = InsiderSecurityKind.NonDerivative,
         };
         DbContext.Set<CommonStock>().Add(stock);
         DbContext.Set<InsiderOwner>().Add(owner);

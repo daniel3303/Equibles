@@ -75,11 +75,13 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         AcquiredDisposed acquiredDisposed = AcquiredDisposed.Acquired,
         long sharesOwnedAfter = 5000,
         string securityTitle = "Common Stock",
-        string accessionNumber = "0001234567-24-000001"
+        string accessionNumber = "0001234567-24-000001",
+        InsiderSecurityKind securityKind = InsiderSecurityKind.NonDerivative
     )
     {
         return new InsiderTransaction
         {
+            SecurityKind = securityKind,
             CommonStockId = stock.Id,
             CommonStock = stock,
             InsiderOwnerId = owner.Id,

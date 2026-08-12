@@ -41,6 +41,7 @@ public class InsiderFilingReprocessResultSummaryCultureInvarianceTests
             Reclassified = 3456,
             Repaired = 7890,
             DatesCorrected = 6789,
+            Rule10b5Stamped = 4321,
             Failed = 2345,
         };
 
@@ -53,7 +54,8 @@ public class InsiderFilingReprocessResultSummaryCultureInvarianceTests
                 .Summary.Should()
                 .Be(
                     "Reprocessed 1,234/5,678 filings (9,012 fetched, 3,456 rows reclassified, "
-                        + "7,890 prices repaired, 6,789 dates corrected, 2,345 failed).",
+                        + "7,890 prices repaired, 6,789 dates corrected, 4,321 10b5-1 flags stamped, "
+                        + "2,345 failed).",
                     "log helpers in this repo are culture-invariant (cf. BaseScraperWorker.FormatInterval, "
                         + "FactMarkdown.Value); a non-invariant group separator forks operator log output by host locale"
                 );

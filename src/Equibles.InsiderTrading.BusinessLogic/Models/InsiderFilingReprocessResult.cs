@@ -27,11 +27,16 @@ public class InsiderFilingReprocessResult
     /// <summary>Rows whose implausible transaction date was corrected from source XML.</summary>
     public int DatesCorrected { get; set; }
 
+    /// <summary>Rows whose Rule 10b5-1 checkbox value changed (v7 re-copies it — the v4
+    /// capture parsed it but the reprocess never wrote it, so pre-capture rows stayed
+    /// null).</summary>
+    public int Rule10b5Stamped { get; set; }
+
     /// <summary>Filings that could not be fetched or parsed this run.</summary>
     public int Failed { get; set; }
 
     public string Summary =>
         FormattableString.Invariant(
-            $"Reprocessed {Processed:N0}/{Total:N0} filings ({Fetched:N0} fetched, {Reclassified:N0} rows reclassified, {Repaired:N0} prices repaired, {DatesCorrected:N0} dates corrected, {Failed:N0} failed)."
+            $"Reprocessed {Processed:N0}/{Total:N0} filings ({Fetched:N0} fetched, {Reclassified:N0} rows reclassified, {Repaired:N0} prices repaired, {DatesCorrected:N0} dates corrected, {Rule10b5Stamped:N0} 10b5-1 flags stamped, {Failed:N0} failed)."
         );
 }
