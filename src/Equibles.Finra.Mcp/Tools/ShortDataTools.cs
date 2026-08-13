@@ -247,13 +247,13 @@ public class ShortDataTools
                         )
                 );
 
-                // The estimate is appended BELOW the table, never merged into it as a row: the
-                // table is FINRA's reported record and a prediction sitting in it would read as
-                // one. A source that has nothing to add returns null and the answer is unchanged.
                 var answer = AppendNote(table, NewestKeptNote(display.Count, total, "settlements"));
+                if (!WindowReachesPresent(end))
+                    return answer;
+
                 var estimate =
                     _estimateSource == null ? null : await _estimateSource.Describe(stock);
-                return string.IsNullOrWhiteSpace(estimate) ? answer : $"{answer}\n{estimate}\n";
+                return AppendEstimate(answer, estimate);
             },
             "GetShortInterest",
             $"ticker: {ticker}"
@@ -604,6 +604,20 @@ public class ShortDataTools
     // renderers keep the table intact); a no-op for the empty note or an empty-state message.
     private static string AppendNote(string table, string note) =>
         note.Length == 0 ? table : $"{table}\n{note}\n";
+
+    // The pending-settlement estimate answers "where is short interest NOW", so it belongs only
+    // to a request whose window runs to the present. Appending it under a 2019 table would answer
+    // a question the caller did not ask — and the default endDate already IS today, so this only
+    // ever withholds it from someone who explicitly asked for a historical window.
+    private static bool WindowReachesPresent(DateOnly end) =>
+        end >= DateOnly.FromDateTime(DateTime.UtcNow);
+
+    // Separated from the table by a BLANK line, never merged into it: the table is FINRA's
+    // reported record, and a prediction sitting inside it would read as one. The blank line is
+    // load-bearing — with a single newline the block becomes a lazy continuation of whatever
+    // precedes it, which in the no-rows case fuses it into the "no data found" sentence.
+    private static string AppendEstimate(string answer, string estimate) =>
+        string.IsNullOrWhiteSpace(estimate) ? answer : $"{answer.TrimEnd('\n')}\n\n{estimate}\n";
 
     private static string FormatSignedChange(long change) =>
         change >= 0 ? $"+{McpFormat.WholeNumber(change)}" : McpFormat.WholeNumber(change);
