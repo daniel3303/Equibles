@@ -12,6 +12,7 @@ using Equibles.Errors.Data.Models;
 using Equibles.Finra.BusinessLogic;
 using Equibles.Finra.BusinessLogic.Models;
 using Equibles.Finra.Data.Models;
+using Equibles.Finra.Mcp.Contracts;
 using Equibles.Finra.Repositories;
 using Equibles.Mcp;
 using Equibles.Mcp.Extensions;
@@ -39,6 +40,10 @@ public class ShortDataTools
     private readonly IMemoryCache _memoryCache;
     private readonly McpToolRunner _runner;
 
+    // Injected as a sequence so the dependency stays genuinely optional: a deployment that
+    // cannot estimate the pending settlement registers nothing and resolves an empty one.
+    private readonly IShortInterestEstimateSource _estimateSource;
+
     public ShortDataTools(
         DailyShortVolumeRepository shortVolumeRepository,
         ShortInterestRepository shortInterestRepository,
@@ -46,6 +51,7 @@ public class ShortDataTools
         ShortSqueezeScoreManager shortSqueezeScoreManager,
         StockSplitRepository stockSplitRepository,
         IMemoryCache memoryCache,
+        IEnumerable<IShortInterestEstimateSource> estimateSources,
         ErrorManager errorManager,
         ILogger<ShortDataTools> logger
     )
@@ -56,6 +62,7 @@ public class ShortDataTools
         _shortSqueezeScoreManager = shortSqueezeScoreManager;
         _stockSplitRepository = stockSplitRepository;
         _memoryCache = memoryCache;
+        _estimateSource = estimateSources.FirstOrDefault();
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -148,7 +155,7 @@ public class ShortDataTools
 
     [McpServerTool(Name = "GetShortInterest", Title = "Short Interest History", ReadOnly = true)]
     [Description(
-        "Get bi-monthly short interest history for a stock from FINRA. Shows the reported short position, change from the previous settlement, average daily volume, and days to cover per settlement date. Share counts are restated onto today's split basis so the series stays continuous across stock splits; days to cover is as reported (FINRA caps it at 999.99). High days-to-cover (>5) suggests a potential short squeeze — for short interest as a % of shares outstanding and an actual squeeze-candidate ranking use GetShortSqueezeScores; for the market-wide latest settlement use GetShortInterestSnapshot."
+        "Get bi-monthly short interest history for a stock from FINRA. Shows the reported short position, change from the previous settlement, average daily volume, and days to cover per settlement date. Share counts are restated onto today's split basis so the series stays continuous across stock splits; days to cover is as reported (FINRA caps it at 999.99). High days-to-cover (>5) suggests a potential short squeeze — for short interest as a % of shares outstanding and an actual squeeze-candidate ranking use GetShortSqueezeScores; for the market-wide latest settlement use GetShortInterestSnapshot. FINRA publishes each file weeks after it measures the position, so the answer may also carry an estimate of the settlement that has not been reported yet — it appears BELOW the table, labelled as an estimate, and is a model prediction rather than reported data; never present it as a FINRA figure."
     )]
     public Task<string> GetShortInterest(
         [Description("Stock ticker symbol (e.g., AAPL, GME, TSLA)")] string ticker,
@@ -240,7 +247,13 @@ public class ShortDataTools
                         )
                 );
 
-                return AppendNote(table, NewestKeptNote(display.Count, total, "settlements"));
+                // The estimate is appended BELOW the table, never merged into it as a row: the
+                // table is FINRA's reported record and a prediction sitting in it would read as
+                // one. A source that has nothing to add returns null and the answer is unchanged.
+                var answer = AppendNote(table, NewestKeptNote(display.Count, total, "settlements"));
+                var estimate =
+                    _estimateSource == null ? null : await _estimateSource.Describe(stock);
+                return string.IsNullOrWhiteSpace(estimate) ? answer : $"{answer}\n{estimate}\n";
             },
             "GetShortInterest",
             $"ticker: {ticker}"
