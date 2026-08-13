@@ -189,7 +189,9 @@ public class InsiderTradingTools
                 // own price/value — never compared across dates). Only the running
                 // post-transaction balance (Owned After) is compared across dates and insiders,
                 // so it alone is restated onto today's split basis.
-                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                var splits = await _stockSplitRepository
+                    .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+                    .ToListAsync();
 
                 var sb = new StringBuilder();
                 sb.AppendLine($"Recent insider transactions for {stock.Name} ({stock.Ticker}):");
@@ -316,7 +318,9 @@ public class InsiderTradingTools
                 // Restate every position onto today's basis, then rank and cut on the
                 // adjusted holding so the ordering — and the top-N cut itself — compares
                 // like with like.
-                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                var splits = await _stockSplitRepository
+                    .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+                    .ToListAsync();
                 offset = McpLimit.ClampOffset(offset);
                 // Adjusted holdings tie constantly (zero-share former insiders), so the
                 // ordering ends on stable keys — an offset over a partial order would
@@ -451,7 +455,9 @@ public class InsiderTradingTools
                 // "100% of outstanding" figures (#7164, EquiblesCommercial). The filed share
                 // count is restated onto today's split basis first so the ratio compares like
                 // with like against the current issuer count.
-                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                var splits = await _stockSplitRepository
+                    .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+                    .ToListAsync();
                 var result = MarkdownTable.Start(
                     $"Recent proposed sales (Form 144) for {stock.Name} ({stock.Ticker}):",
                     $"Showing {filings.Count} of {totalCount} most recent notices",

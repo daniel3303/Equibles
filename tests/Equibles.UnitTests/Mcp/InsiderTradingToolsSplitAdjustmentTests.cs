@@ -132,6 +132,66 @@ public class InsiderTradingToolsSplitAdjustmentTests
         output.Should().Contain("| 1,000,000 |");
     }
 
+    // Split rows are captured at announcement, ahead of their effective date. A split that has
+    // not happened yet must not restate anything: during its announcement window the unfiltered
+    // set scaled every running balance by a factor the market had not applied (GH-7254).
+    [Fact]
+    public async Task GetInsiderTransactions_AnnouncedFutureSplit_DoesNotRestateTheRunningBalance()
+    {
+        await using var db = NewDb();
+
+        var stock = new CommonStock
+        {
+            Ticker = "NVDA",
+            Name = "NVIDIA Corp.",
+            Cik = "0001045810",
+        };
+        var owner = new InsiderOwner
+        {
+            OwnerCik = "0009876543",
+            Name = "Jensen Huang",
+            IsOfficer = true,
+            OfficerTitle = "CEO",
+        };
+        db.AddRange(stock, owner);
+        db.Add(
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(7),
+                Numerator = 10,
+                Denominator = 1,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        db.Add(
+            new InsiderTransaction
+            {
+                CommonStockId = stock.Id,
+                CommonStock = stock,
+                InsiderOwnerId = owner.Id,
+                InsiderOwner = owner,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 3),
+                TransactionCode = TransactionCode.Sale,
+                Shares = 40_000,
+                PricePerShare = 800.00m,
+                AcquiredDisposed = AcquiredDisposed.Disposed,
+                SharesOwnedAfter = 100_000,
+                OwnershipNature = OwnershipNature.Direct,
+                SecurityTitle = "Common Stock",
+                AccessionNumber = "acc-nvda-1",
+            }
+        );
+        await db.SaveChangesAsync();
+
+        var output = await Sut(db).GetInsiderTransactions("NVDA");
+
+        // The running balance stays as filed — the announced split is not yet a basis change.
+        output.Should().Contain("| 100,000 |");
+        output.Should().NotContain("1,000,000");
+    }
+
     [Fact]
     public async Task GetProposedSales_NoticeBeforeSplit_KeepsSharesAsFiledBesideMarketValue()
     {
