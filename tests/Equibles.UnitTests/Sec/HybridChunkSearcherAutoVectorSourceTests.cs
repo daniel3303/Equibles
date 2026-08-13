@@ -188,9 +188,7 @@ public class HybridChunkSearcherAutoVectorSourceTests
             bm25Results: [duplicate, duplicate, semanticMatch],
             allChunks: [duplicate, semanticMatch]
         );
-        var embeddingRepository = new StubEmbeddingRepository(
-            similarChunkIds: [semanticMatch.Id]
-        );
+        var embeddingRepository = new StubEmbeddingRepository(similarChunkIds: [semanticMatch.Id]);
         var searcher = NewSearcher(chunkRepository, embeddingRepository);
 
         var results = await searcher.Search("semantic question", 5, ticker: "AAPL");
