@@ -261,7 +261,7 @@ public class InsiderTransactionPriceBackfillManager
 
         var splitsByStock = (
             await _stockSplitRepository
-                .GetAll()
+                .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                 .Where(sp => stockIds.Contains(sp.CommonStockId))
                 .ToListAsync()
         )

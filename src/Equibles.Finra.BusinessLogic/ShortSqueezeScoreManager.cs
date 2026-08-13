@@ -259,7 +259,7 @@ public class ShortSqueezeScoreManager
         // split factor (e.g. a 10:1 split makes the raw ratio 10× too small).
         var splitsByStock = (
             await _stockSplitRepository
-                .GetAll()
+                .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                 .Where(s => stockIds.Contains(s.CommonStockId))
                 .ToListAsync(cancellationToken)
         )

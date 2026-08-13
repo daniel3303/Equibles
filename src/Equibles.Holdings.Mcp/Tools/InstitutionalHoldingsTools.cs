@@ -2394,7 +2394,7 @@ public class InstitutionalHoldingsTools
             return new Dictionary<Guid, List<StockSplit>>();
 
         var splits = await _stockSplitRepository
-            .GetAll()
+            .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
             .Where(s => ids.Contains(s.CommonStockId))
             .ToListAsync();
         return splits.GroupBy(s => s.CommonStockId).ToDictionary(g => g.Key, g => g.ToList());

@@ -140,7 +140,7 @@ public class StockCombinedQuarterService
         }
 
         var splits = await _stockSplitRepository
-            .GetByStock(stock.Id)
+            .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
             .AsNoTracking()
             .ToListAsync(cancellationToken);
         var combinedShares = MarketActivityShareRestater.RestateListingTotal(

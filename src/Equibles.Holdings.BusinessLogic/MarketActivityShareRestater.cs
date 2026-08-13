@@ -46,7 +46,7 @@ public class MarketActivityShareRestater
             .ToDictionaryAsync(stock => stock.Id, stock => stock.Ticker, cancellationToken);
         var splitsByStock = (
             await _stockSplitRepository
-                .GetAll()
+                .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                 .AsNoTracking()
                 .Where(split => stockIds.Contains(split.CommonStockId))
                 .ToListAsync(cancellationToken)
@@ -94,7 +94,7 @@ public class MarketActivityShareRestater
             return;
 
         var splits = await _stockSplitRepository
-            .GetByStock(stock.Id)
+            .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
             .AsNoTracking()
             .ToListAsync(cancellationToken);
         if (splits.Count == 0)

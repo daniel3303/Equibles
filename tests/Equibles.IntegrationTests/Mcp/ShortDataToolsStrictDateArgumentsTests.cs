@@ -40,6 +40,7 @@ public class ShortDataToolsStrictDateArgumentsTests : ParadeDbMcpTestBase
             ),
             new StockSplitRepository(DbContext),
             new MemoryCache(new MemoryCacheOptions()),
+            estimateSources: [],
             ErrorManager,
             NullLogger<ShortDataTools>()
         );

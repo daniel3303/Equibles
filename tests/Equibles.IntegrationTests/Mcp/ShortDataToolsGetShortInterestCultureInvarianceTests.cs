@@ -33,6 +33,7 @@ public class ShortDataToolsGetShortInterestCultureInvarianceTests : ParadeDbMcpT
             ),
             new StockSplitRepository(DbContext),
             new MemoryCache(new MemoryCacheOptions()),
+            estimateSources: [],
             ErrorManager,
             NullLogger<ShortDataTools>()
         );

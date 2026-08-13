@@ -38,6 +38,7 @@ public class ShortDataToolsLargestShortVolumeSortAndLegendTests : ParadeDbMcpTes
             ),
             new StockSplitRepository(DbContext),
             new MemoryCache(new MemoryCacheOptions()),
+            estimateSources: [],
             ErrorManager,
             NullLogger<ShortDataTools>()
         );
