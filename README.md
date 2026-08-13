@@ -39,7 +39,7 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 | **FDA Catalysts** | FDA.gov | ✅ | ✅ | Advisory-committee (AdComm) meeting calendar — scheduled FDA panel dates, center, and title that act as regulatory catalysts for biotech/pharma stocks |
 | **Earnings Call Transcripts** | Company webcasts | — | ✅ | Full quarterly-call transcripts with speaker attribution, searchable alongside filings |
 | **Earnings Call Audio** | Company webcasts | — | ✅ | The recorded call itself, playable and aligned to the transcript |
-| **Earnings Briefs & Narrative Shift** | Earnings calls + releases | — | ✅ | Verifier-approved quarter summaries, bull/bear points, call quotes, and a derived comparison with the previous available approved earnings brief |
+| **Earnings Briefs, Guidance & Narrative Shift** | Earnings calls + releases | — | ✅ | Verifier-approved quarter summaries, call quotes, derived narrative changes, management guidance revisions, and reported results versus prior company guidance |
 | **Live Quotes** | Licensed market feed | — | ✅ | Real-time US equity quotes |
 | **Options Chains** | Licensed options feed | — | ✅ | Chains by expiration and strike with bid/ask, volume, open interest, implied volatility, and delta/gamma/theta/vega |
 | **Company KPIs** | Filings + earnings releases | — | ✅ | Operating metrics a company reports but XBRL never standardised, plus GAAP-to-non-GAAP bridges |
