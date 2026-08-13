@@ -119,6 +119,24 @@ public class HybridChunkSearcherBm25TimeoutTests
     }
 
     [Fact]
+    public async Task DuplicateConjunctiveRows_DoNotSuppressDisjunctiveFallback()
+    {
+        var precise = new Chunk { Id = Guid.NewGuid(), Content = "precise match" };
+        var broad = new Chunk { Id = Guid.NewGuid(), Content = "broadened match" };
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveResults: [precise, precise, precise, precise, precise],
+            disjunctiveResults: [precise, broad],
+            allChunks: [precise, broad]
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        var results = await searcher.Search("query", 5, disjunctiveFallback: true);
+
+        Assert.Equal([precise.Id, broad.Id], results.Select(chunk => chunk.Id));
+        Assert.Single(chunkRepository.DisjunctiveBudgets);
+    }
+
+    [Fact]
     public async Task ConjunctiveTimeout_DisjunctiveCompletesEmpty_ReturnsProvenEmptyWithoutThrowing()
     {
         // The disjunctive pass matches a SUPERSET of the conjunctive pass — when it

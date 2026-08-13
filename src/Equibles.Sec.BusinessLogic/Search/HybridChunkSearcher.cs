@@ -177,6 +177,12 @@ public class HybridChunkSearcher
             }
         }
 
+        // ParadeDB can occasionally materialize the same indexed row more than once. Rankings
+        // must contain unique ids: duplicates would make the pool look full, be counted twice by
+        // RRF, and make the final id-to-chunk lookup throw. Keep the first occurrence because it
+        // has the best BM25 rank.
+        bm25 = bm25.DistinctBy(chunk => chunk.Id).ToList();
+
         // Opt-in recall fallback: BM25 ANDs every query token, so a wordy natural-language
         // query where a single token has no match ("drivers" vs the filing's "driven")
         // excludes every on-point chunk. When the conjunctive pass can't fill the request,
@@ -202,8 +208,7 @@ public class HybridChunkSearcher
                     commandTimeoutSeconds: bm25Timeout != null ? DegradedPassTimeoutSeconds : null,
                     cancellationToken: cancellationToken
                 );
-                var seen = bm25.Select(chunk => chunk.Id).ToHashSet();
-                bm25 = bm25.Concat(disjunctive.Where(chunk => !seen.Contains(chunk.Id))).ToList();
+                bm25 = bm25.Concat(disjunctive).DistinctBy(chunk => chunk.Id).ToList();
                 // The disjunctive pass matches a superset of the conjunctive pass, so its
                 // completed result also answers for a timed-out conjunctive pass — an
                 // empty pool now genuinely means "no matches", not "ran out of budget".
