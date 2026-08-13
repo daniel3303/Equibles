@@ -33,6 +33,7 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
             ),
             new StockSplitRepository(DbContext),
             new MemoryCache(new MemoryCacheOptions()),
+            estimateSources: [],
             ErrorManager,
             NullLogger<ShortDataTools>()
         );

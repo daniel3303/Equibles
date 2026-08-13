@@ -33,6 +33,7 @@ public class ShortDataToolsGetLargestShortVolumeCultureInvarianceTests : ParadeD
             ),
             new StockSplitRepository(DbContext),
             new MemoryCache(new MemoryCacheOptions()),
+            estimateSources: [],
             ErrorManager,
             NullLogger<ShortDataTools>()
         );

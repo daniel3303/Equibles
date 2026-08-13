@@ -326,8 +326,7 @@ public class InsiderFilingReprocessManager
         // repaired trading day rather than the impossible source typo.
         var bars = await FetchBars(first.CommonStockId, rows);
         var splits = await _stockSplitRepository
-            .GetAll()
-            .Where(sp => sp.CommonStockId == first.CommonStockId)
+            .GetEffectiveByStock(first.CommonStockId, DateOnly.FromDateTime(DateTime.UtcNow))
             .ToListAsync();
         var identity = await _dbContext
             .Set<CommonStock>()

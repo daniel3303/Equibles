@@ -807,8 +807,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             .ToListAsync();
 
         var splits = await stockSplitRepository
-            .GetAll()
-            .Where(sp => sp.CommonStockId == companyId)
+            .GetEffectiveByStock(companyId, DateOnly.FromDateTime(DateTime.UtcNow))
             .ToListAsync();
 
         foreach (var transaction in transactions)

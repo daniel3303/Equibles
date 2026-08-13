@@ -27,6 +27,16 @@ public class StockSplitRepository : BaseRepository<StockSplit>
         return GetByStock(commonStockId).Where(s => s.EffectiveDate <= asOf);
     }
 
+    /// <summary>
+    /// Batch companion to <see cref="GetEffectiveByStock"/> for callers that restate many
+    /// stocks with one query: every split already effective as of <paramref name="asOf"/>,
+    /// across all stocks. Compose the stock filter on top.
+    /// </summary>
+    public IQueryable<StockSplit> GetEffective(DateOnly asOf)
+    {
+        return GetAll().Where(s => s.EffectiveDate <= asOf);
+    }
+
     public IQueryable<StockSplit> GetPendingPriceAdjustment()
     {
         // SQL-translatable mirror of StockSplit.IsPriceAdjustmentApplied: a marker written on or
