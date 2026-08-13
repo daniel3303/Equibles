@@ -141,6 +141,65 @@ public class HybridChunkSearcherAutoVectorSourceTests
     }
 
     [Fact]
+    public async Task TickerScoped_AutoMode_DuplicateBm25Rows_ReturnsEachChunkOnce()
+    {
+        var chunkId = Guid.NewGuid();
+        var bestRankedInstance = new Chunk
+        {
+            Id = chunkId,
+            Ticker = "AAPL",
+            Content = "best-ranked materialization",
+        };
+        var duplicateInstance = new Chunk
+        {
+            Id = chunkId,
+            Ticker = "AAPL",
+            Content = "duplicate materialization",
+        };
+        var chunkRepository = new StubChunkRepository(
+            bm25Results: [bestRankedInstance, duplicateInstance],
+            allChunks: [bestRankedInstance]
+        );
+        var embeddingRepository = new StubEmbeddingRepository(similarChunkIds: [chunkId]);
+        var searcher = NewSearcher(chunkRepository, embeddingRepository);
+
+        var results = await searcher.Search("semantic question", 5, ticker: "AAPL");
+
+        var result = Assert.Single(results);
+        Assert.Same(bestRankedInstance, result);
+    }
+
+    [Fact]
+    public async Task TickerScoped_AutoMode_DuplicateBm25Rows_DoNotInflateRrfScore()
+    {
+        var duplicate = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Content = "keyword-only result",
+        };
+        var semanticMatch = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Content = "semantic match",
+        };
+        var chunkRepository = new StubChunkRepository(
+            bm25Results: [duplicate, duplicate, semanticMatch],
+            allChunks: [duplicate, semanticMatch]
+        );
+        var embeddingRepository = new StubEmbeddingRepository(
+            similarChunkIds: [semanticMatch.Id]
+        );
+        var searcher = NewSearcher(chunkRepository, embeddingRepository);
+
+        var results = await searcher.Search("semantic question", 5, ticker: "AAPL");
+
+        Assert.Equal(semanticMatch.Id, results[0].Id);
+        Assert.Equal(2, results.Count);
+    }
+
+    [Fact]
     public void Auto_IsTheDefaultVectorSource()
     {
         Assert.Equal(VectorSource.Auto, new HybridSearchOptions().VectorSource);
