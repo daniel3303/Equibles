@@ -15,6 +15,18 @@ public class StockSplitRepository : BaseRepository<StockSplit>
         return GetAll().Where(s => s.CommonStockId == commonStockId);
     }
 
+    /// <summary>
+    /// The stock's splits already effective as of <paramref name="asOf"/> — the set every
+    /// read-time restatement must use. Split rows are captured at announcement, ahead of their
+    /// effective date, so restating a historical series with the unfiltered set scales it by a
+    /// split that has not happened yet, for the whole announcement window. <see cref="GetByStock"/>
+    /// remains for writers (capture/reconciliation), which do need the announced rows.
+    /// </summary>
+    public IQueryable<StockSplit> GetEffectiveByStock(Guid commonStockId, DateOnly asOf)
+    {
+        return GetByStock(commonStockId).Where(s => s.EffectiveDate <= asOf);
+    }
+
     public IQueryable<StockSplit> GetPendingPriceAdjustment()
     {
         // SQL-translatable mirror of StockSplit.IsPriceAdjustmentApplied: a marker written on or

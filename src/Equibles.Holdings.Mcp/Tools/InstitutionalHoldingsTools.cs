@@ -164,7 +164,9 @@ public class InstitutionalHoldingsTools
                 if (holdings.Count == 0)
                     return $"No institutional holdings found for {ticker} as of {FormatDate(targetDate)}.";
 
-                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                var splits = await _stockSplitRepository
+                    .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+                    .ToListAsync();
                 foreach (var holding in holdings)
                 {
                     var listing = holding.ListedTicker ?? stock.Ticker;
@@ -864,7 +866,9 @@ public class InstitutionalHoldingsTools
                 // quarters sit on different bases if a split fell between them) so Δ Shares
                 // and the Prior → New column reflect a real position change, not the split.
                 // Δ Value is a dollar figure and is split-invariant — leave the stored value.
-                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                var splits = await _stockSplitRepository
+                    .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+                    .ToListAsync();
                 long AdjustShares(long shares, DateOnly asOf, string listedTicker)
                 {
                     var exactTicker = listedTicker ?? stock.Ticker;

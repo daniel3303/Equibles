@@ -129,7 +129,9 @@ public class ShortDataTools
                 // continuous across a split (a raw pre-split day would otherwise show a
                 // phantom step against post-split days). The same-day Short % is a ratio of
                 // two counts on the same date, so it is split-invariant and left as-is.
-                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                var splits = await _stockSplitRepository
+                    .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+                    .ToListAsync();
 
                 var table = MarkdownTable.Render(
                     records.OrderBy(r => r.Date).ToList(),
@@ -206,7 +208,9 @@ public class ShortDataTools
                 // split. Days to cover is a same-settlement ratio (position ÷ ADV) and is left
                 // as reported — restating the numerator and denominator by the same factor
                 // leaves it unchanged anyway.
-                var splits = await _stockSplitRepository.GetByStock(stock.Id).ToListAsync();
+                var splits = await _stockSplitRepository
+                    .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+                    .ToListAsync();
 
                 // FINRA's raw change is (current − previous) where the previous position is on
                 // the PREVIOUS settlement's split basis, so scaling it by the current factor
