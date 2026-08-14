@@ -7,6 +7,7 @@ using Equibles.Core.Calendars;
 using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
@@ -37,11 +38,30 @@ internal readonly record struct PriceSeriesTarget(
 
 internal readonly record struct LockedPriceSeries(CommonStock Stock, bool IsPrimary);
 
+internal readonly record struct AppliedSplitBoundary(
+    Guid SplitId,
+    DateTime AppliedTime,
+    decimal Numerator,
+    decimal Denominator,
+    decimal? CloseBefore,
+    decimal? CloseAfter
+);
+
+internal readonly record struct SplitBasisDefinition(
+    DateOnly EffectiveDate,
+    decimal Numerator,
+    decimal Denominator
+);
+
 [Service]
 public class YahooPriceImportService
 {
     private const double MinimumReferenceHistoryCoverageShare = 0.90;
     private const int InsertBatchSize = 500;
+    private const int AppliedSplitBasisAuditLookbackDays = 180;
+    private const decimal MaterialSplitRatioFloor = 0.5m;
+    private const decimal MaterialSplitRatioCeiling = 2m;
+    private const decimal SplitRatioMatchTolerance = 0.25m;
     private const decimal MaxPriceValue = 99_999_999_999_999.9999m; // numeric(18,4) ceiling
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -452,6 +472,8 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
+        await RequeueStampedSplitBasisMismatches(today, cancellationToken);
+
         PendingPriceReconciliationSelection selection;
         using (var scope = _scopeFactory.CreateScope())
         {
@@ -531,6 +553,7 @@ public class YahooPriceImportService
             IsPrimary: false
         );
         var chartData = await _yahooClient.GetChart(target.Ticker, floor, today);
+        await CaptureSplits(target, chartData.Splits, cancellationToken);
 
         // A delisted/unresolved ticker returns no prices. Do NOT wipe the existing series in that
         // case — leave the split pending so a later run or another source can handle it.
@@ -543,6 +566,29 @@ public class YahooPriceImportService
             return;
         }
 
+        var splitBoundaries = selectedSeries
+            .Splits.Select(split =>
+                new SplitBasisDefinition(
+                    split.EffectiveDate,
+                    split.Numerator,
+                    split.Denominator
+                )
+            )
+            .Concat(
+                chartData.Splits.Select(split =>
+                    new SplitBasisDefinition(split.Date, split.Numerator, split.Denominator)
+                )
+            )
+            .Distinct();
+        if (
+            ShouldRejectSplitBearingHistory(
+                target.Ticker,
+                chartData.Prices,
+                splitBoundaries
+            )
+        )
+            return;
+
         var replaced = await ReplaceStoredPrices(
             target,
             floor,
@@ -553,10 +599,8 @@ public class YahooPriceImportService
         if (!replaced)
             return;
 
-        // Capture actions carried by the full-history response before stamping. Dividends that
-        // still exactly match this response can be marked from the same fetch; a concurrent
-        // restatement remains pending because the manager revalidates the locked current row.
-        await CaptureSplits(target, chartData.Splits, cancellationToken);
+        // Dividends that still exactly match this response can be marked from the same fetch; a
+        // concurrent restatement remains pending because the manager revalidates the locked row.
         var capturedDividends = await CaptureDividends(
             target,
             chartData.Dividends,
@@ -585,6 +629,156 @@ public class YahooPriceImportService
             target.Ticker,
             stamped
         );
+    }
+
+    private async Task RequeueStampedSplitBasisMismatches(
+        DateOnly today,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var splitRepository = scope.ServiceProvider.GetRequiredService<StockSplitRepository>();
+        var priceRepository = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        var appliedSince = DateTime.UtcNow.AddDays(-AppliedSplitBasisAuditLookbackDays);
+
+        var boundaries = await splitRepository
+            .GetAll()
+            .Where(split =>
+                split.PriceAdjustmentAppliedTime >= appliedSince
+                && split.PriceSeriesTicker != null
+                && split.EffectiveDate < today
+                && split.Numerator > 0m
+                && split.Denominator > 0m
+                && (
+                    split.Numerator / split.Denominator <= MaterialSplitRatioFloor
+                    || split.Numerator / split.Denominator >= MaterialSplitRatioCeiling
+                )
+            )
+            .Select(split => new AppliedSplitBoundary(
+                split.Id,
+                split.PriceAdjustmentAppliedTime!.Value,
+                split.Numerator,
+                split.Denominator,
+                priceRepository
+                    .GetAllSeries()
+                    .Where(price =>
+                        price.CommonStockId == split.CommonStockId
+                        && price.ListedTicker == split.PriceSeriesTicker
+                        && price.Date < split.EffectiveDate
+                    )
+                    .OrderByDescending(price => price.Date)
+                    .Select(price => (decimal?)price.Close)
+                    .FirstOrDefault(),
+                priceRepository
+                    .GetAllSeries()
+                    .Where(price =>
+                        price.CommonStockId == split.CommonStockId
+                        && price.ListedTicker == split.PriceSeriesTicker
+                        && price.Date >= split.EffectiveDate
+                    )
+                    .OrderBy(price => price.Date)
+                    .Select(price => (decimal?)price.Close)
+                    .FirstOrDefault()
+            ))
+            .ToListAsync(cancellationToken);
+
+        var invalidMarkers = boundaries
+            .Where(boundary =>
+                IsSplitBoundaryDiscontinuous(
+                    boundary.CloseBefore,
+                    boundary.CloseAfter,
+                    boundary.Numerator,
+                    boundary.Denominator
+                )
+            )
+            .Select(boundary =>
+                new AppliedSplitMarkerSnapshot(boundary.SplitId, boundary.AppliedTime)
+            )
+            .ToList();
+        if (invalidMarkers.Count == 0)
+            return;
+
+        var manager = scope.ServiceProvider.GetRequiredService<CorporateActionPriceReconciliationManager>();
+        var requeued = await manager.RequeueAppliedSplits(invalidMarkers, cancellationToken);
+        _logger.LogWarning(
+            "Requeued {Count} split reconciliation marker(s) whose stored history still crossed price bases",
+            requeued
+        );
+    }
+
+    private bool ShouldRejectSplitBearingHistory(
+        string ticker,
+        IReadOnlyCollection<HistoricalPrice> prices,
+        IEnumerable<SplitBasisDefinition> splits
+    )
+    {
+        foreach (var split in splits)
+        {
+            if (
+                !HasSplitBasisDiscontinuity(
+                    prices,
+                    split.EffectiveDate,
+                    split.Numerator,
+                    split.Denominator
+                )
+            )
+                continue;
+
+            _logger.LogWarning(
+                "Yahoo full history for {Ticker} still straddles split {EffectiveDate} ({Numerator}:{Denominator}); keeping the existing series and the action pending",
+                ticker,
+                split.EffectiveDate,
+                split.Numerator,
+                split.Denominator
+            );
+            return true;
+        }
+
+        return false;
+    }
+
+    internal static bool HasSplitBasisDiscontinuity(
+        IReadOnlyCollection<HistoricalPrice> prices,
+        DateOnly effectiveDate,
+        decimal numerator,
+        decimal denominator
+    )
+    {
+        var closeBefore = prices
+            .Where(price => price.Date < effectiveDate)
+            .OrderByDescending(price => price.Date)
+            .Select(price => (decimal?)price.Close)
+            .FirstOrDefault();
+        var closeAfter = prices
+            .Where(price => price.Date >= effectiveDate)
+            .OrderBy(price => price.Date)
+            .Select(price => (decimal?)price.Close)
+            .FirstOrDefault();
+
+        return IsSplitBoundaryDiscontinuous(closeBefore, closeAfter, numerator, denominator);
+    }
+
+    internal static bool IsSplitBoundaryDiscontinuous(
+        decimal? closeBefore,
+        decimal? closeAfter,
+        decimal numerator,
+        decimal denominator
+    )
+    {
+        if (
+            closeBefore is not > 0m
+            || closeAfter is not > 0m
+            || numerator <= 0m
+            || denominator <= 0m
+        )
+            return false;
+
+        var splitRatio = numerator / denominator;
+        if (splitRatio > MaterialSplitRatioFloor && splitRatio < MaterialSplitRatioCeiling)
+            return false;
+
+        var observedRatio = closeBefore.Value / closeAfter.Value;
+        return Math.Abs(observedRatio - splitRatio) / splitRatio <= SplitRatioMatchTolerance;
     }
 
     // Transactionally swaps a stock's stored rows in [floor, today] for the fresh provider-served
@@ -795,6 +989,7 @@ public class YahooPriceImportService
 
         if (target.RequiresFullHistory)
         {
+            await CaptureSplits(target, chartData.Splits, cancellationToken);
             if (!IsCompleteReferenceHistory(chartData, PriceHistoryFloor(), today))
             {
                 _logger.LogWarning(
@@ -803,6 +998,21 @@ public class YahooPriceImportService
                 );
                 return new TickerImportResult(Fetched: true, Inserted: 0);
             }
+
+            if (
+                ShouldRejectSplitBearingHistory(
+                    target.Ticker,
+                    chartData.Prices,
+                    chartData.Splits.Select(split =>
+                        new SplitBasisDefinition(
+                            split.Date,
+                            split.Numerator,
+                            split.Denominator
+                        )
+                    )
+                )
+            )
+                return new TickerImportResult(Fetched: true, Inserted: 0);
 
             var replaced = await ReplaceStoredPrices(
                 target,
@@ -817,7 +1027,6 @@ public class YahooPriceImportService
                     "Replaced grouped bootstrap rows with full Yahoo history for reference listing {Ticker}",
                     target.Ticker
                 );
-                await CaptureSplits(target, chartData.Splits, cancellationToken);
                 await CaptureDividends(target, chartData.Dividends, cancellationToken);
             }
             return new TickerImportResult(
@@ -832,9 +1041,30 @@ public class YahooPriceImportService
         // harmless. Issuer-level action capture below independently locks and requires whichever
         // listing is primary at write time.
         var floor = PriceHistoryFloor();
+        if (chartData.Splits.Count > 0 && startDate == floor)
+        {
+            await CaptureSplits(target, chartData.Splits, cancellationToken);
+            if (
+                ShouldRejectSplitBearingHistory(
+                    target.Ticker,
+                    chartData.Prices,
+                    chartData.Splits.Select(split =>
+                        new SplitBasisDefinition(
+                            split.Date,
+                            split.Numerator,
+                            split.Denominator
+                        )
+                    )
+                )
+            )
+                return new TickerImportResult(Fetched: true, Inserted: 0);
+        }
+
         if (chartData.Splits.Count > 0 && startDate > floor)
         {
+            await CaptureSplits(target, chartData.Splits, cancellationToken);
             var fullChart = await _yahooClient.GetChart(target.Ticker, floor, today);
+            await CaptureSplits(target, fullChart.Splits, cancellationToken);
             if (fullChart.Prices.Count == 0)
             {
                 _logger.LogWarning(
@@ -843,6 +1073,21 @@ public class YahooPriceImportService
                 );
                 return new TickerImportResult(Fetched: true, Inserted: 0);
             }
+
+            var splitBoundaries = chartData
+                .Splits.Concat(fullChart.Splits)
+                .Select(split =>
+                    new SplitBasisDefinition(split.Date, split.Numerator, split.Denominator)
+                )
+                .Distinct();
+            if (
+                ShouldRejectSplitBearingHistory(
+                    target.Ticker,
+                    fullChart.Prices,
+                    splitBoundaries
+                )
+            )
+                return new TickerImportResult(Fetched: true, Inserted: 0);
 
             var replaced = await ReplaceStoredPrices(
                 target,
@@ -857,7 +1102,6 @@ public class YahooPriceImportService
                     "Reconciled {Ticker}: replaced its full listed price history",
                     target.Ticker
                 );
-                await CaptureSplits(target, chartData.Splits, cancellationToken);
                 await CaptureDividends(target, chartData.Dividends, cancellationToken);
             }
             return new TickerImportResult(Fetched: true, Inserted: 0);

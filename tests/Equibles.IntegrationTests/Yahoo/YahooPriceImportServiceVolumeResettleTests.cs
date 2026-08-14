@@ -75,6 +75,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), _priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
+            (typeof(StockSplitRepository), splitRepo),
             (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>()),
             (
                 typeof(CorporateActionPriceReconciliationManager),
