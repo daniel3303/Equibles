@@ -5,13 +5,18 @@ namespace Equibles.Yahoo.HostedService.Configuration;
 public class YahooPriceScraperOptions : ScraperOptions
 {
     /// <summary>
-    /// Minimum hours between enrichment sweeps (key statistics + company profile — 2 extra Yahoo
-    /// calls per stock, the bulk of a cycle's traffic). Price cycles run every
-    /// <see cref="ScraperOptions.SleepIntervalHours"/>; only cycles where this interval has
-    /// elapsed since the last enrichment sweep carry the enrichment calls, so the sleep interval
-    /// can be short (fresh daily closes) without multiplying the per-stock enrichment traffic.
+    /// Minimum hours between each stock's Yahoo enrichment attempts (key statistics + company
+    /// profile — 2 extra calls per stock). The persisted per-stock timestamp keeps this cadence
+    /// across restarts.
     /// </summary>
     public int EnrichmentIntervalHours { get; set; } = 24;
+
+    /// <summary>
+    /// Maximum due stocks enriched after each price pass. A full batch requests an immediate
+    /// continuation, so a backlog drains across short, restart-safe cycles without holding the
+    /// price pass behind a universe-sized enrichment sweep.
+    /// </summary>
+    public int EnrichmentBatchSize { get; set; } = 250;
 
     /// <summary>
     /// How many days back a stored bar is still re-read from the feed. A bar is stored as soon as

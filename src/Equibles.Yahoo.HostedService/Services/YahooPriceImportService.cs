@@ -30,7 +30,8 @@ internal readonly record struct PriceSeriesTarget(
     string Ticker,
     Guid CommonStockId,
     bool IsPrimary,
-    bool RequiresFullHistory = false
+    bool RequiresFullHistory = false,
+    DateTime? YahooEnrichmentAttemptedAt = null
 )
 {
     public PriceSeriesKey Key => new(CommonStockId, Ticker);
@@ -72,6 +73,8 @@ public class YahooPriceImportService
     private readonly WorkerOptions _workerOptions;
     private readonly YahooPriceScraperOptions _scraperOptions;
 
+    public bool HasEnrichmentBacklog { get; private set; }
+
     public YahooPriceImportService(
         IServiceScopeFactory scopeFactory,
         ILogger<YahooPriceImportService> logger,
@@ -98,11 +101,13 @@ public class YahooPriceImportService
     /// One price-sync cycle over the tracked universe. With <paramref name="includeEnrichment"/>
     /// false only the incremental chart fetch runs per stock (1 Yahoo call, and none at all for a
     /// stock that is already current — see the settled-trading-day gate in ImportTicker), so the
-    /// worker can run frequent cheap price cycles and reserve the key-statistics + company-profile
-    /// calls (2 extra Yahoo calls per stock, the bulk of a cycle's traffic) for a slower cadence.
+    /// worker can run frequent cheap price cycles. When true, a bounded batch of stocks whose
+    /// persisted attempt time is due receives the key-statistics + company-profile calls (2 extra
+    /// Yahoo calls per stock, the bulk of a cycle's traffic).
     /// </summary>
     public async Task Import(bool includeEnrichment, CancellationToken cancellationToken)
     {
+        HasEnrichmentBacklog = false;
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
             cancellationToken
@@ -172,6 +177,7 @@ public class YahooPriceImportService
                 stock.SecondaryTickers,
                 stock.ReferenceTickers,
                 stock.PriceHistoryBackfilledTickers,
+                stock.YahooEnrichmentAttemptedAt,
             })
             .ToListAsync(cancellationToken);
 
@@ -200,7 +206,8 @@ public class YahooPriceImportService
                     stock.Id,
                     IsPrimary: true,
                     RequiresFullHistory: referenceTickers.Contains(primaryTicker)
-                        && !backfilledTickers.Contains(primaryTicker)
+                        && !backfilledTickers.Contains(primaryTicker),
+                    YahooEnrichmentAttemptedAt: stock.YahooEnrichmentAttemptedAt
                 )
             );
 
@@ -360,36 +367,116 @@ public class YahooPriceImportService
     private const double BarrenUniverseShareForWarning = 0.25;
 
     // Pass 2 — key statistics + company profile. Two extra Yahoo calls per stock and the bulk of a
-    // cycle's traffic, which is why it runs on its own slower cadence AND strictly after prices.
+    // cycle's traffic, which is why it runs in restart-safe batches AND strictly after prices.
     private async Task ImportEnrichment(
         List<PriceSeriesTarget> crawlOrder,
         CancellationToken cancellationToken
     )
     {
-        foreach (var target in crawlOrder)
-        {
-            var ticker = target.Ticker;
-            cancellationToken.ThrowIfCancellationRequested();
+        var interval = TimeSpan.FromHours(Math.Max(0, _scraperOptions.EnrichmentIntervalHours));
+        var selection = SelectEnrichmentBatch(
+            crawlOrder,
+            DateTime.UtcNow,
+            interval,
+            Math.Max(1, _scraperOptions.EnrichmentBatchSize)
+        );
+        HasEnrichmentBacklog = selection.Remaining > 0;
+        if (selection.Targets.Count == 0)
+            return;
 
-            try
-            {
-                await SyncKeyStatistics(target, cancellationToken);
-                await SyncCompanyProfile(target, cancellationToken);
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogWarning(ex, "Failed to fetch enrichment for {Ticker}, skipping", ticker);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error enriching {Ticker}", ticker);
-                await _errorReporter.Report(ErrorSource.YahooPriceScraper, $"Enrich({ticker})", ex);
-            }
+        _logger.LogInformation(
+            "Enriching {Count} due stocks; {Remaining} will continue after the next price pass",
+            selection.Targets.Count,
+            selection.Remaining
+        );
+
+        foreach (var target in selection.Targets)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await EnrichTarget(target, cancellationToken);
         }
+    }
+
+    internal static (List<PriceSeriesTarget> Targets, int Remaining) SelectEnrichmentBatch(
+        IReadOnlyCollection<PriceSeriesTarget> targets,
+        DateTime now,
+        TimeSpan interval,
+        int batchSize
+    )
+    {
+        var cutoff = now - interval;
+        var due = targets
+            .Where(target =>
+                target.IsPrimary
+                && (
+                    target.YahooEnrichmentAttemptedAt == null
+                    || target.YahooEnrichmentAttemptedAt <= cutoff
+                )
+            )
+            .OrderBy(target => target.YahooEnrichmentAttemptedAt ?? DateTime.MinValue)
+            .ThenBy(target => target.Ticker, StringComparer.Ordinal)
+            .ThenBy(target => target.CommonStockId)
+            .ToList();
+        var batch = due.Take(Math.Max(1, batchSize)).ToList();
+        return (batch, due.Count - batch.Count);
+    }
+
+    private async Task EnrichTarget(PriceSeriesTarget target, CancellationToken cancellationToken)
+    {
+        var ticker = target.Ticker;
+
+        try
+        {
+            await SyncKeyStatistics(target, cancellationToken);
+            await SyncCompanyProfile(target, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch enrichment for {Ticker}, skipping", ticker);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enriching {Ticker}", ticker);
+            await _errorReporter.Report(ErrorSource.YahooPriceScraper, $"Enrich({ticker})", ex);
+        }
+
+        await StampEnrichmentAttempt(target, DateTime.UtcNow, cancellationToken);
+    }
+
+    private async Task StampEnrichmentAttempt(
+        PriceSeriesTarget target,
+        DateTime attemptedAt,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        await using var transaction = await stockRepo.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        var lockedSeries = await LockPriceSeries(stockRepo, target, cancellationToken);
+        if (lockedSeries is not { IsPrimary: true })
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return;
+        }
+
+        lockedSeries.Value.Stock.YahooEnrichmentAttemptedAt = attemptedAt;
+        if (
+            !await SaveStockChanges(
+                stockRepo,
+                target.CommonStockId,
+                target.Ticker,
+                cancellationToken
+            )
+        )
+            return;
+        await transaction.CommitAsync(cancellationToken);
     }
 
     // A stock whose newest stored bar is within this many calendar days is treated as actively
