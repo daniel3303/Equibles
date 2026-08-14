@@ -209,8 +209,7 @@ public class CorporateActionPriceReconciliationManager
         var splits = await _splitRepository.GetForUpdate(appliedTimesById.Keys, cancellationToken);
         var applied = splits
             .Where(split =>
-                split.PriceAdjustmentAppliedTime
-                == appliedTimesById.GetValueOrDefault(split.Id)
+                split.PriceAdjustmentAppliedTime == appliedTimesById.GetValueOrDefault(split.Id)
             )
             .ToList();
 

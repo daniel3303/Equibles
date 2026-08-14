@@ -567,26 +567,20 @@ public class YahooPriceImportService
         }
 
         var splitBoundaries = selectedSeries
-            .Splits.Select(split =>
-                new SplitBasisDefinition(
-                    split.EffectiveDate,
+            .Splits.Select(split => new SplitBasisDefinition(
+                split.EffectiveDate,
+                split.Numerator,
+                split.Denominator
+            ))
+            .Concat(
+                chartData.Splits.Select(split => new SplitBasisDefinition(
+                    split.Date,
                     split.Numerator,
                     split.Denominator
-                )
-            )
-            .Concat(
-                chartData.Splits.Select(split =>
-                    new SplitBasisDefinition(split.Date, split.Numerator, split.Denominator)
-                )
+                ))
             )
             .Distinct();
-        if (
-            ShouldRejectSplitBearingHistory(
-                target.Ticker,
-                chartData.Prices,
-                splitBoundaries
-            )
-        )
+        if (ShouldRejectSplitBearingHistory(target.Ticker, chartData.Prices, splitBoundaries))
             return;
 
         var replaced = await ReplaceStoredPrices(
@@ -691,14 +685,16 @@ public class YahooPriceImportService
                     boundary.Denominator
                 )
             )
-            .Select(boundary =>
-                new AppliedSplitMarkerSnapshot(boundary.SplitId, boundary.AppliedTime)
-            )
+            .Select(boundary => new AppliedSplitMarkerSnapshot(
+                boundary.SplitId,
+                boundary.AppliedTime
+            ))
             .ToList();
         if (invalidMarkers.Count == 0)
             return;
 
-        var manager = scope.ServiceProvider.GetRequiredService<CorporateActionPriceReconciliationManager>();
+        var manager =
+            scope.ServiceProvider.GetRequiredService<CorporateActionPriceReconciliationManager>();
         var requeued = await manager.RequeueAppliedSplits(invalidMarkers, cancellationToken);
         _logger.LogWarning(
             "Requeued {Count} split reconciliation marker(s) whose stored history still crossed price bases",
@@ -1003,13 +999,11 @@ public class YahooPriceImportService
                 ShouldRejectSplitBearingHistory(
                     target.Ticker,
                     chartData.Prices,
-                    chartData.Splits.Select(split =>
-                        new SplitBasisDefinition(
-                            split.Date,
-                            split.Numerator,
-                            split.Denominator
-                        )
-                    )
+                    chartData.Splits.Select(split => new SplitBasisDefinition(
+                        split.Date,
+                        split.Numerator,
+                        split.Denominator
+                    ))
                 )
             )
                 return new TickerImportResult(Fetched: true, Inserted: 0);
@@ -1048,13 +1042,11 @@ public class YahooPriceImportService
                 ShouldRejectSplitBearingHistory(
                     target.Ticker,
                     chartData.Prices,
-                    chartData.Splits.Select(split =>
-                        new SplitBasisDefinition(
-                            split.Date,
-                            split.Numerator,
-                            split.Denominator
-                        )
-                    )
+                    chartData.Splits.Select(split => new SplitBasisDefinition(
+                        split.Date,
+                        split.Numerator,
+                        split.Denominator
+                    ))
                 )
             )
                 return new TickerImportResult(Fetched: true, Inserted: 0);
@@ -1076,17 +1068,13 @@ public class YahooPriceImportService
 
             var splitBoundaries = chartData
                 .Splits.Concat(fullChart.Splits)
-                .Select(split =>
-                    new SplitBasisDefinition(split.Date, split.Numerator, split.Denominator)
-                )
+                .Select(split => new SplitBasisDefinition(
+                    split.Date,
+                    split.Numerator,
+                    split.Denominator
+                ))
                 .Distinct();
-            if (
-                ShouldRejectSplitBearingHistory(
-                    target.Ticker,
-                    fullChart.Prices,
-                    splitBoundaries
-                )
-            )
+            if (ShouldRejectSplitBearingHistory(target.Ticker, fullChart.Prices, splitBoundaries))
                 return new TickerImportResult(Fetched: true, Inserted: 0);
 
             var replaced = await ReplaceStoredPrices(

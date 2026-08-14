@@ -50,9 +50,6 @@ public class YahooPriceImportServiceSplitBoundaryValidationTests
     [Fact]
     public void IsSplitBoundaryDiscontinuous_SmallRatioChange_IsNotClassified()
     {
-        YahooPriceImportService
-            .IsSplitBoundaryDiscontinuous(1.50m, 1m, 3m, 2m)
-            .Should()
-            .BeFalse();
+        YahooPriceImportService.IsSplitBoundaryDiscontinuous(1.50m, 1m, 3m, 2m).Should().BeFalse();
     }
 }

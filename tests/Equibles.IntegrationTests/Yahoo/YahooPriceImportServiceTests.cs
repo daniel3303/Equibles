@@ -402,10 +402,7 @@ public class YahooPriceImportServiceTests : IDisposable
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         _priceRepo.GetAllSeries().Should().Contain(price => price.Id == groupedRow.Id);
-        _splitRepo
-            .GetAll()
-            .Should()
-            .ContainSingle(split => split.EffectiveDate == effectiveDate);
+        _splitRepo.GetAll().Should().ContainSingle(split => split.EffectiveDate == effectiveDate);
     }
 
     [Fact]
@@ -1000,7 +997,10 @@ public class YahooPriceImportServiceTests : IDisposable
         var effectiveDate = today.AddDays(-4);
         var beforeDate = effectiveDate.AddDays(-1);
         var afterDate = effectiveDate.AddDays(1);
-        await SeedPrices(CreatePrice(stock, beforeDate, 3.00m), CreatePrice(stock, afterDate, 57.10m));
+        await SeedPrices(
+            CreatePrice(stock, beforeDate, 3.00m),
+            CreatePrice(stock, afterDate, 57.10m)
+        );
 
         var incremental = new YahooChartData
         {
@@ -1239,9 +1239,7 @@ public class YahooPriceImportServiceTests : IDisposable
                 Denominator = 16m,
             },
         ];
-        _yahooClient
-            .GetChart("PNDG", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(response);
+        _yahooClient.GetChart("PNDG", Arg.Any<DateOnly>(), Arg.Any<DateOnly>()).Returns(response);
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
