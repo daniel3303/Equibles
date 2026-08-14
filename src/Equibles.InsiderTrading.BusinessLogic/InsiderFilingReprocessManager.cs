@@ -105,23 +105,36 @@ public class InsiderFilingReprocessManager
 
         // No DB cursor: a reprocessed filing's rows advance to the current version and
         // drop out of the filter, so each pass takes the next batch of unprocessed
-        // accessions. Filings that fail this run are held in-memory and excluded so the
-        // run still terminates; they're retried on the next run (string ordering would
-        // be collation-dependent, so a textual keyset is deliberately avoided).
+        // accessions. Drain one exact parser version at a time so the composite
+        // (ParserVersion, AccessionNumber) index can stream DISTINCT accessions directly
+        // into LIMIT instead of filtering current rows from the accession index (#4374).
+        // Filings that fail this run are held in-memory and excluded so the run still
+        // terminates; they're retried on the next run. The textual order is local to one
+        // batch, not a persisted keyset boundary, so database collation cannot skip work.
         var failedThisRun = new HashSet<string>();
         while (!cancellationToken.IsCancellationRequested)
         {
-            var accessions = await _transactionRepository
+            var pending = _transactionRepository
                 .GetAll()
                 .Where(t => t.ParserVersion < InsiderTransaction.CurrentParserVersion)
-                .Where(t => !failedThisRun.Contains(t.AccessionNumber))
+                .Where(t => !failedThisRun.Contains(t.AccessionNumber));
+            var oldestParserVersion = await pending
+                .Select(t => (int?)t.ParserVersion)
+                .MinAsync(cancellationToken);
+
+            if (oldestParserVersion == null)
+                break;
+
+            var accessions = await pending
+                .Where(t => t.ParserVersion == oldestParserVersion.Value)
                 .Select(t => t.AccessionNumber)
                 .Distinct()
+                .OrderBy(accession => accession)
                 .Take(BatchSize)
                 .ToListAsync(cancellationToken);
 
             if (accessions.Count == 0)
-                break;
+                continue;
 
             var attempted = 0;
             foreach (var accession in accessions)
