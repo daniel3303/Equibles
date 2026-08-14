@@ -13,16 +13,7 @@ namespace Equibles.Yahoo.HostedService;
 public class YahooPriceScraperWorker : BaseScraperWorker
 {
     private readonly WorkerOptions _workerOptions;
-    private readonly TimeSpan _enrichmentInterval;
     private bool _ohlcRepairComplete;
-
-    // UTC stamp of the last cycle that carried the enrichment calls. In-memory on purpose, which
-    // means every process start RE-RUNS enrichment on its first cycle (default stamp = due). That
-    // errs on the side of extra traffic, never staleness — and is bounded: the pre-split behavior
-    // carried enrichment on every single cycle, so even one restart per cycle merely matches the
-    // old traffic, while seeding the stamp at startup instead would let frequent deploys starve
-    // enrichment indefinitely. Persisting the stamp buys nothing worth a schema change.
-    private DateTime _lastEnrichmentAt;
 
     protected override string WorkerName => "Yahoo price scraper";
     protected override TimeSpan SleepInterval { get; }
@@ -38,17 +29,8 @@ public class YahooPriceScraperWorker : BaseScraperWorker
         : base(logger, scopeFactory, errorReporter)
     {
         SleepInterval = TimeSpan.FromHours(options.Value.SleepIntervalHours);
-        _enrichmentInterval = TimeSpan.FromHours(options.Value.EnrichmentIntervalHours);
         _workerOptions = workerOptions.Value;
     }
-
-    // Pure so the cadence rule is pinnable in tests: enrichment rides along only when the
-    // configured interval has elapsed since the last enrichment-carrying cycle (or none ran yet).
-    private static bool IsEnrichmentDue(
-        DateTime lastEnrichmentAt,
-        DateTime now,
-        TimeSpan enrichmentInterval
-    ) => lastEnrichmentAt == default || now - lastEnrichmentAt >= enrichmentInterval;
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
@@ -67,13 +49,8 @@ public class YahooPriceScraperWorker : BaseScraperWorker
             return;
         }
 
-        var includeEnrichment = IsEnrichmentDue(
-            _lastEnrichmentAt,
-            DateTime.UtcNow,
-            _enrichmentInterval
-        );
         var importService = scope.ServiceProvider.GetRequiredService<YahooPriceImportService>();
-        await importService.Import(includeEnrichment, stoppingToken);
+        await importService.Import(stoppingToken);
 
         // Historical corruption is repaired in bounded batches after current prices, so cleanup
         // never queues the time-sensitive daily pass behind old work. Once a scan finds no more
@@ -82,9 +59,7 @@ public class YahooPriceScraperWorker : BaseScraperWorker
         if (!_ohlcRepairComplete)
             _ohlcRepairComplete = await importService.RepairInvalidOhlc(stoppingToken);
 
-        // Stamp only after the sweep ran to completion — an interrupted enrichment cycle (deploy,
-        // crash) leaves the stamp unset so the next cycle retries it.
-        if (includeEnrichment)
-            _lastEnrichmentAt = DateTime.UtcNow;
+        if (importService.HasEnrichmentBacklog)
+            RequestImmediateContinuation();
     }
 }

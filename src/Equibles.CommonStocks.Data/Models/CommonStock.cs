@@ -36,6 +36,14 @@ public class CommonStock
     /// </summary>
     public DateTime? WebsiteCheckedAt { get; set; }
 
+    /// <summary>
+    /// When Yahoo enrichment was last attempted for the primary ticker (UTC). Null until first
+    /// attempted. Completed and failed non-cancellation attempts advance the checkpoint so an
+    /// unsupported ticker cannot pin a batch; the configured interval controls its next retry.
+    /// The worker selects the oldest due stocks, so a restart resumes through the universe.
+    /// </summary>
+    public DateTime? YahooEnrichmentAttemptedAt { get; set; }
+
     public double MarketCapitalization { get; set; }
     public long SharesOutStanding { get; set; }
 
