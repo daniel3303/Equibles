@@ -25,6 +25,15 @@ public class InsiderTradingModuleConfiguration : Equibles.Data.IFinancialModule
             .IsRequired()
             .HasDefaultValueSql("'{}'");
 
+        // The reprocess drain selects DISTINCT accessions from one exact stale parser
+        // version at a time. This key order lets Postgres seek that version and stream
+        // accession order into Unique + Limit without scanning current-version rows
+        // (#4374). Build concurrently because the scraper continuously writes this table.
+        builder
+            .Entity<InsiderTransaction>()
+            .HasIndex(t => new { t.ParserVersion, t.AccessionNumber })
+            .IsCreatedConcurrently();
+
         // Covering index for every ~90-day TransactionDate window scan. Two
         // consumers share it:
         //   - the insider-trading dashboard's "top by dollar volume" boards (run
