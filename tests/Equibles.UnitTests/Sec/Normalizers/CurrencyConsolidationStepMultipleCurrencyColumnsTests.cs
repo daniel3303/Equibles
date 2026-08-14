@@ -56,5 +56,9 @@ public class CurrencyConsolidationStepMultipleCurrencyColumnsTests
 
         var secondRow = rows[1].QuerySelectorAll("td").Select(c => c.TextContent.Trim()).ToList();
         secondRow.Should().Equal("200", "60");
+
+        doc.QuerySelector("table + p em")
+            .Should()
+            .BeNull("a table with both USD and EUR values has no truthful single-currency note");
     }
 }

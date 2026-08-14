@@ -54,6 +54,7 @@ public class YahooPriceImportServiceCompanyProfilePreservesSectorTests : IDispos
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
+            (typeof(StockSplitRepository), splitRepo),
             (typeof(IndustryRepository), _industryRepo),
             (typeof(SectorRepository), _sectorRepo),
             (

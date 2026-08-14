@@ -23,6 +23,16 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
             code => new Regex($@"\b{Regex.Escape(code)}\b", RegexOptions.Compiled)
         );
 
+    private static readonly Regex CurrencyScaleRegex = new(
+        @"^(?:(?:amounts?\s+)?in\s+)?(?:thousands|millions|billions|trillions)(?:\s*,?\s*except\s+(?:per[- ]share(?:\s+(?:amounts?|data))?|share(?:s)?))?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
+
+    private static readonly Regex UsDollarRegex = new(
+        @"\bUS\$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
+
     public void Execute(IHtmlDocument doc)
     {
         var tables = doc.QuerySelectorAll("table").ToList();
@@ -51,15 +61,17 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
 
         for (int colIndex = 0; colIndex < maxCols - 1; colIndex++)
         {
-            if (ShouldConsolidateColumn(rows, colIndex, currencySymbols))
+            var columnCurrencySymbols = new HashSet<string>();
+            if (ShouldConsolidateColumn(rows, colIndex, columnCurrencySymbols))
             {
                 columnsToProcess.Add(colIndex);
+                currencySymbols.UnionWith(columnCurrencySymbols);
             }
         }
 
         ProcessCurrencyColumnsForConsolidation(rows, columnsToProcess);
 
-        return currencySymbols.FirstOrDefault();
+        return currencySymbols.Count == 1 ? currencySymbols.Single() : null;
     }
 
     private bool ShouldConsolidateColumn(
@@ -77,25 +89,28 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
                 continue;
 
             var currentCell = cells[colIndex].TextContent.Trim();
-            var nextCell = cells[colIndex + 1].TextContent.Trim();
-
-            if (string.IsNullOrWhiteSpace(currentCell) && string.IsNullOrWhiteSpace(nextCell))
-            {
+            if (IsEmptyCell(currentCell))
                 continue;
-            }
 
-            if (!string.IsNullOrWhiteSpace(currentCell) && IsEmptyCell(nextCell))
-            {
-                var detectedCurrency = DetectCurrency(currentCell);
-                if (detectedCurrency != null)
-                {
-                    currencySymbols.Add(detectedCurrency);
-                    shouldConsolidate = true;
-                }
-            }
+            var detectedCurrency = DetectCurrency(currentCell);
+            var nextCell = cells[colIndex + 1].TextContent.Trim();
+            if (
+                detectedCurrency == null
+                || (!IsStandaloneCurrencyCell(currentCell) && !IsEmptyCell(nextCell))
+            )
+                return false;
+
+            currencySymbols.Add(detectedCurrency);
+            shouldConsolidate = true;
         }
 
-        return shouldConsolidate && currencySymbols.Count > 0;
+        return shouldConsolidate;
+    }
+
+    private bool IsStandaloneCurrencyCell(string text)
+    {
+        var remainder = RemoveCurrencySymbols(text).Trim(' ', '\t', '\r', '\n', '(', ')');
+        return remainder.Length == 0 || CurrencyScaleRegex.IsMatch(remainder);
     }
 
     private bool IsEmptyCell(string cellText)
@@ -160,19 +175,27 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
             foreach (var row in rows)
             {
                 var cells = HtmlElementExtensions.DirectChildCells(row);
-                if (colIndex >= cells.Count || (colIndex + 1) >= cells.Count)
+                if (colIndex >= cells.Count)
                     continue;
 
                 var currentCell = cells[colIndex];
-                var nextCell = cells[colIndex + 1];
-
                 var currentText = currentCell.TextContent.Trim();
-                var nextText = nextCell.TextContent.Trim();
-                if (string.IsNullOrWhiteSpace(currentText) || !IsEmptyCell(nextText))
+
+                if (!IsEmptyCell(currentText) && DetectCurrency(currentText) == null)
                     continue;
 
                 var cleanTitle = RemoveCurrencySymbols(currentText);
-                nextCell.InnerHtml = cleanTitle;
+                if (cleanTitle.Length > 0 && (colIndex + 1) >= cells.Count)
+                    continue;
+
+                if (cleanTitle.Length > 0)
+                {
+                    var nextCell = cells[colIndex + 1];
+                    nextCell.InnerHtml = IsEmptyCell(nextCell.TextContent.Trim())
+                        ? cleanTitle
+                        : $"{cleanTitle} {nextCell.InnerHtml}";
+                }
+
                 currentCell.Remove();
             }
         }
@@ -180,6 +203,7 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
 
     private string RemoveCurrencySymbols(string text)
     {
+        text = UsDollarRegex.Replace(text, "");
         foreach (var (code, (symbol, _)) in CurrencyMap)
         {
             text = text.Replace(symbol, "");

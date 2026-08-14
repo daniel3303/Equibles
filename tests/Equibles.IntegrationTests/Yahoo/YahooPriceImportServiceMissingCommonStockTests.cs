@@ -62,6 +62,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), _priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
+            (typeof(StockSplitRepository), splitRepo),
             (typeof(IndustryRepository), new IndustryRepository(_dbContext)),
             (typeof(SectorRepository), new SectorRepository(_dbContext)),
             (typeof(ISharesOutstandingProvider), _sharesProvider),

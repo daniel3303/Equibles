@@ -62,6 +62,7 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyStockPriceRepository), priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
+            (typeof(StockSplitRepository), splitRepo),
             (typeof(IndustryRepository), _industryRepo),
             (typeof(SectorRepository), _sectorRepo),
             // SyncKeyStatistics resolves the EDGAR shares provider even when Yahoo has no

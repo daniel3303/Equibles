@@ -186,6 +186,43 @@ public class CorporateActionPriceReconciliationManager
         );
     }
 
+    /// <summary>
+    /// Clears reconciliation markers whose stored price boundary proves that the replacement did
+    /// not put the series on one split basis. The next selection pass retries those exact series.
+    /// </summary>
+    public async Task<int> RequeueAppliedSplits(
+        IReadOnlyCollection<AppliedSplitMarkerSnapshot> auditedMarkers,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (auditedMarkers.Count == 0)
+            return 0;
+
+        var appliedTimesById = auditedMarkers
+            .GroupBy(marker => marker.SplitId)
+            .ToDictionary(group => group.Key, group => group.Last().AppliedTime);
+
+        await using var transaction = await _stockRepository.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        var splits = await _splitRepository.GetForUpdate(appliedTimesById.Keys, cancellationToken);
+        var applied = splits
+            .Where(split =>
+                split.PriceAdjustmentAppliedTime == appliedTimesById.GetValueOrDefault(split.Id)
+            )
+            .ToList();
+
+        foreach (var split in applied)
+            split.PriceAdjustmentAppliedTime = null;
+
+        if (applied.Count > 0)
+            await _splitRepository.SaveChanges();
+
+        await transaction.CommitAsync(cancellationToken);
+        return applied.Count;
+    }
+
     private async Task<int> StampAppliedCore(
         PendingPriceReconciliationSeries selectedSeries,
         IReadOnlyCollection<CapturedDividend> priceSeriesDividends,

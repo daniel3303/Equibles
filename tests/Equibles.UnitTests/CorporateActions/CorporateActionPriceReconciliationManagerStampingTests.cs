@@ -96,6 +96,48 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         };
 
     [Fact]
+    public async Task RequeueAppliedSplits_ClearsOnlySelectedAppliedMarkers()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var appliedAt = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc);
+        var selected = PendingSplit(stockId, new DateOnly(2026, 8, 10));
+        selected.PriceAdjustmentAppliedTime = appliedAt;
+        var untouched = PendingSplit(stockId, new DateOnly(2026, 7, 10));
+        untouched.PriceAdjustmentAppliedTime = appliedAt;
+        db.Add(Stock(stockId));
+        db.AddRange(selected, untouched);
+        await db.SaveChangesAsync();
+
+        var count = await NewManager(db)
+            .RequeueAppliedSplits([new AppliedSplitMarkerSnapshot(selected.Id, appliedAt)]);
+
+        count.Should().Be(1);
+        selected.PriceAdjustmentAppliedTime.Should().BeNull();
+        untouched.PriceAdjustmentAppliedTime.Should().Be(appliedAt);
+    }
+
+    [Fact]
+    public async Task RequeueAppliedSplits_MarkerChangedAfterAudit_KeepsNewerStamp()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var auditedAt = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc);
+        var restampedAt = auditedAt.AddMinutes(1);
+        var split = PendingSplit(stockId, new DateOnly(2026, 8, 10));
+        split.PriceAdjustmentAppliedTime = restampedAt;
+        db.Add(Stock(stockId));
+        db.Add(split);
+        await db.SaveChangesAsync();
+
+        var count = await NewManager(db)
+            .RequeueAppliedSplits([new AppliedSplitMarkerSnapshot(split.Id, auditedAt)]);
+
+        count.Should().Be(0);
+        split.PriceAdjustmentAppliedTime.Should().Be(restampedAt);
+    }
+
+    [Fact]
     public async Task StampApplied_StampsSelectedSplitAndDividendSnapshots()
     {
         await using var db = NewDb();
