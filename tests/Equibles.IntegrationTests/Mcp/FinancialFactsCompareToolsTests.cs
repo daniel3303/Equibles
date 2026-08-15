@@ -151,7 +151,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         result.Should().NotContain("$380,000,000,000", "the latest-filed restatement wins");
         result.Should().Contain("Skipped:");
         result.Should().Contain("GOOGL (no data)");
-        result.Should().Contain("ZZZZ (not found)");
+        result.Should().Contain("ZZZZ (not found in the tracked SEC issuer set)");
     }
 
     [Fact]

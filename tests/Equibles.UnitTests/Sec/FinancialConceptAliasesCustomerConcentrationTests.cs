@@ -1,52 +1,30 @@
-using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 
 namespace Equibles.UnitTests.Sec;
 
 /// <summary>
-/// Filers that tag their customer-concentration disclosure carry it under the
-/// ConcentrationRiskPercentage elements (us-gaap and srt spellings). The
-/// 'customer-concentration' alias makes that tagged data reachable through
-/// the FinancialFacts tools; without it the tags were ingested but had no
-/// caller-facing name.
+/// Customer-concentration percentages are normally dimensioned by customer and
+/// benchmark. Consolidated fact tools discard those dimensions, so advertising
+/// this disclosure as a consolidated alias creates a guaranteed false miss.
 /// </summary>
 public class FinancialConceptAliasesCustomerConcentrationTests
 {
-    [Fact]
-    public void TryResolve_CustomerConcentration_MapsConcentrationRiskPercentageTags()
-    {
-        var resolved = FinancialConceptAliases.TryResolve(
-            "customer-concentration",
-            out var concepts
-        );
-
-        resolved.Should().BeTrue();
-        concepts
-            .Select(c => (c.Taxonomy, c.Tag))
-            .Should()
-            .ContainInOrder(
-                (FactTaxonomy.UsGaap, "ConcentrationRiskPercentage1"),
-                (FactTaxonomy.UsGaap, "ConcentrationRiskPercentage"),
-                (FactTaxonomy.Srt, "ConcentrationRiskPercentage1"),
-                (FactTaxonomy.Srt, "ConcentrationRiskPercentage")
-            );
-    }
-
     [Theory]
+    [InlineData("customer-concentration")]
     [InlineData("concentration-risk")]
     [InlineData("customer-concentration-risk")]
     [InlineData("Customer Concentration")]
-    public void TryResolve_Synonyms_ResolveToCustomerConcentration(string alias)
+    public void TryResolve_CustomerConcentrationAliases_AreNotConsolidatedFacts(string alias)
     {
         var resolved = FinancialConceptAliases.TryResolve(alias, out var concepts);
 
-        resolved.Should().BeTrue();
-        concepts.Should().Contain(c => c.Tag == "ConcentrationRiskPercentage1");
+        resolved.Should().BeFalse();
+        concepts.Should().BeEmpty();
     }
 
     [Fact]
-    public void SupportedAliases_ListCustomerConcentration()
+    public void SupportedAliases_DoNotListCustomerConcentration()
     {
-        FinancialConceptAliases.SupportedAliases.Should().Contain("customer-concentration");
+        FinancialConceptAliases.SupportedAliases.Should().NotContain("customer-concentration");
     }
 }
