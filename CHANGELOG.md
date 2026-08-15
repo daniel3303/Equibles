@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- The fund-series directory now preserves every NPORT series exposed through a shared issuer feed instead of failing its rebuild on duplicate stock-scoped identities.
 - Financial-fact MCP tools no longer advertise dimensioned customer-concentration disclosures as consolidated series, and peer comparisons preserve exact dotted ticker spellings instead of inferring a different dash-listed security. Unknown symbols are now identified as outside the tracked SEC issuer set. Closes #4391.
 - Secondary price-series responses now label exact listing tickers without appending the primary listing's name, preventing headings such as a fund-series symbol paired with its parent security name.
 - Yahoo adjusted closes now re-sync the entire exact listed series after a captured cash dividend changes, sharing the split reconciliation queue and its retry-safe snapshot stamping. Existing dividends queue a capped one-time rebase, future actions wait until their effective session settles, a durable round-robin cursor prevents failed series from starving the queue, and amount restatements from older rolling workers remain detectable.

@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
+using Equibles.Integrations.Sec.Contracts;
+using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
@@ -14,9 +16,10 @@ namespace Equibles.IntegrationTests.Sec;
 /// <summary>
 /// Contract for <see cref="FundSeriesRefreshService"/>: after <c>RebuildAllAsync</c> the
 /// <see cref="FundSeries"/> directory holds one row per series taken from that series' latest NPORT
-/// report — tracked funds keyed by stock, sweep-discovered trusts keyed by registrant CIK + series
-/// id — with the report-header totals, stored and reported holdings counts, the N-CEN type when on
-/// record, and a unique route slug. Superseded reports never linger; untouched rows are pruned.
+/// report — issuer-feed funds keyed by stock plus any non-empty series id, sweep-discovered trusts
+/// keyed by registrant CIK + series id — with the report-header totals, stored and reported holdings
+/// counts, the N-CEN type when on record, and a unique route slug. Superseded reports never linger;
+/// untouched rows are pruned.
 /// Exercised against ParadeDB because the service writes through FlexLabs <c>UpsertRange</c> and
 /// <c>ExecuteDeleteAsync</c>, neither of which the in-memory provider supports.
 /// </summary>
@@ -44,10 +47,10 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         return ctx;
     }
 
-    private FundSeriesRefreshService BuildService()
+    private FundSeriesRefreshService BuildService(List<FundClassTicker> classTickers = null)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        scopeFactory.CreateScope().Returns(_ => CreateScopeFromFixture());
+        scopeFactory.CreateScope().Returns(_ => CreateScopeFromFixture(classTickers));
         return new FundSeriesRefreshService(
             scopeFactory,
             NullLogger<FundSeriesRefreshService>.Instance
@@ -56,13 +59,19 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
 
     // Each scope hands out a fresh context plus a repository bound to the same context, mirroring
     // how the worker resolves both from its request scope.
-    private IServiceScope CreateScopeFromFixture()
+    private IServiceScope CreateScopeFromFixture(List<FundClassTicker> classTickers)
     {
         var ctx = FreshContext();
         var scope = Substitute.For<IServiceScope>();
         var provider = Substitute.For<IServiceProvider>();
         provider.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
         provider.GetService(typeof(NportFilingRepository)).Returns(new NportFilingRepository(ctx));
+        if (classTickers != null)
+        {
+            var edgar = Substitute.For<ISecEdgarClient>();
+            edgar.GetFundClassTickers().Returns(Task.FromResult(classTickers));
+            provider.GetService(typeof(ISecEdgarClient)).Returns(edgar);
+        }
         scope.ServiceProvider.Returns(provider);
         return scope;
     }
@@ -167,6 +176,68 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         row.NetAssets.Should().Be(900m, "the newest report wins");
         row.PositionCount.Should().Be(2);
         row.LatestReportPeriodDate.Should().Be(new DateOnly(2025, 3, 31));
+    }
+
+    [Fact]
+    public async Task RebuildAll_DistinctTrackedSeries_UsesSeriesScopedIdentity()
+    {
+        await using var seed = FreshContext();
+        var trust = await SeedStock(seed, "AAXJ", "0001100663");
+        var seriesA = MakeFiling(
+            trust.Id,
+            null,
+            "0001100663-25-000001",
+            "S000002277",
+            "iShares Russell 2000 ETF",
+            "iShares Trust",
+            new DateOnly(2025, 3, 31),
+            netAssets: 2_000m,
+            totalAssets: 2_050m
+        );
+        var seriesB = MakeFiling(
+            trust.Id,
+            null,
+            "0001100663-25-000002",
+            "S000004310",
+            "iShares Core S&P 500 ETF",
+            "iShares Trust",
+            new DateOnly(2025, 3, 31),
+            netAssets: 3_000m,
+            totalAssets: 3_050m
+        );
+        seed.AddRange(seriesA, seriesB);
+        await seed.SaveChangesAsync();
+
+        await BuildService([
+                new FundClassTicker
+                {
+                    Cik = "0001100663",
+                    SeriesId = "S000002277",
+                    ClassId = "C000006768",
+                    Symbol = "IWM",
+                },
+                new FundClassTicker
+                {
+                    Cik = "0001100663",
+                    SeriesId = "S000004310",
+                    ClassId = "C000012285",
+                    Symbol = "IVV",
+                },
+            ])
+            .RebuildAllAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var rows = await read.Set<FundSeries>()
+            .Where(s => s.CommonStockId == trust.Id)
+            .OrderBy(s => s.SeriesId)
+            .ToListAsync();
+        rows.Should().HaveCount(2);
+        rows.Select(s => s.IdentityKey)
+            .Should()
+            .Equal($"cs:{trust.Id}:S000002277", $"cs:{trust.Id}:S000004310");
+        rows.Select(s => s.Ticker).Should().Equal("IWM", "IVV");
+        rows.Select(s => s.Ticker).Should().NotContain(trust.Ticker);
+        rows.Select(s => s.Slug).Should().OnlyHaveUniqueItems();
     }
 
     [Fact]

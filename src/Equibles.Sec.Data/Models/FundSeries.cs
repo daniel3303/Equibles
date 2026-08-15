@@ -18,12 +18,13 @@ namespace Equibles.Sec.Data.Models;
 /// by the <see cref="ComputedAt"/> watermark.
 ///
 /// Series identity never compares name text. Exactly one of the two populations applies per row:
-/// a tracked fund (listed closed-end fund / standalone ETF trust crawled through its own feed) is
-/// scoped by <see cref="CommonStockId"/>; a fund-family trust series discovered by the daily-index
-/// sweep is scoped by <see cref="RegistrantCik"/> + <see cref="SeriesId"/>. For the sweep-discovered
-/// trusts only the holdings carrying a tracked stock's CUSIP are stored, so <see cref="PositionCount"/>
-/// counts the fund's positions in tracked stocks, not its whole portfolio; <see cref="NetAssets"/>
-/// and <see cref="TotalAssets"/> are the fund's real totals from the report header regardless.
+/// an issuer-feed filing is scoped by <see cref="CommonStockId"/> plus its non-empty
+/// <see cref="SeriesId"/> (or by stock alone for an id-less standalone fund); a fund-family trust
+/// series discovered by the daily-index sweep is scoped by <see cref="RegistrantCik"/> plus
+/// <see cref="SeriesId"/>. For the sweep-discovered trusts only the holdings carrying a tracked
+/// stock's CUSIP are stored, so <see cref="PositionCount"/> counts the fund's positions in tracked
+/// stocks, not its whole portfolio; <see cref="NetAssets"/> and <see cref="TotalAssets"/> are the
+/// fund's real totals from the report header regardless.
 /// </summary>
 [Index(nameof(IdentityKey), IsUnique = true)]
 [Index(nameof(Slug), IsUnique = true)]
@@ -37,7 +38,8 @@ public class FundSeries
 
     /// <summary>
     /// Stable canonical identity and upsert conflict target. Derived from whichever identity
-    /// population applies, never from name text: <c>cs:{CommonStockId}</c> for a tracked fund,
+    /// population applies, never from name text: <c>cs:{CommonStockId}</c> for an id-less tracked
+    /// fund, <c>cs:{CommonStockId}:{SeriesId}</c> for a tracked multi-series registrant, and
     /// <c>rc:{RegistrantCik}:{SeriesId}</c> for a sweep-discovered trust series (an id-less
     /// registrant collapses to <c>rc:{RegistrantCik}:</c>).
     /// </summary>
@@ -54,7 +56,7 @@ public class FundSeries
     [MaxLength(256)]
     public string Slug { get; set; }
 
-    /// <summary>The tracked stock the fund is itself, when crawled through its own feed; null for trusts.</summary>
+    /// <summary>The stock whose issuer feed supplied the filing; series id completes identity for multi-series registrants.</summary>
     public Guid? CommonStockId { get; set; }
 
     /// <summary>The sweep-discovered trust's registrant CIK; null for tracked funds.</summary>
@@ -72,7 +74,7 @@ public class FundSeries
     [MaxLength(512)]
     public string RegistrantName { get; set; }
 
-    /// <summary>The fund's own ticker, denormalised from the tracked stock; null for trusts.</summary>
+    /// <summary>The unambiguous SEC fund-class ticker for a series, or the tracked stock ticker for an id-less fund.</summary>
     [MaxLength(16)]
     public string Ticker { get; set; }
 

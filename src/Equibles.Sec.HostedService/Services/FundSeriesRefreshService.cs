@@ -61,8 +61,8 @@ public class FundSeriesRefreshService
         }
 
         // Latest report per series, with the report-header totals and the count of stored holding
-        // rows. The fund's ticker is denormalised from the tracked stock (null for trusts, whose
-        // CommonStockId is null — a LEFT JOIN yields null).
+        // rows. The joined stock ticker remains the fallback for id-less issuer-feed funds; a
+        // series-bearing row is enriched later from SEC's fund-class directory.
         var aggregates = await nportRepository
             .GetLatestPerSeries(DateOnly.MinValue)
             .Select(f => new FundSeriesAggregate
@@ -213,15 +213,18 @@ public class FundSeriesRefreshService
         var seriesId = a.SeriesId ?? string.Empty;
         var isTracked = a.CommonStockId != null;
 
-        var identityKey = isTracked ? $"cs:{a.CommonStockId}" : $"rc:{a.RegistrantCik}:{seriesId}";
+        var identityKey = isTracked
+            ? BuildTrackedIdentityKey(a.CommonStockId.Value, seriesId)
+            : $"rc:{a.RegistrantCik}:{seriesId}";
 
         var displayName = !string.IsNullOrWhiteSpace(a.SeriesName)
             ? a.SeriesName
             : a.RegistrantName;
 
-        var discriminator = isTracked
-            ? (!string.IsNullOrEmpty(a.Ticker) ? a.Ticker : a.CommonStockId.ToString())
-            : (!string.IsNullOrEmpty(seriesId) ? seriesId : $"cik{a.RegistrantCik}");
+        var discriminator =
+            !string.IsNullOrEmpty(seriesId) ? seriesId
+            : isTracked ? (!string.IsNullOrEmpty(a.Ticker) ? a.Ticker : a.CommonStockId.ToString())
+            : $"cik{a.RegistrantCik}";
 
         string fundType = null;
         if (isTracked)
@@ -229,13 +232,16 @@ public class FundSeriesRefreshService
             fundTypeByStock.TryGetValue(a.CommonStockId.Value, out fundType);
         }
 
-        // A tracked fund's ticker comes from its own stock row; a trust series (null here) gets
-        // the SEC fund-class directory's symbol when the series maps to exactly one. The slug
-        // discriminator above deliberately stays the series id so existing trust URLs never move.
-        var ticker = a.Ticker;
-        if (string.IsNullOrEmpty(ticker) && !string.IsNullOrEmpty(seriesId))
+        // A series-bearing filing can share its issuer-feed stock with hundreds of sibling series,
+        // so that stock's ticker is not series authority. SEC's fund-class directory is.
+        string ticker = null;
+        if (!string.IsNullOrEmpty(seriesId))
         {
             tickerBySeries.TryGetValue(seriesId, out ticker);
+        }
+        else if (isTracked)
+        {
+            ticker = a.Ticker;
         }
 
         return new FundSeries
@@ -258,6 +264,9 @@ public class FundSeriesRefreshService
             ComputedAt = computedAt,
         };
     }
+
+    internal static string BuildTrackedIdentityKey(Guid commonStockId, string seriesId) =>
+        string.IsNullOrEmpty(seriesId) ? $"cs:{commonStockId}" : $"cs:{commonStockId}:{seriesId}";
 
     // "{name-slug}-{discriminator}". The discriminator (unique per series) is preserved whole; only
     // the name part is trimmed to fit, so the slug stays unique under truncation.
