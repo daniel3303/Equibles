@@ -241,6 +241,110 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RebuildAll_SeriesMovesBetweenPopulations_ReplacesConflictingSlugIdentity()
+    {
+        await using var seed = FreshContext();
+        var trust = await SeedStock(seed, "AAXJ", "0001100663");
+        var tracked = MakeFiling(
+            trust.Id,
+            null,
+            "0001100663-25-000001",
+            "S000002277",
+            "iShares Russell 2000 ETF",
+            "iShares Trust",
+            new DateOnly(2024, 12, 31),
+            netAssets: 2_000m,
+            totalAssets: 2_050m
+        );
+        var swept = MakeFiling(
+            null,
+            "0001100663",
+            "0001100663-25-000002",
+            "S000002277",
+            "iShares Russell 2000 ETF",
+            "iShares Trust",
+            new DateOnly(2025, 1, 31),
+            netAssets: 2_100m,
+            totalAssets: 2_150m
+        );
+        seed.AddRange(tracked, swept);
+        seed.Set<FundSeries>()
+            .Add(
+                new FundSeries
+                {
+                    IdentityKey = $"cs:{trust.Id}:S000002277",
+                    Slug = "ishares-russell-2000-etf-s000002277",
+                    CommonStockId = trust.Id,
+                    SeriesId = "S000002277",
+                    SeriesName = "iShares Russell 2000 ETF",
+                    LatestReportPeriodDate = tracked.ReportPeriodDate,
+                    LatestFilingDate = tracked.FilingDate,
+                }
+            );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildAllAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var row = await read.Set<FundSeries>().SingleAsync();
+        row.IdentityKey.Should().Be("rc:0001100663:S000002277");
+        row.Slug.Should().Be("ishares-russell-2000-etf-s000002277");
+        row.CommonStockId.Should().BeNull();
+        row.NetAssets.Should().Be(2_100m);
+    }
+
+    [Fact]
+    public async Task RebuildAll_ReplacementUpsertFails_RollsBackConflictingSlugDeletion()
+    {
+        await using var seed = FreshContext();
+        var trust = await SeedStock(seed, "AAXJ", "0001100663");
+        var swept = MakeFiling(
+            null,
+            "0001100663",
+            "0001100663-25-000002",
+            "S000002277",
+            "iShares Russell 2000 ETF",
+            "iShares Trust",
+            new DateOnly(2025, 1, 31),
+            netAssets: 2_100m,
+            totalAssets: 2_150m
+        );
+        seed.Add(swept);
+        var previous = new FundSeries
+        {
+            IdentityKey = $"cs:{trust.Id}:S000002277",
+            Slug = "ishares-russell-2000-etf-s000002277",
+            CommonStockId = trust.Id,
+            SeriesId = "S000002277",
+            SeriesName = "iShares Russell 2000 ETF",
+            LatestReportPeriodDate = new DateOnly(2024, 12, 31),
+            LatestFilingDate = new DateOnly(2025, 1, 30),
+        };
+        seed.Add(previous);
+        await seed.SaveChangesAsync();
+
+        var service = BuildService([
+            new FundClassTicker
+            {
+                Cik = "0001100663",
+                SeriesId = "S000002277",
+                ClassId = "C000006768",
+                Symbol = "SYMBOL-OVER-16-CHARS",
+            },
+        ]);
+
+        Func<Task> act = () => service.RebuildAllAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<Exception>();
+
+        await using var read = FreshContext();
+        var surviving = await read.Set<FundSeries>().SingleAsync();
+        surviving.Id.Should().Be(previous.Id);
+        surviving.IdentityKey.Should().Be(previous.IdentityKey);
+        surviving.Slug.Should().Be(previous.Slug);
+    }
+
+    [Fact]
     public async Task RebuildAll_PopulatesFundType_FromLatestNCen()
     {
         await using var seed = FreshContext();

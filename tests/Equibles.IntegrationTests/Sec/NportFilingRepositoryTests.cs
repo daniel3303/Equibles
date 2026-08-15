@@ -410,6 +410,102 @@ public class NportFilingRepositoryTests : IDisposable
         result.Should().ContainSingle().Which.Id.Should().Be(newest.Id);
     }
 
+    [Fact]
+    public async Task GetLatestPerSeries_SameSecSeriesAcrossPopulations_NewestWinsOnce()
+    {
+        var stock = CreateStock("AAXJ", "0001100663");
+        _dbContext.Set<CommonStock>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var tracked = CreateFiling(
+            stock.Id,
+            "0001100663-25-000001",
+            new DateOnly(2025, 1, 15),
+            "iShares Russell 2000 ETF",
+            "S000002277"
+        );
+        tracked.ReportPeriodDate = new DateOnly(2024, 12, 31);
+        var swept = CreateTrustFiling(
+            "1100663",
+            "0001100663-25-000002",
+            new DateOnly(2025, 2, 15),
+            "iShares Russell 2000 ETF",
+            "S000002277"
+        );
+        swept.ReportPeriodDate = new DateOnly(2025, 1, 31);
+        _repository.Add(tracked);
+        _repository.Add(swept);
+        await _repository.SaveChanges();
+
+        var result = await _repository.GetLatestPerSeries(DateOnly.MinValue).ToListAsync();
+
+        result.Should().ContainSingle().Which.Id.Should().Be(swept.Id);
+    }
+
+    [Fact]
+    public async Task GetLatestPerSeries_SameCrossPopulationPeriod_LatestFilingDateWins()
+    {
+        var stock = CreateStock("AAXJ", "0001100663");
+        _dbContext.Set<CommonStock>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var tracked = CreateFiling(
+            stock.Id,
+            "0001100663-25-000001",
+            new DateOnly(2025, 1, 15),
+            "iShares Russell 2000 ETF",
+            "S000002277"
+        );
+        tracked.ReportPeriodDate = new DateOnly(2024, 12, 31);
+        var swept = CreateTrustFiling(
+            "1100663",
+            "0001100663-25-000002",
+            new DateOnly(2025, 2, 15),
+            "iShares Russell 2000 ETF",
+            "S000002277"
+        );
+        swept.ReportPeriodDate = tracked.ReportPeriodDate;
+        _repository.Add(tracked);
+        _repository.Add(swept);
+        await _repository.SaveChanges();
+
+        var result = await _repository.GetLatestPerSeries(DateOnly.MinValue).ToListAsync();
+
+        result.Should().ContainSingle().Which.Id.Should().Be(swept.Id);
+    }
+
+    [Fact]
+    public async Task GetLatestPerSeries_SameCrossPopulationDates_HighestAccessionWins()
+    {
+        var stock = CreateStock("AAXJ", "0001100663");
+        _dbContext.Set<CommonStock>().Add(stock);
+        await _dbContext.SaveChangesAsync();
+
+        var tracked = CreateFiling(
+            stock.Id,
+            "0001100663-25-000001",
+            new DateOnly(2025, 1, 15),
+            "iShares Russell 2000 ETF",
+            "S000002277"
+        );
+        tracked.ReportPeriodDate = new DateOnly(2024, 12, 31);
+        var swept = CreateTrustFiling(
+            "1100663",
+            "0001100663-25-000002",
+            tracked.FilingDate,
+            "iShares Russell 2000 ETF",
+            "S000002277"
+        );
+        swept.ReportPeriodDate = tracked.ReportPeriodDate;
+        _repository.Add(tracked);
+        _repository.Add(swept);
+        await _repository.SaveChanges();
+
+        var result = await _repository.GetLatestPerSeries(DateOnly.MinValue).ToListAsync();
+
+        result.Should().ContainSingle().Which.Id.Should().Be(swept.Id);
+    }
+
     // Two id-less trust filings from different registrants are different funds — registrant CIK,
     // not a shared null CommonStockId, must keep them apart (otherwise every trust-only id-less
     // filing would collapse into one).

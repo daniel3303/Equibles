@@ -62,8 +62,9 @@ public class NportFilingRepositoryQueryTranslationTests
         var sql = repository.GetLatestPerSeries(new DateOnly(2024, 1, 1)).ToQueryString();
         var flat = System.Text.RegularExpressions.Regex.Replace(sql, @"\s+", " ");
 
-        // One branch per registrant population, concatenated — never one OR-ed identity.
-        System.Text.RegularExpressions.Regex.Matches(flat, "UNION ALL").Count.Should().Be(2);
+        // Series-bearing and id-less paths are separate within each real population, followed by
+        // the identity-less fallback — never an OR around a correlated anti-join.
+        System.Text.RegularExpressions.Regex.Matches(flat, "UNION ALL").Count.Should().Be(4);
 
         // The trust branch's anti-join must keep a bare RegistrantCik equality: EF null
         // compensation ("= OR both-null") would strip the anti-join of its hash key and

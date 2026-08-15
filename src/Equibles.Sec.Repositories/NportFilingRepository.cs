@@ -108,43 +108,74 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     /// filings ("and"/"&amp;", "Inc"/"Inc.", stray spaces, legal renames), which would freeze a
     /// stale "latest" report under every spelling.
     ///
-    /// A series is scoped to its registrant: a filing crawled through a tracked stock's feed is
-    /// scoped by <see cref="NportFiling.CommonStockId"/>; a filing discovered by the daily-index
-    /// sweep (whose registrant is a fund-family trust that is not a tracked stock) is scoped by
-    /// <see cref="NportFiling.RegistrantCik"/>. Exactly one is set per filing, so the two
-    /// populations never collide. Within a registrant, filings carrying the same non-empty
-    /// <see cref="NportFiling.SeriesId"/> are the same series; filings carrying different non-empty
-    /// ids are genuinely different series and never supersede each other; and an id-less filing
-    /// belongs to the registrant's single fund (listed closed-end funds file with no series id at
-    /// all), so it shares identity with every filing of its registrant.
+    /// A series is normally scoped to its registrant: a filing crawled through a tracked stock's
+    /// feed is scoped by <see cref="NportFiling.CommonStockId"/>; a filing discovered by the
+    /// daily-index sweep is scoped by <see cref="NportFiling.RegistrantCik"/>. A non-empty SEC
+    /// <see cref="NportFiling.SeriesId"/> is globally authoritative, however, so if the same series
+    /// has reached both ingestion populations only the newest filing survives. Different non-empty
+    /// series ids never supersede each other. An id-less filing belongs to the registrant's single
+    /// fund, so it shares identity with every filing of that registrant.
     ///
     /// The latest report is the one with the greatest report period, breaking ties by filing date
     /// and then accession number so amendments and re-filings of the same period win.
     ///
-    /// The supersedes check is split into three registrant-population branches (tracked-stock
-    /// filings, CIK-scoped trust filings, identity-less filings) concatenated with UNION ALL,
-    /// rather than one anti-join whose identity condition ORs the populations together: a filing
-    /// only ever competes with filings of its own population, and the OR form gives the anti-join
-    /// no hashable key, degrading it to an O(N²) nested loop over every pair of filings (observed
-    /// at ~8 s per call). Each branch leads with a plain equality on its population's key, so the
-    /// planner hash-partitions the anti-join and the whole dedup runs in milliseconds. The series
-    /// wildcard and newer-report conditions are identical in every branch.
+    /// Series-bearing and id-less filings are split into separate population branches concatenated
+    /// with UNION ALL. A non-empty series id first competes globally through a plain equality;
+    /// id-less filings then compete through their population key. Keeping both anti-joins outside
+    /// OR predicates gives PostgreSQL a hashable key and avoids an O(N²) correlated scan (observed
+    /// at ~8 s per call with the former combined identity predicate).
     /// </summary>
     public IQueryable<NportFiling> GetLatestPerSeries(DateOnly floor)
     {
         var filings = GetAll().Where(f => f.ReportPeriodDate >= floor);
 
-        // Tracked funds: scoped by CommonStockId.
-        var trackedFunds = filings
-            .Where(f => f.CommonStockId != null)
+        // A series-bearing tracked fund first competes globally by SEC series id, then against an
+        // id-less filing scoped to the same tracked stock.
+        var trackedSeries = filings
+            .Where(f => f.CommonStockId != null && !string.IsNullOrEmpty(f.SeriesId))
+            .Where(f =>
+                !filings.Any(f2 =>
+                    f2.SeriesId == f.SeriesId
+                    && (
+                        f2.ReportPeriodDate > f.ReportPeriodDate
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate > f.FilingDate
+                        )
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate == f.FilingDate
+                            && string.Compare(f2.AccessionNumber, f.AccessionNumber) > 0
+                        )
+                    )
+                )
+            )
             .Where(f =>
                 !filings.Any(f2 =>
                     f2.CommonStockId == f.CommonStockId
+                    && string.IsNullOrEmpty(f2.SeriesId)
                     && (
-                        f2.SeriesId == f.SeriesId
-                        || string.IsNullOrEmpty(f.SeriesId)
-                        || string.IsNullOrEmpty(f2.SeriesId)
+                        f2.ReportPeriodDate > f.ReportPeriodDate
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate > f.FilingDate
+                        )
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate == f.FilingDate
+                            && string.Compare(f2.AccessionNumber, f.AccessionNumber) > 0
+                        )
                     )
+                )
+            );
+
+        // An id-less tracked filing represents the stock's whole fund and therefore competes with
+        // every filing scoped to that stock.
+        var trackedIdless = filings
+            .Where(f => f.CommonStockId != null && string.IsNullOrEmpty(f.SeriesId))
+            .Where(f =>
+                !filings.Any(f2 =>
+                    f2.CommonStockId == f.CommonStockId
                     && (
                         f2.ReportPeriodDate > f.ReportPeriodDate
                         || (
@@ -165,17 +196,62 @@ public class NportFilingRepository : BaseRepository<NportFiling>
         // emit a plain (hashable) equality instead of null-compensating it into
         // "= OR both-null" — which would give the anti-join no hash key again.
         var trustSeries = filings
-            .Where(f => f.CommonStockId == null && f.RegistrantCik != null)
+            .Where(f =>
+                f.CommonStockId == null
+                && f.RegistrantCik != null
+                && !string.IsNullOrEmpty(f.SeriesId)
+            )
+            .Where(f =>
+                !filings.Any(f2 =>
+                    f2.SeriesId == f.SeriesId
+                    && (
+                        f2.ReportPeriodDate > f.ReportPeriodDate
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate > f.FilingDate
+                        )
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate == f.FilingDate
+                            && string.Compare(f2.AccessionNumber, f.AccessionNumber) > 0
+                        )
+                    )
+                )
+            )
             .Where(f =>
                 !filings.Any(f2 =>
                     f2.CommonStockId == null
                     && f.RegistrantCik != null
                     && f2.RegistrantCik == f.RegistrantCik
+                    && string.IsNullOrEmpty(f2.SeriesId)
                     && (
-                        f2.SeriesId == f.SeriesId
-                        || string.IsNullOrEmpty(f.SeriesId)
-                        || string.IsNullOrEmpty(f2.SeriesId)
+                        f2.ReportPeriodDate > f.ReportPeriodDate
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate > f.FilingDate
+                        )
+                        || (
+                            f2.ReportPeriodDate == f.ReportPeriodDate
+                            && f2.FilingDate == f.FilingDate
+                            && string.Compare(f2.AccessionNumber, f.AccessionNumber) > 0
+                        )
                     )
+                )
+            );
+
+        // An id-less sweep filing represents the registrant's whole fund and therefore competes
+        // with every sweep filing scoped to that registrant.
+        var trustIdless = filings
+            .Where(f =>
+                f.CommonStockId == null
+                && f.RegistrantCik != null
+                && string.IsNullOrEmpty(f.SeriesId)
+            )
+            .Where(f =>
+                !filings.Any(f2 =>
+                    f2.CommonStockId == null
+                    && f.RegistrantCik != null
+                    && f2.RegistrantCik == f.RegistrantCik
                     && (
                         f2.ReportPeriodDate > f.ReportPeriodDate
                         || (
@@ -219,7 +295,11 @@ public class NportFilingRepository : BaseRepository<NportFiling>
                 )
             );
 
-        return trackedFunds.Concat(trustSeries).Concat(identityless);
+        return trackedSeries
+            .Concat(trackedIdless)
+            .Concat(trustSeries)
+            .Concat(trustIdless)
+            .Concat(identityless);
     }
 
     /// <summary>
