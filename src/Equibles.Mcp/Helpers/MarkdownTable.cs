@@ -63,9 +63,20 @@ public static class MarkdownTable
         if (rows.Count == 0)
             return emptyMessage;
 
-        var sb = Start(title, headerRow, separatorRow);
+        var dataRows = new List<string>(rows.Count);
         foreach (var row in rows)
-            sb.AppendLine(renderRow(row));
+            dataRows.Add(renderRow(row));
+
+        if (GcfTable.Enabled)
+        {
+            var gcf = GcfTable.TryEncode(headerRow, dataRows);
+            if (gcf != null)
+                return title + "\n\n" + gcf;
+        }
+
+        var sb = Start(title, headerRow, separatorRow);
+        foreach (var row in dataRows)
+            sb.AppendLine(row);
         return sb.ToString();
     }
 
@@ -85,9 +96,20 @@ public static class MarkdownTable
         if (rows.Count == 0)
             return emptyMessage;
 
-        var sb = Start(title, subtitle, headerRow, separatorRow);
+        var dataRows = new List<string>(rows.Count);
         foreach (var row in rows)
-            sb.AppendLine(renderRow(row));
+            dataRows.Add(renderRow(row));
+
+        if (GcfTable.Enabled)
+        {
+            var gcf = GcfTable.TryEncode(headerRow, dataRows);
+            if (gcf != null)
+                return title + "\n" + subtitle + "\n\n" + gcf;
+        }
+
+        var sb = Start(title, subtitle, headerRow, separatorRow);
+        foreach (var row in dataRows)
+            sb.AppendLine(row);
         return sb.ToString();
     }
 

@@ -29,6 +29,7 @@
     <PackageVersion Include="MassTransit.EntityFrameworkCore" Version="8.5.10" />
     <PackageVersion Include="MassTransit.SqlTransport.PostgreSQL" Version="8.5.10" />
     <!-- AI / ML -->
+    <PackageVersion Include="BlackwellSystems.Gcf" Version="0.2.0" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.3.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.3.0" />
     <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.0" />

@@ -228,6 +228,21 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 - **Government Contracts** — Federal contract awards won by a ticker (awarding agency, amount, period dates) and a ranking of the top public-company contractors by total federal dollars over a date range (USAspending.gov)
 - **FDA Catalysts** — Scheduled FDA advisory-committee (AdComm) meetings over a date range — the regulatory catalyst dates that move biotech and pharma stocks (FDA.gov)
 
+### Output Format (GCF, opt-in)
+
+By default the table tools return markdown tables. Setting `EQUIBLES_OUTPUT_FORMAT=gcf`
+instead emits [Graph Compact Format](https://gcformat.com) for those tools: the same
+cells the markdown table would show, with the column names factored into a single header
+and the per-cell `| ` padding and separator row dropped. On the tools' own table shapes
+this is roughly **13–16% fewer tokens** (o200k) than the markdown table, losslessly.
+
+It is deliberately conservative: **every cell value is preserved verbatim** (the compact-USD,
+comma-grouped, adaptive-decimal and em-dash formatting is untouched — GCF only changes the
+framing, not the numbers a model reads), and any row that does not match the header's column
+shape falls back to the markdown table, so a result is never dropped or garbled. Default
+output is unchanged unless the variable is set. GCF is MIT-licensed and its encoder is
+zero-dependency.
+
 ### Connecting to Claude Desktop
 
 Add this to your Claude Desktop config file (`claude_desktop_config.json`):
