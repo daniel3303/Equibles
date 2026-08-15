@@ -110,15 +110,16 @@ public class StockPriceTools
                 // dividends. A differing column is useful evidence, but the provider response does
                 // not certify one universal split basis across every raw window.
                 var hasAdjustment = records.Any(p => p.AdjustedClose != p.Close);
+                var listingTitle = ListingTitle(stock, priceTicker);
 
                 var result = hasAdjustment
                     ? StartTable(
-                        $"Daily prices for {priceTicker} ({stock.Name}):",
+                        $"Daily prices for {listingTitle}:",
                         "| Date | Open | High | Low | Close | Adj Close | Volume |",
                         "|------|------|------|-----|-------|-----------|--------|"
                     )
                     : StartTable(
-                        $"Daily prices for {priceTicker} ({stock.Name}):",
+                        $"Daily prices for {listingTitle}:",
                         "| Date | Open | High | Low | Close | Volume |",
                         "|------|------|------|-----|-------|--------|"
                     );
@@ -484,7 +485,7 @@ public class StockPriceTools
                 );
 
                 return RenderNewestFirst(
-                    $"Stochastic Oscillator (%K={kPeriod}, %D={dPeriod}) for {priceTicker} ({stock.Name}):",
+                    $"Stochastic Oscillator (%K={kPeriod}, %D={dPeriod}) for {ListingTitle(stock, priceTicker)}:",
                     "| Date | Close | %K | %D |",
                     "|------|-------|----|----|",
                     records.Count,
@@ -558,7 +559,7 @@ public class StockPriceTools
                 var atr = TechnicalIndicatorService.ComputeAtr(highs, lows, closes, period);
 
                 return RenderNewestFirst(
-                    $"Average True Range (period={period}) for {priceTicker} ({stock.Name}):",
+                    $"Average True Range (period={period}) for {ListingTitle(stock, priceTicker)}:",
                     "| Date | Close | ATR |",
                     "|------|-------|-----|",
                     records.Count,
@@ -622,7 +623,7 @@ public class StockPriceTools
                 var obv = TechnicalIndicatorService.ComputeObv(closes, volumes);
 
                 return RenderNewestFirst(
-                    $"On-Balance Volume for {priceTicker} ({stock.Name}):",
+                    $"On-Balance Volume for {ListingTitle(stock, priceTicker)}:",
                     "| Date | Close | Volume | OBV |",
                     "|------|-------|--------|-----|",
                     records.Count,
@@ -696,7 +697,7 @@ public class StockPriceTools
                 );
 
                 return RenderNewestFirst(
-                    $"Bollinger Bands (period={period}, stdDev={McpFormat.Invariant(stdDev, "0.#")}) for {priceTicker} ({stock.Name}):",
+                    $"Bollinger Bands (period={period}, stdDev={McpFormat.Invariant(stdDev, "0.#")}) for {ListingTitle(stock, priceTicker)}:",
                     "| Date | Close | Lower | Middle | Upper | %B | Bandwidth |",
                     "|------|-------|-------|--------|-------|----|-----------|",
                     records.Count,
@@ -735,6 +736,13 @@ public class StockPriceTools
             return null;
         return Math.Round((upper.Value - lower.Value) / middle.Value, 4);
     }
+
+    // CommonStock.Name describes the primary SEC listing. Secondary symbols can identify a
+    // different share class or fund series, and no authoritative per-listing name is stored.
+    private static string ListingTitle(CommonStock stock, string priceTicker) =>
+        string.Equals(stock.Ticker, priceTicker, StringComparison.OrdinalIgnoreCase)
+            ? $"{priceTicker} ({stock.Name})"
+            : priceTicker;
 
     // Resolves a ticker to its filer and exact stored listing symbol, additionally accepting
     // the dot class-share notation (BRK.B) for the dash form the price data stores (BRK-B).

@@ -148,8 +148,12 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetTopHolders_CombinedViewRestatesCarriedRowsFromTheirSourceDate()
     {
-        var previous = new DateOnly(2026, 3, 31);
-        var current = new DateOnly(2026, 6, 30);
+        // GetTopHolders resolves the filing-window mode from the system clock. Keep this
+        // synthetic newest report safely inside that window so a fixed date cannot expire.
+        var current = DateOnly
+            .FromDateTime(DateTime.UtcNow)
+            .AddDays(-(CombinedQuarterHelper.FilingDeadlineDays - 1));
+        var previous = current.AddMonths(-3);
         var stock = new CommonStock
         {
             Ticker = "CARR",
@@ -168,7 +172,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
             {
                 CommonStockId = stock.Id,
                 PriceSeriesTicker = "CARR.B",
-                EffectiveDate = new DateOnly(2026, 5, 15),
+                EffectiveDate = current.AddDays(-30),
                 Numerator = 10m,
                 Denominator = 1m,
                 Source = StockSplitSource.Manual,
