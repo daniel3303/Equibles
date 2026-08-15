@@ -10,13 +10,13 @@ public class FinancialFactsToolsBuildComparisonRowsNotFoundSkipTests
 {
     // Sibling to FinancialFactsToolsBuildComparisonRowsDistinguishedSkipTests
     // (which pins the "(no data)" skip path — known stock, missing fact).
-    // This pin defends the OTHER skip arm: "(not found)" — when the
+    // This pin defends the OTHER skip arm: "(not found in the tracked SEC issuer set)" — when the
     // requested ticker doesn't resolve to any stock in stockByTicker.
     //
     // The body has TWO sequential early-continues:
     //     if (!stockByTicker.TryGetValue(ticker, out var stock))
     //     {
-    //         skipped.Add($"{FactMarkdown.Cell(ticker)} (not found)");
+    //         skipped.Add($"{FactMarkdown.Cell(ticker)} (not found in the tracked SEC issuer set)");
     //         continue;
     //     }
     //     if (!bestByStock.TryGetValue(stock.Id, out var best))
@@ -26,7 +26,7 @@ public class FinancialFactsToolsBuildComparisonRowsNotFoundSkipTests
     //     }
     //
     // Each suffix means something different to the LLM consumer:
-    //   • "(not found)" — the ticker isn't in the master CommonStocks
+    //   • "(not found in the tracked SEC issuer set)" — the ticker isn't in CommonStocks
     //     table. Causes: typo, ADR symbol the user passed in lower
     //     case, delisted ticker, never-tracked exchange.
     //   • "(no data)" — the company exists but reported no fact for
@@ -59,7 +59,7 @@ public class FinancialFactsToolsBuildComparisonRowsNotFoundSkipTests
     // Adversarial input: a requested ticker with NO entry in
     // stockByTicker AND NO matching entry in bestByStock (the latter
     // could never match because there's no stock.Id to look up).
-    // Assert (a) skipped contains exactly the "(not found)" message,
+    // Assert (a) skipped contains exactly the scoped "not found" message,
     // (b) it does NOT contain "(no data)" — separating the two
     // suffixes — and (c) rows is empty.
     [Fact]
@@ -79,7 +79,11 @@ public class FinancialFactsToolsBuildComparisonRowsNotFoundSkipTests
         var rows = (IList)result.GetType().GetField("Item1").GetValue(result);
 
         rows.Count.Should().Be(0);
-        skipped.Should().ContainSingle().Which.Should().Be("XYZ (not found)");
+        skipped
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be("XYZ (not found in the tracked SEC issuer set)");
         skipped[0].Should().NotContain("(no data)");
     }
 }
