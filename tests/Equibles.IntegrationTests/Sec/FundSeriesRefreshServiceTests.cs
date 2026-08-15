@@ -1,8 +1,8 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
-using Equibles.IntegrationTests.Helpers;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
+using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
@@ -227,8 +227,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             .RebuildAllAsync(CancellationToken.None);
 
         await using var read = FreshContext();
-        var rows = await read
-            .Set<FundSeries>()
+        var rows = await read.Set<FundSeries>()
             .Where(s => s.CommonStockId == trust.Id)
             .OrderBy(s => s.SeriesId)
             .ToListAsync();

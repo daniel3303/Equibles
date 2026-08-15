@@ -221,11 +221,10 @@ public class FundSeriesRefreshService
             ? a.SeriesName
             : a.RegistrantName;
 
-        var discriminator = !string.IsNullOrEmpty(seriesId)
-            ? seriesId
-            : isTracked
-                ? (!string.IsNullOrEmpty(a.Ticker) ? a.Ticker : a.CommonStockId.ToString())
-                : $"cik{a.RegistrantCik}";
+        var discriminator =
+            !string.IsNullOrEmpty(seriesId) ? seriesId
+            : isTracked ? (!string.IsNullOrEmpty(a.Ticker) ? a.Ticker : a.CommonStockId.ToString())
+            : $"cik{a.RegistrantCik}";
 
         string fundType = null;
         if (isTracked)
@@ -267,9 +266,7 @@ public class FundSeriesRefreshService
     }
 
     internal static string BuildTrackedIdentityKey(Guid commonStockId, string seriesId) =>
-        string.IsNullOrEmpty(seriesId)
-            ? $"cs:{commonStockId}"
-            : $"cs:{commonStockId}:{seriesId}";
+        string.IsNullOrEmpty(seriesId) ? $"cs:{commonStockId}" : $"cs:{commonStockId}:{seriesId}";
 
     // "{name-slug}-{discriminator}". The discriminator (unique per series) is preserved whole; only
     // the name part is trimmed to fit, so the slug stays unique under truncation.
