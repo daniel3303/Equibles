@@ -218,11 +218,14 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_ASecondarySymbol_ServesItsOwnSeries()
     {
-        await SeedBerkshire();
+        var stock = await SeedBerkshire();
 
         var result = await Sut().GetStockPrices("BRK-A");
 
-        result.Should().Contain("Daily prices for BRK-A");
+        result.Should().Contain("Daily prices for BRK-A:");
+        result
+            .Should()
+            .NotContain(stock.Name, "the parent name does not identify the secondary listing");
         result.Should().Contain("749200.00");
         result.Should().NotContain("511.54");
     }
@@ -259,6 +262,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
         // The dot form is a spelling of the SAME symbol, so the refusal must not catch it.
         var result = await Sut().GetStockPrices("BRK.B");
 
+        result.Should().Contain("Daily prices for BRK-B (Berkshire Hathaway Inc):");
         result.Should().Contain("511.54");
         result.Should().NotContain("749200.00");
     }
@@ -278,12 +282,15 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetBollingerBands_ASecondarySymbol_UsesTheSecondarySeries()
     {
-        await SeedBerkshire();
+        var stock = await SeedBerkshire();
 
         // Every indicator shares one resolution path, so none can drift back to primary bars.
         var result = await Sut().GetBollingerBands("BRK-A");
 
-        result.Should().Contain("for BRK-A");
+        result.Should().Contain("for BRK-A:");
+        result
+            .Should()
+            .NotContain(stock.Name, "indicator headings follow the exact listing identity");
         result.Should().Contain("749200.00");
         result.Should().NotContain("511.54");
     }
