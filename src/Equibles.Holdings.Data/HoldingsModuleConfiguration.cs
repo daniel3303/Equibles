@@ -42,6 +42,20 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.Shares,
             });
 
+        // Covering index for the stock shell's recent-filing badge:
+        // WHERE CommonStockId = @stock AND FilingDate >= @since, followed by
+        // COUNT(DISTINCT AccessionNumber/InstitutionalHolderId). The ReportDate
+        // index above made Postgres read every historical position for a stock and
+        // heap-filter FilingDate; during 13F ingest pressure this exhausted the
+        // portal's 30-second command timeout (#6049). Lead with the exact range
+        // predicate and carry both distinct-count keys so the query stays bounded
+        // to the recent filing window and can run index-only.
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(h => new { h.CommonStockId, h.FilingDate })
+            .IncludeProperties(h => new { h.AccessionNumber, h.InstitutionalHolderId })
+            .IsCreatedConcurrently();
+
         // Covering index for the per-holder portfolio rollups on the holder page
         // (StocksController.ShowHolder → ComputeTopPortfolioPositions /
         // HolderPortfolioProvider.GetTrend). Both filter by holder and GROUP BY
