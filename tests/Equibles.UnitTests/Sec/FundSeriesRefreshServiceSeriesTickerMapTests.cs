@@ -4,10 +4,10 @@ using Equibles.Sec.HostedService.Services;
 namespace Equibles.UnitTests.Sec;
 
 // BuildSeriesTickerMap turns SEC's fund-class ticker directory into the series → symbol map that
-// fills FundSeries.Ticker for sweep-discovered trust series (an ETF like ProShares Ultra
-// Semiconductors "USD" was unresolvable by ticker because NPORT carries no symbol). The rule under
-// test: a series maps ONLY when all its share classes agree on one symbol — a multi-class mutual
-// fund has no single ticker, and guessing one class's symbol would misattribute the whole series.
+// fills FundSeries.Ticker for every series-bearing row (an ETF like ProShares Ultra Semiconductors
+// "USD" was unresolvable by ticker because NPORT carries no symbol). The rule under test: a series
+// maps ONLY when all its share classes agree on one symbol — a multi-class mutual fund has no single
+// ticker, and guessing one class's symbol would misattribute the whole series.
 public class FundSeriesRefreshServiceSeriesTickerMapTests
 {
     private static FundClassTicker Row(string seriesId, string symbol, string classId = "C1") =>
