@@ -21,10 +21,11 @@ namespace Equibles.Sec.Data.Models;
 /// an issuer-feed filing is scoped by <see cref="CommonStockId"/> plus its non-empty
 /// <see cref="SeriesId"/> (or by stock alone for an id-less standalone fund); a fund-family trust
 /// series discovered by the daily-index sweep is scoped by <see cref="RegistrantCik"/> plus
-/// <see cref="SeriesId"/>. For the sweep-discovered trusts only the holdings carrying a tracked
-/// stock's CUSIP are stored, so <see cref="PositionCount"/> counts the fund's positions in tracked
-/// stocks, not its whole portfolio; <see cref="NetAssets"/> and <see cref="TotalAssets"/> are the
-/// fund's real totals from the report header regardless.
+/// <see cref="SeriesId"/>. If a series has filings in both populations, the newest filing decides
+/// which identity is materialised. For the sweep-discovered trusts only the holdings carrying a
+/// tracked stock's CUSIP are stored, so <see cref="PositionCount"/> counts the fund's positions in
+/// tracked stocks, not its whole portfolio; <see cref="NetAssets"/> and
+/// <see cref="TotalAssets"/> are the fund's real totals from the report header regardless.
 /// </summary>
 [Index(nameof(IdentityKey), IsUnique = true)]
 [Index(nameof(Slug), IsUnique = true)]

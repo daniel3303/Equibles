@@ -16,7 +16,8 @@ namespace Equibles.Sec.Data.Models;
 /// ("Vanguard Index Funds", "Fidelity Concord Street Trust", "iShares Trust") are not tracked
 /// issuers, so they are instead discovered by the daily-index NPORT-P sweep — <see cref="CommonStockId"/>
 /// is null and the registrant is identified by <see cref="RegistrantCik"/>. Exactly one of the two
-/// is set, so the two populations never share a series.
+/// is set on each filing. A series can still appear in both populations over its history when its
+/// ingestion route changes; its SEC <see cref="SeriesId"/> remains the cross-population authority.
 ///
 /// The record captures the series' header facts — name, identifier, reporting period, total assets
 /// and liabilities, net assets — plus the schedule of portfolio investments in

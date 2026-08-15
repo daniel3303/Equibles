@@ -93,8 +93,25 @@ public class FundSeriesRefreshService
 
         _logger.LogInformation("Rebuilding fund-series directory: {Count} series", rows.Count);
 
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
+
         if (rows.Count > 0)
         {
+            // A series can move between the issuer-feed and sweep populations while retaining its
+            // canonical route slug. Remove the superseded identity first so the unique Slug index
+            // cannot block the replacement; the transaction preserves the old directory if the
+            // subsequent rebuild fails.
+            var currentIdentityKeys = rows.Select(s => s.IdentityKey).ToList();
+            var currentSlugs = rows.Select(s => s.Slug).ToList();
+            await dbContext
+                .Set<FundSeries>()
+                .Where(s =>
+                    currentSlugs.Contains(s.Slug) && !currentIdentityKeys.Contains(s.IdentityKey)
+                )
+                .ExecuteDeleteAsync(cancellationToken);
+
             await dbContext
                 .Set<FundSeries>()
                 .UpsertRange(rows)
@@ -133,6 +150,8 @@ public class FundSeriesRefreshService
         {
             _logger.LogInformation("Pruned {Count} stale fund-series rows", deleted);
         }
+
+        await transaction.CommitAsync(cancellationToken);
     }
 
     // Latest N-CEN registration type per tracked fund. N-CEN is filed only by tracked funds
