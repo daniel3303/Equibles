@@ -9,7 +9,7 @@ namespace Equibles.UnitTests.Sec;
 public class FinancialFactsToolsBuildComparisonRowsDistinguishedSkipTests
 {
     // BuildComparisonRows (extracted in #1580) partitions the user-supplied
-    // tickers into two distinct skip buckets: "(not found)" when the ticker
+    // tickers into two distinct skip buckets: "not found in the tracked SEC issuer set" when the ticker
     // doesn't resolve to any stock, vs "(no data)" when the stock is known
     // but has no reported fact for the requested period. The two messages
     // mean different things to the LLM consumer — unknown ticker is a typo

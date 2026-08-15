@@ -59,8 +59,9 @@ public class FinancialFactsTools
             + "Each row carries its actual period start/end; fiscal years/quarters follow the "
             + "company's own fiscal calendar. Warns when the selected alias ends materially "
             + "before the company's other structured facts, which can indicate an XBRL tag "
-            + "change. For a full statement use GetFinancialStatement; to compare peers use "
-            + "CompareFinancialFact."
+            + "change. Dimensioned disclosures such as customer concentration are outside this "
+            + "consolidated-series tool. For a full statement use GetFinancialStatement; to "
+            + "compare peers use CompareFinancialFact."
     )]
     public Task<string> GetFinancialFact(
         [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -260,25 +261,9 @@ public class FinancialFactsTools
                 if (!FactArgs.TryParsePeriod(fiscalPeriod, out var period))
                     return $"Unknown period '{fiscalPeriod}'. Use 'FY' or 'Q1'..'Q4'.";
 
-                if (string.IsNullOrWhiteSpace(tickers))
-                    return "At least one ticker is required.";
-
-                var segments = tickers.Split(',').Select(ticker => ticker.Trim()).ToList();
-                if (segments.All(string.IsNullOrWhiteSpace))
-                    return "At least one ticker is required.";
-                if (segments.Count > MaxTickers)
-                    return $"Too many tickers ({segments.Count}). The maximum is {MaxTickers}.";
-
-                var requested = new List<string>();
-                var seenTickers = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var segment in segments)
-                {
-                    var normalizedTicker = TickerNormalizer.NormalizeDashListed(segment);
-                    if (normalizedTicker == null)
-                        return $"Invalid ticker '{segment}'. Use 1-32 ASCII letters, digits, dots, or dashes.";
-                    if (seenTickers.Add(normalizedTicker))
-                        requested.Add(normalizedTicker);
-                }
+                var (requested, tickerError) = ParseComparisonTickers(tickers);
+                if (tickerError != null)
+                    return tickerError;
 
                 var conceptPriority = await ResolveConceptPriority(conceptRefs);
                 if (conceptPriority.Count == 0)
@@ -287,15 +272,7 @@ public class FinancialFactsTools
                 // Two queries instead of 2N: batch-load the requested stocks,
                 // then all matching facts in one go keyed by company.
                 var stocks = await _commonStockRepository.GetByTickers(requested).ToListAsync();
-                var stockByTicker = new Dictionary<string, CommonStock>();
-                foreach (var s in stocks)
-                {
-                    if (requested.Contains(s.Ticker))
-                        stockByTicker.TryAdd(s.Ticker, s);
-                    foreach (var secondary in s.SecondaryTickers ?? [])
-                        if (requested.Contains(secondary))
-                            stockByTicker.TryAdd(secondary, s);
-                }
+                var stockByTicker = BuildComparisonStockMap(requested, stocks);
 
                 var stockIds = stocks.Select(s => s.Id).ToList();
                 // A Q4 request must also load the year's fp=FY rows: filers whose
@@ -440,7 +417,9 @@ public class FinancialFactsTools
         {
             if (!stockByTicker.TryGetValue(ticker, out var stock))
             {
-                skipped.Add($"{FactMarkdown.Cell(ticker)} (not found)");
+                skipped.Add(
+                    $"{FactMarkdown.Cell(ticker)} (not found in the tracked SEC issuer set)"
+                );
                 continue;
             }
             if (rowTickerByStockId.TryGetValue(stock.Id, out var firstTicker))
@@ -461,6 +440,58 @@ public class FinancialFactsTools
         }
         return (rows, skipped);
     }
+
+    internal static Dictionary<string, CommonStock> BuildComparisonStockMap(
+        IReadOnlyList<string> requested,
+        IReadOnlyList<CommonStock> stocks
+    )
+    {
+        var stockByTicker = new Dictionary<string, CommonStock>(StringComparer.Ordinal);
+        foreach (var ticker in requested)
+        {
+            var stock = ResolveComparisonStock(stocks, ticker);
+            if (stock != null)
+                stockByTicker.Add(ticker, stock);
+        }
+        return stockByTicker;
+    }
+
+    internal static (List<string> Tickers, string Error) ParseComparisonTickers(string tickers)
+    {
+        if (string.IsNullOrWhiteSpace(tickers))
+            return ([], "At least one ticker is required.");
+
+        var segments = tickers.Split(',').Select(ticker => ticker.Trim()).ToList();
+        if (segments.All(string.IsNullOrWhiteSpace))
+            return ([], "At least one ticker is required.");
+        if (segments.Count > MaxTickers)
+            return ([], $"Too many tickers ({segments.Count}). The maximum is {MaxTickers}.");
+
+        var requested = new List<string>();
+        var seenTickers = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var segment in segments)
+        {
+            var normalizedTicker = TickerNormalizer.NormalizeListed(segment);
+            if (normalizedTicker == null)
+                return (
+                    [],
+                    $"Invalid ticker '{segment}'. Use 1-32 ASCII letters, digits, dots, or dashes."
+                );
+            if (seenTickers.Add(normalizedTicker))
+                requested.Add(normalizedTicker);
+        }
+        return (requested, null);
+    }
+
+    private static CommonStock ResolveComparisonStock(
+        IReadOnlyList<CommonStock> stocks,
+        string ticker
+    ) =>
+        stocks
+            .Where(stock => stock.Ticker == ticker || stock.SecondaryTickers.Contains(ticker))
+            .OrderBy(stock => stock.Ticker == ticker ? 0 : 1)
+            .ThenBy(stock => stock.Ticker, StringComparer.Ordinal)
+            .FirstOrDefault();
 
     // Peer period ends further apart than one calendar quarter mean the rows
     // cover materially different calendar months (NVDA's fiscal Q2 2025 ended

@@ -87,4 +87,95 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
         rows[0].Ticker.Should().Be("GOOG (GOOGL)", "the caller asked for GOOG");
         skipped.Should().BeEmpty();
     }
+
+    [Fact]
+    public void BuildComparisonStockMap_DottedTicker_UsesOnlyExactAuthoritativeListing()
+    {
+        var exact = new CommonStock { Id = Guid.NewGuid(), Ticker = "FDR.V" };
+        var dash = new CommonStock { Id = Guid.NewGuid(), Ticker = "FDR-V" };
+
+        var stockByTicker = FinancialFactsTools.BuildComparisonStockMap(["FDR.V"], [dash, exact]);
+
+        stockByTicker.Should().ContainKey("FDR.V").WhoseValue.Should().BeSameAs(exact);
+    }
+
+    [Fact]
+    public void ParseComparisonTickers_DottedTicker_PreservesExactNormalizedSpelling()
+    {
+        var (tickers, error) = FinancialFactsTools.ParseComparisonTickers(" fdr.v,FDR.V ");
+
+        error.Should().BeNull();
+        tickers.Should().ContainSingle().Which.Should().Be("FDR.V");
+    }
+
+    [Fact]
+    public void BuildComparisonStockMap_DottedTicker_DoesNotInferDashListing()
+    {
+        var dash = new CommonStock { Id = Guid.NewGuid(), Ticker = "FDR-V" };
+
+        var stockByTicker = FinancialFactsTools.BuildComparisonStockMap(["FDR.V"], [dash]);
+
+        stockByTicker.Should().NotContainKey("FDR.V");
+    }
+
+    [Fact]
+    public void BuildComparisonStockMap_PrimaryTicker_WinsOverSecondaryCollision()
+    {
+        var primary = new CommonStock { Id = Guid.NewGuid(), Ticker = "DUP" };
+        var secondary = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "ZZZ",
+            SecondaryTickers = ["DUP"],
+        };
+
+        var stockByTicker = FinancialFactsTools.BuildComparisonStockMap(
+            ["DUP"],
+            [secondary, primary]
+        );
+
+        stockByTicker.Should().ContainKey("DUP").WhoseValue.Should().BeSameAs(primary);
+    }
+
+    [Fact]
+    public void BuildComparisonStockMap_SecondaryCollision_IsIndependentOfQueryOrder()
+    {
+        var alphabeticallyFirst = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAA",
+            SecondaryTickers = ["DUP"],
+        };
+        var alphabeticallyLast = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "ZZZ",
+            SecondaryTickers = ["DUP"],
+        };
+
+        var forward = FinancialFactsTools.BuildComparisonStockMap(
+            ["DUP"],
+            [alphabeticallyFirst, alphabeticallyLast]
+        );
+        var reversed = FinancialFactsTools.BuildComparisonStockMap(
+            ["DUP"],
+            [alphabeticallyLast, alphabeticallyFirst]
+        );
+
+        forward["DUP"].Should().BeSameAs(alphabeticallyFirst);
+        reversed["DUP"].Should().BeSameAs(alphabeticallyFirst);
+    }
+
+    [Fact]
+    public void BuildComparisonRows_UnknownDottedTicker_PreservesCallerSpellingAndScope()
+    {
+        var (rows, skipped) = Invoke(["FDR.V"], new Dictionary<string, CommonStock>());
+
+        rows.Should().BeEmpty();
+        skipped
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be("FDR.V (not found in the tracked SEC issuer set)");
+    }
 }
