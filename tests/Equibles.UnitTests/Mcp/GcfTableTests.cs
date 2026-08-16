@@ -90,4 +90,21 @@ public class GcfTableTests : IDisposable
         var first = (OrderedMap)decoded[0];
         Assert.Equal("a | b", first["Note"]);
     }
+
+    [Fact]
+    public void TryEncode_Keeps_Digit_Only_Cells_As_Strings()
+    {
+        // A digit-only cell must survive as text, not decode as a number. TryEncode's
+        // round-trip guard returns a wire only if the encoder quoted it; had it emitted a
+        // bare number, decode would differ and TryEncode would return null.
+        var header = "| Id | Note |";
+        var rows = new List<string> { "| 1001 | first |", "| 1002 | second |" };
+
+        var wire = GcfTable.TryEncode(header, rows);
+
+        Assert.NotNull(wire);
+        Assert.Contains("1001", wire);
+        var decoded = (System.Collections.IList)Gcf.DecodeGeneric(wire);
+        Assert.Equal("1001", ((OrderedMap)decoded[0])["Id"]);
+    }
 }

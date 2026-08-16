@@ -57,6 +57,26 @@ public class MarkdownTableGcfTests : IDisposable
     }
 
     [Fact]
+    public void Gcf_Not_Used_When_It_Would_Grow_A_Tiny_Table()
+    {
+        Environment.SetEnvironmentVariable("EQUIBLES_OUTPUT_FORMAT", "gcf");
+
+        // One short column, one row: GCF's `GCF profile=generic` + section-header overhead
+        // exceeds the tiny markdown table, so the never-grow guard keeps the markdown.
+        var output = MarkdownTable.Render(
+            new[] { "x" },
+            "No data.",
+            "T:",
+            "| C |",
+            "|---|",
+            r => $"| {r} |"
+        );
+
+        Assert.DoesNotContain("GCF profile=generic", output);
+        Assert.Contains("| C |", output);
+    }
+
+    [Fact]
     public void Empty_Rows_Return_Empty_Message_Regardless_Of_Format()
     {
         Environment.SetEnvironmentVariable("EQUIBLES_OUTPUT_FORMAT", "gcf");

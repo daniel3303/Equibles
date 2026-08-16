@@ -67,17 +67,24 @@ public static class MarkdownTable
         foreach (var row in rows)
             dataRows.Add(renderRow(row));
 
+        var sb = Start(title, headerRow, separatorRow);
+        foreach (var row in dataRows)
+            sb.AppendLine(row);
+        var markdown = sb.ToString();
+
         if (GcfTable.Enabled)
         {
             var gcf = GcfTable.TryEncode(headerRow, dataRows);
             if (gcf != null)
-                return title + "\n\n" + gcf;
+            {
+                var message = title + "\n\n" + gcf;
+                // Never-grow: use GCF only when the whole message is smaller than the table.
+                if (message.Length < markdown.Length)
+                    return message;
+            }
         }
 
-        var sb = Start(title, headerRow, separatorRow);
-        foreach (var row in dataRows)
-            sb.AppendLine(row);
-        return sb.ToString();
+        return markdown;
     }
 
     // Subtitle-carrying variant of Render: same empty-check and one-row-per-item shape,
@@ -100,17 +107,24 @@ public static class MarkdownTable
         foreach (var row in rows)
             dataRows.Add(renderRow(row));
 
+        var sb = Start(title, subtitle, headerRow, separatorRow);
+        foreach (var row in dataRows)
+            sb.AppendLine(row);
+        var markdown = sb.ToString();
+
         if (GcfTable.Enabled)
         {
             var gcf = GcfTable.TryEncode(headerRow, dataRows);
             if (gcf != null)
-                return title + "\n" + subtitle + "\n\n" + gcf;
+            {
+                var message = title + "\n" + subtitle + "\n\n" + gcf;
+                // Never-grow: use GCF only when the whole message is smaller than the table.
+                if (message.Length < markdown.Length)
+                    return message;
+            }
         }
 
-        var sb = Start(title, subtitle, headerRow, separatorRow);
-        foreach (var row in dataRows)
-            sb.AppendLine(row);
-        return sb.ToString();
+        return markdown;
     }
 
     // Appends one markdown row per item in order. Unnumbered sibling of AppendNumberedRows,

@@ -27,8 +27,10 @@ public static class GcfTable
     // Encodes the markdown header + already-rendered data rows as a GCF generic wire,
     // or returns null to fall back to markdown. Null is returned whenever a row does not
     // split into the same number of cells as the header (a shape GCF would otherwise
-    // misrepresent) or the encoder rejects the value, so enabling GCF never drops or
-    // garbles a tool result.
+    // misrepresent), the encoder rejects the value, or the wire does not decode back to
+    // the same cells, so enabling GCF never drops or garbles a tool result. The never-grow
+    // check (only use GCF when it is smaller than the markdown table) is applied by the
+    // caller, which has the table to compare against.
     public static string TryEncode(string headerRow, IReadOnlyList<string> dataRows)
     {
         try
@@ -50,12 +52,72 @@ public static class GcfTable
                 records.Add(map);
             }
 
-            return Gcf.EncodeGeneric(records);
+            var wire = Gcf.EncodeGeneric(records);
+
+            // Fail-safe: require the wire to decode back to the same records
+            // (order-insensitive on keys), so a cell the encoder mis-rendered — e.g. a
+            // digit-only string that must stay a string rather than decode as a number —
+            // is caught and the markdown table is kept.
+            if (!ValuesEqual(Gcf.DecodeGeneric(wire), records))
+                return null;
+
+            return wire;
         }
         catch
         {
             return null; // never fail a tool call over output formatting
         }
+    }
+
+    // Order-insensitive structural equality over the gcf-dotnet model (OrderedMap / List /
+    // string / long / double / bool / null), used to confirm a decoded wire equals the
+    // records that produced it. (The decoded value and the input records are both
+    // List<object> at runtime, so one list branch covers both.)
+    private static bool ValuesEqual(object left, object right)
+    {
+        if (left is null || right is null)
+            return left is null && right is null;
+
+        if (left is OrderedMap ml && right is OrderedMap mr)
+        {
+            if (ml.Count != mr.Count)
+                return false;
+            foreach (var key in ml.Keys)
+            {
+                if (!mr.TryGetValue(key, out var vr) || !ValuesEqual(ml[key], vr))
+                    return false;
+            }
+            return true;
+        }
+
+        if (left is List<object> ll && right is List<object> rl)
+        {
+            if (ll.Count != rl.Count)
+                return false;
+            for (var i = 0; i < ll.Count; i++)
+                if (!ValuesEqual(ll[i], rl[i]))
+                    return false;
+            return true;
+        }
+
+        if (left is string sl && right is string sr)
+            return sl == sr;
+        if (left is bool bl && right is bool br)
+            return bl == br;
+        if (IsNumber(left) && IsNumber(right))
+            return NumbersEqual(left, right);
+        return false;
+    }
+
+    private static bool IsNumber(object v) => v is long || v is double;
+
+    private static bool NumbersEqual(object a, object b)
+    {
+        if (a is long al && b is long bl)
+            return al == bl;
+        var da = a is long la ? la : (double)a;
+        var db = b is long lb ? lb : (double)b;
+        return da.Equals(db);
     }
 
     // Splits one markdown table row into trimmed, unescaped cell values. Columns are
