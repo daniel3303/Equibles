@@ -42,6 +42,24 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
                 h.Shares,
             });
 
+        // Partial covering index for the holder-rank aggregate on the single-holder /
+        // single-stock page. That query needs only common-share 13F rows for one
+        // stock+quarter, grouped by holder and summed by Value. Keeping the predicate
+        // in the index avoids heap-filtering FilingType / OptionType while ingestion is
+        // churning the 30M+ row holdings table (#6049).
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(h => new
+            {
+                h.CommonStockId,
+                h.ReportDate,
+                h.InstitutionalHolderId,
+            })
+            .HasDatabaseName("IX_InstitutionalHolding_StockQuarterCommonValue")
+            .IncludeProperties(h => h.Value)
+            .HasFilter("\"FilingType\" = 0 AND \"OptionType\" IS NULL")
+            .IsCreatedConcurrently();
+
         // Covering index for the stock shell's recent-filing badge:
         // WHERE CommonStockId = @stock AND FilingDate >= @since, followed by
         // COUNT(DISTINCT AccessionNumber/InstitutionalHolderId). The ReportDate
