@@ -38,10 +38,7 @@ public class HoldingsModuleStockQuarterCommonValueIndexTests
             .FindAnnotation(IndexIncludeAnnotation)
             ?.Value.Should()
             .BeEquivalentTo(new[] { nameof(InstitutionalHolding.Value) });
-        index
-            .GetFilter()
-            .Should()
-            .Be("\"FilingType\" = 0 AND \"OptionType\" IS NULL");
+        index.GetFilter().Should().Be("\"FilingType\" = 0 AND \"OptionType\" IS NULL");
         index
             .FindAnnotation(IndexConcurrentAnnotation)
             ?.Value.Should()
