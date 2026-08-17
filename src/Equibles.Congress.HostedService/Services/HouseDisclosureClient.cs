@@ -76,7 +76,10 @@ public partial class HouseDisclosureClient
                             continue;
 
                         foreach (var txn in txns)
+                        {
                             txn.SourceId = filing.DocId;
+                            txn.StateDistrict = filing.StateDst;
+                        }
 
                         result.Transactions.AddRange(txns);
                         result.ProcessedFilings.Add(
