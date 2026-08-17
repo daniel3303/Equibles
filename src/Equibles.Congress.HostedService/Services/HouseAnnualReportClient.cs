@@ -400,17 +400,25 @@ public partial class HouseAnnualReportClient
         // not exactly range-shaped is label-paragraph prose spilling across
         // the page (e.g. ".. strike price of $200 and ..") and contributes
         // nothing.
+        // The income cells are passengers: they ride along with whatever the
+        // value cell already decided this line is, and never promote page
+        // furniture into a row or split one row into two.
         void ApplyRowText(
             CongressionalDisclosureLineKind kind,
             string rangeText,
             string primaryText,
-            string secondaryText
+            string secondaryText,
+            string incomeTypeText = null,
+            string incomeRangeText = null
         )
         {
             if (string.IsNullOrEmpty(rangeText))
             {
                 if (!inLabelParagraph)
+                {
                     pending?.AppendDescription(primaryText, secondaryText);
+                    pending?.AppendIncome(incomeTypeText, incomeRangeText);
+                }
                 return;
             }
 
@@ -428,7 +436,14 @@ public partial class HouseAnnualReportClient
             {
                 inLabelParagraph = false;
                 Flush();
-                pending = new PendingLine(kind, primaryText, secondaryText, rangeText);
+                pending = new PendingLine(
+                    kind,
+                    primaryText,
+                    secondaryText,
+                    rangeText,
+                    incomeTypeText,
+                    incomeRangeText
+                );
                 return;
             }
 
@@ -438,6 +453,7 @@ public partial class HouseAnnualReportClient
                 // range opened on the previous line.
                 pending.AppendRange(rangeText);
                 pending.AppendDescription(primaryText, secondaryText);
+                pending.AppendIncome(incomeTypeText, incomeRangeText);
             }
         }
 
@@ -482,10 +498,20 @@ public partial class HouseAnnualReportClient
                         rangeText: JoinWindow(
                             line,
                             assetColumns.ValueLeft,
-                            assetColumns.IncomeLeft
+                            assetColumns.IncomeTypeLeft
                         ),
                         primaryText: JoinWindow(line, double.MinValue, assetColumns.OwnerLeft),
-                        secondaryText: null
+                        secondaryText: null,
+                        incomeTypeText: JoinWindow(
+                            line,
+                            assetColumns.IncomeTypeLeft,
+                            assetColumns.IncomeAmountLeft
+                        ),
+                        incomeRangeText: JoinWindow(
+                            line,
+                            assetColumns.IncomeAmountLeft,
+                            assetColumns.TransactionLeft
+                        )
                     );
                     break;
 
@@ -536,7 +562,9 @@ public partial class HouseAnnualReportClient
     // Schedule A column header: "Asset | Owner | Value of Asset | Income
     // Type(s) | Income | Tx. >". Both the value and the income columns carry
     // dollar ranges, so the asset-value window must end where the income-type
-    // column starts.
+    // column starts. "Income Type(s)" tokenizes into two words, so the header
+    // holds TWO "Income" tokens: the first opens the income-type column and the
+    // second the income-amount column, which the "Tx." column closes.
     private static bool TryReadAssetHeader(List<ScheduleToken> line, out AssetColumns columns)
     {
         columns = null;
@@ -548,11 +576,23 @@ public partial class HouseAnnualReportClient
         if (owner == null || value == null)
             return false;
 
-        var income = line.FirstOrDefault(t => t.Text == "Income" && t.Left > value.Left);
-        if (income == null)
+        var incomeTokens = line.Where(t => t.Text == "Income" && t.Left > value.Left).ToList();
+        if (incomeTokens.Count == 0)
             return false;
 
-        columns = new AssetColumns(owner.Left, value.Left, income.Left);
+        // Older layouts without a separate income-amount column leave the second
+        // token absent; the amount window then stays empty rather than
+        // borrowing the type column's text.
+        var incomeAmount = incomeTokens.Count > 1 ? incomeTokens[1].Left : double.MaxValue;
+        var transaction = line.FirstOrDefault(t => t.Text == "Tx.")?.Left ?? double.MaxValue;
+
+        columns = new AssetColumns(
+            owner.Left,
+            value.Left,
+            incomeTokens[0].Left,
+            incomeAmount,
+            transaction
+        );
         return true;
     }
 
@@ -666,7 +706,13 @@ public partial class HouseAnnualReportClient
         bool IsAmendment
     );
 
-    private sealed record AssetColumns(double OwnerLeft, double ValueLeft, double IncomeLeft);
+    private sealed record AssetColumns(
+        double OwnerLeft,
+        double ValueLeft,
+        double IncomeTypeLeft,
+        double IncomeAmountLeft,
+        double TransactionLeft
+    );
 
     private sealed record LiabilityColumns(
         double CreditorLeft,
@@ -681,21 +727,29 @@ public partial class HouseAnnualReportClient
     private sealed class PendingLine
     {
         private readonly CongressionalDisclosureLineKind _kind;
+        private string _assetType;
         private string _primary;
         private string _secondary;
         private string _rangeText;
+        private string _incomeType;
+        private string _incomeRangeText;
 
         public PendingLine(
             CongressionalDisclosureLineKind kind,
             string primaryText,
             string secondaryText,
-            string rangeText
+            string rangeText,
+            string incomeTypeText = null,
+            string incomeRangeText = null
         )
         {
             _kind = kind;
             _primary = primaryText ?? "";
             _secondary = secondaryText ?? "";
             _rangeText = rangeText;
+            _incomeType = incomeTypeText ?? "";
+            _incomeRangeText = incomeRangeText;
+            _assetType = ReadAssetTypeCode(primaryText);
         }
 
         public void AppendRange(string text)
@@ -707,9 +761,30 @@ public partial class HouseAnnualReportClient
         public void AppendDescription(string primaryText, string secondaryText)
         {
             if (!string.IsNullOrEmpty(primaryText))
+            {
                 _primary += " " + primaryText;
+                // A long asset name wraps, and the code rides the last visual
+                // line with it ("… Money Market / Account [BA]"), so the code
+                // has to be read as the description arrives — not once up
+                // front. The first code seen wins; a later line's is a second
+                // row's, which a Flush would already have separated.
+                _assetType ??= ReadAssetTypeCode(primaryText);
+            }
             if (!string.IsNullOrEmpty(secondaryText))
                 _secondary += " " + secondaryText;
+        }
+
+        // The income bracket wraps exactly as the value bracket does ("$1,001 -"
+        // then a bare "$2,500" on the next line), and the income-type text wraps
+        // like any other cell.
+        public void AppendIncome(string incomeTypeText, string incomeRangeText)
+        {
+            if (!string.IsNullOrEmpty(incomeTypeText))
+                _incomeType = string.IsNullOrEmpty(_incomeType)
+                    ? incomeTypeText
+                    : _incomeType + " " + incomeTypeText;
+            if (!string.IsNullOrEmpty(incomeRangeText) && _incomeRangeText != null)
+                _incomeRangeText += " " + incomeRangeText;
         }
 
         public AnnualDisclosureLineItem ToLineItem()
@@ -733,13 +808,51 @@ public partial class HouseAnnualReportClient
             if (string.IsNullOrEmpty(description))
                 return null;
 
+            var (incomeMinimum, incomeMaximum) = ParseIncomeRange();
             return new AnnualDisclosureLineItem
             {
                 Kind = _kind,
                 Description = Truncate(description, 512),
                 RangeMinimum = minimum,
                 RangeMaximum = maximum,
+                AssetType = _assetType,
+                IncomeType = NormalizeIncomeType(),
+                IncomeMinimum = incomeMinimum,
+                IncomeMaximum = incomeMaximum,
             };
+        }
+
+        // "None" is a disclosed answer, not an income bracket, and a bracket
+        // still ending in its opening dash never received its wrapped upper
+        // bound — both leave income unset rather than inventing a (0, X) range.
+        private (long?, long?) ParseIncomeRange()
+        {
+            if (string.IsNullOrEmpty(_incomeRangeText))
+                return (null, null);
+
+            var text = _incomeRangeText.Trim();
+            if (text is "None" or "Undetermined" || text.EndsWith('-'))
+                return (null, null);
+
+            var (minimum, maximum) = ParseAmountRange(text);
+            return minimum == 0 && maximum == 0 ? (null, null) : (minimum, maximum);
+        }
+
+        private string NormalizeIncomeType()
+        {
+            var text = Clean(_incomeType);
+            return string.IsNullOrEmpty(text) || text == "None" ? null : Truncate(text, 256);
+        }
+
+        // The asset name column ends with the filer's bracketed asset-class
+        // code ("… Vineyard [RP]"). The House form ships no legend, so the code
+        // is kept exactly as filed rather than expanded through a guessed map.
+        private static string ReadAssetTypeCode(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return null;
+            var matches = AssetTypeCodeRegex().Matches(text);
+            return matches.Count == 0 ? null : matches[^1].Value.Trim().Trim('[', ']');
         }
 
         private string BuildDescription()

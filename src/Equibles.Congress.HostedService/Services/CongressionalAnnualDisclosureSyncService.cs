@@ -38,6 +38,18 @@ public class CongressionalAnnualDisclosureSyncService
     // late Y+1) and amendments trail in afterwards.
     private const int DefaultCoverageYearsBack = 2;
 
+    // Raise this whenever the schedule parsers start extracting a field their
+    // stored rows do not carry; already-ingested filings then re-download and
+    // re-parse so the new field is populated for history too, instead of only
+    // appearing on filings submitted from now on.
+    //   1 — asset type, income type and the income bracket (GH-7347).
+    private const int AnnualParserVersion = 1;
+
+    // Filings re-parsed per 24h cycle after a version bump. The clients fetch
+    // at 5 requests/second, so this is a runaway guard rather than a politeness
+    // limit: a normal backfill of the whole archive still drains in a few days.
+    private const int ReprocessPerCycleLimit = 1_000;
+
     public CongressionalAnnualDisclosureSyncService(
         IServiceScopeFactory scopeFactory,
         IOptions<WorkerOptions> workerOptions,
@@ -69,11 +81,15 @@ public class CongressionalAnnualDisclosureSyncService
 
         var houseProcessedIds = await _filingLedger.GetProcessedSourceIds(
             CongressionalFilingKind.HouseAnnualReport,
-            ct
+            ct,
+            AnnualParserVersion,
+            ReprocessPerCycleLimit
         );
         var senateProcessedIds = await _filingLedger.GetProcessedSourceIds(
             CongressionalFilingKind.SenateAnnualReport,
-            ct
+            ct,
+            AnnualParserVersion,
+            ReprocessPerCycleLimit
         );
 
         var houseResult = await FetchReports(
@@ -128,14 +144,16 @@ public class CongressionalAnnualDisclosureSyncService
             houseResult
                 .ProcessedFilings.Where(f => !unpersistedReportIds.Contains(f.SourceId))
                 .ToList(),
-            ct
+            ct,
+            AnnualParserVersion
         );
         await _filingLedger.RecordProcessed(
             CongressionalFilingKind.SenateAnnualReport,
             senateResult
                 .ProcessedFilings.Where(f => !unpersistedReportIds.Contains(f.SourceId))
                 .ToList(),
-            ct
+            ct,
+            AnnualParserVersion
         );
     }
 
@@ -371,5 +389,9 @@ public class CongressionalAnnualDisclosureSyncService
             Description = item.Description,
             RangeMinimum = item.RangeMinimum,
             RangeMaximum = item.RangeMaximum,
+            AssetType = item.AssetType,
+            IncomeType = item.IncomeType,
+            IncomeMinimum = item.IncomeMinimum,
+            IncomeMaximum = item.IncomeMaximum,
         };
 }

@@ -31,5 +31,34 @@ public class CongressionalDisclosureLine
     /// <summary>Upper bound of the disclosed range, in dollars.</summary>
     public long RangeMaximum { get; set; }
 
+    /// <summary>
+    /// The asset class the filer declared, verbatim in the filing's own
+    /// vocabulary: a House bracketed code with its brackets removed ("ST",
+    /// "RP", "BA") or the Senate's spelled-out label ("Bank Deposit", "Corporate
+    /// Securities Non-Public Stock"). The two chambers publish different
+    /// vocabularies and neither form carries a legend, so no cross-chamber
+    /// mapping is invented here. Null on liability rows and on filings parsed
+    /// before this was captured.
+    /// </summary>
+    [MaxLength(128)]
+    public string AssetType { get; set; }
+
+    /// <summary>
+    /// The income categories the asset produced, verbatim ("Dividends",
+    /// "Rent", "Dividends, Capital Gains"). Null when the filer disclosed none.
+    /// </summary>
+    [MaxLength(256)]
+    public string IncomeType { get; set; }
+
+    /// <summary>
+    /// Lower bound of the income the asset produced over the year, in dollars.
+    /// Null when the filer disclosed no income bracket — never zero, which is
+    /// itself a disclosed value.
+    /// </summary>
+    public long? IncomeMinimum { get; set; }
+
+    /// <summary>Upper bound of the disclosed income range, in dollars.</summary>
+    public long? IncomeMaximum { get; set; }
+
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }
