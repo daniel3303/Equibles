@@ -101,7 +101,7 @@ public class CongressionalAnnualDisclosureSyncServiceTests
     }
 
     [Theory]
-    [InlineData("1001", "2025-05-15", false, false)] // same source report → no-op
+    [InlineData("1001", "2025-05-15", false, true)] // same source report → rebuilt in place
     [InlineData("1002", "2025-11-04", false, true)] // later filing replaces
     [InlineData("1002", "2025-01-01", false, false)] // earlier filing never replaces
     [InlineData("1002", "2025-05-15", true, true)] // same-day amendment replaces
@@ -131,6 +131,28 @@ public class CongressionalAnnualDisclosureSyncServiceTests
             .ShouldReplace(existing, incoming)
             .Should()
             .Be(expected);
+    }
+
+    [Fact]
+    public void ShouldReplace_SameReportRefetched_RebuildsSoAParserBumpCanLand()
+    {
+        // The ledger only puts an already-stored filing back in the queue when
+        // it deliberately de-listed it — a parser-version bump, or a cycle that
+        // died before recording it. Skipping the re-parse there would make a
+        // version bump re-download the archive and discard every result, so the
+        // backfill would report success having written nothing.
+        var existing = new CongressionalAnnualDisclosure
+        {
+            ReportId = "1001",
+            FiledDate = new DateOnly(2025, 5, 15),
+            Year = 2024,
+        };
+        var refetched = Report("Jane Doe", 2024, new DateOnly(2025, 5, 15), false, "1001");
+
+        CongressionalAnnualDisclosureSyncService
+            .ShouldReplace(existing, refetched)
+            .Should()
+            .BeTrue();
     }
 
     [Theory]

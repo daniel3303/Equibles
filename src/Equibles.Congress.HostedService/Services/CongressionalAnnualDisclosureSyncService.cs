@@ -38,6 +38,18 @@ public class CongressionalAnnualDisclosureSyncService
     // late Y+1) and amendments trail in afterwards.
     private const int DefaultCoverageYearsBack = 2;
 
+    // Raise this whenever the schedule parsers start extracting a field their
+    // stored rows do not carry; already-ingested filings then re-download and
+    // re-parse so the new field is populated for history too, instead of only
+    // appearing on filings submitted from now on.
+    //   1 — asset type, income type and the income bracket (GH-7347).
+    private const int AnnualParserVersion = 1;
+
+    // Filings re-parsed per 24h cycle after a version bump. The clients fetch
+    // at 5 requests/second, so this is a runaway guard rather than a politeness
+    // limit: a normal backfill of the whole archive still drains in a few days.
+    private const int ReprocessPerCycleLimit = 1_000;
+
     public CongressionalAnnualDisclosureSyncService(
         IServiceScopeFactory scopeFactory,
         IOptions<WorkerOptions> workerOptions,
@@ -69,11 +81,15 @@ public class CongressionalAnnualDisclosureSyncService
 
         var houseProcessedIds = await _filingLedger.GetProcessedSourceIds(
             CongressionalFilingKind.HouseAnnualReport,
-            ct
+            ct,
+            AnnualParserVersion,
+            ReprocessPerCycleLimit
         );
         var senateProcessedIds = await _filingLedger.GetProcessedSourceIds(
             CongressionalFilingKind.SenateAnnualReport,
-            ct
+            ct,
+            AnnualParserVersion,
+            ReprocessPerCycleLimit
         );
 
         var houseResult = await FetchReports(
@@ -128,14 +144,16 @@ public class CongressionalAnnualDisclosureSyncService
             houseResult
                 .ProcessedFilings.Where(f => !unpersistedReportIds.Contains(f.SourceId))
                 .ToList(),
-            ct
+            ct,
+            AnnualParserVersion
         );
         await _filingLedger.RecordProcessed(
             CongressionalFilingKind.SenateAnnualReport,
             senateResult
                 .ProcessedFilings.Where(f => !unpersistedReportIds.Contains(f.SourceId))
                 .ToList(),
-            ct
+            ct,
+            AnnualParserVersion
         );
     }
 
@@ -244,7 +262,12 @@ public class CongressionalAnnualDisclosureSyncService
         // sync uses, so the two pipelines converge on the same member.
         var distinctMembers = reports
             .GroupBy(r => DisclosureParsingHelper.NormalizeMemberName(r.MemberName))
-            .Select(g => new CongressMember { Name = g.Key, Position = g.First().Position })
+            .Select(g => new CongressMember
+            {
+                Name = g.Key,
+                Position = g.First().Position,
+                StateDistrict = SelectStateDistrict(g),
+            })
             .ToList();
 
         await dbContext
@@ -252,7 +275,15 @@ public class CongressionalAnnualDisclosureSyncService
             .UpsertRange(distinctMembers)
             .On(m => new { m.Name })
             .WhenMatched(
-                (existing, incoming) => new CongressMember { Position = incoming.Position }
+                (existing, incoming) =>
+                    new CongressMember
+                    {
+                        Position = incoming.Position,
+                        // Only the House index publishes a seat, so a member's
+                        // Senate reports carry none — coalescing keeps a
+                        // recorded seat instead of blanking it on every cycle.
+                        StateDistrict = incoming.StateDistrict ?? existing.StateDistrict,
+                    }
             )
             .RunAsync(ct);
 
@@ -262,6 +293,19 @@ public class CongressionalAnnualDisclosureSyncService
             .Where(m => memberNames.Contains(m.Name))
             .ToDictionaryAsync(m => m.Name, ct);
     }
+
+    /// <summary>
+    /// The seat to record for a member this cycle. Redistricting moves a member
+    /// between districts, so the most recently filed report that states one
+    /// wins; reports that state none (every Senate filing) are ignored rather
+    /// than treated as "no seat".
+    /// </summary>
+    internal static string SelectStateDistrict(IEnumerable<AnnualDisclosureReport> reports) =>
+        reports
+            .Where(r => !string.IsNullOrWhiteSpace(r.StateDistrict))
+            .OrderBy(r => r.FiledDate)
+            .LastOrDefault()
+            ?.StateDistrict.Trim();
 
     /// <summary>
     /// One report per (member, position, year): the latest filed wins, and an
@@ -278,7 +322,12 @@ public class CongressionalAnnualDisclosureSyncService
     /// <summary>
     /// Amendments replace the stored report in place: a different source
     /// report filed on a later date (or an amendment refiled the same day)
-    /// wins; re-encountering the stored report id is a no-op.
+    /// wins. Re-encountering the stored report id rebuilds it in place rather
+    /// than skipping it — a filing only comes back round when the ledger
+    /// deliberately de-listed it, and that rebuild is the whole mechanism by
+    /// which a parser-version bump lands its new fields on rows an older
+    /// parser wrote. Rebuilding is idempotent, so a replay costs a row
+    /// rewrite and changes nothing else.
     /// </summary>
     internal static bool ShouldReplace(
         CongressionalAnnualDisclosure existing,
@@ -286,7 +335,7 @@ public class CongressionalAnnualDisclosureSyncService
     )
     {
         if (incoming.ReportId == existing.ReportId)
-            return false;
+            return true;
         if (incoming.FiledDate != existing.FiledDate)
             return incoming.FiledDate > existing.FiledDate;
         return incoming.IsAmendment;
@@ -371,5 +420,9 @@ public class CongressionalAnnualDisclosureSyncService
             Description = item.Description,
             RangeMinimum = item.RangeMinimum,
             RangeMaximum = item.RangeMaximum,
+            AssetType = item.AssetType,
+            IncomeType = item.IncomeType,
+            IncomeMinimum = item.IncomeMinimum,
+            IncomeMaximum = item.IncomeMaximum,
         };
 }

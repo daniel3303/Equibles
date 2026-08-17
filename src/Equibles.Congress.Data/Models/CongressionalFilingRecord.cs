@@ -31,5 +31,14 @@ public class CongressionalFilingRecord
     // policy-skipped filings (scanned paper reports, candidate reports).
     public int ItemCount { get; set; }
 
+    /// <summary>
+    /// The parser generation that produced this row's data. A lane that starts
+    /// extracting new fields raises its current version, which demotes every
+    /// older row to "not yet ingested" so the filing is re-fetched and re-parsed
+    /// — the same effect as deleting the row, without a manual sweep. Lanes that
+    /// have never bumped it stay at 0 and are unaffected.
+    /// </summary>
+    public int ParserVersion { get; set; }
+
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

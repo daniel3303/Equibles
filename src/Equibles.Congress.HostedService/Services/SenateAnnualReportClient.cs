@@ -302,6 +302,12 @@ public partial class SenateAnnualReportClient
     {
         var assetColumn = headers.IndexOf("asset");
         var valueColumn = headers.IndexOf("value");
+        // Present on the current Part 3 layout; an older table missing any of
+        // them leaves that detail unset rather than shifting the read onto a
+        // neighbouring column.
+        var assetTypeColumn = headers.IndexOf("asset type");
+        var incomeTypeColumn = headers.IndexOf("income type");
+        var incomeColumn = headers.IndexOf("income");
 
         foreach (var row in DataRows(table))
         {
@@ -317,6 +323,10 @@ public partial class SenateAnnualReportClient
             if (string.IsNullOrEmpty(description))
                 continue;
 
+            var income = ReadOptionalCell(cells, incomeColumn) is { } incomeText
+                ? ParseRangeCell(incomeText)
+                : null;
+
             items.Add(
                 new AnnualDisclosureLineItem
                 {
@@ -324,6 +334,10 @@ public partial class SenateAnnualReportClient
                     Description = Truncate(description, 512),
                     RangeMinimum = range.Value.from,
                     RangeMaximum = range.Value.to,
+                    AssetType = TruncateOrNull(ReadAssetTypeCell(cells, assetTypeColumn), 128),
+                    IncomeType = TruncateOrNull(ReadOptionalCell(cells, incomeTypeColumn), 256),
+                    IncomeMinimum = income?.from,
+                    IncomeMaximum = income?.to,
                 }
             );
         }
@@ -396,6 +410,47 @@ public partial class SenateAnnualReportClient
         }
         var text = HtmlEntity.DeEntitize(clone.InnerText);
         return WhitespaceRegex().Replace(text, " ").Trim();
+    }
+
+    // A detail column the layout may not have: an absent header leaves the
+    // index at -1, and a short row simply has no such cell. Both mean "not
+    // disclosed here", never "read the next column along".
+    private static string ReadOptionalCell(HtmlNodeCollection cells, int column)
+    {
+        if (column < 0 || column >= cells.Count)
+            return null;
+        var text = CellText(cells[column]);
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
+
+    // "None" is the filer answering the question, not a value worth storing.
+    private static string TruncateOrNull(string text, int length) =>
+        string.IsNullOrEmpty(text) || text == "None" ? null : Truncate(text, length);
+
+    // The asset-type cell holds a category with the filer's specific subtype in
+    // a muted child ("Corporate Securities" + "Non-Public Stock"). Unlike the
+    // name column — where the muted half is location metadata CellText is right
+    // to drop — both halves here are disclosed classification, so they are kept.
+    private static string ReadAssetTypeCell(HtmlNodeCollection cells, int column)
+    {
+        if (column < 0 || column >= cells.Count)
+            return null;
+
+        var category = CellText(cells[column]);
+        var mutedNodes = cells[column].SelectNodes(".//*[contains(@class, 'muted')]");
+        if (mutedNodes == null)
+            return category;
+
+        var subtype = WhitespaceRegex()
+            .Replace(
+                string.Join(" ", mutedNodes.Select(n => HtmlEntity.DeEntitize(n.InnerText))),
+                " "
+            )
+            .Trim();
+
+        if (string.IsNullOrEmpty(subtype) || subtype == category)
+            return category;
+        return string.IsNullOrEmpty(category) ? subtype : $"{category} - {subtype}";
     }
 
     // A line item carries only the form's own brackets: "$X - $Y" or the

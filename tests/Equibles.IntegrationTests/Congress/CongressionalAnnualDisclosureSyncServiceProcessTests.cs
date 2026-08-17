@@ -21,7 +21,7 @@ namespace Equibles.IntegrationTests.Congress;
 /// Postgres: a new report upserts the member and stores the disclosure with
 /// its band rollup and lines; a later amendment replaces the member-year row
 /// in place (same row, new report id, fresh lines); re-running the same
-/// report is a no-op.
+/// report rebuilds that row in place without forking or duplicating it.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class CongressionalAnnualDisclosureSyncServiceProcessTests : ParadeDbMcpTestBase
@@ -179,14 +179,26 @@ public class CongressionalAnnualDisclosureSyncServiceProcessTests : ParadeDbMcpT
         );
         var sut = BuildSut();
         await ProcessReports(sut, [report]);
+        var originalId = await DbContext
+            .Set<CongressionalAnnualDisclosure>()
+            .AsNoTracking()
+            .Select(d => d.Id)
+            .SingleAsync();
         DbContext.ChangeTracker.Clear();
 
         await ProcessReports(sut, [report]);
 
+        // The re-parse rebuilds the year's row rather than skipping it — that
+        // rebuild is how a parser-version bump lands newly extracted fields on
+        // history — but it must not fork a second row or duplicate the lines.
         await using var verify = Fixture.CreateDbContext();
-        (await verify.Set<CongressionalAnnualDisclosure>().AsNoTracking().CountAsync())
-            .Should()
-            .Be(1);
+        var disclosure = await verify
+            .Set<CongressionalAnnualDisclosure>()
+            .AsNoTracking()
+            .Include(d => d.Lines)
+            .SingleAsync();
+        disclosure.Id.Should().Be(originalId);
+        disclosure.Lines.Should().ContainSingle();
         (await verify.Set<CongressionalDisclosureLine>().AsNoTracking().CountAsync())
             .Should()
             .Be(1);

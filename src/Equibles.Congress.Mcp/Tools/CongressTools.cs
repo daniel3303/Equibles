@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.Congress.Data;
 using Equibles.Congress.Data.Extensions;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.Repositories;
@@ -174,8 +175,8 @@ public class CongressTools
 
                 var table = MarkdownTable.Render(
                     trades,
-                    $"No trades found for {member.Name} ({member.Position.NameForHumans()}) between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
-                    $"Trades by {member.Name} ({member.Position.NameForHumans()}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
+                    $"No trades found for {member.Name} ({DescribeMember(member)}) between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
+                    $"Trades by {member.Name} ({DescribeMember(member)}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
                     "| Date | Filed | Ticker | Type | Amount Range | Asset | Owner |",
                     "|------|-------|--------|------|-------------|-------|-------|",
                     t =>
@@ -240,8 +241,8 @@ public class CongressTools
 
                 var table = MarkdownTable.Render(
                     disclosures,
-                    $"No electronically filed annual disclosure found for {member.Name} ({member.Position.NameForHumans()}). Paper filings are not read, so this does not mean zero net worth.",
-                    $"Net worth of {member.Name} ({member.Position.NameForHumans()}), as disclosed in annual financial reports (band = sum of disclosed asset minimums minus liability maximums, through asset maximums minus liability minimums; Asset Lines / Liability Lines are counts of disclosed line items, not dollar amounts):",
+                    $"No electronically filed annual disclosure found for {member.Name} ({DescribeMember(member)}). Paper filings are not read, so this does not mean zero net worth.",
+                    $"Net worth of {member.Name} ({DescribeMember(member)}), as disclosed in annual financial reports (band = sum of disclosed asset minimums minus liability maximums, through asset maximums minus liability minimums; Asset Lines / Liability Lines are counts of disclosed line items, not dollar amounts):",
                     "| Year | Filed | Net Worth Minimum | Net Worth Maximum | Asset Lines | Liability Lines |",
                     "|------|-------|-------------------|-------------------|-------------|-----------------|",
                     d =>
@@ -252,6 +253,16 @@ public class CongressTools
             "GetMemberNetWorth",
             $"memberName: {memberName}"
         );
+    }
+
+    // How a member is identified in prose: the chamber, plus the seat when one
+    // is recorded. Only the House index publishes a seat, so senators read as
+    // "Senator" alone rather than carrying an empty bracket.
+    private static string DescribeMember(CongressMember member)
+    {
+        var seat = CongressSeat.Format(member.StateDistrict);
+        var position = member.Position.NameForHumans();
+        return seat == null ? position : $"{position}, {seat}";
     }
 
     // Net worth bands can be negative (liabilities exceeding assets).
@@ -296,10 +307,12 @@ public class CongressTools
                     members,
                     $"No match for '{query}' in the tracked congressional roster. This result describes only the tracked roster.",
                     $"Congress members matching '{query}':",
-                    "| Name | Position |",
-                    "|------|----------|",
+                    "| Name | Position | Seat |",
+                    "|------|----------|------|",
                     m =>
-                        $"| {MarkdownTable.EscapeCell(m.Name, "-")} | {MarkdownTable.EscapeCell(m.Position.NameForHumans(), "-")} |"
+                        $"| {MarkdownTable.EscapeCell(m.Name, "-")} "
+                        + $"| {MarkdownTable.EscapeCell(m.Position.NameForHumans(), "-")} "
+                        + $"| {MarkdownTable.EscapeCell(CongressSeat.Format(m.StateDistrict), "-")} |"
                 );
                 return AppendTruncationNote(table, members.Count, totalCount);
             },
