@@ -256,7 +256,12 @@ public class CongressionalTradeSyncService
         // the single source of truth for member identity.
         var distinctMembers = matched
             .GroupBy(t => DisclosureParsingHelper.NormalizeMemberName(t.MemberName))
-            .Select(g => new CongressMember { Name = g.Key, Position = g.First().Position })
+            .Select(g => new CongressMember
+            {
+                Name = g.Key,
+                Position = g.First().Position,
+                StateDistrict = SelectStateDistrict(g),
+            })
             .ToList();
 
         await dbContext
@@ -264,7 +269,15 @@ public class CongressionalTradeSyncService
             .UpsertRange(distinctMembers)
             .On(m => new { m.Name })
             .WhenMatched(
-                (existing, incoming) => new CongressMember { Position = incoming.Position }
+                (existing, incoming) =>
+                    new CongressMember
+                    {
+                        Position = incoming.Position,
+                        // Coalesced, never overwritten with nothing: this lane sees the same
+                        // member through Senate transactions too, and those state no seat. A
+                        // straight assignment would wipe a recorded seat on the next cycle.
+                        StateDistrict = incoming.StateDistrict ?? existing.StateDistrict,
+                    }
             )
             .RunAsync(ct);
 
@@ -274,6 +287,19 @@ public class CongressionalTradeSyncService
             .Where(m => memberNames.Contains(m.Name))
             .ToDictionaryAsync(m => m.Name, ct);
     }
+
+    /// <summary>
+    /// The seat to record for a member from this batch of transactions. Only the House index
+    /// states one, so a member's rows mix seat-bearing and seat-less transactions and picking
+    /// the wrong one would blank a recorded seat. Redistricting moves a member between
+    /// districts, so the most recently filed transaction that states a seat wins.
+    /// </summary>
+    internal static string SelectStateDistrict(IEnumerable<DisclosureTransaction> transactions) =>
+        transactions
+            .Where(t => !string.IsNullOrWhiteSpace(t.StateDistrict))
+            .OrderBy(t => t.FilingDate)
+            .LastOrDefault()
+            ?.StateDistrict.Trim();
 
     internal List<CongressionalTrade> BuildTrades(
         List<DisclosureTransaction> matched,

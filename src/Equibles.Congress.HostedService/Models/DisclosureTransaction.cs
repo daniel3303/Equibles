@@ -9,6 +9,12 @@ public class DisclosureTransaction
     // deciding whether to mark it as ingested.
     public string SourceId { get; set; }
 
+    // The seat the filer holds, as the House Clerk's index states it ("SC05").
+    // Stamped from the filing alongside SourceId rather than parsed out of the
+    // PDF, which never names it. Null on Senate transactions — no Senate
+    // filing states the member's state.
+    public string StateDistrict { get; set; }
+
     public required string MemberName { get; init; }
     public CongressPosition Position { get; init; }
     public string Ticker { get; init; }
