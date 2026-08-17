@@ -262,7 +262,12 @@ public class CongressionalAnnualDisclosureSyncService
         // sync uses, so the two pipelines converge on the same member.
         var distinctMembers = reports
             .GroupBy(r => DisclosureParsingHelper.NormalizeMemberName(r.MemberName))
-            .Select(g => new CongressMember { Name = g.Key, Position = g.First().Position })
+            .Select(g => new CongressMember
+            {
+                Name = g.Key,
+                Position = g.First().Position,
+                StateDistrict = SelectStateDistrict(g),
+            })
             .ToList();
 
         await dbContext
@@ -270,7 +275,15 @@ public class CongressionalAnnualDisclosureSyncService
             .UpsertRange(distinctMembers)
             .On(m => new { m.Name })
             .WhenMatched(
-                (existing, incoming) => new CongressMember { Position = incoming.Position }
+                (existing, incoming) =>
+                    new CongressMember
+                    {
+                        Position = incoming.Position,
+                        // Only the House index publishes a seat, so a member's
+                        // Senate reports carry none — coalescing keeps a
+                        // recorded seat instead of blanking it on every cycle.
+                        StateDistrict = incoming.StateDistrict ?? existing.StateDistrict,
+                    }
             )
             .RunAsync(ct);
 
@@ -280,6 +293,19 @@ public class CongressionalAnnualDisclosureSyncService
             .Where(m => memberNames.Contains(m.Name))
             .ToDictionaryAsync(m => m.Name, ct);
     }
+
+    /// <summary>
+    /// The seat to record for a member this cycle. Redistricting moves a member
+    /// between districts, so the most recently filed report that states one
+    /// wins; reports that state none (every Senate filing) are ignored rather
+    /// than treated as "no seat".
+    /// </summary>
+    internal static string SelectStateDistrict(IEnumerable<AnnualDisclosureReport> reports) =>
+        reports
+            .Where(r => !string.IsNullOrWhiteSpace(r.StateDistrict))
+            .OrderBy(r => r.FiledDate)
+            .LastOrDefault()
+            ?.StateDistrict.Trim();
 
     /// <summary>
     /// One report per (member, position, year): the latest filed wins, and an

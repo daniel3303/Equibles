@@ -15,6 +15,16 @@ public class CongressMember
 
     public CongressPosition Position { get; set; }
 
+    /// <summary>
+    /// The seat the member holds, exactly as the House Clerk publishes it:
+    /// a state postal code and a zero-padded district number ("SC05"), or the
+    /// state alone for an at-large seat ("AK00"). Null for senators — no Senate
+    /// filing states the member's state — and for members whose filings predate
+    /// this being captured.
+    /// </summary>
+    [MaxLength(16)]
+    public string StateDistrict { get; set; }
+
     public virtual List<CongressionalTrade> Trades { get; set; } = [];
 
     public virtual List<CongressionalAnnualDisclosure> AnnualDisclosures { get; set; } = [];
