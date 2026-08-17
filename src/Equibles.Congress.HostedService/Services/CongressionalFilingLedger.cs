@@ -29,7 +29,7 @@ public class CongressionalFilingLedger
     /// generation than <paramref name="parserVersion"/> are deliberately left
     /// out so their filings re-download and re-parse with the fields the newer
     /// parser extracts — at most <paramref name="reprocessLimit"/> of them per
-    /// cycle, oldest filing first, so a version bump drip-feeds its backfill
+    /// cycle, newest filing first, so a version bump drip-feeds its backfill
     /// instead of re-fetching the whole archive at once. A lane that never
     /// raises its version passes 0 and sees every row as processed, exactly as
     /// before.
@@ -55,9 +55,18 @@ public class CongressionalFilingLedger
     /// <summary>
     /// Splits the ledger into the filings to skip and the ones to re-ingest.
     /// Rows at or above the current parser version are always skipped; stale
-    /// rows are re-ingested oldest-filing-first up to the cycle's quota, and the
+    /// rows are re-ingested newest-filing-first up to the cycle's quota, and the
     /// rest are skipped for now. The ordering is stable, so each cycle takes the
     /// next slice and the backfill converges instead of re-picking at random.
+    ///
+    /// Newest first is load-bearing, not a preference. A lane only fetches
+    /// indexes inside its coverage window, so a stale row older than that
+    /// window can never be re-downloaded — queueing it oldest-first would park
+    /// un-fetchable rows at the head of every cycle's quota and starve the
+    /// in-window filings behind them forever. Taking the newest first drains
+    /// everything reachable and leaves the unreachable residue at the back,
+    /// where it costs nothing. Widening the window is what makes that residue
+    /// reachable.
     /// </summary>
     internal static HashSet<string> SelectProcessed(
         IReadOnlyCollection<LedgerEntry> records,
@@ -68,7 +77,7 @@ public class CongressionalFilingLedger
         var current = records.Where(r => r.ParserVersion >= parserVersion).Select(r => r.SourceId);
         var deferred = records
             .Where(r => r.ParserVersion < parserVersion)
-            .OrderBy(r => r.FilingDate)
+            .OrderByDescending(r => r.FilingDate)
             .ThenBy(r => r.SourceId, StringComparer.Ordinal)
             .Skip(Math.Max(reprocessLimit, 0))
             .Select(r => r.SourceId);

@@ -64,9 +64,29 @@ public class CongressionalFilingLedgerSelectProcessedTests
 
         var processed = CongressionalFilingLedger.SelectProcessed(records, 1, reprocessLimit: 1);
 
-        // Oldest filing first: only "oldest" leaves the processed set this
+        // Newest filing first: only "newest" leaves the processed set this
         // cycle, and the other two stay skipped until a later one.
-        processed.Should().BeEquivalentTo(["middle", "newest"]);
+        processed.Should().BeEquivalentTo(["oldest", "middle"]);
+    }
+
+    [Fact]
+    public void SelectProcessed_BacklogOlderThanTheCoverageWindow_DoesNotStarveRecentFilings()
+    {
+        // The clients only fetch indexes inside their coverage window, so a
+        // filing older than it can never be re-downloaded however often it is
+        // queued. Ordering oldest-first would hand the whole quota to those
+        // dead rows every cycle and the reachable ones behind them would never
+        // re-parse.
+        List<LedgerEntry> records =
+        [
+            new("unreachable-1", new DateOnly(2015, 3, 1), 0),
+            new("unreachable-2", new DateOnly(2016, 3, 1), 0),
+            new("in-window", new DateOnly(2026, 3, 1), 0),
+        ];
+
+        var processed = CongressionalFilingLedger.SelectProcessed(records, 1, reprocessLimit: 1);
+
+        processed.Should().NotContain("in-window");
     }
 
     [Fact]

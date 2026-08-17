@@ -322,7 +322,12 @@ public class CongressionalAnnualDisclosureSyncService
     /// <summary>
     /// Amendments replace the stored report in place: a different source
     /// report filed on a later date (or an amendment refiled the same day)
-    /// wins; re-encountering the stored report id is a no-op.
+    /// wins. Re-encountering the stored report id rebuilds it in place rather
+    /// than skipping it — a filing only comes back round when the ledger
+    /// deliberately de-listed it, and that rebuild is the whole mechanism by
+    /// which a parser-version bump lands its new fields on rows an older
+    /// parser wrote. Rebuilding is idempotent, so a replay costs a row
+    /// rewrite and changes nothing else.
     /// </summary>
     internal static bool ShouldReplace(
         CongressionalAnnualDisclosure existing,
@@ -330,7 +335,7 @@ public class CongressionalAnnualDisclosureSyncService
     )
     {
         if (incoming.ReportId == existing.ReportId)
-            return false;
+            return true;
         if (incoming.FiledDate != existing.FiledDate)
             return incoming.FiledDate > existing.FiledDate;
         return incoming.IsAmendment;
