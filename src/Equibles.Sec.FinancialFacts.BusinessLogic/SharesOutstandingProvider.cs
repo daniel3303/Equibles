@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Statements;
@@ -66,19 +68,25 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
 
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
 
     public SharesOutstandingProvider(
         FinancialFactRepository financialFactRepository,
-        FinancialConceptRepository financialConceptRepository
+        FinancialConceptRepository financialConceptRepository,
+        StockSplitRepository stockSplitRepository
     )
     {
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
+        _stockSplitRepository = stockSplitRepository;
     }
 
-    // The current entity share count together with the filing that stated it.
+    // The current entity share count together with the filing that stated it. AsOf is the
+    // instant the count was stated for (the fact's PeriodEnd), which trails the filed date —
+    // a 10-Q cover states "shares outstanding as of <a few days before filing>".
     private sealed record SharesFact(
         long Shares,
+        DateOnly AsOf,
         DateOnly Filed,
         DocumentType Form,
         string AccessionNumber
@@ -139,7 +147,44 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     public async Task<long?> GetCurrentSharesOutstanding(
         CommonStock stock,
         CancellationToken cancellationToken = default
-    ) => (await ResolveCurrentSharesFact(stock, cancellationToken))?.Shares;
+    )
+    {
+        var fact = await ResolveCurrentSharesFact(stock, cancellationToken);
+        if (fact == null)
+            return null;
+        return await RestateToCurrentSplitBasis(stock, fact, cancellationToken);
+    }
+
+    // A cover-page count is stated as-of a date inside its filing window, and the NEXT cover page
+    // is typically a quarter away — so a split effective in between leaves this figure on the
+    // pre-split basis for months (BYND's 1-for-30 kept every market-cap and ownership surface 30x
+    // wrong until its next 10-Q). Restate the count onto today's basis with the captured splits,
+    // the same read-time contract every other share-count consumer applies (SplitAdjustment):
+    // only splits already effective apply (never an announced future one), and the strict
+    // after-AsOf comparison makes the first post-split cover page a natural no-op — no flag to
+    // clear, no double application. Scoped to the primary price series (exact primary ticker plus
+    // legacy null attribution): the entity total moves with the issuer's common stock, and a
+    // split attributed only to a sibling listing must not rescale it.
+    private async Task<long> RestateToCurrentSplitBasis(
+        CommonStock stock,
+        SharesFact fact,
+        CancellationToken cancellationToken
+    )
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var splits = await _stockSplitRepository
+            .GetEffectiveByStock(stock.Id, today)
+            .Where(split =>
+                split.PriceSeriesTicker == null || split.PriceSeriesTicker == stock.Ticker
+            )
+            .ToListAsync(cancellationToken);
+
+        var factor = SplitAdjustment.ShareCountFactor(fact.AsOf, splits);
+        // Defensive: a corrupt split row (zero/negative numerator) zeroes the factor, and a zeroed
+        // count is a worse answer than the stale one — leave the count as filed, like every other
+        // non-positive-factor fallback in the split-adjustment family.
+        return factor <= 0m ? fact.Shares : SplitAdjustment.AdjustShareCount(fact.Shares, factor);
+    }
 
     // True when the fact backing GetCurrentSharesOutstanding — the latest consolidated cover-page
     // fact or the latest per-class filing, whichever wins the pick — is a foreign-private-issuer
@@ -314,6 +359,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
                 true,
                 new SharesFact(
                     (long)sameFilingBalanceSheet.Value,
+                    latest.AsOf,
                     latest.Filed,
                     latest.Form,
                     latest.AccessionNumber
@@ -418,6 +464,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
             .Select(f => new
             {
                 f.Value,
+                f.PeriodEnd,
                 f.FiledDate,
                 f.Form,
                 f.AccessionNumber,
@@ -430,7 +477,13 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // decimal->long cast would throw, crashing the caller. Treat an unrepresentable figure as
         // none on record (null), matching how every other decimal->long cast here is range-checked.
         return match.Value >= long.MinValue && match.Value <= long.MaxValue
-            ? new SharesFact((long)match.Value, match.FiledDate, match.Form, match.AccessionNumber)
+            ? new SharesFact(
+                (long)match.Value,
+                match.PeriodEnd,
+                match.FiledDate,
+                match.Form,
+                match.AccessionNumber
+            )
             : null;
     }
 
@@ -486,7 +539,13 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // Same range-check: a corrupt per-class count can push the sum past Int64; degrade to null
         // rather than let the decimal->long cast throw.
         return total > 0 && total <= long.MaxValue
-            ? new SharesFact((long)total, latest.FiledDate, latest.Form, latest.AccessionNumber)
+            ? new SharesFact(
+                (long)total,
+                latest.PeriodEnd,
+                latest.FiledDate,
+                latest.Form,
+                latest.AccessionNumber
+            )
             : null;
     }
 

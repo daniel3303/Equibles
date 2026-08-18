@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
@@ -35,6 +37,7 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
             {
                 new CommonStocksModuleConfiguration(),
                 new FinancialFactsTestModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
             }
         );
         ctx.Database.EnsureCreated();
@@ -73,7 +76,8 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
 
         var provider = new SharesOutstandingProvider(
             new FinancialFactRepository(db),
-            new FinancialConceptRepository(db)
+            new FinancialConceptRepository(db),
+            new StockSplitRepository(db)
         );
 
         var shares = await provider.GetReportedSharesOutstanding(stock);
@@ -114,7 +118,8 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
 
         var provider = new SharesOutstandingProvider(
             new FinancialFactRepository(db),
-            new FinancialConceptRepository(db)
+            new FinancialConceptRepository(db),
+            new StockSplitRepository(db)
         );
 
         var shares = await provider.GetSummedPerClassSharesOutstanding(stock);

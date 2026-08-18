@@ -43,6 +43,10 @@ public interface ISharesOutstandingProvider
     /// collapse by both the issuer's previous cover-page count and the same filing's
     /// balance-sheet count — in which case EDGAR abstains and the caller's fallback source (the
     /// price feed's listed-security count) stands.
+    /// The count is restated onto today's split basis: a captured primary-series split effective
+    /// after the fact's as-of date rescales it (a 1-for-30 reverse split divides it by 30), so
+    /// the months between a split and the issuer's next cover page do not serve a stale-basis
+    /// count. The first post-split cover page makes the restatement a natural no-op.
     /// </summary>
     Task<long?> GetCurrentSharesOutstanding(
         CommonStock stock,
