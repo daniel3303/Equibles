@@ -302,7 +302,7 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_ReferenceBootstrapStillStraddlesSplit_KeepsGroupedRowsPending()
+    public async Task Import_ReferenceBootstrapStraddlingKnownSplit_RestatesAndCompletesBackfill()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var floor = today.AddDays(-14);
@@ -353,13 +353,28 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        _priceRepo.GetAllSeries().Should().Contain(price => price.Id == firstBootstrap.Id);
-        _priceRepo.GetAllSeries().Should().Contain(price => price.Id == secondBootstrap.Id);
+        // The serve straddles the captured effective 1:16 split at the matching ratio, so the
+        // pre-effective segment is restated (3 x 16 = 48) instead of parking the whole bootstrap
+        // until the provider restates. The bootstrap rows are replaced by the full history.
+        var stored = _priceRepo
+            .GetAllSeries()
+            .Where(price => price.CommonStockId == stock.Id && price.ListedTicker == "REF")
+            .OrderBy(price => price.Date)
+            .ToList();
+        stored.Select(price => price.Date).Should().Equal(sessions);
+        stored
+            .Select(price => price.Close)
+            .Should()
+            .Equal(sessions.Select(date => date < effectiveDate ? 48m : 57m));
+        stored.Should().NotContain(price => price.Id == firstBootstrap.Id);
+        stored.Should().NotContain(price => price.Id == secondBootstrap.Id);
         _stockRepo
             .GetAll()
             .Single(row => row.Id == stock.Id)
             .PriceHistoryBackfilledTickers.Should()
-            .BeEmpty();
+            .Equal("REF");
+        // The split was captured from this same response, after the cycle's reconcile pass ran,
+        // so its marker is stamped on a later cycle rather than this one.
         _splitRepo
             .GetAll()
             .Should()
@@ -944,7 +959,7 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_AppliedMarkerStillStraddlesSplit_RequeuesWithoutRestamping()
+    public async Task Import_AppliedMarkerStillStraddlesSplit_RequeuesThenRestatesFromCapturedRatio()
     {
         var stock = CreateStock("AEHL", "Antelope Enterprise Holdings");
         await SeedStocks(stock);
@@ -979,17 +994,20 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        split.PriceAdjustmentAppliedTime.Should().BeNull();
+        // The audit clears the false marker, then the same cycle's reconcile restates the still-
+        // straddling serve with the captured 1:16 ratio (3.20 x 16 = 51.2), replaces the series on
+        // one basis, and stamps the split off a serve that now certifies its boundary.
+        split.PriceAdjustmentAppliedTime.Should().NotBeNull();
         _priceRepo
             .GetAll()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
-            .Equal(3.00m, 57.10m, 56.00m);
+            .Equal(51.20m, 58.00m, 57.00m);
     }
 
     [Fact]
-    public async Task Import_OrdinarySplitFetchStillStraddlesBoundary_KeepsStoredSeriesPending()
+    public async Task Import_OrdinarySplitFetchStraddlingKnownSplit_RestatesTheFullHistory()
     {
         var stock = CreateStock("AEHL", "Antelope Enterprise Holdings");
         await SeedStocks(stock);
@@ -1027,12 +1045,17 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
+        // The full serve still straddles the newly captured 1:16 split at the matching ratio, so
+        // its pre-effective segment is restated (3.20 x 16 = 51.2) and the atomic replacement
+        // proceeds instead of freezing the stored series until the provider restates.
         _priceRepo
             .GetAll()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
-            .Equal(3.00m, 57.10m);
+            .Equal(51.20m, 58.00m, 57.00m);
+        // The ordinary rebase path never stamps; the split captured this cycle stays pending for
+        // the reconcile queue, which ran before this stock's fetch.
         _splitRepo
             .GetAll()
             .Should()
@@ -1093,7 +1116,7 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_FirstOrdinaryHistoryStillStraddlesSplit_KeepsSeriesEmptyPending()
+    public async Task Import_FirstOrdinaryHistoryStraddlingKnownSplit_RestatesAndInserts()
     {
         var stock = CreateStock("NEW", "Newly Imported Company");
         await SeedStocks(stock);
@@ -1119,7 +1142,14 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        _priceRepo.GetAll().Should().BeEmpty();
+        // A first backfill whose serve straddles the captured split at the matching ratio is put
+        // on one basis (3.20 x 16 = 51.2) and inserted, instead of leaving the series empty.
+        _priceRepo
+            .GetAll()
+            .OrderBy(price => price.Date)
+            .Select(price => price.Close)
+            .Should()
+            .Equal(51.20m, 58.00m, 57.00m);
         _splitRepo
             .GetAll()
             .Should()
@@ -1129,7 +1159,7 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_OrdinarySplitFullResponseHasOlderMixedSplit_KeepsStoredSeriesPending()
+    public async Task Import_OrdinarySplitFullResponseHasOlderMixedSplit_RestatesTheOlderBoundary()
     {
         var stock = CreateStock("DUAL", "Dual Split Company");
         await SeedStocks(stock);
@@ -1179,12 +1209,15 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
+        // The older 1:16 boundary still straddles at the matching ratio and is restated
+        // (3.20 x 16 = 51.2); the newer 2:1 event shows no boundary jump (the provider already
+        // adjusted it), so the serve is accepted as one continuous basis and replaces the store.
         _priceRepo
             .GetAll()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
-            .Equal(3.00m, 57.10m, 56.00m);
+            .Equal(51.20m, 58.00m, 57.00m, 60.00m);
         _splitRepo
             .GetAll()
             .OrderBy(split => split.EffectiveDate)
@@ -1194,7 +1227,7 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_PendingReconcileResponseHasNewMixedSplit_KeepsStoredSeriesPending()
+    public async Task Import_PendingReconcileResponseHasNewMixedSplit_RestatesAndStampsTheSelected()
     {
         var stock = CreateStock("PNDG", "Pending Split Company");
         await SeedStocks(stock);
@@ -1243,18 +1276,22 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
+        // The newly returned 1:16 event is captured first, its matching boundary is restated
+        // (rows before it scale x 16: 100 -> 1600 and 3.20 -> 51.2), and the selected 2:1 split's
+        // own boundary shows no jump — so the serve is accepted, replaces the store, and the
+        // selected split is stamped. The new 1:16 stays pending for a later cycle.
         _priceRepo
             .GetAll()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
-            .Equal(storedRows.OrderBy(price => price.Date).Select(price => price.Close));
-        _splitRepo
-            .GetAll()
-            .OrderBy(split => split.EffectiveDate)
-            .Should()
-            .HaveCount(2)
-            .And.AllSatisfy(split => split.PriceAdjustmentAppliedTime.Should().BeNull());
+            .Equal(1600m, 1600m, 51.20m, 58.00m, 57.00m);
+        var splits = _splitRepo.GetAll().OrderBy(split => split.EffectiveDate).ToList();
+        splits.Should().HaveCount(2);
+        splits[0].EffectiveDate.Should().Be(selectedEffectiveDate);
+        splits[0].PriceAdjustmentAppliedTime.Should().NotBeNull();
+        splits[1].EffectiveDate.Should().Be(newEffectiveDate);
+        splits[1].PriceAdjustmentAppliedTime.Should().BeNull();
     }
 
     [Fact]
