@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
@@ -50,6 +52,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
             {
                 new CommonStocksModuleConfiguration(),
                 new FinancialFactsTestModuleConfiguration(),
+                new CorporateActionsModuleConfiguration(),
             }
         );
         ctx.Database.EnsureCreated();
@@ -57,7 +60,11 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
     }
 
     private static SharesOutstandingProvider NewProvider(EquiblesFinancialDbContext db) =>
-        new(new FinancialFactRepository(db), new FinancialConceptRepository(db));
+        new(
+            new FinancialFactRepository(db),
+            new FinancialConceptRepository(db),
+            new StockSplitRepository(db)
+        );
 
     private static CommonStock Stock(string ticker) =>
         new()
