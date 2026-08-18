@@ -666,8 +666,16 @@ public class YahooPriceImportService
                     split.Denominator
                 ))
             )
-            .Distinct();
-        if (ShouldRejectSplitBearingHistory(target.Ticker, chartData.Prices, splitBoundaries))
+            .Distinct()
+            .ToList();
+        if (
+            !TryPutHistoryOnSingleSplitBasis(
+                target.Ticker,
+                chartData.Prices,
+                splitBoundaries,
+                today
+            )
+        )
             return;
 
         var replaced = await ReplaceStoredPrices(
@@ -688,18 +696,37 @@ public class YahooPriceImportService
             cancellationToken
         );
 
+        // A serve whose last bar predates a split's effective date passed the boundary check
+        // vacuously (no post-effective close to compare), so it cannot certify that split's basis:
+        // stamping it applied here parked BYND's 1-for-30 outside the pending queue while the
+        // stored series stayed pre-split. Keep such splits pending; the fair queue retries them.
+        var certifiableSeries = selectedSeries with
+        {
+            Splits = CertifiableSplits(selectedSeries.Splits, chartData.Prices.Max(p => p.Date)),
+        };
+        if (certifiableSeries.Splits.Count < selectedSeries.Splits.Count)
+        {
+            _logger.LogWarning(
+                "Provider history for {Ticker} ends before {Count} pending split(s) became effective; keeping them pending",
+                target.Ticker,
+                selectedSeries.Splits.Count - certifiableSeries.Splits.Count
+            );
+        }
+
         // A split changes the share base, so refresh the authoritative current share count +
         // market cap by refetch, not arithmetic (#2879). A dividend-only price reconciliation is
         // complete after the atomic history replacement and must not depend on unrelated
-        // quote-summary or EDGAR enrichment succeeding.
-        if (selectedSeries.Splits.Count > 0)
+        // quote-summary or EDGAR enrichment succeeding. Gate on the certifiable set: a provider
+        // that has not served the split's first post-effective bar is serving pre-split
+        // key statistics too.
+        if (certifiableSeries.Splits.Count > 0)
             await SyncKeyStatistics(target, cancellationToken);
 
         using var scope = _scopeFactory.CreateScope();
         var manager =
             scope.ServiceProvider.GetRequiredService<CorporateActionPriceReconciliationManager>();
         var stamped = await manager.StampApplied(
-            selectedSeries,
+            certifiableSeries,
             capturedDividends,
             today,
             DateTime.UtcNow,
@@ -787,6 +814,91 @@ public class YahooPriceImportService
             "Requeued {Count} split reconciliation marker(s) whose stored history still crossed price bases",
             requeued
         );
+    }
+
+    // Accepts a fetched history only when it sits on one split basis, restating it first when the
+    // authoritative captured ratio explains the jump. Yahoo can serve an unrestated history for
+    // days after a split becomes effective; waiting for it froze the whole series (no new bars,
+    // no rebase) for exactly the names customers are watching. The restatement is deterministic
+    // arithmetic off the captured ratio — never an inference — because it only fires when the
+    // observed boundary jump already matches that ratio.
+    private bool TryPutHistoryOnSingleSplitBasis(
+        string ticker,
+        List<HistoricalPrice> prices,
+        IReadOnlyCollection<SplitBasisDefinition> splits,
+        DateOnly today
+    )
+    {
+        var restated = RestateHistoryAcrossKnownSplits(prices, splits, today);
+        if (restated > 0)
+        {
+            _logger.LogWarning(
+                "Restated {Ticker}'s fetched history across {Count} captured split boundary(ies) the provider had not adjusted yet",
+                ticker,
+                restated
+            );
+        }
+
+        return !ShouldRejectSplitBearingHistory(ticker, prices, splits);
+    }
+
+    // Puts the segment before each straddled effective split onto the post-split basis: prices
+    // scale by denominator/numerator and volumes by numerator/denominator, exactly cancelling the
+    // boundary jump. A boundary is restated ONLY when its observed jump matches the captured
+    // ratio — restating on the ratio alone would double-apply a split the provider had already
+    // adjusted, and a future (announced) split must never restate anything.
+    internal static int RestateHistoryAcrossKnownSplits(
+        List<HistoricalPrice> prices,
+        IEnumerable<SplitBasisDefinition> splits,
+        DateOnly today
+    )
+    {
+        var restated = 0;
+        foreach (var split in splits.OrderByDescending(split => split.EffectiveDate))
+        {
+            if (split.EffectiveDate > today || split.Numerator <= 0m || split.Denominator <= 0m)
+                continue;
+            if (
+                !HasSplitBasisDiscontinuity(
+                    prices,
+                    split.EffectiveDate,
+                    split.Numerator,
+                    split.Denominator
+                )
+            )
+                continue;
+
+            var priceFactor = split.Denominator / split.Numerator;
+            var volumeFactor = split.Numerator / split.Denominator;
+            foreach (var price in prices)
+            {
+                if (price.Date >= split.EffectiveDate)
+                    continue;
+
+                price.Open = Math.Round(price.Open * priceFactor, 4);
+                price.High = Math.Round(price.High * priceFactor, 4);
+                price.Low = Math.Round(price.Low * priceFactor, 4);
+                price.Close = Math.Round(price.Close * priceFactor, 4);
+                price.AdjustedClose = Math.Round(price.AdjustedClose * priceFactor, 4);
+                price.Volume = (long)Math.Round(price.Volume * volumeFactor);
+            }
+
+            restated++;
+        }
+
+        return restated;
+    }
+
+    // The splits a replacement history can actually certify: only a serve containing at least one
+    // bar on or after a split's effective date can prove the series is on that split's basis. A
+    // serve ending earlier passes the discontinuity check vacuously and must leave the split
+    // pending instead of stamping it applied.
+    internal static IReadOnlyList<PendingSplitSnapshot> CertifiableSplits(
+        IReadOnlyList<PendingSplitSnapshot> splits,
+        DateOnly lastServedDate
+    )
+    {
+        return splits.Where(split => split.EffectiveDate <= lastServedDate).ToList();
     }
 
     private bool ShouldRejectSplitBearingHistory(
@@ -1083,14 +1195,17 @@ public class YahooPriceImportService
             }
 
             if (
-                ShouldRejectSplitBearingHistory(
+                !TryPutHistoryOnSingleSplitBasis(
                     target.Ticker,
                     chartData.Prices,
-                    chartData.Splits.Select(split => new SplitBasisDefinition(
-                        split.Date,
-                        split.Numerator,
-                        split.Denominator
-                    ))
+                    chartData
+                        .Splits.Select(split => new SplitBasisDefinition(
+                            split.Date,
+                            split.Numerator,
+                            split.Denominator
+                        ))
+                        .ToList(),
+                    today
                 )
             )
                 return new TickerImportResult(Fetched: true, Inserted: 0);
@@ -1126,14 +1241,17 @@ public class YahooPriceImportService
         {
             await CaptureSplits(target, chartData.Splits, cancellationToken);
             if (
-                ShouldRejectSplitBearingHistory(
+                !TryPutHistoryOnSingleSplitBasis(
                     target.Ticker,
                     chartData.Prices,
-                    chartData.Splits.Select(split => new SplitBasisDefinition(
-                        split.Date,
-                        split.Numerator,
-                        split.Denominator
-                    ))
+                    chartData
+                        .Splits.Select(split => new SplitBasisDefinition(
+                            split.Date,
+                            split.Numerator,
+                            split.Denominator
+                        ))
+                        .ToList(),
+                    today
                 )
             )
                 return new TickerImportResult(Fetched: true, Inserted: 0);
@@ -1160,8 +1278,16 @@ public class YahooPriceImportService
                     split.Numerator,
                     split.Denominator
                 ))
-                .Distinct();
-            if (ShouldRejectSplitBearingHistory(target.Ticker, fullChart.Prices, splitBoundaries))
+                .Distinct()
+                .ToList();
+            if (
+                !TryPutHistoryOnSingleSplitBasis(
+                    target.Ticker,
+                    fullChart.Prices,
+                    splitBoundaries,
+                    today
+                )
+            )
                 return new TickerImportResult(Fetched: true, Inserted: 0);
 
             var replaced = await ReplaceStoredPrices(
