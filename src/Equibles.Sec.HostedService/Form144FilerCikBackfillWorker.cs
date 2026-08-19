@@ -42,8 +42,7 @@ public class Form144FilerCikBackfillWorker : BaseScraperWorker
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
         using var scope = ScopeFactory.CreateScope();
-        var manager =
-            scope.ServiceProvider.GetRequiredService<Form144FilerCikBackfillManager>();
+        var manager = scope.ServiceProvider.GetRequiredService<Form144FilerCikBackfillManager>();
 
         var resolved = await manager.Run(stoppingToken);
 

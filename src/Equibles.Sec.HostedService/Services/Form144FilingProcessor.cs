@@ -145,7 +145,10 @@ public class Form144FilingProcessor
     /// </summary>
     private static DateOnly? ParsePlanAdoptionDate(XElement formData)
     {
-        var dates = Els(El(El(formData, "noticeSignature"), "planAdoptionDates"), "planAdoptionDate")
+        var dates = Els(
+                El(El(formData, "noticeSignature"), "planAdoptionDates"),
+                "planAdoptionDate"
+            )
             .Select(e => ParseDate(e.Value))
             .Where(d => d != null)
             .ToList();

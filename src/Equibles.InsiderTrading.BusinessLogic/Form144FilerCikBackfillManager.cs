@@ -205,8 +205,7 @@ public class Form144FilerCikBackfillManager
     private static IEnumerable<XElement> Children(XElement parent, string name) =>
         parent?.Elements().Where(e => e.Name.LocalName == name) ?? [];
 
-    private static string Value(XElement parent, string name) =>
-        Child(parent, name)?.Value?.Trim();
+    private static string Value(XElement parent, string name) => Child(parent, name)?.Value?.Trim();
 
     private static DateOnly? ParseUsDate(string value)
     {
