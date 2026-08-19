@@ -177,7 +177,7 @@ public class DocumentRepository : BaseRepository<Document>
             );
     }
 
-    public async Task<Document> GetWithContent(Guid id)
+    public virtual async Task<Document> GetWithContent(Guid id)
     {
         // The content bytes ride along eagerly: leaving File.FileContent to a lazy load
         // lets an aborted or transient load mid-request corrupt the navigation's loaded
