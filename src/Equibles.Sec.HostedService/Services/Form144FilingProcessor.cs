@@ -78,6 +78,8 @@ public class Form144FilingProcessor
             CommonStockId = companyId,
             AccessionNumber = filing.AccessionNumber,
             FilingDate = filing.FilingDate,
+            FilerCik = ParseFilerCik(root),
+            PlanAdoptionDate = ParsePlanAdoptionDate(formData),
             SellerName = Truncate(
                 Val(issuerInfo, "nameOfPersonForWhoseAccountTheSecuritiesAreToBeSold"),
                 512
@@ -104,6 +106,51 @@ public class Form144FilingProcessor
         }
 
         return entity;
+    }
+
+    /// <summary>
+    /// CIK of the natural person the notice is filed for, from
+    /// <c>headerData/filerInfo/filer/filerCredentials/cik</c>. EDGAR indexes the notice under
+    /// this CIK as well as the issuer's, and it is the same CIK that person's Forms 3/4/5 use,
+    /// which is what makes a notice joinable to its executions.
+    ///
+    /// Kept verbatim (EDGAR zero-pads to ten characters) so it matches
+    /// <c>InsiderOwner.OwnerCik</c>, which stores the Form 4 value the same way.
+    /// </summary>
+    private string ParseFilerCik(XElement root)
+    {
+        var filerInfo = El(El(root, "headerData"), "filerInfo");
+
+        // A joint filing carries several <filer> elements. The first is the person the notice
+        // is filed for; log the rest rather than guessing between them.
+        var filers = Els(filerInfo, "filer").ToList();
+        if (filers.Count == 0)
+            return null;
+
+        if (filers.Count > 1)
+        {
+            Logger.LogWarning(
+                "Form 144 carries {Count} filer elements; taking the first CIK",
+                filers.Count
+            );
+        }
+
+        return Truncate(Val(El(filers[0], "filerCredentials"), "cik"), 16);
+    }
+
+    /// <summary>
+    /// Adoption date of the Rule 10b5-1 plan the sale is made under, when the notice declares
+    /// one, from <c>noticeSignature/planAdoptionDates/planAdoptionDate</c>. A notice may list
+    /// more than one adoption date; the earliest is taken as the plan's origin.
+    /// </summary>
+    private static DateOnly? ParsePlanAdoptionDate(XElement formData)
+    {
+        var dates = Els(El(El(formData, "noticeSignature"), "planAdoptionDates"), "planAdoptionDate")
+            .Select(e => ParseDate(e.Value))
+            .Where(d => d != null)
+            .ToList();
+
+        return dates.Count == 0 ? null : dates.Min();
     }
 
     private static Form144PriorSale ParsePriorSale(XElement element)

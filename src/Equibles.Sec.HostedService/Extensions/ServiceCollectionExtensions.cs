@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<AsFiledHtmlBackfillWorker>();
         services.AddHostedService<FilingItemsBackfillWorker>();
         services.AddHostedService<InsiderFilingReprocessWorker>();
+        services.AddHostedService<Form144FilerCikBackfillWorker>();
         services.AddHostedService<NportFilingReprocessWorker>();
         services.AddHostedService<NportRealtimeWorker>();
         services.AddHostedService<FundSeriesRefreshWorker>();

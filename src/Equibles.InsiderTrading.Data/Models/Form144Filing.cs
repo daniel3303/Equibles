@@ -14,6 +14,7 @@ namespace Equibles.InsiderTrading.Data.Models;
 [Index(nameof(CommonStockId), nameof(FilingDate))]
 [Index(nameof(AccessionNumber), IsUnique = true)]
 [Index(nameof(FilingDate))]
+[Index(nameof(FilerCik), nameof(FilingDate))]
 public class Form144Filing
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -27,12 +28,25 @@ public class Form144Filing
     public DateOnly FilingDate { get; set; }
 
     /// <summary>
-    /// Person for whose account the securities are to be sold (the affiliate). Form 144 XML
-    /// carries the seller's name but not a CIK, so this is stored as free text rather than
-    /// resolved to an <see cref="InsiderOwner"/>.
+    /// Person for whose account the securities are to be sold (the affiliate), as free text.
+    /// Use <see cref="FilerCik"/> to identify them; names are not unique and not stable.
     /// </summary>
     [MaxLength(512)]
     public string SellerName { get; set; }
+
+    /// <summary>
+    /// CIK of the natural person who filed the notice, taken from the submission's
+    /// <c>filerCredentials</c> block. This is the same identifier that person's Forms 3/4/5
+    /// are filed under, so it joins directly to <see cref="InsiderOwner.OwnerCik"/> and is the
+    /// only reliable way to tell whether a proposed sale was ever executed.
+    ///
+    /// Stored verbatim, zero-padded to ten characters exactly as EDGAR emits it and exactly as
+    /// <see cref="InsiderOwner.OwnerCik"/> stores it, so the two compare without normalisation.
+    ///
+    /// Null on notices imported before this field was captured; the backfill fills them in.
+    /// </summary>
+    [MaxLength(16)]
+    public string FilerCik { get; set; }
 
     /// <summary>
     /// The seller's relationship(s) to the issuer (e.g. "Director", "Officer"). A filing can
@@ -63,6 +77,20 @@ public class Form144Filing
 
     [MaxLength(2048)]
     public string Remarks { get; set; }
+
+    /// <summary>
+    /// Adoption date of the Rule 10b5-1 trading plan the sale is made under, when the notice
+    /// declares one. Its presence is the notice's own signal that the sale is pre-arranged
+    /// rather than discretionary.
+    ///
+    /// This matters most where the Form 4 side cannot help: an executed notice can borrow
+    /// <see cref="InsiderTransaction.IsRule10b5One"/> from the matching transaction, but a
+    /// notice that is never executed has no transaction to borrow from.
+    ///
+    /// Null when the notice declares no plan, and on notices imported before this field was
+    /// captured. The two are not distinguishable until the backfill has drained.
+    /// </summary>
+    public DateOnly? PlanAdoptionDate { get; set; }
 
     public virtual List<Form144PriorSale> PriorSales { get; set; } = [];
 
