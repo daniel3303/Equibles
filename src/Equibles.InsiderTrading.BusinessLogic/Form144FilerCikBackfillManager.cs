@@ -36,6 +36,9 @@ public class Form144FilerCikBackfillManager
     private const int BatchSize = 64;
     private const int MaxAttempts = 3;
 
+    // One full batch parked for missing credentials is already past coincidence.
+    private const int ParkedWithoutCredentialsAlarm = BatchSize;
+
     private readonly Form144FilingRepository _repository;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly ILogger<Form144FilerCikBackfillManager> _logger;
@@ -57,6 +60,9 @@ public class Form144FilerCikBackfillManager
     public async Task<int> Run(CancellationToken cancellationToken = default)
     {
         var resolved = 0;
+        var parkedNoIssuerCik = 0;
+        var parkedNoCredentials = 0;
+        var parkedAttemptsExhausted = 0;
         var attempts = new Dictionary<Guid, int>();
 
         while (!cancellationToken.IsCancellationRequested)
@@ -86,6 +92,7 @@ public class Form144FilerCikBackfillManager
                     // The notice is attributed to an issuer with no CIK, so its document cannot
                     // be addressed on EDGAR at all. Park it rather than retrying forever.
                     filing.FilerCik = UnavailableMarker;
+                    parkedNoIssuerCik++;
                     progressed = true;
                     continue;
                 }
@@ -93,6 +100,7 @@ public class Form144FilerCikBackfillManager
                 if (!TryRecordAttempt(attempts, filing.Id))
                 {
                     filing.FilerCik = UnavailableMarker;
+                    parkedAttemptsExhausted++;
                     progressed = true;
                     _logger.LogWarning(
                         "Parking Form 144 {AccessionNumber} after {Attempts} failed attempts",
@@ -129,6 +137,7 @@ public class Form144FilerCikBackfillManager
                     // Fetched cleanly but carries no filer credentials. Retrying cannot change
                     // that, so park it immediately rather than burning the attempt budget.
                     filing.FilerCik = UnavailableMarker;
+                    parkedNoCredentials++;
                     progressed = true;
                     continue;
                 }
@@ -150,6 +159,38 @@ public class Form144FilerCikBackfillManager
             }
         }
 
+        var parked = parkedNoIssuerCik + parkedNoCredentials + parkedAttemptsExhausted;
+        if (parked > 0)
+        {
+            _logger.LogInformation(
+                "Form 144 filer-CIK backfill parked {Parked} notice(s): {NoIssuerCik} with no "
+                    + "issuer CIK, {NoCredentials} carrying no filer credentials, {Exhausted} after "
+                    + "{MaxAttempts} failed fetches. Resolved {Resolved}.",
+                parked,
+                parkedNoIssuerCik,
+                parkedNoCredentials,
+                parkedAttemptsExhausted,
+                MaxAttempts,
+                resolved
+            );
+        }
+
+        // Notices EDGAR serves but that carry no filer credentials are the exception, not the
+        // rule: every electronically filed Form 144 has them. A cycle that parks far more than
+        // it resolves is a fault in THIS lane (a document shape it cannot read), not a corpus
+        // of bad filings, and parking is silent enough to burn the whole backlog unnoticed.
+        if (parkedNoCredentials > resolved && parkedNoCredentials >= ParkedWithoutCredentialsAlarm)
+        {
+            _logger.LogWarning(
+                "Form 144 filer-CIK backfill parked {NoCredentials} notice(s) for missing filer "
+                    + "credentials while resolving only {Resolved}. Expect nearly every notice to "
+                    + "carry credentials, so this points at the document shape this lane reads, not "
+                    + "at the filings. Investigate before the backlog is exhausted.",
+                parkedNoCredentials,
+                resolved
+            );
+        }
+
         return resolved;
     }
 
@@ -165,12 +206,25 @@ public class Form144FilerCikBackfillManager
     /// Kept here rather than on the processor because the backfill runs from a raw document
     /// with no surrounding filing metadata.
     /// </summary>
+    /// <summary>
+    /// Reads the filer CIK and earliest plan adoption date out of a notice's RAW EDGAR
+    /// submission.
+    ///
+    /// The document arrives as the full <c>.txt</c> submission, which opens with an SGML
+    /// envelope (<c>SEC-DOCUMENT</c>, <c>SEC-HEADER</c>) and is NOT well-formed XML, so it must
+    /// be sanitized exactly as the import path sanitizes it before it can be parsed. Parsing the
+    /// raw text instead throws on every notice, which reads here as "carries no filer
+    /// credentials" and quietly parks the entire corpus.
+    /// </summary>
     internal static (string FilerCik, DateOnly? PlanAdoptionDate) ParseIdentity(string xml)
     {
+        if (string.IsNullOrWhiteSpace(xml))
+            return (null, null);
+
         XElement root;
         try
         {
-            root = XDocument.Parse(xml).Root;
+            root = XDocument.Parse(InsiderFilingParser.SanitizeXml(xml)).Root;
         }
         catch (System.Xml.XmlException)
         {

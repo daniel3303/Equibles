@@ -147,8 +147,10 @@ public class Form144FilingProcessorFilerCikTests
         Parse(Document(Header("0001780525"))).PlanAdoptionDate.Should().BeNull();
     }
 
-    // The backfill reads a raw document with no surrounding filing metadata, so it parses the
-    // same two fields independently. The two paths must agree, or history and new ingest diverge.
+    // The backfill parses the same two fields independently of the import path, so the two must
+    // agree or history and new ingest diverge. This case feeds the ALREADY-SANITIZED payload;
+    // BackfillParseIdentity_RawSgmlSubmissionAsEdgarServesIt covers what the backfill is actually
+    // handed, which is not this.
     [Fact]
     public void BackfillParseIdentity_AgreesWithTheProcessor()
     {
@@ -172,5 +174,59 @@ public class Form144FilingProcessorFilerCikTests
 
         parsed.FilerCik.Should().BeNull();
         parsed.PlanAdoptionDate.Should().BeNull();
+    }
+
+    // The exact bytes EDGAR serves for accession 0001959173-23-000915 (trimmed), which is what
+    // the backfill is handed: GetDocumentContent fetches `{accession}.txt`, the FULL submission.
+    // It opens with an SGML envelope and is NOT well-formed XML, and the payload is namespaced.
+    //
+    // This is the regression. The backfill shipped parsing this text directly, so XDocument threw
+    // on every notice, every notice looked like it "carries no filer credentials", and the lane
+    // parked the corpus instead of filling it: 1,854 notices parked and 0 resolved in production
+    // before it was caught. The old agreement test passed throughout because it fed the payload
+    // post-sanitize, a shape the backfill never sees.
+    private const string RawSgmlSubmission =
+        "<SEC-DOCUMENT>0001959173-23-000915.txt : 20230508\n"
+        + "<SEC-HEADER>0001959173-23-000915.hdr.sgml : 20230508\n"
+        + "<ACCEPTANCE-DATETIME>20230508153241\n"
+        + "ACCESSION NUMBER:\t\t0001959173-23-000915\n"
+        + "CONFORMED SUBMISSION TYPE:\t144\n"
+        + "</SEC-HEADER>\n"
+        + "<DOCUMENT>\n<TYPE>144\n<SEQUENCE>1\n<FILENAME>primary_doc.xml\n<TEXT>\n"
+        + "<XML>\n"
+        + "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        + "<edgarSubmission xmlns=\"http://www.sec.gov/edgar/ownership\" "
+        + "xmlns:com=\"http://www.sec.gov/edgar/common\">"
+        + "<headerData><filerInfo><filer><filerCredentials>"
+        + "<cik>0001914614</cik><ccc>XXXXXXXX</ccc>"
+        + "</filerCredentials></filer></filerInfo></headerData>"
+        + "<formData><noticeSignature><planAdoptionDates>"
+        + "<planAdoptionDate>11/28/2022</planAdoptionDate>"
+        + "</planAdoptionDates></noticeSignature></formData>"
+        + "</edgarSubmission>\n"
+        + "</XML>\n</TEXT>\n</DOCUMENT>\n</SEC-DOCUMENT>\n";
+
+    [Fact]
+    public void BackfillParseIdentity_RawSgmlSubmissionAsEdgarServesIt_ReadsFilerCikAndPlanDate()
+    {
+        var parsed = Form144FilerCikBackfillManager.ParseIdentity(RawSgmlSubmission);
+
+        // Zero-padded verbatim, so it joins InsiderOwner.OwnerCik without transformation.
+        parsed.FilerCik.Should().Be("0001914614");
+        parsed.PlanAdoptionDate.Should().Be(new DateOnly(2022, 11, 28));
+    }
+
+    // A document EDGAR serves that genuinely carries no credentials must still park, so the fix
+    // above cannot be mistaken for "never park anything".
+    [Fact]
+    public void BackfillParseIdentity_SgmlSubmissionWithoutFilerCredentials_ReturnsNothing()
+    {
+        var withoutCredentials =
+            "<SEC-DOCUMENT>x.txt : 20230508\n<SEC-HEADER>x</SEC-HEADER>\n<XML>\n"
+            + "<edgarSubmission xmlns=\"http://www.sec.gov/edgar/ownership\">"
+            + "<headerData><filerInfo><filer /></filerInfo></headerData>"
+            + "</edgarSubmission>\n</XML>\n</SEC-DOCUMENT>\n";
+
+        Form144FilerCikBackfillManager.ParseIdentity(withoutCredentials).FilerCik.Should().BeNull();
     }
 }
