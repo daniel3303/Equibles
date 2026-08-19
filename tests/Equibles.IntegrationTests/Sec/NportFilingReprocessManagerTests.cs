@@ -173,7 +173,118 @@ public class NportFilingReprocessManagerTests
         await secClient.DidNotReceive().GetDocumentContent(Arg.Any<string>(), Arg.Any<string>());
     }
 
+    [Fact]
+    public async Task Run_FullFidelitySeries_KeepsTheWholeScheduleInsteadOfNarrowing()
+    {
+        var (manager, dbContext, secClient) = CreateManagerWithDeps();
+        // No tracked stock carries either CUSIP in the submission, so the narrowing a sweep-
+        // discovered filing normally gets would leave the schedule empty.
+        var filing = SeedSweepFiling(dbContext, parserVersion: 0);
+        secClient
+            .GetDocumentContent(filing.AccessionNumber, Arg.Any<string>())
+            .Returns(ValidNportSubmission);
+
+        var result = await manager.Run(SeriesSet("S000087771"));
+
+        result.HoldingsAdded.Should().Be(2);
+        var reprocessed = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
+        reprocessed.Holdings.Should().HaveCount(2);
+        reprocessed.ParserVersion.Should().Be(NportFiling.CurrentParserVersion);
+    }
+
+    [Fact]
+    public async Task Run_SweepFilingOfAnUnlistedSeries_IsStillNarrowed()
+    {
+        var (manager, dbContext, secClient) = CreateManagerWithDeps();
+        var filing = SeedSweepFiling(dbContext, parserVersion: 0);
+        secClient
+            .GetDocumentContent(filing.AccessionNumber, Arg.Any<string>())
+            .Returns(ValidNportSubmission);
+
+        // An opt-in for some other series must not widen this one.
+        var result = await manager.Run(SeriesSet("S000030003"));
+
+        result.HoldingsAdded.Should().Be(0);
+        var reprocessed = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
+        reprocessed.Holdings.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Run_OptedInFilingStillNarrowed_IsReenrolledAndHealed()
+    {
+        var (manager, dbContext, secClient) = CreateManagerWithDeps();
+        // Already at the current parser version, so the version-driven pass would never select it —
+        // but its stored schedule is one row against the two the filing reported, the fingerprint of
+        // a filing persisted while the series was still being narrowed.
+        var filing = SeedSweepFiling(
+            dbContext,
+            parserVersion: NportFiling.CurrentParserVersion,
+            reportedHoldingCount: 2
+        );
+        SeedHolding(dbContext, filing, "AT&T Inc", "00206R102");
+        secClient
+            .GetDocumentContent(filing.AccessionNumber, Arg.Any<string>())
+            .Returns(ValidNportSubmission);
+
+        var result = await manager.Run(SeriesSet("S000087771"));
+
+        result.Processed.Should().Be(1);
+        var healed = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
+        healed.Holdings.Should().HaveCount(2);
+        healed.ParserVersion.Should().Be(NportFiling.CurrentParserVersion);
+
+        // Self-clearing: a healed filing matches its reported count, so a second pass leaves it be.
+        dbContext.ChangeTracker.Clear();
+        secClient.ClearReceivedCalls();
+        var second = await manager.Run(SeriesSet("S000087771"));
+
+        second.Total.Should().Be(0);
+        await secClient.DidNotReceive().GetDocumentContent(Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task Run_OptedInFilingAtTheAttemptCeiling_IsNotReenrolled()
+    {
+        var (manager, dbContext, secClient) = CreateManagerWithDeps();
+        // EDGAR will never return this submission; the ceiling already stamped it current. Re-
+        // enrolling it would undo that and retry forever, one cycle at a time.
+        var filing = SeedSweepFiling(
+            dbContext,
+            parserVersion: NportFiling.CurrentParserVersion,
+            reportedHoldingCount: 2,
+            reprocessAttempts: NportFilingReprocessManager.MaxReprocessAttempts
+        );
+        SeedHolding(dbContext, filing, "AT&T Inc", "00206R102");
+
+        var result = await manager.Run(SeriesSet("S000087771"));
+
+        result.Total.Should().Be(0);
+        await secClient.DidNotReceive().GetDocumentContent(Arg.Any<string>(), Arg.Any<string>());
+        var untouched = await dbContext.Set<NportFiling>().SingleAsync();
+        untouched.ParserVersion.Should().Be(NportFiling.CurrentParserVersion);
+    }
+
+    [Fact]
+    public async Task Run_NarrowedFilingOfAnUnlistedSeries_IsNotReenrolled()
+    {
+        var (manager, dbContext, secClient) = CreateManagerWithDeps();
+        var filing = SeedSweepFiling(
+            dbContext,
+            parserVersion: NportFiling.CurrentParserVersion,
+            reportedHoldingCount: 2
+        );
+        SeedHolding(dbContext, filing, "AT&T Inc", "00206R102");
+
+        var result = await manager.Run(SeriesSet("S000030003"));
+
+        result.Total.Should().Be(0);
+        await secClient.DidNotReceive().GetDocumentContent(Arg.Any<string>(), Arg.Any<string>());
+    }
+
     // ── Helpers ──
+
+    private static IReadOnlySet<string> SeriesSet(params string[] seriesIds) =>
+        new HashSet<string>(seriesIds, StringComparer.OrdinalIgnoreCase);
 
     private static (
         NportFilingReprocessManager manager,
@@ -247,6 +358,55 @@ public class NportFilingReprocessManagerTests
         dbContext.SaveChanges();
         dbContext.ChangeTracker.Clear();
         return filing;
+    }
+
+    // A sweep-discovered filing: no tracked stock, identified by its registrant CIK. Its schedule
+    // is the one the tracked-CUSIP narrowing applies to.
+    private static NportFiling SeedSweepFiling(
+        Equibles.Data.EquiblesFinancialDbContext dbContext,
+        int parserVersion,
+        int? reportedHoldingCount = null,
+        int reprocessAttempts = 0
+    )
+    {
+        var filing = new NportFiling
+        {
+            Id = Guid.NewGuid(),
+            CommonStockId = null,
+            RegistrantCik = "0001100663",
+            SeriesId = "S000087771",
+            AccessionNumber = "0001104659-26-000099",
+            FilingDate = new DateOnly(2026, 3, 30),
+            ReportPeriodDate = new DateOnly(2026, 2, 28),
+            ReportPeriodEnd = new DateOnly(2026, 2, 28),
+            ParserVersion = parserVersion,
+            ReportedHoldingCount = reportedHoldingCount,
+            ReprocessAttempts = reprocessAttempts,
+        };
+        dbContext.Add(filing);
+        dbContext.SaveChanges();
+        dbContext.ChangeTracker.Clear();
+        return filing;
+    }
+
+    private static void SeedHolding(
+        Equibles.Data.EquiblesFinancialDbContext dbContext,
+        NportFiling filing,
+        string name,
+        string cusip
+    )
+    {
+        dbContext.Add(
+            new NportHolding
+            {
+                Id = Guid.NewGuid(),
+                NportFilingId = filing.Id,
+                Name = name,
+                Cusip = cusip,
+            }
+        );
+        dbContext.SaveChanges();
+        dbContext.ChangeTracker.Clear();
     }
 
     // A trimmed NPORT-P submission with two holdings, laid out as real EDGAR filings are —

@@ -1,7 +1,9 @@
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Sec.HostedService.Helpers;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Worker;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -32,19 +34,29 @@ public class NportFilingReprocessWorker : BaseScraperWorker
     // starting at the same time.
     protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(5);
 
+    private readonly IConfiguration _configuration;
+
     public NportFilingReprocessWorker(
         ILogger<NportFilingReprocessWorker> logger,
         IServiceScopeFactory scopeFactory,
-        ErrorReporter errorReporter
+        ErrorReporter errorReporter,
+        IConfiguration configuration
     )
-        : base(logger, scopeFactory, errorReporter) { }
+        : base(logger, scopeFactory, errorReporter)
+    {
+        _configuration = configuration;
+    }
 
     protected override async Task DoWork(CancellationToken stoppingToken)
     {
+        // Read from the sweep's own configuration: the two workers must agree on which series keep
+        // a whole schedule, or reprocess would re-narrow what the sweep just stored in full.
+        var fullFidelitySeriesIds = NportFullFidelitySeries.FromConfiguration(_configuration);
+
         await using var scope = ScopeFactory.CreateAsyncScope();
         var manager = scope.ServiceProvider.GetRequiredService<NportFilingReprocessManager>();
 
-        var result = await manager.Run(stoppingToken);
+        var result = await manager.Run(fullFidelitySeriesIds, stoppingToken);
 
         if (result.Processed > 0)
             Logger.LogInformation("NPORT-P filing reprocess cycle: {Summary}", result.Summary);

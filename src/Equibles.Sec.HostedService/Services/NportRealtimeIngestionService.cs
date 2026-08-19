@@ -27,6 +27,10 @@ namespace Equibles.Sec.HostedService.Services;
 /// the only consumer is the reverse "who holds this stock" lookup. A registrant that is itself a
 /// tracked stock is left to the issuer-feed crawler, which stores its reports at full fidelity, so
 /// the two paths never produce the same series twice.
+///
+/// A series named in <see cref="NportFullFidelitySeries"/> is exempt from that narrowing and keeps
+/// its whole schedule — for consumers that need a fund's complete portfolio rather than its overlap
+/// with our universe.
 /// </summary>
 [Service]
 public class NportRealtimeIngestionService
@@ -69,14 +73,19 @@ public class NportRealtimeIngestionService
     /// <paramref name="today"/>) for NPORT-P submissions, ingesting the trust-only ones that hold a
     /// stock we track. At most <paramref name="maxFetchesPerCycle"/> submissions are downloaded per
     /// cycle; when more remain the result flags it so the worker drains the rest promptly.
+    /// Filings of a series in <paramref name="fullFidelitySeriesIds"/> keep their whole schedule
+    /// instead of being narrowed to tracked-stock positions.
     /// </summary>
     public async Task<NportRealtimeResult> IngestRecentFilings(
         DateOnly today,
         int lookbackDays,
         int maxFetchesPerCycle,
+        IReadOnlySet<string> fullFidelitySeriesIds,
         CancellationToken cancellationToken
     )
     {
+        fullFidelitySeriesIds ??= NportFullFidelitySeries.None;
+
         var trackedCusips = await LoadTrackedCusips(cancellationToken);
         if (trackedCusips.Count == 0)
         {
@@ -124,7 +133,12 @@ public class NportRealtimeIngestionService
                 }
 
                 fetched++;
-                var outcome = await ProcessTrustFiling(entry, trackedCusips, cancellationToken);
+                var outcome = await ProcessTrustFiling(
+                    entry,
+                    trackedCusips,
+                    fullFidelitySeriesIds,
+                    cancellationToken
+                );
                 if (outcome == FilingOutcome.Stored)
                     stored++;
                 if (outcome != FilingOutcome.TransientFailure)
@@ -167,6 +181,7 @@ public class NportRealtimeIngestionService
     private async Task<FilingOutcome> ProcessTrustFiling(
         EdgarDailyIndexEntry entry,
         HashSet<string> trackedCusips,
+        IReadOnlySet<string> fullFidelitySeriesIds,
         CancellationToken cancellationToken
     )
     {
@@ -228,6 +243,19 @@ public class NportRealtimeIngestionService
         }
 
         filing.RegistrantCik = Truncate(entry.Cik, 16);
+
+        // An opted-in series keeps its whole schedule and is stored unconditionally: its consumer
+        // reads the fund's complete portfolio, so narrowing it to our universe would not merely
+        // shrink the row count — it would answer the wrong question. Storing it even when it holds
+        // nothing we track is what lets the series' latest report keep advancing.
+        if (
+            !string.IsNullOrEmpty(filing.SeriesId)
+            && fullFidelitySeriesIds.Contains(filing.SeriesId)
+        )
+        {
+            _nportFilingRepository.Add(filing);
+            return FilingOutcome.Stored;
+        }
 
         var trackedHoldings = filing
             .Holdings.Where(h => !string.IsNullOrEmpty(h.Cusip) && trackedCusips.Contains(h.Cusip))

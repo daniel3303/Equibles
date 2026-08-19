@@ -54,6 +54,25 @@ public class NportFilingRepositoryQueryTranslationTests
     }
 
     [Fact]
+    public void GetNarrowedBelowReportedCount_TranslatesTheHoldingCountComparisonToSql()
+    {
+        using var ctx = CreateContext();
+        var repository = new NportFilingRepository(ctx);
+
+        // The whole re-enrollment selector is a correlated count against a nullable column. If a
+        // provider change stops translating it the query throws at runtime in the worker — a place
+        // no other test reaches — so pin that it reaches SQL at all, and that the null guard rides
+        // along rather than being optimised into a comparison that swallows unknown counts.
+        var sql = repository
+            .GetNarrowedBelowReportedCount(["S000030000", "S000030003"])
+            .ToQueryString();
+        var flat = System.Text.RegularExpressions.Regex.Replace(sql, @"\s+", " ");
+
+        flat.ToUpperInvariant().Should().Contain("SELECT COUNT(*)");
+        flat.Should().Contain("\"ReportedHoldingCount\" IS NOT NULL");
+    }
+
+    [Fact]
     public void GetLatestPerSeries_TranslatesToPartitionedBranches_WithHashableIdentityKeys()
     {
         using var ctx = CreateContext();

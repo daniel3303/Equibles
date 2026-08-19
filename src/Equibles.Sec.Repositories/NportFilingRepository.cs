@@ -103,6 +103,33 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     }
 
     /// <summary>
+    /// Sweep-discovered filings of the given series whose stored schedule is shorter than the row
+    /// count the filing reported — that is, ones persisted while the series was still being
+    /// narrowed to tracked-stock positions. The reprocess pass re-enrolls exactly these so an
+    /// opted-in series heals its own history from EDGAR instead of needing a manual replay.
+    ///
+    /// The count comparison is the whole test and it is self-clearing: the parser stamps
+    /// <see cref="NportFiling.ReportedHoldingCount"/> from the same list it returns, so a filing
+    /// re-derived at full fidelity ends with the two equal and drops out. Filings whose reported
+    /// count was never captured (null, pre-versioning) are left alone rather than guessed at.
+    ///
+    /// Series ids are compared upper-cased on both sides: EDGAR writes them uppercase, but a
+    /// hand-typed configuration value must not silently match nothing.
+    /// </summary>
+    public IQueryable<NportFiling> GetNarrowedBelowReportedCount(
+        IReadOnlyCollection<string> seriesIds
+    )
+    {
+        var wanted = seriesIds.Select(s => s.ToUpperInvariant()).ToList();
+
+        return GetAll()
+            .Where(f => f.CommonStockId == null)
+            .Where(f => f.SeriesId != null && wanted.Contains(f.SeriesId.ToUpper()))
+            .Where(f => f.ReportedHoldingCount != null)
+            .Where(f => f.Holdings.Count < f.ReportedHoldingCount);
+    }
+
+    /// <summary>
     /// Each fund series' most recent NPORT report whose portfolio is as of the floor date or
     /// later. Series identity never compares name text — the same fund's name varies across
     /// filings ("and"/"&amp;", "Inc"/"Inc.", stray spaces, legal renames), which would freeze a

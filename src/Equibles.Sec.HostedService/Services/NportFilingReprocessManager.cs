@@ -75,8 +75,20 @@ public class NportFilingReprocessManager
         _logger = logger;
     }
 
-    public async Task<NportFilingReprocessResult> Run(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Brings every filing below <see cref="NportFiling.CurrentParserVersion"/> up to date.
+    /// Filings of a series in <paramref name="fullFidelitySeriesIds"/> keep their whole schedule
+    /// rather than being re-narrowed to tracked-stock positions, and any of that series' filings
+    /// still holding a narrowed schedule are re-enrolled first so the opt-in heals history too.
+    /// </summary>
+    public async Task<NportFilingReprocessResult> Run(
+        IReadOnlySet<string> fullFidelitySeriesIds = null,
+        CancellationToken cancellationToken = default
+    )
     {
+        fullFidelitySeriesIds ??= NportFullFidelitySeries.None;
+        await ReenrollNarrowedFullFidelityFilings(fullFidelitySeriesIds, cancellationToken);
+
         var result = new NportFilingReprocessResult
         {
             Total = await _filingRepository
@@ -128,7 +140,11 @@ public class NportFilingReprocessManager
 
                 try
                 {
-                    result.HoldingsAdded += await ReprocessFiling(filing, cancellationToken);
+                    result.HoldingsAdded += await ReprocessFiling(
+                        filing,
+                        fullFidelitySeriesIds,
+                        cancellationToken
+                    );
                     result.Processed++;
                 }
                 catch (DbUpdateException ex) when (IsUniqueViolation(ex))
@@ -189,6 +205,62 @@ public class NportFilingReprocessManager
         return result;
     }
 
+    // Drops the parser stamp on opted-in filings whose stored schedule is still narrowed, so the
+    // pass below re-derives them from EDGAR. Bumping CurrentParserVersion would do the same job for
+    // the whole table — a six-figure re-fetch through the shared SEC budget — where the opt-in only
+    // invalidates the series it names.
+    //
+    // Two guards keep it from looping. The selection is self-clearing: a filing re-derived at full
+    // fidelity ends with its schedule matching its reported count and stops being selected. And a
+    // filing EDGAR will never return advances to the current version at the attempt ceiling, so
+    // this skips it rather than resetting the stamp the ceiling just set.
+    private async Task ReenrollNarrowedFullFidelityFilings(
+        IReadOnlySet<string> fullFidelitySeriesIds,
+        CancellationToken cancellationToken
+    )
+    {
+        if (fullFidelitySeriesIds.Count == 0)
+            return;
+
+        var narrowed = await _filingRepository
+            .GetNarrowedBelowReportedCount(fullFidelitySeriesIds.ToList())
+            .Where(f => f.ParserVersion >= NportFiling.CurrentParserVersion)
+            .Where(f => f.ReprocessAttempts < MaxReprocessAttempts)
+            .Select(f => f.Id)
+            .ToListAsync(cancellationToken);
+
+        if (narrowed.Count == 0)
+            return;
+
+        // Version 0 is the pre-versioning marker the reprocess pass already treats as "re-derive
+        // me", so it needs no separate sentinel.
+        if (_dbContext.Database.IsRelational())
+        {
+            await _filingRepository
+                .GetAll()
+                .Where(f => narrowed.Contains(f.Id))
+                .ExecuteUpdateAsync(s => s.SetProperty(f => f.ParserVersion, 0), cancellationToken);
+        }
+        else
+        {
+            // The in-memory provider (tests) has no ExecuteUpdate; the seeded set is tiny.
+            var filings = await _filingRepository
+                .GetAll()
+                .Where(f => narrowed.Contains(f.Id))
+                .ToListAsync(cancellationToken);
+            foreach (var filing in filings)
+                filing.ParserVersion = 0;
+            await _filingRepository.SaveChanges();
+        }
+
+        _dbContext.ChangeTracker.Clear();
+
+        _logger.LogInformation(
+            "NPORT-P reprocess: re-enrolled {Count} filings of full-fidelity series still holding a narrowed schedule",
+            narrowed.Count
+        );
+    }
+
     // Only a unique violation is trusted as "another writer got there first" and retried without
     // burning an attempt; every other database failure (e.g. a length or constraint violation) is
     // deterministic for the filing and must count toward the ceiling.
@@ -198,7 +270,11 @@ public class NportFilingReprocessManager
     // Returns the number of holdings parsed onto the filing. Throws on any fetch/parse failure so
     // the caller can record the attempt and retry the filing on a later run. The EDGAR fetch and
     // parse run before any database write, so a failure never leaves the filing half-replaced.
-    private async Task<int> ReprocessFiling(NportFiling filing, CancellationToken cancellationToken)
+    private async Task<int> ReprocessFiling(
+        NportFiling filing,
+        IReadOnlySet<string> fullFidelitySeriesIds,
+        CancellationToken cancellationToken
+    )
     {
         // A sweep-discovered filing has no tracked stock; its registrant CIK is the one to re-fetch
         // from. A feed-crawled filing carries no registrant CIK and re-fetches via its stock's.
@@ -245,9 +321,16 @@ public class NportFilingReprocessManager
         // Sweep-discovered (registrant-only) filings keep only positions in stocks we track — they
         // exist solely to answer the reverse "who holds this stock" lookup. Re-derive that same
         // filtered schedule so reprocess doesn't re-inflate the filing with the fund's full
-        // portfolio of bonds, derivatives and untracked equities.
+        // portfolio of bonds, derivatives and untracked equities. A series opted into full fidelity
+        // is the exception and keeps everything — re-narrowing it here would silently undo the
+        // opt-in on the next parser-version bump. The freshly parsed id wins over the stored one so
+        // a filing whose series id was never captured can still be recognised.
+        var seriesId = string.IsNullOrEmpty(parsed.SeriesId) ? filing.SeriesId : parsed.SeriesId;
+        var fullFidelity =
+            !string.IsNullOrEmpty(seriesId) && fullFidelitySeriesIds.Contains(seriesId);
+
         var reparsedHoldings = parsed.Holdings;
-        if (filing.CommonStockId == null)
+        if (filing.CommonStockId == null && !fullFidelity)
         {
             var trackedCusips = await GetTrackedCusips();
             reparsedHoldings = parsed

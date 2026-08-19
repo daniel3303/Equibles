@@ -1,5 +1,6 @@
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
+using Equibles.Sec.HostedService.Helpers;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Worker;
 using Microsoft.Extensions.Configuration;
@@ -79,6 +80,7 @@ public class NportRealtimeWorker : BaseScraperWorker
             1,
             _configuration.GetValue("NportSweep:MaxFetchesPerCycle", DefaultMaxFetchesPerCycle)
         );
+        var fullFidelitySeriesIds = NportFullFidelitySeries.FromConfiguration(_configuration);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         await using var scope = ScopeFactory.CreateAsyncScope();
@@ -88,6 +90,7 @@ public class NportRealtimeWorker : BaseScraperWorker
             today,
             lookbackDays,
             maxFetches,
+            fullFidelitySeriesIds,
             stoppingToken
         );
 
