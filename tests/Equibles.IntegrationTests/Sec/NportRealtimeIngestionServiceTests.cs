@@ -8,6 +8,7 @@ using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.HostedService.Helpers;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +51,7 @@ public class NportRealtimeIngestionServiceTests
             new DateOnly(2026, 3, 1),
             lookbackDays: 1,
             maxFetchesPerCycle: 100,
+            NportFullFidelitySeries.None,
             CancellationToken.None
         );
 
@@ -80,6 +82,7 @@ public class NportRealtimeIngestionServiceTests
             new DateOnly(2026, 3, 1),
             lookbackDays: 1,
             maxFetchesPerCycle: 100,
+            NportFullFidelitySeries.None,
             CancellationToken.None
         );
 
@@ -116,6 +119,7 @@ public class NportRealtimeIngestionServiceTests
             new DateOnly(2026, 3, 1),
             lookbackDays: 1,
             maxFetchesPerCycle: 100,
+            NportFullFidelitySeries.None,
             CancellationToken.None
         );
 
@@ -150,12 +154,19 @@ public class NportRealtimeIngestionServiceTests
             NportXml("SOME BOND TRUST", "S000099999", (BondCusip, "US TREASURY NOTE", 1m))
         );
 
-        await service.IngestRecentFilings(new DateOnly(2026, 3, 1), 1, 100, CancellationToken.None);
+        await service.IngestRecentFilings(
+            new DateOnly(2026, 3, 1),
+            1,
+            100,
+            NportFullFidelitySeries.None,
+            CancellationToken.None
+        );
         dbContext.ChangeTracker.Clear();
         var second = await service.IngestRecentFilings(
             new DateOnly(2026, 3, 1),
             1,
             100,
+            NportFullFidelitySeries.None,
             CancellationToken.None
         );
 
@@ -201,6 +212,7 @@ public class NportRealtimeIngestionServiceTests
             new DateOnly(2026, 3, 1),
             lookbackDays: 1,
             maxFetchesPerCycle: 100,
+            NportFullFidelitySeries.None,
             CancellationToken.None
         );
 
@@ -209,7 +221,113 @@ public class NportRealtimeIngestionServiceTests
         stored.Holdings.Should().ContainSingle().Which.Cusip.Should().Be(AppleCusip);
     }
 
+    [Fact]
+    public async Task IngestRecentFilings_FullFidelitySeries_StoresTheWholeSchedule()
+    {
+        var (service, dbContext, secClient) = CreateServiceWithDeps();
+        SeedStock(dbContext, "AAPL", cik: "0000320193", cusip: AppleCusip);
+
+        var entry = Entry("0000036405-26-000001", cik: "36405");
+        StubDailyIndex(secClient, entry);
+        StubContent(
+            secClient,
+            entry,
+            NportXml(
+                "VANGUARD INDEX FUNDS",
+                "S000030003",
+                (AppleCusip, "APPLE INC", 170_000_000m),
+                (BondCusip, "US TREASURY NOTE", 5_000_000m),
+                // A foreign-domiciled issuer whose CUSIP the filer masks — the row a narrowed
+                // schedule can never recover, and the reason the opt-in exists.
+                ("000000000", "LINDE PLC", 2_600_000m)
+            )
+        );
+
+        var result = await service.IngestRecentFilings(
+            new DateOnly(2026, 3, 1),
+            lookbackDays: 1,
+            maxFetchesPerCycle: 100,
+            SeriesSet("S000030003"),
+            CancellationToken.None
+        );
+
+        result.Stored.Should().Be(1);
+        var stored = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
+        stored.Holdings.Should().HaveCount(3);
+        stored
+            .Holdings.Should()
+            .HaveCount(
+                stored.ReportedHoldingCount.Value,
+                "a whole schedule matches the count the filing reported — the signal reprocess re-enrolls on"
+            );
+    }
+
+    [Fact]
+    public async Task IngestRecentFilings_FullFidelitySeriesHoldingNothingTracked_StillStores()
+    {
+        var (service, dbContext, secClient) = CreateServiceWithDeps();
+        SeedStock(dbContext, "AAPL", cik: "0000320193", cusip: AppleCusip);
+
+        var entry = Entry("0000036405-26-000002", cik: "36405");
+        StubDailyIndex(secClient, entry);
+        StubContent(
+            secClient,
+            entry,
+            NportXml("VANGUARD INDEX FUNDS", "S000030003", (BondCusip, "US TREASURY NOTE", 1m))
+        );
+
+        // Without the opt-in this filing is skip-recorded (it holds nothing we track and the series
+        // is unknown); with it the series' report must land so its latest period keeps advancing.
+        var result = await service.IngestRecentFilings(
+            new DateOnly(2026, 3, 1),
+            lookbackDays: 1,
+            maxFetchesPerCycle: 100,
+            SeriesSet("S000030003"),
+            CancellationToken.None
+        );
+
+        result.Stored.Should().Be(1);
+        var stored = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
+        stored.Holdings.Should().ContainSingle().Which.Cusip.Should().Be(BondCusip);
+    }
+
+    [Fact]
+    public async Task IngestRecentFilings_SeriesNotOptedIn_StillNarrows()
+    {
+        var (service, dbContext, secClient) = CreateServiceWithDeps();
+        SeedStock(dbContext, "AAPL", cik: "0000320193", cusip: AppleCusip);
+
+        var entry = Entry("0000036405-26-000003", cik: "36405");
+        StubDailyIndex(secClient, entry);
+        StubContent(
+            secClient,
+            entry,
+            NportXml(
+                "VANGUARD INDEX FUNDS",
+                "S000002277",
+                (AppleCusip, "APPLE INC", 1m),
+                (BondCusip, "US TREASURY NOTE", 1m)
+            )
+        );
+
+        // An opt-in elsewhere must not widen every other series the sweep meets.
+        await service.IngestRecentFilings(
+            new DateOnly(2026, 3, 1),
+            lookbackDays: 1,
+            maxFetchesPerCycle: 100,
+            SeriesSet("S000030003"),
+            CancellationToken.None
+        );
+
+        var stored = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
+        stored.Holdings.Should().ContainSingle().Which.Cusip.Should().Be(AppleCusip);
+        stored.ReportedHoldingCount.Should().Be(2);
+    }
+
     // ── Helpers ──
+
+    private static IReadOnlySet<string> SeriesSet(params string[] seriesIds) =>
+        new HashSet<string>(seriesIds, StringComparer.OrdinalIgnoreCase);
 
     private static (
         NportRealtimeIngestionService service,
