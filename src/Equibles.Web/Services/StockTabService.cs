@@ -6,6 +6,9 @@ using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Core.Extensions;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data.Extensions;
 using Equibles.Finra.Repositories;
 using Equibles.Holdings.BusinessLogic;
@@ -48,6 +51,7 @@ public class StockTabService
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly MarketActivityShareRestater _marketActivityShareRestater;
+    private readonly StockSplitRepository _stockSplitRepository;
 
     // Data before the configured sync floor is partial — the scrapers only
     // backfill from it — so historical series clamp to it rather than render
@@ -80,7 +84,8 @@ public class StockTabService
         FinancialConceptRepository financialConceptRepository,
         CommonStockRepository commonStockRepository,
         IOptions<WorkerOptions> workerOptions = null,
-        MarketActivityShareRestater marketActivityShareRestater = null
+        MarketActivityShareRestater marketActivityShareRestater = null,
+        StockSplitRepository stockSplitRepository = null
     )
     {
         _minSyncDate = workerOptions?.Value.MinSyncDate is { } floor
@@ -103,6 +108,20 @@ public class StockTabService
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
         _marketActivityShareRestater = marketActivityShareRestater;
+        _stockSplitRepository = stockSplitRepository;
+    }
+
+    // The stock's splits effective as of today, for restating share balances onto today's
+    // post-split basis at read time (stored rows stay as filed). Empty when the optional
+    // repository is absent (test constructors), which keeps every consumer as-filed.
+    private async Task<IReadOnlyList<StockSplit>> LoadEffectiveSplits(CommonStock stock)
+    {
+        if (_stockSplitRepository == null)
+            return [];
+        return await _stockSplitRepository
+            .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+            .AsNoTracking()
+            .ToListAsync();
     }
 
     // Whether the holdings tab should OPEN in the combined view: the newest quarter's filing
@@ -150,10 +169,13 @@ public class StockTabService
             selectedDate
         );
 
+        var effectiveSplits = await LoadEffectiveSplits(stock);
         var grouped = HoldingsPositionGrouper.Group(
             allCurrent,
             allPrevious,
-            filersWithCurrentQuarterFilings
+            filersWithCurrentQuarterFilings,
+            effectiveSplits,
+            stock.Ticker
         );
 
         var allChanges = grouped.SelectMany(g => g.Value).ToList();
@@ -171,7 +193,12 @@ public class StockTabService
             SelectedDate = selectedDate,
             Ticker = stock.Ticker,
             TotalValue = allCurrent.Sum(h => h.Value),
-            TotalShares = allCurrent.Sum(h => h.Shares),
+            // Restated onto today's split basis so the header stat matches the ownership
+            // trend's latest point (the trend is restated by MarketActivityShareRestater)
+            // and stays comparable to today's SharesOutStanding.
+            TotalShares = allCurrent.Sum(h =>
+                HoldingShareRestatement.RestateToToday(h, effectiveSplits, stock.Ticker)
+            ),
             HolderCount = allCurrent.Select(h => h.InstitutionalHolderId).Distinct().Count(),
             SharesOutstanding = stock.SharesOutStanding,
             OwnershipTrend = await LoadOwnershipTrend(stock),
@@ -209,6 +236,11 @@ public class StockTabService
             .Include(h => h.InstitutionalHolder)
             .ToListAsync();
 
+        // Restate from each ROW's own report date: carried-forward rows keep the previous
+        // quarter's date, so a split between the two quarters only rescales the rows that
+        // actually predate it.
+        var effectiveSplits = await LoadEffectiveSplits(stock);
+
         var holders = allCombined
             .GroupBy(h => h.InstitutionalHolderId)
             .Select(g =>
@@ -223,7 +255,9 @@ public class StockTabService
                     CurrentHolding = g.OrderBy(h => h.ListedTicker == null ? 0 : 1)
                         .ThenByDescending(h => h.FilingDate)
                         .First(),
-                    CurrentShares = g.Sum(h => h.Shares),
+                    CurrentShares = g.Sum(h =>
+                        HoldingShareRestatement.RestateToToday(h, effectiveSplits, stock.Ticker)
+                    ),
                     CurrentValue = g.Sum(h => h.Value),
                     ChangeType = PositionChangeType.Unchanged,
                     LatestReportDate = latestDate,
@@ -248,7 +282,9 @@ public class StockTabService
             SelectedDate = current,
             Ticker = stock.Ticker,
             TotalValue = allCombined.Sum(h => h.Value),
-            TotalShares = allCombined.Sum(h => h.Shares),
+            TotalShares = allCombined.Sum(h =>
+                HoldingShareRestatement.RestateToToday(h, effectiveSplits, stock.Ticker)
+            ),
             HolderCount = holders.Count,
             SharesOutstanding = stock.SharesOutStanding,
             OwnershipTrend = await LoadOwnershipTrend(stock),
@@ -261,27 +297,77 @@ public class StockTabService
 
     public async Task<ShortVolumeTabViewModel> LoadShortVolumeTab(CommonStock stock)
     {
+        // AsNoTracking: the rows are mutated below for display (restated onto today's
+        // split basis) and must never flush back through a tracked context.
         var shortVolumes = await FetchMostRecentAscending(
-            _dailyShortVolumeRepository.GetHistoryByStock(stock),
+            _dailyShortVolumeRepository.GetHistoryByStock(stock).AsNoTracking(),
             d => d.Date,
             90
         );
+        var primarySplits = await LoadPrimarySeriesSplits(stock);
+        foreach (var row in shortVolumes)
+        {
+            var factor = SplitAdjustment.ShareCountFactor(row.Date, primarySplits);
+            if (factor == 1m)
+                continue;
+            row.ShortVolume = SplitAdjustment.AdjustShareCount(row.ShortVolume, factor);
+            row.ShortExemptVolume = SplitAdjustment.AdjustShareCount(row.ShortExemptVolume, factor);
+            // TotalVolume restates by the same factor, so the short-of-total ratio stays
+            // exactly as filed (same-observation ratios are split-invariant).
+            row.TotalVolume = SplitAdjustment.AdjustShareCount(row.TotalVolume, factor);
+        }
         return new ShortVolumeTabViewModel { ShortVolumes = shortVolumes, Ticker = stock.Ticker };
     }
 
     public async Task<ShortInterestTabViewModel> LoadShortInterestTab(CommonStock stock)
     {
         var shortInterests = await FetchMostRecentAscending(
-            _shortInterestRepository.GetHistoryByStock(stock),
+            _shortInterestRepository.GetHistoryByStock(stock).AsNoTracking(),
             s => s.SettlementDate,
             24
         );
+        var primarySplits = await LoadPrimarySeriesSplits(stock);
+        foreach (var row in shortInterests)
+        {
+            var factor = SplitAdjustment.ShareCountFactor(row.SettlementDate, primarySplits);
+            if (factor == 1m)
+                continue;
+            row.CurrentShortPosition = SplitAdjustment.AdjustShareCount(
+                row.CurrentShortPosition,
+                factor
+            );
+            row.PreviousShortPosition = SplitAdjustment.AdjustShareCount(
+                row.PreviousShortPosition,
+                factor
+            );
+            row.ChangeInShortPosition = SplitAdjustment.AdjustShareCount(
+                row.ChangeInShortPosition,
+                factor
+            );
+            // ADV restates with the position so the stored DaysToCover (position ÷ ADV, a
+            // same-observation ratio) stays consistent with both printed magnitudes.
+            if (row.AverageDailyVolume.HasValue)
+                row.AverageDailyVolume = SplitAdjustment.AdjustShareCount(
+                    row.AverageDailyVolume.Value,
+                    factor
+                );
+        }
         return new ShortInterestTabViewModel
         {
             ShortInterests = shortInterests,
             Ticker = stock.Ticker,
         };
     }
+
+    // FINRA report magnitudes belong to the stock's PRIMARY listed series, so restatement
+    // uses only splits attributed to that exact series (a sibling share class's split must
+    // never rescale them).
+    private async Task<List<StockSplit>> LoadPrimarySeriesSplits(CommonStock stock) =>
+        PriceSeriesSplitScope.ForListing(
+            await LoadEffectiveSplits(stock),
+            stock.Ticker,
+            stock.Ticker
+        );
 
     public async Task<FtdTabViewModel> LoadFtdTab(CommonStock stock)
     {
@@ -768,12 +854,29 @@ public class StockTabService
         InstitutionalHolder holder
     )
     {
+        // AsNoTracking: rows are mutated below for display and must never flush back.
         var holdings = await _institutionalHoldingRepository
             .GetHistoryByStock(stock)
             .Where(h => h.InstitutionalHolderId == holder.Id)
             .OrderByDescending(h => h.ReportDate)
             .Take(50)
+            .AsNoTracking()
             .ToListAsync();
+
+        // Restate every quarter's count onto today's split basis so the position-over-time
+        // chart is continuous across a split and the quarter-over-quarter change compares
+        // like with like (as filed, an unchanged position reads as a 10x jump across a
+        // 10:1 forward split). Values stay as filed.
+        var effectiveSplits = await LoadEffectiveSplits(stock);
+        if (effectiveSplits.Count > 0)
+        {
+            foreach (var holding in holdings)
+                holding.Shares = HoldingShareRestatement.RestateToToday(
+                    holding,
+                    effectiveSplits,
+                    stock.Ticker
+                );
+        }
 
         return new HolderDetailViewModel
         {

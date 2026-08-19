@@ -1,8 +1,15 @@
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Web.ViewModels.Stocks;
 
 namespace Equibles.Web.Services;
 
+// The commercial repo carries a deliberate fork of this class
+// (Equibles.Web.Providers.Services.HoldingsPositionGrouper). Their split-restatement
+// behaviour must stay equivalent, but the classification contracts intentionally
+// diverge: this copy keeps a 0-share-both-quarters holder as an Unchanged row
+// (pinned by HoldingsPositionGrouperZeroSharesBothQuartersTests) while the
+// commercial copy skips those rows entirely. Never blind-copy either direction.
 public static class HoldingsPositionGrouper
 {
     /// <param name="filersWithCurrentQuarterFilings">
@@ -19,10 +26,27 @@ public static class HoldingsPositionGrouper
         IReadOnlyList<InstitutionalHolding> currentHoldings,
         IReadOnlyList<InstitutionalHolding> previousHoldings,
         IReadOnlySet<Guid> filersWithCurrentQuarterFilings
+    ) => Group(currentHoldings, previousHoldings, filersWithCurrentQuarterFilings, [], null);
+
+    /// <param name="effectiveSplits">
+    /// The stock's splits effective as of today. Every share count is restated onto
+    /// today's post-split basis from its row's own report date before aggregation and
+    /// bucket classification — a split between the two quarters otherwise reads as a
+    /// phantom Increased (forward) or Reduced (reverse) row for every unchanged holder.
+    /// Restatement is per exact listed series (see <see cref="HoldingShareRestatement"/>);
+    /// dollar values stay as filed. Pass an empty list for as-filed behaviour.
+    /// </param>
+    /// <param name="primaryTicker">The stock's primary ticker, scoping split attribution.</param>
+    public static Dictionary<PositionChangeType, List<HolderPositionChange>> Group(
+        IReadOnlyList<InstitutionalHolding> currentHoldings,
+        IReadOnlyList<InstitutionalHolding> previousHoldings,
+        IReadOnlySet<Guid> filersWithCurrentQuarterFilings,
+        IReadOnlyList<StockSplit> effectiveSplits,
+        string primaryTicker
     )
     {
-        var currentByHolder = AggregateByHolder(currentHoldings);
-        var previousByHolder = AggregateByHolder(previousHoldings);
+        var currentByHolder = AggregateByHolder(currentHoldings, effectiveSplits, primaryTicker);
+        var previousByHolder = AggregateByHolder(previousHoldings, effectiveSplits, primaryTicker);
 
         var result = new Dictionary<PositionChangeType, List<HolderPositionChange>>
         {
@@ -98,7 +122,9 @@ public static class HoldingsPositionGrouper
     }
 
     private static Dictionary<Guid, HolderAggregate> AggregateByHolder(
-        IReadOnlyList<InstitutionalHolding> holdings
+        IReadOnlyList<InstitutionalHolding> holdings,
+        IReadOnlyList<StockSplit> effectiveSplits,
+        string primaryTicker
     )
     {
         return holdings
@@ -114,7 +140,13 @@ public static class HoldingsPositionGrouper
                     LatestHolding = g.OrderBy(h => h.ListedTicker == null ? 0 : 1)
                         .ThenByDescending(h => h.FilingDate)
                         .First(),
-                    TotalShares = g.Sum(h => h.Shares),
+                    // Restate per ROW, not per aggregate: a holder's total can mix share
+                    // classes, and a sibling-class count only moves on its own series'
+                    // splits — one factor over the mixed sum would restate the sibling's
+                    // part by the primary's ratio.
+                    TotalShares = g.Sum(h =>
+                        HoldingShareRestatement.RestateToToday(h, effectiveSplits, primaryTicker)
+                    ),
                     TotalValue = g.Sum(h => h.Value),
                 }
             );
