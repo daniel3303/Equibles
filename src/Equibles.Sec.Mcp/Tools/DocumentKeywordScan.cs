@@ -1,6 +1,7 @@
 using System.Text;
 using Equibles.Mcp.Helpers;
 using Equibles.Media.BusinessLogic;
+using Equibles.Sec.BusinessLogic.Search;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
 
@@ -17,7 +18,8 @@ internal static class DocumentKeywordScan
         IFileManager fileManager,
         Guid documentId,
         string keyword,
-        int maxResults
+        int maxResults,
+        IDocumentExcerptLinkBuilder linkBuilder = null
     )
     {
         var (document, lines, error) = await LoadDocumentLines(
@@ -58,7 +60,7 @@ internal static class DocumentKeywordScan
         );
         result.AppendLine();
 
-        AppendMatchBlocks(result, lines, matches, keyword);
+        AppendMatchBlocks(result, lines, matches, keyword, document, linkBuilder);
 
         result.AppendLine(McpOutput.TruncationNote(matches.Count, allMatches.Count));
 
@@ -87,12 +89,15 @@ internal static class DocumentKeywordScan
 
     // Renders each match with one line of context on each side, merging overlapping and
     // adjacent blocks grep-style so a document line never prints twice; a blank line
-    // separates non-contiguous blocks.
+    // separates non-contiguous blocks. When a link builder is registered, each block ends
+    // with a link anchored on the block's line span and its first matched line's text.
     private static void AppendMatchBlocks(
         StringBuilder result,
         string[] lines,
         List<int> matches,
-        string keyword
+        string keyword,
+        Document document,
+        IDocumentExcerptLinkBuilder linkBuilder
     )
     {
         var matchSet = matches.ToHashSet();
@@ -107,19 +112,75 @@ internal static class DocumentKeywordScan
         }
 
         int? previous = null;
+        int? blockStart = null;
+        int? blockFirstMatch = null;
         foreach (var lineIndex in linesToPrint)
         {
             if (previous.HasValue && lineIndex > previous.Value + 1)
+            {
+                AppendBlockLink(
+                    result,
+                    lines,
+                    document,
+                    linkBuilder,
+                    blockStart,
+                    previous,
+                    blockFirstMatch
+                );
                 result.AppendLine();
+                blockStart = null;
+                blockFirstMatch = null;
+            }
 
-            var content = matchSet.Contains(lineIndex)
-                ? HighlightKeyword(lines[lineIndex], keyword)
-                : lines[lineIndex];
+            blockStart ??= lineIndex;
+            var isMatch = matchSet.Contains(lineIndex);
+            if (isMatch && blockFirstMatch == null)
+                blockFirstMatch = lineIndex;
+
+            var content = isMatch ? HighlightKeyword(lines[lineIndex], keyword) : lines[lineIndex];
             result.AppendLine(DocumentTextFormat.Line(lineIndex + 1, content));
             previous = lineIndex;
         }
 
+        AppendBlockLink(
+            result,
+            lines,
+            document,
+            linkBuilder,
+            blockStart,
+            previous,
+            blockFirstMatch
+        );
         result.AppendLine();
+    }
+
+    private static void AppendBlockLink(
+        StringBuilder result,
+        string[] lines,
+        Document document,
+        IDocumentExcerptLinkBuilder linkBuilder,
+        int? blockStart,
+        int? blockEnd,
+        int? blockFirstMatch
+    )
+    {
+        if (
+            linkBuilder == null
+            || blockStart == null
+            || blockEnd == null
+            || blockFirstMatch == null
+        )
+            return;
+
+        // Line numbers are rendered 1-based; the builder gets the same basis.
+        var url = linkBuilder.BuildExcerptUrl(
+            document,
+            blockStart.Value + 1,
+            blockEnd.Value + 1,
+            lines[blockFirstMatch.Value]
+        );
+        if (url != null)
+            result.AppendLine($"Link: {url}");
     }
 
     private static string HighlightKeyword(string line, string keyword)

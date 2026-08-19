@@ -5,6 +5,7 @@ using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
 using Equibles.Media.BusinessLogic;
+using Equibles.Sec.BusinessLogic.Search;
 using Equibles.Sec.Repositories;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -16,17 +17,22 @@ public class DocumentTextTools
 {
     private readonly DocumentRepository _documentRepository;
     private readonly IFileManager _fileManager;
+    private readonly IDocumentExcerptLinkBuilder _excerptLinkBuilder;
     private readonly McpToolRunner _runner;
 
+    // The excerpt link builder is optional by design — no framework registration exists,
+    // and the container falls back to null on deployments without a public viewer.
     public DocumentTextTools(
         DocumentRepository documentRepository,
         ErrorManager errorManager,
         IFileManager fileManager,
-        ILogger<DocumentTextTools> logger
+        ILogger<DocumentTextTools> logger,
+        IDocumentExcerptLinkBuilder excerptLinkBuilder = null
     )
     {
         _documentRepository = documentRepository;
         _fileManager = fileManager;
+        _excerptLinkBuilder = excerptLinkBuilder;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -52,7 +58,8 @@ public class DocumentTextTools
                     _fileManager,
                     documentId,
                     keyword,
-                    maxResults
+                    maxResults,
+                    _excerptLinkBuilder
                 ),
             "SearchDocumentKeyword",
             $"documentId: {documentId}, keyword: {keyword}",

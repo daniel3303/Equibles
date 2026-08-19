@@ -17,16 +17,22 @@ public class RagManager : IRagManager
     private readonly HybridChunkSearcher _hybridChunkSearcher;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly ILogger<RagManager> _logger;
+    private readonly IDocumentExcerptLinkBuilder _excerptLinkBuilder;
 
+    // The link builder is an OPTIONAL dependency by design: the framework registers no
+    // implementation, and the DI container falls back to the default (null) when a
+    // deployment has not registered a public document viewer to link into.
     public RagManager(
         HybridChunkSearcher hybridChunkSearcher,
         CommonStockRepository commonStockRepository,
-        ILogger<RagManager> logger
+        ILogger<RagManager> logger,
+        IDocumentExcerptLinkBuilder excerptLinkBuilder = null
     )
     {
         _hybridChunkSearcher = hybridChunkSearcher;
         _commonStockRepository = commonStockRepository;
         _logger = logger;
+        _excerptLinkBuilder = excerptLinkBuilder;
     }
 
     public async Task<List<Chunk>> SearchRelevantChunks(
@@ -118,7 +124,8 @@ public class RagManager : IRagManager
     public Task<string> BuildContext(
         List<Chunk> chunks,
         bool includeDocumentIds = false,
-        int maxExcerptChars = 0
+        int maxExcerptChars = 0,
+        bool includeExcerptLinks = false
     )
     {
         if (!chunks.Any())
@@ -167,6 +174,11 @@ public class RagManager : IRagManager
                             : $"**Excerpt {chunk.Index + 1}:**"
                     );
                     context.AppendLine(content);
+                    var link = BuildExcerptLink(chunk, includeExcerptLinks);
+                    if (link != null)
+                    {
+                        context.AppendLine($"Link: {link}");
+                    }
                     context.AppendLine();
                 }
             }
@@ -176,6 +188,22 @@ public class RagManager : IRagManager
         }
 
         return Task.FromResult(context.ToString());
+    }
+
+    // The link anchors on the chunk's line span in the normalized text — the same
+    // (StartLineNumber, StartLineNumber + newline count) convention the excerpt header
+    // and ReadDocumentLines use — plus the chunk's raw text for viewers that refine the
+    // approximate line anchor by matching the passage itself.
+    private string BuildExcerptLink(Chunk chunk, bool includeExcerptLinks)
+    {
+        if (!includeExcerptLinks || _excerptLinkBuilder == null || chunk.StartLineNumber <= 0)
+        {
+            return null;
+        }
+
+        var fromLine = chunk.StartLineNumber;
+        var toLine = fromLine + (chunk.Content ?? string.Empty).Count(c => c == '\n');
+        return _excerptLinkBuilder.BuildExcerptUrl(chunk.Document, fromLine, toLine, chunk.Content);
     }
 
     // Markdown image references in chunk content (slide-deck captures embed one per slide)

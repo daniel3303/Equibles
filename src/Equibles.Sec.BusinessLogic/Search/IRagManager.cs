@@ -38,6 +38,7 @@ public interface IRagManager
     public Task<string> BuildContext(
         List<Chunk> chunks,
         bool includeDocumentIds = false,
-        int maxExcerptChars = 0
+        int maxExcerptChars = 0,
+        bool includeExcerptLinks = false
     );
 }

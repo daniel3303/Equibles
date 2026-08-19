@@ -44,8 +44,11 @@ public class RagSearchTools
     private readonly CommonStockRepository _commonStockRepository;
     private readonly DocumentRepository _documentRepository;
     private readonly IFileManager _fileManager;
+    private readonly IDocumentExcerptLinkBuilder _excerptLinkBuilder;
     private readonly McpToolRunner _runner;
 
+    // The excerpt link builder is optional by design — no framework registration exists,
+    // and the container falls back to null on deployments without a public viewer.
     public RagSearchTools(
         IRagManager ragManager,
         ISecDocumentService secDocumentService,
@@ -53,7 +56,8 @@ public class RagSearchTools
         DocumentRepository documentRepository,
         IFileManager fileManager,
         ErrorManager errorManager,
-        ILogger<RagSearchTools> logger
+        ILogger<RagSearchTools> logger,
+        IDocumentExcerptLinkBuilder excerptLinkBuilder = null
     )
     {
         _ragManager = ragManager;
@@ -61,6 +65,7 @@ public class RagSearchTools
         _commonStockRepository = commonStockRepository;
         _documentRepository = documentRepository;
         _fileManager = fileManager;
+        _excerptLinkBuilder = excerptLinkBuilder;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -118,7 +123,8 @@ public class RagSearchTools
                 var context = await _ragManager.BuildContext(
                     chunks,
                     includeDocumentIds: true,
-                    maxExcerptChars: maxExcerptChars
+                    maxExcerptChars: maxExcerptChars,
+                    includeExcerptLinks: true
                 );
                 return AppendShortfallNote(context, chunks.Count, maxResults);
             },
@@ -183,7 +189,8 @@ public class RagSearchTools
                 var context = await _ragManager.BuildContext(
                     chunks,
                     includeDocumentIds: true,
-                    maxExcerptChars: maxExcerptChars
+                    maxExcerptChars: maxExcerptChars,
+                    includeExcerptLinks: true
                 );
                 return AppendShortfallNote(context, chunks.Count, maxResults);
             },
@@ -229,7 +236,8 @@ public class RagSearchTools
                         _fileManager,
                         documentId,
                         query,
-                        maxResults
+                        maxResults,
+                        _excerptLinkBuilder
                     );
                 if (mode != "semantic")
                     return $"Unknown searchMode \"{searchMode}\" — pass 'semantic' (default) or 'exact'.";
@@ -254,7 +262,8 @@ public class RagSearchTools
                 var context = await _ragManager.BuildContext(
                     chunks,
                     includeDocumentIds: true,
-                    maxExcerptChars: maxExcerptChars
+                    maxExcerptChars: maxExcerptChars,
+                    includeExcerptLinks: true
                 );
                 return context
                     + $"_{chunks.Count} excerpt(s) returned (maxResults {maxResults}); excerpts are in document order — pass an excerpt's line number to ReadDocumentLines for surrounding context._";
