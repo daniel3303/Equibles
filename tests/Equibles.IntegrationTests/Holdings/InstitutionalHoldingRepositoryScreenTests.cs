@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Models.Taxonomies;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
@@ -241,6 +242,105 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         rows[0].PercentOfFloat.Should().BeApproximately(80.0, 0.01);
     }
 
+    [Fact]
+    public async Task ScreenRestated_SplitAfterTheQuarter_JudgesPctFloatOnTheRestatedBasis()
+    {
+        // BYND shape: 1-for-30 reverse split effective after the screened quarter. The
+        // as-filed count over today's post-split float reads 1500%; restated it is 50%.
+        // The SQL pass must let the affected stock THROUGH its % bounds (passthrough),
+        // then the in-memory re-judgement keeps it on the restated ratio, drops the
+        // affected stock whose restated ratio fails, and never leaks an unaffected
+        // stock that the plain SQL predicate already rejects.
+        await using var seed = FreshContext();
+        var kept = await SeedStock(seed, ticker: "BYND", sharesOutStanding: 2_000_000);
+        var dropped = await SeedStock(seed, ticker: "DROPME", sharesOutStanding: 10_000_000);
+        var unaffected = await SeedStock(seed, ticker: "CTRL", sharesOutStanding: 1_000_000);
+        var holder = await SeedHolder(seed, cik: "sr1");
+        seed.Add(MakeHolding(kept, holder, Current, shares: 30_000_000, value: 12_000_000));
+        seed.Add(MakeHolding(dropped, holder, Current, shares: 30_000_000, value: 9_000_000));
+        seed.Add(MakeHolding(unaffected, holder, Current, shares: 10_000, value: 10_000));
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+        List<StockSplit> splits =
+        [
+            new StockSplit
+            {
+                CommonStockId = kept.Id,
+                EffectiveDate = Current.AddDays(20),
+                Numerator = 1m,
+                Denominator = 30m,
+                PriceSeriesTicker = "BYND",
+            },
+            new StockSplit
+            {
+                CommonStockId = dropped.Id,
+                EffectiveDate = Current.AddDays(20),
+                Numerator = 1m,
+                Denominator = 30m,
+                PriceSeriesTicker = "DROPME",
+            },
+        ];
+
+        var rows = await sut.ScreenRestated(
+            new ScreenerCriteria { MinPctFloat = 20.0, MaxPctFloat = 60.0 },
+            Current,
+            Prior,
+            splits,
+            rowCap: null
+        );
+        rows = rows.Where(r => r.Ticker is "BYND" or "DROPME" or "CTRL").ToList();
+
+        var row = rows.Should().ContainSingle().Subject;
+        row.Ticker.Should().Be("BYND");
+        row.CurrentShares.Should().Be(1_000_000);
+        row.PercentOfFloat.Should().BeApproximately(50.0, 0.01);
+    }
+
+    [Fact]
+    public async Task ScreenRestated_SiblingListingSlice_IsNeverRescaledByThePrimarySplit()
+    {
+        // The current quarter holds 300,000 primary shares plus 700 of a sibling class.
+        // The 1-for-30 split is attributed to the PRIMARY series only, so restatement is
+        // per exact listing: 300,000/30 + 700 as-filed = 10,700 → 10.7% of the 100,000
+        // float. An unscoped factor over the mixed sum would divide the sibling's 700 too.
+        await using var seed = FreshContext();
+        var stock = await SeedStock(seed, ticker: "GOOGL", sharesOutStanding: 100_000);
+        var holder = await SeedHolder(seed, cik: "sr2");
+        seed.Add(MakeHolding(stock, holder, Current, shares: 300_000, value: 5_000_000));
+        seed.Add(
+            MakeHolding(stock, holder, Current, shares: 700, value: 70_000, listedTicker: "GOOG")
+        );
+        await seed.SaveChangesAsync();
+
+        await using var read = FreshContext();
+        var sut = new InstitutionalHoldingRepository(read);
+        List<StockSplit> splits =
+        [
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                EffectiveDate = Current.AddDays(20),
+                Numerator = 1m,
+                Denominator = 30m,
+                PriceSeriesTicker = "GOOGL",
+            },
+        ];
+
+        var rows = await sut.ScreenRestated(
+            new ScreenerCriteria { MinPctFloat = 5.0, MaxPctFloat = 15.0 },
+            Current,
+            Prior,
+            splits,
+            rowCap: null
+        );
+
+        var row = rows.Should().ContainSingle(r => r.Ticker == "GOOGL").Subject;
+        row.CurrentShares.Should().Be(10_700);
+        row.PercentOfFloat.Should().BeApproximately(10.7, 0.01);
+    }
+
     private static async Task<CommonStock> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker,
@@ -277,7 +377,8 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
-        long value
+        long value,
+        string listedTicker = null
     ) =>
         new()
         {
@@ -287,6 +388,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
             ReportDate = reportDate,
             Shares = shares,
             Value = value,
+            ListedTicker = listedTicker,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
             AccessionNumber = $"acc-{holder.Cik}-{reportDate:yyyyMMdd}",
