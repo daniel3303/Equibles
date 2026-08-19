@@ -1446,12 +1446,22 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // round trip, joins CommonStock + Industry for display columns and the % of float
     // calculation, and applies each non-null criterion as a server-side filter so result
     // pagination stays cheap. Caller materializes with ToListAsync.
+    //
+    // splitAffectedStockIds: stocks with a split effective after `current` — their as-filed
+    // CurrentShares sits on a different basis than today's SharesOutStanding, so the SQL
+    // % of float predicates PASS them THROUGH instead of judging them on a wrong ratio;
+    // ScreenRestated re-judges them in memory on the restated count. Null/empty keeps the
+    // pure-SQL behaviour.
     public IQueryable<ScreenerRow> Screen(
         ScreenerCriteria criteria,
         DateOnly current,
-        DateOnly previous
+        DateOnly previous,
+        IReadOnlyCollection<Guid> splitAffectedStockIds = null
     )
     {
+        var pctPassthroughIds = splitAffectedStockIds is { Count: > 0 }
+            ? splitAffectedStockIds.ToList()
+            : null;
         var aggregated = BothQuarters(current, previous)
             .GroupBy(h => h.CommonStockId)
             .Select(g => new
@@ -1554,18 +1564,38 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             // SharesOutStanding == 0 means "unknown" in the current schema; any % filter
             // excludes those stocks rather than treating them as 100% held (false positive).
             .WhereIf(
-                criteria.MinPctFloat.HasValue,
+                criteria.MinPctFloat.HasValue && pctPassthroughIds == null,
                 j =>
                     j.cs.SharesOutStanding > 0
                     && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0
                         >= criteria.MinPctFloat.Value
             )
             .WhereIf(
-                criteria.MaxPctFloat.HasValue,
+                criteria.MinPctFloat.HasValue && pctPassthroughIds != null,
+                j =>
+                    pctPassthroughIds.Contains(j.agg.CommonStockId)
+                    || (
+                        j.cs.SharesOutStanding > 0
+                        && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0
+                            >= criteria.MinPctFloat.Value
+                    )
+            )
+            .WhereIf(
+                criteria.MaxPctFloat.HasValue && pctPassthroughIds == null,
                 j =>
                     j.cs.SharesOutStanding > 0
                     && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0
                         <= criteria.MaxPctFloat.Value
+            )
+            .WhereIf(
+                criteria.MaxPctFloat.HasValue && pctPassthroughIds != null,
+                j =>
+                    pctPassthroughIds.Contains(j.agg.CommonStockId)
+                    || (
+                        j.cs.SharesOutStanding > 0
+                        && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0
+                            <= criteria.MaxPctFloat.Value
+                    )
             );
 
         return joined.Select(j => new ScreenerRow
@@ -1588,6 +1618,83 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     ? (double?)((double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0)
                     : null,
         });
+    }
+
+    // Split-aware screener entry point: runs Screen with % of float passthrough for stocks
+    // that split after `current`, restates those stocks' CurrentShares / PercentOfFloat onto
+    // today's basis from their exact per-listing sums, re-applies the % filters on the
+    // restated ratio, and caps the ordered result. Ordering is by CurrentValue (a dollar
+    // figure, split-invariant), so the SQL Take fast path stays correct whenever no
+    // in-memory % re-judgement is needed.
+    //
+    // splitsSinceCurrent: splits effective strictly after `current` and on or before today
+    // (load via StockSplitRepository.GetEffective(today) — announced-but-not-effective rows
+    // must never restate anything).
+    public async Task<List<ScreenerRow>> ScreenRestated(
+        ScreenerCriteria criteria,
+        DateOnly current,
+        DateOnly previous,
+        IReadOnlyList<StockSplit> splitsSinceCurrent,
+        int? rowCap,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var splitsByStock = (splitsSinceCurrent ?? [])
+            .Where(s => s.Numerator > 0 && s.Denominator > 0)
+            .GroupBy(s => s.CommonStockId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<StockSplit>)g.ToList());
+
+        var query = Screen(criteria, current, previous, splitsByStock.Keys.ToList())
+            .OrderByDescending(r => r.CurrentValue);
+
+        // The SQL % predicates passed affected stocks through un-judged, so the cap can
+        // only apply after the in-memory re-judgement; without an active % filter the
+        // passthrough changes nothing and the SQL Take fast path is exact.
+        var pctFilterActive = criteria.MinPctFloat.HasValue || criteria.MaxPctFloat.HasValue;
+        var needsInMemoryPctPass = splitsByStock.Count > 0 && pctFilterActive;
+
+        var rows =
+            rowCap.HasValue && !needsInMemoryPctPass
+                ? await query.Take(rowCap.Value).ToListAsync(cancellationToken)
+                : await query.ToListAsync(cancellationToken);
+
+        var affectedRows = rows.Where(r => splitsByStock.ContainsKey(r.CommonStockId)).ToList();
+        if (affectedRows.Count > 0)
+        {
+            var affectedIds = affectedRows.Select(r => r.CommonStockId).Distinct().ToList();
+            var listingShares = await BothQuarters(current, previous)
+                .Where(h => h.ReportDate == current && affectedIds.Contains(h.CommonStockId))
+                .GroupBy(h => new { h.CommonStockId, h.ListedTicker })
+                .Select(g => new ScreenerListingShares
+                {
+                    CommonStockId = g.Key.CommonStockId,
+                    ListedTicker = g.Key.ListedTicker,
+                    Shares = g.Sum(h => h.Shares),
+                })
+                .ToListAsync(cancellationToken);
+            var listingSharesByStock = listingShares
+                .GroupBy(s => s.CommonStockId)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<ScreenerListingShares>)g.ToList());
+
+            foreach (var row in affectedRows)
+                ScreenerSplitRestatement.RestateRow(
+                    row,
+                    listingSharesByStock.GetValueOrDefault(row.CommonStockId) ?? [],
+                    splitsByStock[row.CommonStockId],
+                    current
+                );
+
+            if (needsInMemoryPctPass)
+                rows = rows.Where(r =>
+                        !splitsByStock.ContainsKey(r.CommonStockId)
+                        || ScreenerSplitRestatement.PassesPctFloat(r, criteria)
+                    )
+                    .ToList();
+        }
+
+        return rowCap.HasValue && rows.Count > rowCap.Value
+            ? rows.Take(rowCap.Value).ToList()
+            : rows;
     }
 
     public IQueryable<FilingActivitySummary> GetFilingActivitySummary(

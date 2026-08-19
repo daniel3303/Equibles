@@ -2409,6 +2409,11 @@ public class InstitutionalHoldingsTools
     // Restates the quarterly-activity diff onto today's split basis, then re-classifies the
     // movement buckets from the restated counts. A zero side is preserved by restatement, so
     // Initiated/Exited stay put; only Increased/Reduced/Unchanged can flip.
+    //
+    // MIRROR: the commercial repo's ALVIS runtime carries a deliberate, test-pinned copy of
+    // this logic (Equibles.Agent.BusinessLogic.QuarterlyActivitySplitRestater) because this
+    // method is private and the host references the tool modules, not the reverse. A change
+    // to the rebucketing contract here must be mirrored there in the same change.
     private async Task RestateAndRebucketQuarterlyActivity(
         Dictionary<StockPositionChangeType, List<StockPositionChange>> grouped,
         DateOnly currentDate,

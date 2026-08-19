@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Holdings.Repositories.Models;
 using Equibles.Web.Controllers.Abstract;
@@ -18,17 +20,31 @@ public class HoldingsScreenerController : BaseController
 
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly IndustryRepository _industryRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
 
     public HoldingsScreenerController(
         InstitutionalHoldingRepository holdingRepository,
         IndustryRepository industryRepository,
+        StockSplitRepository stockSplitRepository,
         ILogger<HoldingsScreenerController> logger
     )
         : base(logger)
     {
         _holdingRepository = holdingRepository;
         _industryRepository = industryRepository;
+        _stockSplitRepository = stockSplitRepository;
     }
+
+    // Splits effective after the screened quarter (and on or before today): those stocks'
+    // as-filed 13F counts sit on a different basis than today's SharesOutStanding, so
+    // ScreenRestated restates them before the % of float judgement. GetEffective already
+    // excludes announced-but-not-yet-effective rows.
+    private Task<List<StockSplit>> LoadSplitsSince(DateOnly current) =>
+        _stockSplitRepository
+            .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
+            .AsNoTracking()
+            .Where(s => s.EffectiveDate > current)
+            .ToListAsync();
 
     [HttpGet("~/holdings/screener")]
     public async Task<IActionResult> Screener(
@@ -70,11 +86,13 @@ public class HoldingsScreenerController : BaseController
         viewModel.ComparisonDate = comparisonDate.Value;
 
         var criteria = ToCriteria(filters);
-        var rows = await _holdingRepository
-            .Screen(criteria, selectedDate.Value, comparisonDate.Value)
-            .OrderByDescending(r => r.CurrentValue)
-            .Take(RowCap)
-            .ToListAsync();
+        var rows = await _holdingRepository.ScreenRestated(
+            criteria,
+            selectedDate.Value,
+            comparisonDate.Value,
+            await LoadSplitsSince(selectedDate.Value),
+            RowCap
+        );
 
         viewModel.Rows = rows.Select(r => new ScreenerResultRow
             {
@@ -116,10 +134,13 @@ public class HoldingsScreenerController : BaseController
         // matching row, not the first 200. Materializing the full result set here is fine:
         // the Screen query is already filtered server-side, so the row count is bounded by
         // the user's criteria rather than the universe.
-        var rows = await _holdingRepository
-            .Screen(criteria, selectedDate.Value, comparisonDate.Value)
-            .OrderByDescending(r => r.CurrentValue)
-            .ToListAsync();
+        var rows = await _holdingRepository.ScreenRestated(
+            criteria,
+            selectedDate.Value,
+            comparisonDate.Value,
+            await LoadSplitsSince(selectedDate.Value),
+            rowCap: null
+        );
 
         var csv = BuildCsv(rows);
         var filename =
