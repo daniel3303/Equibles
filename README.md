@@ -11,7 +11,7 @@
 
 **Equibles is a self-hosted, open-source financial data MCP server** — an open-source alternative to a Bloomberg Terminal, built for AI agents rather than humans. It scrapes, stores, and serves SEC filings and XBRL financials, 13F institutional holdings, insider and congressional trades, FINRA/SEC short data, FRED economic indicators, CFTC and CBOE positioning, fund filings, government contracts, and daily stock prices — and exposes all of it over the Model Context Protocol, so Claude, ChatGPT, Cursor, or any agent can query it directly. Runs on your own hardware with Docker, for free, forever.
 
-**This is the open-source core of [Equibles](https://equibles.com).** [Equibles Cloud](https://equibles.com/mcp) runs this exact core and adds 33 more tools, 97 in total — earnings call transcripts and audio, real-time quotes, options chains with Greeks, LLM-extracted KPIs and guidance, buybacks, IPO filings, executive changes, valuation multiples, and a full US-market screener. Same protocol, same tool names, nothing to run — see [what's included](#whats-included).
+**This is the open-source core of [Equibles](https://equibles.com).** [Equibles Cloud](https://equibles.com/mcp) runs this exact core and adds 44 more tools, 108 in total — earnings call transcripts and audio, real-time quotes, options chains with Greeks, LLM-extracted KPIs and guidance, buybacks, IPO filings, executive changes, valuation multiples, index composition, portfolio tracking, and a full US-market screener. Same protocol, same tool names, nothing to run — see [what's included](#whats-included).
 
 > **Don't want to run anything?** Point your AI assistant at `https://mcp.equibles.com/mcp` and get a free API key at [equibles.com/mcp](https://equibles.com/mcp) — 100 requests/day, no card. Per-client setup guides live at [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
@@ -19,7 +19,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-Everything marked **Self-hosted** is scraped, stored, and served by this repo — **64 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds 33 more tools, 97 in total.
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **64 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds 44 more tools, 108 in total.
 
 | Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
@@ -53,6 +53,8 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 | **Smart Money** | Derived | — | ✅ | Insider sentiment scores, super-investor portfolios, and market-wide congressional activity |
 | **Risk Flags** | SEC filings | — | ✅ | Going-concern language and customer-concentration disclosures |
 | **Market Context** | Derived | — | ✅ | Correlated stocks, plus market calendar and open/closed status |
+| **Index Composition** | SEC N-PORT + fund holdings files | — | ✅ | Constituents and membership-change history for the S&P 500/400/600, Nasdaq-100, Russell 1000/2000, and the Dow, plus rule-based addition and deletion forecasts |
+| **Portfolios** | Your own account | — | ✅ | Track holdings and watchlists across stocks and options, with cost basis and realized/unrealized P&L. The only tools on the server that write |
 
 ## Why Some Data Is Cloud-Only
 
@@ -63,6 +65,8 @@ Nothing above is held back from this repo. The cloud-only rows are data whose *p
 - **KPIs, guidance, buybacks, IPO terms, executives, risk flags** — pulled out of filings, proxies, and earnings releases by LLM extraction lanes with verification passes and a human review queue, which needs sustained inference capacity.
 - **Investor-relations events and news** — collected from thousands of company IR sites, needing the same stealth browser fleet as the webcasts.
 - **Multiples, screener, smart money, market context** — derived, and only meaningful over a fully backfilled corpus of the whole market rather than the tickers you happen to have scraped so far.
+- **Index composition** — assembled from every tracking fund's N-PORT schedule plus each fund's own holdings file fetched daily, which needs the full NPORT corpus and a fetcher that keeps re-learning where those files moved to.
+- **Portfolios** — not scraped data at all: it is your own, stored against your account. The self-hosted build has no accounts, so there is nothing to store it against.
 
 Beyond the data, the cloud is already backfilled and kept current, and it is managed — no scrapers to babysit. This repo is free forever under AGPL-3.0; the cloud has a free tier at 100 requests/day with no card.
 
@@ -280,7 +284,7 @@ Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP trans
 
 ## Tools
 
-This self-hosted build exposes 64 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` exposes 97 — the same 64 plus [33 more](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 64 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` exposes 108 — the same 64 plus [44 more](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
