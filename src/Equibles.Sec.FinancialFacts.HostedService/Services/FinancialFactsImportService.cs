@@ -183,6 +183,15 @@ public class FinancialFactsImportService
         if (await sharesProvider.IsForeignPrivateIssuer(stock, cancellationToken))
             return;
 
+        // Same unit problem, one step further out: a company that lost foreign private issuer
+        // status files 10-K/10-Q while its US listing stays a depositary receipt, so the form
+        // says domestic and the cover page still counts ordinary shares. Its registered 12(b)
+        // title says what it listed, so ask that before writing. Without this the count goes back
+        // onto the ordinary base every facts cycle while the Yahoo importer keeps the market cap
+        // on the ADS base, and the two writers undo each other forever.
+        if (ListedSecurityClassifier.IsAmericanDepositary(stock.ListedSecurityTitle))
+            return;
+
         var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var tracked = await stockRepository
             .GetByIds([stock.Id])
