@@ -84,6 +84,43 @@ public static class ListedSecurityClassifier
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled
         );
 
+    // The listed unit is a depositary receipt. Deliberately matched against the RAW title, not
+    // the rider-stripped one Classify uses: the question here is only whether the issuer names
+    // an American Depositary Share anywhere in the title it registered, and a title can put that
+    // phrase inside a parenthetical ("Ordinary Shares (represented by American Depositary
+    // Shares)") that Classify strips before choosing a kind.
+    //
+    // "Deposit[ao]ry" spells the issuer's own typo into the pattern rather than around it. The
+    // canonical word is "depositary"; a handful of filers register "American Depository Shares"
+    // instead, and because this is the title THEY filed there is nothing upstream to normalize
+    // it. "American" is required either way, so the far commoner preferred-stock form
+    // ("Depositary Shares, each representing a 1/1,000th interest in a share of Series A
+    // Preferred Stock") cannot match: that one is a fractional interest in the issuer's OWN
+    // preferred, counted on the same basis as the cover page, and there is no unit mismatch.
+    // A Global Depositary Share carries the same mismatch and is deliberately left out: every GDS
+    // issuer on record files as a foreign private issuer, so the form-based guard already answers
+    // for them, and one unexercised alternation is a rule nothing pins.
+    private static readonly Regex AmericanDepositary = Pattern(
+        "american deposit[ao]ry (shares?|receipts?)"
+    );
+
+    /// <summary>
+    /// True when the issuer's own registered title says the LISTED security is an American
+    /// Depositary Share or Receipt.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// A separate question from <see cref="Classify"/>, which answers what KIND of security is
+    /// listed (an ADS over ordinary shares is common equity, and classifies as such). This one
+    /// answers what UNIT the listing is quoted in, which is what a share count has to agree with:
+    /// the depositary receipt is priced per receipt while the issuer's SEC cover page counts
+    /// ordinary shares, and the two differ by the deposit ratio. Callers use it to refuse to mix
+    /// the bases, never to derive the ratio — the ratio is stated in prose and reading a number
+    /// out of prose is exactly what the registered title is authoritative INSTEAD of.
+    /// </remarks>
+    public static bool IsAmericanDepositary(string securityTitle) =>
+        !string.IsNullOrWhiteSpace(securityTitle) && AmericanDepositary.IsMatch(securityTitle);
+
     public static ListedSecurityType Classify(string securityTitle)
     {
         if (string.IsNullOrWhiteSpace(securityTitle))

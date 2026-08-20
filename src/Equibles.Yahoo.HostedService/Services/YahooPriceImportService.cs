@@ -1960,15 +1960,30 @@ public class YahooPriceImportService
             edgarShares = null;
 
         // The form-based guard above can't see a DOMESTIC filer whose US listing is still an ADS:
-        // a former foreign private issuer that lost FPI status files 10-K/10-Q while its cover
-        // page keeps counting ordinary shares — AKTX filed 10-Q covers of 91.6B ordinary shares
-        // against ~1.1M listed ADSs (80,000 ordinary per ADS). Rescaling onto that base inflates
-        // market cap by the full ADS ratio, and the damage is undetectable downstream because the
-        // stored pair stays self-consistent (cap ÷ shares == the close). No ingested API exposes
-        // the registered security's title to flag these issuers authoritatively, so detect the
-        // unit mismatch from the figures themselves: when the EDGAR count and Yahoo's own share
-        // base are too far apart to be statements of the same unit, keep Yahoo's self-consistent
-        // listed-security figures verbatim, exactly like the FPI path. Also stops a garbage EDGAR
+        // a company that lost foreign-private-issuer status files 10-K/10-Q while its cover page
+        // keeps counting ordinary shares. So ask what it LISTED rather than what it files. The
+        // 12(b) registration title for the stock's own ticker is already materialized on the
+        // stock from that same cover page ("American Depositary Shares, each representing 13
+        // Ordinary Shares"), and a depositary receipt is a different unit from the ordinary
+        // shares counted beside it — so drop the EDGAR count exactly like the FPI path.
+        //
+        // This has to run BEFORE the ratio guard below and cannot be left to it: real deposit
+        // ratios are small (ONC 13x, SNY and AZN 2x) and sit far inside the band where two counts
+        // are still credible statements of the same unit, so the figures alone can never expose
+        // them. ONC stored a $557B market cap against a true ~$42.9B for exactly this reason, and
+        // the damage is invisible downstream because the stored pair stays self-consistent
+        // (cap ÷ shares == the close). The ratio itself is never read out of the title — only the
+        // fact that the listing is a receipt — so the repair is to stop rescaling, not to divide.
+        if (
+            edgarShares != null
+            && ListedSecurityClassifier.IsAmericanDepositary(stock.ListedSecurityTitle)
+        )
+            edgarShares = null;
+
+        // A last guard for issuers the two authoritative statements above miss: detect the unit
+        // mismatch from the figures themselves, when the EDGAR count and Yahoo's own share base
+        // are too far apart to be statements of the same unit. This catches an ADS issuer with no
+        // registered title on record (AKTX, 80,000 ordinary per ADS) and stops a garbage EDGAR
         // count (ABTC 458x, CNDA 768x off any real basis) from poisoning the rescale. The
         // threshold is deliberately far above any corporate-action lag (see
         // MaxPlausibleSameUnitRatio), so a lagging reverse split — where EDGAR is right and the
@@ -2060,12 +2075,13 @@ public class YahooPriceImportService
     // cap onto the EDGAR base (== EDGAR shares × the same implied price) so market cap stays
     // consistent with SharesOutStanding and the screener's derived price (market cap ÷ shares)
     // holds. Falls back to Yahoo's figure when there is no EDGAR count or no usable Yahoo share
-    // base to rescale from. The caller passes edgarShares == null for foreign private issuers
-    // (20-F/40-F), whose EDGAR count is in ordinary shares — a different unit from the US-listed
-    // ADR — so they keep Yahoo's self-consistent ADR market cap rather than being rescaled onto
-    // the ordinary base, and likewise whenever the EDGAR count and Yahoo's share base are too far
-    // apart to be statements of the same unit (a domestic filer still listing ADSs, a garbage
-    // cover-page count — see ShareBasisPlausibility).
+    // base to rescale from. The caller passes edgarShares == null whenever the EDGAR count is in a
+    // different unit from the listing Yahoo prices — a foreign private issuer (20-F/40-F) or a
+    // domestic filer whose registered 12(b) title says it listed American Depositary Shares, both
+    // of which count ordinary shares on the cover page, and any issuer whose EDGAR count and
+    // Yahoo share base are too far apart to be statements of the same unit at all (see
+    // ShareBasisPlausibility). Those keep Yahoo's self-consistent listed-security market cap
+    // rather than being rescaled onto the ordinary base.
     //
     // The rescale must divide by the share base Yahoo actually built its market cap on. That is
     // impliedSharesOutstanding (the entity-wide count, all classes) when Yahoo provides it — NOT

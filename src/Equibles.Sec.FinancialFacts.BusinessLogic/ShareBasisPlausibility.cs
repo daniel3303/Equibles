@@ -11,9 +11,15 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic;
 /// another unit entirely. The form-based foreign-private-issuer guard catches 20-F/40-F filers,
 /// but a former FPI that lost the status keeps filing 10-K/10-Q while its US listing is still an
 /// ADS — AKTX files 10-Q covers of 91.6B ordinary shares against ~1.1M listed ADSs (80,000
-/// ordinary per ADS since 2026-03-31). No API the importers ingest exposes the registered
-/// security's title (the SEC companyfacts endpoint serves numeric facts only, and the submissions
-/// feed has no security section), so the mismatch is detected from the figures themselves.
+/// ordinary per ADS since 2026-03-31).
+///
+/// Where the issuer's registered 12(b) title IS on record, callers ask it first
+/// (<see cref="ListedSecurityClassifier.IsAmericanDepositary"/>) — it says what unit the listing
+/// is quoted in, which no ratio can. This class is what remains when no title is on record, or
+/// when the two counts disagree for a reason no title would explain (a dropped digit, a
+/// thousands-scaled entry, a nominal placeholder): the mismatch is then detected from the figures
+/// themselves. Deposit ratios are small enough to hide inside that tolerance, which is exactly
+/// why the title has to be asked first rather than instead.
 /// </summary>
 public static class ShareBasisPlausibility
 {
