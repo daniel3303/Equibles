@@ -17,10 +17,10 @@ namespace Equibles.InsiderTrading.BusinessLogic;
 /// only way to tell whether a proposed sale was ever executed. Without it the seller is free
 /// text, and matching on a name resolves only about half of the corpus.
 ///
-/// <see cref="Form144Filing.FilerCik"/> being null is the single selector, so the run drains,
-/// terminates and resumes: an interrupted run continues where it left off. Notices EDGAR will
-/// not serve are parked with <see cref="UnavailableMarker"/> after
-/// <see cref="MaxAttempts"/> tries so one bad document cannot stall the backlog forever.
+/// Never-attempted notices run before retries, and failed fetches wait between persisted attempts,
+/// so a temporary EDGAR outage cannot consume the retry budget or starve later notices. Notices
+/// EDGAR will not serve are parked with <see cref="UnavailableMarker"/> after
+/// <see cref="MaxAttempts"/> tries.
 /// </summary>
 [Service]
 public class Form144FilerCikBackfillManager
@@ -35,6 +35,7 @@ public class Form144FilerCikBackfillManager
     // Committed per batch, so a throttled or interrupted run keeps what it fetched.
     private const int BatchSize = 64;
     private const int MaxAttempts = 3;
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromHours(6);
 
     // One full batch parked for missing credentials is already past coincidence.
     private const int ParkedWithoutCredentialsAlarm = BatchSize;
@@ -42,16 +43,19 @@ public class Form144FilerCikBackfillManager
     private readonly Form144FilingRepository _repository;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly ILogger<Form144FilerCikBackfillManager> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public Form144FilerCikBackfillManager(
         Form144FilingRepository repository,
         ISecEdgarClient secEdgarClient,
-        ILogger<Form144FilerCikBackfillManager> logger
+        ILogger<Form144FilerCikBackfillManager> logger,
+        TimeProvider timeProvider
     )
     {
         _repository = repository;
         _secEdgarClient = secEdgarClient;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -59,19 +63,31 @@ public class Form144FilerCikBackfillManager
     /// </summary>
     public async Task<int> Run(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var resolved = 0;
         var parkedNoIssuerCik = 0;
         var parkedNoCredentials = 0;
         var parkedAttemptsExhausted = 0;
-        var attempts = new Dictionary<Guid, int>();
+        var retryBefore = (_timeProvider.GetUtcNow() - RetryDelay).UtcDateTime;
 
-        while (!cancellationToken.IsCancellationRequested)
+        while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var batch = await _repository
                 .GetAll()
-                .Where(f => f.FilerCik == null)
+                .Where(f =>
+                    f.FilerCik == null
+                    && (
+                        f.FilerCikBackfillAttemptedAt == null
+                        || f.FilerCikBackfillAttemptedAt <= retryBefore
+                    )
+                )
                 .Include(f => f.CommonStock)
-                .OrderBy(f => f.FilingDate)
+                .OrderBy(f => f.FilerCikBackfillAttemptedAt != null)
+                .ThenBy(f => f.FilerCikBackfillAttemptedAt)
+                .ThenBy(f => f.FilingDate)
                 .ThenBy(f => f.Id)
                 .Take(BatchSize)
                 .ToListAsync(cancellationToken);
@@ -79,12 +95,14 @@ public class Form144FilerCikBackfillManager
             if (batch.Count == 0)
                 break;
 
-            var progressed = false;
-
             foreach (var filing in batch)
             {
                 if (cancellationToken.IsCancellationRequested)
-                    break;
+                {
+                    await _repository.SaveChanges();
+                    _repository.ClearChangeTracker();
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
 
                 var issuerCik = filing.CommonStock?.Cik;
                 if (string.IsNullOrEmpty(issuerCik))
@@ -93,22 +111,17 @@ public class Form144FilerCikBackfillManager
                     // be addressed on EDGAR at all. Park it rather than retrying forever.
                     filing.FilerCik = UnavailableMarker;
                     parkedNoIssuerCik++;
-                    progressed = true;
                     continue;
                 }
 
-                if (!TryRecordAttempt(attempts, filing.Id))
+                if (filing.FilerCikBackfillAttempts >= MaxAttempts)
                 {
-                    filing.FilerCik = UnavailableMarker;
-                    parkedAttemptsExhausted++;
-                    progressed = true;
-                    _logger.LogWarning(
-                        "Parking Form 144 {AccessionNumber} after {Attempts} failed attempts",
-                        filing.AccessionNumber,
-                        MaxAttempts
-                    );
+                    ParkIfAttemptsExhausted(filing, ref parkedAttemptsExhausted);
                     continue;
                 }
+
+                filing.FilerCikBackfillAttempts++;
+                filing.FilerCikBackfillAttemptedAt = _timeProvider.GetUtcNow().UtcDateTime;
 
                 string xml;
                 try
@@ -118,6 +131,12 @@ public class Form144FilerCikBackfillManager
                         issuerCik
                     );
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    await _repository.SaveChanges();
+                    _repository.ClearChangeTracker();
+                    throw;
+                }
                 catch (Exception exception)
                 {
                     _logger.LogWarning(
@@ -125,11 +144,15 @@ public class Form144FilerCikBackfillManager
                         "Failed to fetch Form 144 {AccessionNumber}",
                         filing.AccessionNumber
                     );
+                    ParkIfAttemptsExhausted(filing, ref parkedAttemptsExhausted);
                     continue;
                 }
 
                 if (string.IsNullOrWhiteSpace(xml))
+                {
+                    ParkIfAttemptsExhausted(filing, ref parkedAttemptsExhausted);
                     continue;
+                }
 
                 var parsed = ParseIdentity(xml);
                 if (parsed.FilerCik == null)
@@ -138,25 +161,16 @@ public class Form144FilerCikBackfillManager
                     // that, so park it immediately rather than burning the attempt budget.
                     filing.FilerCik = UnavailableMarker;
                     parkedNoCredentials++;
-                    progressed = true;
                     continue;
                 }
 
                 filing.FilerCik = parsed.FilerCik;
                 filing.PlanAdoptionDate = parsed.PlanAdoptionDate;
                 resolved++;
-                progressed = true;
             }
 
             await _repository.SaveChanges();
-
-            // Every notice in the batch failed transiently and none was parked, so the same
-            // batch would be re-read forever. Stop and let the next cycle retry.
-            if (!progressed)
-            {
-                _logger.LogWarning("Form 144 filer-CIK backfill made no progress; stopping cycle");
-                break;
-            }
+            _repository.ClearChangeTracker();
         }
 
         var parked = parkedNoIssuerCik + parkedNoCredentials + parkedAttemptsExhausted;
@@ -194,11 +208,18 @@ public class Form144FilerCikBackfillManager
         return resolved;
     }
 
-    private static bool TryRecordAttempt(Dictionary<Guid, int> attempts, Guid id)
+    private void ParkIfAttemptsExhausted(Form144Filing filing, ref int parkedAttemptsExhausted)
     {
-        attempts.TryGetValue(id, out var count);
-        attempts[id] = count + 1;
-        return count < MaxAttempts;
+        if (filing.FilerCikBackfillAttempts < MaxAttempts)
+            return;
+
+        filing.FilerCik = UnavailableMarker;
+        parkedAttemptsExhausted++;
+        _logger.LogWarning(
+            "Parking Form 144 {AccessionNumber} after {Attempts} failed attempts",
+            filing.AccessionNumber,
+            MaxAttempts
+        );
     }
 
     /// <summary>
