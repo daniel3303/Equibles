@@ -49,6 +49,18 @@ public class Form144Filing
     public string FilerCik { get; set; }
 
     /// <summary>
+    /// Number of EDGAR fetches attempted by the filer-CIK backfill. Persisted so worker restarts
+    /// cannot reset the retry budget and let one bad filing starve the backlog forever.
+    /// </summary>
+    public int FilerCikBackfillAttempts { get; set; }
+
+    /// <summary>
+    /// UTC time of the latest filer-CIK fetch attempt. Failed notices wait for the retry interval
+    /// while never-attempted notices continue through the backlog.
+    /// </summary>
+    public DateTime? FilerCikBackfillAttemptedAt { get; set; }
+
+    /// <summary>
     /// The seller's relationship(s) to the issuer (e.g. "Director", "Officer"). A filing can
     /// list several — joined with ", ".
     /// </summary>

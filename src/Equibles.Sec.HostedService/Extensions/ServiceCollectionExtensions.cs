@@ -3,6 +3,7 @@ using Equibles.Core.AutoWiring;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Equibles.Sec.HostedService.Extensions;
 
@@ -10,6 +11,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddSecWorker(this IServiceCollection services)
     {
+        services.TryAddSingleton(TimeProvider.System);
         services.AutoWireServicesFrom<DocumentManager>();
         services.AutoWireServicesFrom<Equibles.Integrations.Sec.SecEdgarClient>();
 
