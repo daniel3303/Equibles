@@ -20,7 +20,7 @@ Each table shows the insider's name, the stock ticker, the transaction value, an
 - **Red values** in the Top Sells card indicate sales.
 - In the Biggest Transactions table, a green **Buy** or red **Sell** badge marks each row's direction.
 
-Insider activity comes from SEC Forms 3, 4, and 5. Form 4 normally reports a trade within two business days; Form 5 is the annual statement that can report transactions eligible for deferred reporting.
+Transactions come from SEC Forms 4 and 5; Form 3 supplies initial ownership. Form 4 normally reports a trade within two business days, while Form 5 is the annual statement that can report transactions eligible for deferred reporting.
 
 ## Drill into an insider or stock
 
@@ -29,4 +29,4 @@ Insider activity comes from SEC Forms 3, 4, and 5. Form 4 normally reports a tra
 
 ## If the dashboard is empty
 
-The dashboard shows "No insider transactions yet" until the worker has ingested Forms 3, 4, and 5. After a fresh install, give the scrapers at least an hour to begin populating insider data. You can check ingestion progress on the [status page](how-to-view-status-and-errors.md).
+The dashboard shows "No insider transactions yet" until the worker has ingested Forms 4 and 5. After a fresh install, give the scrapers at least an hour to begin populating insider data. You can check ingestion progress on the [status page](how-to-view-status-and-errors.md).
