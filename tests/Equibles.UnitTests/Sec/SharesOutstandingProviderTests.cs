@@ -472,7 +472,9 @@ public class SharesOutstandingProviderTests
 
     [Theory]
     [InlineData("TwentyF")]
+    [InlineData("TwentyFa")]
     [InlineData("FortyF")]
+    [InlineData("FortyFa")]
     public async Task IsForeignPrivateIssuer_LatestSharesFactIsForeignAnnualForm_ReturnsTrue(
         string formValue
     )
@@ -491,7 +493,7 @@ public class SharesOutstandingProviderTests
         };
         db.AddRange(stock, concept);
         // A foreign private issuer reports its ordinary-share cover-page count on a 20-F (or 40-F
-        // for Canadian cross-listings), never a 10-K.
+        // for Canadian cross-listings), including amendments, never a 10-K.
         db.Add(
             Fact(
                 stock,

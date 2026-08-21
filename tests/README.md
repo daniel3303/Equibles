@@ -83,7 +83,7 @@ tests/Equibles.Tests/
 - `TokenCounterTests` — Tokenization utility
 - `SecDocumentHtmlNormalizerTests` — SGML parsing, document type filtering
 - `SecDocumentHtmlToMarkdownConverterTests` — HTML-to-Markdown conversion
-- `InsiderTradingFilingProcessorTests` — XML sanitization, transaction code/bool/numeric parsing, full Process pipeline (Form 3/4, amendments, deduplication)
+- `InsiderTradingFilingProcessorTests` — XML sanitization, transaction code/bool/numeric parsing, full Process pipeline (Forms 3/4/5, amendments, deduplication)
 - `FtdImportServiceTests` — FTD file name generation, recent-file detection
 - `RagManagerTests` — BuildContext formatting (grouping, ordering, whitespace filtering)
 - **Normalizer pipeline** (6 test classes): XBRL stripping, table normalization, heading conversion, list conversion, pagination removal, currency consolidation

@@ -6,7 +6,7 @@ namespace Equibles.Sec.HostedService.Contracts;
 
 /// <summary>
 /// Strategy interface for specialized processing of SEC filings.
-/// Implementations handle specific document types (e.g., Form 3/4 → structured insider trading records)
+/// Implementations handle specific document types (e.g., Forms 3/4/5 → structured insider trading records)
 /// instead of the default HTML→Markdown→Document pipeline.
 /// </summary>
 public interface IFilingProcessor

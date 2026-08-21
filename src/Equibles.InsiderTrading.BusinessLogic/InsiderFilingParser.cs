@@ -126,7 +126,7 @@ public static class InsiderFilingParser
     // Form 3 initial statements set <noSecuritiesOwned> to 1 when the reporting owner
     // holds none of the issuer's securities; both ownership tables are then empty.
     /// <summary>
-    /// The filing date of the original report a Form 4/A or 3/A restates — the
+    /// The filing date of the original report a Form 3/A, 4/A, or 5/A restates — the
     /// document-level <c>dateOfOriginalSubmission</c> element (a plain value, not
     /// wrapped like transaction fields). Null when absent or unparseable, which
     /// disables supersession for that amendment rather than guessing.

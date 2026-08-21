@@ -192,18 +192,17 @@ public class InsiderTradingFilingProcessorTests
 
     // ── CanProcess ──
 
-    [Fact]
-    public void CanProcess_FormFour_ReturnsTrue()
+    [Theory]
+    [InlineData("FormThree")]
+    [InlineData("FormThreeA")]
+    [InlineData("FormFour")]
+    [InlineData("FormFourA")]
+    [InlineData("FormFive")]
+    [InlineData("FormFiveA")]
+    public void CanProcess_OwnershipForm_ReturnsTrue(string documentTypeValue)
     {
         var processor = CreateProcessor();
-        processor.CanProcess(DocumentType.FormFour).Should().BeTrue();
-    }
-
-    [Fact]
-    public void CanProcess_FormThree_ReturnsTrue()
-    {
-        var processor = CreateProcessor();
-        processor.CanProcess(DocumentType.FormThree).Should().BeTrue();
+        processor.CanProcess(DocumentType.FromValue(documentTypeValue)).Should().BeTrue();
     }
 
     [Fact]

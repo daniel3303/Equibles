@@ -31,10 +31,10 @@ public class RagSearchTools
     // to round-trip through ParseDocumentType in THIS build, and EarningsCallTranscript
     // is registered by the commercial host only.
     private const string DocumentTypeDescription =
-        "Document type filter. Accepts a registered type value — 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF' — or its display name (e.g. '10-K', '8-K'), plus any deployment-registered type, such as EarningsCallTranscript (display name: Earnings Call) for earnings-call transcripts where available. An unrecognized value returns an error listing every accepted value.";
+        "Document type filter. Accepts a registered type value — 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF', 'TwentyFa', 'SixKa', or 'FortyFa' — or its display name (e.g. '10-K', '20-F/A'), plus any deployment-registered type, such as EarningsCallTranscript (display name: Earnings Call) for earnings-call transcripts where available. An unrecognized value returns an error listing every accepted value.";
 
     private const string DocumentTypesDescription =
-        "Document type filter — one value or a comma-separated list (e.g. 'TenK,TenQ'). Accepts registered type values — 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF' — or display names (e.g. '10-K', '8-K'), plus any deployment-registered type, such as EarningsCallTranscript (display name: Earnings Call) for earnings-call transcripts where available. An unrecognized value returns an error listing every accepted value.";
+        "Document type filter — one value or a comma-separated list (e.g. 'TenK,TenQ'). Accepts registered type values — 'TenK', 'TenQ', 'EightK', 'TenKa', 'TenQa', 'EightKa', 'TwentyF', 'SixK', 'FortyF', 'TwentyFa', 'SixKa', or 'FortyFa' — or display names (e.g. '10-K', '20-F/A'), plus any deployment-registered type, such as EarningsCallTranscript (display name: Earnings Call) for earnings-call transcripts where available. An unrecognized value returns an error listing every accepted value.";
 
     private const string MaxExcerptCharsDescription =
         "Maximum characters per excerpt (default: 0 = full excerpt). Set a small value (e.g. 400) for a compact scan across many results; truncated excerpts end with an explicit note.";

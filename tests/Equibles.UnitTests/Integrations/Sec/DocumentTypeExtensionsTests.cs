@@ -49,4 +49,20 @@ public class DocumentTypeExtensionsTests
 
         result.Should().Be("4");
     }
+
+    [Theory]
+    [InlineData(DocumentTypeFilter.TwentyFa, "20-F/A")]
+    [InlineData(DocumentTypeFilter.SixKa, "6-K/A")]
+    [InlineData(DocumentTypeFilter.FortyFa, "40-F/A")]
+    [InlineData(DocumentTypeFilter.FormFive, "5")]
+    [InlineData(DocumentTypeFilter.FormFiveA, "5/A")]
+    public void GetFormName_NewFilingType_ReturnsExactSecWireValue(
+        DocumentTypeFilter filter,
+        string expected
+    )
+    {
+        var result = (string)GetFormNameMethod.Invoke(null, [filter]);
+
+        result.Should().Be(expected);
+    }
 }

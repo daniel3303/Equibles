@@ -80,7 +80,7 @@ public class InsiderTradingTools
 
     [McpServerTool(
         Name = "GetInsiderTransactions",
-        Title = "Insider Transactions (Form 4)",
+        Title = "Insider Transactions (Forms 3/4/5)",
         ReadOnly = true
     )]
     [Description(

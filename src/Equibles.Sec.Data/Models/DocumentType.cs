@@ -35,10 +35,15 @@ public sealed class DocumentType
     public static readonly DocumentType TwentyF = new("TwentyF", "20-F");
     public static readonly DocumentType SixK = new("SixK", "6-K");
     public static readonly DocumentType FortyF = new("FortyF", "40-F");
+    public static readonly DocumentType TwentyFa = new("TwentyFa", "20-F/A");
+    public static readonly DocumentType SixKa = new("SixKa", "6-K/A");
+    public static readonly DocumentType FortyFa = new("FortyFa", "40-F/A");
     public static readonly DocumentType FormFour = new("FormFour", "4");
     public static readonly DocumentType FormThree = new("FormThree", "3");
+    public static readonly DocumentType FormFive = new("FormFive", "5");
     public static readonly DocumentType FormFourA = new("FormFourA", "4/A");
     public static readonly DocumentType FormThreeA = new("FormThreeA", "3/A");
+    public static readonly DocumentType FormFiveA = new("FormFiveA", "5/A");
     public static readonly DocumentType Form144 = new("Form144", "144");
     public static readonly DocumentType FormD = new("FormD", "D");
     public static readonly DocumentType FormDa = new("FormDa", "D/A");
@@ -61,10 +66,15 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(TwentyF.Value, TwentyF),
             new KeyValuePair<string, DocumentType>(SixK.Value, SixK),
             new KeyValuePair<string, DocumentType>(FortyF.Value, FortyF),
+            new KeyValuePair<string, DocumentType>(TwentyFa.Value, TwentyFa),
+            new KeyValuePair<string, DocumentType>(SixKa.Value, SixKa),
+            new KeyValuePair<string, DocumentType>(FortyFa.Value, FortyFa),
             new KeyValuePair<string, DocumentType>(FormFour.Value, FormFour),
             new KeyValuePair<string, DocumentType>(FormThree.Value, FormThree),
+            new KeyValuePair<string, DocumentType>(FormFive.Value, FormFive),
             new KeyValuePair<string, DocumentType>(FormFourA.Value, FormFourA),
             new KeyValuePair<string, DocumentType>(FormThreeA.Value, FormThreeA),
+            new KeyValuePair<string, DocumentType>(FormFiveA.Value, FormFiveA),
             new KeyValuePair<string, DocumentType>(Form144.Value, Form144),
             new KeyValuePair<string, DocumentType>(FormD.Value, FormD),
             new KeyValuePair<string, DocumentType>(FormDa.Value, FormDa),
@@ -90,10 +100,15 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(TwentyF.DisplayName, TwentyF),
             new KeyValuePair<string, DocumentType>(SixK.DisplayName, SixK),
             new KeyValuePair<string, DocumentType>(FortyF.DisplayName, FortyF),
+            new KeyValuePair<string, DocumentType>(TwentyFa.DisplayName, TwentyFa),
+            new KeyValuePair<string, DocumentType>(SixKa.DisplayName, SixKa),
+            new KeyValuePair<string, DocumentType>(FortyFa.DisplayName, FortyFa),
             new KeyValuePair<string, DocumentType>(FormFour.DisplayName, FormFour),
             new KeyValuePair<string, DocumentType>(FormThree.DisplayName, FormThree),
+            new KeyValuePair<string, DocumentType>(FormFive.DisplayName, FormFive),
             new KeyValuePair<string, DocumentType>(FormFourA.DisplayName, FormFourA),
             new KeyValuePair<string, DocumentType>(FormThreeA.DisplayName, FormThreeA),
+            new KeyValuePair<string, DocumentType>(FormFiveA.DisplayName, FormFiveA),
             new KeyValuePair<string, DocumentType>(Form144.DisplayName, Form144),
             new KeyValuePair<string, DocumentType>(FormD.DisplayName, FormD),
             new KeyValuePair<string, DocumentType>(FormDa.DisplayName, FormDa),

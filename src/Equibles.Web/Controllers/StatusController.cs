@@ -278,7 +278,7 @@ public class StatusController : BaseController
         [
             Configurable(
                 "SEC Scraper",
-                "Filings (10-K, 10-Q, 8-K, Form 3/4), document processing, institutional holdings (13F-HR), and fails-to-deliver",
+                "Filings (domestic and foreign reports, Forms 3/4/5), document processing, institutional holdings (13F-HR), and fails-to-deliver",
                 secConfigured,
                 "SEC contact email configured",
                 "SEC_CONTACT_EMAIL not set — required by SEC EDGAR fair access policy"

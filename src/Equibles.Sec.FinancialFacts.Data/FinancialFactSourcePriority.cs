@@ -17,7 +17,9 @@ public static class FinancialFactSourcePriority
             || form == DocumentType.TenQ
             || form == DocumentType.TenQa
             || form == DocumentType.TwentyF
+            || form == DocumentType.TwentyFa
             || form == DocumentType.FortyF
+            || form == DocumentType.FortyFa
         )
             return 0;
 
@@ -25,6 +27,7 @@ public static class FinancialFactSourcePriority
             form == DocumentType.EightK
             || form == DocumentType.EightKa
             || form == DocumentType.SixK
+            || form == DocumentType.SixKa
         )
             return 1;
 
