@@ -29,8 +29,7 @@ namespace Equibles.IntegrationTests.Helpers;
 /// </summary>
 public class WebHostFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder()
-        .WithImage("paradedb/paradedb:latest")
+    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder("paradedb/paradedb:latest")
         .WithDatabase("equibles_webint")
         .WithUsername("postgres")
         .WithPassword("postgres")

@@ -29,8 +29,7 @@ namespace Equibles.FunctionalTests.Fixtures;
 /// </summary>
 public class WebAppFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder()
-        .WithImage("paradedb/paradedb:latest")
+    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder("paradedb/paradedb:latest")
         .WithDatabase("equibles_functional")
         .WithUsername("postgres")
         .WithPassword("postgres")
