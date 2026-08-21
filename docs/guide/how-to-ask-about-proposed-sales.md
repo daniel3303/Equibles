@@ -1,6 +1,6 @@
 # Ask your AI assistant about proposed insider sales (Form 144)
 
-Equibles imports SEC Form 144 notices — an affiliate's declaration of intent to sell restricted or control shares — and exposes them through the MCP server, so you can ask your AI assistant about a company's upcoming insider selling before it executes. Form 144 is the forward-looking complement to executed Form 4 trades — to ask about those, see [Ask about a company's insider trading](how-to-ask-about-insider-trading.md). To browse the same notices on the web portal, see [View proposed insider sales](how-to-view-proposed-sales.md).
+Equibles imports SEC Form 144 notices — an affiliate's declaration of intent to sell restricted or control shares — and exposes them through the MCP server, so you can ask your AI assistant about proposed insider selling before any trade occurs. A proposed sale may never execute; when one does and is reportable there, it may later appear on Form 4 or 5 — to ask about reported transactions, see [Ask about a company's insider trading](how-to-ask-about-insider-trading.md). To browse the same notices on the web portal, see [View proposed insider sales](how-to-view-proposed-sales.md).
 
 ## Before you start
 
@@ -21,6 +21,6 @@ The assistant picks the `GetProposedSales` tool and returns the company's recent
 
 A table of recent Form 144 notices, each showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the sale as a percent of shares outstanding, the approximate sale date, the broker, and filed remarks such as a stated 10b5-1 plan.
 
-Remember that a Form 144 is a *declaration of intent*, not a completed trade — the actual sale, if it happens, later appears as an executed [Form 4 insider transaction](how-to-ask-about-insider-trading.md).
+Remember that a Form 144 is a *declaration of intent*, not a completed trade — the actual sale, if it happens and is reportable there, may later appear as an executed [Form 4 or 5 insider transaction](how-to-ask-about-insider-trading.md).
 
 If the reply says there are no proposed sales, the company may simply have no recent Form 144 filings — confirm the worker has run, then try a large, actively-traded ticker such as AAPL.

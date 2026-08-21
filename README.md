@@ -304,7 +304,7 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 
 **Insider trading**
 
-- GetInsiderTransactions — insider transactions from Form 3/4/5
+- GetInsiderTransactions — insider transactions from Forms 4/5
 - GetInsiderOwnership — insider ownership ranked by shares
 - GetProposedSales — proposed sales from Form 144
 - SearchInsiders — strict-first whole-word filed-name search with verified public-name aliases

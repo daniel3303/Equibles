@@ -26,5 +26,5 @@ Each row is one Form 144 notice. The columns are:
 
 ## Related
 
-- For completed insider transactions (Forms 3, 4, and 5), see the **Insider Trading** tab on the same profile.
+- For completed insider transactions (Forms 4 and 5), see the **Insider Trading** tab on the same profile. Form 3 supplies initial ownership.
 - To walk through every tab on a stock profile, see [Explore a company's data on the web portal](tutorial-explore-stock.md).
