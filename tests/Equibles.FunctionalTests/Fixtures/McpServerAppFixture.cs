@@ -48,8 +48,7 @@ namespace Equibles.FunctionalTests.Fixtures;
 /// </summary>
 public class McpServerAppFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder()
-        .WithImage("paradedb/paradedb:latest")
+    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder("paradedb/paradedb:latest")
         .WithDatabase("equibles_functional_mcp")
         .WithUsername("postgres")
         .WithPassword("postgres")
