@@ -77,11 +77,11 @@ public class SecScraperWorkerTests
     }
 
     [Fact]
-    public void SleepInterval_IsFifteenSeconds()
+    public void SleepInterval_IsTenSeconds()
     {
         // SecScraperWorker is the only scraper in the pipeline that polls the SEC
         // submissions API at sub-minute cadence (the other workers — FTD, Holdings,
-        // InsiderTrading, etc. — sleep for hours per cycle). The 15-second interval
+        // InsiderTrading, etc. — sleep for hours per cycle). The 10-second interval
         // sits well inside SEC EDGAR's documented 10 req/second / 600 req/minute
         // limit even with concurrent cycles, but a refactor that "tightened the loop"
         // to e.g. `TimeSpan.FromSeconds(1)` (a plausible copy-paste from a unit-test
@@ -101,7 +101,7 @@ public class SecScraperWorkerTests
             new ConfigurationBuilder().Build()
         );
 
-        sut.InvokeSleepInterval().Should().Be(TimeSpan.FromSeconds(15));
+        sut.InvokeSleepInterval().Should().Be(TimeSpan.FromSeconds(10));
     }
 
     [Fact]

@@ -20,8 +20,10 @@ Equibles scrapes several public and free-tier data sources automatically. Each s
 
 | Source | What it provides | Default sync interval |
 |--------|-----------------|----------------------|
-| **SEC EDGAR** | Company filings (10-K, 10-Q, 8-K, …), financial facts (XBRL), and Failure-to-Deliver data | ~15 seconds (continuous) |
-| **SEC EDGAR 13F** | Institutional holdings (who owns what) | Every 24 hours (daily backfill) plus a 6-hour realtime check |
+| **SEC EDGAR filings** | Company filings (10-K, 10-Q, 8-K, …) | Ten-second default minimum between latest-filings polling attempts; active scrape cycles add latency |
+| **SEC EDGAR financial facts** | Company facts reported in XBRL | Every 24 hours |
+| **SEC EDGAR FTD** | Failure-to-Deliver data | Every 24 hours |
+| **SEC EDGAR 13F** | Institutional holdings (who owns what) | Every 24 hours (daily backfill) plus a 6-hour incremental check |
 | **Yahoo Finance** | Historical stock prices (OHLCV) | Every 24 hours |
 | **FRED** | U.S. economic indicators (GDP, unemployment, CPI, …) | Every 24 hours (requires a [free API key](how-to-set-up-fred-api-key.md)) |
 | **FINRA** | Short-sale volume data | Every 24 hours (requires a [free API key](how-to-set-up-finra-api-key.md)) |
@@ -31,7 +33,7 @@ Equibles scrapes several public and free-tier data sources automatically. Each s
 | **USAspending.gov** | Federal government contract awards won by public companies | Every 24 hours |
 | **FDA.gov** | FDA advisory-committee (AdComm) meeting calendar — regulatory catalyst dates for biotech and pharma stocks | Every 24 hours |
 
-The SEC filing and document-processing scrapers run nearly continuously (every 15 seconds) to pick up new filings as they appear on EDGAR. All other scrapers default to a 24-hour cycle. You don't need API keys for SEC, Yahoo, Congress, CBOE, CFTC, USAspending, or FDA — those work out of the box. FRED and FINRA require free API keys; without them those scrapers are simply skipped.
+The SEC latest-filings feed uses a ten-second default minimum polling interval, and document processing checks for queued work every 15 seconds. Financial-facts and Failure-to-Deliver imports run on separate daily schedules. You don't need API keys for SEC, Yahoo, Congress, CBOE, CFTC, USAspending, or FDA — those work out of the box. FRED and FINRA require free API keys; without them those scrapers are simply skipped.
 
 ## I started the stack but the web portal is nearly empty — is something wrong?
 
@@ -98,4 +100,4 @@ Not currently. All data sources are U.S.-focused: SEC EDGAR for filings and hold
 
 ## Does Equibles provide real-time data?
 
-No — Equibles is designed for research and analysis, not live trading. Stock prices from Yahoo Finance are end-of-day and update once every 24 hours. SEC filings appear within minutes of being published on EDGAR (the scraper polls every ~15 seconds), but the filings themselves are not real-time market data. Institutional holdings from 13F filings are quarterly and arrive with a 45-day lag. Short volume from FINRA and economic indicators from FRED are published daily or less frequently by those agencies. For the exact sync cadence of each data source, see [What data sources does Equibles pull from?](#what-data-sources-does-equibles-pull-from-and-how-often-do-they-update).
+No — Equibles is designed for research and analysis, not live trading. Stock prices from Yahoo Finance are end-of-day and update once every 24 hours. SEC filing discovery uses a ten-second default minimum between polling attempts, but active scrape cycles, SEC publication timing, and downstream processing mean a filing can take minutes to become available in Equibles. Institutional holdings from 13F filings are quarterly and arrive with a 45-day lag. Short volume from FINRA and economic indicators from FRED are published daily or less frequently by those agencies. For the exact sync cadence of each data source, see [What data sources does Equibles pull from?](#what-data-sources-does-equibles-pull-from-and-how-often-do-they-update).

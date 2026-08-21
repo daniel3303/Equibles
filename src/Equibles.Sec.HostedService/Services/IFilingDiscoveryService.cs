@@ -7,7 +7,8 @@ public interface IFilingDiscoveryService
     /// <summary>
     /// Returns the tracked companies that likely have new filings since the
     /// last cycle, discovered from EDGAR's centralized feeds: the real-time
-    /// "Latest Filings" ATOM stream (minutes of latency, lossy under bursts)
+    /// "Latest Filings" ATOM stream (a configurable interval with a ten-second
+    /// default minimum, lossy under bursts)
     /// plus the immutable per-day master index (complete, hours of latency,
     /// watermarked so downtime is caught up without loss). Both layers are
     /// best-effort — the periodic per-company reconciliation sweep is the

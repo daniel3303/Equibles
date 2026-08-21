@@ -39,7 +39,7 @@ public class DocumentScraperOptions
     // Minimum seconds between "Latest Filings" ATOM feed polls. The feed holds
     // ~100 entries per page and peak dissemination bursts run tens of filings a
     // minute, so the poll interval bounds the realtime layer's blind window.
-    public int RecentFeedPollSeconds { get; set; } = 60;
+    public int RecentFeedPollSeconds { get; set; } = 10;
 
     // Max ATOM pages (100 entries each) walked per poll when every entry is
     // still unseen (first poll after a boot, or a heavy burst).
