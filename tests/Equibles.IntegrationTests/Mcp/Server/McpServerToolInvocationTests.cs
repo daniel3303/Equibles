@@ -129,4 +129,40 @@ public class McpServerToolInvocationTests : IAsyncLifetime
                 "the F2-formatted close should round-trip through the JSON content block"
             );
     }
+
+    [Fact]
+    public async Task CallTool_ListCompanyDocuments_EmbeddingsDisabled_ActivatesSecSearchGraph()
+    {
+        var httpClient = _serverFixture.CreateClient();
+        httpClient.BaseAddress = new Uri("http://localhost/");
+
+        var transport = new HttpClientTransport(
+            new HttpClientTransportOptions
+            {
+                Endpoint = new Uri("http://localhost/mcp"),
+                TransportMode = HttpTransportMode.StreamableHttp,
+            },
+            httpClient
+        );
+
+        await using var client = await McpClient.CreateAsync(transport);
+        var result = await client.CallToolAsync(
+            toolName: "ListCompanyDocuments",
+            arguments: new Dictionary<string, object> { ["ticker"] = "ZZZZ" }
+        );
+
+        result
+            .IsError.Should()
+            .NotBe(
+                true,
+                "the SEC search dependency graph should activate when embeddings are disabled"
+            );
+
+        var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+        text.Should()
+            .Contain(
+                "Stock 'ZZZZ' not found.",
+                "the tool should reach its normal unknown-ticker response after DI activation"
+            );
+    }
 }
