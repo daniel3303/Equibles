@@ -57,6 +57,26 @@ public class MarkdownTableGcfTests : IDisposable
     }
 
     [Fact]
+    public void Gcf_Enabled_Preserves_Title_And_Subtitle_Framing()
+    {
+        Environment.SetEnvironmentVariable("EQUIBLES_OUTPUT_FORMAT", "gcf");
+
+        var output = MarkdownTable.Render(
+            Rows,
+            "No data.",
+            "Daily volume for AAPL:",
+            "Showing 2 of 2 rows.",
+            Header,
+            Separator,
+            r => $"| {r.Date} | {r.Vol} |"
+        );
+
+        Assert.StartsWith("Daily volume for AAPL:\nShowing 2 of 2 rows.\n\n", output);
+        Assert.Contains("GCF profile=generic", output);
+        Assert.DoesNotContain(Separator, output);
+    }
+
+    [Fact]
     public void Gcf_Not_Used_When_It_Would_Grow_A_Tiny_Table()
     {
         Environment.SetEnvironmentVariable("EQUIBLES_OUTPUT_FORMAT", "gcf");

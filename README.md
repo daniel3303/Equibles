@@ -231,10 +231,10 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 ### Output Format (GCF, opt-in)
 
 By default the table tools return markdown tables. Setting `EQUIBLES_OUTPUT_FORMAT=gcf`
-instead emits [Graph Compact Format](https://gcformat.com) for those tools: the same
-cells the markdown table would show, with the column names factored into a single header
-and the per-cell `| ` padding and separator row dropped. On the tools' own table shapes
-this is roughly **13–16% fewer tokens** (o200k) than the markdown table, losslessly.
+uses [Graph Compact Format](https://gcformat.com) when it is smaller, otherwise it falls
+back to markdown. GCF carries the same cells the markdown table would show, with the column
+names factored into a single header and the per-cell `| ` padding and separator row dropped.
+On the tools' own table shapes this is roughly **13–16% fewer tokens** (o200k), losslessly.
 
 It is deliberately conservative: **every cell value is preserved verbatim** (the compact-USD,
 comma-grouped, adaptive-decimal and em-dash formatting is untouched — GCF only changes the
