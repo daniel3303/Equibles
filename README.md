@@ -11,7 +11,7 @@
 
 **Equibles is a self-hosted, open-source financial data MCP server** — an open-source alternative to a Bloomberg Terminal, built for AI agents rather than humans. It scrapes, stores, and serves SEC filings and XBRL financials, 13F institutional holdings, insider and congressional trades, FINRA/SEC short data, FRED economic indicators, CFTC and CBOE positioning, fund filings, government contracts, and daily stock prices — and exposes all of it over the Model Context Protocol, so Claude, ChatGPT, Cursor, or any agent can query it directly. Runs on your own hardware with Docker, for free, forever.
 
-**This is the open-source core of [Equibles](https://equibles.com).** [Equibles Cloud](https://equibles.com/mcp) runs this exact core and adds 44 more tools, 108 in total — earnings call transcripts and audio, real-time quotes, options chains with Greeks, LLM-extracted KPIs and guidance, buybacks, IPO filings, executive changes, valuation multiples, index composition, portfolio tracking, and a full US-market screener. Same protocol, same tool names, nothing to run — see [what's included](#whats-included).
+**This is the open-source core of [Equibles](https://equibles.com).** [Equibles Cloud](https://equibles.com/mcp) runs this exact core and adds more tools on top — earnings call transcripts and audio, real-time quotes, options chains with Greeks, LLM-extracted KPIs and guidance, buybacks, IPO filings, executive changes, valuation multiples, index composition, portfolio tracking, and a full US-market screener. Same protocol, same tool names, nothing to run — see [what's included](#whats-included).
 
 > **Don't want to run anything?** Point your AI assistant at `https://mcp.equibles.com/mcp` and get a free API key at [equibles.com/mcp](https://equibles.com/mcp) — 100 requests/day, no card. Per-client setup guides live at [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
@@ -19,7 +19,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-Everything marked **Self-hosted** is scraped, stored, and served by this repo — **64 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds 44 more tools, 108 in total.
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **64 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
 
 | Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
@@ -284,7 +284,7 @@ Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP trans
 
 ## Tools
 
-This self-hosted build exposes 64 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` exposes 108 — the same 64 plus [44 more](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 64 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 

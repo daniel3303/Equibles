@@ -98,7 +98,7 @@ public class McpToolAnnotationsTests
         EnumerateTools().Should().HaveCountGreaterThan(50);
     }
 
-    private static List<(McpServerToolAttribute Attribute, MethodInfo Method)> EnumerateTools()
+    internal static List<(McpServerToolAttribute Attribute, MethodInfo Method)> EnumerateTools()
     {
         return ToolAssemblyMarkers
             .Select(marker => marker.Assembly)
