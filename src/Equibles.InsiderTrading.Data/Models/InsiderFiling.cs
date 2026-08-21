@@ -30,6 +30,13 @@ public class InsiderFiling
     public string AccessionNumber { get; set; }
 
     /// <summary>
+    /// SEC ownership-report family declared by this filing's documentType.
+    /// Stored independently of transaction rows so a superseded original remains
+    /// classifiable after its transactions are removed.
+    /// </summary>
+    public InsiderOwnershipForm FilingForm { get; set; } = InsiderOwnershipForm.Unknown;
+
+    /// <summary>
     /// The file holding the gzip-compressed ownership XML. Null when no XML was
     /// captured (status <see cref="InsiderFilingCaptureStatus.NotChecked"/> or
     /// <see cref="InsiderFilingCaptureStatus.NotPresent"/>). The stored

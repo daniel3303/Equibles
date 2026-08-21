@@ -24,6 +24,7 @@ namespace Equibles.IntegrationTests.InsiderTrading;
 /// reprocess re-parses from the cached ownership XML — where the source element is a
 /// <c>nonDerivativeHolding</c> — and re-tags the row to <see cref="TransactionCode.Holding"/>,
 /// authoritatively (from the element, never a DB heuristic), then stamps the version.
+/// It also pins v8's ownership-form family stamp from the SEC documentType.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class InsiderFilingReprocessManagerRetagHoldingTests : ParadeDbMcpTestBase
@@ -75,13 +76,14 @@ public class InsiderFilingReprocessManagerRetagHoldingTests : ParadeDbMcpTestBas
             OwnershipNature = OwnershipNature.Direct,
             SecurityTitle = "Common Stock",
             SecurityKind = InsiderSecurityKind.NonDerivative,
+            FilingForm = InsiderOwnershipForm.Unknown,
             ParserVersion = 4,
         };
 
         // Source is a holding element (no transaction), so the re-parse routes through
         // ParseHolding and tags the row Holding.
         var ownershipXml =
-            "<ownershipDocument>"
+            "<ownershipDocument><documentType>5</documentType>"
             + "<nonDerivativeTable><nonDerivativeHolding>"
             + "<securityTitle><value>Common Stock</value></securityTitle>"
             + "<postTransactionAmounts>"
@@ -148,6 +150,7 @@ public class InsiderFilingReprocessManagerRetagHoldingTests : ParadeDbMcpTestBas
         await using var verify = Fixture.CreateDbContext();
         var reprocessed = await verify.Set<InsiderTransaction>().FindAsync(stale.Id);
         reprocessed!.TransactionCode.Should().Be(TransactionCode.Holding);
+        reprocessed.FilingForm.Should().Be(InsiderOwnershipForm.Form5);
         reprocessed.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
     }
 }

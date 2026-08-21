@@ -88,20 +88,24 @@ public class InsiderFilingReprocessManager
         // Snapshot of the work-set for the progress bar. The live ingest worker may
         // stamp new rows at the current version while this runs; harmless — Processed
         // can briefly nudge past Total and self-corrects.
+        var staleTransactionFilingCount = await _transactionRepository
+            .GetAll()
+            .Where(t => t.ParserVersion < InsiderTransaction.CurrentParserVersion)
+            .Select(t => t.AccessionNumber)
+            .Distinct()
+            .CountAsync();
+        var rowlessUnknownFilingCount = await RowlessUnknownCapturedFilings().CountAsync();
         var result = new InsiderFilingReprocessResult
         {
-            Total = await _transactionRepository
-                .GetAll()
-                .Where(t => t.ParserVersion < InsiderTransaction.CurrentParserVersion)
-                .Select(t => t.AccessionNumber)
-                .Distinct()
-                .CountAsync(),
+            Total = staleTransactionFilingCount + rowlessUnknownFilingCount,
         };
 
         if (result.Total == 0)
             return result;
 
         _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
+
+        await ReprocessRowlessFilingForms(result, onProgress, cancellationToken);
 
         // No DB cursor: a reprocessed filing's rows advance to the current version and
         // drop out of the filter, so each pass takes the next batch of unprocessed
@@ -213,6 +217,89 @@ public class InsiderFilingReprocessManager
         return result;
     }
 
+    // Supersession deliberately deletes an original filing's transaction rows but
+    // retains its cached XML. Those rowless filings are absent from the parser-version
+    // workset, so stamp their authoritative form family in a separate bounded pass.
+    private IQueryable<InsiderFiling> RowlessUnknownCapturedFilings()
+    {
+        return _filingRepository
+            .GetAll()
+            .Where(f =>
+                f.FilingForm == InsiderOwnershipForm.Unknown
+                && f.CaptureStatus == InsiderFilingCaptureStatus.Captured
+                && f.ContentId != null
+                && !_transactionRepository.GetAll().Any(t => t.AccessionNumber == f.AccessionNumber)
+            );
+    }
+
+    private async Task ReprocessRowlessFilingForms(
+        InsiderFilingReprocessResult result,
+        Func<InsiderFilingReprocessResult, Task> onProgress,
+        CancellationToken cancellationToken
+    )
+    {
+        var failedThisRun = new HashSet<string>();
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var accessions = await RowlessUnknownCapturedFilings()
+                .Where(f => !failedThisRun.Contains(f.AccessionNumber))
+                .Select(f => f.AccessionNumber)
+                .OrderBy(accession => accession)
+                .Take(BatchSize)
+                .ToListAsync(cancellationToken);
+            if (accessions.Count == 0)
+                break;
+
+            foreach (var accession in accessions)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    break;
+
+                try
+                {
+                    var filing = await _filingRepository
+                        .GetByAccessionNumber(accession)
+                        .Include(f => f.Content)
+                            .ThenInclude(content => content.FileContent)
+                        .SingleAsync(cancellationToken);
+                    var raw = GzipCompressor.Decompress(
+                        await _fileManager.GetContent(filing.Content)
+                    );
+                    var root = InsiderFilingParser.TryGetOwnershipRoot(
+                        Encoding.UTF8.GetString(raw)
+                    );
+                    var filingForm = InsiderFilingParser.ParseOwnershipForm(
+                        root?.Element("documentType")?.Value
+                    );
+                    if (filingForm == InsiderOwnershipForm.Unknown)
+                    {
+                        failedThisRun.Add(accession);
+                        result.Failed++;
+                        continue;
+                    }
+
+                    filing.FilingForm = filingForm;
+                    result.Processed++;
+                }
+                catch (Exception ex)
+                {
+                    failedThisRun.Add(accession);
+                    result.Failed++;
+                    _logger.LogWarning(
+                        ex,
+                        "Insider filing family replay failed for rowless filing {AccessionNumber}; skipping this run",
+                        accession
+                    );
+                }
+            }
+
+            await _filingRepository.SaveChanges();
+            _dbContext.ChangeTracker.Clear();
+            if (onProgress != null)
+                await onProgress(result);
+        }
+    }
+
     // Re-saves the batch after detaching the best-effort filing/file cache inserts that a
     // concurrent run beat us to (the unique-accession conflict). Those cache rows are
     // regenerable — re-fetched on a later pass — but the batch's transaction updates are the
@@ -265,11 +352,24 @@ public class InsiderFilingReprocessManager
         {
             AccessionNumber = accession,
             FilingDate = first.FilingDate,
+            Form = root.Element("documentType")?.Value?.Trim(),
             // periodOfReport is the authoritative fallback used by the parser when a
             // filer keyed an impossible transaction date. Falling back to the stored
             // date preserves legacy behavior only for malformed documents that omit it.
             ReportDate = InsiderFilingParser.ParsePeriodOfReport(root) ?? first.TransactionDate,
         };
+        var filingForm = InsiderFilingParser.ParseOwnershipForm(filing.Form);
+
+        // The family is a document-level fact, so stamp every stored row even
+        // when the current parser produces fewer rows than an older version.
+        foreach (var row in rows)
+            row.FilingForm = filingForm;
+
+        var storedFiling = await _filingRepository
+            .GetByAccessionNumber(accession)
+            .FirstOrDefaultAsync();
+        if (storedFiling != null)
+            storedFiling.FilingForm = filingForm;
 
         // Re-parse in the same document order the ingest used; map back onto the
         // stored rows by TransactionOrder so a kind lands on the right row even if
@@ -426,6 +526,9 @@ public class InsiderFilingReprocessManager
     {
         var rawBytes = Encoding.UTF8.GetBytes(root.ToString(SaveOptions.DisableFormatting));
         var compressed = GzipCompressor.Compress(rawBytes);
+        var filingForm = InsiderFilingParser.ParseOwnershipForm(
+            root.Element("documentType")?.Value
+        );
         var file = await _fileManager.SaveInternalFile(
             compressed,
             accession,
@@ -439,6 +542,7 @@ public class InsiderFilingReprocessManager
                 new InsiderFiling
                 {
                     AccessionNumber = accession,
+                    FilingForm = filingForm,
                     Content = file,
                     UncompressedSize = rawBytes.Length,
                     CaptureStatus = InsiderFilingCaptureStatus.Captured,
@@ -447,6 +551,7 @@ public class InsiderFilingReprocessManager
         }
         else
         {
+            filing.FilingForm = filingForm;
             filing.Content = file;
             filing.UncompressedSize = rawBytes.Length;
             filing.CaptureStatus = InsiderFilingCaptureStatus.Captured;

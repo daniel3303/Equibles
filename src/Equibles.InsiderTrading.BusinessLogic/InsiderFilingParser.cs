@@ -56,6 +56,7 @@ public static class InsiderFilingParser
             tx.TransactionOrder = transactions.Count;
             tx.IsRule10b5One = rule10b5One;
             tx.OriginalFilingDate = originalFilingDate;
+            tx.FilingForm = ParseOwnershipForm(filing.Form);
             transactions.Add(tx);
         }
 
@@ -148,6 +149,19 @@ public static class InsiderFilingParser
     }
 
     /// <summary>
+    /// Maps the SEC's authoritative ownership form label to its base family.
+    /// Unknown labels stay unknown rather than being inferred from row contents.
+    /// </summary>
+    public static InsiderOwnershipForm ParseOwnershipForm(string form) =>
+        form?.Trim().ToUpperInvariant() switch
+        {
+            "3" or "3/A" => InsiderOwnershipForm.Form3,
+            "4" or "4/A" => InsiderOwnershipForm.Form4,
+            "5" or "5/A" => InsiderOwnershipForm.Form5,
+            _ => InsiderOwnershipForm.Unknown,
+        };
+
+    /// <summary>
     /// The transaction-period anchor declared by the ownership document. Null when
     /// absent or unparseable, so callers can retain existing data rather than infer a
     /// financial date.
@@ -193,6 +207,7 @@ public static class InsiderFilingParser
             TransactionCode = TransactionCode.Other,
             AccessionNumber = filing.AccessionNumber,
             SecurityTitle = "No Securities Owned",
+            FilingForm = ParseOwnershipForm(filing.Form),
             IsPriceValid = true,
             ParserVersion = InsiderTransaction.CurrentParserVersion,
         };

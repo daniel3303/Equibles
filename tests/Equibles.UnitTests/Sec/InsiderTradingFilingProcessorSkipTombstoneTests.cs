@@ -200,6 +200,7 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
                     SecurityTitle = "Common Stock",
                     TransactionOrder = 1,
                     IsAmendment = true,
+                    FilingForm = InsiderOwnershipForm.Form4,
                     OriginalFilingDate = new DateOnly(2023, 5, 25),
                     IsPriceValid = true,
                     Notes = [],
