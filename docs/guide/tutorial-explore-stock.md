@@ -50,7 +50,7 @@ Click **SEC Filings**. Here you'll find every filing the company has made with t
 
 ## Insider Trades
 
-Click **Insider Trades**. This tab lists stock transactions by company insiders (officers, directors, and large shareholders) as reported on SEC Form 4. You'll see who traded, when, how many shares, at what price, and whether it was a buy or a sell.
+Click **Insider Trades**. This tab lists stock transactions by company insiders (officers, directors, and large shareholders) as reported on SEC Forms 3, 4, and 5. You'll see who traded, when, how many shares, at what price, and whether it was a buy or a sell.
 
 ## Proposed Sales
 

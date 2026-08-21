@@ -31,17 +31,32 @@ public enum DocumentTypeFilter
     [Display(Name = "40-F")]
     FortyF,
 
+    [Display(Name = "20-F/A")]
+    TwentyFa,
+
+    [Display(Name = "6-K/A")]
+    SixKa,
+
+    [Display(Name = "40-F/A")]
+    FortyFa,
+
     [Display(Name = "4")]
     FormFour,
 
     [Display(Name = "3")]
     FormThree,
 
+    [Display(Name = "5")]
+    FormFive,
+
     [Display(Name = "4/A")]
     FormFourA,
 
     [Display(Name = "3/A")]
     FormThreeA,
+
+    [Display(Name = "5/A")]
+    FormFiveA,
 
     [Display(Name = "144")]
     Form144,

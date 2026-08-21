@@ -9,6 +9,8 @@ public class DocumentTypeTests
     [InlineData("TenQ")]
     [InlineData("EightK")]
     [InlineData("FormFour")]
+    [InlineData("FormFive")]
+    [InlineData("TwentyFa")]
     [InlineData("Def14A")]
     public void FromValue_ReturnsCorrectType(string value)
     {
@@ -43,8 +45,17 @@ public class DocumentTypeTests
     [InlineData("8-K", "EightK")]
     [InlineData("10-Q", "TenQ")]
     [InlineData("20-F", "TwentyF")]
+    [InlineData("6-K", "SixK")]
+    [InlineData("40-F", "FortyF")]
+    [InlineData("20-F/A", "TwentyFa")]
+    [InlineData("6-K/A", "SixKa")]
+    [InlineData("40-F/A", "FortyFa")]
     [InlineData("4", "FormFour")]
     [InlineData("3", "FormThree")]
+    [InlineData("5", "FormFive")]
+    [InlineData("4/A", "FormFourA")]
+    [InlineData("3/A", "FormThreeA")]
+    [InlineData("5/A", "FormFiveA")]
     [InlineData("D", "FormD")]
     [InlineData("D/A", "FormDa")]
     [InlineData("N-CEN", "NCen")]
@@ -97,8 +108,15 @@ public class DocumentTypeTests
                     DocumentType.TwentyF,
                     DocumentType.SixK,
                     DocumentType.FortyF,
+                    DocumentType.TwentyFa,
+                    DocumentType.SixKa,
+                    DocumentType.FortyFa,
                     DocumentType.FormFour,
                     DocumentType.FormThree,
+                    DocumentType.FormFive,
+                    DocumentType.FormFourA,
+                    DocumentType.FormThreeA,
+                    DocumentType.FormFiveA,
                     DocumentType.Form144,
                     DocumentType.FormD,
                     DocumentType.FormDa,
@@ -106,6 +124,7 @@ public class DocumentTypeTests
                     DocumentType.NCenA,
                     DocumentType.NportP,
                     DocumentType.NportPa,
+                    DocumentType.Def14A,
                     DocumentType.Other,
                 }
             );
@@ -117,6 +136,7 @@ public class DocumentTypeTests
         DocumentType.TenK.ToString().Should().Be("10-K");
         DocumentType.EightK.ToString().Should().Be("8-K");
         DocumentType.FormFour.ToString().Should().Be("4");
+        DocumentType.FormFiveA.ToString().Should().Be("5/A");
         DocumentType.Other.ToString().Should().Be("Other");
     }
 

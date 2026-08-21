@@ -35,7 +35,7 @@ public class FinancialFactsImportService
     // Bump whenever parsing, fiscal identity, or quality filtering changes existing rows. The
     // per-company checkpoint forces a full Company Facts replay without racing the old worker
     // during an additive migration rollout.
-    internal const int CurrentImporterVersion = 2;
+    internal const int CurrentImporterVersion = 3;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ISecEdgarClient _secEdgarClient;
@@ -557,11 +557,13 @@ public class FinancialFactsImportService
         return (document.ReportingForDate.Year, SecFiscalPeriod.FullYear);
     }
 
-    private static bool IsAnnualPeriodicForm(DocumentType form) =>
+    internal static bool IsAnnualPeriodicForm(DocumentType form) =>
         form == DocumentType.TenK
         || form == DocumentType.TenKa
         || form == DocumentType.TwentyF
-        || form == DocumentType.FortyF;
+        || form == DocumentType.TwentyFa
+        || form == DocumentType.FortyF
+        || form == DocumentType.FortyFa;
 
     // The CIK set one facts import reads: primary first, then every attached
     // secondary. Distinct because the subsidiary-attach path writes SEC's value

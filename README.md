@@ -28,7 +28,7 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 | **Holdings** | SEC 13F-HR | ✅ | ✅ | Institutional ownership — who owns what, how much, and trend over time |
 | **Fund Filings** | SEC NPORT / N-CEN / Form D | ✅ | ✅ | Fund portfolio holdings, registered-fund operations (service providers), and exempt offerings (private placements) |
 | **Investment Advisers** | SEC Form ADV | ✅ | ✅ | SEC-registered advisers — assets under management, main office, employee count, fee structure |
-| **Insider Trading** | SEC Form 3/4/144 | ✅ | ✅ | Director, officer, and 10% owner transactions, plus proposed (Form 144) sales |
+| **Insider Trading** | SEC Forms 3/4/5/144 | ✅ | ✅ | Director, officer, and 10% owner transactions, annual ownership statements, and proposed (Form 144) sales |
 | **Congressional Trading** | House/Senate disclosures | ✅ | ✅ | Securities transactions by members of Congress, including the filed stock, option, bond, or other instrument |
 | **Short Data** | SEC / FINRA | ✅ | ✅ | Fails-to-deliver (SEC), daily short volume and short interest (FINRA) |
 | **Economic Indicators** | FRED (Federal Reserve) | ✅ | ✅ | Interest rates, inflation, employment, GDP, yield spreads, and more |

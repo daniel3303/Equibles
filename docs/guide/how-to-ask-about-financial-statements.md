@@ -36,7 +36,7 @@ The assistant calls `CompareFinancialFact`, returning one row per ticker for the
 
 ## What you should see
 
-A Markdown table (or several) with figures taken directly from the company's XBRL filings, labelled by fiscal year, fiscal period, period start, and period end. Values are the latest restated numbers unless you ask for them as originally reported. A canonical periodic report (10-K, 10-Q, 20-F, or 40-F) outranks a later proxy that repeats the same period's figure in rounded form.
+A Markdown table (or several) with figures taken directly from the company's XBRL filings, labelled by fiscal year, fiscal period, period start, and period end. Values are the latest restated numbers unless you ask for them as originally reported. A canonical periodic report (10-K, 10-Q, 20-F, or 40-F, including amendments) outranks a later proxy that repeats the same period's figure in rounded form.
 
 If a statement or metric is missing, the most likely reasons are that the scraper hasn't imported that company's XBRL facts yet, or the company doesn't tag that concept. For a breakdown of revenue by segment, geography, or product — which lives in dimensional facts rather than the standard statements — see [Ask your AI assistant for a company's revenue breakdown](how-to-ask-about-revenue-breakdown.md).
 

@@ -35,7 +35,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetMostHeldStocks` — cross-sectional ranking of stocks by institutional 13F breadth for a quarter, ordered by filer count (default), quarter-over-quarter change in filer count (warming / cooling), or total reported value; includes Δ filers, total value, Δ value, and the stock's share of the 13F universe.
 - `GetFundCloneBacktest` — backtest cloning a filer's reported 13F portfolio against a benchmark over a trailing window, rebalancing on the SEC filing lag; uses raw closing prices for each exact listing, excludes dividends, and returns price return, price CAGR, max drawdown, and price-return alpha. Captured splits can shorten the comparable window.
 
-### `mcp.AddInsiderTrading()` — Form 3 / 4
+### `mcp.AddInsiderTrading()` — Forms 3 / 4 / 5
 
 `InsiderTradingTools`:
 

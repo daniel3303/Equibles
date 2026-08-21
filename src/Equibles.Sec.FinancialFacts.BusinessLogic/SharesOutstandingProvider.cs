@@ -188,7 +188,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
 
     // True when the fact backing GetCurrentSharesOutstanding — the latest consolidated cover-page
     // fact or the latest per-class filing, whichever wins the pick — is a foreign-private-issuer
-    // annual form (20-F/40-F). Those cover-page counts are in the issuer's ordinary shares, which
+    // annual form (20-F/40-F, including amendments). Those cover-page counts are in the issuer's ordinary shares, which
     // are a different unit from the US-listed ADR a price feed quotes; the Yahoo importer uses this
     // to skip reconciling Yahoo's (correct, self-consistent) ADR market cap / shares onto that
     // ordinary base, which would otherwise inflate market cap by the ADR ratio (e.g. Latam Airlines
@@ -202,7 +202,12 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     {
         var fact = await ResolveCurrentSharesFact(stock, cancellationToken);
         return fact != null
-            && (fact.Form == DocumentType.TwentyF || fact.Form == DocumentType.FortyF);
+            && (
+                fact.Form == DocumentType.TwentyF
+                || fact.Form == DocumentType.TwentyFa
+                || fact.Form == DocumentType.FortyF
+                || fact.Form == DocumentType.FortyFa
+            );
     }
 
     // The single source of truth for "the issuer's current share count and the filing that stated

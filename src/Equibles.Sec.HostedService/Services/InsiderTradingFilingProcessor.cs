@@ -20,7 +20,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Sec.HostedService.Services;
 
 /// <summary>
-/// Processes SEC Form 3 and Form 4 filings by parsing the ownership XML
+/// Processes SEC Forms 3, 4, and 5 by parsing the ownership XML
 /// into structured InsiderOwner + InsiderTransaction database records.
 /// The XML→transaction parsing lives in <see cref="InsiderFilingParser"/>;
 /// this processor handles fetching, owner resolution, price validity, raw-XML
@@ -47,8 +47,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
     {
         return documentType == DocumentType.FormFour
             || documentType == DocumentType.FormThree
+            || documentType == DocumentType.FormFive
             || documentType == DocumentType.FormFourA
-            || documentType == DocumentType.FormThreeA;
+            || documentType == DocumentType.FormThreeA
+            || documentType == DocumentType.FormFiveA;
     }
 
     public async Task<HashSet<string>> FilterKnownAccessions(
@@ -165,7 +167,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             return false;
         }
 
-        // A Form 4 appears in the EDGAR submissions feed of every CIK it references —
+        // An ownership filing appears in the EDGAR submissions feed of every CIK it references —
         // the issuer and each reporting owner. When a tracked public company (e.g.
         // Carlyle) is itself a reporting owner on another issuer's filing (e.g. its
         // sale of Medline stock), that filing surfaces in the company's own feed.

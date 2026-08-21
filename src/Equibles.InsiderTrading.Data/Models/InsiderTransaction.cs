@@ -93,7 +93,7 @@ public class InsiderTransaction
     public string AccessionNumber { get; set; }
 
     /// <summary>
-    /// Ordinal position of this row within its Form 3/4 filing (0-based). Form 4 XML
+    /// Ordinal position of this row within its Form 3/4/5 filing (0-based). Ownership XML
     /// has no per-transaction identifier — uniqueness is by (AccessionNumber, position).
     /// </summary>
     public int TransactionOrder { get; set; }
@@ -101,7 +101,7 @@ public class InsiderTransaction
     public bool IsAmendment { get; set; }
 
     /// <summary>
-    /// For rows from a Form 4/A or 3/A: the filing date of the ORIGINAL report the
+    /// For rows from a Form 3/A, 4/A, or 5/A: the filing date of the ORIGINAL report the
     /// amendment restates (the XML's <c>dateOfOriginalSubmission</c>). Drives
     /// supersession — an amendment replaces the original filing's rows, and a
     /// late-arriving original (or an older chained amendment) is skipped when a row

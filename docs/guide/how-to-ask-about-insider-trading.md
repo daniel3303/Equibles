@@ -1,6 +1,6 @@
 # Ask your AI assistant about a company's insider trading
 
-Equibles tracks the Form 3, Form 4, and Form 144 filings that company insiders — directors, officers, and 10%-or-more owners — submit to the SEC, and exposes them through the MCP server, so you can ask your AI assistant who is buying or selling a stock, what each insider owns, and which sales are coming up.
+Equibles tracks the Form 3, Form 4, Form 5, and Form 144 filings that company insiders — directors, officers, and 10%-or-more owners — submit to the SEC, and exposes them through the MCP server, so you can ask your AI assistant who is buying or selling a stock, what each insider owns, and which sales are coming up.
 
 ## Before you start
 
@@ -14,7 +14,7 @@ Name a company and ask about its insider activity:
 - "What insider buying and selling has there been at AAPL recently?"
 - "Have any Tesla executives sold shares in the last few months?"
 
-The assistant calls the `GetInsiderTransactions` tool and replies with recent purchases, sales, and awards from Form 3 and Form 4 filings — each with the insider's name and role, the transaction type, the number of shares and price, and the holding left afterward.
+The assistant calls the `GetInsiderTransactions` tool and replies with recent purchases, sales, and awards from Forms 3, 4, and 5 — each with the insider's name and role, the transaction type, the number of shares and price, and the holding left afterward.
 
 ## Ask who owns what
 

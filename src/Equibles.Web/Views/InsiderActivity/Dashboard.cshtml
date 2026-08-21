@@ -3,16 +3,16 @@
 
 @{
     ViewData["Title"] = "Insider Trading Dashboard";
-    ViewData["Description"] = "Market-wide insider trading activity — top buys, top sells, and biggest transactions from SEC Form 4 filings.";
+    ViewData["Description"] = "Market-wide insider trading activity — top buys, top sells, and biggest transactions from SEC Forms 3, 4, and 5.";
 }
 
 <div class="max-w-6xl mx-auto px-6 py-12">
     <page-header title="Insider Trading Dashboard">
-            Top insider transactions from the last 90 days (SEC Form 4 filings)
+            Top insider transactions from the last 90 days (SEC Forms 3, 4, and 5)
         </page-header>
 
     @if (Model.TopBuys.Count == 0 && Model.TopSells.Count == 0) {
-        <partial name="_EmptyStateCard" model='(IconName: "user-group", Heading: "No insider transactions yet", Message: "Once Form 4 filings have been ingested, the insider dashboard appears here.")' />
+        <partial name="_EmptyStateCard" model='(IconName: "user-group", Heading: "No insider transactions yet", Message: "Once Forms 3, 4, and 5 have been ingested, the insider dashboard appears here.")' />
     } else {
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <!-- Top Buys -->

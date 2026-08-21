@@ -4,18 +4,14 @@ namespace Equibles.Sec.HostedService.Configuration;
 
 public class DocumentScraperOptions
 {
-    // Amendments are first-class: 10-K/A, 10-Q/A and 8-K/A store as their own
-    // document types, and Form 4/A / 3/A supersede their originals' transactions
-    // in the insider pipeline. Omitting them left corrected filings invisible
-    // while the erroneous originals stayed live.
+    // Amendments are first-class: periodic-report amendments store as their own
+    // document types, and Forms 3/A, 4/A, and 5/A supersede their originals'
+    // transactions in the insider pipeline. Omitting them left corrected filings
+    // invisible while the erroneous originals stayed live.
     //
-    // 20-F/6-K/40-F are a foreign private issuer's equivalents of 10-K/8-K (40-F
-    // specifically for Canadian filers using the MJDS annual-report regime) —
-    // already fully wired end to end (SEC filter mapping, form-name detection,
-    // HTML/XBRL/PDF-fallback extraction, even used elsewhere to infer fiscal
-    // year-end when no 10-K exists), but missing from this list meant a foreign
-    // filer like OceanaGold (ticker OGC, CIK 0001487326, files 6-K routinely and
-    // 40-F annually) synced as a known company with zero documents ever ingested.
+    // 20-F/6-K/40-F and their amendments cover foreign private issuers. Forms
+    // 3/4/5 and their amendments cover initial, transactional, and annual insider
+    // ownership disclosures.
     public List<DocumentType> DocumentTypesToSync { get; set; } =
     [
         DocumentType.TenK,
@@ -27,10 +23,15 @@ public class DocumentScraperOptions
         DocumentType.TwentyF,
         DocumentType.SixK,
         DocumentType.FortyF,
+        DocumentType.TwentyFa,
+        DocumentType.SixKa,
+        DocumentType.FortyFa,
         DocumentType.FormFour,
         DocumentType.FormThree,
+        DocumentType.FormFive,
         DocumentType.FormFourA,
         DocumentType.FormThreeA,
+        DocumentType.FormFiveA,
         DocumentType.Form144,
         DocumentType.FormD,
         DocumentType.FormDa,
