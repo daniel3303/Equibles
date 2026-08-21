@@ -25,7 +25,6 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Npgsql;
 using Respawn;
 using Testcontainers.PostgreSql;
@@ -100,16 +99,6 @@ public class McpServerAppFixture : IAsyncLifetime
         );
 
         builder.Configuration["ConnectionStrings:DefaultConnection"] = _db.GetConnectionString();
-
-        // Production MCP server doesn't opt in to validate-on-build; EmbeddingClient pulls
-        // IHttpClientFactory lazily on first use and isn't registered at composition time.
-        // Match that behaviour so the fixture's host build doesn't reject the composition
-        // before any request is served.
-        builder.Host.UseDefaultServiceProvider(o =>
-        {
-            o.ValidateOnBuild = false;
-            o.ValidateScopes = false;
-        });
 
         Program.ConfigureServices(builder);
         _app = builder.Build();

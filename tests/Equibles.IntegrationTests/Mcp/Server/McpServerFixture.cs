@@ -31,19 +31,7 @@ public class McpServerFixture : WebApplicationFactory<Program>, IAsyncLifetime
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:DefaultConnection", _paradeDb.ConnectionString);
-
-        // Match production: WebApplicationFactory enables ValidateOnBuild + ValidateScopes in
-        // the Development environment, which the production MCP server (running under
-        // ASP.NET Core's default options without explicit opt-in) does not. EmbeddingClient
-        // pulls IHttpClientFactory only when an embeddings tool is actually invoked, and the
-        // MCP server doesn't register AddHttpClient at composition time; the validation
-        // would reject the host before any test runs even though the production startup
-        // tolerates this lazy resolution.
-        builder.UseDefaultServiceProvider(o =>
-        {
-            o.ValidateOnBuild = false;
-            o.ValidateScopes = false;
-        });
+        builder.UseSetting("Embedding:Enabled", "false");
     }
 
     public async Task InitializeAsync()
