@@ -11,7 +11,7 @@ public class SecScraperWorker : BaseScraperWorker
     private readonly IConfiguration _configuration;
 
     protected override string WorkerName => "SEC filing scraper";
-    protected override TimeSpan SleepInterval => TimeSpan.FromSeconds(15);
+    protected override TimeSpan SleepInterval => TimeSpan.FromSeconds(10);
     protected override ErrorSource ErrorSource => ErrorSource.DocumentScraper;
 
     // Staggered so the SEC scrapers don't drain the shared EDGAR request budget at

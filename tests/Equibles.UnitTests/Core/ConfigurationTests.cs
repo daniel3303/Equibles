@@ -176,6 +176,14 @@ public class ConfigurationTests
         options.DocumentTypesToSync.Should().ContainSingle().Which.Should().Be(DocumentType.EightK);
     }
 
+    [Fact]
+    public void DocumentScraperOptions_RecentFeedPollSeconds_DefaultsToTenSeconds()
+    {
+        var options = new DocumentScraperOptions();
+
+        options.RecentFeedPollSeconds.Should().Be(10);
+    }
+
     // ── FinraOptions (integration) ───────────────────────────────────
 
     [Fact]
