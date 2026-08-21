@@ -8,6 +8,14 @@ public class DocumentScraperOptions
     // document types, and Form 4/A / 3/A supersede their originals' transactions
     // in the insider pipeline. Omitting them left corrected filings invisible
     // while the erroneous originals stayed live.
+    //
+    // 20-F/6-K/40-F are a foreign private issuer's equivalents of 10-K/8-K (40-F
+    // specifically for Canadian filers using the MJDS annual-report regime) —
+    // already fully wired end to end (SEC filter mapping, form-name detection,
+    // HTML/XBRL/PDF-fallback extraction, even used elsewhere to infer fiscal
+    // year-end when no 10-K exists), but missing from this list meant a foreign
+    // filer like OceanaGold (ticker OGC, CIK 0001487326, files 6-K routinely and
+    // 40-F annually) synced as a known company with zero documents ever ingested.
     public List<DocumentType> DocumentTypesToSync { get; set; } =
     [
         DocumentType.TenK,
@@ -16,6 +24,9 @@ public class DocumentScraperOptions
         DocumentType.TenKa,
         DocumentType.TenQa,
         DocumentType.EightKa,
+        DocumentType.TwentyF,
+        DocumentType.SixK,
+        DocumentType.FortyF,
         DocumentType.FormFour,
         DocumentType.FormThree,
         DocumentType.FormFourA,

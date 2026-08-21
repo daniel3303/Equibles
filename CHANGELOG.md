@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Foreign private issuers (20-F/6-K annual and current reports, 40-F for Canadian filers using the MJDS regime) are now synced like any other company's filings. The SEC filter mapping, form-name detection, and document extraction already supported these three types, but `DocumentScraperOptions.DocumentTypesToSync`'s default list never included them, so a company with no 10-K/10-Q/8-K on file synced with zero documents ever ingested regardless of how many 20-F/6-K/40-F filings it actually has in EDGAR.
 - The fund-series directory now preserves every NPORT series exposed through a shared issuer feed and deduplicates SEC series seen through both issuer-feed and sweep ingestion, instead of failing rebuilds on duplicate identities or route slugs.
 - Financial-fact MCP tools no longer advertise dimensioned customer-concentration disclosures as consolidated series, and peer comparisons preserve exact dotted ticker spellings instead of inferring a different dash-listed security. Unknown symbols are now identified as outside the tracked SEC issuer set. Closes #4391.
 - Secondary price-series responses now label exact listing tickers without appending the primary listing's name, preventing headings such as a fund-series symbol paired with its parent security name.
