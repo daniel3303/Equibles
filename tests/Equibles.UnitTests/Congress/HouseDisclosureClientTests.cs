@@ -162,6 +162,21 @@ public class HouseDisclosureClientTests
     }
 
     [Fact]
+    public void ParseTransactionLines_NullPaddedCompactSubholding_RetainsFiledIdentity()
+    {
+        var result = Parse(
+            "Procter & Gamble Company (PG) [ST] P 08/11/2026 08/20/2026 $1,001 - $15,000",
+            "F\0\0\0\0\0 S\0\0\0\0\0: New S\0\0\0\0\0\0\0\0\0 O\0: David Taylor Trust > Sardinia Ready Mix 401(k) - Dave"
+        );
+
+        var tx = result.Should().ContainSingle().Subject;
+        tx.Ticker.Should().Be("PG");
+        tx.AssetType.Should().Be("ST");
+        tx.Subholding.Should().Be("David Taylor Trust > Sardinia Ready Mix 401(k) - Dave");
+        tx.AssetName.Should().Be("Procter & Gamble Company (PG)");
+    }
+
+    [Fact]
     public void ParseTransactionLines_SeriesDAssetNameWithoutSubholding_PreservesAssetName()
     {
         var result = Parse(

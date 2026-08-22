@@ -365,7 +365,10 @@ public partial class HouseDisclosureClient
         var lines = new List<string>(rawLines.Count);
         foreach (var rawLine in rawLines)
         {
-            var line = StripReprintedHeader(rawLine);
+            // Some official House PDFs encode the spaced field labels with null-padded
+            // glyphs (for example "S\0... O\0:"). Remove those source artifacts before
+            // any label or metadata regex runs; cleaning only at persistence is too late.
+            var line = StripReprintedHeader(rawLine.Replace("\0", "", StringComparison.Ordinal));
             if (!string.IsNullOrWhiteSpace(line))
                 lines.Add(line);
         }

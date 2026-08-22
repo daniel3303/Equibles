@@ -42,7 +42,7 @@ public class CongressionalTradeSyncService
 
     // Congressional trade disclosures are available from 2012 (STOCK Act).
     private static readonly DateOnly EarliestAvailableDate = new(2012, 4, 1);
-    private const int TradeParserVersion = 3;
+    private const int TradeParserVersion = 4;
     private const int ReprocessPerCycleLimit = 1_000;
 
     // A filing with a transaction whose ticker is not (yet) a tracked stock
