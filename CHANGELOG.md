@@ -7,6 +7,23 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-08-22
+
+### Added
+
+- Table tools can opt into Graph Compact Format when it produces a smaller response. PR #4394.
+
+### Changed
+
+- Runtime, test, web, and GitHub Actions dependencies were updated to supported releases, including the Testcontainers SSH.NET security fix. PRs #4334, #4398–#4400, #4425, #4427, #4428.
+- Hosted tool-count wording now avoids publishing a number that drifts as modules change. PR #4416.
+
+### Fixed
+
+- Yahoo listed-price batches now revalidate dates after acquiring the series lock, so a concurrent writer's insert is skipped without losing the rest of the batch; the split-boundary regression is also trading-calendar-safe. PR #4430; issues #4320 and #4403.
+- FINRA short-interest imports preserve case-sensitive security identity for direct and compressed class-share symbols. PR #4430; issue #4319.
+- Insider filing replay keeps amendment and claim cleanup scoped to the correct form family. PRs #4426 and #4429.
+
 ## [1.5.0] — 2026-08-21
 
 ### Added
@@ -666,7 +683,8 @@ First tagged release.
 - Background worker — scrapers and document processor.
 - Docker Compose stack (ParadeDB + web + MCP + worker), with an optional vector-embedding profile.
 
-[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/daniel3303/Equibles/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/daniel3303/Equibles/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/daniel3303/Equibles/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/daniel3303/Equibles/compare/v1.2.0...v1.3.0
