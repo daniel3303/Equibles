@@ -132,6 +132,34 @@ public class HouseDisclosureClientTests
     }
 
     [Fact]
+    public void ParseTransactionLines_InlineAbbreviatedSubholding_RetainsFiledIdentity()
+    {
+        var result = Parse(
+            "Broadcom Inc. - Common Stock (AVGO) [OP] F S: New S O: 150 Main Street Trust > Pershing Advisor Solutions LLC Brokerage D: Put option, strike price P 03/03/2025 03/05/2025 $15,001 - $50,000"
+        );
+
+        var tx = result.Should().ContainSingle().Subject;
+        tx.Ticker.Should().Be("AVGO");
+        tx.AssetType.Should().Be("OP");
+        tx.Subholding.Should()
+            .Be("150 Main Street Trust > Pershing Advisor Solutions LLC Brokerage");
+        tx.AssetName.Should().Be("Broadcom Inc. - Common Stock (AVGO)");
+    }
+
+    [Fact]
+    public void ParseTransactionLines_SeriesDAssetNameWithoutSubholding_PreservesAssetName()
+    {
+        var result = Parse(
+            "Acme Series D: Preferred Stock (ACME) [ST] P 03/03/2025 03/05/2025 $15,001 - $50,000"
+        );
+
+        var tx = result.Should().ContainSingle().Subject;
+        tx.Ticker.Should().Be("ACME");
+        tx.Subholding.Should().BeNull();
+        tx.AssetName.Should().Be("Acme Series D: Preferred Stock (ACME)");
+    }
+
+    [Fact]
     public void ParseTransactionLines_HeaderFieldLabelAndFooterLines_ProduceNoTransactions()
     {
         // None of these lines is a transaction row. The "Digitally Signed … ,

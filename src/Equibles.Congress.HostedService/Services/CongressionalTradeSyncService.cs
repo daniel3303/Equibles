@@ -42,7 +42,7 @@ public class CongressionalTradeSyncService
 
     // Congressional trade disclosures are available from 2012 (STOCK Act).
     private static readonly DateOnly EarliestAvailableDate = new(2012, 4, 1);
-    private const int TradeParserVersion = 1;
+    private const int TradeParserVersion = 2;
     private const int ReprocessPerCycleLimit = 1_000;
 
     // A filing with a transaction whose ticker is not (yet) a tracked stock
@@ -486,6 +486,128 @@ public class CongressionalTradeSyncService
     private static string CleanStoredText(string value) =>
         value?.Replace("\0", "", StringComparison.Ordinal).Trim() ?? "";
 
+    private async Task RepairLegacyInlineSubholdingNames(
+        List<CongressionalTrade> incoming,
+        EquiblesFinancialDbContext dbContext,
+        CancellationToken ct
+    )
+    {
+        if (incoming.Count == 0)
+            return;
+
+        var incomingByIdentity = incoming
+            .GroupBy(InlineMetadataRepairIdentity.From)
+            .ToDictionary(group => group.Key, group => group.ToList());
+        var stockIds = incoming.Select(t => t.CommonStockId).Distinct().ToList();
+        var memberIds = incoming.Select(t => t.CongressMemberId).Distinct().ToList();
+        var firstDate = incoming.Min(t => t.TransactionDate);
+        var lastDate = incoming.Max(t => t.TransactionDate);
+        var legacyRows = await dbContext
+            .Set<CongressionalTrade>()
+            .Where(t =>
+                stockIds.Contains(t.CommonStockId)
+                && memberIds.Contains(t.CongressMemberId)
+                && t.TransactionDate >= firstDate
+                && t.TransactionDate <= lastDate
+                && t.AssetName.Contains(":")
+            )
+            .ToListAsync(ct);
+        var legacyCandidates = new List<LegacyInlineMetadataCandidate>();
+        foreach (var legacy in legacyRows)
+        {
+            var details = HouseDisclosureClient.ExtractInlineAssetDetails(legacy.AssetName);
+            if (details.Subholding == null)
+                continue;
+
+            var cleanedName = DisclosureParsingHelper.CleanAssetName(details.AssetName);
+            var cleanedSubholding = CleanStoredText(
+                DisclosureParsingHelper.Truncate(details.Subholding, 256)
+            );
+            legacyCandidates.Add(
+                new LegacyInlineMetadataCandidate(
+                    legacy,
+                    InlineMetadataRepairIdentity.From(legacy, cleanedName),
+                    cleanedSubholding
+                )
+            );
+        }
+
+        var repairs = new List<CongressionalTrade>();
+        foreach (var legacyGroup in legacyCandidates.GroupBy(candidate => candidate.Identity))
+        {
+            if (!incomingByIdentity.TryGetValue(legacyGroup.Key, out var candidates))
+                continue;
+            var activeCandidates = candidates.Where(incoming.Contains).ToList();
+            if (activeCandidates.Count == 0)
+                continue;
+
+            var groupedLegacy = legacyGroup.ToList();
+            if (groupedLegacy.Count != 1)
+            {
+                incoming.RemoveAll(candidate => activeCandidates.Contains(candidate));
+                _logger.LogWarning(
+                    "Deferred congressional trade inline-metadata repair because {Count} legacy rows share the deployed identity",
+                    groupedLegacy.Count
+                );
+                continue;
+            }
+
+            var legacyCandidate = groupedLegacy[0];
+            var legacy = legacyCandidate.Trade;
+            if (legacy.Subholding != "" && legacy.Subholding != legacyCandidate.CleanedSubholding)
+            {
+                incoming.RemoveAll(candidate => activeCandidates.Contains(candidate));
+                _logger.LogWarning(
+                    "Deferred congressional trade inline-metadata repair because stored and filed subholdings conflict"
+                );
+                continue;
+            }
+
+            var matchingSubholding = activeCandidates
+                .Where(candidate => candidate.Subholding == legacyCandidate.CleanedSubholding)
+                .ToList();
+            List<CongressionalTrade> selectedCandidates;
+            if (!string.IsNullOrEmpty(legacy.AssetType))
+            {
+                selectedCandidates = matchingSubholding
+                    .Where(candidate => candidate.AssetType == legacy.AssetType)
+                    .ToList();
+            }
+            else
+            {
+                var candidateAssetTypes = matchingSubholding
+                    .Select(candidate => candidate.AssetType)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+                selectedCandidates = candidateAssetTypes.Count == 1 ? matchingSubholding : [];
+            }
+
+            if (selectedCandidates.Count == 0)
+            {
+                incoming.RemoveAll(candidate => activeCandidates.Contains(candidate));
+                _logger.LogWarning(
+                    "Deferred congressional trade inline-metadata repair because replay did not supply one authoritative account and asset type"
+                );
+                continue;
+            }
+
+            incoming.RemoveAll(candidate =>
+                activeCandidates.Contains(candidate) && !selectedCandidates.Contains(candidate)
+            );
+            repairs.Add(legacy);
+        }
+
+        if (repairs.Count == 0)
+            return;
+
+        dbContext.RemoveRange(repairs);
+        await dbContext.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "Removed {Count} legacy congressional trades whose inline House metadata was separated by source replay",
+            repairs.Count
+        );
+    }
+
     private async Task PersistTrades(
         List<CongressionalTrade> trades,
         EquiblesFinancialDbContext dbContext,
@@ -493,6 +615,7 @@ public class CongressionalTradeSyncService
     )
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
+        await RepairLegacyInlineSubholdingNames(trades, dbContext, ct);
         await RepairLegacyZeroFloorAmounts(trades, dbContext, ct);
         var expandCompatibleTrades = CollapseExpandPhaseCollisions(trades);
         await WarnOnPersistedExpandPhaseCollisions(expandCompatibleTrades, dbContext, ct);
@@ -701,4 +824,40 @@ public class CongressionalTradeSyncService
     }
 
     private sealed record TradeAmountRange(long AmountFrom, long AmountTo, DateOnly FilingDate);
+
+    private sealed record InlineMetadataRepairIdentity(
+        Guid CommonStockId,
+        Guid CongressMemberId,
+        DateOnly TransactionDate,
+        CongressTransactionType TransactionType,
+        string AssetName,
+        string OwnerType,
+        long AmountFrom,
+        long AmountTo
+    )
+    {
+        public static InlineMetadataRepairIdentity From(CongressionalTrade trade) =>
+            From(trade, trade.AssetName);
+
+        public static InlineMetadataRepairIdentity From(
+            CongressionalTrade trade,
+            string assetName
+        ) =>
+            new(
+                trade.CommonStockId,
+                trade.CongressMemberId,
+                trade.TransactionDate,
+                trade.TransactionType,
+                assetName,
+                trade.OwnerType,
+                trade.AmountFrom,
+                trade.AmountTo
+            );
+    }
+
+    private sealed record LegacyInlineMetadataCandidate(
+        CongressionalTrade Trade,
+        InlineMetadataRepairIdentity Identity,
+        string CleanedSubholding
+    );
 }
