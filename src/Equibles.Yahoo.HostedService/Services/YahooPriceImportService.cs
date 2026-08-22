@@ -1896,6 +1896,25 @@ public class YahooPriceImportService
             return;
         }
 
+        // Another price writer can add a date after PersistPrices' optimistic read and before
+        // this series lock. Rechecking while locked turns that collision into an idempotent skip
+        // instead of rolling back every later row in this batch.
+        var batchDates = batch.Select(price => price.Date).ToList();
+        var existingDates = await repo.GetAllSeries()
+            .Where(p =>
+                p.CommonStockId == first.CommonStockId
+                && p.ListedTicker == first.ListedTicker
+                && batchDates.Contains(p.Date)
+            )
+            .Select(p => p.Date)
+            .ToListAsync();
+        batch.RemoveAll(price => existingDates.Contains(price.Date));
+        if (batch.Count == 0)
+        {
+            await transaction.CommitAsync();
+            return;
+        }
+
         repo.AddRange(batch);
         await repo.SaveChanges();
         await transaction.CommitAsync();

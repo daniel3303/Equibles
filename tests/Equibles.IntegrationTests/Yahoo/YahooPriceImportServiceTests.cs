@@ -1012,9 +1012,10 @@ public class YahooPriceImportServiceTests : IDisposable
         var stock = CreateStock("AEHL", "Antelope Enterprise Holdings");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var effectiveDate = today.AddDays(-4);
-        var beforeDate = effectiveDate.AddDays(-1);
-        var afterDate = effectiveDate.AddDays(1);
+        var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
+        var afterDate = UsMarketCalendar.PreviousTradingDay(latestSettled);
+        var effectiveDate = UsMarketCalendar.PreviousTradingDay(afterDate);
+        var beforeDate = UsMarketCalendar.PreviousTradingDay(effectiveDate);
         await SeedPrices(
             CreatePrice(stock, beforeDate, 3.00m),
             CreatePrice(stock, afterDate, 57.10m)
@@ -1022,7 +1023,7 @@ public class YahooPriceImportServiceTests : IDisposable
 
         var incremental = new YahooChartData
         {
-            Prices = CreateHistoricalPrices((today.AddDays(-1), 56.00m)),
+            Prices = CreateHistoricalPrices((latestSettled, 56.00m)),
             Splits =
             [
                 new StockSplitEvent
@@ -1036,7 +1037,7 @@ public class YahooPriceImportServiceTests : IDisposable
         var mixedFullHistory = CreateChartData(
             (beforeDate, 3.20m),
             (afterDate, 58.00m),
-            (today.AddDays(-1), 57.00m)
+            (latestSettled, 57.00m)
         );
         var floor = new DateOnly(2020, 1, 1);
         _yahooClient

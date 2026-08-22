@@ -50,7 +50,8 @@ public class ShortInterestImportService
 
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
-            cancellationToken
+            cancellationToken,
+            StringComparer.Ordinal
         );
         if (tickerMap.Count == 0)
         {
@@ -67,7 +68,7 @@ public class ShortInterestImportService
         // stocks on the next cycle.
         var compressedIndex = FinraClassShareSymbols.BuildCompressedIndex(
             tickerMap,
-            StringComparer.OrdinalIgnoreCase
+            StringComparer.Ordinal
         );
 
         HashSet<DateOnly> knownDates;
