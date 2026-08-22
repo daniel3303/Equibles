@@ -463,15 +463,17 @@ public class CongressionalTradeSyncService
                     TransactionType = tx.TransactionType,
                     // '' rather than null: OwnerType is part of the upsert key, and Postgres
                     // treats NULLs as distinct in unique indexes, which would disable dedup.
-                    OwnerType = tx.OwnerType ?? "",
+                    OwnerType = CleanStoredText(tx.OwnerType),
                     // The stored name is part of the trade upsert key (see PersistTrades), so it
                     // must be normalized here no matter which scraper emitted the transaction —
                     // an unnormalized variant would re-insert the same trade as a new row. Every
                     // source already cleans at emission; doing it here too makes this the single
                     // choke point, mirroring NormalizeMemberName above (GH-3374).
-                    AssetName = DisclosureParsingHelper.CleanAssetName(tx.AssetName) ?? "",
-                    AssetType = tx.AssetType?.Trim() ?? "",
-                    Subholding = tx.Subholding?.Trim() ?? "",
+                    AssetName = DisclosureParsingHelper.CleanAssetName(
+                        CleanStoredText(tx.AssetName)
+                    ),
+                    AssetType = CleanStoredText(tx.AssetType),
+                    Subholding = CleanStoredText(tx.Subholding),
                     AmountFrom = tx.AmountFrom,
                     AmountTo = tx.AmountTo,
                 }
@@ -480,6 +482,9 @@ public class CongressionalTradeSyncService
 
         return trades;
     }
+
+    private static string CleanStoredText(string value) =>
+        value?.Replace("\0", "", StringComparison.Ordinal).Trim() ?? "";
 
     private async Task PersistTrades(
         List<CongressionalTrade> trades,

@@ -103,6 +103,39 @@ public class CongressionalTradeSyncServiceBuildTradesCleanAssetNameTests
         trades.Should().ContainSingle().Which.OwnerType.Should().Be("");
     }
 
+    [Fact]
+    public void BuildTrades_SourceTextContainsNullBytes_RemovesThemBeforePersistence()
+    {
+        var sut = CreateService();
+        var member = new CongressMember { Name = "Jane Doe" };
+        var transaction = new DisclosureTransaction
+        {
+            MemberName = "Jane Doe",
+            Ticker = "WY",
+            AssetName = "Weyer\0haeuser Company (WY)",
+            AssetType = "Stock\0",
+            OwnerType = "S\0P",
+            Subholding = "Brokerage\0 IRA",
+            TransactionDate = new DateOnly(2026, 6, 18),
+            FilingDate = new DateOnly(2026, 7, 2),
+            TransactionType = CongressTransactionType.Purchase,
+            AmountFrom = 1001,
+            AmountTo = 15000,
+        };
+
+        var trades = sut.BuildTrades(
+            [transaction],
+            new Dictionary<string, CongressMember> { ["Jane Doe"] = member },
+            new Dictionary<string, CommonStock> { ["WY"] = new CommonStock() }
+        );
+
+        var trade = trades.Should().ContainSingle().Which;
+        trade.AssetName.Should().Be("Weyerhaeuser Company (WY)");
+        trade.AssetType.Should().Be("Stock");
+        trade.OwnerType.Should().Be("SP");
+        trade.Subholding.Should().Be("Brokerage IRA");
+    }
+
     private static CongressionalTradeSyncService CreateService()
     {
         var scope = Substitute.For<IServiceScope>();
