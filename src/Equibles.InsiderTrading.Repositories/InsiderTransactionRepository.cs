@@ -48,18 +48,21 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
     /// <summary>
     /// Rows from any amendment that restates the original report an owner filed for
     /// this company on <paramref name="originalFilingDate"/> (the filer-entered
-    /// <c>dateOfOriginalSubmission</c>, stable across chained amendments).
+    /// <c>dateOfOriginalSubmission</c>, stable across chained amendments), within
+    /// the same authoritative Form 3/4/5 family.
     /// </summary>
     public IQueryable<InsiderTransaction> GetAmendmentsOfOriginal(
         InsiderOwner owner,
         Guid commonStockId,
-        DateOnly originalFilingDate
+        DateOnly originalFilingDate,
+        InsiderOwnershipForm filingForm
     )
     {
         return GetAll()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
                 && t.CommonStockId == commonStockId
+                && t.FilingForm == filingForm
                 && t.OriginalFilingDate == originalFilingDate
             );
     }
@@ -69,9 +72,15 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
     /// original it replaces — the durable guard that stops a late-arriving (or
     /// re-listed) original from re-inserting rows its amendment already superseded.
     /// </summary>
-    public IQueryable<InsiderTransaction> GetAmendmentsClaiming(string accessionNumber)
+    public IQueryable<InsiderTransaction> GetAmendmentsClaiming(
+        string accessionNumber,
+        InsiderOwnershipForm filingForm
+    )
     {
-        return GetAll().Where(t => t.SupersededAccessionNumber == accessionNumber);
+        return GetAll()
+            .Where(t =>
+                t.SupersededAccessionNumber == accessionNumber && t.FilingForm == filingForm
+            );
     }
 
     /// <summary>
@@ -80,19 +89,22 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
     /// [<paramref name="windowStart"/>, <paramref name="windowEnd"/>]. The window
     /// absorbs EDGAR's date shift: an after-17:30 submission is indexed the next
     /// business day, so the feed FilingDate of the original can trail the
-    /// filer-entered <c>dateOfOriginalSubmission</c> by up to a weekend.
+    /// filer-entered <c>dateOfOriginalSubmission</c> by up to a weekend. Matching
+    /// is restricted to the incoming original's Form 3/4/5 family.
     /// </summary>
     public IQueryable<InsiderTransaction> GetUnresolvedAmendments(
         InsiderOwner owner,
         Guid commonStockId,
         DateOnly windowStart,
-        DateOnly windowEnd
+        DateOnly windowEnd,
+        InsiderOwnershipForm filingForm
     )
     {
         return GetAll()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
                 && t.CommonStockId == commonStockId
+                && t.FilingForm == filingForm
                 && t.IsAmendment
                 && t.SupersededAccessionNumber == null
                 && t.OriginalFilingDate != null
@@ -107,18 +119,21 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
     /// [<paramref name="windowStart"/>, <paramref name="windowEnd"/>] (the
     /// filer-entered original date plus the EDGAR indexing shift). The caller
     /// resolves the single original accession from these before deleting anything.
+    /// Candidates from another Form 3/4/5 family are never returned.
     /// </summary>
     public IQueryable<InsiderTransaction> GetOriginalCandidates(
         InsiderOwner owner,
         Guid commonStockId,
         DateOnly windowStart,
-        DateOnly windowEnd
+        DateOnly windowEnd,
+        InsiderOwnershipForm filingForm
     )
     {
         return GetAll()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
                 && t.CommonStockId == commonStockId
+                && t.FilingForm == filingForm
                 && !t.IsAmendment
                 && t.FilingDate >= windowStart
                 && t.FilingDate <= windowEnd

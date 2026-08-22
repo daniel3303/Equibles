@@ -38,9 +38,10 @@ public class InsiderTransaction
     /// anchoring source typos to the filing's period of report; v7 re-copies the
     /// Rule 10b5-1 checkbox during reprocess — the v4 capture parsed it but the
     /// reprocess copy-loop never wrote it, so pre-capture rows (1.4M checkbox-era
-    /// rows) stayed null (#7164, EquiblesCommercial).
+    /// rows) stayed null (#7164, EquiblesCommercial); v8 stamps the authoritative
+    /// Form 3/4/5 family so amendments cannot supersede a different ownership form.
     /// </summary>
-    public const int CurrentParserVersion = 7;
+    public const int CurrentParserVersion = 8;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -99,6 +100,14 @@ public class InsiderTransaction
     public int TransactionOrder { get; set; }
 
     public bool IsAmendment { get; set; }
+
+    /// <summary>
+    /// SEC ownership-report family that produced this row. Amendments retain the
+    /// base family (for example, Form 5/A stores <see cref="InsiderOwnershipForm.Form5"/>).
+    /// <see cref="InsiderOwnershipForm.Unknown"/> marks legacy rows awaiting the
+    /// parser-version reprocess.
+    /// </summary>
+    public InsiderOwnershipForm FilingForm { get; set; } = InsiderOwnershipForm.Unknown;
 
     /// <summary>
     /// For rows from a Form 3/A, 4/A, or 5/A: the filing date of the ORIGINAL report the

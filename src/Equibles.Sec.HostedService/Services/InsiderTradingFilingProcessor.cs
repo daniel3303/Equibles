@@ -63,42 +63,47 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         await using var scope = _scopeFactory.CreateAsyncScope();
         var transactionRepository =
             scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
+        var filingRepository = scope.ServiceProvider.GetRequiredService<InsiderFilingRepository>();
 
         // An accession is "known" both when its own rows exist and when an
         // amendment has superseded (or claimed) it — a superseded original has
         // no rows of its own, and without the claim column every sweep would
         // re-fetch it from EDGAR forever just to re-skip it.
         //
-        // Deliberately TWO single-column probes instead of one cross-column OR:
-        // EF translates the OR (plus null-compensation branches for the nullable
-        // columns) into a shape Postgres plans as a bitmap heap scan — ~230 ms
-        // per call at the sweep's batch rate, the single largest query cost on
-        // the box — while each single-column ANY probe walks its own index in
-        // well under a millisecond. The union is semantically identical: feed
-        // accession numbers are never null, so the dropped null-match branches
-        // could never fire.
+        // Keep own-accession and superseded-claim probes separate instead of one
+        // cross-column OR: Postgres plans the OR as a costly bitmap heap scan.
+        // Claims additionally join the captured original's tiny, indexed filing
+        // row so a legacy cross-family link cannot suppress the real accession.
         var candidates = accessionNumbers.ToList();
         var knownByOwnRows = await transactionRepository
             .GetAll()
             .Where(t => candidates.Contains(t.AccessionNumber))
-            .Select(t => new { t.AccessionNumber, t.SupersededAccessionNumber })
+            .Select(t => t.AccessionNumber)
+            .Distinct()
             .ToListAsync();
-        var knownBySupersededClaim = await transactionRepository
-            .GetAll()
-            .Where(t =>
-                t.SupersededAccessionNumber != null
-                && candidates.Contains(t.SupersededAccessionNumber)
-            )
-            .Select(t => new { t.AccessionNumber, t.SupersededAccessionNumber })
+        // A legacy claim is authoritative only when both the amendment row and
+        // the captured original have a known, matching Form 3/4/5 family. Before
+        // v8, same-day filings from different families could be linked; treating
+        // that stale link as known would permanently suppress the real original.
+        var knownBySupersededClaim = await (
+            from transaction in transactionRepository.GetAll()
+            join original in filingRepository.GetAll()
+                on transaction.SupersededAccessionNumber equals original.AccessionNumber
+            where
+                transaction.SupersededAccessionNumber != null
+                && candidates.Contains(transaction.SupersededAccessionNumber)
+                && transaction.FilingForm != InsiderOwnershipForm.Unknown
+                && transaction.FilingForm == original.FilingForm
+            select transaction.SupersededAccessionNumber
+        )
+            .Distinct()
             .ToListAsync();
 
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in knownByOwnRows.Concat(knownBySupersededClaim))
-        {
-            result.Add(row.AccessionNumber);
-            if (row.SupersededAccessionNumber != null)
-                result.Add(row.SupersededAccessionNumber);
-        }
+        foreach (var accession in knownByOwnRows)
+            result.Add(accession);
+        foreach (var accession in knownBySupersededClaim)
+            result.Add(accession);
         return result;
     }
 
@@ -193,6 +198,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         }
 
         var isAmendment = filing.Form.Contains("/A", StringComparison.OrdinalIgnoreCase);
+        var ownershipForm = InsiderFilingParser.ParseOwnershipForm(filing.Form);
+        await StampFilingForm(filingRepository, filing.AccessionNumber, ownershipForm);
 
         // A late-arriving original whose amendment already ingested must not
         // re-insert the rows that amendment replaced (EDGAR lists newest-first,
@@ -201,9 +208,12 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             !isAmendment
             && await TrySkipSupersededOriginal(
                 transactionRepository,
+                filingRepository,
+                fileManager,
                 owner,
                 companyId,
                 filing,
+                ownershipForm,
                 companyTicker
             )
         )
@@ -216,13 +226,32 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         if (isAmendment && originalFilingDate.HasValue)
         {
+            // The v8 migration initializes legacy rows to Unknown. Resolve only the
+            // relevant original/amendment candidates from their captured SEC XML before
+            // the family-scoped queries run, or a live amendment racing the replay could
+            // leave a same-family legacy row permanently duplicated.
+            await ResolveLegacyAmendmentCandidates(
+                transactionRepository,
+                filingRepository,
+                fileManager,
+                owner,
+                companyId,
+                originalFilingDate.Value,
+                _logger
+            );
+
             // Stale amendment: a NEWER amendment of the same original already
             // ingested — its rows are the current truth, so skip this one.
             // Same-day chains break the tie on accession number (SEC assigns
             // them monotonically per filer agent).
             if (
                 await transactionRepository
-                    .GetAmendmentsOfOriginal(owner, companyId, originalFilingDate.Value)
+                    .GetAmendmentsOfOriginal(
+                        owner,
+                        companyId,
+                        originalFilingDate.Value,
+                        ownershipForm
+                    )
                     .AnyAsync(t =>
                         t.FilingDate > filing.FilingDate
                         || (
@@ -255,10 +284,12 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
             supersededAccession = await SupersedeOriginal(
                 transactionRepository,
+                filingRepository,
                 owner,
                 companyId,
                 filing,
                 originalFilingDate.Value,
+                ownershipForm,
                 companyTicker
             );
         }
@@ -351,13 +382,37 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
     // prefilter drops the original from every future sweep without a fetch.
     private async Task<bool> TrySkipSupersededOriginal(
         InsiderTransactionRepository transactionRepository,
+        InsiderFilingRepository filingRepository,
+        IFileManager fileManager,
         InsiderOwner owner,
         Guid companyId,
         FilingData filing,
+        InsiderOwnershipForm ownershipForm,
         string companyTicker
     )
     {
-        if (await transactionRepository.GetAmendmentsClaiming(filing.AccessionNumber).AnyAsync())
+        await ResolveLegacyClaimForms(
+            transactionRepository,
+            filingRepository,
+            fileManager,
+            filing.AccessionNumber,
+            _logger
+        );
+        await PrepareLegacyOriginalCandidates(
+            transactionRepository,
+            filingRepository,
+            fileManager,
+            owner,
+            companyId,
+            filing.FilingDate,
+            _logger
+        );
+
+        if (
+            await transactionRepository
+                .GetAmendmentsClaiming(filing.AccessionNumber, ownershipForm)
+                .AnyAsync()
+        )
         {
             _logger.LogInformation(
                 "Skipping {Form} {AccessionNumber} for {Ticker}: an amendment already claimed and superseded it",
@@ -370,7 +425,13 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         var windowStart = filing.FilingDate.AddDays(-OriginalDateShiftToleranceDays);
         var orphans = await transactionRepository
-            .GetUnresolvedAmendments(owner, companyId, windowStart, filing.FilingDate)
+            .GetUnresolvedAmendments(
+                owner,
+                companyId,
+                windowStart,
+                filing.FilingDate,
+                ownershipForm
+            )
             .ToListAsync();
         if (orphans.Count == 0)
             return false;
@@ -401,6 +462,258 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         return true;
     }
 
+    // v8 introduced FilingForm after claims already existed. Resolve an unknown
+    // claimant from its captured SEC ownership XML before deciding whether it
+    // suppresses an incoming original. An unreadable claimant stays unknown and
+    // is ignored: a visible duplicate is safer than deleting the wrong family.
+    private static async Task ResolveLegacyClaimForms(
+        InsiderTransactionRepository transactionRepository,
+        InsiderFilingRepository filingRepository,
+        IFileManager fileManager,
+        string supersededAccessionNumber,
+        ILogger<InsiderTradingFilingProcessor> logger
+    )
+    {
+        var accessions = await transactionRepository
+            .GetAll()
+            .Where(t =>
+                t.SupersededAccessionNumber == supersededAccessionNumber
+                && t.FilingForm == InsiderOwnershipForm.Unknown
+            )
+            .Select(t => t.AccessionNumber)
+            .Distinct()
+            .ToListAsync();
+        await ResolveLegacyFilingForms(
+            transactionRepository,
+            filingRepository,
+            fileManager,
+            accessions,
+            logger
+        );
+    }
+
+    private static async Task ResolveLegacyAmendmentCandidates(
+        InsiderTransactionRepository transactionRepository,
+        InsiderFilingRepository filingRepository,
+        IFileManager fileManager,
+        InsiderOwner owner,
+        Guid companyId,
+        DateOnly originalFilingDate,
+        ILogger<InsiderTradingFilingProcessor> logger
+    )
+    {
+        var windowEnd = originalFilingDate.AddDays(OriginalDateShiftToleranceDays);
+        var accessions = await transactionRepository
+            .GetAll()
+            .Where(t =>
+                t.InsiderOwnerId == owner.Id
+                && t.CommonStockId == companyId
+                && (
+                    (
+                        !t.IsAmendment
+                        && t.FilingDate >= originalFilingDate
+                        && t.FilingDate <= windowEnd
+                    ) || (t.IsAmendment && t.OriginalFilingDate == originalFilingDate)
+                )
+            )
+            .Select(t => t.AccessionNumber)
+            .Distinct()
+            .ToListAsync();
+        await ResolveLegacyFilingForms(
+            transactionRepository,
+            filingRepository,
+            fileManager,
+            accessions,
+            logger
+        );
+        await ClearProvenCrossFamilyClaims(transactionRepository, filingRepository, accessions);
+    }
+
+    private static async Task PrepareLegacyOriginalCandidates(
+        InsiderTransactionRepository transactionRepository,
+        InsiderFilingRepository filingRepository,
+        IFileManager fileManager,
+        InsiderOwner owner,
+        Guid companyId,
+        DateOnly filingDate,
+        ILogger<InsiderTradingFilingProcessor> logger
+    )
+    {
+        var windowStart = filingDate.AddDays(-OriginalDateShiftToleranceDays);
+        var accessions = await transactionRepository
+            .GetAll()
+            .Where(t =>
+                t.InsiderOwnerId == owner.Id
+                && t.CommonStockId == companyId
+                && t.IsAmendment
+                && t.OriginalFilingDate != null
+                && t.OriginalFilingDate >= windowStart
+                && t.OriginalFilingDate <= filingDate
+            )
+            .Select(t => t.AccessionNumber)
+            .Distinct()
+            .ToListAsync();
+        await ResolveLegacyFilingForms(
+            transactionRepository,
+            filingRepository,
+            fileManager,
+            accessions,
+            logger
+        );
+        await ClearProvenCrossFamilyClaims(transactionRepository, filingRepository, accessions);
+    }
+
+    // Pre-v8 same-day matching could attach an amendment to a sibling form family.
+    // Clear only claims disproved by both authoritative documentType stamps; an
+    // unknown target remains untouched until its cached XML can prove the mismatch.
+    private static async Task ClearProvenCrossFamilyClaims(
+        InsiderTransactionRepository transactionRepository,
+        InsiderFilingRepository filingRepository,
+        IReadOnlyCollection<string> amendmentAccessions
+    )
+    {
+        if (amendmentAccessions.Count == 0)
+            return;
+
+        var claimedRows = await transactionRepository
+            .GetAll()
+            .Where(t =>
+                amendmentAccessions.Contains(t.AccessionNumber)
+                && t.SupersededAccessionNumber != null
+                && t.FilingForm != InsiderOwnershipForm.Unknown
+            )
+            .ToListAsync();
+        var targetAccessions = claimedRows
+            .Select(t => t.SupersededAccessionNumber)
+            .Distinct()
+            .ToList();
+        var targetFamilies = await filingRepository
+            .GetAll()
+            .Where(f => targetAccessions.Contains(f.AccessionNumber))
+            .Select(f => new { f.AccessionNumber, f.FilingForm })
+            .ToDictionaryAsync(f => f.AccessionNumber, f => f.FilingForm);
+
+        foreach (var row in claimedRows)
+        {
+            if (
+                targetFamilies.TryGetValue(row.SupersededAccessionNumber, out var targetFamily)
+                && targetFamily != InsiderOwnershipForm.Unknown
+                && targetFamily != row.FilingForm
+            )
+            {
+                row.SupersededAccessionNumber = null;
+            }
+        }
+
+        await transactionRepository.SaveChanges();
+    }
+
+    // A pre-v8 family is trusted only when it was already stamped from documentType
+    // or can be recovered from the gzip-compressed SEC ownership XML. Names, dates,
+    // accession shape, and transaction content never infer a form family.
+    private static async Task ResolveLegacyFilingForms(
+        InsiderTransactionRepository transactionRepository,
+        InsiderFilingRepository filingRepository,
+        IFileManager fileManager,
+        IReadOnlyCollection<string> accessionNumbers,
+        ILogger<InsiderTradingFilingProcessor> logger
+    )
+    {
+        if (accessionNumbers.Count == 0)
+            return;
+
+        foreach (var accessionNumber in accessionNumbers)
+        {
+            var unresolved = await transactionRepository
+                .GetByAccessionNumber(accessionNumber)
+                .Where(t => t.FilingForm == InsiderOwnershipForm.Unknown)
+                .ToListAsync();
+            if (unresolved.Count == 0)
+                continue;
+
+            var stored = await filingRepository
+                .GetByAccessionNumber(accessionNumber)
+                .Include(f => f.Content)
+                    .ThenInclude(content => content.FileContent)
+                .FirstOrDefaultAsync();
+            if (stored == null)
+            {
+                logger.LogWarning(
+                    "Could not resolve legacy insider filing family for {AccessionNumber}: no cached filing row; leaving it unknown",
+                    accessionNumber
+                );
+                continue;
+            }
+
+            var filingForm = stored.FilingForm;
+            if (filingForm == InsiderOwnershipForm.Unknown)
+            {
+                if (
+                    stored
+                    is not {
+                        CaptureStatus: InsiderFilingCaptureStatus.Captured,
+                        ContentId: not null
+                    }
+                )
+                {
+                    logger.LogWarning(
+                        "Could not resolve legacy insider filing family for {AccessionNumber}: cached XML is unavailable; leaving it unknown",
+                        accessionNumber
+                    );
+                    continue;
+                }
+
+                try
+                {
+                    var compressed = await fileManager.GetContent(stored.Content);
+                    if (compressed == null || compressed.Length == 0)
+                    {
+                        logger.LogWarning(
+                            "Could not resolve legacy insider filing family for {AccessionNumber}: cached XML is empty; leaving it unknown",
+                            accessionNumber
+                        );
+                        continue;
+                    }
+
+                    var raw = GzipCompressor.Decompress(compressed);
+                    var root = InsiderFilingParser.TryGetOwnershipRoot(
+                        Encoding.UTF8.GetString(raw)
+                    );
+                    filingForm = InsiderFilingParser.ParseOwnershipForm(
+                        root?.Element("documentType")?.Value
+                    );
+                    if (filingForm == InsiderOwnershipForm.Unknown)
+                    {
+                        logger.LogWarning(
+                            "Could not resolve legacy insider filing family for {AccessionNumber}: cached XML has no supported ownership documentType; leaving it unknown",
+                            accessionNumber
+                        );
+                        continue;
+                    }
+
+                    stored.FilingForm = filingForm;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(
+                        ex,
+                        "Could not resolve legacy insider filing family from cached XML for {AccessionNumber}; leaving it unknown",
+                        accessionNumber
+                    );
+                    continue;
+                }
+            }
+
+            if (filingForm == InsiderOwnershipForm.Unknown)
+                continue;
+
+            foreach (var row in unresolved)
+                row.FilingForm = filingForm;
+        }
+
+        await transactionRepository.SaveChanges();
+    }
+
     // Replaces what an incoming amendment restates: the original filing's rows —
     // resolved to a SINGLE accession via the filer-entered original date plus the
     // indexing-shift window — and any older amendment of the same original.
@@ -412,16 +725,18 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
     // legitimate sibling filing.
     private async Task<string> SupersedeOriginal(
         InsiderTransactionRepository transactionRepository,
+        InsiderFilingRepository filingRepository,
         InsiderOwner owner,
         Guid companyId,
         FilingData filing,
         DateOnly originalFilingDate,
+        InsiderOwnershipForm ownershipForm,
         string companyTicker
     )
     {
         var windowEnd = originalFilingDate.AddDays(OriginalDateShiftToleranceDays);
         var candidates = await transactionRepository
-            .GetOriginalCandidates(owner, companyId, originalFilingDate, windowEnd)
+            .GetOriginalCandidates(owner, companyId, originalFilingDate, windowEnd, ownershipForm)
             .Select(t => new { t.AccessionNumber, t.FilingDate })
             .Distinct()
             .ToListAsync();
@@ -467,7 +782,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         // wholesale, and its resolution (which original accession it consumed or
         // claimed) is inherited so the prefilter keeps dropping that original.
         var olderAmendments = await transactionRepository
-            .GetAmendmentsOfOriginal(owner, companyId, originalFilingDate)
+            .GetAmendmentsOfOriginal(owner, companyId, originalFilingDate, ownershipForm)
             .Where(t =>
                 t.AccessionNumber != filing.AccessionNumber
                 && (
@@ -481,9 +796,19 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             .ToListAsync();
         if (olderAmendments.Count > 0)
         {
-            resolvedAccession ??= olderAmendments
+            var claimedAccessions = olderAmendments
                 .Select(t => t.SupersededAccessionNumber)
-                .FirstOrDefault(a => a != null);
+                .Where(a => a != null)
+                .Distinct()
+                .ToList();
+            var validatedClaims = await filingRepository
+                .GetAll()
+                .Where(f =>
+                    claimedAccessions.Contains(f.AccessionNumber) && f.FilingForm == ownershipForm
+                )
+                .Select(f => f.AccessionNumber)
+                .ToHashSetAsync();
+            resolvedAccession ??= claimedAccessions.FirstOrDefault(validatedClaims.Contains);
             transactionRepository.Delete(olderAmendments);
             _logger.LogInformation(
                 "Amendment {AccessionNumber} replaces {Count} row(s) from older amendment(s) of the same original for {Ticker}",
@@ -494,6 +819,32 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         }
 
         return resolvedAccession;
+    }
+
+    // Persist the authoritative form family before any supersession early-return.
+    // The filing row survives deletion of its transaction rows, which lets the
+    // known-accession prefilter validate both sides of a legacy claim.
+    private static async Task StampFilingForm(
+        InsiderFilingRepository filingRepository,
+        string accessionNumber,
+        InsiderOwnershipForm filingForm
+    )
+    {
+        var stored = await filingRepository
+            .GetByAccessionNumber(accessionNumber)
+            .FirstOrDefaultAsync();
+        if (stored == null)
+        {
+            filingRepository.Add(
+                new InsiderFiling { AccessionNumber = accessionNumber, FilingForm = filingForm }
+            );
+        }
+        else
+        {
+            stored.FilingForm = filingForm;
+        }
+
+        await filingRepository.SaveChanges();
     }
 
     // Stores the parsed ownership XML as a gzip-compressed internal File so the
@@ -509,13 +860,10 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         IFileManager fileManager
     )
     {
-        // A filing is only processed when its transactions don't yet exist, but
-        // guard against a duplicate filing row so the unique accession index
-        // can't be violated by a re-run.
-        var alreadyCaptured = await filingRepository
+        var stored = await filingRepository
             .GetByAccessionNumber(filing.AccessionNumber)
-            .AnyAsync();
-        if (alreadyCaptured)
+            .FirstOrDefaultAsync();
+        if (stored is { CaptureStatus: InsiderFilingCaptureStatus.Captured, ContentId: not null })
             return;
 
         var rawBytes = Encoding.UTF8.GetBytes(root.ToString(SaveOptions.DisableFormatting));
@@ -527,15 +875,26 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             "application/gzip"
         );
 
-        filingRepository.Add(
-            new InsiderFiling
-            {
-                AccessionNumber = filing.AccessionNumber,
-                Content = file,
-                UncompressedSize = rawBytes.Length,
-                CaptureStatus = InsiderFilingCaptureStatus.Captured,
-            }
-        );
+        if (stored == null)
+        {
+            filingRepository.Add(
+                new InsiderFiling
+                {
+                    AccessionNumber = filing.AccessionNumber,
+                    FilingForm = InsiderFilingParser.ParseOwnershipForm(filing.Form),
+                    Content = file,
+                    UncompressedSize = rawBytes.Length,
+                    CaptureStatus = InsiderFilingCaptureStatus.Captured,
+                }
+            );
+        }
+        else
+        {
+            stored.FilingForm = InsiderFilingParser.ParseOwnershipForm(filing.Form);
+            stored.Content = file;
+            stored.UncompressedSize = rawBytes.Length;
+            stored.CaptureStatus = InsiderFilingCaptureStatus.Captured;
+        }
     }
 
     // Returns the parsed ownership root, or (null, reason) when the content is
@@ -749,6 +1108,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 SecurityTitle = "No Securities Owned",
                 TransactionOrder = 0,
                 IsAmendment = isAmendment,
+                FilingForm = InsiderFilingParser.ParseOwnershipForm(filing.Form),
                 OriginalFilingDate = originalFilingDate,
                 SupersededAccessionNumber = supersededAccessionNumber,
                 // 0-price holding sentinel: nothing to validate or repair.

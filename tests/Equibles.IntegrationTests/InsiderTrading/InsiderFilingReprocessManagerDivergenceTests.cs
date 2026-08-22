@@ -74,13 +74,14 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
                 OwnershipNature = OwnershipNature.Direct,
                 SecurityTitle = "Common Stock",
                 SecurityKind = InsiderSecurityKind.Derivative,
+                FilingForm = InsiderOwnershipForm.Unknown,
                 ParserVersion = 0,
             };
         var matched = MakeStale(0);
         var unmatched = MakeStale(1);
 
         var ownershipXml =
-            "<ownershipDocument>"
+            "<ownershipDocument><documentType>5</documentType>"
             + "<nonDerivativeTable><nonDerivativeTransaction>"
             + "<securityTitle><value>Common Stock</value></securityTitle>"
             + "<transactionDate><value>2024-06-14</value></transactionDate>"
@@ -152,11 +153,72 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
         var unmatchedAfter = await verify.Set<InsiderTransaction>().FindAsync(unmatched.Id);
 
         matchedAfter!.SecurityKind.Should().Be(InsiderSecurityKind.NonDerivative);
+        matchedAfter.FilingForm.Should().Be(InsiderOwnershipForm.Form5);
         matchedAfter.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
 
         // The unmatched row keeps its prior kind but must still advance, or it would be
         // re-selected forever.
         unmatchedAfter!.SecurityKind.Should().Be(InsiderSecurityKind.Derivative);
+        unmatchedAfter.FilingForm.Should().Be(InsiderOwnershipForm.Form5);
         unmatchedAfter.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
+
+        var filingAfter = await verify
+            .Set<InsiderFiling>()
+            .SingleAsync(f => f.AccessionNumber == accession);
+        filingAfter.FilingForm.Should().Be(InsiderOwnershipForm.Form5);
+    }
+
+    [Fact]
+    public async Task Run_RowlessCachedLegacyFiling_StampsFamilyFromDocumentType()
+    {
+        var accession = "0000320193-24-000051";
+        var rawBytes = Encoding.UTF8.GetBytes(
+            "<ownershipDocument><documentType>5/A</documentType></ownershipDocument>"
+        );
+        DbContext.Add(
+            new InsiderFiling
+            {
+                AccessionNumber = accession,
+                FilingForm = InsiderOwnershipForm.Unknown,
+                CaptureStatus = InsiderFilingCaptureStatus.Captured,
+                UncompressedSize = rawBytes.Length,
+                Content = new File
+                {
+                    Name = accession,
+                    Extension = "gz",
+                    ContentType = "application/gzip",
+                    FileContent = new FileContent { Bytes = GzipCompressor.Compress(rawBytes) },
+                },
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var runCtx = Fixture.CreateDbContext();
+        var manager = new InsiderFilingReprocessManager(
+            new InsiderTransactionRepository(runCtx),
+            new InsiderFilingRepository(runCtx),
+            new DailyStockPriceRepository(runCtx),
+            new StockSplitRepository(runCtx),
+            new InsiderTransactionPriceValidator(),
+            Substitute.For<ISecEdgarClient>(),
+            InsiderReprocessTestSupport.NewFileManager(),
+            runCtx,
+            NullLogger<InsiderFilingReprocessManager>()
+        );
+
+        var result = await manager.Run();
+
+        result.Total.Should().Be(1);
+        result.Processed.Should().Be(1);
+        result.Failed.Should().Be(0);
+        await using var verify = Fixture.CreateDbContext();
+        var filing = await verify
+            .Set<InsiderFiling>()
+            .SingleAsync(f => f.AccessionNumber == accession);
+        filing.FilingForm.Should().Be(InsiderOwnershipForm.Form5);
+        (await verify.Set<InsiderTransaction>().AnyAsync(t => t.AccessionNumber == accession))
+            .Should()
+            .BeFalse();
     }
 }
