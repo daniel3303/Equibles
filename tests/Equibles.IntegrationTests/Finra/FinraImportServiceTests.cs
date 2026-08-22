@@ -33,6 +33,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     private readonly IFinraClient _finraClient;
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
+    private readonly FinraScraperOptions _finraOptions;
     private readonly TimeProvider _timeProvider;
     private readonly ShortVolumeImportService _service;
 
@@ -53,6 +54,7 @@ public class ShortVolumeImportServiceTests : IDisposable
         );
 
         _workerOptions = new WorkerOptions();
+        _finraOptions = new FinraScraperOptions();
         _timeProvider = Substitute.For<TimeProvider>();
         _timeProvider.GetUtcNow().Returns(Now);
 
@@ -70,7 +72,7 @@ public class ShortVolumeImportServiceTests : IDisposable
             tickerMapService,
             _errorReporter,
             Options.Create(_workerOptions),
-            Options.Create(new FinraScraperOptions()),
+            Options.Create(_finraOptions),
             new FinraImportPartitionTracker(_partitionRepo),
             _timeProvider
         );
@@ -135,6 +137,13 @@ public class ShortVolumeImportServiceTests : IDisposable
         );
         await _partitionRepo.SaveChanges();
         _dbContext.ChangeTracker.Clear();
+    }
+
+    private static string ResolveStockUniverse(params CommonStock[] stocks)
+    {
+        return FinraImportScope.ResolveStockUniverse(
+            stocks.ToDictionary(stock => stock.Ticker, stock => stock.Id, StringComparer.Ordinal)
+        );
     }
 
     private static List<ShortVolumeRecord> CreateVolumeRecords(
@@ -267,7 +276,7 @@ public class ShortVolumeImportServiceTests : IDisposable
         var today = DateOnly.FromDateTime(Now.UtcDateTime);
         _workerOptions.MinSyncDate = today.ToDateTime(TimeOnly.MinValue);
         await SeedVolume(apple, today);
-        await SeedCompletedPartition(today);
+        await SeedCompletedPartition(today, ResolveStockUniverse(apple));
 
         await _service.Import(CancellationToken.None);
 
@@ -289,7 +298,7 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         await _finraClient.Received(1).GetDailyShortVolume(today);
         _partitionRepo
-            .GetPartition("daily-short-volume-files-v2", "all", today)
+            .GetPartition("daily-short-volume-files-v2", ResolveStockUniverse(apple), today)
             .Should()
             .ContainSingle();
     }
@@ -326,13 +335,74 @@ public class ShortVolumeImportServiceTests : IDisposable
         volumes.Should().Contain(v => v.CommonStockId == apple.Id && v.ShortVolume == 200_000);
         volumes.Should().Contain(v => v.CommonStockId == microsoft.Id && v.ShortVolume == 300_000);
         _partitionRepo
-            .GetPartition("daily-short-volume-files-v2", "all", existingDate)
+            .GetPartition(
+                "daily-short-volume-files-v2",
+                ResolveStockUniverse(apple, microsoft),
+                existingDate
+            )
             .Should()
             .ContainSingle();
 
         _finraClient.ClearReceivedCalls();
         await _service.Import(CancellationToken.None);
         await _finraClient.DidNotReceive().GetDailyShortVolume(existingDate);
+    }
+
+    [Fact]
+    public async Task Import_StockAddedAfterPartitionsComplete_BackfillsOutsideCorrectionLookback()
+    {
+        var apple = CreateStock("AAPL", "Apple Inc.");
+        await SeedStocks(apple);
+
+        var historicalDate = new DateOnly(2026, 3, 20);
+        _workerOptions.MinSyncDate = historicalDate.ToDateTime(TimeOnly.MinValue);
+        _finraClient
+            .GetDailyShortVolume(Arg.Any<DateOnly>())
+            .Returns(new List<ShortVolumeRecord>());
+
+        await _service.Import(CancellationToken.None);
+        _finraClient.ClearReceivedCalls();
+
+        var microsoft = CreateStock("MSFT", "Microsoft Corp.");
+        await SeedStocks(microsoft);
+        _finraClient
+            .GetDailyShortVolume(historicalDate)
+            .Returns(CreateVolumeRecords(("MSFT", 300_000, 3_000, 900_000)));
+
+        await _service.Import(CancellationToken.None);
+
+        await _finraClient.Received(1).GetDailyShortVolume(historicalDate);
+        _volumeRepo
+            .GetByDate(historicalDate)
+            .Should()
+            .ContainSingle(volume =>
+                volume.CommonStockId == microsoft.Id && volume.ShortVolume == 300_000
+            );
+    }
+
+    [Fact]
+    public async Task Import_StockUniverseChange_HonorsBackfillDateCap()
+    {
+        var apple = CreateStock("AAPL", "Apple Inc.");
+        await SeedStocks(apple);
+
+        var floor = new DateOnly(2026, 3, 20);
+        _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
+        _finraClient
+            .GetDailyShortVolume(Arg.Any<DateOnly>())
+            .Returns(new List<ShortVolumeRecord>());
+        await _service.Import(CancellationToken.None);
+        _finraClient.ClearReceivedCalls();
+
+        await SeedStocks(CreateStock("MSFT", "Microsoft Corp."));
+        _finraOptions.ShortVolumeBackfillDatesPerCycle = 2;
+
+        await _service.Import(CancellationToken.None);
+
+        _finraClient.ReceivedCalls().Should().HaveCount(2);
+        await _finraClient.Received(1).GetDailyShortVolume(new DateOnly(2026, 3, 30));
+        await _finraClient.Received(1).GetDailyShortVolume(new DateOnly(2026, 3, 27));
+        await _finraClient.DidNotReceive().GetDailyShortVolume(new DateOnly(2026, 3, 26));
     }
 
     // ── Handles empty API response ───────────────────────────────────
@@ -625,6 +695,8 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetAll().ToList();
         volumes.Should().BeEmpty();
+        await _finraClient.DidNotReceive().GetDailyShortVolume(Arg.Any<DateOnly>());
+        _partitionRepo.GetAll().Should().BeEmpty();
     }
 }
 
