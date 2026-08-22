@@ -7,8 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-08-22
+
 ### Fixed
 
+- Congressional disclosure imports preserve filed amount bounds, asset types, and subholding accounts, fail closed on incomplete source input, and backfill complete chamber/year partitions from 2012 forward. PR #4433; issues #4306, #4308, and #4309.
 - FINRA daily short-volume completeness now includes the resolved stock universe, so stocks added after a date was marked complete receive a bounded historical backfill. Issue #4316.
 
 ## [1.6.0] — 2026-08-22
@@ -687,7 +690,8 @@ First tagged release.
 - Background worker — scrapers and document processor.
 - Docker Compose stack (ParadeDB + web + MCP + worker), with an optional vector-embedding profile.
 
-[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/daniel3303/Equibles/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/daniel3303/Equibles/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/daniel3303/Equibles/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/daniel3303/Equibles/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/daniel3303/Equibles/compare/v1.3.0...v1.4.0
