@@ -148,18 +148,18 @@ public class DisclosureParsingHelperTests
     }
 
     [Fact]
-    public void ParseAmountRange_SingleValue_ReturnsZeroToValue()
+    public void ParseAmountRange_SingleExactValue_ReturnsExactValue()
     {
         var (from, to) = DisclosureParsingHelper.ParseAmountRange("$15,000");
-        from.Should().Be(0);
+        from.Should().Be(15000);
         to.Should().Be(15000);
     }
 
     [Fact]
-    public void ParseAmountRange_UnderAmount_ReturnsZeroToValue()
+    public void ParseAmountRange_UnderAmount_ReturnsPositiveDollarRange()
     {
         var (from, to) = DisclosureParsingHelper.ParseAmountRange("Under $1,000");
-        from.Should().Be(0);
+        from.Should().Be(1);
         to.Should().Be(1000);
     }
 
@@ -329,6 +329,7 @@ public class DisclosureParsingHelperTests
         result[0].TransactionDate.Should().Be(new DateOnly(2024, 6, 15));
         result[0].AmountFrom.Should().Be(1001);
         result[0].AmountTo.Should().Be(15000);
+        result[0].AssetType.Should().Be("Stock");
     }
 
     [Fact]
@@ -348,7 +349,7 @@ public class DisclosureParsingHelperTests
     }
 
     [Fact]
-    public void ParseTransactionsFromHtml_NonStockAssetType_Filtered()
+    public void ParseTransactionsFromHtml_NonStockAssetType_RetainsAuthoritativeFiledType()
     {
         var html = """
             <html><body>
@@ -383,7 +384,52 @@ public class DisclosureParsingHelperTests
             Substitute.For<ILogger>()
         );
 
-        result.Should().BeEmpty();
+        var transaction = result.Should().ContainSingle().Subject;
+        transaction.Ticker.Should().BeNull();
+        transaction.AssetType.Should().Be("Municipal Security");
+    }
+
+    [Fact]
+    public void ParseTransactionsFromHtml_StockOption_RetainsFiledInstrumentAndAccount()
+    {
+        var html = """
+            <html><body>
+            <table>
+              <thead><tr>
+                <th>Transaction Date</th>
+                <th>Ticker</th>
+                <th>Asset Name</th>
+                <th>Asset Type</th>
+                <th>Account</th>
+                <th>Transaction Type</th>
+                <th>Amount</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td>2025-03-03</td>
+                  <td>AAPL</td>
+                  <td>Apple Inc. call option</td>
+                  <td>Stock Option</td>
+                  <td>Brokerage IRA</td>
+                  <td>Purchase</td>
+                  <td>$15,001 - $50,000</td>
+                </tr>
+              </tbody>
+            </table>
+            </body></html>
+            """;
+
+        var result = DisclosureParsingHelper.ParseTransactionsFromHtml(
+            html,
+            "Test",
+            CongressPosition.Senator,
+            new DateOnly(2025, 3, 5),
+            Substitute.For<ILogger>()
+        );
+
+        var transaction = result.Should().ContainSingle().Subject;
+        transaction.AssetType.Should().Be("Stock Option");
+        transaction.Subholding.Should().Be("Brokerage IRA");
     }
 
     [Fact]

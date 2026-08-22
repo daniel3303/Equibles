@@ -119,7 +119,8 @@ public class CongressionalTradeSyncServiceBuildTradesCleanAssetNameTests
             Options.Create(new WorkerOptions()),
             Substitute.For<ILogger<CongressionalTradeSyncService>>(),
             errorReporter,
-            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
         );
     }
 }

@@ -391,7 +391,9 @@ public class ProfilesController : BaseController
                 Ticker = trade.CommonStock.Ticker,
                 TransactionDate = trade.TransactionDate,
                 AssetName = trade.AssetName,
+                AssetType = trade.AssetType,
                 OwnerType = trade.OwnerType,
+                Subholding = trade.Subholding,
                 AmountFrom = trade.AmountFrom,
                 AmountTo = trade.AmountTo,
             })

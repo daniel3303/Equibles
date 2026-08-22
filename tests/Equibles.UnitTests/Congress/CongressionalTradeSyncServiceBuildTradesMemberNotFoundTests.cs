@@ -29,7 +29,8 @@ public class CongressionalTradeSyncServiceBuildTradesMemberNotFoundTests
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
-            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
         );
 
         var stock = new CommonStock

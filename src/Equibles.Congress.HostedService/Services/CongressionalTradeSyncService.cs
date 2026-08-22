@@ -21,13 +21,15 @@ public class CongressionalTradeSyncService
     private readonly WorkerOptions _workerOptions;
     private readonly ErrorReporter _errorReporter;
     private readonly CongressionalFilingLedger _filingLedger;
+    private readonly CongressionalTradeImportLedger _importLedger;
 
     public CongressionalTradeSyncService(
         IServiceScopeFactory scopeFactory,
         IOptions<WorkerOptions> workerOptions,
         ILogger<CongressionalTradeSyncService> logger,
         ErrorReporter errorReporter,
-        CongressionalFilingLedger filingLedger
+        CongressionalFilingLedger filingLedger,
+        CongressionalTradeImportLedger importLedger
     )
     {
         _scopeFactory = scopeFactory;
@@ -35,10 +37,13 @@ public class CongressionalTradeSyncService
         _logger = logger;
         _errorReporter = errorReporter;
         _filingLedger = filingLedger;
+        _importLedger = importLedger;
     }
 
     // Congressional trade disclosures are available from 2012 (STOCK Act).
     private static readonly DateOnly EarliestAvailableDate = new(2012, 4, 1);
+    private const int TradeParserVersion = 1;
+    private const int ReprocessPerCycleLimit = 1_000;
 
     // A filing with a transaction whose ticker is not (yet) a tracked stock
     // keeps re-fetching until the filing is this old, so a listing-lag gap
@@ -51,7 +56,7 @@ public class CongressionalTradeSyncService
     {
         var fromDate = _workerOptions.MinSyncDate.HasValue
             ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
-            : DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
+            : new DateOnly(DateTime.UtcNow.Year, 1, 1);
 
         if (fromDate < EarliestAvailableDate)
             fromDate = EarliestAvailableDate;
@@ -63,33 +68,8 @@ public class CongressionalTradeSyncService
             toDate
         );
 
-        var senateProcessedIds = await _filingLedger.GetProcessedSourceIds(
-            CongressionalFilingKind.SenatePeriodicTransactionReport,
-            ct
-        );
-        var houseProcessedIds = await _filingLedger.GetProcessedSourceIds(
-            CongressionalFilingKind.HousePeriodicTransactionReport,
-            ct
-        );
-
-        var senateResult = await FetchDisclosureTransactions(
-            "Senate",
-            "CongressTrades.SyncSenate",
-            sp =>
-                sp.GetRequiredService<SenateDisclosureClient>()
-                    .GetRecentTransactions(fromDate, toDate, senateProcessedIds, ct),
-            ct
-        );
-        var houseResult = await FetchDisclosureTransactions(
-            "House",
-            "CongressTrades.SyncHouse",
-            sp =>
-                sp.GetRequiredService<HouseDisclosureClient>()
-                    .GetRecentTransactions(fromDate, toDate, houseProcessedIds, ct),
-            ct
-        );
-
-        var allTransactions = senateResult.Transactions.Concat(houseResult.Transactions).ToList();
+        var batches = await FetchBatches(fromDate, toDate, ct);
+        var allTransactions = batches.SelectMany(b => b.Result.Transactions).ToList();
 
         var outcome = TradePersistOutcome.Empty;
         if (allTransactions.Count == 0)
@@ -110,17 +90,143 @@ public class CongressionalTradeSyncService
         // throws before this point, so unrecorded filings re-fetch next cycle
         // instead of being lost.
         var unmatchedRetryCutoff = toDate.AddDays(-UnmatchedTickerRetryWindowDays);
-        await _filingLedger.RecordProcessed(
-            CongressionalFilingKind.SenatePeriodicTransactionReport,
-            FilterRecordable(senateResult.ProcessedFilings, outcome, unmatchedRetryCutoff),
-            ct
+        foreach (var batch in batches)
+            await RecordBatch(batch, outcome, unmatchedRetryCutoff, ct);
+    }
+
+    private async Task<List<TradeFetchBatch>> FetchBatches(
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken ct
+    )
+    {
+        var batches = new List<TradeFetchBatch>();
+        var archiveCandidates = new List<(CongressionalFilingKind Kind, int Year)>();
+        foreach (var kind in PeriodicTransactionKinds)
+        {
+            var processed = await _filingLedger.GetProcessedSourceIds(
+                kind,
+                ct,
+                TradeParserVersion,
+                ReprocessPerCycleLimit
+            );
+            var current = await FetchRange(kind, fromDate, toDate, processed, ct);
+            batches.Add(new TradeFetchBatch(kind, current, null));
+
+            var archiveYear = await _importLedger.GetNextYear(
+                kind,
+                TradeParserVersion,
+                EarliestAvailableDate.Year,
+                fromDate.Year - 1,
+                ct
+            );
+            if (archiveYear != null)
+                archiveCandidates.Add((kind, archiveYear.Value));
+        }
+
+        // Bound historical work to one chamber/year partition per cycle. Prefer the newest
+        // missing year across both chambers, then the stable chamber order above for ties.
+        var archiveCandidate = archiveCandidates
+            .OrderByDescending(candidate => candidate.Year)
+            .ThenBy(candidate => Array.IndexOf(PeriodicTransactionKinds, candidate.Kind))
+            .FirstOrDefault();
+        if (archiveCandidate != default)
+        {
+            // Only current-parser ledger rows are skipped in the bounded archive window. Every
+            // stale filing in that one year is replayed, while later years remain untouched.
+            var archiveProcessed = await _filingLedger.GetProcessedSourceIds(
+                archiveCandidate.Kind,
+                ct,
+                TradeParserVersion,
+                int.MaxValue
+            );
+            var archiveStart = new DateOnly(archiveCandidate.Year, 1, 1);
+            if (archiveStart < EarliestAvailableDate)
+                archiveStart = EarliestAvailableDate;
+            var archiveEnd = new DateOnly(archiveCandidate.Year, 12, 31);
+            var archive = await FetchRange(
+                archiveCandidate.Kind,
+                archiveStart,
+                archiveEnd,
+                archiveProcessed,
+                ct
+            );
+            batches.Add(new TradeFetchBatch(archiveCandidate.Kind, archive, archiveCandidate.Year));
+        }
+
+        return batches;
+    }
+
+    private Task<DisclosureFetchResult> FetchRange(
+        CongressionalFilingKind kind,
+        DateOnly fromDate,
+        DateOnly toDate,
+        IReadOnlySet<string> processed,
+        CancellationToken ct
+    ) =>
+        kind switch
+        {
+            CongressionalFilingKind.SenatePeriodicTransactionReport => FetchDisclosureTransactions(
+                "Senate",
+                "CongressTrades.SyncSenate",
+                sp =>
+                    sp.GetRequiredService<SenateDisclosureClient>()
+                        .GetRecentTransactions(fromDate, toDate, processed, ct),
+                ct
+            ),
+            CongressionalFilingKind.HousePeriodicTransactionReport => FetchDisclosureTransactions(
+                "House",
+                "CongressTrades.SyncHouse",
+                sp =>
+                    sp.GetRequiredService<HouseDisclosureClient>()
+                        .GetRecentTransactions(fromDate, toDate, processed, ct),
+                ct
+            ),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+        };
+
+    private async Task RecordBatch(
+        TradeFetchBatch batch,
+        TradePersistOutcome outcome,
+        DateOnly unmatchedRetryCutoff,
+        CancellationToken ct
+    )
+    {
+        var recordable = FilterRecordable(
+            batch.Result.ProcessedFilings,
+            outcome,
+            unmatchedRetryCutoff
         );
-        await _filingLedger.RecordProcessed(
-            CongressionalFilingKind.HousePeriodicTransactionReport,
-            FilterRecordable(houseResult.ProcessedFilings, outcome, unmatchedRetryCutoff),
+        await _filingLedger.RecordProcessed(batch.Kind, recordable, ct, TradeParserVersion);
+
+        if (
+            batch.ArchiveYear == null
+            || !batch.Result.IsComplete
+            || recordable.Count != batch.Result.ProcessedFilings.Count
+        )
+            return;
+
+        await _importLedger.RecordCompleted(
+            batch.Kind,
+            batch.ArchiveYear.Value,
+            TradeParserVersion,
+            recordable.Count,
+            batch.Result.Transactions.Count,
             ct
         );
     }
+
+    private static readonly CongressionalFilingKind[] PeriodicTransactionKinds =
+    [
+        CongressionalFilingKind.SenatePeriodicTransactionReport,
+        CongressionalFilingKind.HousePeriodicTransactionReport,
+    ];
+
+    private sealed record TradeFetchBatch(
+        CongressionalFilingKind Kind,
+        DisclosureFetchResult Result,
+        int? ArchiveYear
+    );
 
     // A filing is only retired once everything it disclosed is accounted for:
     // rows that hit the member-not-found guard were parsed but never stored,
@@ -176,7 +282,7 @@ public class CongressionalTradeSyncService
         {
             _logger.LogWarning(ex, "Failed to fetch {Source} disclosure data", sourceLabel);
             await _errorReporter.Report(ErrorSource.CongressScraper, errorContext, ex);
-            return new DisclosureFetchResult();
+            return new DisclosureFetchResult { IsComplete = false };
         }
     }
 
@@ -200,6 +306,14 @@ public class CongressionalTradeSyncService
             .AsNoTracking()
             .ToDictionaryAsync(s => s.Ticker, s => s, StringComparer.OrdinalIgnoreCase, ct);
 
+        // A source row dated after its own filing is never recordable, even when the ticker is
+        // absent or not tracked. Keep the whole filing retryable rather than checkpointing a
+        // semantically malformed disclosure.
+        var unpersistedSourceIds = transactions
+            .Where(t => t.SourceId != null && t.TransactionDate > t.FilingDate)
+            .Select(t => t.SourceId)
+            .ToHashSet();
+
         // Tickered transactions whose stock is not tracked (yet): their
         // filings stay retryable inside the listing-lag window.
         var unmatchedTickerSourceIds = transactions
@@ -222,19 +336,22 @@ public class CongressionalTradeSyncService
         );
 
         if (matched.Count == 0)
-            return new TradePersistOutcome(unmatchedTickerSourceIds, new HashSet<string>());
+            return new TradePersistOutcome(unmatchedTickerSourceIds, unpersistedSourceIds);
 
         var members = await UpsertCongressMembers(matched, dbContext, memberRepository, ct);
 
         // Mirrors BuildTrades' member-not-found guard: those rows are parsed
         // but never stored, so their filings must not be recorded as ingested.
-        var unpersistedSourceIds = matched
-            .Where(t =>
-                t.SourceId != null
-                && !members.ContainsKey(DisclosureParsingHelper.NormalizeMemberName(t.MemberName))
-            )
-            .Select(t => t.SourceId)
-            .ToHashSet();
+        unpersistedSourceIds.UnionWith(
+            matched
+                .Where(t =>
+                    t.SourceId != null
+                    && !members.ContainsKey(
+                        DisclosureParsingHelper.NormalizeMemberName(t.MemberName)
+                    )
+                )
+                .Select(t => t.SourceId)
+        );
 
         var trades = BuildTrades(matched, members, stocks);
         await PersistTrades(trades, dbContext, ct);
@@ -353,6 +470,8 @@ public class CongressionalTradeSyncService
                     // source already cleans at emission; doing it here too makes this the single
                     // choke point, mirroring NormalizeMemberName above (GH-3374).
                     AssetName = DisclosureParsingHelper.CleanAssetName(tx.AssetName) ?? "",
+                    AssetType = tx.AssetType?.Trim() ?? "",
+                    Subholding = tx.Subholding?.Trim() ?? "",
                     AmountFrom = tx.AmountFrom,
                     AmountTo = tx.AmountTo,
                 }
@@ -368,13 +487,18 @@ public class CongressionalTradeSyncService
         CancellationToken ct
     )
     {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
+        await RepairLegacyZeroFloorAmounts(trades, dbContext, ct);
+        var expandCompatibleTrades = CollapseExpandPhaseCollisions(trades);
+        await WarnOnPersistedExpandPhaseCollisions(expandCompatibleTrades, dbContext, ct);
+
         // Must match the unique index on CongressionalTrade exactly (see the identity note on
         // the entity) or ON CONFLICT has no arbiter and the upsert throws. AssetName
         // participates, so dedup only works while stored names equal the current
         // CleanAssetName output — see the invariant note on CleanAssetName.
         await dbContext
             .Set<CongressionalTrade>()
-            .UpsertRange(trades)
+            .UpsertRange(expandCompatibleTrades)
             .On(t => new
             {
                 t.CommonStockId,
@@ -386,12 +510,190 @@ public class CongressionalTradeSyncService
                 t.AmountFrom,
                 t.AmountTo,
             })
-            .NoUpdate()
+            // Phase 1 of the account-aware rollout keeps the old conflict target so a worker
+            // from the preceding release remains compatible while the additive columns deploy.
+            // Replays still enrich existing rows with the newly retained filed facts.
+            .WhenMatched(
+                (existing, incoming) =>
+                    new CongressionalTrade
+                    {
+                        AssetType =
+                            existing.AssetType != "" || existing.Subholding != ""
+                                ? existing.AssetType
+                                : incoming.AssetType,
+                        Subholding =
+                            existing.AssetType != "" || existing.Subholding != ""
+                                ? existing.Subholding
+                                : incoming.Subholding,
+                    }
+            )
             .RunAsync(ct);
+
+        await transaction.CommitAsync(ct);
 
         _logger.LogInformation(
             "Upserted {Count} congressional trades (duplicates skipped)",
             trades.Count
         );
     }
+
+    private async Task RepairLegacyZeroFloorAmounts(
+        List<CongressionalTrade> incoming,
+        EquiblesFinancialDbContext dbContext,
+        CancellationToken ct
+    )
+    {
+        var incomingByBase = incoming
+            .Where(t => t.AmountFrom > 0)
+            .GroupBy(TradeBaseIdentity.From)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                    group
+                        .Select(t => new TradeAmountRange(t.AmountFrom, t.AmountTo, t.FilingDate))
+                        .Distinct()
+                        .ToList()
+            );
+        if (incomingByBase.Count == 0)
+            return;
+
+        var legacyRows = await dbContext
+            .Set<CongressionalTrade>()
+            .Where(t => t.AmountFrom == 0 && t.AmountTo > 0)
+            .ToListAsync(ct);
+        var repairs = new List<CongressionalTrade>();
+        foreach (var legacy in legacyRows)
+        {
+            if (!incomingByBase.TryGetValue(TradeBaseIdentity.From(legacy), out var candidates))
+                continue;
+
+            var matchingRanges = candidates
+                .Where(current =>
+                    legacy.FilingDate == current.FilingDate
+                    && (
+                        legacy.AmountTo == current.AmountFrom
+                        || (current.AmountFrom == 1 && legacy.AmountTo == current.AmountTo)
+                    )
+                )
+                .ToList();
+            if (matchingRanges.Count == 1)
+                repairs.Add(legacy);
+        }
+        if (repairs.Count == 0)
+            return;
+
+        dbContext.RemoveRange(repairs);
+        await dbContext.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "Removed {Count} legacy congressional trades whose zero lower bound was corrected by source replay",
+            repairs.Count
+        );
+    }
+
+    private List<CongressionalTrade> CollapseExpandPhaseCollisions(List<CongressionalTrade> trades)
+    {
+        var collapsed = new List<CongressionalTrade>();
+        foreach (var group in trades.GroupBy(TradeCurrentIdentity.From))
+        {
+            var selected = group
+                .OrderByDescending(t => !string.IsNullOrEmpty(t.Subholding))
+                .ThenByDescending(t => !string.IsNullOrEmpty(t.AssetType))
+                .First();
+            collapsed.Add(selected);
+            if (
+                group.Any(t =>
+                    t.Subholding != selected.Subholding || t.AssetType != selected.AssetType
+                )
+            )
+            {
+                _logger.LogWarning(
+                    "Deferred {Count} congressional trades distinguished only by asset type or subholding until the account-aware uniqueness contract is deployed",
+                    group.Count() - 1
+                );
+            }
+        }
+
+        return collapsed;
+    }
+
+    private async Task WarnOnPersistedExpandPhaseCollisions(
+        IReadOnlyList<CongressionalTrade> incoming,
+        EquiblesFinancialDbContext dbContext,
+        CancellationToken ct
+    )
+    {
+        if (incoming.Count == 0)
+            return;
+
+        var stockIds = incoming.Select(t => t.CommonStockId).Distinct().ToList();
+        var memberIds = incoming.Select(t => t.CongressMemberId).Distinct().ToList();
+        var firstDate = incoming.Min(t => t.TransactionDate);
+        var lastDate = incoming.Max(t => t.TransactionDate);
+        var persisted = await dbContext
+            .Set<CongressionalTrade>()
+            .AsNoTracking()
+            .Where(t =>
+                stockIds.Contains(t.CommonStockId)
+                && memberIds.Contains(t.CongressMemberId)
+                && t.TransactionDate >= firstDate
+                && t.TransactionDate <= lastDate
+            )
+            .ToListAsync(ct);
+        var persistedByIdentity = persisted.ToDictionary(TradeCurrentIdentity.From);
+
+        var collisionCount = incoming.Count(candidate =>
+            persistedByIdentity.TryGetValue(TradeCurrentIdentity.From(candidate), out var existing)
+            && MetadataPairConflicts(existing, candidate)
+        );
+        if (collisionCount > 0)
+        {
+            _logger.LogWarning(
+                "Deferred {Count} congressional trades distinguished from stored rows only by asset type or subholding until the account-aware uniqueness contract is deployed",
+                collisionCount
+            );
+        }
+    }
+
+    private static bool MetadataPairConflicts(
+        CongressionalTrade existing,
+        CongressionalTrade incoming
+    ) =>
+        (!string.IsNullOrEmpty(existing.AssetType) || !string.IsNullOrEmpty(existing.Subholding))
+        && (!string.IsNullOrEmpty(incoming.AssetType) || !string.IsNullOrEmpty(incoming.Subholding))
+        && (
+            !string.Equals(existing.AssetType, incoming.AssetType, StringComparison.Ordinal)
+            || !string.Equals(existing.Subholding, incoming.Subholding, StringComparison.Ordinal)
+        );
+
+    private sealed record TradeBaseIdentity(
+        Guid CommonStockId,
+        Guid CongressMemberId,
+        DateOnly TransactionDate,
+        CongressTransactionType TransactionType,
+        string AssetName,
+        string OwnerType
+    )
+    {
+        public static TradeBaseIdentity From(CongressionalTrade trade) =>
+            new(
+                trade.CommonStockId,
+                trade.CongressMemberId,
+                trade.TransactionDate,
+                trade.TransactionType,
+                trade.AssetName,
+                trade.OwnerType
+            );
+    }
+
+    private sealed record TradeCurrentIdentity(
+        TradeBaseIdentity Base,
+        long AmountFrom,
+        long AmountTo
+    )
+    {
+        public static TradeCurrentIdentity From(CongressionalTrade trade) =>
+            new(TradeBaseIdentity.From(trade), trade.AmountFrom, trade.AmountTo);
+    }
+
+    private sealed record TradeAmountRange(long AmountFrom, long AmountTo, DateOnly FilingDate);
 }

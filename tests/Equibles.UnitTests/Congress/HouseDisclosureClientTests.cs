@@ -45,6 +45,7 @@ public class HouseDisclosureClientTests
         var tx = result.Should().ContainSingle().Subject;
         tx.Ticker.Should().Be("NVDA");
         tx.OwnerType.Should().Be("SP");
+        tx.AssetType.Should().Be("ST");
         tx.TransactionType.Should().Be(CongressTransactionType.Purchase);
         tx.TransactionDate.Should().Be(new DateOnly(2024, 6, 26));
         tx.AmountFrom.Should().Be(1_000_001);
@@ -110,6 +111,24 @@ public class HouseDisclosureClientTests
         tx.Ticker.Should().BeNull("the bracketed asset-type code is not a ticker");
         tx.OwnerType.Should().BeNull();
         tx.TransactionType.Should().Be(CongressTransactionType.Purchase);
+        tx.AssetType.Should().Be("OI");
+        tx.AmountFrom.Should().Be(982);
+        tx.AmountTo.Should().Be(982);
+    }
+
+    [Fact]
+    public void ParseTransactionLines_OptionUnderNamedSubholding_RetainsFiledIdentity()
+    {
+        var result = Parse(
+            "SP Acme Corporation Call Option (ACME) [OP] P 03/03/2025 03/05/2025 $15,001 - $50,000",
+            "Filing Status: New",
+            "Subholding Of: TIAA-CREF"
+        );
+
+        var tx = result.Should().ContainSingle().Subject;
+        tx.AssetType.Should().Be("OP");
+        tx.Subholding.Should().Be("TIAA-CREF");
+        tx.AssetName.Should().NotContain("[OP]");
     }
 
     [Fact]
@@ -127,6 +146,48 @@ public class HouseDisclosureClientTests
         );
 
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseTransactionLines_TransactionWithInvalidAmount_IsDropped()
+    {
+        var result = Parse(
+            "Apple Inc. - Common Stock (AAPL) P 03/03/2024 03/05/2024 amount unavailable"
+        );
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_UnanchoredRowLikeLine_IsRejected()
+    {
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "Apple Inc. (AAPL) P 03/03/2024 03/05/2024 $1,001 - $15,000",
+                "Brokerage: Microsoft Corp. (MSFT) Corrupt 04/01/2024 04/02/2024 $15,001 - $50,000",
+            ],
+            "Nancy Pelosi",
+            FilingDate
+        );
+
+        result.Transactions.Should().ContainSingle();
+        result.RejectedSourceRowCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_UnanchoredLineWithOneDate_IsRejected()
+    {
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "Apple Inc. (AAPL) P 03/03/2024 03/05/2024 $1,001 - $15,000",
+                "Microsoft Corp. (MSFT) Corrupt 04/01/2024 $15,001 - $50,000",
+            ],
+            "Nancy Pelosi",
+            FilingDate
+        );
+
+        result.Transactions.Should().ContainSingle();
+        result.RejectedSourceRowCount.Should().Be(1);
     }
 
     // ---- end-to-end against real PTR PDFs (page-geometry reconstruction) ----
@@ -180,11 +241,72 @@ public class HouseDisclosureClientTests
     // ---- download flow ----
 
     [Fact]
+    public async Task GetRecentTransactions_OfficialMixedFilingTypes_DoNotInvalidatePtrIndex()
+    {
+        const int year = 2025;
+        var xml = await File.ReadAllTextAsync(FixturePath("house-fd-2025-mixed-types.xml"));
+        var zipBytes = BuildZipWithSingleEntry($"{year}FD.xml", xml);
+        var handler = new UrlRoutingHandler(zipBytes);
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
+
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 31),
+            new HashSet<string> { "20032062" },
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeTrue();
+        result.Transactions.Should().BeEmpty();
+        handler.Requests.Should().ContainSingle("the known PTR is already checkpointed");
+    }
+
+    [Theory]
+    [InlineData("F")]
+    [InlineData("N")]
+    [InlineData("R")]
+    public async Task GetRecentTransactions_HistoricalOfficialNonPtrType_IsComplete(
+        string filingType
+    )
+    {
+        const int year = 2012;
+        var xml = $"""
+            <FinancialDisclosure>
+              <Member>
+                <First>Jane</First><Last>Doe</Last><FilingType>{filingType}</FilingType>
+                <StateDst>CA01</StateDst><Year>{year}</Year>
+                <FilingDate>4/30/{year}</FilingDate><DocID>8200000</DocID>
+              </Member>
+            </FinancialDisclosure>
+            """;
+        var zipBytes = BuildZipWithSingleEntry($"{year}FD.xml", xml);
+        var handler = new UrlRoutingHandler(zipBytes);
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
+
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 31),
+            new HashSet<string>(),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeTrue();
+        result.Transactions.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task GetRecentTransactions_FdZipReturns404ForYear_ReturnsEmptyListWithoutThrowing()
     {
-        // A 404 FD ZIP is the common case for empty years and must short-circuit
-        // quietly in DownloadAndParseFilingIndex rather than throw out of
-        // EnsureSuccessStatusCode and cascade into per-filing PDF downloads.
+        // A missing year index cannot prove an archive partition is complete. The client
+        // contains the failure, marks the result incomplete, and avoids PTR requests.
         var handler = new ConstantStatusHandler(HttpStatusCode.NotFound);
         using var httpClient = new HttpClient(handler);
         var sut = new HouseDisclosureClient(
@@ -200,6 +322,7 @@ public class HouseDisclosureClientTests
         );
 
         result.Transactions.Should().BeEmpty();
+        result.IsComplete.Should().BeFalse();
         handler
             .Requests.Should()
             .ContainSingle(
@@ -210,9 +333,8 @@ public class HouseDisclosureClientTests
     [Fact]
     public async Task GetRecentTransactions_FdZipMissingExpectedXmlEntry_ReturnsEmptyListAndDoesNotRequestAnyPtrPdf()
     {
-        // A 200 ZIP whose {year}FD.xml entry is missing/misnamed must hit the
-        // null-entry guard and return [] without dereferencing the entry or
-        // cascading into PTR PDF downloads.
+        // A 200 ZIP whose {year}FD.xml entry is missing/misnamed is incomplete, not an
+        // authoritative empty year, and must not cascade into PTR PDF downloads.
         var zipBytes = BuildZipWithSingleEntry("wrongname.xml", "<irrelevant />");
         var handler = new BytesContentHandler(zipBytes, "application/zip");
         using var httpClient = new HttpClient(handler);
@@ -229,12 +351,103 @@ public class HouseDisclosureClientTests
         );
 
         result.Transactions.Should().BeEmpty();
+        result.IsComplete.Should().BeFalse();
         handler
             .Requests.Should()
             .ContainSingle(
                 "the missing-XML-entry branch must not cascade into per-filing PTR PDF downloads"
             );
         handler.Requests[0].Should().Contain("2025FD.zip");
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_IndexXmlHasWrongShape_MarksYearIncomplete()
+    {
+        const int year = 2025;
+        var zipBytes = BuildZipWithSingleEntry($"{year}FD.xml", "<html />");
+        var handler = new UrlRoutingHandler(zipBytes);
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
+
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 31),
+            new HashSet<string>(),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeFalse();
+        result.Transactions.Should().BeEmpty();
+        result.ProcessedFilings.Should().BeEmpty();
+        handler.Requests.Should().ContainSingle("the invalid index must not request a PDF");
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_IndexMemberWithoutFilingType_MarksYearIncomplete()
+    {
+        const int year = 2025;
+        var xml = """
+            <FinancialDisclosures>
+              <Member><First>Jane</First><Last>Doe</Last><DocID>20251234</DocID><FilingDate>02/01/2025</FilingDate></Member>
+            </FinancialDisclosures>
+            """;
+        var zipBytes = BuildZipWithSingleEntry($"{year}FD.xml", xml);
+        var handler = new UrlRoutingHandler(zipBytes);
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
+
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 31),
+            new HashSet<string>(),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeFalse();
+        result.ProcessedFilings.Should().BeEmpty();
+        handler.Requests.Should().ContainSingle("the malformed index row must not request a PDF");
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_MalformedPtrIndexRow_MarksYearIncomplete()
+    {
+        const int year = 2025;
+        var xml = $"""
+            <FinancialDisclosures>
+              <Member>
+                <First>Jane</First>
+                <Last>Doe</Last>
+                <FilingType>P</FilingType>
+                <StateDst>CA01</StateDst>
+                <FilingDate>not-a-date</FilingDate>
+                <DocID>20251234</DocID>
+              </Member>
+            </FinancialDisclosures>
+            """;
+        var zipBytes = BuildZipWithSingleEntry($"{year}FD.xml", xml);
+        var handler = new UrlRoutingHandler(zipBytes);
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
+
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 31),
+            new HashSet<string>(),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeFalse();
+        result.ProcessedFilings.Should().BeEmpty();
+        handler.Requests.Should().ContainSingle("the malformed index row must not request a PDF");
     }
 
     [Fact]
@@ -276,6 +489,7 @@ public class HouseDisclosureClientTests
         );
 
         result.Transactions.Should().BeEmpty();
+        result.IsComplete.Should().BeFalse();
         handler
             .Requests.Should()
             .Contain(
@@ -319,6 +533,7 @@ public class HouseDisclosureClientTests
         );
 
         result.Transactions.Should().BeEmpty();
+        result.IsComplete.Should().BeFalse();
         handler
             .Requests.Should()
             .HaveCount(

@@ -48,7 +48,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         long amountFrom = 1_000,
         long amountTo = 15_000,
         string assetName = "Common Stock",
-        string ownerType = "Self"
+        string ownerType = "Self",
+        string assetType = "ST",
+        string subholding = ""
     ) =>
         new()
         {
@@ -61,6 +63,8 @@ public class CongressToolsTests : ParadeDbMcpTestBase
             TransactionType = type,
             OwnerType = ownerType,
             AssetName = assetName,
+            AssetType = assetType,
+            Subholding = subholding,
             AmountFrom = amountFrom,
             AmountTo = amountTo,
         };
@@ -131,7 +135,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
                     pelosi,
                     stock,
                     new DateOnly(2026, 3, 15),
-                    assetName: "NVDA put option \\| $100 strike"
+                    assetName: "NVDA put option \\| $100 strike",
+                    assetType: "OP",
+                    subholding: "Brokerage \\| IRA"
                 )
             );
         await DbContext.SaveChangesAsync();
@@ -144,6 +150,8 @@ public class CongressToolsTests : ParadeDbMcpTestBase
             .Description;
 
         result.Should().Contain("NVDA put option \\\\\\| $100 strike");
+        result.Should().Contain("| OP |");
+        result.Should().Contain("Brokerage \\\\\\| IRA");
         description.Should().Contain("securities transactions");
         description.Should().Contain("Asset identifies the filed instrument");
         description.Should().NotContain("bought or sold shares");

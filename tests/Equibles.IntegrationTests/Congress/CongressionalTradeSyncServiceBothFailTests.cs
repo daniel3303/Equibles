@@ -11,7 +11,7 @@ namespace Equibles.IntegrationTests.Congress;
 
 /// <summary>
 /// Unit-tier CongressionalTradeSyncServiceTests cover only the from-date clamp
-/// and the 90-day default. The disclosure-fetch resilience path is uncovered.
+/// and the default date window. The disclosure-fetch resilience path is uncovered.
 /// Pins SyncAll when BOTH the Senate and House client resolutions throw inside
 /// their scope: each catch block must log + report, and the short-circuit on
 /// "no transactions" must keep SyncAll from attempting the (uninjected)
@@ -42,7 +42,8 @@ public class CongressionalTradeSyncServiceBothFailTests
             ),
             Substitute.For<ILogger<CongressionalTradeSyncService>>(),
             errorReporter,
-            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
         );
 
         // Must not throw — both fetches fail, allTransactions stays empty,

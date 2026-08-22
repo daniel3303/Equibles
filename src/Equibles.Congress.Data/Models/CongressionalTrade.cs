@@ -53,6 +53,18 @@ public class CongressionalTrade
     [MaxLength(256)]
     public string AssetName { get; set; }
 
+    // The authoritative filed type: House abbreviation (ST/OP/...) or Senate label.
+    // Empty only on rows written before the trade parser began retaining it.
+    [Required]
+    [MaxLength(128)]
+    public string AssetType { get; set; } = "";
+
+    // The filed parent account/subholding. This is separate from OwnerType: two assets may both
+    // belong to the spouse while sitting under different disclosed brokerage/retirement accounts.
+    [Required]
+    [MaxLength(256)]
+    public string Subholding { get; set; } = "";
+
     public long AmountFrom { get; set; }
     public long AmountTo { get; set; }
 
