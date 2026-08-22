@@ -23,4 +23,18 @@ public static class FinraImportScope
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
         return $"tickers:{Convert.ToHexString(hash).ToLowerInvariant()}";
     }
+
+    public static string ResolveStockUniverse(IReadOnlyDictionary<string, Guid> stocks)
+    {
+        ArgumentNullException.ThrowIfNull(stocks);
+
+        var payload = string.Join(
+            '\n',
+            stocks
+                .OrderBy(stock => stock.Key, StringComparer.Ordinal)
+                .Select(stock => $"{stock.Key}\0{stock.Value:N}")
+        );
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return $"stocks:{Convert.ToHexString(hash).ToLowerInvariant()}";
+    }
 }

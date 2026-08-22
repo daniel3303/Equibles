@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- FINRA daily short-volume completeness now includes the resolved stock universe, so stocks added after a date was marked complete receive a bounded historical backfill. Issue #4316.
+
 ## [1.6.0] — 2026-08-22
 
 ### Added
