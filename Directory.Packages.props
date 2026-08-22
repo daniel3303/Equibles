@@ -18,7 +18,7 @@
     <PackageVersion Include="HtmlAgilityPack" Version="1.12.4" />
     <PackageVersion Include="Markdig" Version="1.3.2" />
     <PackageVersion Include="PdfPig" Version="0.1.15" />
-    <PackageVersion Include="ReverseMarkdown" Version="5.3.0" />
+    <PackageVersion Include="ReverseMarkdown" Version="6.2.1" />
     <!-- Validation -->
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="FluentValidation.AspNetCore" Version="11.3.1" />
@@ -48,7 +48,7 @@
     <!-- Pinned to remediate the transitive 9.0.4 high-severity advisory
          GHSA-73j8-2gch-69rq (NU1903); referenced directly in
          Equibles.Sec.BusinessLogic to override the vulnerable transitive. -->
-    <PackageVersion Include="Microsoft.Bcl.Memory" Version="9.0.17" />
+    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.11" />
     <!-- Microsoft.Extensions -->
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.11" />
@@ -91,7 +91,7 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageVersion Include="FluentAssertions" Version="8.10.0" />
-    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
     <PackageVersion Include="Testcontainers" Version="4.14.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />

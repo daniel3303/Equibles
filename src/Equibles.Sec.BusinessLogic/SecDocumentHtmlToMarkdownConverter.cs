@@ -38,9 +38,9 @@ public class SecDocumentHtmlToMarkdownConverter : ISecDocumentHtmlToMarkdownConv
         var config = new Config
         {
             GithubFlavored = true,
-            RemoveComments = true,
-            SmartHrefHandling = true,
-            UnknownTags = Config.UnknownTagsOption.Bypass,
+            Formatting = { RemoveComments = true },
+            Links = { SmartHref = true },
+            Tags = { Unknown = Config.UnknownTagsOption.Bypass },
         };
 
         return new Converter(config);
