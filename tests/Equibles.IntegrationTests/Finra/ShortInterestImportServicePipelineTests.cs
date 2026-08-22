@@ -107,6 +107,100 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task Import_CaseVariantSymbols_PersistsEachSecurity()
+    {
+        var common = new CommonStock
+        {
+            Cik = "0000000889",
+            Ticker = "TPC",
+            Name = "Tutor Perini Corporation",
+        };
+        var preferred = new CommonStock
+        {
+            Cik = "0000000890",
+            Ticker = "TpC",
+            Name = "Tutor Perini Preferred",
+        };
+        DbContext.AddRange(common, preferred);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+        var finraClient = Substitute.For<IFinraClient>();
+        finraClient.GetShortInterestSettlementDates().Returns([settlementDate]);
+        finraClient
+            .GetShortInterest(settlementDate)
+            .Returns(
+                new List<ShortInterestRecord>
+                {
+                    new() { Symbol = "TPC", CurrentShortPosition = 100 },
+                    new() { Symbol = "TpC", CurrentShortPosition = 200 },
+                }
+            );
+
+        await BuildService(finraClient).Import(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var rows = await verify
+            .Set<ShortInterest>()
+            .AsNoTracking()
+            .Where(s => s.SettlementDate == settlementDate)
+            .ToListAsync();
+        rows.Should().HaveCount(2);
+        rows.Single(row => row.CommonStockId == common.Id).CurrentShortPosition.Should().Be(100);
+        rows.Single(row => row.CommonStockId == preferred.Id).CurrentShortPosition.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task Import_CaseVariantCompressedClassSymbols_PersistsEachSecurity()
+    {
+        var commonClass = new CommonStock
+        {
+            Cik = "0000000891",
+            Ticker = "TPC-A",
+            Name = "Tutor Perini Class A",
+        };
+        var preferredClass = new CommonStock
+        {
+            Cik = "0000000892",
+            Ticker = "TpC-A",
+            Name = "Tutor Perini Preferred Class A",
+        };
+        DbContext.AddRange(commonClass, preferredClass);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+        var finraClient = Substitute.For<IFinraClient>();
+        finraClient.GetShortInterestSettlementDates().Returns([settlementDate]);
+        finraClient
+            .GetShortInterest(settlementDate)
+            .Returns(
+                new List<ShortInterestRecord>
+                {
+                    new() { Symbol = "TPCA", CurrentShortPosition = 300 },
+                    new() { Symbol = "TpCA", CurrentShortPosition = 400 },
+                }
+            );
+
+        await BuildService(finraClient).Import(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var rows = await verify
+            .Set<ShortInterest>()
+            .AsNoTracking()
+            .Where(s => s.SettlementDate == settlementDate)
+            .ToListAsync();
+        rows.Should().HaveCount(2);
+        rows.Single(row => row.CommonStockId == commonClass.Id)
+            .CurrentShortPosition.Should()
+            .Be(300);
+        rows.Single(row => row.CommonStockId == preferredClass.Id)
+            .CurrentShortPosition.Should()
+            .Be(400);
+    }
+
+    [Fact]
     public async Task Import_SettlementDateDiscoveryThrows_ReportsErrorAndReturns()
     {
         await SeedStock();
