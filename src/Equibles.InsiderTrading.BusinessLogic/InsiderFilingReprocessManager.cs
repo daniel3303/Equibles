@@ -85,6 +85,8 @@ public class InsiderFilingReprocessManager
         CancellationToken cancellationToken = default
     )
     {
+        await ClearProvenCrossFamilyClaims(cancellationToken);
+
         // Snapshot of the work-set for the progress bar. The live ingest worker may
         // stamp new rows at the current version while this runs; harmless — Processed
         // can briefly nudge past Total and self-corrects.
@@ -105,116 +107,153 @@ public class InsiderFilingReprocessManager
 
         _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
 
-        await ReprocessRowlessFilingForms(result, onProgress, cancellationToken);
-
-        // No DB cursor: a reprocessed filing's rows advance to the current version and
-        // drop out of the filter, so each pass takes the next batch of unprocessed
-        // accessions. Drain one exact parser version at a time so the composite
-        // (ParserVersion, AccessionNumber) index can stream DISTINCT accessions directly
-        // into LIMIT instead of filtering current rows from the accession index (#4374).
-        // Filings that fail this run are held in-memory and excluded so the run still
-        // terminates; they're retried on the next run. The textual order is local to one
-        // batch, not a persisted keyset boundary, so database collation cannot skip work.
-        var failedThisRun = new HashSet<string>();
-        while (!cancellationToken.IsCancellationRequested)
+        try
         {
-            var pending = _transactionRepository
-                .GetAll()
-                .Where(t => t.ParserVersion < InsiderTransaction.CurrentParserVersion)
-                .Where(t => !failedThisRun.Contains(t.AccessionNumber));
-            var oldestParserVersion = await pending
-                .Select(t => (int?)t.ParserVersion)
-                .MinAsync(cancellationToken);
+            await ReprocessRowlessFilingForms(result, onProgress, cancellationToken);
 
-            if (oldestParserVersion == null)
-                break;
-
-            var accessions = await pending
-                .Where(t => t.ParserVersion == oldestParserVersion.Value)
-                .Select(t => t.AccessionNumber)
-                .Distinct()
-                .OrderBy(accession => accession)
-                .Take(BatchSize)
-                .ToListAsync(cancellationToken);
-
-            if (accessions.Count == 0)
-                continue;
-
-            var attempted = 0;
-            foreach (var accession in accessions)
+            // No DB cursor: a reprocessed filing's rows advance to the current version and
+            // drop out of the filter, so each pass takes the next batch of unprocessed
+            // accessions. Drain one exact parser version at a time so the composite
+            // (ParserVersion, AccessionNumber) index can stream DISTINCT accessions directly
+            // into LIMIT instead of filtering current rows from the accession index (#4374).
+            // Filings that fail this run are held in-memory and excluded so the run still
+            // terminates; they're retried on the next run. The textual order is local to one
+            // batch, not a persisted keyset boundary, so database collation cannot skip work.
+            var failedThisRun = new HashSet<string>();
+            while (!cancellationToken.IsCancellationRequested)
             {
-                if (cancellationToken.IsCancellationRequested)
+                var pending = _transactionRepository
+                    .GetAll()
+                    .Where(t => t.ParserVersion < InsiderTransaction.CurrentParserVersion)
+                    .Where(t => !failedThisRun.Contains(t.AccessionNumber));
+                var oldestParserVersion = await pending
+                    .Select(t => (int?)t.ParserVersion)
+                    .MinAsync(cancellationToken);
+
+                if (oldestParserVersion == null)
                     break;
-                attempted++;
+
+                var accessions = await pending
+                    .Where(t => t.ParserVersion == oldestParserVersion.Value)
+                    .Select(t => t.AccessionNumber)
+                    .Distinct()
+                    .OrderBy(accession => accession)
+                    .Take(BatchSize)
+                    .ToListAsync(cancellationToken);
+
+                if (accessions.Count == 0)
+                    continue;
+
+                var attempted = 0;
+                foreach (var accession in accessions)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+                    attempted++;
+                    try
+                    {
+                        await ReprocessFiling(accession, result);
+                    }
+                    catch (Exception ex)
+                    {
+                        // One bad filing (e.g. a transient EDGAR 429/timeout) must not abort
+                        // the whole batch. Skip it this run; it's retried on the next.
+                        _logger.LogWarning(
+                            ex,
+                            "Insider filing reprocess failed for {AccessionNumber}; skipping this run",
+                            accession
+                        );
+                        failedThisRun.Add(accession);
+                        result.Failed++;
+                    }
+                }
+
                 try
                 {
-                    await ReprocessFiling(accession, result);
-                }
-                catch (Exception ex)
-                {
-                    // One bad filing (e.g. a transient EDGAR 429/timeout) must not abort
-                    // the whole batch. Skip it this run; it's retried on the next.
-                    _logger.LogWarning(
-                        ex,
-                        "Insider filing reprocess failed for {AccessionNumber}; skipping this run",
-                        accession
-                    );
-                    failedThisRun.Add(accession);
-                    result.Failed++;
-                }
-            }
-
-            try
-            {
-                await _transactionRepository.SaveChanges();
-                // Count only filings actually attempted this batch (successes + failures).
-                // Cancellation can break the loop early, so the remaining accessions were
-                // never tried and must not be credited as processed.
-                result.Processed += attempted;
-            }
-            catch (DbUpdateException ex)
-            {
-                // A concurrent ingest or reprocess run inserted one of these filings' cache
-                // rows first, so this batch's duplicate-accession insert is rejected by the
-                // unique index. That cache write is best-effort, but the batch's transaction
-                // updates (parser-version advances, reclassifications, price repairs) are
-                // not — detaching the pending filing/file inserts and re-saving lets the
-                // transaction work commit instead of being discarded with the conflict (#2454).
-                if (await TryCommitWithoutPendingCacheInserts())
-                {
+                    await _transactionRepository.SaveChanges();
+                    // Count only filings actually attempted this batch (successes + failures).
+                    // Cancellation can break the loop early, so the remaining accessions were
+                    // never tried and must not be credited as processed.
                     result.Processed += attempted;
                 }
-                else
+                catch (DbUpdateException ex)
                 {
-                    _logger.LogWarning(
-                        ex,
-                        "Insider filing reprocess batch save failed; retrying next run"
-                    );
-                    foreach (var accession in accessions)
-                        failedThisRun.Add(accession);
+                    // A concurrent ingest or reprocess run inserted one of these filings' cache
+                    // rows first, so this batch's duplicate-accession insert is rejected by the
+                    // unique index. That cache write is best-effort, but the batch's transaction
+                    // updates (parser-version advances, reclassifications, price repairs) are
+                    // not — detaching the pending filing/file inserts and re-saving lets the
+                    // transaction work commit instead of being discarded with the conflict (#2454).
+                    if (await TryCommitWithoutPendingCacheInserts())
+                    {
+                        result.Processed += attempted;
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Insider filing reprocess batch save failed; retrying next run"
+                        );
+                        foreach (var accession in accessions)
+                            failedThisRun.Add(accession);
+                    }
                 }
-            }
-            finally
-            {
-                _dbContext.ChangeTracker.Clear();
-            }
+                finally
+                {
+                    _dbContext.ChangeTracker.Clear();
+                }
 
-            _logger.LogInformation(
-                "Insider filing reprocess: {Processed}/{Total} filings, reclassified={Reclassified}, repaired={Repaired}, dates corrected={DatesCorrected}, 10b5-1 stamped={Rule10b5Stamped}, failed={Failed}",
-                result.Processed,
-                result.Total,
-                result.Reclassified,
-                result.Repaired,
-                result.DatesCorrected,
-                result.Rule10b5Stamped,
-                result.Failed
-            );
+                _logger.LogInformation(
+                    "Insider filing reprocess: {Processed}/{Total} filings, reclassified={Reclassified}, repaired={Repaired}, dates corrected={DatesCorrected}, 10b5-1 stamped={Rule10b5Stamped}, failed={Failed}",
+                    result.Processed,
+                    result.Total,
+                    result.Reclassified,
+                    result.Repaired,
+                    result.DatesCorrected,
+                    result.Rule10b5Stamped,
+                    result.Failed
+                );
 
-            if (onProgress != null)
-                await onProgress(result);
+                if (onProgress != null)
+                    await onProgress(result);
+            }
+        }
+        finally
+        {
+            await ClearProvenCrossFamilyClaims(CancellationToken.None);
         }
 
         return result;
+    }
+
+    private async Task ClearProvenCrossFamilyClaims(CancellationToken cancellationToken)
+    {
+        var filingRows = _filingRepository.GetAll();
+        var cleared = await _transactionRepository
+            .GetAll()
+            .Where(transaction =>
+                transaction.SupersededAccessionNumber != null
+                && transaction.FilingForm != InsiderOwnershipForm.Unknown
+                && filingRows.Any(original =>
+                    original.AccessionNumber == transaction.SupersededAccessionNumber
+                    && original.FilingForm != InsiderOwnershipForm.Unknown
+                    && original.FilingForm != transaction.FilingForm
+                )
+            )
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters.SetProperty(
+                        transaction => transaction.SupersededAccessionNumber,
+                        (string)null
+                    ),
+                cancellationToken
+            );
+
+        if (cleared > 0)
+            _logger.LogInformation(
+                "Cleared {Count} proven cross-family insider supersession claims",
+                cleared
+            );
     }
 
     // Supersession deliberately deletes an original filing's transaction rows but
