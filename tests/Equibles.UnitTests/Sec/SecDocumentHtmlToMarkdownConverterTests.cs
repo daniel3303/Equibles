@@ -47,6 +47,38 @@ public class SecDocumentHtmlToMarkdownConverterTests
     }
 
     [Fact]
+    public void Convert_GithubFormatting_ProducesCleanMarkdown()
+    {
+        var result = _converter.Convert("<strong>bold</strong><br><em>italic</em>");
+
+        result.Should().Be("**bold**  \n*italic*");
+    }
+
+    [Fact]
+    public void Convert_UnknownTag_UnwrapsTag()
+    {
+        var result = _converter.Convert("<custom-element>content</custom-element>");
+
+        result.Should().Be("content");
+    }
+
+    [Fact]
+    public void Convert_Comment_RemovesComment()
+    {
+        var result = _converter.Convert("before<!--hidden-->after");
+
+        result.Should().Be("beforeafter");
+    }
+
+    [Fact]
+    public void Convert_LinkMatchingHref_UsesSmartHref()
+    {
+        var result = _converter.Convert("<a href=\"https://example.com\">https://example.com</a>");
+
+        result.Should().Be("https://example.com");
+    }
+
+    [Fact]
     public void Convert_DuplicateStyleAttributes_DoesNotThrow()
     {
         var html = """<p style="font-weight:bold;font-weight:bold">styled text</p>""";
