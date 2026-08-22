@@ -525,6 +525,16 @@ public partial class HouseDisclosureClient
             : null;
         assetText = AssetTypeCodeRegex().Replace(assetText, " ").Trim();
 
+        // Some House PTRs place the abbreviated detail fields on the transaction's visual
+        // line instead of separate lines ("F S:", "S O:", "D:"). Preserve the filed
+        // subholding before removing that metadata suffix from the asset name.
+        var inlineDetails = ExtractInlineAssetDetails(assetText);
+        if (inlineDetails.Subholding != null)
+        {
+            subholding = inlineDetails.Subholding;
+            assetText = inlineDetails.AssetName;
+        }
+
         // The PDF's row checkboxes extract as "gfedc"/"gfedcb" glued onto the asset name — strip
         // them before the name is stored or mined for a ticker (see CleanAssetName).
         assetText = CleanAssetName(assetText);
@@ -633,6 +643,32 @@ public partial class HouseDisclosureClient
     [GeneratedRegex(@"^\s*Subholding\s+Of\s*:\s*(.+?)\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex SubholdingRegex();
 
+    [GeneratedRegex(
+        @"(?:^|\s)(?:S\s+O|Subholding\s+Of)\s*:\s*(.+?)(?=\s+(?:D|Description|F\s+S|Filing\s+Status)\s*:|$)",
+        RegexOptions.IgnoreCase
+    )]
+    private static partial Regex InlineSubholdingRegex();
+
+    [GeneratedRegex(@"(?:^|\s)(?:F\s+S|Filing\s+Status)\s*:", RegexOptions.IgnoreCase)]
+    private static partial Regex InlineFilingStatusRegex();
+
+    internal static HouseInlineAssetDetails ExtractInlineAssetDetails(string assetText)
+    {
+        var subholdingMatch = InlineSubholdingRegex().Match(assetText);
+        if (!subholdingMatch.Success)
+            return new HouseInlineAssetDetails(assetText, null);
+
+        var metadataStart = subholdingMatch.Index;
+        var filingStatusMatch = InlineFilingStatusRegex().Match(assetText);
+        if (filingStatusMatch.Success && filingStatusMatch.Index < metadataStart)
+            metadataStart = filingStatusMatch.Index;
+
+        return new HouseInlineAssetDetails(
+            assetText[..metadataStart].Trim(),
+            subholdingMatch.Groups[1].Value.Trim()
+        );
+    }
+
     [GeneratedRegex(@"\b\d{1,2}/\d{1,2}/\d{4}\b")]
     private static partial Regex DateTokenRegex();
 
@@ -667,6 +703,8 @@ public partial class HouseDisclosureClient
         DateOnly FilingDate,
         string StateDst
     );
+
+    internal sealed record HouseInlineAssetDetails(string AssetName, string Subholding);
 
     internal sealed record HousePtrParseResult(
         List<DisclosureTransaction> Transactions,

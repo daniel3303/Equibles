@@ -80,6 +80,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         long amountTo = 15_000,
         string assetType = "ST",
         string subholding = "",
+        string assetName = "Apple Inc.",
         DateOnly? transactionDate = null,
         DateOnly? filingDate = null,
         string sourceId = null
@@ -89,7 +90,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             MemberName = member,
             Position = CongressPosition.Senator,
             Ticker = ticker,
-            AssetName = "Apple Inc.",
+            AssetName = assetName,
             TransactionDate = transactionDate ?? new DateOnly(2024, 6, 1),
             FilingDate = filingDate ?? new DateOnly(2024, 6, 15),
             TransactionType = CongressTransactionType.Purchase,
@@ -317,6 +318,138 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         var enriched = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
         enriched.AssetType.Should().Be("OP");
         enriched.Subholding.Should().Be("Brokerage IRA");
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_RedatedDuplicateInlineSubholdingReplay_ReplacesPollutedLegacyName()
+    {
+        const string subholding =
+            "150 Main Street Trust > Pershing Advisor Solutions LLC Brokerage";
+        const string otherSubholding = "Different Brokerage Account";
+        var stock = new CommonStock { Ticker = "AVGO", Name = "Broadcom Inc." };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(stock, member);
+        DbContext.Add(
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CongressMemberId = member.Id,
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 14),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName =
+                    $"Broadcom Inc. (AVGO) F S: New S O: {subholding} D: Put option, strike price",
+                AssetType = "OP",
+                Subholding = "",
+                AmountFrom = 1_001,
+                AmountTo = 15_000,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(),
+                [
+                    new List<DisclosureTransaction>
+                    {
+                        Txn(
+                            "Jane Doe",
+                            "AVGO",
+                            assetType: "OP",
+                            subholding: otherSubholding,
+                            assetName: "Broadcom Inc. (AVGO)"
+                        ),
+                        Txn(
+                            "Jane Doe",
+                            "AVGO",
+                            assetType: "ST",
+                            subholding: subholding,
+                            assetName: "Broadcom Inc. (AVGO)"
+                        ),
+                        Txn(
+                            "Jane Doe",
+                            "AVGO",
+                            assetType: "OP",
+                            subholding: subholding,
+                            assetName: "Broadcom Inc. (AVGO)"
+                        ),
+                        Txn(
+                            "Jane Doe",
+                            "AVGO",
+                            assetType: "OP",
+                            subholding: subholding,
+                            assetName: "Broadcom Inc. (AVGO)"
+                        ),
+                    },
+                    CancellationToken.None,
+                ]
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var repaired = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        repaired.AssetName.Should().Be("Broadcom Inc. (AVGO)");
+        repaired.AssetType.Should().Be("OP");
+        repaired.Subholding.Should().Be(subholding);
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_TwoPollutedLegacyAccounts_SharedIdentityAbstainsAtomically()
+    {
+        const string firstSubholding = "Brokerage Account A";
+        const string secondSubholding = "Brokerage Account B";
+        var stock = new CommonStock { Ticker = "AVGO", Name = "Broadcom Inc." };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(stock, member);
+        DbContext.AddRange(LegacyTrade(firstSubholding), LegacyTrade(secondSubholding));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(),
+                [
+                    new List<DisclosureTransaction>
+                    {
+                        Txn(
+                            "Jane Doe",
+                            "AVGO",
+                            assetType: "OP",
+                            subholding: firstSubholding,
+                            assetName: "Broadcom Inc. (AVGO)"
+                        ),
+                    },
+                    CancellationToken.None,
+                ]
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var preserved = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
+        preserved.Should().HaveCount(2);
+        preserved.Should().OnlyContain(trade => trade.AssetName.Contains("S O:"));
+
+        CongressionalTrade LegacyTrade(string subholding) =>
+            new()
+            {
+                CongressMember = member,
+                CongressMemberId = member.Id,
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 14),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName =
+                    $"Broadcom Inc. (AVGO) F S: New S O: {subholding} D: Put option, strike price",
+                AssetType = "OP",
+                Subholding = "",
+                AmountFrom = 1_001,
+                AmountTo = 15_000,
+            };
     }
 
     [Fact]
