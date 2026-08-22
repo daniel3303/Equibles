@@ -42,7 +42,7 @@ public class CongressionalTradeSyncService
 
     // Congressional trade disclosures are available from 2012 (STOCK Act).
     private static readonly DateOnly EarliestAvailableDate = new(2012, 4, 1);
-    private const int TradeParserVersion = 2;
+    private const int TradeParserVersion = 3;
     private const int ReprocessPerCycleLimit = 1_000;
 
     // A filing with a transaction whose ticker is not (yet) a tracked stock
@@ -533,37 +533,20 @@ public class CongressionalTradeSyncService
         }
 
         var repairs = new List<CongressionalTrade>();
-        foreach (var legacyGroup in legacyCandidates.GroupBy(candidate => candidate.Identity))
+        foreach (var legacyCandidate in legacyCandidates)
         {
-            if (!incomingByIdentity.TryGetValue(legacyGroup.Key, out var candidates))
+            if (!incomingByIdentity.TryGetValue(legacyCandidate.Identity, out var candidates))
                 continue;
-            var activeCandidates = candidates.Where(incoming.Contains).ToList();
-            if (activeCandidates.Count == 0)
-                continue;
-
-            var groupedLegacy = legacyGroup.ToList();
-            if (groupedLegacy.Count != 1)
-            {
-                incoming.RemoveAll(candidate => activeCandidates.Contains(candidate));
-                _logger.LogWarning(
-                    "Deferred congressional trade inline-metadata repair because {Count} legacy rows share the deployed identity",
-                    groupedLegacy.Count
-                );
-                continue;
-            }
-
-            var legacyCandidate = groupedLegacy[0];
             var legacy = legacyCandidate.Trade;
             if (legacy.Subholding != "" && legacy.Subholding != legacyCandidate.CleanedSubholding)
             {
-                incoming.RemoveAll(candidate => activeCandidates.Contains(candidate));
                 _logger.LogWarning(
                     "Deferred congressional trade inline-metadata repair because stored and filed subholdings conflict"
                 );
                 continue;
             }
 
-            var matchingSubholding = activeCandidates
+            var matchingSubholding = candidates
                 .Where(candidate => candidate.Subholding == legacyCandidate.CleanedSubholding)
                 .ToList();
             List<CongressionalTrade> selectedCandidates;
@@ -584,16 +567,12 @@ public class CongressionalTradeSyncService
 
             if (selectedCandidates.Count == 0)
             {
-                incoming.RemoveAll(candidate => activeCandidates.Contains(candidate));
                 _logger.LogWarning(
                     "Deferred congressional trade inline-metadata repair because replay did not supply one authoritative account and asset type"
                 );
                 continue;
             }
 
-            incoming.RemoveAll(candidate =>
-                activeCandidates.Contains(candidate) && !selectedCandidates.Contains(candidate)
-            );
             repairs.Add(legacy);
         }
 
@@ -614,11 +593,14 @@ public class CongressionalTradeSyncService
         CancellationToken ct
     )
     {
+        if (trades.Count == 0)
+            return;
+
         await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
         await RepairLegacyInlineSubholdingNames(trades, dbContext, ct);
+        await RepairLegacyEmptyFiledMetadata(trades, dbContext, ct);
         await RepairLegacyZeroFloorAmounts(trades, dbContext, ct);
-        var expandCompatibleTrades = CollapseExpandPhaseCollisions(trades);
-        await WarnOnPersistedExpandPhaseCollisions(expandCompatibleTrades, dbContext, ct);
+        RemoveUnidentifiedMetadataDuplicates(trades);
 
         // Must match the unique index on CongressionalTrade exactly (see the identity note on
         // the entity) or ON CONFLICT has no arbiter and the upsert throws. AssetName
@@ -626,7 +608,7 @@ public class CongressionalTradeSyncService
         // CleanAssetName output — see the invariant note on CleanAssetName.
         await dbContext
             .Set<CongressionalTrade>()
-            .UpsertRange(expandCompatibleTrades)
+            .UpsertRange(trades)
             .On(t => new
             {
                 t.CommonStockId,
@@ -637,24 +619,10 @@ public class CongressionalTradeSyncService
                 t.OwnerType,
                 t.AmountFrom,
                 t.AmountTo,
+                t.AssetType,
+                t.Subholding,
             })
-            // Phase 1 of the account-aware rollout keeps the old conflict target so a worker
-            // from the preceding release remains compatible while the additive columns deploy.
-            // Replays still enrich existing rows with the newly retained filed facts.
-            .WhenMatched(
-                (existing, incoming) =>
-                    new CongressionalTrade
-                    {
-                        AssetType =
-                            existing.AssetType != "" || existing.Subholding != ""
-                                ? existing.AssetType
-                                : incoming.AssetType,
-                        Subholding =
-                            existing.AssetType != "" || existing.Subholding != ""
-                                ? existing.Subholding
-                                : incoming.Subholding,
-                    }
-            )
+            .NoUpdate()
             .RunAsync(ct);
 
         await transaction.CommitAsync(ct);
@@ -664,6 +632,65 @@ public class CongressionalTradeSyncService
             trades.Count
         );
     }
+
+    private async Task RepairLegacyEmptyFiledMetadata(
+        IReadOnlyList<CongressionalTrade> incoming,
+        EquiblesFinancialDbContext dbContext,
+        CancellationToken ct
+    )
+    {
+        var authoritativeIdentities = incoming
+            .Where(HasFiledMetadata)
+            .Select(InlineMetadataRepairIdentity.From)
+            .ToHashSet();
+        if (authoritativeIdentities.Count == 0)
+            return;
+
+        var stockIds = incoming.Select(t => t.CommonStockId).Distinct().ToList();
+        var memberIds = incoming.Select(t => t.CongressMemberId).Distinct().ToList();
+        var firstDate = incoming.Min(t => t.TransactionDate);
+        var lastDate = incoming.Max(t => t.TransactionDate);
+        var legacyRows = await dbContext
+            .Set<CongressionalTrade>()
+            .Where(t =>
+                stockIds.Contains(t.CommonStockId)
+                && memberIds.Contains(t.CongressMemberId)
+                && t.TransactionDate >= firstDate
+                && t.TransactionDate <= lastDate
+                && t.AssetType == ""
+                && t.Subholding == ""
+            )
+            .ToListAsync(ct);
+        var repairs = legacyRows
+            .Where(legacy =>
+                authoritativeIdentities.Contains(InlineMetadataRepairIdentity.From(legacy))
+            )
+            .ToList();
+        if (repairs.Count == 0)
+            return;
+
+        dbContext.RemoveRange(repairs);
+        await dbContext.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "Removed {Count} legacy congressional trades whose empty filed metadata was supplied by source replay",
+            repairs.Count
+        );
+    }
+
+    private static void RemoveUnidentifiedMetadataDuplicates(List<CongressionalTrade> trades)
+    {
+        var authoritativeIdentities = trades
+            .Where(HasFiledMetadata)
+            .Select(InlineMetadataRepairIdentity.From)
+            .ToHashSet();
+        trades.RemoveAll(trade =>
+            !HasFiledMetadata(trade)
+            && authoritativeIdentities.Contains(InlineMetadataRepairIdentity.From(trade))
+        );
+    }
+
+    private static bool HasFiledMetadata(CongressionalTrade trade) =>
+        !string.IsNullOrEmpty(trade.AssetType) || !string.IsNullOrEmpty(trade.Subholding);
 
     private async Task RepairLegacyZeroFloorAmounts(
         List<CongressionalTrade> incoming,
@@ -718,81 +745,6 @@ public class CongressionalTradeSyncService
         );
     }
 
-    private List<CongressionalTrade> CollapseExpandPhaseCollisions(List<CongressionalTrade> trades)
-    {
-        var collapsed = new List<CongressionalTrade>();
-        foreach (var group in trades.GroupBy(TradeCurrentIdentity.From))
-        {
-            var selected = group
-                .OrderByDescending(t => !string.IsNullOrEmpty(t.Subholding))
-                .ThenByDescending(t => !string.IsNullOrEmpty(t.AssetType))
-                .First();
-            collapsed.Add(selected);
-            if (
-                group.Any(t =>
-                    t.Subholding != selected.Subholding || t.AssetType != selected.AssetType
-                )
-            )
-            {
-                _logger.LogWarning(
-                    "Deferred {Count} congressional trades distinguished only by asset type or subholding until the account-aware uniqueness contract is deployed",
-                    group.Count() - 1
-                );
-            }
-        }
-
-        return collapsed;
-    }
-
-    private async Task WarnOnPersistedExpandPhaseCollisions(
-        IReadOnlyList<CongressionalTrade> incoming,
-        EquiblesFinancialDbContext dbContext,
-        CancellationToken ct
-    )
-    {
-        if (incoming.Count == 0)
-            return;
-
-        var stockIds = incoming.Select(t => t.CommonStockId).Distinct().ToList();
-        var memberIds = incoming.Select(t => t.CongressMemberId).Distinct().ToList();
-        var firstDate = incoming.Min(t => t.TransactionDate);
-        var lastDate = incoming.Max(t => t.TransactionDate);
-        var persisted = await dbContext
-            .Set<CongressionalTrade>()
-            .AsNoTracking()
-            .Where(t =>
-                stockIds.Contains(t.CommonStockId)
-                && memberIds.Contains(t.CongressMemberId)
-                && t.TransactionDate >= firstDate
-                && t.TransactionDate <= lastDate
-            )
-            .ToListAsync(ct);
-        var persistedByIdentity = persisted.ToDictionary(TradeCurrentIdentity.From);
-
-        var collisionCount = incoming.Count(candidate =>
-            persistedByIdentity.TryGetValue(TradeCurrentIdentity.From(candidate), out var existing)
-            && MetadataPairConflicts(existing, candidate)
-        );
-        if (collisionCount > 0)
-        {
-            _logger.LogWarning(
-                "Deferred {Count} congressional trades distinguished from stored rows only by asset type or subholding until the account-aware uniqueness contract is deployed",
-                collisionCount
-            );
-        }
-    }
-
-    private static bool MetadataPairConflicts(
-        CongressionalTrade existing,
-        CongressionalTrade incoming
-    ) =>
-        (!string.IsNullOrEmpty(existing.AssetType) || !string.IsNullOrEmpty(existing.Subholding))
-        && (!string.IsNullOrEmpty(incoming.AssetType) || !string.IsNullOrEmpty(incoming.Subholding))
-        && (
-            !string.Equals(existing.AssetType, incoming.AssetType, StringComparison.Ordinal)
-            || !string.Equals(existing.Subholding, incoming.Subholding, StringComparison.Ordinal)
-        );
-
     private sealed record TradeBaseIdentity(
         Guid CommonStockId,
         Guid CongressMemberId,
@@ -811,16 +763,6 @@ public class CongressionalTradeSyncService
                 trade.AssetName,
                 trade.OwnerType
             );
-    }
-
-    private sealed record TradeCurrentIdentity(
-        TradeBaseIdentity Base,
-        long AmountFrom,
-        long AmountTo
-    )
-    {
-        public static TradeCurrentIdentity From(CongressionalTrade trade) =>
-            new(TradeBaseIdentity.From(trade), trade.AmountFrom, trade.AmountTo);
     }
 
     private sealed record TradeAmountRange(long AmountFrom, long AmountTo, DateOnly FilingDate);

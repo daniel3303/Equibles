@@ -424,9 +424,9 @@ public partial class HouseDisclosureClient
             if (TransactionAnchorRegex().IsMatch(lines[i]))
                 break;
 
-            var match = SubholdingRegex().Match(lines[i]);
-            if (match.Success)
-                return match.Groups[1].Value.Trim();
+            var details = ExtractInlineAssetDetails(lines[i]);
+            if (details.Subholding != null)
+                return details.Subholding;
         }
 
         return null;
