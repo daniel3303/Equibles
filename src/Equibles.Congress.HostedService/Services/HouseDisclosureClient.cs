@@ -54,11 +54,16 @@ public partial class HouseDisclosureClient
             ct.ThrowIfCancellationRequested();
             try
             {
-                var filings = await DownloadAndParseFilingIndex(year, fromDate, toDate, ct);
-                var newFilings = filings.Where(f => !processedSourceIds.Contains(f.DocId)).ToList();
+                var index = await DownloadAndParseFilingIndex(year, fromDate, toDate, ct);
+                if (!index.IsComplete)
+                    result.IsComplete = false;
+
+                var newFilings = index
+                    .Filings.Where(f => !processedSourceIds.Contains(f.DocId))
+                    .ToList();
                 _logger.LogInformation(
                     "Found {Count} House PTR filings for year {Year} ({New} not yet ingested)",
-                    filings.Count,
+                    index.Filings.Count,
                     year,
                     newFilings.Count
                 );
@@ -73,7 +78,10 @@ public partial class HouseDisclosureClient
                         // A missing PDF is not handled: leave the filing
                         // unrecorded so it retries once the file appears.
                         if (txns == null)
+                        {
+                            result.IsComplete = false;
                             continue;
+                        }
 
                         foreach (var txn in txns)
                         {
@@ -92,6 +100,7 @@ public partial class HouseDisclosureClient
                     }
                     catch (Exception ex)
                     {
+                        result.IsComplete = false;
                         // Not recorded as processed — the filing retries next cycle.
                         _logger.LogWarning(
                             ex,
@@ -108,6 +117,7 @@ public partial class HouseDisclosureClient
             }
             catch (Exception ex)
             {
+                result.IsComplete = false;
                 _logger.LogWarning(
                     ex,
                     "Failed to download House filing index for year {Year}",
@@ -123,7 +133,7 @@ public partial class HouseDisclosureClient
         return result;
     }
 
-    private async Task<List<HouseFiling>> DownloadAndParseFilingIndex(
+    private async Task<HouseFilingIndexResult> DownloadAndParseFilingIndex(
         int year,
         DateOnly from,
         DateOnly to,
@@ -138,7 +148,11 @@ public partial class HouseDisclosureClient
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             _logger.LogDebug("House FD ZIP not found for year {Year}", year);
-            return [];
+            throw new HttpRequestException(
+                $"House financial-disclosure index is unavailable for {year}",
+                null,
+                response.StatusCode
+            );
         }
 
         response.EnsureSuccessStatusCode();
@@ -149,41 +163,74 @@ public partial class HouseDisclosureClient
         var xmlEntry = archive.GetEntry($"{year}FD.xml");
         if (xmlEntry == null)
         {
-            _logger.LogWarning("No XML index found in House FD ZIP for year {Year}", year);
-            return [];
+            throw new InvalidDataException(
+                $"House financial-disclosure ZIP for {year} has no {year}FD.xml index"
+            );
         }
 
         await using var xmlStream = xmlEntry.Open();
         var doc = await XDocument.LoadAsync(xmlStream, LoadOptions.None, ct);
+        var rootName = doc.Root?.Name.LocalName;
+        var members = doc.Descendants("Member").ToList();
+        if (
+            (rootName != "FinancialDisclosure" && rootName != "FinancialDisclosures")
+            || members.Count == 0
+        )
+        {
+            throw new InvalidDataException(
+                $"House financial-disclosure index for {year} has an unrecognized XML shape"
+            );
+        }
 
-        return doc.Descendants("Member")
-            .Where(m => m.Element("FilingType")?.Value == "P")
-            .Select(m =>
+        var filings = new List<HouseFiling>();
+        var isComplete = true;
+        foreach (var member in members)
+        {
+            var filingType = member.Element("FilingType")?.Value?.Trim();
+            if (!ValidFilingTypes.Contains(filingType ?? ""))
             {
-                string TrimmedField(string elementName) =>
-                    m.Element(elementName)?.Value?.Trim() ?? "";
-
-                var filingDateStr = m.Element("FilingDate")?.Value;
-                DateOnly.TryParse(filingDateStr, out var filingDate);
-                var prefix = TrimmedField("Prefix");
-                var first = TrimmedField("First");
-                var last = TrimmedField("Last");
-                var name = NormalizeMemberName($"{prefix} {first} {last}");
-
-                return new HouseFiling(
-                    name,
-                    m.Element("DocID")?.Value ?? "",
-                    filingDate,
-                    m.Element("StateDst")?.Value ?? ""
+                isComplete = false;
+                _logger.LogWarning(
+                    "Skipping House disclosure index row with invalid filing type '{FilingType}' for year {Year}",
+                    filingType,
+                    year
                 );
-            })
-            .Where(f =>
-                !string.IsNullOrEmpty(f.DocId)
-                && !string.IsNullOrEmpty(f.MemberName)
-                && f.FilingDate >= from
-                && f.FilingDate <= to
-            )
-            .ToList();
+                continue;
+            }
+
+            if (filingType != "P")
+                continue;
+
+            string TrimmedField(string elementName) =>
+                member.Element(elementName)?.Value?.Trim() ?? "";
+
+            var filingDateText = TrimmedField("FilingDate");
+            var filingDate = ParseDate(filingDateText);
+            var name = NormalizeMemberName(
+                $"{TrimmedField("Prefix")} {TrimmedField("First")} {TrimmedField("Last")}"
+            );
+            var docId = TrimmedField("DocID");
+
+            if (string.IsNullOrEmpty(docId) || string.IsNullOrEmpty(name) || filingDate == null)
+            {
+                isComplete = false;
+                _logger.LogWarning(
+                    "Skipping malformed House PTR index row for year {Year}: DocID '{DocId}', member '{Member}', filing date '{FilingDate}'",
+                    year,
+                    docId,
+                    name,
+                    filingDateText
+                );
+                continue;
+            }
+
+            if (filingDate < from || filingDate > to)
+                continue;
+
+            filings.Add(new HouseFiling(name, docId, filingDate.Value, TrimmedField("StateDst")));
+        }
+
+        return new HouseFilingIndexResult(filings, isComplete);
     }
 
     // Returns null when the PDF is missing (404) so the caller can tell "not
@@ -210,7 +257,15 @@ public partial class HouseDisclosureClient
         response.EnsureSuccessStatusCode();
 
         var pdfBytes = await response.Content.ReadAsByteArrayAsync(ct);
-        return ParsePtrPdf(pdfBytes, filing.MemberName, filing.FilingDate);
+        var parsed = ParsePtrPdfWithShape(pdfBytes, filing.MemberName, filing.FilingDate);
+        if (parsed.Transactions.Count == 0 || parsed.RejectedSourceRowCount > 0)
+        {
+            throw new InvalidDataException(
+                $"House PTR PDF {filing.DocId} has no recognized transaction rows"
+            );
+        }
+
+        return parsed.Transactions;
     }
 
     // PdfPig's page.Text concatenates glyphs with no line breaks, so the PTR
@@ -221,14 +276,25 @@ public partial class HouseDisclosureClient
         byte[] pdfBytes,
         string memberName,
         DateOnly filingDate
+    ) => ParsePtrPdfWithShape(pdfBytes, memberName, filingDate).Transactions;
+
+    private static HousePtrParseResult ParsePtrPdfWithShape(
+        byte[] pdfBytes,
+        string memberName,
+        DateOnly filingDate
     )
     {
         using var document = PdfDocument.Open(pdfBytes);
         var lines = new List<string>();
         foreach (var page in document.GetPages())
             lines.AddRange(ExtractLines(page));
-        return ParseTransactionLines(lines, memberName, filingDate);
+        return ParseTransactionLinesWithShape(lines, memberName, filingDate);
     }
+
+    private sealed record HouseFilingIndexResult(
+        IReadOnlyList<HouseFiling> Filings,
+        bool IsComplete
+    );
 
     // Cluster words by their vertical position into visual lines, then order
     // each line left-to-right. PdfPig separates table columns with real word
@@ -280,6 +346,12 @@ public partial class HouseDisclosureClient
         IReadOnlyList<string> rawLines,
         string memberName,
         DateOnly filingDate
+    ) => ParseTransactionLinesWithShape(rawLines, memberName, filingDate).Transactions;
+
+    internal static HousePtrParseResult ParseTransactionLinesWithShape(
+        IReadOnlyList<string> rawLines,
+        string memberName,
+        DateOnly filingDate
     )
     {
         // Scrub the reprinted column-header block from every line first. The word clustering
@@ -299,17 +371,20 @@ public partial class HouseDisclosureClient
         }
 
         var transactions = new List<DisclosureTransaction>();
+        var rejectedSourceRowCount = 0;
 
         for (var i = 0; i < lines.Count; i++)
         {
-            // Field-label lines ("Filing Status:", "Description:") and the
-            // table header carry a colon; real transaction rows never do.
-            if (lines[i].Contains(':'))
+            if (IsFieldLabelLine(lines[i]))
                 continue;
 
             var anchor = TransactionAnchorRegex().Match(lines[i]);
             if (!anchor.Success)
+            {
+                if (LooksLikeMalformedTransactionRow(lines[i]))
+                    rejectedSourceRowCount++;
                 continue;
+            }
 
             var assetText = lines[i][..anchor.Index];
             var amountText = lines[i][anchor.Index..];
@@ -323,18 +398,38 @@ public partial class HouseDisclosureClient
                     amountText += " " + amountPart;
             }
 
+            var subholding = FindSubholding(lines, i + 1);
+
             var transaction = BuildTransaction(
                 assetText,
                 amountText,
                 anchor,
                 memberName,
-                filingDate
+                filingDate,
+                subholding
             );
             if (transaction != null)
                 transactions.Add(transaction);
+            else
+                rejectedSourceRowCount++;
         }
 
-        return transactions;
+        return new HousePtrParseResult(transactions, rejectedSourceRowCount);
+    }
+
+    private static string FindSubholding(IReadOnlyList<string> lines, int start)
+    {
+        for (var i = start; i < lines.Count; i++)
+        {
+            if (TransactionAnchorRegex().IsMatch(lines[i]))
+                break;
+
+            var match = SubholdingRegex().Match(lines[i]);
+            if (match.Success)
+                return match.Groups[1].Value.Trim();
+        }
+
+        return null;
     }
 
     // Lines that continue the current row's asset name or amount: not the next
@@ -343,9 +438,10 @@ public partial class HouseDisclosureClient
     {
         if (
             string.IsNullOrWhiteSpace(line)
-            || line.Contains(':')
+            || IsFieldLabelLine(line)
             || line.StartsWith('*')
             || IsTableHeaderFragment(line)
+            || LooksLikeMalformedTransactionRow(line)
         )
             return false;
         return !TransactionAnchorRegex().IsMatch(line);
@@ -374,6 +470,11 @@ public partial class HouseDisclosureClient
         PtrHeaderTokens.Count(token => line.Contains(token, StringComparison.OrdinalIgnoreCase))
         >= 3;
 
+    private static bool LooksLikeMalformedTransactionRow(string line) =>
+        !IsFieldLabelLine(line) && DateTokenRegex().IsMatch(line);
+
+    private static bool IsFieldLabelLine(string line) => FieldLabelRegex().IsMatch(line);
+
     // A continuation line holds asset text, a wrapped amount ("$5,000,000"), or
     // both; the amount is always the trailing "$…" run.
     private static (string asset, string amount) SplitContinuation(string line)
@@ -387,7 +488,8 @@ public partial class HouseDisclosureClient
         string amountText,
         Match anchor,
         string memberName,
-        DateOnly filingDate
+        DateOnly filingDate,
+        string subholding
     )
     {
         var txType = ParseTransactionType(anchor.Groups[1].Value);
@@ -415,8 +517,12 @@ public partial class HouseDisclosureClient
             assetText = assetText[ownerMatch.Length..].Trim();
         }
 
-        // Drop the bracketed asset-type code ("[ST]", "[OP]", …) so it can't be
-        // mistaken for a ticker when the asset has no parenthesised symbol.
+        // Retain the filed code before removing it from the name, where it could otherwise be
+        // mistaken for a ticker when an asset has no parenthesised symbol.
+        var assetTypeMatch = AssetTypeCodeRegex().Match(assetText);
+        var assetType = assetTypeMatch.Success
+            ? assetTypeMatch.Groups[1].Value.ToUpperInvariant()
+            : null;
         assetText = AssetTypeCodeRegex().Replace(assetText, " ").Trim();
 
         // The PDF's row checkboxes extract as "gfedc"/"gfedcb" glued onto the asset name — strip
@@ -428,6 +534,8 @@ public partial class HouseDisclosureClient
             return null;
 
         var (amountFrom, amountTo) = ParseAmountRange(amountText);
+        if (amountFrom <= 0 || amountTo <= 0)
+            return null;
 
         return new DisclosureTransaction
         {
@@ -439,6 +547,8 @@ public partial class HouseDisclosureClient
             FilingDate = filingDate,
             TransactionType = txType.Value,
             OwnerType = owner,
+            AssetType = assetType,
+            Subholding = Truncate(subholding, 256),
             AmountFrom = amountFrom,
             AmountTo = amountTo,
         };
@@ -517,13 +627,49 @@ public partial class HouseDisclosureClient
     private static partial Regex TransactionAnchorRegex();
 
     // Bracketed asset-type code such as [ST], [OP], [OI].
-    [GeneratedRegex(@"\s*\[[A-Za-z]{1,3}\]\s*")]
+    [GeneratedRegex(@"\s*\[([A-Za-z]{1,3})\]\s*")]
     private static partial Regex AssetTypeCodeRegex();
+
+    [GeneratedRegex(@"^\s*Subholding\s+Of\s*:\s*(.+?)\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex SubholdingRegex();
+
+    [GeneratedRegex(@"\b\d{1,2}/\d{1,2}/\d{4}\b")]
+    private static partial Regex DateTokenRegex();
+
+    [GeneratedRegex(
+        @"^\s*(?:F\s+S|D|Filing\s+Status|Description|Subholding\s+Of|Digitally\s+Signed)\s*:",
+        RegexOptions.IgnoreCase
+    )]
+    private static partial Regex FieldLabelRegex();
+
+    private static readonly HashSet<string> ValidFilingTypes = new(StringComparer.Ordinal)
+    {
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "N",
+        "O",
+        "P",
+        "R",
+        "T",
+        "W",
+        "X",
+    };
 
     private record HouseFiling(
         string MemberName,
         string DocId,
         DateOnly FilingDate,
         string StateDst
+    );
+
+    internal sealed record HousePtrParseResult(
+        List<DisclosureTransaction> Transactions,
+        int RejectedSourceRowCount
     );
 }

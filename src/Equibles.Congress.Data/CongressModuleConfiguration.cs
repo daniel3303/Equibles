@@ -8,20 +8,26 @@ public class CongressModuleConfiguration : Equibles.Data.IFinancialModule
     public void ConfigureEntities(ModelBuilder builder)
     {
         builder.Entity<CongressMember>();
-        // Default value has no data annotation, so it must be Fluent: OwnerType is a required
-        // member of the trade upsert unique key, and the '' default lets the migration backfill
-        // pre-existing NULL rows when the column tightens to NOT NULL. ValueGeneratedNever is
-        // load-bearing: HasDefaultValue alone marks the column ValueGenerated.OnAdd, and the
-        // FlexLabs upsert rejects generated columns in its match key (the scraper writes the
-        // value on every insert, so nothing is ever DB-generated here).
-        builder
-            .Entity<CongressionalTrade>()
-            .Property(t => t.OwnerType)
-            .HasDefaultValue("")
-            .ValueGeneratedNever();
+        // These values are written by the scraper. The defaults make the additive migration safe
+        // for existing rows; ValueGeneratedNever keeps FlexLabs free to use them in a later
+        // account-aware conflict key after the expand release is deployed.
+        ConfigureRequiredTradeText(builder, t => t.OwnerType);
+        ConfigureRequiredTradeText(builder, t => t.AssetType);
+        ConfigureRequiredTradeText(builder, t => t.Subholding);
         builder.Entity<CongressionalAnnualDisclosure>();
         builder.Entity<CongressionalDisclosureLine>();
         builder.Entity<CongressionalFilingRecord>();
+        builder.Entity<CongressionalTradeImportPartition>();
         builder.Entity<CongressMemberRedirect>();
     }
+
+    private static void ConfigureRequiredTradeText(
+        ModelBuilder builder,
+        System.Linq.Expressions.Expression<Func<CongressionalTrade, string>> property
+    ) =>
+        builder
+            .Entity<CongressionalTrade>()
+            .Property(property)
+            .HasDefaultValue("")
+            .ValueGeneratedNever();
 }

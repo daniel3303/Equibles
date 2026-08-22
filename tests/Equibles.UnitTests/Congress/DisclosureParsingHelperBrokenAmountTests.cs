@@ -70,6 +70,15 @@ public class DisclosureParsingHelperBrokenAmountTests
     }
 
     [Fact]
+    public void ParseAmountRange_LoneStandardBracketFloor_RederivesCeiling()
+    {
+        var (from, to) = DisclosureParsingHelper.ParseAmountRange("$15,001");
+
+        Assert.Equal(15001, from);
+        Assert.Equal(50000, to);
+    }
+
+    [Fact]
     public void ParseAmountRange_TwoSeparateNumbers_NeverMerge()
     {
         // The rejoin only touches the exact comma+whitespace+three-digits shape; a genuine pair

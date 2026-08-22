@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Trimmed from the official 2025 House Financial Disclosure index on 2026-08-22. -->
+<FinancialDisclosure>
+  <Member>
+    <Prefix>Mr.</Prefix><Last>Ager</Last><First>Jamie Peterson</First><Suffix />
+    <FilingType>A</FilingType><StateDst>NC11</StateDst><Year>2025</Year>
+    <FilingDate>2/2/2026</FilingDate><DocID>10073311</DocID>
+  </Member>
+  <Member>
+    <Prefix>Hon.</Prefix><Last>Phillips</Last><First>Dean</First><Suffix />
+    <FilingType>B</FilingType><StateDst>MN03</StateDst><Year>2025</Year>
+    <FilingDate>1/23/2025</FilingDate><DocID>8220735</DocID>
+  </Member>
+  <Member>
+    <Prefix /><Last>Abel</Last><First>William P.</First><Suffix />
+    <FilingType>C</FilingType><StateDst>TX31</StateDst><Year>2025</Year>
+    <FilingDate>10/12/2025</FilingDate><DocID>10072640</DocID>
+  </Member>
+  <Member>
+    <Prefix /><Last>Aaron</Last><First>Richard</First><Suffix />
+    <FilingType>D</FilingType><StateDst>MI04</StateDst><Year>2025</Year>
+    <FilingDate>3/24/2025</FilingDate><DocID>40003749</DocID>
+  </Member>
+  <Member>
+    <Prefix>Hon.</Prefix><Last>Banks</Last><First>James E Hon</First><Suffix />
+    <FilingType>E</FilingType><StateDst>IN03</StateDst><Year>2025</Year>
+    <FilingDate>1/7/2025</FilingDate><DocID>8220720</DocID>
+  </Member>
+  <Member>
+    <Prefix>Hon.</Prefix><Last>Bresnahan</Last><First>Rob</First><Suffix />
+    <FilingType>G</FilingType><StateDst>PA08</StateDst><Year>2025</Year>
+    <FilingDate>4/14/2025</FilingDate><DocID>8220832</DocID>
+  </Member>
+  <Member>
+    <Prefix>Hon.</Prefix><Last>Grijalva</Last><First>Adelita</First><Suffix />
+    <FilingType>H</FilingType><StateDst>AZ07</StateDst><Year>2025</Year>
+    <FilingDate>8/11/2026</FilingDate><DocID>10076172</DocID>
+  </Member>
+  <Member>
+    <Prefix>Hon.</Prefix><Last>Adams</Last><First>Alma Shealey</First><Suffix />
+    <FilingType>O</FilingType><StateDst>NC12</StateDst><Year>2025</Year>
+    <FilingDate>5/12/2026</FilingDate><DocID>10077643</DocID>
+  </Member>
+  <Member>
+    <Prefix>Hon.</Prefix><Last>Aderholt</Last><First>Robert B.</First><Suffix />
+    <FilingType>P</FilingType><StateDst>AL04</StateDst><Year>2025</Year>
+    <FilingDate>9/10/2025</FilingDate><DocID>20032062</DocID>
+  </Member>
+  <Member>
+    <Prefix>Hon.</Prefix><Last>Allred</Last><First>Colin</First><Suffix />
+    <FilingType>T</FilingType><StateDst>TX32</StateDst><Year>2025</Year>
+    <FilingDate>5/2/2025</FilingDate><DocID>10063338</DocID>
+  </Member>
+  <Member>
+    <Prefix /><Last>Abrevaya</Last><First>David</First><Suffix />
+    <FilingType>W</FilingType><StateDst>IL09</StateDst><Year>2025</Year>
+    <FilingDate>5/19/2025</FilingDate><DocID>8005</DocID>
+  </Member>
+  <Member>
+    <Prefix /><Last>Adeimy</Last><First>Deborah</First><Suffix />
+    <FilingType>X</FilingType><StateDst>FL22</StateDst><Year>2025</Year>
+    <FilingDate>5/22/2025</FilingDate><DocID>30023997</DocID>
+  </Member>
+</FinancialDisclosure>

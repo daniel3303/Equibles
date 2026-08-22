@@ -134,7 +134,9 @@ The cursor pattern means re-running is cheap (a single query for `max(date)` per
 
 The two congressional scrapers re-read a fixed recent window every cycle instead of advancing a `max(date)` watermark, because members file and amend disclosures well after the reporting period — a monotonic cursor would step past a late filing and never pick it up.
 
-- [`CongressionalTradeSyncService`](../../src/Equibles.Congress.HostedService/Services/CongressionalTradeSyncService.cs) re-reads trades from `MinSyncDate` (default: the trailing 90 days) to today from both the `SenateDisclosureClient` and `HouseDisclosureClient`, then matches each transaction to a tracked stock.
+- [`CongressionalTradeSyncService`](../../src/Equibles.Congress.HostedService/Services/CongressionalTradeSyncService.cs) re-reads trades from `MinSyncDate` (default: January 1 of the current year) to today from both the `SenateDisclosureClient` and `HouseDisclosureClient`, then matches each transaction to a tracked stock.
+- One older chamber/year partition is replayed per cycle, newest missing year first down to the STOCK Act start in 2012. `CongressionalTradeImportPartition` is written only after the source index and every recordable filing complete, and stores the parser version so a later parser can reopen every year. Unavailable or malformed archives retry instead of becoming false empty years.
+- `CongressionalFilingRecord.ParserVersion` replays filings after parser changes. The trade parser retains the filed instrument type and account/subholding, and treats a lone standard range floor as that disclosure bracket rather than as a zero-based band.
 - [`CongressionalAnnualDisclosureSyncService`](../../src/Equibles.Congress.HostedService/Services/CongressionalAnnualDisclosureSyncService.cs) re-reads annual financial disclosures across a span of coverage years (House per year, Senate by submitted date) and upserts each report by its stable key, so a late amendment refreshes the stored row rather than inserting a duplicate.
 
 ## Cold-start patterns

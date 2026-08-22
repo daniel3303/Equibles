@@ -32,7 +32,8 @@ public class CongressionalTradeSyncServiceBuildTradesTests
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
-            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
         );
 
         var member = new CongressMember { Id = Guid.NewGuid(), Name = "Jane Smith" };
@@ -48,6 +49,8 @@ public class CongressionalTradeSyncServiceBuildTradesTests
             MemberName = "Jane Smith",
             Ticker = "AAPL",
             AssetName = null,
+            AssetType = "OP",
+            Subholding = "Brokerage IRA",
             TransactionType = CongressTransactionType.Purchase,
             OwnerType = "SP",
             TransactionDate = new DateOnly(2025, 1, 14),
@@ -80,5 +83,7 @@ public class CongressionalTradeSyncServiceBuildTradesTests
         trade.CommonStockId.Should().Be(stock.Id);
         trade.AmountFrom.Should().Be(1001);
         trade.AmountTo.Should().Be(15000);
+        trade.AssetType.Should().Be("OP");
+        trade.Subholding.Should().Be("Brokerage IRA");
     }
 }

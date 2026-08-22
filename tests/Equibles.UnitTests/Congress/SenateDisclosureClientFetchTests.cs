@@ -81,6 +81,113 @@ public class SenateDisclosureClientFetchTests
         session.FetchedUrls.Should().Contain(ReportUrl);
     }
 
+    [Fact]
+    public async Task GetRecentTransactions_ReportWithoutPtrTable_IsIncompleteAndNotProcessed()
+    {
+        var session = new FakeSenateBrowserSession();
+        session.Script.Enqueue(() => Ok(SearchJson(recordsTotal: 1, rowCount: 1)));
+        session.Script.Enqueue(() => Ok("<html><body>temporarily unavailable</body></html>"));
+
+        var result = await Sut(session)
+            .GetRecentTransactions(
+                new DateOnly(2024, 1, 1),
+                new DateOnly(2024, 1, 31),
+                new HashSet<string>(),
+                CancellationToken.None
+            );
+
+        result.IsComplete.Should().BeFalse();
+        result.Transactions.Should().BeEmpty();
+        result.ProcessedFilings.Should().BeEmpty("the malformed report must retry later");
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_PtrTableWithPlaceholderRow_IsIncompleteAndNotProcessed()
+    {
+        var session = new FakeSenateBrowserSession();
+        session.Script.Enqueue(() => Ok(SearchJson(recordsTotal: 1, rowCount: 1)));
+        session.Script.Enqueue(() =>
+            Ok(
+                """
+                <table>
+                  <thead><tr><th>Transaction Date</th><th>Asset</th><th>Type</th><th>Amount</th></tr></thead>
+                  <tbody><tr><td>--</td><td>--</td><td>--</td><td>--</td></tr></tbody>
+                </table>
+                """
+            )
+        );
+
+        var result = await Sut(session)
+            .GetRecentTransactions(
+                new DateOnly(2024, 1, 1),
+                new DateOnly(2024, 1, 31),
+                new HashSet<string>(),
+                CancellationToken.None
+            );
+
+        result.IsComplete.Should().BeFalse();
+        result.Transactions.Should().BeEmpty();
+        result.ProcessedFilings.Should().BeEmpty("a placeholder row is not a PTR transaction");
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_PtrRowWithInvalidAmount_IsIncompleteAndNotProcessed()
+    {
+        var session = new FakeSenateBrowserSession();
+        session.Script.Enqueue(() => Ok(SearchJson(recordsTotal: 1, rowCount: 1)));
+        session.Script.Enqueue(() =>
+            Ok(
+                """
+                <table>
+                  <thead><tr><th>Transaction Date</th><th>Asset</th><th>Type</th><th>Amount</th></tr></thead>
+                  <tbody><tr><td>01/10/2024</td><td>Apple Inc. (AAPL)</td><td>Purchase</td><td>Unavailable</td></tr></tbody>
+                </table>
+                """
+            )
+        );
+
+        var result = await Sut(session)
+            .GetRecentTransactions(
+                new DateOnly(2024, 1, 1),
+                new DateOnly(2024, 1, 31),
+                new HashSet<string>(),
+                CancellationToken.None
+            );
+
+        result.IsComplete.Should().BeFalse();
+        result.Transactions.Should().BeEmpty();
+        result.ProcessedFilings.Should().BeEmpty("an invalid amount must retry later");
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_PtrRowWithUnknownType_IsIncompleteAndNotProcessed()
+    {
+        var session = new FakeSenateBrowserSession();
+        session.Script.Enqueue(() => Ok(SearchJson(recordsTotal: 1, rowCount: 1)));
+        session.Script.Enqueue(() =>
+            Ok(
+                """
+                <table>
+                  <thead><tr><th>Transaction Date</th><th>Asset</th><th>Type</th><th>Amount</th></tr></thead>
+                  <tbody><tr><td>01/10/2024</td><td>Apple Inc. (AAPL)</td><td>Corrupt</td><td>$1,001 - $15,000</td></tr></tbody>
+                </table>
+                """
+            )
+        );
+
+        var result = await Sut(session)
+            .GetRecentTransactions(
+                new DateOnly(2024, 1, 1),
+                new DateOnly(2024, 1, 31),
+                new HashSet<string>(),
+                CancellationToken.None
+            );
+
+        result.IsComplete.Should().BeFalse();
+        result.Transactions.Should().BeEmpty();
+        result.ProcessedFilings.Should().BeEmpty("an unknown type must retry after parser review");
+    }
+
     private static string SearchJsonInvalidRows(int recordsTotal, int rowCount)
     {
         // Rows with no href → ParseReportRow rejects them, so pagination is
@@ -104,7 +211,7 @@ public class SenateDisclosureClientFetchTests
         session.Script.Enqueue(() => Ok(SearchJsonInvalidRows(recordsTotal: 150, rowCount: 100)));
         session.Script.Enqueue(() => Ok(SearchJsonInvalidRows(recordsTotal: 150, rowCount: 50)));
 
-        await Sut(session)
+        var result = await Sut(session)
             .GetRecentTransactions(
                 new DateOnly(2024, 1, 1),
                 new DateOnly(2024, 1, 31),
@@ -113,7 +220,28 @@ public class SenateDisclosureClientFetchTests
             );
 
         // Two search pages fetched, zero reports (all rows rejected).
+        result.IsComplete.Should().BeFalse();
         session.FetchedUrls.Should().AllBe(searchUrl);
+        session.FetchedUrls.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_RecordsTotalChangesBetweenPages_RejectsSearch()
+    {
+        var session = new FakeSenateBrowserSession();
+        session.Script.Enqueue(() => Ok(SearchJsonInvalidRows(recordsTotal: 150, rowCount: 100)));
+        session.Script.Enqueue(() => Ok(SearchJsonInvalidRows(recordsTotal: 100, rowCount: 0)));
+
+        var act = async () =>
+            await Sut(session)
+                .GetRecentTransactions(
+                    new DateOnly(2024, 1, 1),
+                    new DateOnly(2024, 1, 31),
+                    new HashSet<string>(),
+                    CancellationToken.None
+                );
+
+        await act.Should().ThrowAsync<InvalidDataException>();
         session.FetchedUrls.Should().HaveCount(2);
     }
 

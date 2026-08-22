@@ -43,19 +43,19 @@ public class SenateDisclosureClient : IAsyncDisposable
     {
         await _session.EnsureAuthenticated(ct);
 
-        var reports = await SearchPtrReports(fromDate, toDate, ct);
-        var newReports = reports
-            .Where(r => !processedSourceIds.Contains(ExtractReportId(r.ReportUrl)))
+        var search = await SearchPtrReports(fromDate, toDate, ct);
+        var newReports = search
+            .Reports.Where(r => !processedSourceIds.Contains(ExtractReportId(r.ReportUrl)))
             .ToList();
         _logger.LogInformation(
             "Found {Count} Senate PTR reports between {From} and {To} ({New} not yet ingested)",
-            reports.Count,
+            search.Reports.Count,
             fromDate,
             toDate,
             newReports.Count
         );
 
-        var result = new DisclosureFetchResult();
+        var result = new DisclosureFetchResult { IsComplete = search.IsComplete };
 
         foreach (var report in newReports)
         {
@@ -77,6 +77,7 @@ public class SenateDisclosureClient : IAsyncDisposable
             }
             catch (Exception ex)
             {
+                result.IsComplete = false;
                 // Not recorded as processed — the report retries next cycle.
                 _logger.LogWarning(
                     ex,
@@ -95,14 +96,16 @@ public class SenateDisclosureClient : IAsyncDisposable
         return result;
     }
 
-    private async Task<List<SenateReport>> SearchPtrReports(
+    private async Task<SenateReportSearchResult> SearchPtrReports(
         DateOnly from,
         DateOnly to,
         CancellationToken ct
     )
     {
         var reports = new List<SenateReport>();
+        var isComplete = true;
         var start = 0;
+        int? expectedTotal = null;
         const int pageSize = 100;
 
         while (true)
@@ -129,15 +132,47 @@ public class SenateDisclosureClient : IAsyncDisposable
 
             var json = await FetchWithRetry(SearchDataUrl, formFields, ct);
             var result = JsonConvert.DeserializeObject<SenateSearchResponse>(json);
+            if (result == null)
+                throw new InvalidDataException("Senate PTR search returned no JSON envelope");
 
-            if (result?.Data == null || result.Data.Count == 0)
+            expectedTotal ??= result.RecordsTotal;
+            if (result.RecordsTotal != expectedTotal)
+            {
+                throw new InvalidDataException(
+                    $"Senate PTR search total changed from {expectedTotal} to {result.RecordsTotal} at offset {start}"
+                );
+            }
+
+            if (result.Data.Count == 0)
+            {
+                if (start < result.RecordsTotal)
+                {
+                    throw new InvalidDataException(
+                        $"Senate PTR search returned an empty page at {start} of {result.RecordsTotal}"
+                    );
+                }
                 break;
+            }
+
+            if (start + result.Data.Count > result.RecordsTotal)
+            {
+                throw new InvalidDataException(
+                    $"Senate PTR search returned {result.Data.Count} rows at {start} for a total of {result.RecordsTotal}"
+                );
+            }
 
             foreach (var row in result.Data)
             {
                 var report = ParseReportRow(row);
                 if (report != null)
+                {
                     reports.Add(report);
+                }
+                else if (!IsIntentionalPaperFiling(row))
+                {
+                    isComplete = false;
+                    _logger.LogWarning("Skipping malformed Senate PTR search row");
+                }
             }
 
             _logger.LogDebug(
@@ -147,12 +182,12 @@ public class SenateDisclosureClient : IAsyncDisposable
                 result.RecordsTotal
             );
 
-            start += pageSize;
+            start += result.Data.Count;
             if (start >= result.RecordsTotal)
                 break;
         }
 
-        return reports;
+        return new SenateReportSearchResult(reports, isComplete);
     }
 
     private SenateReport ParseReportRow(List<string> row)
@@ -193,19 +228,51 @@ public class SenateDisclosureClient : IAsyncDisposable
         return new SenateReport(memberName, reportUrl, dateSubmitted.Value);
     }
 
+    private static bool IsIntentionalPaperFiling(IReadOnlyList<string> row)
+    {
+        if (row.Count < 4)
+            return false;
+
+        var hrefMatch = HrefRegex().Match(row[3] ?? "");
+        if (!hrefMatch.Success)
+            return false;
+
+        var path = hrefMatch.Groups[1].Value;
+        var reportUrl = path.StartsWith("http") ? path : BaseUrl + path;
+        return IsValidDisclosureUrl(reportUrl, BaseUrl)
+            && reportUrl.Contains("/view/paper/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed record SenateReportSearchResult(
+        IReadOnlyList<SenateReport> Reports,
+        bool IsComplete
+    );
+
     private async Task<List<DisclosureTransaction>> FetchAndParseReport(
         SenateReport report,
         CancellationToken ct
     )
     {
         var html = await FetchWithRetry(report.ReportUrl, ct: ct);
-        return ParseTransactionsFromHtml(
+        var parsed = ParseTransactionsFromHtmlWithShape(
             html,
             report.MemberName,
             CongressPosition.Senator,
             report.DateSubmitted,
             _logger
         );
+        if (
+            !parsed.HasTransactionTable
+            || parsed.RecognizedSourceRowCount == 0
+            || parsed.RejectedSourceRowCount > 0
+        )
+        {
+            throw new InvalidDataException(
+                $"Senate PTR report {ExtractReportId(report.ReportUrl)} has no recognized transaction rows"
+            );
+        }
+
+        return parsed.Transactions;
     }
 
     /// <summary>

@@ -24,7 +24,8 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
-            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
         );
 
     private static List<CongressionalTrade> InvokeBuildTrades(

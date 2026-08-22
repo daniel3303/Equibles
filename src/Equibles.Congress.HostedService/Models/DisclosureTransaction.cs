@@ -23,6 +23,8 @@ public class DisclosureTransaction
     public DateOnly FilingDate { get; init; }
     public CongressTransactionType TransactionType { get; init; }
     public string OwnerType { get; init; }
+    public string AssetType { get; init; }
+    public string Subholding { get; init; }
     public long AmountFrom { get; init; }
     public long AmountTo { get; init; }
 }

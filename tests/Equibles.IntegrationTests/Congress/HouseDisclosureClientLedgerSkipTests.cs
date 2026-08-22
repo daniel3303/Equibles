@@ -10,10 +10,9 @@ namespace Equibles.IntegrationTests.Congress;
 
 /// <summary>
 /// Pins the ingested-filing ledger contract on the House PTR client: filings
-/// whose DocID is already recorded are never re-downloaded, a successfully
-/// parsed filing is reported back as processed (even with zero transactions),
-/// and a missing or unreadable PDF is NOT reported — so it retries on a later
-/// cycle instead of being lost.
+/// whose DocID is already recorded are never re-downloaded, while a blank,
+/// missing, or unreadable PDF is NOT reported — so it retries on a later cycle
+/// instead of being lost.
 /// </summary>
 public class HouseDisclosureClientLedgerSkipTests
 {
@@ -30,8 +29,7 @@ public class HouseDisclosureClientLedgerSkipTests
         + "<FilingDate>2024-02-01</FilingDate><StateDst>NY02</StateDst></Member>"
         + "</FinancialDisclosure>";
 
-    // A structurally valid one-page PDF with no text: parses to zero
-    // transactions, proving "handled with no items" is still recorded.
+    // A structurally valid one-page PDF with no text still lacks a recognizable PTR row.
     private static byte[] BlankPdf()
     {
         var builder = new PdfDocumentBuilder();
@@ -63,7 +61,7 @@ public class HouseDisclosureClientLedgerSkipTests
     }
 
     [Fact]
-    public async Task GetRecentTransactions_ParsedPdf_IsReportedProcessedEvenWithZeroTransactions()
+    public async Task GetRecentTransactions_BlankPdf_IsIncompleteAndNotProcessed()
     {
         var pdf = BlankPdf();
         var handler = new HouseHandler(
@@ -83,9 +81,8 @@ public class HouseDisclosureClientLedgerSkipTests
         );
 
         result.Transactions.Should().BeEmpty();
-        result.ProcessedFilings.Should().ContainSingle();
-        result.ProcessedFilings[0].SourceId.Should().Be(NewDocId);
-        result.ProcessedFilings[0].ItemCount.Should().Be(0);
+        result.IsComplete.Should().BeFalse();
+        result.ProcessedFilings.Should().BeEmpty();
     }
 
     [Fact]

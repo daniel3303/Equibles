@@ -47,7 +47,8 @@ public class CongressSyncServiceTests
             options,
             logger,
             errorReporter,
-            filingLedger
+            filingLedger,
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
         );
     }
 
@@ -907,21 +908,21 @@ public class CongressSyncServiceTests
 
         var fromDate = options.MinSyncDate.HasValue
             ? DateOnly.FromDateTime(options.MinSyncDate.Value)
-            : DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
+            : new DateOnly(DateTime.UtcNow.Year, 1, 1);
 
         fromDate.Should().Be(new DateOnly(2023, 1, 1));
     }
 
     [Fact]
-    public void WorkerOptions_MinSyncDateNull_DefaultsTo90DaysBack()
+    public void WorkerOptions_MinSyncDateNull_DefaultsToStartOfCurrentYear()
     {
         var options = new WorkerOptions { MinSyncDate = null };
 
         var fromDate = options.MinSyncDate.HasValue
             ? DateOnly.FromDateTime(options.MinSyncDate.Value)
-            : DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
+            : new DateOnly(DateTime.UtcNow.Year, 1, 1);
 
-        var expected = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
+        var expected = new DateOnly(DateTime.UtcNow.Year, 1, 1);
         fromDate.Should().Be(expected);
     }
 

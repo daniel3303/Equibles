@@ -38,7 +38,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             BindingFlags.NonPublic | BindingFlags.Instance
         );
 
-    private CongressionalTradeSyncService BuildSut()
+    private CongressionalTradeSyncService BuildSut(
+        ILogger<CongressionalTradeSyncService> logger = null
+    )
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(EquiblesFinancialDbContext), DbContext),
@@ -48,13 +50,26 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         return new CongressionalTradeSyncService(
             scopeFactory,
             Options.Create(new WorkerOptions()),
-            Substitute.For<ILogger<CongressionalTradeSyncService>>(),
+            logger ?? Substitute.For<ILogger<CongressionalTradeSyncService>>(),
             new ErrorReporter(
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
-            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
         );
+    }
+
+    private CongressionalTradeImportLedger BuildImportLedger()
+    {
+        var scopeFactory = ServiceScopeSubstitute.Create(
+            (typeof(EquiblesFinancialDbContext), DbContext),
+            (
+                typeof(CongressionalTradeImportPartitionRepository),
+                new CongressionalTradeImportPartitionRepository(DbContext)
+            )
+        );
+        return new CongressionalTradeImportLedger(scopeFactory);
     }
 
     private static DisclosureTransaction Txn(
@@ -62,7 +77,12 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         string ticker,
         string ownerType = "self",
         long amountFrom = 1_001,
-        long amountTo = 15_000
+        long amountTo = 15_000,
+        string assetType = "ST",
+        string subholding = "",
+        DateOnly? transactionDate = null,
+        DateOnly? filingDate = null,
+        string sourceId = null
     ) =>
         new()
         {
@@ -70,12 +90,15 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             Position = CongressPosition.Senator,
             Ticker = ticker,
             AssetName = "Apple Inc.",
-            TransactionDate = new DateOnly(2024, 6, 1),
-            FilingDate = new DateOnly(2024, 6, 15),
+            TransactionDate = transactionDate ?? new DateOnly(2024, 6, 1),
+            FilingDate = filingDate ?? new DateOnly(2024, 6, 15),
             TransactionType = CongressTransactionType.Purchase,
             OwnerType = ownerType,
+            AssetType = assetType,
+            Subholding = subholding,
             AmountFrom = amountFrom,
             AmountTo = amountTo,
+            SourceId = sourceId,
         };
 
     [Fact]
@@ -99,6 +122,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         var trades = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
         trades.Should().ContainSingle();
         trades[0].CongressMemberId.Should().Be(member.Id);
+        trades[0].AssetType.Should().Be("ST");
     }
 
     // A member can file several same-day purchases of the same stock that differ only in the
@@ -148,5 +172,445 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         (await verify.Set<CongressMember>().AsNoTracking().CountAsync()).Should().Be(0);
         (await verify.Set<CongressionalTrade>().AsNoTracking().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_TransactionAfterFiling_KeepsSourceUnpersisted()
+    {
+        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var transaction = Txn(
+            "Jane Doe",
+            "AAPL",
+            transactionDate: new DateOnly(2024, 6, 16),
+            filingDate: new DateOnly(2024, 6, 15),
+            sourceId: "future-date-filing"
+        );
+
+        var processTask = (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(),
+                [new List<DisclosureTransaction> { transaction }, CancellationToken.None]
+            );
+        await processTask;
+        var outcome = processTask.GetType().GetProperty("Result")!.GetValue(processTask)!;
+        var unpersisted =
+            (IEnumerable<string>)
+                outcome.GetType().GetProperty("UnpersistedSourceIds")!.GetValue(outcome)!;
+
+        unpersisted.Should().Contain("future-date-filing");
+        await using var verify = Fixture.CreateDbContext();
+        (await verify.Set<CongressionalTrade>().AsNoTracking().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_UnmatchedFutureTransaction_KeepsSourceUnpersisted()
+    {
+        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var transaction = Txn(
+            "Jane Doe",
+            null,
+            transactionDate: new DateOnly(2024, 6, 16),
+            filingDate: new DateOnly(2024, 6, 15),
+            sourceId: "tickerless-future-date-filing"
+        );
+
+        var processTask = (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(),
+                [new List<DisclosureTransaction> { transaction }, CancellationToken.None]
+            );
+        await processTask;
+        var outcome = processTask.GetType().GetProperty("Result")!.GetValue(processTask)!;
+        var unpersisted =
+            (IEnumerable<string>)
+                outcome.GetType().GetProperty("UnpersistedSourceIds")!.GetValue(outcome)!;
+
+        unpersisted.Should().Contain("tickerless-future-date-filing");
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_ReplayedRangeFloor_RepairsLegacyRowAndRetainsFiledMetadata()
+    {
+        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(stock, member);
+        DbContext.Add(
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CongressMemberId = member.Id,
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 15),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName = "Apple Inc.",
+                AmountFrom = 0,
+                AmountTo = 15_001,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var transactions = new List<DisclosureTransaction>
+        {
+            Txn(
+                "Jane Doe",
+                "AAPL",
+                amountFrom: 15_001,
+                amountTo: 50_000,
+                assetType: "OP",
+                subholding: "Brokerage IRA"
+            ),
+        };
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(BuildSut(), [transactions, CancellationToken.None]);
+
+        await using var verify = Fixture.CreateDbContext();
+        var repaired = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        repaired.AmountFrom.Should().Be(15_001);
+        repaired.AmountTo.Should().Be(50_000);
+        repaired.AssetType.Should().Be("OP");
+        repaired.Subholding.Should().Be("Brokerage IRA");
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_ReplayedExistingTrade_EnrichesEmptyFiledMetadata()
+    {
+        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(stock, member);
+        DbContext.Add(
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CongressMemberId = member.Id,
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 15),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName = "Apple Inc.",
+                AmountFrom = 1_001,
+                AmountTo = 15_000,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var transactions = new List<DisclosureTransaction>
+        {
+            Txn("Jane Doe", "AAPL", assetType: "OP", subholding: "Brokerage IRA"),
+        };
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(BuildSut(), [transactions, CancellationToken.None]);
+
+        await using var verify = Fixture.CreateDbContext();
+        var enriched = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        enriched.AssetType.Should().Be("OP");
+        enriched.Subholding.Should().Be("Brokerage IRA");
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_DifferentAccountArrivesLater_PreservesFirstStoredAccount()
+    {
+        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var sut = BuildSut();
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                sut,
+                [
+                    new List<DisclosureTransaction>
+                    {
+                        Txn("Jane Doe", "AAPL", subholding: "Account A"),
+                    },
+                    CancellationToken.None,
+                ]
+            );
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                sut,
+                [
+                    new List<DisclosureTransaction>
+                    {
+                        Txn("Jane Doe", "AAPL", subholding: "Account B"),
+                    },
+                    CancellationToken.None,
+                ]
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        stored.Subholding.Should().Be("Account A");
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_PartialStoredMetadata_DoesNotCreateHybridFiledIdentity()
+    {
+        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(stock, member);
+        DbContext.Add(
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CongressMemberId = member.Id,
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 15),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName = "Apple Inc.",
+                AssetType = "ST",
+                Subholding = "",
+                AmountFrom = 1_001,
+                AmountTo = 15_000,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var logger = Substitute.For<ILogger<CongressionalTradeSyncService>>();
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(logger),
+                [
+                    new List<DisclosureTransaction>
+                    {
+                        Txn("Jane Doe", "AAPL", assetType: "OP", subholding: "Brokerage IRA"),
+                    },
+                    CancellationToken.None,
+                ]
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        stored.AssetType.Should().Be("ST");
+        stored.Subholding.Should().BeEmpty();
+        var messages = logger
+            .ReceivedCalls()
+            .Where(call => call.GetArguments().Length > 2)
+            .Select(call => call.GetArguments()[2]?.ToString() ?? "")
+            .ToList();
+        messages.Should().Contain(message => message.Contains("Deferred 1 congressional trade"));
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_SameCycleMetadataCollision_IsLogged()
+    {
+        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var logger = Substitute.For<ILogger<CongressionalTradeSyncService>>();
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(logger),
+                [
+                    new List<DisclosureTransaction>
+                    {
+                        Txn("Jane Doe", "AAPL", assetType: "", subholding: ""),
+                        Txn("Jane Doe", "AAPL", assetType: "OP", subholding: "Brokerage IRA"),
+                    },
+                    CancellationToken.None,
+                ]
+            );
+
+        var messages = logger
+            .ReceivedCalls()
+            .Where(call => call.GetArguments().Length > 2)
+            .Select(call => call.GetArguments()[2]?.ToString() ?? "")
+            .ToList();
+        messages.Should().Contain(message => message.Contains("Deferred 1 congressional trade"));
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_ReplayedUnderAmount_RepairsLegacyZeroFloorRow()
+    {
+        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(stock, member);
+        DbContext.Add(
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CongressMemberId = member.Id,
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 15),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName = "Apple Inc.",
+                AmountFrom = 0,
+                AmountTo = 1_000,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(),
+                [
+                    new List<DisclosureTransaction>
+                    {
+                        Txn("Jane Doe", "AAPL", amountFrom: 1, amountTo: 1_000),
+                    },
+                    CancellationToken.None,
+                ]
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var repaired = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        repaired.AmountFrom.Should().Be(1);
+        repaired.AmountTo.Should().Be(1_000);
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_TwoReplayedRangeFloors_RepairsBothLegacyRows()
+    {
+        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(stock, member);
+        DbContext.AddRange(
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CongressMemberId = member.Id,
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 15),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName = "Apple Inc.",
+                AmountFrom = 0,
+                AmountTo = 15_001,
+            },
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CongressMemberId = member.Id,
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 15),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName = "Apple Inc.",
+                AmountFrom = 0,
+                AmountTo = 50_001,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(),
+                [
+                    new List<DisclosureTransaction>
+                    {
+                        Txn("Jane Doe", "AAPL", amountFrom: 15_001, amountTo: 50_000),
+                        Txn("Jane Doe", "AAPL", amountFrom: 50_001, amountTo: 100_000),
+                    },
+                    CancellationToken.None,
+                ]
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var stored = await verify
+            .Set<CongressionalTrade>()
+            .AsNoTracking()
+            .OrderBy(t => t.AmountFrom)
+            .ToListAsync();
+        stored
+            .Select(t => (t.AmountFrom, t.AmountTo))
+            .Should()
+            .Equal((15_001, 50_000), (50_001, 100_000));
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_ReplacementUpsertFails_RollsBackLegacyRepairDeletion()
+    {
+        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(stock, member);
+        DbContext.Add(
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CongressMemberId = member.Id,
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 15),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName = "Apple Inc.",
+                AmountFrom = 0,
+                AmountTo = 15_001,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var transactions = new List<DisclosureTransaction>
+        {
+            Txn(
+                "Jane Doe",
+                "AAPL",
+                amountFrom: 15_001,
+                amountTo: 50_000,
+                assetType: new string('X', 129)
+            ),
+        };
+
+        var act = async () =>
+            await (Task)
+                ProcessTransactionsMethod.Invoke(
+                    BuildSut(),
+                    [transactions, CancellationToken.None]
+                );
+
+        await act.Should().ThrowAsync<Exception>();
+
+        await using var verify = Fixture.CreateDbContext();
+        var legacy = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        legacy.AmountFrom.Should().Be(0);
+        legacy.AmountTo.Should().Be(15_001);
+    }
+
+    [Fact]
+    public async Task ImportLedger_NewerParserVersion_ReopensCompletedArchiveYear()
+    {
+        var ledger = BuildImportLedger();
+        var kind = CongressionalFilingKind.SenatePeriodicTransactionReport;
+        await ledger.RecordCompleted(kind, 2018, 1, 12, 34, CancellationToken.None);
+
+        var currentParserYear = await ledger.GetNextYear(
+            kind,
+            1,
+            2018,
+            2018,
+            CancellationToken.None
+        );
+        var newerParserYear = await ledger.GetNextYear(kind, 2, 2018, 2018, CancellationToken.None);
+
+        currentParserYear.Should().BeNull();
+        newerParserYear.Should().Be(2018);
     }
 }

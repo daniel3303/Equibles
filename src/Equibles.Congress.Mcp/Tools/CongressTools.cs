@@ -95,8 +95,8 @@ public class CongressTools
                     trades,
                     $"No congressional trades found for {stock.Ticker} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
                     $"Congressional trades for {stock.Ticker} ({stock.Name}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
-                    "| Date | Filed | Member | Position | Type | Amount Range | Asset | Owner |",
-                    "|------|-------|--------|----------|------|-------------|-------|-------|",
+                    "| Date | Filed | Member | Position | Type | Amount Range | Asset | Asset Type | Owner | Account |",
+                    "|------|-------|--------|----------|------|-------------|-------|------------|-------|---------|",
                     t =>
                     {
                         var position = t.CongressMember.Position.NameForHumans();
@@ -105,7 +105,7 @@ public class CongressTools
                         // The asset as filed is the ONLY thing separating an option or bond trade
                         // from a stock trade — "Purchase" alone reads as a bullish share buy even
                         // when the filing says it was a put.
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {EscapeCell(t.AssetName)} | {FormatOwner(t.OwnerType)} |";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
                     }
                 );
                 return AppendTruncationNote(table, trades.Count, totalCount);
@@ -177,13 +177,13 @@ public class CongressTools
                     trades,
                     $"No trades found for {member.Name} ({DescribeMember(member)}) between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
                     $"Trades by {member.Name} ({DescribeMember(member)}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
-                    "| Date | Filed | Ticker | Type | Amount Range | Asset | Owner |",
-                    "|------|-------|--------|------|-------------|-------|-------|",
+                    "| Date | Filed | Ticker | Type | Amount Range | Asset | Asset Type | Owner | Account |",
+                    "|------|-------|--------|------|-------------|-------|------------|-------|---------|",
                     t =>
                     {
                         var type = t.TransactionType.NameForHumans();
                         var amount = FormatAmountRange(t);
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {FormatOwner(t.OwnerType)} |";
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
                     }
                 );
                 var note = McpOutput.PagedTruncationNote(trades.Count, totalCount, offset);

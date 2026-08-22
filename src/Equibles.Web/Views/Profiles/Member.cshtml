@@ -14,9 +14,8 @@
         <table-card>
                     <thead>
                         <tr>
-                            <th scope="col">Ticker</th>
+                            <th scope="col">Security</th>
                             <th scope="col" class="hidden lg:table-cell">Date</th>
-                            <th scope="col" class="hidden lg:table-cell">Asset</th>
                             <th scope="col" class="hidden lg:table-cell">Owner</th>
                             <th scope="col" class="text-right">Amount (USD)</th>
                         </tr>
@@ -26,10 +25,17 @@
                             <tr>
                                 <td>
                                     <partial name="_StockLink" model='(Ticker: trade.Ticker, Class: "font-semibold link link-primary")' />
+                                    <span class="block max-w-64 truncate text-xs text-base-content/60" title="@trade.AssetName">
+                                        @(string.IsNullOrEmpty(trade.AssetType) ? trade.AssetName : $"{trade.AssetType} · {trade.AssetName}")
+                                    </span>
                                 </td>
                                 <td class="hidden lg:table-cell">@trade.TransactionDate.ToString("yyyy-MM-dd")</td>
-                                <td class="hidden lg:table-cell max-w-xs truncate">@trade.AssetName</td>
-                                <td class="hidden lg:table-cell">@trade.OwnerType</td>
+                                <td class="hidden lg:table-cell">
+                                    <span class="block">@(string.IsNullOrEmpty(trade.OwnerType) ? "—" : trade.OwnerType)</span>
+                                    @if (!string.IsNullOrEmpty(trade.Subholding)) {
+                                        <span class="block max-w-40 truncate text-xs text-base-content/60" title="@trade.Subholding">@trade.Subholding</span>
+                                    }
+                                </td>
                                 <td class="text-right">@trade.AmountFrom.ToString("N0") – @trade.AmountTo.ToString("N0")</td>
                             </tr>
                         }

@@ -12,13 +12,13 @@ internal class SenateSearchResponse
     [JsonProperty("draw")]
     public int Draw { get; set; }
 
-    [JsonProperty("recordsTotal")]
+    [JsonProperty("recordsTotal", Required = Required.Always)]
     public int RecordsTotal { get; set; }
 
     [JsonProperty("recordsFiltered")]
     public int RecordsFiltered { get; set; }
 
-    [JsonProperty("data")]
+    [JsonProperty("data", Required = Required.Always)]
     public List<List<string>> Data { get; set; } = [];
 
     [JsonProperty("result")]

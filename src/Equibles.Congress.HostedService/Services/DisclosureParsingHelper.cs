@@ -90,49 +90,67 @@ public static partial class DisclosureParsingHelper
         CongressPosition position,
         DateOnly filingDate,
         ILogger logger
-    )
-    {
-        var transactions = new List<DisclosureTransaction>();
-        var doc = new HtmlDocument();
-        doc.LoadHtml(html);
+    ) =>
+        ParseTransactionsFromHtmlWithShape(
+            html,
+            memberName,
+            position,
+            filingDate,
+            logger
+        ).Transactions;
 
-        var tables = doc.DocumentNode.SelectNodes("//table");
-        if (tables == null)
-            return transactions;
-
-        foreach (var table in tables)
-        {
-            transactions.AddRange(
-                ExtractTransactionsFromTable(table, memberName, position, filingDate, logger)
-            );
-        }
-
-        return transactions;
-    }
-
-    private static IEnumerable<DisclosureTransaction> ExtractTransactionsFromTable(
-        HtmlNode table,
+    internal static HtmlTransactionParseResult ParseTransactionsFromHtmlWithShape(
+        string html,
         string memberName,
         CongressPosition position,
         DateOnly filingDate,
         ILogger logger
     )
     {
-        var headerTexts = ExtractHeaderTexts(table);
-        if (headerTexts == null || !IsTransactionTable(headerTexts))
-            yield break;
+        var transactions = new List<DisclosureTransaction>();
+        var hasTransactionTable = false;
+        var recognizedSourceRowCount = 0;
+        var rejectedSourceRowCount = 0;
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
 
-        var cols = MapColumnIndices(headerTexts);
-        var rows = table.SelectNodes(".//tbody//tr");
-        if (rows == null)
-            yield break;
+        var tables = doc.DocumentNode.SelectNodes("//table");
+        if (tables == null)
+            return new HtmlTransactionParseResult(transactions, false, 0, 0);
 
-        foreach (var row in rows)
+        foreach (var table in tables)
         {
-            var tx = ParseTransactionRow(row, cols, memberName, position, filingDate, logger);
-            if (tx != null)
-                yield return tx;
+            var headerTexts = ExtractHeaderTexts(table);
+            if (headerTexts == null || !IsTransactionTable(headerTexts))
+                continue;
+
+            hasTransactionTable = true;
+            var cols = MapColumnIndices(headerTexts);
+            var rows = table.SelectNodes(".//tbody//tr");
+            if (rows == null)
+                continue;
+
+            foreach (var row in rows)
+            {
+                if (!IsRecognizedTransactionRow(row, cols, position))
+                {
+                    rejectedSourceRowCount++;
+                    continue;
+                }
+
+                recognizedSourceRowCount++;
+                var tx = ParseTransactionRow(row, cols, memberName, position, filingDate, logger);
+                if (tx != null)
+                    transactions.Add(tx);
+            }
         }
+
+        return new HtmlTransactionParseResult(
+            transactions,
+            hasTransactionTable,
+            recognizedSourceRowCount,
+            rejectedSourceRowCount
+        );
     }
 
     private static List<string> ExtractHeaderTexts(HtmlNode table)
@@ -147,8 +165,51 @@ public static partial class DisclosureParsingHelper
         var hasAsset = headerTexts.Any(h =>
             h.Contains("asset") || h.Contains("ticker") || h.Contains("description")
         );
-        return hasDate && hasAsset;
+        var hasType = headerTexts.Any(h => h == "type" || h.Contains("transaction type"));
+        var hasAmount = headerTexts.Any(h => h.Contains("amount"));
+        return hasDate && hasAsset && hasType && hasAmount;
     }
+
+    private static bool IsRecognizedTransactionRow(
+        HtmlNode row,
+        ColumnIndices cols,
+        CongressPosition position
+    )
+    {
+        var cells = row.SelectNodes(".//td");
+        if (cells == null)
+            return false;
+
+        var cellTexts = cells.Select(c => HtmlEntity.DeEntitize(c.InnerText).Trim()).ToList();
+        string Cell(int columnIndex) => GetCleanCell(cellTexts, columnIndex);
+
+        var amount = ParseAmountRange(Cell(cols.Amount));
+        var transactionType = Cell(cols.Type);
+        var isKnownType =
+            position == CongressPosition.Senator
+                ? IsKnownSenateTransactionType(transactionType)
+                : ParseTransactionType(transactionType) != null
+                    || IsIntentionallySkippedTransactionType(transactionType);
+        return ParseDate(Cell(cols.Date)) != null
+            && (!string.IsNullOrEmpty(Cell(cols.Ticker)) || !string.IsNullOrEmpty(Cell(cols.Asset)))
+            && isKnownType
+            && amount.from > 0
+            && amount.to > 0;
+    }
+
+    private static bool IsKnownSenateTransactionType(string type)
+    {
+        var trimmed = type?.Trim();
+        return string.Equals(trimmed, "Purchase", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trimmed, "Sale", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trimmed, "Sale (Full)", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trimmed, "Sale (Partial)", StringComparison.OrdinalIgnoreCase)
+            || IsIntentionallySkippedTransactionType(trimmed);
+    }
+
+    private static bool IsIntentionallySkippedTransactionType(string type) =>
+        string.Equals(type?.Trim(), "Exchange", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(type?.Trim(), "Receive", StringComparison.OrdinalIgnoreCase);
 
     private static ColumnIndices MapColumnIndices(List<string> headers)
     {
@@ -170,6 +231,9 @@ public static partial class DisclosureParsingHelper
         );
 
         var assetTypeCol = headers.FindIndex(h => h.Contains("asset") && h.Contains("type"));
+        var subholdingCol = headers.FindIndex(h =>
+            h.Contains("subholding") || h.Contains("account")
+        );
 
         var typeCol = FindFirstIndex(
             headers,
@@ -185,6 +249,7 @@ public static partial class DisclosureParsingHelper
             tickerCol,
             assetCol,
             assetTypeCol,
+            subholdingCol,
             typeCol,
             amountCol
         );
@@ -235,13 +300,7 @@ public static partial class DisclosureParsingHelper
         if (string.IsNullOrEmpty(ticker) && !string.IsNullOrEmpty(assetName))
             ticker = ExtractTickerFromAssetName(assetName);
 
-        // Skip non-stock assets when asset_type column exists
         var assetType = Cell(cols.AssetType);
-        if (
-            !string.IsNullOrEmpty(assetType)
-            && !assetType.Contains("Stock", StringComparison.OrdinalIgnoreCase)
-        )
-            return null;
 
         var txTypeStr = Cell(cols.Type);
         var txType = ParseTransactionType(txTypeStr);
@@ -258,6 +317,8 @@ public static partial class DisclosureParsingHelper
         var owner = Cell(cols.Owner);
         var amount = Cell(cols.Amount);
         var (amountFrom, amountTo) = ParseAmountRange(amount);
+        if (amountFrom <= 0 || amountTo <= 0)
+            return null;
 
         return new DisclosureTransaction
         {
@@ -269,6 +330,8 @@ public static partial class DisclosureParsingHelper
             FilingDate = filingDate,
             TransactionType = txType.Value,
             OwnerType = Truncate(owner, 64),
+            AssetType = Truncate(assetType, 128),
+            Subholding = Truncate(Cell(cols.Subholding), 256),
             AmountFrom = amountFrom,
             AmountTo = amountTo,
         };
@@ -402,12 +465,19 @@ public static partial class DisclosureParsingHelper
                 || amount.TrimEnd().EndsWith('+');
             if (isOpenTopBracket)
                 return (val, val);
-            // A trailing '-' marks a lower bound whose upper bound was lost to a line/page
-            // break ("$50,001 -"): re-derive the bracket ceiling instead of misreading the
-            // value as an upper bound. Otherwise a single amount is an upper bound ("Under $X").
-            if (amount.TrimEnd().EndsWith('-'))
+            // A transacted security has a positive dollar value. Under/less-than shapes therefore
+            // start at one dollar rather than inventing a zero-valued trade.
+            if (
+                amount.Contains("Under", StringComparison.OrdinalIgnoreCase)
+                || amount.Contains("Less than", StringComparison.OrdinalIgnoreCase)
+                || amount.Contains("Up to", StringComparison.OrdinalIgnoreCase)
+            )
+                return (1, val);
+            // A trailing '-' or a standard bracket floor means extraction lost the ceiling.
+            if (amount.TrimEnd().EndsWith('-') || DisclosureBracketCeilings.ContainsKey(val))
                 return (val, BracketCeilingFor(val));
-            return (0, val);
+            // A bare non-bracket amount is exact, not an invented zero-to-value range.
+            return (val, val);
         }
 
         return (0, 0);
@@ -490,7 +560,15 @@ public static partial class DisclosureParsingHelper
         int Ticker,
         int Asset,
         int AssetType,
+        int Subholding,
         int Type,
         int Amount
+    );
+
+    internal sealed record HtmlTransactionParseResult(
+        List<DisclosureTransaction> Transactions,
+        bool HasTransactionTable,
+        int RecognizedSourceRowCount,
+        int RejectedSourceRowCount
     );
 }
