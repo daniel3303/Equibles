@@ -80,7 +80,23 @@ public class ShortVolumeImportService
             return;
         }
 
-        var scopeKey = FinraImportScope.Resolve(_workerOptions.TickersToSync);
+        // The resolved universe is part of completeness identity. A date checked before a stock
+        // was added is not complete for that stock, so a universe change gets a fresh bounded,
+        // newest-first pass instead of inheriting the old global "all" markers.
+        var tickerMap = await _tickerMapService.Build(
+            _workerOptions.TickersToSync,
+            cancellationToken,
+            StringComparer.Ordinal
+        );
+        if (tickerMap.Count == 0)
+        {
+            _logger.LogInformation(
+                "No common stocks resolved for FINRA daily short-volume import; leaving partitions retryable"
+            );
+            return;
+        }
+
+        var scopeKey = FinraImportScope.ResolveStockUniverse(tickerMap);
         var completed = await _partitionTracker.GetCompleted(
             Dataset,
             scopeKey,
@@ -101,13 +117,6 @@ public class ShortVolumeImportService
             scopeKey
         );
 
-        // Ordinal: FINRA symbol casing is identity (lowercase suffix = preferred/when-issued,
-        // a different security) — a case-insensitive map merges two securities' volumes.
-        var tickerMap = await _tickerMapService.Build(
-            _workerOptions.TickersToSync,
-            cancellationToken,
-            StringComparer.Ordinal
-        );
         foreach (var date in dates)
         {
             cancellationToken.ThrowIfCancellationRequested();
