@@ -10,7 +10,8 @@ namespace Equibles.Congress.Data.Models;
 // The trade identity / upsert key (see CongressionalTradeSyncService.PersistTrades). OwnerType
 // and the amount bracket are part of a trade's identity: a member can file two same-day
 // purchases of the same stock that differ only in bracket or in who holds them (self vs.
-// spouse vs. dependent child), and without those columns the second one is silently dropped.
+// spouse vs. dependent child), asset type, or disclosed account/subholding, and without those
+// columns the second one is silently dropped.
 // FilingDate is deliberately EXCLUDED — the disclosure feeds re-date the same filing between
 // scrapes, so keying on it would re-insert existing trades as duplicates.
 [Index(
@@ -22,6 +23,9 @@ namespace Equibles.Congress.Data.Models;
     nameof(OwnerType),
     nameof(AmountFrom),
     nameof(AmountTo),
+    nameof(AssetType),
+    nameof(Subholding),
+    Name = "UX_CongressionalTrade_FilingIdentity",
     IsUnique = true
 )]
 [Index(nameof(FilingDate))]

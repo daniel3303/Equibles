@@ -147,6 +147,21 @@ public class HouseDisclosureClientTests
     }
 
     [Fact]
+    public void ParseTransactionLines_CompactSubholdingOnMetadataLine_RetainsFiledIdentity()
+    {
+        var result = Parse(
+            "Comfort Systems USA, Inc. Common Stock (FIX) [ST] P 01/13/2025 02/13/2025 $1,001 - $15,000",
+            "F S: New S O: Joint Ownership LPL Account"
+        );
+
+        var tx = result.Should().ContainSingle().Subject;
+        tx.Ticker.Should().Be("FIX");
+        tx.AssetType.Should().Be("ST");
+        tx.Subholding.Should().Be("Joint Ownership LPL Account");
+        tx.AssetName.Should().Be("Comfort Systems USA, Inc. Common Stock (FIX)");
+    }
+
+    [Fact]
     public void ParseTransactionLines_SeriesDAssetNameWithoutSubholding_PreservesAssetName()
     {
         var result = Parse(

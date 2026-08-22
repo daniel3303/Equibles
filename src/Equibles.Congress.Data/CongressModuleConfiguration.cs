@@ -8,9 +8,8 @@ public class CongressModuleConfiguration : Equibles.Data.IFinancialModule
     public void ConfigureEntities(ModelBuilder builder)
     {
         builder.Entity<CongressMember>();
-        // These values are written by the scraper. The defaults make the additive migration safe
-        // for existing rows; ValueGeneratedNever keeps FlexLabs free to use them in a later
-        // account-aware conflict key after the expand release is deployed.
+        // These values are written by the scraper. The defaults made the additive migration safe
+        // for existing rows; ValueGeneratedNever makes them usable in FlexLabs' conflict key.
         ConfigureRequiredTradeText(builder, t => t.OwnerType);
         ConfigureRequiredTradeText(builder, t => t.AssetType);
         ConfigureRequiredTradeText(builder, t => t.Subholding);

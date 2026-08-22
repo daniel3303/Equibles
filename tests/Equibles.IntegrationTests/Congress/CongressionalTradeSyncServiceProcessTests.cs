@@ -159,6 +159,37 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task ProcessTransactions_SameDaySameAssetDifferentAccounts_AllPersistOnce()
+    {
+        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var transactions = new List<DisclosureTransaction>
+        {
+            Txn("Jane Doe", "AAPL", assetType: "ST", subholding: "Brokerage Account"),
+            Txn("Jane Doe", "AAPL", assetType: "ST", subholding: "Retirement Account"),
+            Txn("Jane Doe", "AAPL", assetType: "OP", subholding: "Brokerage Account"),
+        };
+        var sut = BuildSut();
+
+        await (Task)ProcessTransactionsMethod.Invoke(sut, [transactions, CancellationToken.None]);
+        await (Task)ProcessTransactionsMethod.Invoke(sut, [transactions, CancellationToken.None]);
+
+        await using var verify = Fixture.CreateDbContext();
+        var trades = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
+        trades.Should().HaveCount(3);
+        trades
+            .Select(t => (t.AssetType, t.Subholding))
+            .Should()
+            .BeEquivalentTo([
+                ("ST", "Brokerage Account"),
+                ("ST", "Retirement Account"),
+                ("OP", "Brokerage Account"),
+            ]);
+    }
+
+    [Fact]
     public async Task ProcessTransactions_NoTickerMatchesTrackedStock_WritesNothing()
     {
         DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
@@ -391,14 +422,16 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             );
 
         await using var verify = Fixture.CreateDbContext();
-        var repaired = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
+        stored.Should().HaveCount(3);
+        var repaired = stored.Single(trade =>
+            trade.AssetType == "OP" && trade.Subholding == subholding
+        );
         repaired.AssetName.Should().Be("Broadcom Inc. (AVGO)");
-        repaired.AssetType.Should().Be("OP");
-        repaired.Subholding.Should().Be(subholding);
     }
 
     [Fact]
-    public async Task ProcessTransactions_TwoPollutedLegacyAccounts_SharedIdentityAbstainsAtomically()
+    public async Task ProcessTransactions_TwoPollutedLegacyAccounts_ReplaySeparatesBothAccounts()
     {
         const string firstSubholding = "Brokerage Account A";
         const string secondSubholding = "Brokerage Account B";
@@ -422,15 +455,26 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
                             subholding: firstSubholding,
                             assetName: "Broadcom Inc. (AVGO)"
                         ),
+                        Txn(
+                            "Jane Doe",
+                            "AVGO",
+                            assetType: "OP",
+                            subholding: secondSubholding,
+                            assetName: "Broadcom Inc. (AVGO)"
+                        ),
                     },
                     CancellationToken.None,
                 ]
             );
 
         await using var verify = Fixture.CreateDbContext();
-        var preserved = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
-        preserved.Should().HaveCount(2);
-        preserved.Should().OnlyContain(trade => trade.AssetName.Contains("S O:"));
+        var repaired = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
+        repaired.Should().HaveCount(2);
+        repaired.Should().OnlyContain(trade => trade.AssetName == "Broadcom Inc. (AVGO)");
+        repaired
+            .Select(trade => trade.Subholding)
+            .Should()
+            .BeEquivalentTo(firstSubholding, secondSubholding);
 
         CongressionalTrade LegacyTrade(string subholding) =>
             new()
@@ -453,7 +497,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task ProcessTransactions_DifferentAccountArrivesLater_PreservesFirstStoredAccount()
+    public async Task ProcessTransactions_DifferentAccountArrivesLater_PersistsBothAccounts()
     {
         DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
         await DbContext.SaveChangesAsync();
@@ -484,12 +528,13 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             );
 
         await using var verify = Fixture.CreateDbContext();
-        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
-        stored.Subholding.Should().Be("Account A");
+        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
+        stored.Should().HaveCount(2);
+        stored.Select(trade => trade.Subholding).Should().BeEquivalentTo("Account A", "Account B");
     }
 
     [Fact]
-    public async Task ProcessTransactions_PartialStoredMetadata_DoesNotCreateHybridFiledIdentity()
+    public async Task ProcessTransactions_PartialStoredMetadata_PreservesBothFiledIdentities()
     {
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
@@ -514,11 +559,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
-        var logger = Substitute.For<ILogger<CongressionalTradeSyncService>>();
-
         await (Task)
             ProcessTransactionsMethod.Invoke(
-                BuildSut(logger),
+                BuildSut(),
                 [
                     new List<DisclosureTransaction>
                     {
@@ -529,28 +572,23 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             );
 
         await using var verify = Fixture.CreateDbContext();
-        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
-        stored.AssetType.Should().Be("ST");
-        stored.Subholding.Should().BeEmpty();
-        var messages = logger
-            .ReceivedCalls()
-            .Where(call => call.GetArguments().Length > 2)
-            .Select(call => call.GetArguments()[2]?.ToString() ?? "")
-            .ToList();
-        messages.Should().Contain(message => message.Contains("Deferred 1 congressional trade"));
+        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
+        stored.Should().HaveCount(2);
+        stored
+            .Select(trade => (trade.AssetType, trade.Subholding))
+            .Should()
+            .BeEquivalentTo(new[] { ("ST", ""), ("OP", "Brokerage IRA") });
     }
 
     [Fact]
-    public async Task ProcessTransactions_SameCycleMetadataCollision_IsLogged()
+    public async Task ProcessTransactions_SameCycleEmptyMetadataDuplicate_PrefersFiledMetadata()
     {
         DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
-        var logger = Substitute.For<ILogger<CongressionalTradeSyncService>>();
-
         await (Task)
             ProcessTransactionsMethod.Invoke(
-                BuildSut(logger),
+                BuildSut(),
                 [
                     new List<DisclosureTransaction>
                     {
@@ -561,12 +599,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
                 ]
             );
 
-        var messages = logger
-            .ReceivedCalls()
-            .Where(call => call.GetArguments().Length > 2)
-            .Select(call => call.GetArguments()[2]?.ToString() ?? "")
-            .ToList();
-        messages.Should().Contain(message => message.Contains("Deferred 1 congressional trade"));
+        await using var verify = Fixture.CreateDbContext();
+        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        stored.AssetType.Should().Be("OP");
+        stored.Subholding.Should().Be("Brokerage IRA");
     }
 
     [Fact]
