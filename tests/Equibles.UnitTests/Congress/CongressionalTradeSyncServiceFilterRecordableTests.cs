@@ -45,10 +45,7 @@ public class CongressionalTradeSyncServiceFilterRecordableTests
     {
         var filings = new List<ProcessedFiling> { Filing("A", new DateOnly(2026, 7, 1)) };
 
-        var recordable = CongressionalTradeSyncService.FilterRecordable(
-            filings,
-            Outcome()
-        );
+        var recordable = CongressionalTradeSyncService.FilterRecordable(filings, Outcome());
 
         recordable.Should().ContainSingle(f => f.SourceId == "A");
     }

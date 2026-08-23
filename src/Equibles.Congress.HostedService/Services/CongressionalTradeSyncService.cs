@@ -263,10 +263,7 @@ public class CongressionalTradeSyncService
     internal static List<ProcessedFiling> FilterRecordable(
         List<ProcessedFiling> filings,
         TradePersistOutcome outcome
-    ) =>
-        filings
-            .Where(f => !outcome.UnpersistedSourceIds.Contains(f.SourceId))
-            .ToList();
+    ) => filings.Where(f => !outcome.UnpersistedSourceIds.Contains(f.SourceId)).ToList();
 
     /// <summary>
     /// The persistence outcome of one sync cycle: filings named here had
@@ -665,7 +662,12 @@ public class CongressionalTradeSyncService
         var unpersistedSourceIds = new HashSet<string>();
         var duplicateSourceKeys = incoming
             .Where(trade => trade.SourceId != null)
-            .GroupBy(trade => new { trade.FilingKind, trade.SourceId, trade.SourceRowIndex })
+            .GroupBy(trade => new
+            {
+                trade.FilingKind,
+                trade.SourceId,
+                trade.SourceRowIndex,
+            })
             .Where(group => group.Count() > 1)
             .ToList();
         foreach (var duplicate in duplicateSourceKeys)
@@ -696,7 +698,8 @@ public class CongressionalTradeSyncService
                 storedBySourceIdentity.TryGetValue(
                     TradeSourceIdentity.From(incomingTrade),
                     out var storedTrade
-                ) && storedTrade.FiledTicker != incomingTrade.FiledTicker
+                )
+                && storedTrade.FiledTicker != incomingTrade.FiledTicker
             )
             .ToList();
         foreach (var conflict in tickerConflicts)

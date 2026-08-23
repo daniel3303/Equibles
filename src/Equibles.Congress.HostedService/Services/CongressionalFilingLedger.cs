@@ -41,8 +41,7 @@ public class CongressionalFilingLedger
             .AnyAsync(
                 document =>
                     document.XbrlStatus == XbrlCaptureStatus.Captured
-                    && document.XbrlFactsVersion
-                        < CommonStockTickerEvidence.SourceXbrlFactsVersion
+                    && document.XbrlFactsVersion < CommonStockTickerEvidence.SourceXbrlFactsVersion
                     && document.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts,
                 ct
             );

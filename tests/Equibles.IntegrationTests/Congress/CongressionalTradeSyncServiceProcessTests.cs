@@ -45,7 +45,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         var stocks = DbContext.Set<CommonStock>().AsNoTracking().ToList();
         foreach (var stock in stocks)
         {
-            if (DbContext.Set<CommonStockTickerEvidence>().Any(row => row.CommonStockId == stock.Id))
+            if (
+                DbContext.Set<CommonStockTickerEvidence>().Any(row => row.CommonStockId == stock.Id)
+            )
                 continue;
             DbContext.AddRange(
                 Evidence(stock, new DateOnly(2020, 1, 1)),

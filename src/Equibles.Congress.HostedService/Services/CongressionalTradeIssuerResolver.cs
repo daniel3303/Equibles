@@ -43,17 +43,14 @@ public class CongressionalTradeIssuerResolver
                 && trade.FiledTicker != ""
                 && (
                     evidence.Any(row =>
-                        row.Ticker == trade.FiledTicker
-                        && row.FiledDate == trade.TransactionDate
+                        row.Ticker == trade.FiledTicker && row.FiledDate == trade.TransactionDate
                     )
                     || (
                         evidence.Any(row =>
-                            row.Ticker == trade.FiledTicker
-                            && row.FiledDate < trade.TransactionDate
+                            row.Ticker == trade.FiledTicker && row.FiledDate < trade.TransactionDate
                         )
                         && evidence.Any(row =>
-                            row.Ticker == trade.FiledTicker
-                            && row.FiledDate > trade.TransactionDate
+                            row.Ticker == trade.FiledTicker && row.FiledDate > trade.TransactionDate
                         )
                     )
                 )

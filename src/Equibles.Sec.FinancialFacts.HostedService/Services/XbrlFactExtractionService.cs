@@ -1,6 +1,6 @@
 using System.Text;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
