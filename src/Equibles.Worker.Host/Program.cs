@@ -87,6 +87,9 @@ builder.Services.Configure<Equibles.Sec.HostedService.Configuration.XbrlCaptureO
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.AsFiledHtmlCaptureOptions>(
     builder.Configuration.GetSection("AsFiledHtml")
 );
+builder.Services.Configure<Equibles.Sec.HostedService.Configuration.DocumentNormalizationBackfillOptions>(
+    builder.Configuration.GetSection("DocumentNormalizationBackfill")
+);
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FilingItemsBackfillOptions>(
     builder.Configuration.GetSection("FilingItemsBackfill")
 );

@@ -21,7 +21,11 @@ public interface ISecEdgarClient
         DateOnly? fromDate = null,
         DateOnly? toDate = null
     );
-    Task<string> GetDocumentContent(string accessionNumber, string cik);
+    Task<string> GetDocumentContent(
+        string accessionNumber,
+        string cik,
+        CancellationToken cancellationToken = default
+    );
     Task<string> GetDocumentContent(FilingData filing);
 
     /// <summary>

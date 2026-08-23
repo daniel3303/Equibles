@@ -14,6 +14,15 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(XbrlStatus), IsUnique = false)]
 [Index(nameof(XbrlStatus), nameof(XbrlFactsVersion))]
 [Index(nameof(DocumentType), nameof(AsFiledHtmlVersion))]
+[Index(
+    nameof(DocumentType),
+    nameof(NormalizedContentVersion),
+    nameof(NormalizedContentAttempts),
+    nameof(ReportingDate),
+    nameof(Id),
+    IsDescending = new[] { false, false, false, true, false },
+    Name = "IX_Document_NormalizationBackfill"
+)]
 [Index(nameof(ReportedStatementsStatus), IsUnique = false)]
 [Index(nameof(ReportedStatementsStatus), nameof(ReportedStatementsParseVersion))]
 [Index(nameof(CreationTime), IsUnique = false)]
@@ -48,6 +57,30 @@ public class Document
     public DateOnly ReportingForDate { get; set; }
 
     public int LineCount { get; set; }
+
+    /// <summary>
+    /// Version of the HTML-normalization and Markdown-conversion pipeline that produced
+    /// <see cref="Content"/>. Existing rows default to 0; the backfill re-fetches their EDGAR
+    /// submission and replaces the stored text when this is below
+    /// <see cref="NormalizedContentBuilderVersion"/>.
+    /// </summary>
+    public int NormalizedContentVersion { get; set; }
+
+    /// <summary>
+    /// How many times re-normalizing this document has failed. The backfill stops selecting it
+    /// at <see cref="MaxNormalizedContentAttempts"/> so one unavailable filing cannot starve the
+    /// corpus sweep.
+    /// </summary>
+    public int NormalizedContentAttempts { get; set; }
+
+    /// <summary>Retry ceiling for <see cref="NormalizedContentAttempts"/>.</summary>
+    public const int MaxNormalizedContentAttempts = 5;
+
+    /// <summary>
+    /// Current stored-text pipeline version. Bump after a normalization or conversion change
+    /// that must be applied to already-ingested EDGAR documents.
+    /// </summary>
+    public const int NormalizedContentBuilderVersion = 1;
 
     [MaxLength(500)]
     public string SourceUrl { get; set; }

@@ -106,6 +106,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             AccessionNumber = accessionNumber,
             Items = items,
             LineCount = lineCount,
+            NormalizedContentVersion = Document.NormalizedContentBuilderVersion,
         };
 
         await ApplyXbrlCapture(document, xbrl ?? XbrlCaptureResult.NotChecked);
@@ -171,22 +172,42 @@ public class DocumentPersistenceService : IDocumentPersistenceService
 
         // Swap in a new content file and recount lines. The document keeps its id, so every soft
         // reference to it (e.g. an earnings call's TranscriptDocumentId) stays valid with no re-link.
-        var fileName = document.Content?.NameWithExtension ?? $"{document.Id}.txt";
+        var oldContent = document.Content;
+        var fileName = oldContent?.NameWithExtension ?? $"{document.Id}.txt";
         var file = await SaveTextContent(content, fileName);
         document.Content = file;
         document.LineCount = CountLines(content);
-        _documentRepository.Update(document);
+
+        // Remove the superseded File row in the same transaction. Filesystem bytes are queued
+        // for the reference-checked deletion sweep, so content-addressed blobs shared with the
+        // replacement or another File row are never unlinked prematurely.
+        _fileManager.DeleteFile(oldContent);
 
         // Drop the stale chunks (their embeddings cascade at the DB level) so the chunking worker,
         // which polls for documents that have no chunks, re-chunks the new body on its next pass.
-        await _chunkRepository
-            .GetAll()
-            .Where(c => c.DocumentId == document.Id)
-            .ExecuteDeleteAsync(cancellationToken);
+        await DeleteChunks(document.Id, cancellationToken);
 
         await _documentRepository.SaveChanges();
         await transaction.CommitAsync(cancellationToken);
     }
+
+    public async Task ResetChunks(Document document, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await _documentRepository.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+
+        await DeleteChunks(document.Id, cancellationToken);
+        await _documentRepository.SaveChanges();
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    private Task<int> DeleteChunks(Guid documentId, CancellationToken cancellationToken) =>
+        _chunkRepository
+            .GetAll()
+            .Where(c => c.DocumentId == documentId)
+            .ExecuteDeleteAsync(cancellationToken);
 
     // Line count = newline bytes + 1 — identical to the previous
     // GetString(content).Split('\n').Length, without decoding a multi-MB filing
