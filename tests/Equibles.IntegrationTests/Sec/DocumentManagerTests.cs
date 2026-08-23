@@ -1,5 +1,7 @@
+using System.Data.Common;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.BusinessLogic.Embeddings;
 using Equibles.Sec.BusinessLogic.Processing;
@@ -7,7 +9,9 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Pgvector;
@@ -19,13 +23,9 @@ namespace Equibles.IntegrationTests.Sec;
 /// <summary>
 /// The unit-tier <c>DocumentManagerTests</c> in <c>Equibles.UnitTests.Sec</c> explicitly
 /// leaves <see cref="DocumentManager.ChunkDocumentBatch"/> uncovered (see its XML doc):
-/// the query <c>.Include(d =&gt; d.Chunks).Where(d =&gt; !d.Chunks.Any() &amp;&amp; d.Content != null)</c>
-/// only behaves correctly against real Postgres — EF Core's InMemory provider has
-/// different semantics for navigation-property predicates, so a regression in how that
-/// "pending document" query is shaped would slip past the unit suite. With a real
-/// ParadeDB container, this test pins the production filter: a document that already
-/// has chunks must be excluded, and a document without content must also be excluded —
-/// so the Phase 1 worker only chunks documents that genuinely need it.
+/// uses a filtered PostgreSQL index over <see cref="Document.ChunkedAt"/>. These tests pin the
+/// production filter and the bounded compatibility drain for rows created before that marker
+/// existed.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class DocumentManagerTests : ParadeDbMcpTestBase
@@ -54,8 +54,8 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             createdAt: DateTime.UtcNow.AddMinutes(-5)
         );
 
-        // Already chunked: has Content AND at least one Chunk — must be excluded by
-        // the !d.Chunks.Any() predicate so the worker doesn't re-chunk it on every tick.
+        // Already chunked: has a completion marker and must be excluded by the partial queue
+        // predicate even though its historical chunk rows also remain present.
         var chunkedFile = MakeFile();
         var chunkedDoc = MakeDocument(
             stock,
@@ -63,6 +63,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             contentId: chunkedFile.Id,
             createdAt: DateTime.UtcNow.AddMinutes(-10)
         );
+        chunkedDoc.ChunkedAt = DateTime.UtcNow.AddMinutes(-9);
         var existingChunk = new Chunk
         {
             Id = Guid.NewGuid(),
@@ -98,10 +99,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             NullLogger<DocumentManager>()
         );
 
-        var workDone = await sut.ChunkDocumentBatch(
-            new BackfillCursor("document-chunking"),
-            CancellationToken.None
-        );
+        var workDone = await sut.ChunkDocumentBatch(CancellationToken.None);
 
         workDone
             .Should()
@@ -110,17 +108,277 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         var passed =
             _processor
                 .ReceivedCalls()
-                .Single(c => c.GetMethodInfo().Name == nameof(IDocumentProcessor.ProcessDocuments))
-                .GetArguments()[0] as IReadOnlyCollection<Document>;
+                .Single(c => c.GetMethodInfo().Name == nameof(IDocumentProcessor.ProcessDocument))
+                .GetArguments()[0] as Document;
 
         passed.Should().NotBeNull();
-        passed!
-            .Select(d => d.Id)
-            .Should()
-            .ContainSingle(
-                id => id == pendingDoc.Id,
-                "only the chunkless-with-content document survives the !Chunks.Any() && Content != null filter"
+        passed!.Id.Should().Be(pendingDoc.Id);
+    }
+
+    [Fact]
+    public async Task ChunkDocumentBatch_LegacyChunkedDocument_BackfillsMarkerWithoutProcessing()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+        };
+        var file = MakeFile();
+        var document = MakeDocument(
+            stock,
+            file,
+            contentId: file.Id,
+            createdAt: DateTime.UtcNow.AddMinutes(-5)
+        );
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<File>().Add(file);
+        DbContext.Set<Document>().Add(document);
+        DbContext
+            .Set<Chunk>()
+            .Add(
+                new Chunk
+                {
+                    DocumentId = document.Id,
+                    Content = "already chunked",
+                    Index = 0,
+                    DocumentType = document.DocumentType,
+                    Ticker = stock.Ticker,
+                    ReportingDate = document.ReportingDate.ToDateTime(
+                        TimeOnly.MinValue,
+                        DateTimeKind.Utc
+                    ),
+                }
             );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var sut = new DocumentManager(
+            new DocumentRepository(DbContext),
+            new ChunkRepository(DbContext),
+            new BackfillStateRepository(DbContext),
+            _processor,
+            Options.Create(new EmbeddingConfig { Enabled = false }),
+            NullLogger<DocumentManager>()
+        );
+
+        var workDone = await sut.ChunkDocumentBatch(CancellationToken.None);
+
+        workDone.Should().BeTrue();
+        await _processor.DidNotReceiveWithAnyArgs().ProcessDocument(default, default);
+        DbContext.ChangeTracker.Clear();
+        var saved = await DbContext.Set<Document>().SingleAsync(d => d.Id == document.Id);
+        saved.ChunkedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ChunkDocumentBatch_ConcurrentReset_SkipsLockedDocumentUntilResetCommits()
+    {
+        var documentId = Guid.NewGuid();
+        await using (var seed = Fixture.CreateDbContext())
+        {
+            var stock = new CommonStock
+            {
+                Id = Guid.NewGuid(),
+                Ticker = "AAPL",
+                Name = "Apple Inc.",
+            };
+            var file = MakeFile();
+            var document = MakeDocument(
+                stock,
+                file,
+                contentId: file.Id,
+                createdAt: DateTime.UtcNow.AddMinutes(-5)
+            );
+            document.Id = documentId;
+            seed.Set<CommonStock>().Add(stock);
+            seed.Set<File>().Add(file);
+            seed.Set<Document>().Add(document);
+            seed.Set<Chunk>()
+                .Add(
+                    new Chunk
+                    {
+                        DocumentId = document.Id,
+                        Content = "legacy chunk",
+                        Index = 0,
+                        DocumentType = document.DocumentType,
+                        Ticker = stock.Ticker,
+                        ReportingDate = document.ReportingDate.ToDateTime(
+                            TimeOnly.MinValue,
+                            DateTimeKind.Utc
+                        ),
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        var resetInterceptor = new ChunkMarkerResetInterceptor(pauseAfterMarkerClear: true);
+        await using var resetContext = Fixture.CreateDbContext(options =>
+            options.AddInterceptors(resetInterceptor)
+        );
+        var resetDocument = await resetContext.Set<Document>().SingleAsync(d => d.Id == documentId);
+        var resetTask = NewResetService(resetContext).ResetChunks(resetDocument);
+        await resetInterceptor.MarkerCleared.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await using var workerContext = Fixture.CreateDbContext();
+        var sut = new DocumentManager(
+            new DocumentRepository(workerContext),
+            new ChunkRepository(workerContext),
+            new BackfillStateRepository(workerContext),
+            _processor,
+            Options.Create(new EmbeddingConfig { Enabled = false }),
+            NullLogger<DocumentManager>()
+        );
+
+        try
+        {
+            (await sut.ChunkDocumentBatch(CancellationToken.None)).Should().BeFalse();
+            await _processor.DidNotReceiveWithAnyArgs().ProcessDocument(default, default);
+        }
+        finally
+        {
+            resetInterceptor.ReleaseMarkerClear.SetResult();
+        }
+        await resetTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        _processor
+            .ProcessDocument(Arg.Any<Document>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var document = call.ArgAt<Document>(0);
+                workerContext
+                    .Set<Chunk>()
+                    .Add(
+                        new Chunk
+                        {
+                            Document = document,
+                            Content = "fresh chunk",
+                            Index = 0,
+                            DocumentType = document.DocumentType,
+                            Ticker = document.CommonStock.Ticker,
+                            ReportingDate = document.ReportingDate.ToDateTime(
+                                TimeOnly.MinValue,
+                                DateTimeKind.Utc
+                            ),
+                        }
+                    );
+                document.ChunkedAt = DateTime.UtcNow;
+                await workerContext.SaveChangesAsync();
+            });
+
+        (await sut.ChunkDocumentBatch(CancellationToken.None)).Should().BeTrue();
+        await _processor
+            .Received(1)
+            .ProcessDocument(
+                Arg.Is<Document>(d => d.Id == documentId),
+                Arg.Any<CancellationToken>()
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var saved = await verify.Set<Document>().SingleAsync(d => d.Id == documentId);
+        saved.ChunkedAt.Should().NotBeNull();
+        (await verify.Set<Chunk>().CountAsync(c => c.DocumentId == documentId)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ChunkDocumentBatch_WorkerOwnsLock_ResetWaitsAndWinsFinalState()
+    {
+        var documentId = Guid.NewGuid();
+        await using (var seed = Fixture.CreateDbContext())
+        {
+            var stock = new CommonStock
+            {
+                Id = Guid.NewGuid(),
+                Ticker = "AAPL",
+                Name = "Apple Inc.",
+            };
+            var file = MakeFile();
+            var document = MakeDocument(
+                stock,
+                file,
+                contentId: file.Id,
+                createdAt: DateTime.UtcNow.AddMinutes(-5)
+            );
+            document.Id = documentId;
+            seed.Set<CommonStock>().Add(stock);
+            seed.Set<File>().Add(file);
+            seed.Set<Document>().Add(document);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var workerContext = Fixture.CreateDbContext();
+        var workerEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var releaseWorker = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        _processor
+            .ProcessDocument(Arg.Any<Document>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var document = call.ArgAt<Document>(0);
+                workerContext
+                    .Set<Chunk>()
+                    .Add(
+                        new Chunk
+                        {
+                            Document = document,
+                            Content = "fresh chunk",
+                            Index = 0,
+                            DocumentType = document.DocumentType,
+                            Ticker = document.CommonStock.Ticker,
+                            ReportingDate = document.ReportingDate.ToDateTime(
+                                TimeOnly.MinValue,
+                                DateTimeKind.Utc
+                            ),
+                        }
+                    );
+                document.ChunkedAt = DateTime.UtcNow;
+                await workerContext.SaveChangesAsync();
+                workerEntered.SetResult();
+                await releaseWorker.Task;
+            });
+
+        var sut = new DocumentManager(
+            new DocumentRepository(workerContext),
+            new ChunkRepository(workerContext),
+            new BackfillStateRepository(workerContext),
+            _processor,
+            Options.Create(new EmbeddingConfig { Enabled = false }),
+            NullLogger<DocumentManager>()
+        );
+        var workerTask = sut.ChunkDocumentBatch(CancellationToken.None);
+        await workerEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var resetInterceptor = new ChunkMarkerResetInterceptor(pauseAfterMarkerClear: false);
+        await using var resetContext = Fixture.CreateDbContext(options =>
+            options.AddInterceptors(resetInterceptor)
+        );
+        var resetDocument = await resetContext.Set<Document>().SingleAsync(d => d.Id == documentId);
+        var resetTask = NewResetService(resetContext).ResetChunks(resetDocument);
+        await resetInterceptor.MarkerClearStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            var completed = await Task.WhenAny(
+                resetTask,
+                Task.Delay(TimeSpan.FromMilliseconds(250))
+            );
+            completed.Should().NotBe(resetTask, "the reset must wait for the worker's row lock");
+        }
+        finally
+        {
+            releaseWorker.SetResult();
+        }
+
+        (await workerTask).Should().BeTrue();
+        await resetTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await using var verify = Fixture.CreateDbContext();
+        var saved = await verify.Set<Document>().SingleAsync(d => d.Id == documentId);
+        saved.ChunkedAt.Should().BeNull();
+        (await verify.Set<Chunk>().AnyAsync(c => c.DocumentId == documentId)).Should().BeFalse();
     }
 
     [Fact]
@@ -403,6 +661,64 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             ),
             NullLogger<DocumentManager>()
         );
+
+    private static DocumentPersistenceService NewResetService(
+        Equibles.Data.EquiblesFinancialDbContext dbContext
+    ) =>
+        new(
+            new DocumentRepository(dbContext),
+            new ChunkRepository(dbContext),
+            Substitute.For<IFileManager>(),
+            null,
+            Substitute.For<IBus>()
+        );
+
+    private sealed class ChunkMarkerResetInterceptor(bool pauseAfterMarkerClear)
+        : DbCommandInterceptor
+    {
+        public TaskCompletionSource MarkerClearStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource MarkerCleared { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseMarkerClear { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (IsMarkerClear(command))
+                MarkerClearStarted.TrySetResult();
+
+            return ValueTask.FromResult(result);
+        }
+
+        public override async ValueTask<int> NonQueryExecutedAsync(
+            DbCommand command,
+            CommandExecutedEventData eventData,
+            int result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (!IsMarkerClear(command))
+                return result;
+
+            MarkerCleared.TrySetResult();
+            if (pauseAfterMarkerClear)
+                await ReleaseMarkerClear.Task.WaitAsync(cancellationToken);
+
+            return result;
+        }
+
+        private static bool IsMarkerClear(DbCommand command) =>
+            command.CommandText.Contains("UPDATE \"Document\"", StringComparison.Ordinal)
+            && command.CommandText.Contains("\"ChunkedAt\"", StringComparison.Ordinal);
+    }
 
     private static Chunk MakeChunk(
         Document document,

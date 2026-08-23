@@ -21,11 +21,9 @@ public class DocumentProcessorWorker : BaseScraperWorker
     // visibility comes from the System Health probe + activity feed, not these rows.
     protected override int ErrorReportThreshold => 20;
 
-    // Backfill frontiers for the two phases. They live on the worker (a singleton) because the
-    // DocumentManager is re-resolved from a fresh scope per batch; each hydrates from its
-    // persisted BackfillState row on first use, so a process restart resumes at the frontier
-    // instead of paying the unfloored corpus scan.
-    private readonly BackfillCursor _chunkCursor = new("document-chunking");
+    // The embedding frontier lives on the worker (a singleton) because the DocumentManager is
+    // re-resolved from a fresh scope per batch. Chunking no longer needs a frontier: its partial
+    // pending index makes every FIFO lookup bounded by the actual backlog.
     private readonly BackfillCursor _embeddingCursor = new("chunk-embedding");
 
     public DocumentProcessorWorker(
@@ -42,7 +40,7 @@ public class DocumentProcessorWorker : BaseScraperWorker
         {
             await using var chunkScope = ScopeFactory.CreateAsyncScope();
             var documentManager = chunkScope.ServiceProvider.GetRequiredService<DocumentManager>();
-            var workDone = await documentManager.ChunkDocumentBatch(_chunkCursor, stoppingToken);
+            var workDone = await documentManager.ChunkDocumentBatch(stoppingToken);
             if (!workDone)
                 break;
         }

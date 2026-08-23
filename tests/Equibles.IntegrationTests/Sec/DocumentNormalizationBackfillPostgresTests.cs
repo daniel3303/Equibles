@@ -5,9 +5,6 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.BusinessLogic;
 using Equibles.Media.Repositories;
 using Equibles.Sec.BusinessLogic;
-using Equibles.Sec.BusinessLogic.Embeddings;
-using Equibles.Sec.BusinessLogic.Processing;
-using Equibles.Sec.BusinessLogic.Tokenization;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.HostedService.Services;
@@ -17,7 +14,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace Equibles.IntegrationTests.Sec;
@@ -33,7 +29,7 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public async Task Backfill_ReplacesFileDeletesStaleChunksAndRechunksInOneRun()
+    public async Task Backfill_ReplacesFileDeletesStaleChunksAndQueuesLockedRechunking()
     {
         var document = await SeedLegacyDocument("NVDA");
         var oldContentId = document.ContentId;
@@ -96,8 +92,8 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
             .Where(c => c.DocumentId == document.Id)
             .OrderBy(c => c.Index)
             .ToListAsync();
-        chunks.Should().NotBeEmpty();
-        chunks[0].Content.Should().Contain("77,286 | 67 | % |\n| Graphics | 22,459");
+        chunks.Should().BeEmpty();
+        saved.ChunkedAt.Should().BeNull();
     }
 
     [Fact]
@@ -156,7 +152,7 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task Backfill_UnchangedFileKeepsBlobButRebuildsFlattenedChunks()
+    public async Task Backfill_UnchangedFileKeepsBlobAndQueuesLockedRechunking()
     {
         var normalized = new SecDocumentHtmlToMarkdownConverter().Convert(
             new SecDocumentHtmlNormalizer().Normalize(NvidiaSubmission)
@@ -209,8 +205,8 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
             .Where(c => c.DocumentId == document.Id)
             .OrderBy(c => c.Index)
             .ToListAsync();
-        chunks.Should().NotBeEmpty();
-        chunks[0].Content.Should().Contain("77,286 | 67 | % |\n| Graphics | 22,459");
+        chunks.Should().BeEmpty();
+        saved.ChunkedAt.Should().BeNull();
     }
 
     private async Task<Document> SeedLegacyDocument(string ticker, byte[] content = null)
@@ -252,16 +248,6 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
     )
     {
         var fileManager = CreateFileManager();
-        var processor = new DocumentProcessor(
-            new ChunkRepository(DbContext),
-            new EmbeddingRepository(DbContext),
-            Substitute.For<IEmbeddingClient>(),
-            new ChunkingStrategy(new TokenCounter()),
-            Options.Create(new EmbeddingConfig()),
-            fileManager,
-            Substitute.For<ILogger<DocumentProcessor>>()
-        );
-
         return new DocumentNormalizationBackfillService(
             new DocumentRepository(DbContext),
             secClient,
@@ -269,7 +255,6 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
             new SecDocumentHtmlToMarkdownConverter(),
             fileManager,
             persistenceService ?? CreatePersistence(fileManager),
-            processor,
             Substitute.For<ILogger<DocumentNormalizationBackfillService>>()
         );
     }

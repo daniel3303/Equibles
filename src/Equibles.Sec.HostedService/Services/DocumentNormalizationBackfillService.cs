@@ -3,7 +3,6 @@ using System.Text.RegularExpressions;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Media.BusinessLogic;
 using Equibles.Sec.BusinessLogic;
-using Equibles.Sec.BusinessLogic.Processing;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.Repositories;
@@ -14,7 +13,7 @@ namespace Equibles.Sec.HostedService.Services;
 /// <summary>
 /// Re-fetches and re-normalizes EDGAR documents whose stored Markdown predates the current
 /// normalization pipeline. Each successful replacement keeps the document id, removes stale
-/// chunks, and immediately recreates chunks from the corrected body.
+/// chunks, and returns it to the indexed pending queue for locked reprocessing.
 /// </summary>
 public class DocumentNormalizationBackfillService
 {
@@ -29,7 +28,6 @@ public class DocumentNormalizationBackfillService
     private readonly ISecDocumentHtmlToMarkdownConverter _converter;
     private readonly IFileManager _fileManager;
     private readonly IDocumentPersistenceService _persistenceService;
-    private readonly IDocumentProcessor _documentProcessor;
     private readonly ILogger<DocumentNormalizationBackfillService> _logger;
 
     public DocumentNormalizationBackfillService(
@@ -39,7 +37,6 @@ public class DocumentNormalizationBackfillService
         ISecDocumentHtmlToMarkdownConverter converter,
         IFileManager fileManager,
         IDocumentPersistenceService persistenceService,
-        IDocumentProcessor documentProcessor,
         ILogger<DocumentNormalizationBackfillService> logger
     )
     {
@@ -49,7 +46,6 @@ public class DocumentNormalizationBackfillService
         _converter = converter;
         _fileManager = fileManager;
         _persistenceService = persistenceService;
-        _documentProcessor = documentProcessor;
         _logger = logger;
     }
 
@@ -162,7 +158,6 @@ public class DocumentNormalizationBackfillService
                 {
                     await _persistenceService.ResetChunks(document, cancellationToken);
                     result.Unchanged++;
-                    await Rechunk(document, cancellationToken);
                     continue;
                 }
 
@@ -172,8 +167,6 @@ public class DocumentNormalizationBackfillService
                     cancellationToken
                 );
                 result.Replaced++;
-
-                await Rechunk(document, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -197,27 +190,6 @@ public class DocumentNormalizationBackfillService
         }
 
         return result;
-    }
-
-    private async Task Rechunk(Document document, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _documentProcessor.ProcessDocuments([document], cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Corrected document {DocumentId} was stored but could not be re-chunked immediately; the document processor will retry it.",
-                document.Id
-            );
-        }
     }
 
     private async Task<bool> ContentMatches(Document document, byte[] normalizedContent)

@@ -72,6 +72,72 @@ public class DocumentRepository : BaseRepository<Document>
         return GetAll().Where(d => d.DocumentType == documentType);
     }
 
+    /// <summary>
+    /// Locks one bounded FIFO batch of legacy rows that already have chunks but predate the
+    /// completion marker. The pending partial index bounds candidate discovery; the chunk probe
+    /// uses the DocumentId index and disappears once compatibility draining finishes.
+    /// </summary>
+    public Task<int> BackfillLegacyChunked(
+        int batchSize,
+        DateTime chunkedAt,
+        CancellationToken cancellationToken = default
+    ) =>
+        DbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            WITH candidates AS MATERIALIZED (
+                SELECT d."Id"
+                FROM "Document" AS d
+                WHERE d."ChunkedAt" IS NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM "Chunk" AS c
+                      WHERE c."DocumentId" = d."Id"
+                  )
+                ORDER BY d."CreationTime", d."Id"
+                LIMIT {batchSize}
+                FOR UPDATE OF d SKIP LOCKED
+            )
+            UPDATE "Document" AS d
+            SET "ChunkedAt" = {chunkedAt}
+            FROM candidates AS c
+            WHERE d."Id" = c."Id";
+            """,
+            cancellationToken
+        );
+
+    /// <summary>
+    /// Claims one pending document for the current transaction. SKIP LOCKED keeps a concurrent
+    /// content replacement or chunk reset authoritative: the worker skips that document until the
+    /// reset commits instead of waiting and then writing a stale completion marker over it.
+    /// </summary>
+    public async Task<Document> GetPendingForUpdate(
+        Guid documentId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var documents = await GetDbSet()
+            .FromSqlInterpolated(
+                $"""
+                SELECT d.*
+                FROM "Document" AS d
+                WHERE d."Id" = {documentId}
+                  AND d."ChunkedAt" IS NULL
+                  AND d."ContentId" IS NOT NULL
+                FOR UPDATE OF d SKIP LOCKED
+                """
+            )
+            .ToListAsync(cancellationToken);
+
+        var document = documents.SingleOrDefault();
+        if (document == null)
+            return null;
+
+        await DbContext.Entry(document).Reference(d => d.CommonStock).LoadAsync(cancellationToken);
+        await DbContext.Entry(document).Reference(d => d.Content).LoadAsync(cancellationToken);
+        await DbContext.Entry(document).Collection(d => d.Chunks).LoadAsync(cancellationToken);
+        return document;
+    }
+
     public IQueryable<Document> GetByXbrlStatus(XbrlCaptureStatus status)
     {
         return GetAll().Where(d => d.XbrlStatus == status);

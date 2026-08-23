@@ -9,6 +9,7 @@ public interface IDocumentProcessor
         List<Document> documents,
         CancellationToken cancellationToken = default
     );
+    public Task ProcessDocument(Document document, CancellationToken cancellationToken = default);
     public Task GenerateEmbeddings(
         List<Chunk> chunks,
         CancellationToken cancellationToken = default
