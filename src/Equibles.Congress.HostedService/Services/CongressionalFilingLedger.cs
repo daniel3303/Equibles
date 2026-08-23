@@ -1,7 +1,9 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Models;
 using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.Sec.Data.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,6 +24,27 @@ public class CongressionalFilingLedger
     public CongressionalFilingLedger(IServiceScopeFactory scopeFactory)
     {
         _scopeFactory = scopeFactory;
+    }
+
+    /// <summary>
+    /// True while captured filing XBRL can still produce the dated ticker evidence required by
+    /// the current congressional parser. The trade replay waits for this corpus backfill so an
+    /// old filing is never checkpointed before its authoritative issuer evidence is available.
+    /// </summary>
+    public virtual async Task<bool> HasPendingTickerEvidence(CancellationToken ct)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        return await dbContext
+            .Set<Document>()
+            .AsNoTracking()
+            .AnyAsync(
+                document =>
+                    document.XbrlStatus == XbrlCaptureStatus.Captured
+                    && document.XbrlFactsVersion < CommonStockTickerEvidence.SourceXbrlFactsVersion
+                    && document.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts,
+                ct
+            );
     }
 
     /// <summary>

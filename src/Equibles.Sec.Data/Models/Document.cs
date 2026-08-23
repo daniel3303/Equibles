@@ -170,6 +170,9 @@ public class Document
     /// </summary>
     public int XbrlFactsAttempts { get; set; }
 
+    /// <summary>Retry ceiling for <see cref="XbrlFactsAttempts"/>.</summary>
+    public const int MaxXbrlFactsAttempts = 5;
+
     // --- As-filed display HTML (the primary document + its displayable exhibits, stitched) ---
     // Kept SEPARATE from XbrlContent (which the dimensional-fact extractor parses): the as-filed
     // viewer needs the WHOLE filing — an 8-K's cover page PLUS its linked exhibits, e.g. the

@@ -35,6 +35,39 @@ public static class TickerNormalizer
     public static string NormalizeDashListed(string ticker) =>
         NormalizeListed(ticker)?.Replace('.', '-');
 
+    /// <summary>
+    /// Canonical identity used when comparing symbols across sources whose class separators
+    /// differ (for example BRK.B and BRK-B). This form is for equality only, not display.
+    /// </summary>
+    public static string NormalizeIdentity(string ticker)
+    {
+        if (string.IsNullOrWhiteSpace(ticker))
+            return null;
+
+        var trimmed = ticker.Trim();
+        if (
+            trimmed.Equals("n/a", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("none", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("not applicable", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Any(character =>
+                !char.IsAsciiLetterOrDigit(character)
+                && character != '-'
+                && character != '.'
+                && character != '/'
+                && character != ' '
+            )
+        )
+            return null;
+
+        var normalized = trimmed
+            .ToUpperInvariant()
+            .Replace(".", string.Empty)
+            .Replace("-", string.Empty)
+            .Replace("/", string.Empty)
+            .Replace(" ", string.Empty);
+        return normalized.Length is > 0 and <= MaxListedLength ? normalized : null;
+    }
+
     public static string NormalizePrimary(string ticker)
     {
         var normalized = NormalizeListed(ticker);

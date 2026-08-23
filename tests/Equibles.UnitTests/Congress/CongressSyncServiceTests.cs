@@ -49,6 +49,7 @@ public class CongressSyncServiceTests
             errorReporter,
             filingLedger,
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
             Substitute.For<ICongressMemberIdentityService>()
         );
     }
@@ -60,8 +61,13 @@ public class CongressSyncServiceTests
         Dictionary<string, CommonStock> stocks
     )
     {
+        var resolutions = matched.ToDictionary(
+            transaction => transaction,
+            transaction =>
+                stocks.TryGetValue(transaction.Ticker, out var stock) ? (Guid?)stock.Id : null
+        );
         return (List<CongressionalTrade>)
-            BuildTradesMethod.Invoke(service, [matched, members, stocks])!;
+            BuildTradesMethod.Invoke(service, [matched, members, resolutions])!;
     }
 
     // ── Factory helpers ─────────────────────────────────────────────────

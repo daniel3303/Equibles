@@ -35,6 +35,7 @@ public class CongressionalTradeSyncServiceBuildTradesSameDayTests
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
             Substitute.For<ICongressMemberIdentityService>()
         );
         var stock = new CommonStock
@@ -70,7 +71,7 @@ public class CongressionalTradeSyncServiceBuildTradesSameDayTests
                     [
                         new List<DisclosureTransaction> { tx },
                         new Dictionary<string, CongressMember> { [member.Name] = member },
-                        new Dictionary<string, CommonStock> { [stock.Ticker] = stock },
+                        new Dictionary<DisclosureTransaction, Guid?> { [tx] = stock.Id },
                     ]
                 );
 

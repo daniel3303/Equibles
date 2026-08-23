@@ -27,8 +27,6 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
 {
     // After this many failed cycles a document is no longer selected, mirroring
     // the capture backfill's ceiling.
-    private const int MaxAttempts = 5;
-
     private readonly XbrlFactsExtractionOptions _options;
 
     protected override string WorkerName => "XBRL facts extraction";
@@ -68,7 +66,7 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
                 .GetByXbrlStatus(XbrlCaptureStatus.Captured)
                 .Where(d =>
                     d.XbrlFactsVersion < XbrlFactExtractionService.CurrentVersion
-                    && d.XbrlFactsAttempts < MaxAttempts
+                    && d.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts
                 )
                 .OrderByDescending(d => d.ReportingDate)
                 .Take(batchSize)

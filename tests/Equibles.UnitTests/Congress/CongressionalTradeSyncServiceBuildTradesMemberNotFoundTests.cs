@@ -31,6 +31,7 @@ public class CongressionalTradeSyncServiceBuildTradesMemberNotFoundTests
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
             Substitute.For<ICongressMemberIdentityService>()
         );
 
@@ -65,7 +66,7 @@ public class CongressionalTradeSyncServiceBuildTradesMemberNotFoundTests
                     [
                         new List<DisclosureTransaction> { tx },
                         new Dictionary<string, CongressMember>(),
-                        new Dictionary<string, CommonStock> { ["AAPL"] = stock },
+                        new Dictionary<DisclosureTransaction, Guid?> { [tx] = stock.Id },
                     ]
                 );
 

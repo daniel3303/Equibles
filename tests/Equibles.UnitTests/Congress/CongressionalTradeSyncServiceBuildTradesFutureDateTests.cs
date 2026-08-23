@@ -26,6 +26,7 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
             Substitute.For<ICongressMemberIdentityService>()
         );
 
@@ -46,7 +47,7 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
                 [
                     new List<DisclosureTransaction> { tx },
                     new Dictionary<string, CongressMember> { [member.Name] = member },
-                    new Dictionary<string, CommonStock> { [stock.Ticker] = stock },
+                    new Dictionary<DisclosureTransaction, Guid?> { [tx] = stock.Id },
                 ]
             );
     }

@@ -1,5 +1,4 @@
-using Equibles.CommonStocks.Data.Models;
-using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Models;
 using Equibles.Core.AutoWiring;
@@ -21,6 +20,7 @@ public class CongressionalTradeSyncService
     private readonly ErrorReporter _errorReporter;
     private readonly CongressionalFilingLedger _filingLedger;
     private readonly CongressionalTradeImportLedger _importLedger;
+    private readonly CongressionalTradeIssuerResolver _issuerResolver;
     private readonly ICongressMemberIdentityService _memberIdentityService;
 
     public CongressionalTradeSyncService(
@@ -30,6 +30,7 @@ public class CongressionalTradeSyncService
         ErrorReporter errorReporter,
         CongressionalFilingLedger filingLedger,
         CongressionalTradeImportLedger importLedger,
+        CongressionalTradeIssuerResolver issuerResolver,
         ICongressMemberIdentityService memberIdentityService
     )
     {
@@ -39,20 +40,15 @@ public class CongressionalTradeSyncService
         _errorReporter = errorReporter;
         _filingLedger = filingLedger;
         _importLedger = importLedger;
+        _issuerResolver = issuerResolver;
         _memberIdentityService = memberIdentityService;
     }
 
     // Congressional trade disclosures are available from 2012 (STOCK Act).
     private static readonly DateOnly EarliestAvailableDate = new(2012, 4, 1);
-    private const int TradeParserVersion = 4;
+    private const int LegacyTradeParserVersion = 4;
+    private const int CurrentTradeParserVersion = 5;
     private const int ReprocessPerCycleLimit = 1_000;
-
-    // A filing with a transaction whose ticker is not (yet) a tracked stock
-    // keeps re-fetching until the filing is this old, so a listing-lag gap
-    // (e.g. an IPO disclosed before the stock enters CommonStock) is
-    // back-matched on a later cycle. Older than this, the ticker is a
-    // genuinely untracked asset and the filing is retired.
-    private const int UnmatchedTickerRetryWindowDays = 30;
 
     public async Task SyncAll(CancellationToken ct)
     {
@@ -72,7 +68,8 @@ public class CongressionalTradeSyncService
             toDate
         );
 
-        var batches = await FetchBatches(fromDate, toDate, ct);
+        var parserVersion = await GetActiveTradeParserVersion(ct);
+        var batches = await FetchBatches(fromDate, toDate, parserVersion, ct);
         var allTransactions = batches.SelectMany(b => b.Result.Transactions).ToList();
 
         var outcome = TradePersistOutcome.Empty;
@@ -90,17 +87,53 @@ public class CongressionalTradeSyncService
             outcome = await ProcessTransactions(allTransactions, ct);
         }
 
+        var linked = await _issuerResolver.RelinkUnresolved(ct);
+        if (linked > 0)
+        {
+            _logger.LogInformation(
+                "Linked {Count} previously unresolved congressional trades from new ticker evidence",
+                linked
+            );
+        }
+
         // Only after the transactions are committed: a failed persist above
         // throws before this point, so unrecorded filings re-fetch next cycle
         // instead of being lost.
-        var unmatchedRetryCutoff = toDate.AddDays(-UnmatchedTickerRetryWindowDays);
         foreach (var batch in batches)
-            await RecordBatch(batch, outcome, unmatchedRetryCutoff, ct);
+            await RecordBatch(batch, outcome, parserVersion, ct);
     }
+
+    private async Task<int> GetActiveTradeParserVersion(CancellationToken cancellationToken)
+    {
+        var evidenceBackfillPending = await _filingLedger.HasPendingTickerEvidence(
+            cancellationToken
+        );
+
+        var tickerScopeRestricted = (_workerOptions.TickersToSync ?? [])
+            .Select(TickerNormalizer.NormalizeIdentity)
+            .Any(ticker => ticker != null);
+        var version = SelectTradeParserVersion(evidenceBackfillPending, tickerScopeRestricted);
+        _logger.LogInformation(
+            "Congressional trade parser version {ParserVersion} active; ticker evidence backfill pending: {EvidenceBackfillPending}; ticker scope restricted: {TickerScopeRestricted}",
+            version,
+            evidenceBackfillPending,
+            tickerScopeRestricted
+        );
+        return version;
+    }
+
+    internal static int SelectTradeParserVersion(
+        bool evidenceBackfillPending,
+        bool tickerScopeRestricted
+    ) =>
+        evidenceBackfillPending || tickerScopeRestricted
+            ? LegacyTradeParserVersion
+            : CurrentTradeParserVersion;
 
     private async Task<List<TradeFetchBatch>> FetchBatches(
         DateOnly fromDate,
         DateOnly toDate,
+        int parserVersion,
         CancellationToken ct
     )
     {
@@ -111,7 +144,7 @@ public class CongressionalTradeSyncService
             var processed = await _filingLedger.GetProcessedSourceIds(
                 kind,
                 ct,
-                TradeParserVersion,
+                parserVersion,
                 ReprocessPerCycleLimit
             );
             var current = await FetchRange(kind, fromDate, toDate, processed, ct);
@@ -119,7 +152,7 @@ public class CongressionalTradeSyncService
 
             var archiveYear = await _importLedger.GetNextYear(
                 kind,
-                TradeParserVersion,
+                parserVersion,
                 EarliestAvailableDate.Year,
                 fromDate.Year - 1,
                 ct
@@ -141,7 +174,7 @@ public class CongressionalTradeSyncService
             var archiveProcessed = await _filingLedger.GetProcessedSourceIds(
                 archiveCandidate.Kind,
                 ct,
-                TradeParserVersion,
+                parserVersion,
                 int.MaxValue
             );
             var archiveStart = new DateOnly(archiveCandidate.Year, 1, 1);
@@ -192,16 +225,12 @@ public class CongressionalTradeSyncService
     private async Task RecordBatch(
         TradeFetchBatch batch,
         TradePersistOutcome outcome,
-        DateOnly unmatchedRetryCutoff,
+        int parserVersion,
         CancellationToken ct
     )
     {
-        var recordable = FilterRecordable(
-            batch.Result.ProcessedFilings,
-            outcome,
-            unmatchedRetryCutoff
-        );
-        await _filingLedger.RecordProcessed(batch.Kind, recordable, ct, TradeParserVersion);
+        var recordable = FilterRecordable(batch.Result.ProcessedFilings, outcome);
+        await _filingLedger.RecordProcessed(batch.Kind, recordable, ct, parserVersion);
 
         if (
             batch.ArchiveYear == null
@@ -213,7 +242,7 @@ public class CongressionalTradeSyncService
         await _importLedger.RecordCompleted(
             batch.Kind,
             batch.ArchiveYear.Value,
-            TradeParserVersion,
+            parserVersion,
             recordable.Count,
             batch.Result.Transactions.Count,
             ct
@@ -232,38 +261,22 @@ public class CongressionalTradeSyncService
         int? ArchiveYear
     );
 
-    // A filing is only retired once everything it disclosed is accounted for:
-    // rows that hit the member-not-found guard were parsed but never stored,
-    // so their filing must keep retrying; a filing with an unmatched ticker
-    // retries until it ages past the listing-lag window (see
-    // UnmatchedTickerRetryWindowDays).
+    // A filing is only retired once everything it disclosed is accounted for. A ticker with no
+    // safe issuer match is accounted for as an unlinked source row; malformed rows and ambiguous
+    // legacy adoption remain retryable.
     internal static List<ProcessedFiling> FilterRecordable(
         List<ProcessedFiling> filings,
-        TradePersistOutcome outcome,
-        DateOnly unmatchedRetryCutoff
-    ) =>
-        filings
-            .Where(f => !outcome.UnpersistedSourceIds.Contains(f.SourceId))
-            .Where(f =>
-                !outcome.UnmatchedTickerSourceIds.Contains(f.SourceId)
-                || f.FilingDate <= unmatchedRetryCutoff
-            )
-            .ToList();
+        TradePersistOutcome outcome
+    ) => filings.Where(f => !outcome.UnpersistedSourceIds.Contains(f.SourceId)).ToList();
 
     /// <summary>
     /// The persistence outcome of one sync cycle: filings named here had
     /// transactions that were parsed but not stored, so they must not (yet)
     /// be recorded as ingested.
     /// </summary>
-    internal sealed record TradePersistOutcome(
-        IReadOnlySet<string> UnmatchedTickerSourceIds,
-        IReadOnlySet<string> UnpersistedSourceIds
-    )
+    internal sealed record TradePersistOutcome(IReadOnlySet<string> UnpersistedSourceIds)
     {
-        public static readonly TradePersistOutcome Empty = new(
-            new HashSet<string>(),
-            new HashSet<string>()
-        );
+        public static readonly TradePersistOutcome Empty = new(new HashSet<string>());
     }
 
     private async Task<DisclosureFetchResult> FetchDisclosureTransactions(
@@ -299,17 +312,20 @@ public class CongressionalTradeSyncService
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         var memberIdentityService =
             scope.ServiceProvider.GetRequiredService<ICongressMemberIdentityService>();
-        var commonStockRepository =
-            scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
 
-        var stockQuery =
-            _workerOptions.TickersToSync?.Count > 0
-                ? commonStockRepository.GetByTickers(_workerOptions.TickersToSync)
-                : commonStockRepository.GetAll();
-
-        var stocks = await stockQuery
-            .AsNoTracking()
-            .ToDictionaryAsync(s => s.Ticker, s => s, StringComparer.OrdinalIgnoreCase, ct);
+        var configuredTickers = (_workerOptions.TickersToSync ?? [])
+            .Select(TickerNormalizer.NormalizeIdentity)
+            .Where(ticker => ticker != null)
+            .ToHashSet(StringComparer.Ordinal);
+        var tickered = transactions
+            .Where(transaction => TickerNormalizer.NormalizeIdentity(transaction.Ticker) != null)
+            .Where(transaction =>
+                configuredTickers.Count == 0
+                || configuredTickers.Contains(
+                    TickerNormalizer.NormalizeIdentity(transaction.Ticker)
+                )
+            )
+            .ToList();
 
         // A source row dated after its own filing is never recordable, even when the ticker is
         // absent or not tracked. Keep the whole filing retryable rather than checkpointing a
@@ -319,32 +335,18 @@ public class CongressionalTradeSyncService
             .Select(t => t.SourceId)
             .ToHashSet();
 
-        // Tickered transactions whose stock is not tracked (yet): their
-        // filings stay retryable inside the listing-lag window.
-        var unmatchedTickerSourceIds = transactions
-            .Where(t =>
-                t.SourceId != null
-                && !string.IsNullOrEmpty(t.Ticker)
-                && !stocks.ContainsKey(t.Ticker)
-            )
-            .Select(t => t.SourceId)
-            .ToHashSet();
+        if (tickered.Count == 0)
+            return new TradePersistOutcome(unpersistedSourceIds);
 
-        var matched = transactions
-            .Where(t => !string.IsNullOrEmpty(t.Ticker) && stocks.ContainsKey(t.Ticker))
-            .ToList();
-
+        var resolutions = await _issuerResolver.Resolve(tickered, ct);
         _logger.LogInformation(
-            "Matched {Matched}/{Total} transactions to tracked stocks",
-            matched.Count,
-            transactions.Count
+            "Resolved {Resolved}/{Tickered} tickered transactions to an issuer",
+            resolutions.Count(pair => pair.Value.HasValue),
+            tickered.Count
         );
 
-        if (matched.Count == 0)
-            return new TradePersistOutcome(unmatchedTickerSourceIds, unpersistedSourceIds);
-
         var members = await memberIdentityService.UpsertMembers(
-            matched
+            tickered
                 .Select(transaction => new CongressMemberObservation(
                     transaction.MemberName,
                     transaction.Position,
@@ -358,7 +360,7 @@ public class CongressionalTradeSyncService
         // Mirrors BuildTrades' member-not-found guard: those rows are parsed
         // but never stored, so their filings must not be recorded as ingested.
         unpersistedSourceIds.UnionWith(
-            matched
+            tickered
                 .Where(t =>
                     t.SourceId != null
                     && !members.ContainsKey(
@@ -368,10 +370,10 @@ public class CongressionalTradeSyncService
                 .Select(t => t.SourceId)
         );
 
-        var trades = BuildTrades(matched, members, stocks);
-        await PersistTrades(trades, dbContext, ct);
+        var trades = BuildTrades(tickered, members, resolutions);
+        unpersistedSourceIds.UnionWith(await PersistTrades(trades, dbContext, ct));
 
-        return new TradePersistOutcome(unmatchedTickerSourceIds, unpersistedSourceIds);
+        return new TradePersistOutcome(unpersistedSourceIds);
     }
 
     /// <summary>
@@ -388,14 +390,14 @@ public class CongressionalTradeSyncService
             ?.StateDistrict.Trim();
 
     internal List<CongressionalTrade> BuildTrades(
-        List<DisclosureTransaction> matched,
+        List<DisclosureTransaction> tickered,
         Dictionary<string, CongressMember> members,
-        Dictionary<string, CommonStock> stocks
+        IReadOnlyDictionary<DisclosureTransaction, Guid?> resolutions
     )
     {
         var trades = new List<CongressionalTrade>();
 
-        foreach (var tx in matched)
+        foreach (var tx in tickered)
         {
             var memberName = DisclosureParsingHelper.NormalizeMemberName(tx.MemberName);
             if (!members.TryGetValue(memberName, out var member))
@@ -420,13 +422,15 @@ public class CongressionalTradeSyncService
                 continue;
             }
 
-            var stock = stocks[tx.Ticker];
-
             trades.Add(
                 new CongressionalTrade
                 {
                     CongressMemberId = member.Id,
-                    CommonStockId = stock.Id,
+                    CommonStockId = resolutions.GetValueOrDefault(tx),
+                    FiledTicker = TickerNormalizer.NormalizeIdentity(tx.Ticker) ?? "",
+                    FilingKind = tx.FilingKind,
+                    SourceId = tx.SourceId,
+                    SourceRowIndex = tx.SourceRowIndex,
                     TransactionDate = tx.TransactionDate,
                     FilingDate = tx.FilingDate,
                     TransactionType = tx.TransactionType,
@@ -556,43 +560,52 @@ public class CongressionalTradeSyncService
         );
     }
 
-    private async Task PersistTrades(
+    private async Task<IReadOnlySet<string>> PersistTrades(
         List<CongressionalTrade> trades,
         EquiblesFinancialDbContext dbContext,
         CancellationToken ct
     )
     {
         if (trades.Count == 0)
-            return;
+            return new HashSet<string>();
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
         await RepairLegacyInlineSubholdingNames(trades, dbContext, ct);
         await RepairLegacyEmptyFiledMetadata(trades, dbContext, ct);
         await RepairLegacyZeroFloorAmounts(trades, dbContext, ct);
         RemoveUnidentifiedMetadataDuplicates(trades);
+        var unpersistedSourceIds = await AdoptLegacyRows(trades, dbContext, ct);
 
-        // Must match the unique index on CongressionalTrade exactly (see the identity note on
-        // the entity) or ON CONFLICT has no arbiter and the upsert throws. AssetName
-        // participates, so dedup only works while stored names equal the current
-        // CleanAssetName output — see the invariant note on CleanAssetName.
-        await dbContext
-            .Set<CongressionalTrade>()
-            .UpsertRange(trades)
-            .On(t => new
-            {
-                t.CommonStockId,
-                t.CongressMemberId,
-                t.TransactionDate,
-                t.TransactionType,
-                t.AssetName,
-                t.OwnerType,
-                t.AmountFrom,
-                t.AmountTo,
-                t.AssetType,
-                t.Subholding,
-            })
-            .NoUpdate()
-            .RunAsync(ct);
+        if (trades.Count > 0)
+        {
+            await dbContext
+                .Set<CongressionalTrade>()
+                .UpsertRange(trades)
+                .On(t => new
+                {
+                    t.FilingKind,
+                    t.SourceId,
+                    t.SourceRowIndex,
+                })
+                .WhenMatched(
+                    (existing, incoming) =>
+                        new CongressionalTrade
+                        {
+                            CommonStockId = incoming.CommonStockId,
+                            CongressMemberId = incoming.CongressMemberId,
+                            TransactionDate = incoming.TransactionDate,
+                            FilingDate = incoming.FilingDate,
+                            TransactionType = incoming.TransactionType,
+                            OwnerType = incoming.OwnerType,
+                            AssetName = incoming.AssetName,
+                            AssetType = incoming.AssetType,
+                            Subholding = incoming.Subholding,
+                            AmountFrom = incoming.AmountFrom,
+                            AmountTo = incoming.AmountTo,
+                        }
+                )
+                .RunAsync(ct);
+        }
 
         await transaction.CommitAsync(ct);
 
@@ -600,6 +613,147 @@ public class CongressionalTradeSyncService
             "Upserted {Count} congressional trades (duplicates skipped)",
             trades.Count
         );
+
+        return unpersistedSourceIds;
+    }
+
+    /// <summary>
+    /// Gives pre-source-identity rows their stable filing key on replay. Company identity is
+    /// deliberately excluded from the match because correcting a reused ticker is the purpose of
+    /// the replay. Ambiguous matches are refused and keep the filing retryable.
+    /// </summary>
+    private async Task<HashSet<string>> AdoptLegacyRows(
+        List<CongressionalTrade> incoming,
+        EquiblesFinancialDbContext dbContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var unpersistedSourceIds = new HashSet<string>();
+        var duplicateSourceKeys = incoming
+            .Where(trade => trade.SourceId != null)
+            .GroupBy(trade => new
+            {
+                trade.FilingKind,
+                trade.SourceId,
+                trade.SourceRowIndex,
+            })
+            .Where(group => group.Count() > 1)
+            .ToList();
+        foreach (var duplicate in duplicateSourceKeys)
+        {
+            var refusedRows = duplicate.ToList();
+            incoming.RemoveAll(refusedRows.Contains);
+            unpersistedSourceIds.UnionWith(refusedRows.Select(trade => trade.SourceId));
+            _logger.LogWarning(
+                "Deferred congressional filing {SourceId} because source row {SourceRowIndex} appeared more than once",
+                duplicate.Key.SourceId,
+                duplicate.Key.SourceRowIndex
+            );
+        }
+
+        var sourceRows = incoming.Where(trade => trade.SourceId != null).ToList();
+        if (sourceRows.Count == 0)
+            return unpersistedSourceIds;
+
+        var sourceIds = sourceRows.Select(trade => trade.SourceId).Distinct().ToList();
+        var storedSourceRows = await dbContext
+            .Set<CongressionalTrade>()
+            .AsNoTracking()
+            .Where(trade => trade.SourceId != null && sourceIds.Contains(trade.SourceId))
+            .ToListAsync(cancellationToken);
+        var storedBySourceIdentity = storedSourceRows.ToDictionary(TradeSourceIdentity.From);
+        var tickerConflicts = sourceRows
+            .Where(incomingTrade =>
+                storedBySourceIdentity.TryGetValue(
+                    TradeSourceIdentity.From(incomingTrade),
+                    out var storedTrade
+                )
+                && storedTrade.FiledTicker != incomingTrade.FiledTicker
+            )
+            .ToList();
+        foreach (var conflict in tickerConflicts)
+        {
+            incoming.Remove(conflict);
+            unpersistedSourceIds.Add(conflict.SourceId);
+            _logger.LogWarning(
+                "Deferred congressional filing {SourceId} because source row {SourceRowIndex} changed its filed ticker",
+                conflict.SourceId,
+                conflict.SourceRowIndex
+            );
+        }
+
+        sourceRows = incoming.Where(trade => trade.SourceId != null).ToList();
+        if (sourceRows.Count == 0)
+            return unpersistedSourceIds;
+
+        var memberIds = sourceRows.Select(trade => trade.CongressMemberId).Distinct().ToList();
+        var firstDate = sourceRows.Min(trade => trade.TransactionDate);
+        var lastDate = sourceRows.Max(trade => trade.TransactionDate);
+        var legacyRows = await dbContext
+            .Set<CongressionalTrade>()
+            .Where(trade =>
+                trade.SourceId == null
+                && memberIds.Contains(trade.CongressMemberId)
+                && trade.TransactionDate >= firstDate
+                && trade.TransactionDate <= lastDate
+            )
+            .ToListAsync(cancellationToken);
+        var legacyByIdentity = legacyRows
+            .GroupBy(LegacySourceIdentity.From)
+            .ToDictionary(group => group.Key, group => group.ToList());
+        var incomingByIdentity = sourceRows
+            .GroupBy(LegacySourceIdentity.From)
+            .ToDictionary(group => group.Key, group => group.ToList());
+        var adopted = new List<CongressionalTrade>();
+        var refused = new List<CongressionalTrade>();
+
+        foreach (var (identity, candidates) in incomingByIdentity)
+        {
+            if (!legacyByIdentity.TryGetValue(identity, out var legacyCandidates))
+                continue;
+
+            if (legacyCandidates.Count != 1)
+            {
+                refused.AddRange(candidates);
+                unpersistedSourceIds.UnionWith(candidates.Select(trade => trade.SourceId));
+                _logger.LogWarning(
+                    "Deferred congressional trade source adoption because {IncomingCount} source rows matched {LegacyCount} legacy rows",
+                    candidates.Count,
+                    legacyCandidates.Count
+                );
+                continue;
+            }
+
+            // The old semantic unique index could collapse two identical filed source rows into
+            // one legacy row. Adopt it as the lowest source ordinal; remaining rows insert under
+            // their own stable keys.
+            var source = candidates
+                .OrderBy(candidate => candidate.SourceRowIndex)
+                .ThenBy(candidate => candidate.SourceId, StringComparer.Ordinal)
+                .First();
+            var legacy = legacyCandidates[0];
+            legacy.CommonStockId = source.CommonStockId;
+            legacy.FiledTicker = source.FiledTicker;
+            legacy.FilingKind = source.FilingKind;
+            legacy.SourceId = source.SourceId;
+            legacy.SourceRowIndex = source.SourceRowIndex;
+            legacy.FilingDate = source.FilingDate;
+            legacy.AssetType = source.AssetType;
+            legacy.Subholding = source.Subholding;
+            adopted.Add(source);
+        }
+
+        incoming.RemoveAll(trade => adopted.Contains(trade) || refused.Contains(trade));
+        if (adopted.Count > 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation(
+                "Adopted {Count} legacy congressional trades using stable source-row identity",
+                adopted.Count
+            );
+        }
+
+        return unpersistedSourceIds;
     }
 
     private async Task RepairLegacyEmptyFiledMetadata(
@@ -715,7 +869,7 @@ public class CongressionalTradeSyncService
     }
 
     private sealed record TradeBaseIdentity(
-        Guid CommonStockId,
+        Guid? CommonStockId,
         Guid CongressMemberId,
         DateOnly TransactionDate,
         CongressTransactionType TransactionType,
@@ -737,7 +891,7 @@ public class CongressionalTradeSyncService
     private sealed record TradeAmountRange(long AmountFrom, long AmountTo, DateOnly FilingDate);
 
     private sealed record InlineMetadataRepairIdentity(
-        Guid CommonStockId,
+        Guid? CommonStockId,
         Guid CongressMemberId,
         DateOnly TransactionDate,
         CongressTransactionType TransactionType,
@@ -771,4 +925,40 @@ public class CongressionalTradeSyncService
         InlineMetadataRepairIdentity Identity,
         string CleanedSubholding
     );
+
+    private sealed record LegacySourceIdentity(
+        Guid CongressMemberId,
+        DateOnly TransactionDate,
+        CongressTransactionType TransactionType,
+        string AssetName,
+        string OwnerType,
+        long AmountFrom,
+        long AmountTo,
+        string AssetType,
+        string Subholding
+    )
+    {
+        public static LegacySourceIdentity From(CongressionalTrade trade) =>
+            new(
+                trade.CongressMemberId,
+                trade.TransactionDate,
+                trade.TransactionType,
+                trade.AssetName,
+                trade.OwnerType,
+                trade.AmountFrom,
+                trade.AmountTo,
+                trade.AssetType,
+                trade.Subholding
+            );
+    }
+
+    private sealed record TradeSourceIdentity(
+        CongressionalFilingKind? FilingKind,
+        string SourceId,
+        int? SourceRowIndex
+    )
+    {
+        public static TradeSourceIdentity From(CongressionalTrade trade) =>
+            new(trade.FilingKind, trade.SourceId, trade.SourceRowIndex);
+    }
 }

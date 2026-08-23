@@ -65,7 +65,10 @@ public class SenateDisclosureClient : IAsyncDisposable
                 var reportId = ExtractReportId(report.ReportUrl);
                 var reportTxns = await FetchAndParseReport(report, ct);
                 foreach (var txn in reportTxns)
+                {
                     txn.SourceId = reportId;
+                    txn.FilingKind = CongressionalFilingKind.SenatePeriodicTransactionReport;
+                }
                 result.Transactions.AddRange(reportTxns);
                 result.ProcessedFilings.Add(
                     new ProcessedFiling(reportId, report.DateSubmitted, reportTxns.Count)

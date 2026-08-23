@@ -51,6 +51,7 @@ public class CongressionalTradeSyncServiceTests
             errorReporter,
             filingLedger,
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
             Substitute.For<ICongressMemberIdentityService>()
         );
 
@@ -114,6 +115,7 @@ public class CongressionalTradeSyncServiceTests
             errorReporter,
             filingLedger,
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
             Substitute.For<ICongressMemberIdentityService>()
         );
 

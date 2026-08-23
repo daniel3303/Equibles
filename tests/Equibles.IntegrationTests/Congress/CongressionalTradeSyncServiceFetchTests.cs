@@ -96,6 +96,7 @@ public class CongressionalTradeSyncServiceFetchTests
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
             importLedger,
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
             memberIdentityService
         );
 

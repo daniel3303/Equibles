@@ -183,7 +183,8 @@ public class CongressTools
                     {
                         var type = t.TransactionType.NameForHumans();
                         var amount = FormatAmountRange(t);
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CommonStock.Ticker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
+                        var ticker = t.CommonStock?.Ticker ?? t.FiledTicker;
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {ticker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
                     }
                 );
                 var note = McpOutput.PagedTruncationNote(trades.Count, totalCount, offset);

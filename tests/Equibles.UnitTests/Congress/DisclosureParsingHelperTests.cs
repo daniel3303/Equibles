@@ -330,6 +330,7 @@ public class DisclosureParsingHelperTests
         result[0].AmountFrom.Should().Be(1001);
         result[0].AmountTo.Should().Be(15000);
         result[0].AssetType.Should().Be("Stock");
+        result[0].SourceRowIndex.Should().Be(0);
     }
 
     [Fact]

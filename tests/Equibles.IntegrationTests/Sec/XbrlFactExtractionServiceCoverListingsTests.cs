@@ -62,6 +62,13 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
         rows[0].AccessionNumber.Should().Be("0001355096-26-000010");
         rows[0].FiledDate.Should().Be(new DateOnly(2026, 5, 15));
         rows[1].TradingSymbol.Should().Be("QVCGA");
+        var evidence = await DbContext
+            .Set<CommonStockTickerEvidence>()
+            .Where(row => row.CommonStockId == stock.Id)
+            .OrderBy(row => row.Ticker)
+            .ToListAsync(CancellationToken.None);
+        evidence.Select(row => row.Ticker).Should().Equal("QVCC", "QVCGA");
+        evidence.Should().OnlyContain(row => row.FiledDate == new DateOnly(2026, 5, 15));
 
         var reloaded = await ReloadStock(stock);
         reloaded.ListedSecurityType.Should().Be(ListedSecurityType.DebtSecurities);
@@ -100,6 +107,14 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
             .Subject;
         row.Title.Should().Be("Common Stock, par value $0.01");
         row.FiledDate.Should().Be(new DateOnly(2026, 4, 15));
+
+        var evidenceDates = await DbContext
+            .Set<CommonStockTickerEvidence>()
+            .Where(evidence => evidence.CommonStockId == stock.Id)
+            .OrderBy(evidence => evidence.FiledDate)
+            .Select(evidence => evidence.FiledDate)
+            .ToListAsync(CancellationToken.None);
+        evidenceDates.Should().Equal(new DateOnly(2025, 3, 20), new DateOnly(2026, 4, 15));
 
         var reloaded = await ReloadStock(stock);
         reloaded.ListedSecurityType.Should().Be(ListedSecurityType.CommonShares);
@@ -176,6 +191,10 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
             (typeof(EquiblesFinancialDbContext), DbContext),
             (typeof(FinancialConceptRepository), new FinancialConceptRepository(DbContext)),
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (
+                typeof(CommonStockTickerEvidenceRepository),
+                new CommonStockTickerEvidenceRepository(DbContext)
+            ),
             (typeof(ListedSecurityRepository), new ListedSecurityRepository(DbContext))
         );
         var fileManager = Substitute.For<IFileManager>();

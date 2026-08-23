@@ -92,6 +92,45 @@ public class CongressMemberIdentityServiceTests : ParadeDbMcpTestBase
         disclosure.ReportId.Should().Be("amendment");
     }
 
+    [Fact]
+    public async Task ReconcileMembers_DistinctSourceRowsWithSameFacts_PreservesBothTrades()
+    {
+        var survivor = new CongressMember { Name = "Scott Franklin" };
+        var retired = new CongressMember { Name = "C. Scott Franklin" };
+        DbContext.AddRange(survivor, retired);
+        DbContext.AddRange(SourceTrade(survivor, "filing-a"), SourceTrade(retired, "filing-b"));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await CreateSut().ReconcileMembers(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var member = await verify.Set<CongressMember>().AsNoTracking().SingleAsync();
+        var trades = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
+        trades.Should().HaveCount(2);
+        trades.Should().OnlyContain(trade => trade.CongressMemberId == member.Id);
+        trades.Select(trade => trade.SourceId).Should().BeEquivalentTo("filing-a", "filing-b");
+    }
+
+    private static CongressionalTrade SourceTrade(CongressMember member, string sourceId) =>
+        new()
+        {
+            CongressMember = member,
+            FiledTicker = "TEST",
+            FilingKind = CongressionalFilingKind.HousePeriodicTransactionReport,
+            SourceId = sourceId,
+            SourceRowIndex = 0,
+            TransactionDate = new DateOnly(2024, 1, 1),
+            FilingDate = new DateOnly(2024, 1, 10),
+            TransactionType = CongressTransactionType.Purchase,
+            OwnerType = "self",
+            AssetName = "Test Corporation",
+            AssetType = "ST",
+            Subholding = "",
+            AmountFrom = 1_001,
+            AmountTo = 15_000,
+        };
+
     private CongressMemberIdentityService CreateSut() =>
         new(DbContext, Substitute.For<ILogger<CongressMemberIdentityService>>());
 }

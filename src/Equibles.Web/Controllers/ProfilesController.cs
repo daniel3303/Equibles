@@ -399,7 +399,7 @@ public class ProfilesController : BaseController
             .TakeMostRecent(trade => trade.TransactionDate, RecentRowLimit)
             .Select(trade => new CongressTradeRowViewModel
             {
-                Ticker = trade.CommonStock.Ticker,
+                Ticker = trade.CommonStock != null ? trade.CommonStock.Ticker : trade.FiledTicker,
                 TransactionDate = trade.TransactionDate,
                 AssetName = trade.AssetName,
                 AssetType = trade.AssetType,

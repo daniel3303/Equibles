@@ -237,14 +237,15 @@ public class HouseDisclosureClientTests
     {
         var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
             [
-                "Apple Inc. (AAPL) P 03/03/2024 03/05/2024 $1,001 - $15,000",
                 "Microsoft Corp. (MSFT) Corrupt 04/01/2024 $15,001 - $50,000",
+                "Apple Inc. (AAPL) P 03/03/2024 03/05/2024 $1,001 - $15,000",
             ],
             "Nancy Pelosi",
             FilingDate
         );
 
         result.Transactions.Should().ContainSingle();
+        result.Transactions[0].SourceRowIndex.Should().Be(1);
         result.RejectedSourceRowCount.Should().Be(1);
     }
 
