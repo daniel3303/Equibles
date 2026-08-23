@@ -11,6 +11,15 @@ public class CongressMemberRepository : BaseRepository<CongressMember>
 
     public async Task<CongressMember> GetByName(string name)
     {
+        var identity = CongressMemberIdentityCatalog.Resolve(name);
+        if (identity != null)
+        {
+            var canonical = await GetAll()
+                .FirstOrDefaultAsync(m => m.Name.ToLower() == identity.CanonicalName.ToLower());
+            if (canonical != null)
+                return canonical;
+        }
+
         var exactName = name?.Trim().ToLowerInvariant();
         var exact = await GetAll().FirstOrDefaultAsync(m => m.Name.ToLower() == exactName);
         if (exact != null)
@@ -47,14 +56,21 @@ public class CongressMemberRepository : BaseRepository<CongressMember>
             exactName == null
                 ? GetAll().Where(_ => false)
                 : GetAll().Where(m => m.Name.ToLower() == exactName);
-        var canonicalName = CongressMemberSearchAliases.ResolveName(search);
+        var identity = CongressMemberIdentityCatalog.Resolve(search);
+        var preferredIdentity =
+            identity == null
+                ? exactIdentifier
+                : GetAll()
+                    .Where(m => m.Name.ToLower() == identity.CanonicalName.ToLowerInvariant());
+        var canonicalName =
+            identity == null ? CongressMemberSearchAliases.ResolveName(search) : null;
         var verifiedAlias =
             canonicalName == null
                 ? GetAll().Where(_ => false)
                 : GetAll().Where(m => m.Name.ToLower() == canonicalName.ToLowerInvariant());
         return SearchTerms.WithExclusiveResolutionTiers(
-            exactIdentifier,
-            verifiedAlias,
+            preferredIdentity,
+            identity == null ? verifiedAlias : exactIdentifier,
             matches,
             anyTokenMatches
         );
@@ -63,16 +79,20 @@ public class CongressMemberRepository : BaseRepository<CongressMember>
 
 internal static class CongressMemberSearchAliases
 {
-    private static readonly IReadOnlyDictionary<string, string> Names = new Dictionary<
-        string,
-        string
-    >(StringComparer.OrdinalIgnoreCase)
-    {
-        // The House roster files the member as Daniel Crenshaw, while the public and
-        // the tool examples use Dan Crenshaw.
-        ["dan crenshaw"] = "Daniel Crenshaw",
-    };
+    private static readonly IReadOnlyDictionary<string, string> Names = BuildNames();
 
     public static string ResolveName(string query) =>
         Names.GetValueOrDefault(SearchTerms.Normalize(query));
+
+    private static IReadOnlyDictionary<string, string> BuildNames()
+    {
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // The House roster files the member as Daniel Crenshaw, while the public and
+            // the tool examples use Dan Crenshaw.
+            ["dan crenshaw"] = "Daniel Crenshaw",
+        };
+
+        return names;
+    }
 }

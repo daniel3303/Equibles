@@ -44,7 +44,13 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(EquiblesFinancialDbContext), DbContext),
-            (typeof(CongressMemberRepository), new CongressMemberRepository(DbContext)),
+            (
+                typeof(ICongressMemberIdentityService),
+                new CongressMemberIdentityService(
+                    DbContext,
+                    Substitute.For<ILogger<CongressMemberIdentityService>>()
+                )
+            ),
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext))
         );
         return new CongressionalTradeSyncService(
@@ -56,7 +62,8 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
     }
 
@@ -102,6 +109,42 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             SourceId = sourceId,
         };
 
+    private static CongressionalTrade Trade(
+        CongressMember member,
+        CommonStock stock,
+        DateOnly transactionDate,
+        DateOnly filingDate
+    ) =>
+        new()
+        {
+            CongressMemberId = member.Id,
+            CommonStockId = stock.Id,
+            TransactionDate = transactionDate,
+            FilingDate = filingDate,
+            TransactionType = CongressTransactionType.Purchase,
+            OwnerType = "self",
+            AssetName = stock.Name,
+            AssetType = "ST",
+            Subholding = "",
+            AmountFrom = 1_001,
+            AmountTo = 15_000,
+        };
+
+    private static CongressionalAnnualDisclosure Disclosure(
+        CongressMember member,
+        string reportId,
+        DateOnly filedDate
+    ) =>
+        new()
+        {
+            CongressMemberId = member.Id,
+            Year = 2023,
+            FiledDate = filedDate,
+            ReportId = reportId,
+            NetWorthMinimum = 1_001,
+            NetWorthMaximum = 15_000,
+        };
+
     [Fact]
     public async Task ProcessTransactions_TickerMatchesTrackedStock_UpsertsMemberAndPersistsTrade()
     {
@@ -124,6 +167,82 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         trades.Should().ContainSingle();
         trades[0].CongressMemberId.Should().Be(member.Id);
         trades[0].AssetType.Should().Be("ST");
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_ReviewedBioguideAliases_MergesHistoryAndWritesRedirects()
+    {
+        var apple = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var microsoft = new CommonStock { Ticker = "MSFT", Name = "Microsoft Corp." };
+        var survivor = new CongressMember
+        {
+            Name = "James Banks",
+            Position = CongressPosition.Senator,
+            CreationTime = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var retired = new CongressMember
+        {
+            Name = "James E. Banks",
+            Position = CongressPosition.Representative,
+            StateDistrict = "IN03",
+            CreationTime = new DateTime(2017, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var chainedRetiredId = Guid.NewGuid();
+
+        DbContext.AddRange(apple, microsoft, survivor, retired);
+        DbContext.AddRange(
+            Trade(survivor, apple, new DateOnly(2024, 1, 1), new DateOnly(2024, 1, 10)),
+            Trade(retired, apple, new DateOnly(2024, 1, 1), new DateOnly(2024, 1, 11)),
+            Trade(retired, microsoft, new DateOnly(2024, 2, 1), new DateOnly(2024, 2, 10)),
+            Disclosure(survivor, "old-report", new DateOnly(2024, 5, 1)),
+            Disclosure(retired, "new-report", new DateOnly(2024, 6, 1)),
+            new CongressMemberRedirect { Id = chainedRetiredId, MergedIntoId = retired.Id }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(),
+                [
+                    new List<DisclosureTransaction>
+                    {
+                        Txn(
+                            "James E Banks",
+                            "AAPL",
+                            transactionDate: new DateOnly(2024, 1, 1),
+                            filingDate: new DateOnly(2024, 1, 12)
+                        ),
+                    },
+                    CancellationToken.None,
+                ]
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var member = await verify.Set<CongressMember>().AsNoTracking().SingleAsync();
+        member.Id.Should().Be(survivor.Id);
+        member.Name.Should().Be("James Banks");
+        member.BioguideId.Should().Be("B001299");
+        member.Position.Should().Be(CongressPosition.Senator);
+        member.StateDistrict.Should().Be("IN03");
+
+        var trades = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
+        trades.Should().HaveCount(2, "the filing-identity collision is one disclosed trade");
+        trades.Should().OnlyContain(trade => trade.CongressMemberId == survivor.Id);
+
+        var disclosure = await verify
+            .Set<CongressionalAnnualDisclosure>()
+            .AsNoTracking()
+            .SingleAsync();
+        disclosure.CongressMemberId.Should().Be(survivor.Id);
+        disclosure.ReportId.Should().Be("new-report", "the latest filed annual report wins");
+
+        var redirects = await verify
+            .Set<CongressMemberRedirect>()
+            .AsNoTracking()
+            .ToDictionaryAsync(redirect => redirect.Id);
+        redirects[retired.Id].MergedIntoId.Should().Be(survivor.Id);
+        redirects[chainedRetiredId].MergedIntoId.Should().Be(survivor.Id);
     }
 
     // A member can file several same-day purchases of the same stock that differ only in the

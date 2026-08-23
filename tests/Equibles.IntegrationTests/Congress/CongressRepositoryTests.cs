@@ -85,6 +85,33 @@ public class CongressMemberRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetByName_ReviewedFormerFilingName_ReturnsCanonicalMember()
+    {
+        var member = CreateMember("James Banks", CongressPosition.Senator);
+        _dbContext.Set<CongressMember>().Add(member);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.GetByName("James E. Banks");
+
+        result.Should().NotBeNull();
+        result.Id.Should().Be(member.Id);
+    }
+
+    [Fact]
+    public async Task GetByName_ReviewedAliasRowStillExists_PrefersCanonicalMember()
+    {
+        var canonical = CreateMember("James Banks", CongressPosition.Senator);
+        var staleAlias = CreateMember("James E. Banks", CongressPosition.Representative);
+        _dbContext.Set<CongressMember>().AddRange(canonical, staleAlias);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.GetByName("James E. Banks");
+
+        result.Should().NotBeNull();
+        result.Id.Should().Be(canonical.Id);
+    }
+
+    [Fact]
     public async Task GetByName_EmptyDatabase_ReturnsNull()
     {
         var result = await _repository.GetByName("Nancy Pelosi");

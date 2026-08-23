@@ -96,4 +96,26 @@ public class CongressMemberRepositoryPostgresSearchTests : ParadeDbMcpTestBase
         resolved.Should().NotBeNull();
         resolved.Name.Should().Be("Dan Crenshaw");
     }
+
+    [Fact]
+    public async Task Search_ReviewedAliasRowStillExists_PrefersCanonicalMember()
+    {
+        DbContext.AddRange(
+            new CongressMember { Name = "James Banks", Position = CongressPosition.Senator },
+            new CongressMember
+            {
+                Name = "James E. Banks",
+                Position = CongressPosition.Representative,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var results = await new CongressMemberRepository(verify)
+            .Search("James E. Banks")
+            .ToListAsync();
+
+        results.Should().ContainSingle().Which.Name.Should().Be("James Banks");
+    }
 }

@@ -28,6 +28,16 @@ public class CongressServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddCongressWorker_AutoWiresMemberIdentityServiceContract()
+    {
+        var services = new ServiceCollection();
+
+        services.AddCongressWorker();
+
+        services.Should().Contain(d => d.ServiceType == typeof(ICongressMemberIdentityService));
+    }
+
+    [Fact]
     public void AddCongressWorker_RegistersCongressionalTradeScraperWorkerAsIHostedService()
     {
         // Sibling to AddCongressWorker_AutoWiresCongressionalTradeSyncService.

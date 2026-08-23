@@ -34,7 +34,8 @@ public class CongressionalTradeSyncServiceBuildTradesSameDayTests
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
         var stock = new CommonStock
         {

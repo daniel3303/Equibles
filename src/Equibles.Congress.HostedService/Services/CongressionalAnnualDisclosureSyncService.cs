@@ -6,7 +6,6 @@ using Equibles.Core.Configuration;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
-using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -29,6 +28,7 @@ public class CongressionalAnnualDisclosureSyncService
     private readonly WorkerOptions _workerOptions;
     private readonly ErrorReporter _errorReporter;
     private readonly CongressionalFilingLedger _filingLedger;
+    private readonly ICongressMemberIdentityService _memberIdentityService;
 
     // Electronic filing of congressional disclosures dates to the STOCK Act.
     private const int EarliestCoverageYear = 2012;
@@ -55,7 +55,8 @@ public class CongressionalAnnualDisclosureSyncService
         IOptions<WorkerOptions> workerOptions,
         ILogger<CongressionalAnnualDisclosureSyncService> logger,
         ErrorReporter errorReporter,
-        CongressionalFilingLedger filingLedger
+        CongressionalFilingLedger filingLedger,
+        ICongressMemberIdentityService memberIdentityService
     )
     {
         _scopeFactory = scopeFactory;
@@ -63,10 +64,13 @@ public class CongressionalAnnualDisclosureSyncService
         _logger = logger;
         _errorReporter = errorReporter;
         _filingLedger = filingLedger;
+        _memberIdentityService = memberIdentityService;
     }
 
     public async Task SyncAll(CancellationToken ct)
     {
+        await _memberIdentityService.ReconcileMembers(ct);
+
         var currentYear = DateTime.UtcNow.Year;
         var fromYear = Math.Max(
             _workerOptions.MinSyncDate?.Year ?? currentYear - DefaultCoverageYearsBack,
@@ -190,12 +194,23 @@ public class CongressionalAnnualDisclosureSyncService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-        var memberRepository = scope.ServiceProvider.GetRequiredService<CongressMemberRepository>();
+        var memberIdentityService =
+            scope.ServiceProvider.GetRequiredService<ICongressMemberIdentityService>();
         var disclosureRepository =
             scope.ServiceProvider.GetRequiredService<CongressionalAnnualDisclosureRepository>();
 
         var latest = SelectLatestReports(reports);
-        var members = await UpsertCongressMembers(latest, dbContext, memberRepository, ct);
+        var members = await memberIdentityService.UpsertMembers(
+            latest
+                .Select(report => new CongressMemberObservation(
+                    report.MemberName,
+                    report.Position,
+                    report.StateDistrict,
+                    report.FiledDate
+                ))
+                .ToList(),
+            ct
+        );
 
         var unpersistedReportIds = new HashSet<string>();
         int added = 0,
@@ -250,50 +265,6 @@ public class CongressionalAnnualDisclosureSyncService
         return unpersistedReportIds;
     }
 
-    private async Task<Dictionary<string, CongressMember>> UpsertCongressMembers(
-        List<AnnualDisclosureReport> reports,
-        EquiblesFinancialDbContext dbContext,
-        CongressMemberRepository memberRepository,
-        CancellationToken ct
-    )
-    {
-        // Canonicalise the name so cosmetic disclosure variants resolve to one
-        // CongressMember record (GH-3374) — the same identity key the trade
-        // sync uses, so the two pipelines converge on the same member.
-        var distinctMembers = reports
-            .GroupBy(r => DisclosureParsingHelper.NormalizeMemberName(r.MemberName))
-            .Select(g => new CongressMember
-            {
-                Name = g.Key,
-                Position = g.First().Position,
-                StateDistrict = SelectStateDistrict(g),
-            })
-            .ToList();
-
-        await dbContext
-            .Set<CongressMember>()
-            .UpsertRange(distinctMembers)
-            .On(m => new { m.Name })
-            .WhenMatched(
-                (existing, incoming) =>
-                    new CongressMember
-                    {
-                        Position = incoming.Position,
-                        // Only the House index publishes a seat, so a member's
-                        // Senate reports carry none — coalescing keeps a
-                        // recorded seat instead of blanking it on every cycle.
-                        StateDistrict = incoming.StateDistrict ?? existing.StateDistrict,
-                    }
-            )
-            .RunAsync(ct);
-
-        var memberNames = distinctMembers.Select(m => m.Name).ToList();
-        return await memberRepository
-            .GetAll()
-            .Where(m => memberNames.Contains(m.Name))
-            .ToDictionaryAsync(m => m.Name, ct);
-    }
-
     /// <summary>
     /// The seat to record for a member this cycle. Redistricting moves a member
     /// between districts, so the most recently filed report that states one
@@ -308,16 +279,27 @@ public class CongressionalAnnualDisclosureSyncService
             ?.StateDistrict.Trim();
 
     /// <summary>
-    /// One report per (member, position, year): the latest filed wins, and an
-    /// amendment beats the original on a same-day refiling.
+    /// One report per member and year: the latest filed wins, and an amendment beats the
+    /// original on a same-day refiling. Reviewed aliases group by BioGuide identity before
+    /// persistence; unresolved names retain position in their exact key so no identity is
+    /// inferred from a similar name.
     /// </summary>
     internal static List<AnnualDisclosureReport> SelectLatestReports(
         IEnumerable<AnnualDisclosureReport> reports
     ) =>
         reports
-            .GroupBy(r => (r.MemberName, r.Position, r.Year))
+            .GroupBy(r => (IdentityKey: SelectAnnualIdentityKey(r), r.Year))
             .Select(g => g.OrderBy(r => r.FiledDate).ThenBy(r => r.IsAmendment).Last())
             .ToList();
+
+    private static string SelectAnnualIdentityKey(AnnualDisclosureReport report)
+    {
+        var normalizedName = DisclosureParsingHelper.NormalizeMemberName(report.MemberName);
+        var identity = CongressMemberIdentityCatalog.Resolve(normalizedName);
+        return identity != null
+            ? $"bioguide:{identity.BioguideId}"
+            : $"name:{normalizedName}|position:{report.Position}";
+    }
 
     /// <summary>
     /// Amendments replace the stored report in place: a different source
