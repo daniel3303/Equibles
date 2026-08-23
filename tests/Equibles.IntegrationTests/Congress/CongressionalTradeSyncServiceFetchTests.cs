@@ -84,6 +84,7 @@ public class CongressionalTradeSyncServiceFetchTests
                 Arg.Any<CancellationToken>()
             )
             .Returns(2018);
+        var memberIdentityService = Substitute.For<ICongressMemberIdentityService>();
 
         var sut = new CongressionalTradeSyncService(
             scopeFactory,
@@ -95,7 +96,8 @@ public class CongressionalTradeSyncServiceFetchTests
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
             importLedger,
-            Substitute.For<CongressionalTradeIssuerResolver>(null, null)
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
+            memberIdentityService
         );
 
         // Both fetch helpers run their success path; with no transactions the
@@ -103,6 +105,7 @@ public class CongressionalTradeSyncServiceFetchTests
         var act = async () => await sut.SyncAll(CancellationToken.None);
 
         await act.Should().NotThrowAsync();
+        await memberIdentityService.Received(1).ReconcileMembers(CancellationToken.None);
         senateSession
             .FetchCount.Should()
             .Be(2, "Senate receives current plus the one archive partition");

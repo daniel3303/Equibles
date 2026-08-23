@@ -1,7 +1,6 @@
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Congress.Data.Models;
 using Equibles.Congress.HostedService.Models;
-using Equibles.Congress.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
@@ -22,6 +21,7 @@ public class CongressionalTradeSyncService
     private readonly CongressionalFilingLedger _filingLedger;
     private readonly CongressionalTradeImportLedger _importLedger;
     private readonly CongressionalTradeIssuerResolver _issuerResolver;
+    private readonly ICongressMemberIdentityService _memberIdentityService;
 
     public CongressionalTradeSyncService(
         IServiceScopeFactory scopeFactory,
@@ -30,7 +30,8 @@ public class CongressionalTradeSyncService
         ErrorReporter errorReporter,
         CongressionalFilingLedger filingLedger,
         CongressionalTradeImportLedger importLedger,
-        CongressionalTradeIssuerResolver issuerResolver
+        CongressionalTradeIssuerResolver issuerResolver,
+        ICongressMemberIdentityService memberIdentityService
     )
     {
         _scopeFactory = scopeFactory;
@@ -40,6 +41,7 @@ public class CongressionalTradeSyncService
         _filingLedger = filingLedger;
         _importLedger = importLedger;
         _issuerResolver = issuerResolver;
+        _memberIdentityService = memberIdentityService;
     }
 
     // Congressional trade disclosures are available from 2012 (STOCK Act).
@@ -50,6 +52,8 @@ public class CongressionalTradeSyncService
 
     public async Task SyncAll(CancellationToken ct)
     {
+        await _memberIdentityService.ReconcileMembers(ct);
+
         var fromDate = _workerOptions.MinSyncDate.HasValue
             ? DateOnly.FromDateTime(_workerOptions.MinSyncDate.Value)
             : new DateOnly(DateTime.UtcNow.Year, 1, 1);
@@ -306,7 +310,8 @@ public class CongressionalTradeSyncService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-        var memberRepository = scope.ServiceProvider.GetRequiredService<CongressMemberRepository>();
+        var memberIdentityService =
+            scope.ServiceProvider.GetRequiredService<ICongressMemberIdentityService>();
 
         var configuredTickers = (_workerOptions.TickersToSync ?? [])
             .Select(TickerNormalizer.NormalizeIdentity)
@@ -340,7 +345,17 @@ public class CongressionalTradeSyncService
             tickered.Count
         );
 
-        var members = await UpsertCongressMembers(tickered, dbContext, memberRepository, ct);
+        var members = await memberIdentityService.UpsertMembers(
+            tickered
+                .Select(transaction => new CongressMemberObservation(
+                    transaction.MemberName,
+                    transaction.Position,
+                    transaction.StateDistrict,
+                    transaction.FilingDate
+                ))
+                .ToList(),
+            ct
+        );
 
         // Mirrors BuildTrades' member-not-found guard: those rows are parsed
         // but never stored, so their filings must not be recorded as ingested.
@@ -359,52 +374,6 @@ public class CongressionalTradeSyncService
         unpersistedSourceIds.UnionWith(await PersistTrades(trades, dbContext, ct));
 
         return new TradePersistOutcome(unpersistedSourceIds);
-    }
-
-    private async Task<Dictionary<string, CongressMember>> UpsertCongressMembers(
-        List<DisclosureTransaction> matched,
-        EquiblesFinancialDbContext dbContext,
-        CongressMemberRepository memberRepository,
-        CancellationToken ct
-    )
-    {
-        // Key identity on the canonical name so cosmetic disclosure variants
-        // (mid-name honorific, doubled first name) resolve to one record no
-        // matter which scraper emitted the transaction (GH-3374). Every source
-        // already normalises at emission; doing it here too makes the upsert key
-        // the single source of truth for member identity.
-        var distinctMembers = matched
-            .GroupBy(t => DisclosureParsingHelper.NormalizeMemberName(t.MemberName))
-            .Select(g => new CongressMember
-            {
-                Name = g.Key,
-                Position = g.First().Position,
-                StateDistrict = SelectStateDistrict(g),
-            })
-            .ToList();
-
-        await dbContext
-            .Set<CongressMember>()
-            .UpsertRange(distinctMembers)
-            .On(m => new { m.Name })
-            .WhenMatched(
-                (existing, incoming) =>
-                    new CongressMember
-                    {
-                        Position = incoming.Position,
-                        // Coalesced, never overwritten with nothing: this lane sees the same
-                        // member through Senate transactions too, and those state no seat. A
-                        // straight assignment would wipe a recorded seat on the next cycle.
-                        StateDistrict = incoming.StateDistrict ?? existing.StateDistrict,
-                    }
-            )
-            .RunAsync(ct);
-
-        var memberNames = distinctMembers.Select(m => m.Name).ToList();
-        return await memberRepository
-            .GetAll()
-            .Where(m => memberNames.Contains(m.Name))
-            .ToDictionaryAsync(m => m.Name, ct);
     }
 
     /// <summary>

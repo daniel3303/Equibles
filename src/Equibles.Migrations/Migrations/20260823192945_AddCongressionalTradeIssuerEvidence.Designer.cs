@@ -14,7 +14,7 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    [Migration("20260823184320_AddCongressionalTradeIssuerEvidence")]
+    [Migration("20260823192945_AddCongressionalTradeIssuerEvidence")]
     partial class AddCongressionalTradeIssuerEvidence
     {
         /// <inheritdoc />
@@ -489,6 +489,10 @@ namespace Equibles.Migrations.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BioguideId")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("timestamp with time zone");
 
@@ -504,6 +508,9 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("character varying(16)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BioguideId")
+                        .IsUnique();
 
                     b.HasIndex("Name")
                         .IsUnique();

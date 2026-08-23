@@ -26,7 +26,8 @@ public class CongressionalTradeSyncServiceBuildTradesMissingMemberTests
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeIssuerResolver>(null, null)
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
 
     private static List<CongressionalTrade> InvokeBuildTrades(

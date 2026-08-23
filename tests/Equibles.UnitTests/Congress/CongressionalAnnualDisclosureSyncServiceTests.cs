@@ -100,6 +100,20 @@ public class CongressionalAnnualDisclosureSyncServiceTests
         latest.Should().ContainSingle().Which.ReportId.Should().Be("1002");
     }
 
+    [Fact]
+    public void SelectLatestReports_ReviewedAliases_KeepsOneLatestReportPerBioguideMemberYear()
+    {
+        var original = Report("C. Scott Franklin", 2024, new DateOnly(2025, 5, 15), false, "1001");
+        var amendment = Report("Scott Franklin", 2024, new DateOnly(2025, 11, 4), true, "1002");
+
+        var latest = CongressionalAnnualDisclosureSyncService.SelectLatestReports([
+            original,
+            amendment,
+        ]);
+
+        latest.Should().ContainSingle().Which.ReportId.Should().Be("1002");
+    }
+
     [Theory]
     [InlineData("1001", "2025-05-15", false, true)] // same source report → rebuilt in place
     [InlineData("1002", "2025-11-04", false, true)] // later filing replaces

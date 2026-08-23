@@ -34,7 +34,8 @@ public class CongressionalTradeSyncServiceBuildTradesTests
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeIssuerResolver>(null, null)
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
 
         var member = new CongressMember { Id = Guid.NewGuid(), Name = "Jane Smith" };
@@ -102,7 +103,8 @@ public class CongressionalTradeSyncServiceBuildTradesTests
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeIssuerResolver>(null, null)
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
         var member = new CongressMember { Id = Guid.NewGuid(), Name = "Jane Smith" };
         var transaction = new DisclosureTransaction

@@ -44,7 +44,8 @@ public class CongressionalTradeSyncServiceBothFailTests
             errorReporter,
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeIssuerResolver>(null, null)
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
 
         // Must not throw — both fetches fail, allTransactions stays empty,

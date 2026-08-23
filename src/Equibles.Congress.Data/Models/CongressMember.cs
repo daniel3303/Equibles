@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Congress.Data.Models;
 
 [Index(nameof(Name), IsUnique = true)]
+[Index(nameof(BioguideId), IsUnique = true)]
 public class CongressMember
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
@@ -12,6 +13,14 @@ public class CongressMember
 
     [MaxLength(256)]
     public string Name { get; set; }
+
+    /// <summary>
+    /// The member's stable identifier from the official Biographical Directory of the
+    /// United States Congress. Null only when the filing name has not been authoritatively
+    /// resolved; names alone never establish identity.
+    /// </summary>
+    [MaxLength(7)]
+    public string BioguideId { get; set; }
 
     public CongressPosition Position { get; set; }
 

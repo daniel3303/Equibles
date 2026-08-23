@@ -51,7 +51,8 @@ public class CongressionalTradeSyncServiceTests
             errorReporter,
             filingLedger,
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeIssuerResolver>(null, null)
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
 
         await sut.SyncAll(CancellationToken.None);
@@ -114,7 +115,8 @@ public class CongressionalTradeSyncServiceTests
             errorReporter,
             filingLedger,
             Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeIssuerResolver>(null, null)
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
 
         await sut.SyncAll(CancellationToken.None);

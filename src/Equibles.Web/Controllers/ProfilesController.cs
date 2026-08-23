@@ -32,6 +32,7 @@ public class ProfilesController : BaseController
     private readonly InsiderOwnerRepository _insiderOwnerRepository;
     private readonly InsiderTransactionRepository _insiderTransactionRepository;
     private readonly CongressMemberRepository _congressMemberRepository;
+    private readonly CongressMemberRedirectRepository _congressMemberRedirectRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
     private readonly HoldingsBacktestService _holdingsBacktestService;
     private readonly InstitutionPortfolioSummaryProvider _institutionPortfolioSummaryProvider;
@@ -43,6 +44,7 @@ public class ProfilesController : BaseController
         InsiderOwnerRepository insiderOwnerRepository,
         InsiderTransactionRepository insiderTransactionRepository,
         CongressMemberRepository congressMemberRepository,
+        CongressMemberRedirectRepository congressMemberRedirectRepository,
         CongressionalTradeRepository congressionalTradeRepository,
         HoldingsBacktestService holdingsBacktestService,
         InstitutionPortfolioSummaryProvider institutionPortfolioSummaryProvider,
@@ -56,6 +58,7 @@ public class ProfilesController : BaseController
         _insiderOwnerRepository = insiderOwnerRepository;
         _insiderTransactionRepository = insiderTransactionRepository;
         _congressMemberRepository = congressMemberRepository;
+        _congressMemberRedirectRepository = congressMemberRedirectRepository;
         _congressionalTradeRepository = congressionalTradeRepository;
         _holdingsBacktestService = holdingsBacktestService;
         _institutionPortfolioSummaryProvider = institutionPortfolioSummaryProvider;
@@ -381,7 +384,15 @@ public class ProfilesController : BaseController
     {
         var member = await _congressMemberRepository.Get(id);
         if (member == null)
-            return NotFound();
+        {
+            var mergedIntoId = await _congressMemberRedirectRepository
+                .GetByRetiredId(id)
+                .Select(redirect => (Guid?)redirect.MergedIntoId)
+                .SingleOrDefaultAsync();
+            return mergedIntoId.HasValue
+                ? RedirectToActionPermanent(nameof(Member), new { id = mergedIntoId.Value })
+                : NotFound();
+        }
 
         var trades = await _congressionalTradeRepository
             .GetByMember(member)

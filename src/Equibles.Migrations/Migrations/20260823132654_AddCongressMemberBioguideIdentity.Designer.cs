@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    partial class EquiblesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260823132654_AddCongressMemberBioguideIdentity")]
+    partial class AddCongressMemberBioguideIdentity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -412,40 +415,6 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("CommonStockTickerAlias");
                 });
 
-            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.CommonStockTickerEvidence", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AccessionNumber")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<Guid>("CommonStockId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("FiledDate")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("SourceDocumentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Ticker")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Ticker", "FiledDate");
-
-                    b.HasIndex("CommonStockId", "Ticker", "SourceDocumentId")
-                        .IsUnique();
-
-                    b.ToTable("CommonStockTickerEvidence");
-                });
-
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.Taxonomies.Industry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -672,7 +641,7 @@ namespace Equibles.Migrations.Migrations
                         .HasColumnType("character varying(128)")
                         .HasDefaultValue("");
 
-                    b.Property<Guid?>("CommonStockId")
+                    b.Property<Guid>("CommonStockId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("CongressMemberId")
@@ -681,30 +650,14 @@ namespace Equibles.Migrations.Migrations
                     b.Property<DateTime>("CreationTime")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("FiledTicker")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("");
-
                     b.Property<DateOnly>("FilingDate")
                         .HasColumnType("date");
-
-                    b.Property<int?>("FilingKind")
-                        .HasColumnType("integer");
 
                     b.Property<string>("OwnerType")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasDefaultValue("");
-
-                    b.Property<string>("SourceId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<int?>("SourceRowIndex")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Subholding")
                         .IsRequired()
@@ -728,10 +681,8 @@ namespace Equibles.Migrations.Migrations
 
                     b.HasIndex("CongressMemberId", "TransactionDate");
 
-                    b.HasIndex("FilingKind", "SourceId", "SourceRowIndex")
+                    b.HasIndex(new[] { "CommonStockId", "CongressMemberId", "TransactionDate", "TransactionType", "AssetName", "OwnerType", "AmountFrom", "AmountTo", "AssetType", "Subholding" }, "UX_CongressionalTrade_FilingIdentity")
                         .IsUnique();
-
-                    b.HasIndex(new[] { "CommonStockId", "CongressMemberId", "TransactionDate", "TransactionType", "AssetName", "OwnerType", "AmountFrom", "AmountTo", "AssetType", "Subholding" }, "IX_CongressionalTrade_LegacyFilingIdentity");
 
                     b.ToTable("CongressionalTrade");
                 });
@@ -3907,17 +3858,6 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("CommonStock");
                 });
 
-            modelBuilder.Entity("Equibles.CommonStocks.Data.Models.CommonStockTickerEvidence", b =>
-                {
-                    b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
-                        .WithMany()
-                        .HasForeignKey("CommonStockId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CommonStock");
-                });
-
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.Taxonomies.Industry", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.Taxonomies.Sector", "Sector")
@@ -3965,7 +3905,8 @@ namespace Equibles.Migrations.Migrations
                     b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
                         .WithMany()
                         .HasForeignKey("CommonStockId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("Equibles.Congress.Data.Models.CongressMember", "CongressMember")
                         .WithMany("Trades")
