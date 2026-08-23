@@ -111,6 +111,7 @@ public static partial class DisclosureParsingHelper
         var hasTransactionTable = false;
         var recognizedSourceRowCount = 0;
         var rejectedSourceRowCount = 0;
+        var sourceRowIndex = 0;
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
 
@@ -135,13 +136,18 @@ public static partial class DisclosureParsingHelper
                 if (!IsRecognizedTransactionRow(row, cols, position))
                 {
                     rejectedSourceRowCount++;
+                    sourceRowIndex++;
                     continue;
                 }
 
                 recognizedSourceRowCount++;
                 var tx = ParseTransactionRow(row, cols, memberName, position, filingDate, logger);
                 if (tx != null)
+                {
+                    tx.SourceRowIndex = sourceRowIndex;
                     transactions.Add(tx);
+                }
+                sourceRowIndex++;
             }
         }
 

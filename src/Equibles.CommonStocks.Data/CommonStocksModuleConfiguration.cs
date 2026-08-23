@@ -12,6 +12,7 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<CommonStockCusipAlias>();
         builder.Entity<CommonStockListedCusip>();
         builder.Entity<CommonStockTickerAlias>();
+        builder.Entity<CommonStockTickerEvidence>();
         builder.Entity<Industry>();
         builder.Entity<Sector>();
     }

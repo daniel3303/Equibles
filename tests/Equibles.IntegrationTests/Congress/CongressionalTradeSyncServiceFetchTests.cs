@@ -94,7 +94,8 @@ public class CongressionalTradeSyncServiceFetchTests
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
-            importLedger
+            importLedger,
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null)
         );
 
         // Both fetch helpers run their success path; with no transactions the

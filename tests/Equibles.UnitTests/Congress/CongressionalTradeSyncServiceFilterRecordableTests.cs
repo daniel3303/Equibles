@@ -4,29 +4,24 @@ using Equibles.Congress.HostedService.Services;
 namespace Equibles.UnitTests.Congress;
 
 /// <summary>
-/// Pins the retirement rules for trade filings: a filing whose rows hit the
-/// member-not-found guard is never recorded; a filing with an unmatched
-/// ticker is only recorded once it has aged past the listing-lag retry
-/// cutoff; everything else records immediately.
+/// Pins the retirement rules for trade filings: a filing whose parsed rows were not stored is
+/// never recorded; an unresolved ticker is stored as a source fact and therefore records.
 /// </summary>
 public class CongressionalTradeSyncServiceFilterRecordableTests
 {
-    private static readonly DateOnly Cutoff = new(2026, 6, 21);
-
     private static ProcessedFiling Filing(string sourceId, DateOnly filingDate) =>
         new(sourceId, filingDate, ItemCount: 1);
 
     private static CongressionalTradeSyncService.TradePersistOutcome Outcome(
-        IEnumerable<string> unmatched = null,
         IEnumerable<string> unpersisted = null
-    ) => new((unmatched ?? []).ToHashSet(), (unpersisted ?? []).ToHashSet());
+    ) => new((unpersisted ?? []).ToHashSet());
 
     [Fact]
     public void FilterRecordable_CleanFiling_IsRecorded()
     {
-        var filings = new List<ProcessedFiling> { Filing("A", Cutoff.AddDays(10)) };
+        var filings = new List<ProcessedFiling> { Filing("A", new DateOnly(2026, 7, 1)) };
 
-        var recordable = CongressionalTradeSyncService.FilterRecordable(filings, Outcome(), Cutoff);
+        var recordable = CongressionalTradeSyncService.FilterRecordable(filings, Outcome());
 
         recordable.Should().ContainSingle(f => f.SourceId == "A");
     }
@@ -35,40 +30,24 @@ public class CongressionalTradeSyncServiceFilterRecordableTests
     public void FilterRecordable_UnpersistedFiling_IsNeverRecorded()
     {
         // Even an old filing stays unrecorded when its rows were not stored.
-        var filings = new List<ProcessedFiling> { Filing("A", Cutoff.AddYears(-1)) };
+        var filings = new List<ProcessedFiling> { Filing("A", new DateOnly(2025, 7, 1)) };
 
         var recordable = CongressionalTradeSyncService.FilterRecordable(
             filings,
-            Outcome(unpersisted: ["A"]),
-            Cutoff
+            Outcome(unpersisted: ["A"])
         );
 
         recordable.Should().BeEmpty();
     }
 
     [Fact]
-    public void FilterRecordable_UnmatchedTickerInsideRetryWindow_IsNotRecorded()
+    public void FilterRecordable_UnlinkedTickerSourceFact_IsRecorded()
     {
-        var filings = new List<ProcessedFiling> { Filing("A", Cutoff.AddDays(1)) };
+        var filings = new List<ProcessedFiling> { Filing("A", new DateOnly(2026, 7, 1)) };
 
         var recordable = CongressionalTradeSyncService.FilterRecordable(
             filings,
-            Outcome(unmatched: ["A"]),
-            Cutoff
-        );
-
-        recordable.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void FilterRecordable_UnmatchedTickerPastRetryWindow_IsRetired()
-    {
-        var filings = new List<ProcessedFiling> { Filing("A", Cutoff) };
-
-        var recordable = CongressionalTradeSyncService.FilterRecordable(
-            filings,
-            Outcome(unmatched: ["A"]),
-            Cutoff
+            Outcome()
         );
 
         recordable.Should().ContainSingle(f => f.SourceId == "A");
@@ -79,18 +58,16 @@ public class CongressionalTradeSyncServiceFilterRecordableTests
     {
         var filings = new List<ProcessedFiling>
         {
-            Filing("clean", Cutoff.AddDays(5)),
-            Filing("unmatched-recent", Cutoff.AddDays(5)),
-            Filing("unmatched-old", Cutoff.AddDays(-5)),
-            Filing("unpersisted", Cutoff.AddDays(-5)),
+            Filing("clean", new DateOnly(2026, 7, 1)),
+            Filing("unlinked", new DateOnly(2026, 7, 1)),
+            Filing("unpersisted", new DateOnly(2026, 7, 1)),
         };
 
         var recordable = CongressionalTradeSyncService.FilterRecordable(
             filings,
-            Outcome(unmatched: ["unmatched-recent", "unmatched-old"], unpersisted: ["unpersisted"]),
-            Cutoff
+            Outcome(unpersisted: ["unpersisted"])
         );
 
-        recordable.Select(f => f.SourceId).Should().BeEquivalentTo("clean", "unmatched-old");
+        recordable.Select(f => f.SourceId).Should().BeEquivalentTo("clean", "unlinked");
     }
 }

@@ -7,13 +7,8 @@ namespace Equibles.Congress.Data.Models;
 
 [Index(nameof(CommonStockId), nameof(TransactionDate))]
 [Index(nameof(CongressMemberId), nameof(TransactionDate))]
-// The trade identity / upsert key (see CongressionalTradeSyncService.PersistTrades). OwnerType
-// and the amount bracket are part of a trade's identity: a member can file two same-day
-// purchases of the same stock that differ only in bracket or in who holds them (self vs.
-// spouse vs. dependent child), asset type, or disclosed account/subholding, and without those
-// columns the second one is silently dropped.
-// FilingDate is deliberately EXCLUDED — the disclosure feeds re-date the same filing between
-// scrapes, so keying on it would re-insert existing trades as duplicates.
+// Legacy semantic lookup used only while parser-v5 replay adopts rows written before stable
+// source identity. It is intentionally non-unique: the source row key below owns dedup now.
 [Index(
     nameof(CommonStockId),
     nameof(CongressMemberId),
@@ -25,9 +20,9 @@ namespace Equibles.Congress.Data.Models;
     nameof(AmountTo),
     nameof(AssetType),
     nameof(Subholding),
-    Name = "UX_CongressionalTrade_FilingIdentity",
-    IsUnique = true
+    Name = "IX_CongressionalTrade_LegacyFilingIdentity"
 )]
+[Index(nameof(FilingKind), nameof(SourceId), nameof(SourceRowIndex), IsUnique = true)]
 [Index(nameof(FilingDate))]
 [Index(nameof(TransactionDate))]
 public class CongressionalTrade
@@ -38,8 +33,26 @@ public class CongressionalTrade
     public Guid CongressMemberId { get; set; }
     public virtual CongressMember CongressMember { get; set; }
 
-    public Guid CommonStockId { get; set; }
+    // Derived from the immutable filed ticker and authoritative dated issuer evidence. Null is
+    // preferable to attaching a reused symbol to the wrong company.
+    public Guid? CommonStockId { get; set; }
     public virtual CommonStock CommonStock { get; set; }
+
+    /// <summary>The ticker exactly as normalized from the congressional filing.</summary>
+    [Required]
+    [MaxLength(32)]
+    public string FiledTicker { get; set; } = "";
+
+    /// <summary>
+    /// Stable source-row identity. Legacy rows remain null until an authoritative source replay
+    /// adopts them; PostgreSQL permits multiple nulls in this unique index.
+    /// </summary>
+    public CongressionalFilingKind? FilingKind { get; set; }
+
+    [MaxLength(128)]
+    public string SourceId { get; set; }
+
+    public int? SourceRowIndex { get; set; }
 
     public DateOnly TransactionDate { get; set; }
     public DateOnly FilingDate { get; set; }

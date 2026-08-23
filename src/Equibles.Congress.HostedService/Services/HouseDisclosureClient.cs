@@ -86,6 +86,7 @@ public partial class HouseDisclosureClient
                         foreach (var txn in txns)
                         {
                             txn.SourceId = filing.DocId;
+                            txn.FilingKind = CongressionalFilingKind.HousePeriodicTransactionReport;
                             txn.StateDistrict = filing.StateDst;
                         }
 
@@ -375,6 +376,7 @@ public partial class HouseDisclosureClient
 
         var transactions = new List<DisclosureTransaction>();
         var rejectedSourceRowCount = 0;
+        var sourceRowIndex = 0;
 
         for (var i = 0; i < lines.Count; i++)
         {
@@ -385,7 +387,10 @@ public partial class HouseDisclosureClient
             if (!anchor.Success)
             {
                 if (LooksLikeMalformedTransactionRow(lines[i]))
+                {
                     rejectedSourceRowCount++;
+                    sourceRowIndex++;
+                }
                 continue;
             }
 
@@ -412,9 +417,13 @@ public partial class HouseDisclosureClient
                 subholding
             );
             if (transaction != null)
+            {
+                transaction.SourceRowIndex = sourceRowIndex;
                 transactions.Add(transaction);
+            }
             else
                 rejectedSourceRowCount++;
+            sourceRowIndex++;
         }
 
         return new HousePtrParseResult(transactions, rejectedSourceRowCount);

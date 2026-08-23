@@ -23,8 +23,8 @@ namespace Equibles.IntegrationTests.Congress;
 /// FlexLabs upsert path (ProcessTransactions → UpsertCongressMembers →
 /// PersistTrades) needs a real Postgres and was zero-hit. Pins it end-to-end
 /// via the existing scope/DB harness: a transaction whose ticker matches a
-/// tracked stock upserts the member and persists the trade; an unmatched
-/// ticker short-circuits before any DB write.
+/// tracked stock upserts the member and persists the trade; an unresolved ticker persists its
+/// source fact without a company link.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
@@ -42,10 +42,26 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         ILogger<CongressionalTradeSyncService> logger = null
     )
     {
+        var stocks = DbContext.Set<CommonStock>().AsNoTracking().ToList();
+        foreach (var stock in stocks)
+        {
+            if (DbContext.Set<CommonStockTickerEvidence>().Any(row => row.CommonStockId == stock.Id))
+                continue;
+            DbContext.AddRange(
+                Evidence(stock, new DateOnly(2020, 1, 1)),
+                Evidence(stock, new DateOnly(2030, 1, 1))
+            );
+        }
+        DbContext.SaveChanges();
+        DbContext.ChangeTracker.Clear();
+
+        var evidenceRepository = new CommonStockTickerEvidenceRepository(DbContext);
+        var issuerResolver = new CongressionalTradeIssuerResolver(evidenceRepository, DbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(EquiblesFinancialDbContext), DbContext),
             (typeof(CongressMemberRepository), new CongressMemberRepository(DbContext)),
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext))
+            (typeof(CommonStockTickerEvidenceRepository), evidenceRepository),
+            (typeof(CongressionalTradeIssuerResolver), issuerResolver)
         );
         return new CongressionalTradeSyncService(
             scopeFactory,
@@ -56,9 +72,20 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            issuerResolver
         );
     }
+
+    private static CommonStockTickerEvidence Evidence(CommonStock stock, DateOnly filedDate) =>
+        new()
+        {
+            CommonStockId = stock.Id,
+            Ticker = stock.Ticker,
+            FiledDate = filedDate,
+            SourceDocumentId = Guid.NewGuid(),
+            AccessionNumber = $"{stock.Id:N}"[..24] + filedDate.Year,
+        };
 
     private CongressionalTradeImportLedger BuildImportLedger()
     {
@@ -99,8 +126,29 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             Subholding = subholding,
             AmountFrom = amountFrom,
             AmountTo = amountTo,
-            SourceId = sourceId,
+            SourceId = sourceId ?? $"test-{member}-{ticker}",
+            FilingKind = CongressionalFilingKind.SenatePeriodicTransactionReport,
+            SourceRowIndex = StableRowIndex(
+                ownerType,
+                amountFrom,
+                amountTo,
+                assetType,
+                subholding,
+                assetName,
+                transactionDate ?? new DateOnly(2024, 6, 1)
+            ),
         };
+
+    private static int StableRowIndex(params object[] values)
+    {
+        unchecked
+        {
+            var hash = 17;
+            foreach (var character in string.Join('|', values))
+                hash = hash * 31 + character;
+            return hash;
+        }
+    }
 
     [Fact]
     public async Task ProcessTransactions_TickerMatchesTrackedStock_UpsertsMemberAndPersistsTrade()
@@ -190,7 +238,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task ProcessTransactions_NoTickerMatchesTrackedStock_WritesNothing()
+    public async Task ProcessTransactions_NoIssuerEvidence_PersistsUnlinkedSourceFact()
     {
         DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
         await DbContext.SaveChangesAsync();
@@ -202,8 +250,194 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             ProcessTransactionsMethod.Invoke(BuildSut(), [transactions, CancellationToken.None]);
 
         await using var verify = Fixture.CreateDbContext();
-        (await verify.Set<CongressMember>().AsNoTracking().CountAsync()).Should().Be(0);
-        (await verify.Set<CongressionalTrade>().AsNoTracking().CountAsync()).Should().Be(0);
+        (await verify.Set<CongressMember>().AsNoTracking().CountAsync()).Should().Be(1);
+        var trade = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        trade.CommonStockId.Should().BeNull();
+        trade.FiledTicker.Should().Be("ZZZZ");
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_StableSourceRowChangesTicker_RefusesReplayAndKeepsFiledFact()
+    {
+        DbContext.AddRange(
+            new CommonStock { Ticker = "AAPL", Name = "Apple Inc." },
+            new CommonStock { Ticker = "MSFT", Name = "Microsoft Corporation" }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var sut = BuildSut();
+        var original = Txn("Jane Doe", "AAPL", sourceId: "immutable-ticker-filing");
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                sut,
+                [new List<DisclosureTransaction> { original }, CancellationToken.None]
+            );
+        var replay = Txn("Jane Doe", "MSFT", sourceId: "immutable-ticker-filing");
+        var replayTask = (Task)
+            ProcessTransactionsMethod.Invoke(
+                sut,
+                [new List<DisclosureTransaction> { replay }, CancellationToken.None]
+            );
+        await replayTask;
+
+        var outcome = replayTask.GetType().GetProperty("Result")!.GetValue(replayTask)!;
+        var unpersisted =
+            (IEnumerable<string>)
+                outcome.GetType().GetProperty("UnpersistedSourceIds")!.GetValue(outcome)!;
+        unpersisted.Should().Contain("immutable-ticker-filing");
+
+        await using var verify = Fixture.CreateDbContext();
+        var stored = await verify
+            .Set<CongressionalTrade>()
+            .AsNoTracking()
+            .Include(trade => trade.CommonStock)
+            .SingleAsync();
+        stored.FiledTicker.Should().Be("AAPL");
+        stored.CommonStock.Ticker.Should().Be("AAPL");
+    }
+
+    [Fact]
+    public async Task CommonStockDeletion_PreservesFiledTradeAndClearsDerivedIssuerLink()
+    {
+        var stock = new CommonStock { Ticker = "ACME", Name = "Acme Corporation" };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(stock, member);
+        DbContext.Add(
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CommonStock = stock,
+                FiledTicker = "ACME",
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 15),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName = "Acme Corporation",
+                AssetType = "ST",
+                Subholding = "",
+                AmountFrom = 1_001,
+                AmountTo = 15_000,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        DbContext.Remove(await DbContext.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id));
+        await DbContext.SaveChangesAsync();
+
+        await using var verify = Fixture.CreateDbContext();
+        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        stored.CommonStockId.Should().BeNull();
+        stored.FiledTicker.Should().Be("ACME");
+    }
+
+    [Fact]
+    public async Task RelinkUnresolved_NewBracketingEvidence_LinksStoredSourceFactLater()
+    {
+        var issuer = new CommonStock { Ticker = "ACME", Name = "Acme Corporation" };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        var trade = new CongressionalTrade
+        {
+            CongressMember = member,
+            FiledTicker = "ACME",
+            TransactionDate = new DateOnly(2024, 5, 1),
+            FilingDate = new DateOnly(2024, 5, 10),
+            TransactionType = CongressTransactionType.Purchase,
+            OwnerType = "self",
+            AssetName = "Acme Corporation",
+            AssetType = "ST",
+            Subholding = "",
+            AmountFrom = 1_001,
+            AmountTo = 15_000,
+        };
+        DbContext.AddRange(issuer, member, trade);
+        DbContext.Add(Evidence(issuer, new DateOnly(2024, 2, 1)));
+        await DbContext.SaveChangesAsync();
+
+        var resolver = new CongressionalTradeIssuerResolver(
+            new CommonStockTickerEvidenceRepository(DbContext),
+            DbContext
+        );
+        (await resolver.RelinkUnresolved(CancellationToken.None)).Should().Be(0);
+
+        DbContext.Add(Evidence(issuer, new DateOnly(2024, 8, 1)));
+        await DbContext.SaveChangesAsync();
+
+        (await resolver.RelinkUnresolved(CancellationToken.None)).Should().Be(1);
+        trade.CommonStockId.Should().Be(issuer.Id);
+    }
+
+    [Fact]
+    public async Task ProcessTransactions_ReusedTickerReplay_RelinksLegacyRowToHistoricalIssuer()
+    {
+        var historicalIssuer = new CommonStock { Ticker = "B", Name = "Barrick Gold" };
+        var currentIssuer = new CommonStock { Ticker = "GOLD", Name = "Gold.com" };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(historicalIssuer, currentIssuer, member);
+        DbContext.AddRange(
+            new CommonStockTickerEvidence
+            {
+                CommonStock = historicalIssuer,
+                Ticker = "GOLD",
+                FiledDate = new DateOnly(2020, 2, 1),
+                SourceDocumentId = Guid.NewGuid(),
+                AccessionNumber = "historical-before",
+            },
+            new CommonStockTickerEvidence
+            {
+                CommonStock = historicalIssuer,
+                Ticker = "GOLD",
+                FiledDate = new DateOnly(2022, 2, 1),
+                SourceDocumentId = Guid.NewGuid(),
+                AccessionNumber = "historical-after",
+            },
+            new CommonStockTickerEvidence
+            {
+                CommonStock = currentIssuer,
+                Ticker = "GOLD",
+                FiledDate = new DateOnly(2025, 2, 1),
+                SourceDocumentId = Guid.NewGuid(),
+                AccessionNumber = "current-before",
+            },
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CommonStock = currentIssuer,
+                TransactionDate = new DateOnly(2021, 6, 1),
+                FilingDate = new DateOnly(2021, 6, 15),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName = "Barrick Gold Corporation",
+                AssetType = "ST",
+                Subholding = "",
+                AmountFrom = 1_001,
+                AmountTo = 15_000,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var source = Txn(
+            "Jane Doe",
+            "GOLD",
+            assetName: "Barrick Gold Corporation",
+            transactionDate: new DateOnly(2021, 6, 1),
+            filingDate: new DateOnly(2021, 6, 15),
+            sourceId: "house-4304"
+        );
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(),
+                [new List<DisclosureTransaction> { source }, CancellationToken.None]
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var corrected = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
+        corrected.CommonStockId.Should().Be(historicalIssuer.Id);
+        corrected.FiledTicker.Should().Be("GOLD");
+        corrected.SourceId.Should().Be("house-4304");
+        corrected.SourceRowIndex.Should().Be(source.SourceRowIndex);
     }
 
     [Fact]
@@ -399,13 +633,6 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
                             "Jane Doe",
                             "AVGO",
                             assetType: "ST",
-                            subholding: subholding,
-                            assetName: "Broadcom Inc. (AVGO)"
-                        ),
-                        Txn(
-                            "Jane Doe",
-                            "AVGO",
-                            assetType: "OP",
                             subholding: subholding,
                             assetName: "Broadcom Inc. (AVGO)"
                         ),

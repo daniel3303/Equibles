@@ -46,7 +46,7 @@ public class CongressionalTradeSyncServiceBuildTradesCleanAssetNameTests
         var trades = sut.BuildTrades(
             [transaction],
             new Dictionary<string, CongressMember> { ["Jane Doe"] = member },
-            new Dictionary<string, CommonStock> { ["WY"] = stock }
+            new Dictionary<DisclosureTransaction, Guid?> { [transaction] = stock.Id }
         );
 
         trades.Should().ContainSingle().Which.AssetName.Should().Be(expected);
@@ -70,7 +70,7 @@ public class CongressionalTradeSyncServiceBuildTradesCleanAssetNameTests
         var trades = sut.BuildTrades(
             [transaction],
             new Dictionary<string, CongressMember> { ["Jane Doe"] = member },
-            new Dictionary<string, CommonStock> { ["WY"] = new CommonStock() }
+            new Dictionary<DisclosureTransaction, Guid?> { [transaction] = Guid.NewGuid() }
         );
 
         trades.Should().ContainSingle().Which.AssetName.Should().Be("");
@@ -97,7 +97,7 @@ public class CongressionalTradeSyncServiceBuildTradesCleanAssetNameTests
         var trades = sut.BuildTrades(
             [transaction],
             new Dictionary<string, CongressMember> { ["Jane Doe"] = member },
-            new Dictionary<string, CommonStock> { ["WY"] = new CommonStock() }
+            new Dictionary<DisclosureTransaction, Guid?> { [transaction] = Guid.NewGuid() }
         );
 
         trades.Should().ContainSingle().Which.OwnerType.Should().Be("");
@@ -126,7 +126,7 @@ public class CongressionalTradeSyncServiceBuildTradesCleanAssetNameTests
         var trades = sut.BuildTrades(
             [transaction],
             new Dictionary<string, CongressMember> { ["Jane Doe"] = member },
-            new Dictionary<string, CommonStock> { ["WY"] = new CommonStock() }
+            new Dictionary<DisclosureTransaction, Guid?> { [transaction] = Guid.NewGuid() }
         );
 
         var trade = trades.Should().ContainSingle().Which;
@@ -153,7 +153,8 @@ public class CongressionalTradeSyncServiceBuildTradesCleanAssetNameTests
             Substitute.For<ILogger<CongressionalTradeSyncService>>(),
             errorReporter,
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null)
         );
     }
 }

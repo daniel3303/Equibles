@@ -1,5 +1,6 @@
 using System.Text;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
@@ -62,7 +63,8 @@ public class XbrlFactExtractionService
     // FactTaxonomy.Custom, consolidated contexts included.
     // Version 4: cover-page 12(b) security listings extracted from inline
     // envelopes; the re-drain classifies every stock's ListedSecurityType.
-    public const int CurrentVersion = 4;
+    // Version 5: preserve every cover-page symbol observation as dated issuer evidence.
+    public const int CurrentVersion = CommonStockTickerEvidence.SourceXbrlFactsVersion;
 
     private const int InsertBatchSize = 1000;
 
@@ -516,12 +518,24 @@ public class XbrlFactExtractionService
         using var scope = _scopeFactory.CreateScope();
         var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var listedRepository = scope.ServiceProvider.GetRequiredService<ListedSecurityRepository>();
+        var evidenceRepository =
+            scope.ServiceProvider.GetRequiredService<CommonStockTickerEvidenceRepository>();
 
         var stock = await stockRepository
             .GetByIds([document.CommonStockId])
             .FirstOrDefaultAsync(cancellationToken);
         if (stock == null)
             return;
+
+        var evidence = incoming.Keys.Select(symbol => new CommonStockTickerEvidence
+        {
+            CommonStockId = stock.Id,
+            Ticker = symbol,
+            FiledDate = document.ReportingDate,
+            SourceDocumentId = document.Id,
+            AccessionNumber = document.AccessionNumber,
+        });
+        await evidenceRepository.UpsertRange(evidence, cancellationToken);
 
         var existingBySymbol = await listedRepository
             .GetByStock(stock)
@@ -581,16 +595,7 @@ public class XbrlFactExtractionService
         )
             return null;
 
-        var normalized = trimmed
-            .ToUpperInvariant()
-            .Replace(".", string.Empty)
-            .Replace("-", string.Empty)
-            .Replace("/", string.Empty)
-            .Replace(" ", string.Empty);
-        if (normalized.Length == 0 || normalized.Length > ListingSymbolMaxLength)
-            return null;
-
-        return normalized;
+        return TickerNormalizer.NormalizeIdentity(trimmed);
     }
 
     private static string Truncate(string value, int maxLength)

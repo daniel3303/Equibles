@@ -25,7 +25,8 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<CongressionalTradeIssuerResolver>(null, null)
         );
 
     private static List<CongressionalTrade> InvokeBuildTrades(
@@ -45,7 +46,7 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
                 [
                     new List<DisclosureTransaction> { tx },
                     new Dictionary<string, CongressMember> { [member.Name] = member },
-                    new Dictionary<string, CommonStock> { [stock.Ticker] = stock },
+                    new Dictionary<DisclosureTransaction, Guid?> { [tx] = stock.Id },
                 ]
             );
     }
