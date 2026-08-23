@@ -42,6 +42,8 @@ public class OffExchangeVolumeTools
             + "Each week shows ATS (alternative trading system / dark pool) volume and trade count, non-ATS OTC volume and trade count, "
             + "and the total off-exchange volume (ATS + non-ATS OTC). The FINRA file does not include consolidated tape volume, so the "
             + "off-exchange share of total market volume is not reported here; compute that share elsewhere against a consolidated-volume source. "
+            + OffExchangeVolumeCoverage.HistoricalCaseFoldCaveat
+            + " "
             + "FINRA publishes each week on a delay (2 weeks for Tier 1 NMS stocks, longer for other tiers), so the latest week lags today."
     )]
     public Task<string> GetOffExchangeVolume(
@@ -92,7 +94,12 @@ public class OffExchangeVolumeTools
                     r => RenderOffExchangeRow($"{r.WeekStartDate:yyyy-MM-dd}", r)
                 );
 
-                return AppendNote(table, NewestKeptNote(records.Count, total, "weeks"));
+                var notes = new[]
+                {
+                    HistoricalCoverageNote(records),
+                    NewestKeptNote(records.Count, total, "weeks"),
+                };
+                return AppendNotes(table, notes);
             },
             "GetOffExchangeVolume",
             $"ticker: {ticker}"
@@ -151,10 +158,20 @@ public class OffExchangeVolumeTools
             ? string.Empty
             : $"_Showing the newest {shown} of {total} {unit} in the range — raise maxResults (max {McpLimit.MaxResults}) or narrow the date range to see earlier ones._";
 
-    // Appends a note line under a rendered table (blank line first so strict CommonMark
-    // renderers keep the table intact); a no-op for the empty note or an empty-state message.
-    private static string AppendNote(string table, string note) =>
-        note.Length == 0 ? table : $"{table}\n{note}\n";
+    private static string HistoricalCoverageNote(IReadOnlyCollection<OffExchangeVolume> records) =>
+        records.Any(record =>
+            OffExchangeVolumeCoverage.MayIncludeCaseFoldedSiblingVolume(record.WeekStartDate)
+        )
+            ? $"_Historical data caveat: {OffExchangeVolumeCoverage.HistoricalCaseFoldCaveat}_"
+            : string.Empty;
+
+    // Appends note lines under a rendered table (blank line first so strict CommonMark
+    // renderers keep the table intact); a no-op when every note is empty.
+    private static string AppendNotes(string table, IEnumerable<string> notes)
+    {
+        var renderedNotes = notes.Where(note => note.Length > 0).ToList();
+        return renderedNotes.Count == 0 ? table : $"{table}\n{string.Join("\n", renderedNotes)}\n";
+    }
 
     // Render with InvariantCulture so the MCP markdown does not fork the separators by host
     // locale (e.g. de-DE would render 5.000.000 instead of 5,000,000). Total off-exchange

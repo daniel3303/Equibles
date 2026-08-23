@@ -145,7 +145,7 @@ never substitutes `BRK-B`; dot share-class spelling such as `BRK.A` resolves to 
 
 `OffExchangeVolumeTools`:
 
-- `GetOffExchangeVolume` — weekly off-exchange (dark-pool / OTC) volume per ticker from FINRA OTC/ATS Transparency data: ATS volume and trade count, non-ATS OTC volume and trade count, and the ATS + non-ATS OTC total.
+- `GetOffExchangeVolume` — weekly off-exchange (dark-pool / OTC) volume per ticker from FINRA OTC/ATS Transparency data: ATS volume and trade count, non-ATS OTC volume and trade count, and the ATS + non-ATS OTC total. Responses containing a week before 2025-08-11 warn that the historical row may include volume from a case-variant sibling security that can no longer be re-imported.
 
 ### `mcp.AddCftc()` — CFTC Commitments of Traders
 
