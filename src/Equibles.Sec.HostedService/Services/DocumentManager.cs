@@ -1,3 +1,4 @@
+using System.Data;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Sec.BusinessLogic.Embeddings;
@@ -40,47 +41,78 @@ public class DocumentManager
         _logger = logger;
     }
 
-    // Both batch loaders anti-join a huge table ("no chunks yet" / "no embeddings yet") ordered
-    // by CreationTime. Unfloored, that anti-join hashes the entire table on every poll — minutes
-    // of I/O each time on the chunk corpus. The caller-owned cursor floors each poll at the
-    // backfill frontier so the CreationTime index seeks straight to the pending rows; the
-    // rate-limited full-rescan fallback in LoadBatch catches rows left behind the frontier.
+    // The chunk loader reads the partial pending index. Existing installations initially have a
+    // null marker on every document, so a bounded compatibility update marks legacy rows that
+    // already have chunks while holding their document row locks. This drains the corpus without
+    // an unbounded anti-join and makes concurrent reset/replacement authoritative.
 
-    public async Task<bool> ChunkDocumentBatch(
-        BackfillCursor cursor,
-        CancellationToken cancellationToken
-    )
+    public async Task<bool> ChunkDocumentBatch(CancellationToken cancellationToken)
     {
-        var pendingDocuments = await LoadBatch(
-            floor =>
-            {
-                var query = _documentRepository
-                    .GetAll()
-                    .Include(d => d.CommonStock)
-                    .Include(d => d.Content)
-                    .Where(d => !d.Chunks.Any() && d.Content != null);
-                if (floor is { } f)
-                    query = query.Where(d => d.CreationTime >= f);
-                return query
-                    .OrderBy(d => d.CreationTime)
-                    .Take(_loadSize)
-                    .ToListAsync(cancellationToken);
-            },
-            cursor
-        );
+        if (await BackfillChunkedAtBatch(cancellationToken) > 0)
+            return true;
 
-        if (pendingDocuments.Count == 0)
+        var pendingDocumentIds = await _documentRepository
+            .GetAll()
+            .Where(d => d.ChunkedAt == null && d.Content != null)
+            .OrderBy(d => d.CreationTime)
+            .ThenBy(d => d.Id)
+            .Select(d => d.Id)
+            .Take(_loadSize)
+            .ToListAsync(cancellationToken);
+
+        if (pendingDocumentIds.Count == 0)
             return false;
 
-        _logger.LogInformation("Chunking {Count} documents", pendingDocuments.Count);
-        await ProcessOrRewind(
-            () => _documentProcessor.ProcessDocuments(pendingDocuments, cancellationToken),
-            cursor
-        );
-        cursor.Advance(pendingDocuments[^1].CreationTime);
-        await PersistCursor(cursor);
-        return true;
+        _logger.LogInformation("Chunking {Count} documents", pendingDocumentIds.Count);
+        var attempted = 0;
+        var progressed = 0;
+        foreach (var documentId in pendingDocumentIds)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                break;
+
+            await using var transaction = await _documentRepository.CreateTransaction(
+                IsolationLevel.ReadCommitted,
+                cancellationToken
+            );
+            try
+            {
+                var document = await _documentRepository.GetPendingForUpdate(
+                    documentId,
+                    cancellationToken
+                );
+                if (document == null)
+                    continue;
+
+                attempted++;
+                await _documentProcessor.ProcessDocument(document, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                progressed++;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _logger.LogError(ex, "Error chunking document {DocumentId}", documentId);
+            }
+            finally
+            {
+                _documentRepository.ClearChangeTracker();
+            }
+        }
+
+        if (!cancellationToken.IsCancellationRequested && attempted > 0 && progressed == 0)
+        {
+            throw new InvalidOperationException(
+                $"Chunking failed for all {attempted} documents in the batch — the content "
+                    + "store is likely unavailable. Backing off this cycle."
+            );
+        }
+
+        return progressed > 0;
     }
+
+    private Task<int> BackfillChunkedAtBatch(CancellationToken cancellationToken) =>
+        _documentRepository.BackfillLegacyChunked(_loadSize, DateTime.UtcNow, cancellationToken);
 
     public async Task<bool> GenerateEmbeddingBatch(
         BackfillCursor cursor,

@@ -7,7 +7,6 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.BusinessLogic;
 using Equibles.Media.Data;
 using Equibles.Sec.BusinessLogic;
-using Equibles.Sec.BusinessLogic.Processing;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
@@ -24,7 +23,6 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     private readonly IFileManager _fileManager = Substitute.For<IFileManager>();
     private readonly IDocumentPersistenceService _persistenceService =
         Substitute.For<IDocumentPersistenceService>();
-    private readonly IDocumentProcessor _documentProcessor = Substitute.For<IDocumentProcessor>();
     private readonly CommonStock _company;
 
     public DocumentNormalizationBackfillServiceTests()
@@ -58,7 +56,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     public void Dispose() => _dbContext.Dispose();
 
     [Fact]
-    public async Task Backfill_PendingNvidiaFiling_ReplacesContentAndRechunksAtCurrentVersion()
+    public async Task Backfill_PendingNvidiaFiling_ReplacesContentForIndexedRechunking()
     {
         var document = SeedDocument(normalizedContentVersion: 0);
         _secEdgarClient
@@ -83,14 +81,6 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
                     && d.NormalizedContentAttempts == 0
                 ),
                 Arg.Is<byte[]>(bytes => CorrectedTable(Encoding.UTF8.GetString(bytes))),
-                Arg.Any<CancellationToken>()
-            );
-        await _documentProcessor
-            .Received(1)
-            .ProcessDocuments(
-                Arg.Is<List<Document>>(documents =>
-                    documents.Count == 1 && documents[0].Id == document.Id
-                ),
                 Arg.Any<CancellationToken>()
             );
     }
@@ -154,7 +144,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Backfill_WhenNormalizedBytesAreUnchanged_RechunksWithoutReplacingFile()
+    public async Task Backfill_WhenNormalizedBytesAreUnchanged_ResetsChunksWithoutReplacingFile()
     {
         var document = SeedDocument(normalizedContentVersion: 0);
         _secEdgarClient
@@ -182,12 +172,6 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         await _persistenceService
             .Received(1)
             .ResetChunks(Arg.Is<Document>(d => d.Id == document.Id), Arg.Any<CancellationToken>());
-        await _documentProcessor
-            .Received(1)
-            .ProcessDocuments(
-                Arg.Is<List<Document>>(documents => documents.Single().Id == document.Id),
-                Arg.Any<CancellationToken>()
-            );
     }
 
     [Fact]
@@ -216,31 +200,6 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         document.NormalizedContentVersion.Should().Be(0);
     }
 
-    [Fact]
-    public async Task Backfill_CancellationDuringRechunk_PropagatesAfterProcessorReturns()
-    {
-        var document = SeedDocument(normalizedContentVersion: 0);
-        using var cancellation = new CancellationTokenSource();
-        _secEdgarClient
-            .GetDocumentContent(
-                document.AccessionNumber,
-                _company.Cik,
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(NvidiaSubmission);
-        _documentProcessor
-            .ProcessDocuments(Arg.Any<List<Document>>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                cancellation.Cancel();
-                return Task.CompletedTask;
-            });
-
-        var act = () => BuildSut().Backfill(batchSize: 1, cancellationToken: cancellation.Token);
-
-        await act.Should().ThrowAsync<OperationCanceledException>();
-    }
-
     private DocumentNormalizationBackfillService BuildSut() =>
         new(
             new DocumentRepository(_dbContext),
@@ -249,7 +208,6 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
             new SecDocumentHtmlToMarkdownConverter(),
             _fileManager,
             _persistenceService,
-            _documentProcessor,
             Substitute.For<ILogger<DocumentNormalizationBackfillService>>()
         );
 
