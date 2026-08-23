@@ -5,8 +5,9 @@ namespace Equibles.InsiderTrading.Data.Extensions;
 public static class InsiderTransactionQueryableExtensions
 {
     /// <summary>
-    /// Drops position-snapshot rows (<see cref="TransactionCode.Holding"/>) from a
-    /// transaction query. Holdings are parsed from Form 3/4/5 holding elements and
+    /// Drops non-transaction rows (<see cref="TransactionCode.Holding"/> and
+    /// <see cref="TransactionCode.IngestMarker"/>) from a transaction query.
+    /// Holdings are parsed from Form 3/4/5 holding elements and
     /// carry the insider's whole position in <see cref="InsiderTransaction.Shares"/>
     /// with no price, so listing them next to trades reads as a phantom acquisition
     /// of the entire stake. Apply on transaction lists and dollar-volume boards;
@@ -18,6 +19,9 @@ public static class InsiderTransactionQueryableExtensions
         this IQueryable<InsiderTransaction> query
     )
     {
-        return query.Where(t => t.TransactionCode != TransactionCode.Holding);
+        return query.Where(t =>
+            t.TransactionCode != TransactionCode.Holding
+            && t.TransactionCode != TransactionCode.IngestMarker
+        );
     }
 }

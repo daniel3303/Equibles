@@ -25,13 +25,10 @@ using MediaFileContent = Equibles.Media.Data.Models.FileContent;
 
 namespace Equibles.IntegrationTests.Sec;
 
-// Form 3/A, 4/A, and 5/A supersession: an amendment restates its original filing in full,
-// so the pipeline must (1) replace the original's transactions when the amendment
-// ingests, (2) skip a late-arriving original whose amendment already ingested
-// (EDGAR lists newest-first, so that order is the COMMON one during history
-// sweeps), and (3) skip an older amendment when a newer one of the same original
-// is already in, and (4) never crosses the Form 3/4/5 family boundary. Without
-// these, amendments can double count a correction or delete a same-day sibling form.
+// Form 3/A, 4/A, and 5/A supersession is section-scoped: transaction rows replace
+// transactions and holding snapshots replace holdings. The pipeline also handles
+// amendments arriving before originals, newer amendment chains, and Form 3/4/5
+// family boundaries without double-counting or deleting a sibling filing.
 public class InsiderTradingFilingProcessorAmendmentTests
 {
     private const string OriginalAccession = "0001-24-000100";
@@ -54,6 +51,20 @@ public class InsiderTradingFilingProcessorAmendmentTests
         shares: 250,
         dateOfOriginalSubmission: OriginalFilingDate,
         form: "4/A"
+    );
+
+    private static readonly string OriginalForm4WithHoldingXml = AddHolding(
+        OriginalForm4Xml,
+        shares: 5000
+    );
+
+    private static readonly string HoldingsOnlyAmendmentForm4Xml = BuildHoldingOnlyOwnershipXml(
+        shares: 4500,
+        dateOfOriginalSubmission: OriginalFilingDate
+    );
+
+    private static readonly string EmptyAmendmentForm4Xml = BuildEmptyAmendmentOwnershipXml(
+        OriginalFilingDate
     );
 
     private static string BuildOwnershipXml(
@@ -100,12 +111,133 @@ public class InsiderTradingFilingProcessorAmendmentTests
             """;
     }
 
+    private static string AddHolding(string xml, long shares)
+    {
+        var holding = $"""
+                    <nonDerivativeHolding>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>{shares}</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeHolding>
+            """;
+        return xml.Replace("</nonDerivativeTable>", $"{holding}</nonDerivativeTable>");
+    }
+
+    private static string BuildHoldingOnlyOwnershipXml(
+        long shares,
+        DateOnly dateOfOriginalSubmission
+    )
+    {
+        return $"""
+            <ownershipDocument>
+                <documentType>4/A</documentType>
+                <dateOfOriginalSubmission>{dateOfOriginalSubmission:yyyy-MM-dd}</dateOfOriginalSubmission>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0001234567</rptOwnerCik>
+                        <rptOwnerName>John Doe</rptOwnerName>
+                    </reportingOwnerId>
+                    <reportingOwnerRelationship>
+                        <isDirector>1</isDirector>
+                    </reportingOwnerRelationship>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeHolding>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>{shares}</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                        <ownershipNature>
+                            <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+                        </ownershipNature>
+                    </nonDerivativeHolding>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+    }
+
+    private static string BuildEmptyAmendmentOwnershipXml(DateOnly dateOfOriginalSubmission)
+    {
+        return $"""
+            <ownershipDocument>
+                <documentType>4/A</documentType>
+                <dateOfOriginalSubmission>{dateOfOriginalSubmission:yyyy-MM-dd}</dateOfOriginalSubmission>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0001234567</rptOwnerCik>
+                        <rptOwnerName>John Doe</rptOwnerName>
+                    </reportingOwnerId>
+                </reportingOwner>
+                <nonDerivativeTable/>
+                <derivativeTable/>
+            </ownershipDocument>
+            """;
+    }
+
+    private static string BuildNoSecuritiesOwnedAmendmentXml(DateOnly originalFilingDate)
+    {
+        return $"""
+            <ownershipDocument>
+                <documentType>3/A</documentType>
+                <dateOfOriginalSubmission>{originalFilingDate:yyyy-MM-dd}</dateOfOriginalSubmission>
+                <noSecuritiesOwned>1</noSecuritiesOwned>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0001234567</rptOwnerCik>
+                        <rptOwnerName>John Doe</rptOwnerName>
+                    </reportingOwnerId>
+                </reportingOwner>
+                <nonDerivativeTable/>
+                <derivativeTable/>
+            </ownershipDocument>
+            """;
+    }
+
+    private static string BuildFormThreeHoldingXml(long shares)
+    {
+        return $"""
+            <ownershipDocument>
+                <documentType>3</documentType>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0001234567</rptOwnerCik>
+                        <rptOwnerName>John Doe</rptOwnerName>
+                    </reportingOwnerId>
+                </reportingOwner>
+                <nonDerivativeTable>
+                    <nonDerivativeHolding>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <postTransactionAmounts>
+                            <sharesOwnedFollowingTransaction><value>{shares}</value></sharesOwnedFollowingTransaction>
+                        </postTransactionAmounts>
+                    </nonDerivativeHolding>
+                </nonDerivativeTable>
+            </ownershipDocument>
+            """;
+    }
+
     private static (
         InsiderTradingFilingProcessor Processor,
         InsiderTransactionRepository TxRepo,
         ISecEdgarClient SecClient,
         InsiderFilingRepository FilingRepo
-    ) CreateProcessorWithDeps(ILogger<InsiderTradingFilingProcessor> logger = null)
+    ) CreateProcessorWithDeps(ILogger<InsiderTradingFilingProcessor> logger = null) =>
+        CreateProcessorWithDeps(out _, out _, logger);
+
+    private static (
+        InsiderTradingFilingProcessor Processor,
+        InsiderTransactionRepository TxRepo,
+        ISecEdgarClient SecClient,
+        InsiderFilingRepository FilingRepo
+    ) CreateProcessorWithDeps(
+        out IFileManager fileManager,
+        out Action restoreFileManager,
+        ILogger<InsiderTradingFilingProcessor> logger = null
+    )
     {
         var dbContext = TestDbContextFactory.Create(
             new InsiderTradingModuleConfiguration(),
@@ -121,32 +253,40 @@ public class InsiderTradingFilingProcessorAmendmentTests
         var errorManager = new ErrorManager(new ErrorRepository(dbContext));
         var dailyStockPriceRepo = new DailyStockPriceRepository(dbContext);
         var secClient = Substitute.For<ISecEdgarClient>();
-        var fileManager = Substitute.For<IFileManager>();
-        fileManager
-            .SaveInternalFile(
-                Arg.Any<byte[]>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>()
-            )
-            .Returns(call =>
-            {
-                var bytes = call.ArgAt<byte[]>(0);
-                var file = new MediaFile
+        var configuredFileManager = Substitute.For<IFileManager>();
+
+        void ConfigureFileManager()
+        {
+            configuredFileManager
+                .SaveInternalFile(
+                    Arg.Any<byte[]>(),
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    Arg.Any<string>()
+                )
+                .Returns(call =>
                 {
-                    Name = call.ArgAt<string>(1),
-                    Extension = call.ArgAt<string>(2),
-                    ContentType = call.ArgAt<string>(3),
-                    Size = bytes.Length,
-                    FileContent = new MediaFileContent { Bytes = bytes },
-                };
-                dbContext.Add(file);
-                return file;
-            });
-        fileManager
-            .GetContent(Arg.Any<MediaFile>())
-            .Returns(call => call.ArgAt<MediaFile>(0).FileContent.Bytes);
+                    var bytes = call.ArgAt<byte[]>(0);
+                    var file = new MediaFile
+                    {
+                        Name = call.ArgAt<string>(1),
+                        Extension = call.ArgAt<string>(2),
+                        ContentType = call.ArgAt<string>(3),
+                        Size = bytes.Length,
+                        FileContent = new MediaFileContent { Bytes = bytes },
+                    };
+                    dbContext.Add(file);
+                    return file;
+                });
+            configuredFileManager
+                .GetContent(Arg.Any<MediaFile>())
+                .Returns(call => call.ArgAt<MediaFile>(0).FileContent.Bytes);
+        }
+
+        ConfigureFileManager();
+        fileManager = configuredFileManager;
+        restoreFileManager = ConfigureFileManager;
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(ISecEdgarClient), secClient),
@@ -154,7 +294,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
             (typeof(InsiderTransactionRepository), txRepo),
             (typeof(InsiderFilingRepository), filingRepo),
             (typeof(FailedFilingIngestRepository), new FailedFilingIngestRepository(dbContext)),
-            (typeof(IFileManager), fileManager),
+            (typeof(IFileManager), configuredFileManager),
             (typeof(ErrorManager), errorManager),
             (typeof(DailyStockPriceRepository), dailyStockPriceRepo),
             (typeof(InsiderTransactionPriceValidator), new InsiderTransactionPriceValidator()),
@@ -218,6 +358,23 @@ public class InsiderTradingFilingProcessorAmendmentTests
             Cik = "0000320193",
         };
 
+    private static List<InsiderTransaction> CurrentRows(InsiderTransactionRepository repository) =>
+        repository.GetAll().Where(t => t.TransactionCode != TransactionCode.IngestMarker).ToList();
+
+    private static void AssertCurrentMarker(
+        InsiderTransactionRepository repository,
+        string accessionNumber
+    )
+    {
+        repository
+            .GetByAccessionNumber(accessionNumber)
+            .Should()
+            .ContainSingle(t =>
+                t.TransactionCode == TransactionCode.IngestMarker
+                && t.ParserVersion == InsiderTransaction.CurrentParserVersion
+            );
+    }
+
     [Fact]
     public async Task Process_AmendmentAfterOriginal_ReplacesTheOriginalsTransactions()
     {
@@ -230,7 +387,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
         var result = await processor.Process(MakeAmendment(), company);
 
         result.Should().BeTrue();
-        var transactions = txRepo.GetAll().ToList();
+        var transactions = CurrentRows(txRepo);
         transactions
             .Should()
             .ContainSingle("the amendment replaces, never sums with, its original");
@@ -241,6 +398,374 @@ public class InsiderTradingFilingProcessorAmendmentTests
         transactions[0]
             .SupersededAccessionNumber.Should()
             .Be(OriginalAccession, "the amendment records which original it replaced");
+        AssertCurrentMarker(txRepo, OriginalAccession);
+    }
+
+    [Fact]
+    public async Task Process_HoldingsOnlyAmendmentAfterOriginal_PreservesOriginalTransactions()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        var rows = txRepo.GetAll().OrderBy(t => t.AccessionNumber).ToList();
+        rows.Should().HaveCount(2);
+        rows.Single(t => t.TransactionCode != TransactionCode.Holding)
+            .AccessionNumber.Should()
+            .Be(OriginalAccession);
+        var holding = rows.Single(t => t.TransactionCode == TransactionCode.Holding);
+        holding.AccessionNumber.Should().Be(AmendmentAccession);
+        holding.Shares.Should().Be(4500);
+        holding.SupersededAccessionNumber.Should().Be(OriginalAccession);
+    }
+
+    [Fact]
+    public async Task Process_LegacyWholesaleDeletion_ReplaysOriginalAndRestoresUntouchedSection()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        // Recreate the pre-fix production state: the holdings-only amendment
+        // claimed the original after wholesale deletion removed its transaction.
+        txRepo.Delete(txRepo.GetByAccessionNumber(OriginalAccession));
+        await txRepo.SaveChanges();
+
+        var knownBeforeReplay = await processor.FilterKnownAccessions([
+            OriginalAccession,
+            AmendmentAccession,
+        ]);
+        knownBeforeReplay.Should().Equal(AmendmentAccession);
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+
+        var rows = txRepo
+            .GetAll()
+            .Where(t => t.TransactionCode != TransactionCode.IngestMarker)
+            .ToList();
+        rows.Should().HaveCount(2);
+        rows.Should()
+            .ContainSingle(t =>
+                t.AccessionNumber == OriginalAccession
+                && t.TransactionCode != TransactionCode.Holding
+            );
+        rows.Should()
+            .ContainSingle(t =>
+                t.AccessionNumber == AmendmentAccession
+                && t.TransactionCode == TransactionCode.Holding
+            );
+    }
+
+    [Fact]
+    public async Task Process_LegacyClaimAndUnresolvedAmendment_ReplayAppliesBothSections()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        var transactionAmendment = MakeAmendment();
+        transactionAmendment.AccessionNumber = "0001-24-000300";
+        transactionAmendment.FilingDate = AmendmentFilingDate.AddDays(1);
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
+        (await processor.Process(transactionAmendment, company)).Should().BeTrue();
+
+        // Recreate a mixed legacy state: wholesale deletion attached the holding
+        // claim, while the disjoint transaction correction stayed unresolved.
+        var holdingAmendment = txRepo.GetByAccessionNumber(AmendmentAccession).Single();
+        holdingAmendment.SupersededAccessionNumber = OriginalAccession;
+        await txRepo.SaveChanges();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company))
+            .Should()
+            .BeFalse("both amended sections leave the original with no current rows");
+
+        var rows = CurrentRows(txRepo);
+        rows.Should().HaveCount(2);
+        rows.Should()
+            .ContainSingle(t =>
+                t.AccessionNumber == AmendmentAccession
+                && t.TransactionCode == TransactionCode.Holding
+            );
+        rows.Should()
+            .ContainSingle(t =>
+                t.AccessionNumber == transactionAmendment.AccessionNumber
+                && t.TransactionCode != TransactionCode.Holding
+            );
+        rows.Should().OnlyContain(t => t.SupersededAccessionNumber == OriginalAccession);
+        AssertCurrentMarker(txRepo, OriginalAccession);
+    }
+
+    [Fact]
+    public async Task Process_OriginalAfterHoldingsOnlyAmendment_PreservesOriginalTransactions()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+
+        var rows = txRepo.GetAll().OrderBy(t => t.AccessionNumber).ToList();
+        rows.Should().HaveCount(2);
+        rows.Single(t => t.TransactionCode != TransactionCode.Holding)
+            .AccessionNumber.Should()
+            .Be(OriginalAccession);
+        rows.Single(t => t.TransactionCode == TransactionCode.Holding)
+            .AccessionNumber.Should()
+            .Be(AmendmentAccession);
+    }
+
+    [Fact]
+    public async Task Process_OriginalAfterEmptyAmendment_PreservesEveryOriginalSection()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(EmptyAmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        txRepo
+            .GetAll()
+            .Should()
+            .ContainSingle(t =>
+                t.TransactionCode == TransactionCode.IngestMarker
+                && t.SupersededAccessionNumber == null
+            );
+        (await processor.FilterKnownAccessions([AmendmentAccession]))
+            .Should()
+            .Equal(AmendmentAccession);
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+
+        var rows = txRepo
+            .GetAll()
+            .Where(t => t.TransactionCode != TransactionCode.IngestMarker)
+            .ToList();
+        rows.Should().HaveCount(2);
+        rows.Should().OnlyContain(t => t.AccessionNumber == OriginalAccession);
+        rows.Should().ContainSingle(t => t.TransactionCode == TransactionCode.Holding);
+        rows.Should().ContainSingle(t => t.TransactionCode != TransactionCode.Holding);
+    }
+
+    [Fact]
+    public async Task Process_EmptyNewerAmendment_DoesNotSuppressOlderAmendmentSections()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        var emptyNewerAmendment = MakeAmendment();
+        emptyNewerAmendment.AccessionNumber = "0001-24-000300";
+        emptyNewerAmendment.FilingDate = AmendmentFilingDate.AddDays(1);
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(EmptyAmendmentForm4Xml);
+        (await processor.Process(emptyNewerAmendment, company)).Should().BeTrue();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+
+        var rows = txRepo
+            .GetAll()
+            .Where(t => t.TransactionCode != TransactionCode.IngestMarker)
+            .ToList();
+        rows.Should().HaveCount(2);
+        rows.Single(t => t.TransactionCode == TransactionCode.Holding)
+            .AccessionNumber.Should()
+            .Be(AmendmentAccession);
+        rows.Single(t => t.TransactionCode != TransactionCode.Holding)
+            .AccessionNumber.Should()
+            .Be(OriginalAccession);
+    }
+
+    [Fact]
+    public async Task Process_FormThreeOriginalAfterNoSecuritiesOwnedAmendment_IsSuperseded()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+        var amendment = MakeAmendment();
+        amendment.Form = "3/A";
+        secClient
+            .GetDocumentContent(Arg.Any<FilingData>())
+            .Returns(BuildNoSecuritiesOwnedAmendmentXml(OriginalFilingDate));
+        (await processor.Process(amendment, company)).Should().BeTrue();
+
+        var original = MakeOriginal();
+        original.Form = "3";
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(BuildFormThreeHoldingXml(5000));
+        (await processor.Process(original, company)).Should().BeFalse();
+
+        var sentinel = CurrentRows(txRepo).Should().ContainSingle().Subject;
+        sentinel.AccessionNumber.Should().Be(AmendmentAccession);
+        sentinel.TransactionCode.Should().Be(TransactionCode.Holding);
+        sentinel.IsAmendment.Should().BeTrue();
+        sentinel.OriginalFilingDate.Should().Be(OriginalFilingDate);
+        sentinel.SupersededAccessionNumber.Should().Be(OriginalAccession);
+        AssertCurrentMarker(txRepo, OriginalAccession);
+    }
+
+    [Fact]
+    public async Task Process_TransactionAmendment_PreservesAmbiguousPreV5Holding()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+
+        var legacyHolding = txRepo
+            .GetByAccessionNumber(OriginalAccession)
+            .Single(t => t.TransactionCode == TransactionCode.Holding);
+        legacyHolding.TransactionCode = TransactionCode.Other;
+        legacyHolding.ParserVersion = 4;
+        await txRepo.SaveChanges();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        var rows = txRepo.GetAll().ToList();
+        rows.Should().HaveCount(2);
+        rows.Should().Contain(legacyHolding);
+        rows.Should().ContainSingle(t => t.AccessionNumber == AmendmentAccession);
+    }
+
+    [Fact]
+    public async Task Process_HoldingsAmendment_PreservesAmbiguousPreV5Holding()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+
+        var legacyHolding = txRepo
+            .GetByAccessionNumber(OriginalAccession)
+            .Single(t => t.TransactionCode == TransactionCode.Holding);
+        legacyHolding.TransactionCode = TransactionCode.Other;
+        legacyHolding.ParserVersion = 4;
+        await txRepo.SaveChanges();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        var rows = txRepo.GetAll().ToList();
+        rows.Should().HaveCount(3);
+        rows.Should().Contain(legacyHolding);
+        rows.Should()
+            .ContainSingle(t =>
+                t.AccessionNumber == AmendmentAccession
+                && t.TransactionCode == TransactionCode.Holding
+            );
+    }
+
+    [Fact]
+    public async Task Process_NewerHoldingsAmendment_PreservesOlderAmendmentTransactions()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        var newerAmendment = MakeAmendment();
+        newerAmendment.AccessionNumber = "0001-24-000300";
+        newerAmendment.FilingDate = AmendmentFilingDate.AddDays(1);
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
+        (await processor.Process(newerAmendment, company)).Should().BeTrue();
+
+        var rows = CurrentRows(txRepo).OrderBy(t => t.AccessionNumber).ToList();
+        rows.Should().HaveCount(2);
+        rows.Single(t => t.TransactionCode != TransactionCode.Holding)
+            .AccessionNumber.Should()
+            .Be(AmendmentAccession);
+        rows.Single(t => t.TransactionCode == TransactionCode.Holding)
+            .AccessionNumber.Should()
+            .Be(newerAmendment.AccessionNumber);
+    }
+
+    [Fact]
+    public async Task Process_OlderTransactionAmendmentAfterNewerHoldingsAmendment_PreservesBoth()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+        var newerAmendment = MakeAmendment();
+        newerAmendment.AccessionNumber = "0001-24-000300";
+        newerAmendment.FilingDate = AmendmentFilingDate.AddDays(1);
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
+        (await processor.Process(newerAmendment, company)).Should().BeTrue();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeFalse();
+
+        var rows = CurrentRows(txRepo).OrderBy(t => t.AccessionNumber).ToList();
+        rows.Should().HaveCount(2);
+        rows.Single(t => t.TransactionCode != TransactionCode.Holding)
+            .AccessionNumber.Should()
+            .Be(AmendmentAccession);
+        rows.Single(t => t.TransactionCode == TransactionCode.Holding)
+            .AccessionNumber.Should()
+            .Be(newerAmendment.AccessionNumber);
+        rows.Should().OnlyContain(t => t.SupersededAccessionNumber == OriginalAccession);
+    }
+
+    [Fact]
+    public async Task Process_PartialLateOriginalFailure_DoesNotPersistClaimAndCanRetry()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps(
+            out var fileManager,
+            out var restoreFileManager
+        );
+        var company = MakeCompany();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        fileManager
+            .SaveInternalFile(
+                Arg.Any<byte[]>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>()
+            )
+            .Returns(Task.FromException<MediaFile>(new IOException("simulated capture failure")));
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
+
+        var act = () => processor.Process(MakeOriginal(), company);
+        await act.Should().ThrowAsync<IOException>();
+
+        txRepo.ClearChangeTracker();
+        var knownAfterFailure = await processor.FilterKnownAccessions([
+            AmendmentAccession,
+            OriginalAccession,
+        ]);
+        knownAfterFailure.Should().Equal(AmendmentAccession);
+
+        restoreFileManager();
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+        txRepo
+            .GetByAccessionNumber(OriginalAccession)
+            .Should()
+            .ContainSingle(t => t.TransactionCode != TransactionCode.Holding);
+        txRepo
+            .GetByAccessionNumber(AmendmentAccession)
+            .Single()
+            .SupersededAccessionNumber.Should()
+            .Be(OriginalAccession);
     }
 
     [Fact]
@@ -260,8 +785,8 @@ public class InsiderTradingFilingProcessorAmendmentTests
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
 
-        txRepo.GetAll().Should().ContainSingle();
-        txRepo.GetAll().Single().AccessionNumber.Should().Be(AmendmentAccession);
+        CurrentRows(txRepo).Should().ContainSingle();
+        CurrentRows(txRepo).Single().AccessionNumber.Should().Be(AmendmentAccession);
     }
 
     [Fact]
@@ -301,7 +826,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
         var result = await processor.Process(MakeOriginal(), company);
 
         result.Should().BeFalse("the original's rows were already superseded");
-        var transactions = txRepo.GetAll().ToList();
+        var transactions = CurrentRows(txRepo);
         transactions.Should().ContainSingle();
         transactions[0].AccessionNumber.Should().Be(AmendmentAccession);
         transactions[0].Shares.Should().Be(250);
@@ -311,6 +836,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
                 OriginalAccession,
                 "the orphaned amendment claims the original so future sweeps drop it without a fetch"
             );
+        AssertCurrentMarker(txRepo, OriginalAccession);
     }
 
     [Fact]
@@ -333,11 +859,12 @@ public class InsiderTradingFilingProcessorAmendmentTests
             .Should()
             .BeFalse("the cached Form 4/A proves the legacy orphan superseded this original");
 
-        txRepo.GetAll().Should().ContainSingle();
-        var remaining = txRepo.GetAll().Single();
+        CurrentRows(txRepo).Should().ContainSingle();
+        var remaining = CurrentRows(txRepo).Single();
         remaining.AccessionNumber.Should().Be(AmendmentAccession);
         remaining.FilingForm.Should().Be(InsiderOwnershipForm.Form4);
         remaining.SupersededAccessionNumber.Should().Be(OriginalAccession);
+        AssertCurrentMarker(txRepo, OriginalAccession);
     }
 
     [Fact]
@@ -449,7 +976,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
             .Returns(BuildOwnershipXml(550, OriginalFilingDate, "5/A"));
         (await processor.Process(MakeFormFiveAmendment(), company)).Should().BeTrue();
 
-        var transactions = txRepo.GetAll().OrderBy(t => t.AccessionNumber).ToList();
+        var transactions = CurrentRows(txRepo).OrderBy(t => t.AccessionNumber).ToList();
         transactions.Should().HaveCount(2);
         transactions
             .Select(t => t.AccessionNumber)
@@ -486,7 +1013,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
             .Should()
             .BeFalse("the already-ingested Form 5/A superseded this Form 5");
 
-        var transactions = txRepo.GetAll().OrderBy(t => t.AccessionNumber).ToList();
+        var transactions = CurrentRows(txRepo).OrderBy(t => t.AccessionNumber).ToList();
         transactions.Should().HaveCount(2);
         transactions
             .Select(t => t.AccessionNumber)
@@ -579,7 +1106,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
             .Should()
             .BeFalse("the Form 5/A is reassigned from its disproved Form 4 claim");
 
-        txRepo.GetByAccessionNumber(FormFiveOriginalAccession).Should().BeEmpty();
+        AssertCurrentMarker(txRepo, FormFiveOriginalAccession);
         txRepo
             .GetByAccessionNumber(FormFiveAmendmentAccession)
             .Single()
@@ -665,6 +1192,62 @@ public class InsiderTradingFilingProcessorAmendmentTests
     }
 
     [Fact]
+    public async Task Process_LegacyEmptyParseMarkerClaim_DoesNotHideOriginal()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        txRepo.Delete(txRepo.GetByAccessionNumber(OriginalAccession));
+        await txRepo.SaveChanges();
+
+        var legacyMarker = txRepo.GetByAccessionNumber(AmendmentAccession).Single();
+        legacyMarker.TransactionCode = TransactionCode.Other;
+        legacyMarker.SecurityTitle = "No Securities Owned";
+        legacyMarker.Shares = 0;
+        legacyMarker.ParserVersion = 8;
+        await txRepo.SaveChanges();
+
+        var known = await processor.FilterKnownAccessions([OriginalAccession, AmendmentAccession]);
+        known.Should().Equal(AmendmentAccession);
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+        txRepo.GetByAccessionNumber(OriginalAccession).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Process_AmbiguousPreV5OtherClaim_DoesNotHideOriginal()
+    {
+        var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
+        var company = MakeCompany();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
+        (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        txRepo.Delete(txRepo.GetByAccessionNumber(OriginalAccession));
+        await txRepo.SaveChanges();
+
+        var legacyOther = txRepo.GetByAccessionNumber(AmendmentAccession).Single();
+        legacyOther.TransactionCode = TransactionCode.Other;
+        legacyOther.ParserVersion = 4;
+        await txRepo.SaveChanges();
+
+        var known = await processor.FilterKnownAccessions([OriginalAccession, AmendmentAccession]);
+        known.Should().Equal(AmendmentAccession);
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
+        (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
+        txRepo.GetByAccessionNumber(OriginalAccession).Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task Process_ValidLegacyUnknownClaim_ResolvesFromCachedXmlAndStillSuppressesOriginal()
     {
         var (processor, txRepo, secClient, filingRepo) = CreateProcessorWithDeps();
@@ -674,6 +1257,9 @@ public class InsiderTradingFilingProcessorAmendmentTests
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
+
+        txRepo.Delete(txRepo.GetByAccessionNumber(OriginalAccession));
+        await txRepo.SaveChanges();
 
         var amendment = txRepo.GetByAccessionNumber(AmendmentAccession).Single();
         amendment.FilingForm = InsiderOwnershipForm.Unknown;
@@ -691,7 +1277,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
             .Should()
             .BeFalse("the cached Form 4/A proves this same-family legacy claim is valid");
 
-        txRepo.GetByAccessionNumber(OriginalAccession).Should().BeEmpty();
+        AssertCurrentMarker(txRepo, OriginalAccession);
         txRepo
             .GetByAccessionNumber(AmendmentAccession)
             .Single()
@@ -721,18 +1307,19 @@ public class InsiderTradingFilingProcessorAmendmentTests
         var result = await processor.Process(MakeAmendment(), company);
 
         result.Should().BeTrue();
-        var transactions = txRepo.GetAll().ToList();
+        var transactions = CurrentRows(txRepo);
         transactions.Should().ContainSingle("the date-shifted original must still be replaced");
         transactions[0].AccessionNumber.Should().Be(AmendmentAccession);
         transactions[0].SupersededAccessionNumber.Should().Be(OriginalAccession);
+        AssertCurrentMarker(txRepo, OriginalAccession);
     }
 
     [Fact]
     public async Task FilterKnownAccessions_SupersededOriginal_CountsAsKnown()
     {
-        // A superseded original has no rows of its own; without the claim column
-        // every sweep would pass it through the prefilter and re-fetch it from
-        // EDGAR forever just to re-skip it.
+        // A fully superseded original retains a non-section marker of its own.
+        // Claims cannot make an original known because a legacy claim may have
+        // been paired with wholesale deletion of sections it never restated.
         var (processor, _, secClient, _) = CreateProcessorWithDeps();
         var company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);

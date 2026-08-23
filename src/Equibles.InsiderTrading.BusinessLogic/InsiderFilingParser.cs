@@ -119,7 +119,7 @@ public static class InsiderFilingParser
         // it the reprocess pipeline, which replays this parse, re-derives zero rows and
         // logs a phantom "stored 1 but re-parsed 0" divergence for every such filing.
         if (transactions.Count == 0 && DeclaresNoSecuritiesOwned(root))
-            AddParsed(BuildNoSecuritiesOwnedSentinel(owner, companyId, filing));
+            AddParsed(BuildNoSecuritiesOwnedSentinel(owner, companyId, filing, isAmendment));
 
         return transactions;
     }
@@ -196,7 +196,8 @@ public static class InsiderFilingParser
     internal static InsiderTransaction BuildNoSecuritiesOwnedSentinel(
         InsiderOwner owner,
         Guid companyId,
-        FilingData filing
+        FilingData filing,
+        bool isAmendment
     ) =>
         new()
         {
@@ -204,9 +205,10 @@ public static class InsiderFilingParser
             CommonStockId = companyId,
             FilingDate = filing.FilingDate,
             TransactionDate = filing.ReportDate,
-            TransactionCode = TransactionCode.Other,
+            TransactionCode = TransactionCode.Holding,
             AccessionNumber = filing.AccessionNumber,
             SecurityTitle = "No Securities Owned",
+            IsAmendment = isAmendment,
             FilingForm = ParseOwnershipForm(filing.Form),
             IsPriceValid = true,
             ParserVersion = InsiderTransaction.CurrentParserVersion,

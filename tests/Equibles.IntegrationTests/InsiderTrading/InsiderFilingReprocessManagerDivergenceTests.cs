@@ -30,11 +30,16 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
     public InsiderFilingReprocessManagerDivergenceTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    [Fact]
-    public async Task Run_CachedXmlReparsesFewerRowsThanStored_AdvancesUnmatchedRowKeepingPriorData()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Run_CachedXmlReparsesFewerRowsThanStored_StampsDocumentIdentityOnEveryRow(
+        bool isAmendment
+    )
     {
         var date = new DateOnly(2024, 6, 14);
-        var accession = "0000320193-24-000050";
+        var originalFilingDate = new DateOnly(2024, 5, 31);
+        var accession = isAmendment ? "0000320193-24-000053" : "0000320193-24-000050";
 
         var stock = new CommonStock
         {
@@ -80,8 +85,12 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
         var matched = MakeStale(0);
         var unmatched = MakeStale(1);
 
+        var documentType = isAmendment ? "5/A" : "5";
+        var originalSubmission = isAmendment
+            ? $"<dateOfOriginalSubmission>{originalFilingDate:yyyy-MM-dd}</dateOfOriginalSubmission>"
+            : string.Empty;
         var ownershipXml =
-            "<ownershipDocument><documentType>5</documentType>"
+            $"<ownershipDocument><documentType>{documentType}</documentType>{originalSubmission}"
             + "<nonDerivativeTable><nonDerivativeTransaction>"
             + "<securityTitle><value>Common Stock</value></securityTitle>"
             + "<transactionDate><value>2024-06-14</value></transactionDate>"
@@ -154,12 +163,16 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
 
         matchedAfter!.SecurityKind.Should().Be(InsiderSecurityKind.NonDerivative);
         matchedAfter.FilingForm.Should().Be(InsiderOwnershipForm.Form5);
+        matchedAfter.IsAmendment.Should().Be(isAmendment);
+        matchedAfter.OriginalFilingDate.Should().Be(isAmendment ? originalFilingDate : null);
         matchedAfter.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
 
         // The unmatched row keeps its prior kind but must still advance, or it would be
         // re-selected forever.
         unmatchedAfter!.SecurityKind.Should().Be(InsiderSecurityKind.Derivative);
         unmatchedAfter.FilingForm.Should().Be(InsiderOwnershipForm.Form5);
+        unmatchedAfter.IsAmendment.Should().Be(isAmendment);
+        unmatchedAfter.OriginalFilingDate.Should().Be(isAmendment ? originalFilingDate : null);
         unmatchedAfter.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
 
         var filingAfter = await verify
@@ -220,5 +233,181 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
         (await verify.Set<InsiderTransaction>().AnyAsync(t => t.AccessionNumber == accession))
             .Should()
             .BeFalse();
+    }
+
+    [Fact]
+    public async Task Run_LegacyEmptyParseMarker_ConvertsToNonSectionMarkerAndClearsClaim()
+    {
+        var date = new DateOnly(2024, 6, 14);
+        var accession = "0000320193-24-000052";
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
+        var owner = new InsiderOwner
+        {
+            Id = Guid.NewGuid(),
+            OwnerCik = "0001",
+            Name = "Jane Insider",
+        };
+        var marker = new InsiderTransaction
+        {
+            Id = Guid.NewGuid(),
+            CommonStockId = stock.Id,
+            InsiderOwnerId = owner.Id,
+            AccessionNumber = accession,
+            TransactionOrder = 0,
+            FilingDate = date,
+            TransactionDate = date,
+            TransactionCode = TransactionCode.Other,
+            SecurityTitle = "No Securities Owned",
+            IsAmendment = true,
+            OriginalFilingDate = date,
+            SupersededAccessionNumber = "0000320193-24-000051",
+            FilingForm = InsiderOwnershipForm.Form4,
+            ParserVersion = 8,
+        };
+        var rawBytes = Encoding.UTF8.GetBytes(
+            "<ownershipDocument><documentType>4/A</documentType>"
+                + "<dateOfOriginalSubmission>2024-06-14</dateOfOriginalSubmission>"
+                + "<nonDerivativeTable/><derivativeTable/></ownershipDocument>"
+        );
+
+        DbContext.Add(stock);
+        DbContext.Add(owner);
+        DbContext.Add(marker);
+        DbContext.Add(
+            new InsiderFiling
+            {
+                AccessionNumber = accession,
+                FilingForm = InsiderOwnershipForm.Form4,
+                CaptureStatus = InsiderFilingCaptureStatus.Captured,
+                UncompressedSize = rawBytes.Length,
+                Content = new File
+                {
+                    Name = accession,
+                    Extension = "gz",
+                    ContentType = "application/gzip",
+                    FileContent = new FileContent { Bytes = GzipCompressor.Compress(rawBytes) },
+                },
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var runCtx = Fixture.CreateDbContext();
+        var manager = new InsiderFilingReprocessManager(
+            new InsiderTransactionRepository(runCtx),
+            new InsiderFilingRepository(runCtx),
+            new DailyStockPriceRepository(runCtx),
+            new StockSplitRepository(runCtx),
+            new InsiderTransactionPriceValidator(),
+            Substitute.For<ISecEdgarClient>(),
+            InsiderReprocessTestSupport.NewFileManager(),
+            runCtx,
+            NullLogger<InsiderFilingReprocessManager>()
+        );
+
+        var result = await manager.Run();
+
+        result.Failed.Should().Be(0);
+        result.Processed.Should().Be(1);
+        await using var verify = Fixture.CreateDbContext();
+        var converted = await verify.Set<InsiderTransaction>().SingleAsync(t => t.Id == marker.Id);
+        converted.TransactionCode.Should().Be(TransactionCode.IngestMarker);
+        converted.SecurityTitle.Should().BeNull();
+        converted.SupersededAccessionNumber.Should().BeNull();
+        converted.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
+    }
+
+    [Fact]
+    public async Task Run_LegacyNoSecuritiesAmendment_RestoresAmendmentIdentity()
+    {
+        var originalDate = new DateOnly(2024, 6, 14);
+        var accession = "0000320193-24-000053";
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
+        var owner = new InsiderOwner
+        {
+            Id = Guid.NewGuid(),
+            OwnerCik = "0001",
+            Name = "Jane Insider",
+        };
+        var sentinel = new InsiderTransaction
+        {
+            Id = Guid.NewGuid(),
+            CommonStockId = stock.Id,
+            InsiderOwnerId = owner.Id,
+            AccessionNumber = accession,
+            TransactionOrder = 0,
+            FilingDate = originalDate.AddDays(1),
+            TransactionDate = originalDate,
+            TransactionCode = TransactionCode.Other,
+            SecurityTitle = "No Securities Owned",
+            IsAmendment = false,
+            FilingForm = InsiderOwnershipForm.Form3,
+            ParserVersion = 8,
+        };
+        var rawBytes = Encoding.UTF8.GetBytes(
+            "<ownershipDocument><documentType>3/A</documentType>"
+                + "<periodOfReport>2024-06-14</periodOfReport>"
+                + "<dateOfOriginalSubmission>2024-06-14</dateOfOriginalSubmission>"
+                + "<noSecuritiesOwned>1</noSecuritiesOwned>"
+                + "<nonDerivativeTable/><derivativeTable/></ownershipDocument>"
+        );
+
+        DbContext.Add(stock);
+        DbContext.Add(owner);
+        DbContext.Add(sentinel);
+        DbContext.Add(
+            new InsiderFiling
+            {
+                AccessionNumber = accession,
+                FilingForm = InsiderOwnershipForm.Form3,
+                CaptureStatus = InsiderFilingCaptureStatus.Captured,
+                UncompressedSize = rawBytes.Length,
+                Content = new File
+                {
+                    Name = accession,
+                    Extension = "gz",
+                    ContentType = "application/gzip",
+                    FileContent = new FileContent { Bytes = GzipCompressor.Compress(rawBytes) },
+                },
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var runCtx = Fixture.CreateDbContext();
+        var manager = new InsiderFilingReprocessManager(
+            new InsiderTransactionRepository(runCtx),
+            new InsiderFilingRepository(runCtx),
+            new DailyStockPriceRepository(runCtx),
+            new StockSplitRepository(runCtx),
+            new InsiderTransactionPriceValidator(),
+            Substitute.For<ISecEdgarClient>(),
+            InsiderReprocessTestSupport.NewFileManager(),
+            runCtx,
+            NullLogger<InsiderFilingReprocessManager>()
+        );
+
+        var result = await manager.Run();
+
+        result.Failed.Should().Be(0);
+        result.Processed.Should().Be(1);
+        await using var verify = Fixture.CreateDbContext();
+        var restored = await verify.Set<InsiderTransaction>().SingleAsync(t => t.Id == sentinel.Id);
+        restored.TransactionCode.Should().Be(TransactionCode.Holding);
+        restored.IsAmendment.Should().BeTrue();
+        restored.OriginalFilingDate.Should().Be(originalDate);
+        restored.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
     }
 }
