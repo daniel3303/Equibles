@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -21,6 +23,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialFactsTools>()
         );
@@ -109,6 +112,75 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
         var result = await Sut().GetFinancialFact("AAPL", "revenue");
 
         result.Should().Contain("No 'revenue' data has been ingested for AAPL");
+    }
+
+    [Fact]
+    public async Task GetFinancialFact_PerShareHistory_RestatesValuesFiledBeforeSplit()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "GOOGL",
+            Name = "Alphabet Inc.",
+            Cik = "0001652044",
+        };
+        var dilutedEps = AddConcept("EarningsPerShareDiluted");
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStockId = stock.Id,
+                    EffectiveDate = new DateOnly(2022, 7, 18),
+                    Numerator = 20m,
+                    Denominator = 1m,
+                }
+            );
+        DbContext
+            .Set<FinancialFact>()
+            .AddRange(
+                new FinancialFact
+                {
+                    CommonStockId = stock.Id,
+                    FinancialConceptId = dilutedEps.Id,
+                    Unit = "USD/shares",
+                    PeriodType = FactPeriodType.Duration,
+                    PeriodStart = new DateOnly(2022, 1, 1),
+                    PeriodEnd = new DateOnly(2022, 3, 31),
+                    Value = 24.62m,
+                    FiscalYear = 2022,
+                    FiscalPeriod = SecFiscalPeriod.Q1,
+                    Form = DocumentType.TenQ,
+                    FiledDate = new DateOnly(2022, 4, 26),
+                    AccessionNumber = "googl-q1",
+                },
+                new FinancialFact
+                {
+                    CommonStockId = stock.Id,
+                    FinancialConceptId = dilutedEps.Id,
+                    Unit = "USD/shares",
+                    PeriodType = FactPeriodType.Duration,
+                    PeriodStart = new DateOnly(2022, 7, 1),
+                    PeriodEnd = new DateOnly(2022, 9, 30),
+                    Value = 1.06m,
+                    FiscalYear = 2022,
+                    FiscalPeriod = SecFiscalPeriod.Q3,
+                    Form = DocumentType.TenQ,
+                    FiledDate = new DateOnly(2022, 10, 26),
+                    AccessionNumber = "googl-q3",
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetFinancialFact("GOOGL", "eps-diluted");
+
+        result
+            .Should()
+            .Contain("| $1.23 | USD/shares |", "24.62 is restated across the 20:1 split");
+        result.Should().Contain("| $1.06 | USD/shares |", "the post-split filing stays unchanged");
+        result.Should().NotContain("| $24.62 | USD/shares |");
+        result.Should().Contain("Per-share values are split-adjusted");
     }
 
     [Fact]

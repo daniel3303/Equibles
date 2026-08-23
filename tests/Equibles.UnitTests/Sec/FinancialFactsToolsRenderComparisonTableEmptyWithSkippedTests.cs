@@ -1,4 +1,5 @@
 using System.Reflection;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
@@ -44,7 +45,17 @@ public class FinancialFactsToolsRenderComparisonTableEmptyWithSkippedTests
         var skipped = new List<string> { "AAPL", "MSFT" };
 
         var result = (string)
-            method.Invoke(null, ["Revenues", 2024, SecFiscalPeriod.FullYear, rows, skipped]);
+            method.Invoke(
+                null,
+                [
+                    "Revenues",
+                    2024,
+                    SecFiscalPeriod.FullYear,
+                    rows,
+                    skipped,
+                    new Dictionary<Guid, List<StockSplit>>(),
+                ]
+            );
 
         result.Should().Contain("No company reported");
         result.Should().Contain("AAPL");

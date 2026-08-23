@@ -1,5 +1,6 @@
 using System.Reflection;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
@@ -39,7 +40,11 @@ public class FinancialFactsToolsRenderFactHistoryTableTruncationNoteTests
             })
             .ToList();
 
-        return (string)method.Invoke(null, ["revenue", stock, false, perPeriod, total, null]);
+        return (string)
+            method.Invoke(
+                null,
+                ["revenue", stock, false, perPeriod, total, null, Array.Empty<StockSplit>()]
+            );
     }
 
     [Fact]

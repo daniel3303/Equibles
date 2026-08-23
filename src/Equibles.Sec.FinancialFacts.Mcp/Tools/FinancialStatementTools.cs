@@ -3,6 +3,8 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Extensions;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Errors.Data.Models;
@@ -25,12 +27,14 @@ public class FinancialStatementTools
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public FinancialStatementTools(
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
         CommonStockRepository commonStockRepository,
+        StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<FinancialStatementTools> logger
     )
@@ -38,6 +42,7 @@ public class FinancialStatementTools
         _financialFactRepository = financialFactRepository;
         _financialConceptRepository = financialConceptRepository;
         _commonStockRepository = commonStockRepository;
+        _stockSplitRepository = stockSplitRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -168,6 +173,11 @@ public class FinancialStatementTools
                     facts,
                     selectedPeriod
                 );
+                var splits = latestByConcept.Values.Any(FinancialFactSplitAdjustment.IsPerShare)
+                    ? await _stockSplitRepository
+                        .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+                        .ToListAsync()
+                    : [];
 
                 return RenderStatementTable(
                     stock,
@@ -176,7 +186,8 @@ public class FinancialStatementTools
                     selectedPeriod,
                     statementLines,
                     conceptIdByKey,
-                    latestByConcept
+                    latestByConcept,
+                    splits
                 );
             },
             "GetFinancialStatement",
@@ -192,7 +203,8 @@ public class FinancialStatementTools
         SecFiscalPeriod selectedPeriod,
         IReadOnlyList<StatementLine> statementLines,
         Dictionary<(FactTaxonomy Taxonomy, string Tag), Guid> conceptIdByKey,
-        Dictionary<Guid, FinancialFact> latestByConcept
+        Dictionary<Guid, FinancialFact> latestByConcept,
+        IReadOnlyList<StockSplit> splits
     )
     {
         var result = MarkdownTable.Start(
@@ -205,6 +217,7 @@ public class FinancialStatementTools
 
         var rendered = 0;
         var omitted = 0;
+        var splitAdjusted = false;
         DateOnly? earliestFiled = null;
         DateOnly? latestFiled = null;
         foreach (var line in statementLines)
@@ -219,9 +232,11 @@ public class FinancialStatementTools
                 continue;
             }
 
+            var value = FinancialFactSplitAdjustment.Restate(fact, splits, out var adjusted);
+            splitAdjusted |= adjusted;
             result.AppendLine(
                 $"| {FactMarkdown.Cell(line.Label)} | "
-                    + $"{FactMarkdown.Value(fact.Value, fact.Unit)} | "
+                    + $"{FactMarkdown.Value(value, fact.Unit)} | "
                     + $"{FactMarkdown.Cell(fact.Unit)} | "
                     + $"{fact.PeriodStart:yyyy-MM-dd} | "
                     + $"{fact.PeriodEnd:yyyy-MM-dd} | "
@@ -244,6 +259,9 @@ public class FinancialStatementTools
             result.AppendLine(
                 "\n_Line items the filer did not report for this period are omitted._"
             );
+
+        if (splitAdjusted)
+            result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
 
         if (
             selectedPeriod != SecFiscalPeriod.FullYear
