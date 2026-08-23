@@ -61,6 +61,27 @@ public class CommonStockRepositoryTests : IDisposable
         await _dbContext.SaveChangesAsync();
     }
 
+    [Fact]
+    public async Task GetAll_ExcludesInactiveRows_WhileHistoricalQueryRetainsThem()
+    {
+        var active = MakeStock(ticker: "LIVE", cik: "111");
+        var delisted = MakeStock(ticker: "GONE", cik: "222");
+        delisted.Active = false;
+        delisted.DelistedOn = new DateOnly(2024, 6, 14);
+        await SeedStocks(active, delisted);
+
+        var liveDirectory = await _repository.GetAll().Select(stock => stock.Ticker).ToListAsync();
+        var retained = await _repository
+            .GetAllIncludingInactive()
+            .Select(stock => stock.Ticker)
+            .ToListAsync();
+
+        liveDirectory.Should().Equal("LIVE");
+        retained.Should().BeEquivalentTo("LIVE", "GONE");
+        (await _repository.Get(delisted.Id)).Should().BeNull();
+        (await _repository.GetIncludingInactive(delisted.Id)).Should().BeSameAs(delisted);
+    }
+
     // ── GetByCik ────────────────────────────────────────────────────────
 
     [Fact]

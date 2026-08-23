@@ -179,7 +179,7 @@ public class CompanySyncService : ICompanySyncService
         // as SecondaryCiks on prior syncs. We can't filter by SEC CIKs alone because
         // the subsidiary's CIK won't match any incoming primary CIK — it lives only
         // inside another stock's SecondaryCiks list.
-        var allExistingStocks = await commonStockRepository.GetAll().ToListAsync();
+        var allExistingStocks = await commonStockRepository.GetAllIncludingInactive().ToListAsync();
         var existingStocks = allExistingStocks
             .Where(stock => secCiks.Contains(CikNormalizer.Canonicalize(stock.Cik)))
             .ToList();
@@ -197,12 +197,14 @@ public class CompanySyncService : ICompanySyncService
         var primaryTickerToStock = new Dictionary<string, CommonStock>(
             StringComparer.OrdinalIgnoreCase
         );
-        foreach (var stock in allExistingStocks)
+        foreach (var stock in allExistingStocks.Where(stock => stock.Active))
         {
             primaryTickerToStock[stock.Ticker] = stock;
         }
 
-        var secondaryCikToParent = BuildSecondaryCikToParent(allExistingStocks);
+        var secondaryCikToParent = BuildSecondaryCikToParent(
+            allExistingStocks.Where(stock => stock.Active).ToList()
+        );
 
         var existingPrimaryTickers = (
             await commonStockRepository.GetAllTickers().ToListAsync()
@@ -246,7 +248,9 @@ public class CompanySyncService : ICompanySyncService
             string.IsNullOrEmpty(existingStock.Website)
             && ShouldAttemptWebsiteFetch(secCompany.Cik);
         var needsUpdate =
-            existingStock.Ticker != primaryTicker
+            !existingStock.Active
+            || existingStock.DelistedOn != null
+            || existingStock.Ticker != primaryTicker
             || existingStock.Name != normalizedName
             || !(existingStock.SecondaryTickers ?? []).SequenceEqual(combinedSecondaryTickers)
             || missingWebsite;
@@ -259,6 +263,8 @@ public class CompanySyncService : ICompanySyncService
 
         // Save old values for rollback
         var oldTicker = existingStock.Ticker;
+        var oldActive = existingStock.Active;
+        var oldDelistedOn = existingStock.DelistedOn;
         var oldName = existingStock.Name;
         var oldSecondaryTickers = existingStock.SecondaryTickers.ToList();
         var oldWebsite = existingStock.Website;
@@ -269,11 +275,15 @@ public class CompanySyncService : ICompanySyncService
                 existingStock.Website = await FetchWebsite(secCompany.Cik);
 
             existingStock.Ticker = primaryTicker;
+            existingStock.Active = true;
+            existingStock.DelistedOn = null;
             existingStock.Name = normalizedName;
             existingStock.SecondaryTickers = combinedSecondaryTickers;
 
             if (
                 existingStock.Ticker == oldTicker
+                && existingStock.Active == oldActive
+                && existingStock.DelistedOn == oldDelistedOn
                 && existingStock.Name == oldName
                 && oldSecondaryTickers.SequenceEqual(existingStock.SecondaryTickers)
                 && existingStock.Website == oldWebsite
@@ -308,6 +318,8 @@ public class CompanySyncService : ICompanySyncService
         {
             // Revert entity to old values and detach changes to prevent dirty state
             existingStock.Ticker = oldTicker;
+            existingStock.Active = oldActive;
+            existingStock.DelistedOn = oldDelistedOn;
             existingStock.Name = oldName;
             existingStock.SecondaryTickers = oldSecondaryTickers;
             existingStock.Website = oldWebsite;
@@ -388,10 +400,10 @@ public class CompanySyncService : ICompanySyncService
 
             try
             {
-                await DeleteAndUntrack(tickerHolder, state);
+                await RetireAndUntrack(tickerHolder, state);
 
                 _logger.LogInformation(
-                    "Removed obsolete company {Name} (CIK: {Cik}) holding ticker {Ticker}",
+                    "Retired obsolete company {Name} (CIK: {Cik}) holding ticker {Ticker} without deleting its history",
                     tickerHolder.Name,
                     tickerHolder.Cik,
                     primaryTicker
@@ -404,7 +416,7 @@ public class CompanySyncService : ICompanySyncService
                     "Error removing obsolete company for ticker {Ticker}",
                     primaryTicker
                 );
-                await ReportError("CompanySync.RemoveObsolete", ex, $"ticker: {primaryTicker}");
+                await ReportError("CompanySync.RetireObsolete", ex, $"ticker: {primaryTicker}");
                 return false;
             }
         }
@@ -471,7 +483,7 @@ public class CompanySyncService : ICompanySyncService
 
         try
         {
-            await DeleteAndUntrack(obsoleteStock, state);
+            await RetireAndUntrack(obsoleteStock, state);
 
             var website = await FetchWebsite(secCompany.Cik);
             var newStock = await CreateCommonStock(
@@ -901,7 +913,7 @@ public class CompanySyncService : ICompanySyncService
         state.PrimaryTickerToStock[primaryTicker] = newStock;
     }
 
-    private static async Task DeleteAndUntrack(CommonStock stock, StockSyncState state)
+    private static async Task RetireAndUntrack(CommonStock stock, StockSyncState state)
     {
         if (state.DbContext.Database.IsRelational())
         {
@@ -926,10 +938,11 @@ public class CompanySyncService : ICompanySyncService
                     );
                 }
 
-                // Deleting the parent cascades through both the legacy and isolated exact-price
-                // foreign keys. The row lock and revalidation keep that deletion from racing a
-                // listing importer that is about to persist fresh exact-series rows.
-                state.CommonStockRepository.Delete(lockedStock);
+                // A recycled ticker ends the live designation, not the old issuer's identity.
+                // Retain the row and every exact price/holding FK; the authoritative inactive
+                // directory fills DelistedOn before any historical backfill is attempted.
+                lockedStock.Active = false;
+                InvalidateHistoricalPriceCompletion(lockedStock);
                 await state.CommonStockRepository.SaveChanges();
             }
 
@@ -937,7 +950,8 @@ public class CompanySyncService : ICompanySyncService
         }
         else
         {
-            state.CommonStockRepository.Delete(stock);
+            stock.Active = false;
+            InvalidateHistoricalPriceCompletion(stock);
             await state.CommonStockRepository.SaveChanges();
         }
 
@@ -951,6 +965,16 @@ public class CompanySyncService : ICompanySyncService
             && mapped.Id == stock.Id
         )
             state.PrimaryTickerToStock.Remove(stock.Ticker);
+    }
+
+    private static void InvalidateHistoricalPriceCompletion(CommonStock stock)
+    {
+        stock.PriceHistoryBackfilledTickers = stock
+            .PriceHistoryBackfilledTickers.Where(ticker =>
+                !string.Equals(ticker, stock.Ticker, StringComparison.OrdinalIgnoreCase)
+            )
+            .ToList();
+        stock.HistoricalPriceBackfillAttemptedAt = null;
     }
 
     private Task ReportError(string operation, Exception ex, string context) =>

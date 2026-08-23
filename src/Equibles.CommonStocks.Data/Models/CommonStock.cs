@@ -1,19 +1,39 @@
 using System.ComponentModel.DataAnnotations;
 using Equibles.CommonStocks.Data.Models.Taxonomies;
+using Equibles.Data.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models;
 
-[Index(nameof(Ticker), IsUnique = true)]
 [Index(nameof(Cik), IsUnique = true)]
 [Index(nameof(Cusip))]
 [Index(nameof(IndustryId))]
-public class CommonStock
+public class CommonStock : IActivable
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
     [MaxLength(16)]
     public string Ticker { get; set; }
+
+    /// <summary>
+    /// Whether this issuer currently has an active listed common-stock symbol. Inactive rows are
+    /// retained because their exact price series and historical holdings remain valid inputs to
+    /// point-in-time analysis; ordinary stock discovery excludes them through the repository.
+    /// </summary>
+    public bool Active { get; set; } = true;
+
+    /// <summary>
+    /// The authoritative final trading date published by the listing reference directory. Null
+    /// for active rows and legacy rows whose status has not yet been reconciled.
+    /// </summary>
+    public DateOnly? DelistedOn { get; set; }
+
+    /// <summary>
+    /// Last bounded Yahoo history attempt for an inactive listing. Successful backfills also add
+    /// the ticker to <see cref="PriceHistoryBackfilledTickers"/>; failed responses cool down
+    /// before retrying instead of occupying every price cycle.
+    /// </summary>
+    public DateTime? HistoricalPriceBackfillAttemptedAt { get; set; }
 
     [MaxLength(256)]
     public string Name { get; set; }

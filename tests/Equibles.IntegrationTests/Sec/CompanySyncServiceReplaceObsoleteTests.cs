@@ -37,7 +37,7 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public async Task SyncCompaniesFromSecApi_NewCikReusesTickerOfDroppedCik_ReplacesObsoleteRow()
+    public async Task SyncCompaniesFromSecApi_NewCikReusesTickerOfDroppedCik_RetainsHistoricalRow()
     {
         // Seed an "obsolete" stock whose CIK no longer appears in SEC's feed.
         var obsolete = new CommonStock
@@ -45,6 +45,8 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
             Cik = "0000000999",
             Ticker = "REUSED",
             Name = "Defunct Old Inc.",
+            PriceHistoryBackfilledTickers = ["REUSED"],
+            HistoricalPriceBackfillAttemptedAt = DateTime.UtcNow,
         };
         var exactPriceId = Guid.NewGuid();
         DbContext.AddRange(
@@ -110,13 +112,17 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
 
         await using var verify = Fixture.CreateDbContext();
         var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
-        stocks.Should().ContainSingle("the obsolete CIK is gone and the new one took its ticker");
-        stocks[0].Cik.Should().Be("0000000111");
-        stocks[0].Ticker.Should().Be("REUSED");
-        stocks[0].Name.Should().Be("Acquirer Inc.");
+        stocks.Should().HaveCount(2, "ticker reuse must not erase historical identities");
+        stocks.Should().ContainSingle(stock => stock.Cik == "0000000111" && stock.Active);
+        var retired = stocks.Should()
+            .ContainSingle(stock => stock.Cik == "0000000999" && !stock.Active)
+            .Subject;
+        retired.PriceHistoryBackfilledTickers.Should().BeEmpty();
+        retired.HistoricalPriceBackfillAttemptedAt.Should().BeNull();
+        stocks.Should().OnlyContain(stock => stock.Ticker == "REUSED");
         (await verify.Set<DailyStockPrice>().AsNoTracking().ToListAsync())
             .Should()
-            .BeEmpty("the authorized parent cascade removes the obsolete listing's exact rows");
+            .ContainSingle("retiring a listing must preserve its exact historical prices");
     }
 
     [Fact]

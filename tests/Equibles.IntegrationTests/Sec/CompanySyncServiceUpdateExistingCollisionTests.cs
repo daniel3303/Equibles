@@ -107,10 +107,12 @@ public class CompanySyncServiceUpdateExistingCollisionTests : ParadeDbMcpTestBas
 
         await using var verify = Fixture.CreateDbContext();
         var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
-        stocks.Should().ContainSingle("the obsolete holder must be deleted");
-        stocks[0].Id.Should().Be(updating.Id);
-        stocks[0].Ticker.Should().Be("NEW");
-        stocks[0].Name.Should().Be("Berkshire Hathaway Inc.");
+        stocks.Should().HaveCount(2, "the obsolete holder remains as historical identity");
+        var updated = stocks.Should().ContainSingle(stock => stock.Id == updating.Id).Subject;
+        updated.Active.Should().BeTrue();
+        updated.Ticker.Should().Be("NEW");
+        updated.Name.Should().Be("Berkshire Hathaway Inc.");
+        stocks.Should().ContainSingle(stock => stock.Id == obsoleteHolder.Id && !stock.Active);
     }
 
     [Fact]
