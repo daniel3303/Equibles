@@ -108,6 +108,47 @@ public class DocumentRepository : BaseRepository<Document>
     }
 
     /// <summary>
+    /// EDGAR documents whose stored Markdown predates the current normalization pipeline and
+    /// can be re-fetched safely. This is the single definition of the normalized-content
+    /// backfill work-set.
+    /// </summary>
+    public IQueryable<Document> GetPendingNormalizedContent()
+    {
+        return GetAll()
+            .Where(d =>
+                d.NormalizedContentVersion < Document.NormalizedContentBuilderVersion
+                && d.NormalizedContentAttempts < Document.MaxNormalizedContentAttempts
+                && (
+                    (d.AccessionNumber != null && d.AccessionNumber != "")
+                    || (d.SourceUrl != null && d.SourceUrl.Contains("/Archives/edgar/data/"))
+                )
+                && d.CommonStock.Cik != null
+            );
+    }
+
+    /// <summary>
+    /// Ordered normalized-content work set aligned with IX_Document_NormalizationBackfill.
+    /// The periodic stage drains 10-K/10-Q first; the all-types stage reuses the same order.
+    /// </summary>
+    public IQueryable<Document> GetOrderedPendingNormalizedContent(bool includeAllDocumentTypes)
+    {
+        var pending = GetPendingNormalizedContent();
+        if (!includeAllDocumentTypes)
+        {
+            pending = pending.Where(d =>
+                d.DocumentType == DocumentType.TenK || d.DocumentType == DocumentType.TenQ
+            );
+        }
+
+        return pending
+            .OrderBy(d => d.DocumentType)
+            .ThenBy(d => d.NormalizedContentVersion)
+            .ThenBy(d => d.NormalizedContentAttempts)
+            .ThenByDescending(d => d.ReportingDate)
+            .ThenBy(d => d.Id);
+    }
+
+    /// <summary>
     /// One-batch dedup lookup for a (company, type) scrape pass: the subset of
     /// <paramref name="accessionNumbers"/> already stored, plus the (filing date,
     /// report date) keys of legacy rows stored before accession stamping. Together
@@ -177,7 +218,32 @@ public class DocumentRepository : BaseRepository<Document>
             );
     }
 
-    public virtual async Task<Document> GetWithContent(Guid id)
+    /// <summary>
+    /// Persists only normalized-content retry bookkeeping after a failed attempt whose tracked
+    /// normalization and file mutations have been discarded.
+    /// </summary>
+    public Task PersistNormalizedContentAttempt(
+        Document document,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return GetAll()
+            .Where(d => d.Id == document.Id)
+            .ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(
+                            x => x.NormalizedContentAttempts,
+                            document.NormalizedContentAttempts
+                        )
+                        .SetProperty(x => x.AccessionNumber, document.AccessionNumber),
+                cancellationToken
+            );
+    }
+
+    public virtual async Task<Document> GetWithContent(
+        Guid id,
+        CancellationToken cancellationToken = default
+    )
     {
         // The content bytes ride along eagerly: leaving File.FileContent to a lazy load
         // lets an aborted or transient load mid-request corrupt the navigation's loaded
@@ -187,7 +253,7 @@ public class DocumentRepository : BaseRepository<Document>
             .Include(d => d.Content)
                 .ThenInclude(f => f.FileContent)
             .Include(d => d.CommonStock)
-            .FirstOrDefaultAsync(d => d.Id == id);
+            .FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
     }
 
     public IQueryable<Document> GetByDateRange(DateOnly? fromDate = null, DateOnly? toDate = null)

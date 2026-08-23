@@ -58,6 +58,9 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
         var maxCols = rows.Max(row => HtmlElementExtensions.DirectChildCells(row).Count);
         var columnsToProcess = new List<int>();
         var currencySymbols = new HashSet<string>();
+        var hasRejectedCurrencySymbol = rows.SelectMany(HtmlElementExtensions.DirectChildCells)
+            .Select(cell => cell.TextContent.Trim())
+            .Any(text => DetectCurrency(text) == null && ContainsAnyCurrencySymbol(text));
 
         for (int colIndex = 0; colIndex < maxCols - 1; colIndex++)
         {
@@ -71,7 +74,9 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
 
         ProcessCurrencyColumnsForConsolidation(rows, columnsToProcess);
 
-        return currencySymbols.Count == 1 ? currencySymbols.Single() : null;
+        return !hasRejectedCurrencySymbol && currencySymbols.Count == 1
+            ? currencySymbols.Single()
+            : null;
     }
 
     private bool ShouldConsolidateColumn(
@@ -81,7 +86,6 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
     )
     {
         var shouldConsolidate = false;
-
         foreach (var row in rows)
         {
             var cells = HtmlElementExtensions.DirectChildCells(row);
@@ -94,10 +98,24 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
 
             var detectedCurrency = DetectCurrency(currentCell);
             var nextCell = cells[colIndex + 1].TextContent.Trim();
-            if (
-                detectedCurrency == null
-                || (!IsStandaloneCurrencyCell(currentCell) && !IsEmptyCell(nextCell))
-            )
+            if (detectedCurrency == null)
+            {
+                // A raw symbol that was deliberately rejected by DetectCurrency is a foreign
+                // prefixed symbol such as C$ or A$. Treat it as conflicting currency evidence:
+                // shifting it as a Workiva header would later strip the symbol and mislabel the
+                // whole table as USD.
+                if (ContainsAnyCurrencySymbol(currentCell))
+                    return false;
+
+                // Workiva colspans put both leading headers and values from symbol-less rows in
+                // the same physical column as standalone currency cells. Preserve that content
+                // by shifting it into the empty cell to the right before removing the column.
+                if (!IsEmptyCell(nextCell))
+                    return false;
+                continue;
+            }
+
+            if (!IsStandaloneCurrencyCell(currentCell) && !IsEmptyCell(nextCell))
                 return false;
 
             currencySymbols.Add(detectedCurrency);
@@ -127,6 +145,11 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
         }
         return null;
     }
+
+    private static bool ContainsAnyCurrencySymbol(string text) =>
+        CurrencyMap.Values.Any(currency =>
+            text.Contains(currency.Symbol, StringComparison.Ordinal)
+        );
 
     // A symbol immediately preceded by a letter is a different currency's
     // prefixed symbol (e.g. "C$", "A$", "HK$", "NZ$"), not this one — so a
@@ -180,9 +203,6 @@ internal class CurrencyConsolidationStep : IHtmlNormalizationStep
 
                 var currentCell = cells[colIndex];
                 var currentText = currentCell.TextContent.Trim();
-
-                if (!IsEmptyCell(currentText) && DetectCurrency(currentText) == null)
-                    continue;
 
                 var cleanTitle = RemoveCurrencySymbols(currentText);
                 if (cleanTitle.Length > 0 && (colIndex + 1) >= cells.Count)

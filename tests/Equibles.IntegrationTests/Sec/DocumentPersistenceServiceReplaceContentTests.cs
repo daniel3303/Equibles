@@ -1,6 +1,8 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.BusinessLogic;
+using Equibles.Media.BusinessLogic.Configuration;
+using Equibles.Media.Data.Models;
 using Equibles.Media.Repositories;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
@@ -21,8 +23,13 @@ namespace Equibles.IntegrationTests.Sec;
 /// chunks are deleted so the chunking worker re-chunks the new body on its next pass.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
+public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase, IDisposable
 {
+    private readonly string _storageRoot = Path.Combine(
+        Path.GetTempPath(),
+        $"equibles-replace-content-{Guid.NewGuid():N}"
+    );
+
     public DocumentPersistenceServiceReplaceContentTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
@@ -44,18 +51,34 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
         return await DbContext.Set<CommonStock>().SingleAsync(s => s.Id == apple.Id);
     }
 
-    private DocumentPersistenceService BuildSut() =>
-        new(
+    private DocumentPersistenceService BuildSut()
+    {
+        var storageOptions = new FileStorageOptions { Enabled = true, RootPath = _storageRoot };
+        var pendingDeletions = new PendingBlobDeletionRepository(DbContext);
+        var fileManager = FileManagerTestFactory.Create(
+            new FileRepository(DbContext),
+            storageOptions,
+            pendingDeletions
+        );
+
+        return new(
             new DocumentRepository(DbContext),
             new ChunkRepository(DbContext),
-            FileManagerTestFactory.Create(new FileRepository(DbContext)),
+            fileManager,
             new DocumentImageService(
                 new DocumentImageRepository(DbContext),
                 new FileRepository(DbContext),
-                FileManagerTestFactory.Create(new FileRepository(DbContext))
+                fileManager
             ),
             Substitute.For<IBus>()
         );
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_storageRoot))
+            Directory.Delete(_storageRoot, recursive: true);
+    }
 
     [Fact]
     public async Task ReplaceContent_SwapsBodyAndLineCount_AndDeletesStaleChunks()
@@ -75,10 +98,18 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
             );
 
         Guid documentId;
+        Guid oldContentId;
+        string oldContentHash;
+        string oldRelativePath;
         await using (var seed = Fixture.CreateDbContext())
         {
-            var document = await seed.Set<Document>().SingleAsync(d => d.CommonStockId == apple.Id);
+            var document = await seed.Set<Document>()
+                .Include(d => d.Content)
+                .SingleAsync(d => d.CommonStockId == apple.Id);
             documentId = document.Id;
+            oldContentId = document.ContentId;
+            oldContentHash = document.Content.ContentHash;
+            oldRelativePath = document.Content.RelativePath;
             seed.Set<Chunk>()
                 .Add(
                     new Chunk
@@ -99,6 +130,13 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
 
         DbContext.ChangeTracker.Clear();
         var tracked = await new DocumentRepository(DbContext).Get(documentId);
+        await using (var concurrent = Fixture.CreateDbContext())
+        {
+            await concurrent
+                .Set<Document>()
+                .Where(d => d.Id == documentId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(d => d.Items, "7.01"));
+        }
         var newBody = "new line 1\nnew line 2\nnew line 3"u8.ToArray();
 
         await BuildSut().ReplaceContent(tracked, newBody);
@@ -106,9 +144,20 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var saved = await verify.Set<Document>().SingleAsync(d => d.Id == documentId);
         saved.LineCount.Should().Be(3);
+        saved.Items.Should().Be("7.01");
+        saved.NormalizedContentVersion.Should().Be(Document.NormalizedContentBuilderVersion);
 
         var bodyFile = await verify.Set<File>().SingleAsync(f => f.Id == saved.ContentId);
-        bodyFile.FileContent.Bytes.Should().Equal(newBody);
+        bodyFile.StorageProvider.Should().Be(StorageProvider.FileSystem);
+        var bodyBytes = await System.IO.File.ReadAllBytesAsync(
+            Path.Combine(_storageRoot, bodyFile.RelativePath)
+        );
+        bodyBytes.Should().Equal(newBody);
+
+        (await verify.Set<File>().AnyAsync(f => f.Id == oldContentId)).Should().BeFalse();
+        var queuedDeletion = await verify.Set<PendingBlobDeletion>().SingleAsync();
+        queuedDeletion.ContentHash.Should().Be(oldContentHash);
+        queuedDeletion.RelativePath.Should().Be(oldRelativePath);
 
         var remainingChunks = await verify.Set<Chunk>().CountAsync(c => c.DocumentId == documentId);
         remainingChunks.Should().Be(0);

@@ -24,4 +24,18 @@ public class ChunkingStrategyCleanTextBlockBoundaryTests
 
         result.Should().Be("Net income 1000");
     }
+
+    [Fact]
+    public void CleanText_AdjacentMarkdownTableRows_PreservesRowBoundaries()
+    {
+        var result = _strategy.CleanText(
+            "| Segment | 2026 | 2025 |\n"
+                + "| --- | --- | --- |\n"
+                + "| Compute & Networking | 193,479 | 116,193 |\n"
+                + "| Graphics | 22,459 | 14,304 |"
+        );
+
+        result.Split('\n').Should().HaveCount(4);
+        result.Should().Contain("116,193 |\n| Graphics");
+    }
 }

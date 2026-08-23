@@ -25,6 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<XbrlEnvelopeCaptureService>();
         services.AddScoped<AsFiledHtmlCaptureService>();
         services.AddScoped<AsFiledHtmlBackfillService>();
+        services.AddScoped<DocumentNormalizationBackfillService>();
         services.AddScoped<DocumentImageService>();
         services.AddScoped<FilingItemsBackfillService>();
         services.AddScoped<IDocumentScraper, DocumentScraper>();
@@ -38,6 +39,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<FtdScraperWorker>();
         services.AddHostedService<FormAdvScraperWorker>();
         services.AddHostedService<AsFiledHtmlBackfillWorker>();
+        services.AddHostedService<DocumentNormalizationBackfillWorker>();
         services.AddHostedService<FilingItemsBackfillWorker>();
         services.AddHostedService<InsiderFilingReprocessWorker>();
         services.AddHostedService<Form144FilerCikBackfillWorker>();

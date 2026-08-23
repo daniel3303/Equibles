@@ -102,11 +102,13 @@ public class ChunkingStrategy
         // TextContent concatenates descendant text with NO separator, so adjacent
         // block-level cells (a table label and its figure, or sibling <p>/<div>/<li>)
         // glue into one junk token ("Net income1000") that never matches a search
-        // query. Join the remaining text nodes with a space instead; the \s+ collapse
-        // below removes any extra space introduced between inline runs of one word.
+        // query. Join distinct text nodes with a space, but preserve line breaks already
+        // present in Markdown so filing-table rows remain independently readable.
         text = string.Join(" ", document.Body.Descendants<IText>().Select(node => node.Data));
 
-        text = Regex.Replace(text, @"\s+", " ");
+        text = Regex.Replace(text, @"[^\S\r\n]+", " ");
+        text = Regex.Replace(text, @" *\r?\n *", "\n");
+        text = Regex.Replace(text, @"\n{3,}", "\n\n");
         return text.Trim();
     }
 

@@ -73,4 +73,10 @@ public interface IDocumentPersistenceService
         byte[] content,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Persists document bookkeeping and removes stale chunks without rewriting an unchanged
+    /// content file. Used when a chunking-only pipeline change must rebuild the search corpus.
+    /// </summary>
+    Task ResetChunks(Document document, CancellationToken cancellationToken = default);
 }

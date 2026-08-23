@@ -451,7 +451,11 @@ public class SecEdgarClient : ISecEdgarClient
         return await GetDocumentContent(filing.AccessionNumber, filing.Cik);
     }
 
-    public async Task<string> GetDocumentContent(string accessionNumber, string cik)
+    public async Task<string> GetDocumentContent(
+        string accessionNumber,
+        string cik,
+        CancellationToken cancellationToken = default
+    )
     {
         try
         {
@@ -459,13 +463,17 @@ public class SecEdgarClient : ISecEdgarClient
 
             _logger.LogInformation("Requesting document: {Url}", url);
 
-            var content = await FetchStringAsync(url);
+            var content = await FetchStringAsync(url, cancellationToken);
 
             _logger.LogInformation(
                 "Successfully retrieved document content ({Length} characters)",
                 content.Length
             );
             return content;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -833,11 +841,14 @@ public class SecEdgarClient : ISecEdgarClient
     }
 
     // Send a retrying GET, throw on a non-success status, and return the fully-buffered body.
-    private async Task<string> FetchStringAsync(string url)
+    private async Task<string> FetchStringAsync(
+        string url,
+        CancellationToken cancellationToken = default
+    )
     {
-        using var response = await SendWithRetryAsync(url);
+        using var response = await SendWithRetryAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
+        return await response.Content.ReadAsStringAsync(cancellationToken);
     }
 
     private Task<HttpResponseMessage> SendWithRetryAsync(
