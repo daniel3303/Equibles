@@ -123,6 +123,165 @@ public class YahooPriceImportServiceTests : IDisposable
         await _stockRepo.SaveChanges();
     }
 
+    [Fact]
+    public async Task Import_InactiveListing_BackfillsOnlyThroughAuthoritativeDelistingDate()
+    {
+        var floor = new DateOnly(2023, 1, 1);
+        var delistedOn = new DateOnly(2023, 1, 10);
+        _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
+        var stock = CreateStock("GONE", "Formerly Listed");
+        stock.Active = false;
+        stock.DelistedOn = delistedOn;
+        await SeedStocks(stock);
+
+        var prices = Enumerable
+            .Range(0, delistedOn.DayNumber - floor.DayNumber + 1)
+            .Select(floor.AddDays)
+            .Where(UsMarketCalendar.IsTradingDay)
+            .Select(date => new HistoricalPrice
+            {
+                Date = date,
+                Open = 10m,
+                High = 11m,
+                Low = 9m,
+                Close = 10m,
+                AdjustedClose = 10m,
+                Volume = 1_000,
+            })
+            .ToList();
+        _yahooClient
+            .GetChart("GONE", floor, delistedOn)
+            .Returns(new YahooChartData { FirstTradeDate = floor, Prices = prices });
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        await _yahooClient.Received(1).GetChart("GONE", floor, delistedOn);
+        var retained = _stockRepo
+            .GetAllIncludingInactive()
+            .Single(row => row.Id == stock.Id);
+        retained.HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
+        retained.PriceHistoryBackfilledTickers.Should().Equal("GONE");
+        _priceRepo
+            .GetAllSeries()
+            .Where(price => price.CommonStockId == stock.Id)
+            .Select(price => price.Date)
+            .Should()
+            .Equal(prices.Select(price => price.Date));
+    }
+
+    [Fact]
+    public async Task Import_PreHistoryDelistings_DoNotStarveEligibleHistoricalBackfill()
+    {
+        var floor = new DateOnly(2023, 1, 1);
+        var delistedOn = new DateOnly(2023, 1, 10);
+        _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
+        var ineligible = Enumerable
+            .Range(0, 25)
+            .Select(index => CreateStock($"OLD{index:D2}", $"Old Listing {index:D2}"))
+            .ToArray();
+        foreach (var stock in ineligible)
+        {
+            stock.Active = false;
+            stock.DelistedOn = floor.AddDays(-1);
+        }
+
+        var eligible = CreateStock("GONE", "Formerly Listed");
+        eligible.Active = false;
+        eligible.DelistedOn = delistedOn;
+        await SeedStocks([.. ineligible, eligible]);
+
+        var prices = Enumerable
+            .Range(0, delistedOn.DayNumber - floor.DayNumber + 1)
+            .Select(floor.AddDays)
+            .Where(UsMarketCalendar.IsTradingDay)
+            .Select(date => new HistoricalPrice
+            {
+                Date = date,
+                Open = 10m,
+                High = 11m,
+                Low = 9m,
+                Close = 10m,
+                AdjustedClose = 10m,
+                Volume = 1_000,
+            })
+            .ToList();
+        _yahooClient
+            .GetChart("GONE", floor, delistedOn)
+            .Returns(new YahooChartData { FirstTradeDate = floor, Prices = prices });
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        await _yahooClient.Received(1).GetChart("GONE", floor, delistedOn);
+        await _yahooClient
+            .DidNotReceive()
+            .GetChart(Arg.Is<string>(ticker => ticker.StartsWith("OLD")), Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+        eligible.PriceHistoryBackfilledTickers.Should().Equal("GONE");
+    }
+
+    [Fact]
+    public async Task Import_InactiveListingHttpFailure_CheckpointsAttemptWithoutCompleting()
+    {
+        var stock = CreateStock("GONE", "Formerly Listed");
+        stock.Active = false;
+        stock.DelistedOn = new DateOnly(2023, 1, 10);
+        await SeedStocks(stock);
+        _yahooClient
+            .GetChart("GONE", Arg.Any<DateOnly>(), stock.DelistedOn.Value)
+            .ThrowsAsync(new HttpRequestException("temporary"));
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        var retained = _stockRepo
+            .GetAllIncludingInactive()
+            .Single(row => row.Id == stock.Id);
+        retained.HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
+        retained.PriceHistoryBackfilledTickers.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Import_InactiveListingReactivatedDuringFetch_RefusesStaleReplacement()
+    {
+        var floor = new DateOnly(2023, 1, 1);
+        var delistedOn = new DateOnly(2023, 1, 10);
+        _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
+        var stock = CreateStock("GONE", "Formerly Listed");
+        stock.Active = false;
+        stock.DelistedOn = delistedOn;
+        await SeedStocks(stock);
+        var prices = Enumerable
+            .Range(0, delistedOn.DayNumber - floor.DayNumber + 1)
+            .Select(floor.AddDays)
+            .Where(UsMarketCalendar.IsTradingDay)
+            .Select(date => new HistoricalPrice
+            {
+                Date = date,
+                Open = 10m,
+                High = 11m,
+                Low = 9m,
+                Close = 10m,
+                AdjustedClose = 10m,
+                Volume = 1_000,
+            })
+            .ToList();
+        _yahooClient
+            .GetChart("GONE", floor, delistedOn)
+            .Returns(_ =>
+            {
+                stock.Active = true;
+                stock.DelistedOn = null;
+                _dbContext.SaveChanges();
+                return new YahooChartData { FirstTradeDate = floor, Prices = prices };
+            });
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        _priceRepo
+            .GetAllSeries()
+            .Should()
+            .BeEmpty("the fetched cutoff no longer describes the listing at commit time");
+        stock.PriceHistoryBackfilledTickers.Should().BeEmpty();
+    }
+
     private async Task SeedPrices(params DailyStockPrice[] prices)
     {
         _priceRepo.AddRange(prices);

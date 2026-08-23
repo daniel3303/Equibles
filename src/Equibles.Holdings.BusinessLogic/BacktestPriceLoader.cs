@@ -74,7 +74,7 @@ public class BacktestPriceLoader
             .Distinct()
             .ToArray();
         var primaryTickers = await _stockRepository
-            .GetByIds(stockIds)
+            .GetByIdsIncludingInactive(stockIds)
             .Select(stock => new { stock.Id, stock.Ticker })
             .ToDictionaryAsync(stock => stock.Id, stock => stock.Ticker, cancellationToken);
 

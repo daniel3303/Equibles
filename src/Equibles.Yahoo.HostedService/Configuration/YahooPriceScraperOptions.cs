@@ -36,4 +36,10 @@ public class YahooPriceScraperOptions : ScraperOptions
     /// limit. Set to zero to disable it.
     /// </summary>
     public int OhlcRepairBatchSize { get; set; } = 100;
+
+    /// <summary>Maximum inactive listings attempted per price cycle.</summary>
+    public int HistoricalBackfillBatchSize { get; set; } = 25;
+
+    /// <summary>Days before retrying an incomplete inactive-listing response.</summary>
+    public int HistoricalBackfillRetryDays { get; set; } = 30;
 }

@@ -31,7 +31,9 @@ internal readonly record struct PriceSeriesTarget(
     Guid CommonStockId,
     bool IsPrimary,
     bool RequiresFullHistory = false,
-    DateTime? YahooEnrichmentAttemptedAt = null
+    DateTime? YahooEnrichmentAttemptedAt = null,
+    bool IsHistorical = false,
+    DateOnly? HistoryEndDate = null
 )
 {
     public PriceSeriesKey Key => new(CommonStockId, Ticker);
@@ -116,6 +118,7 @@ public class YahooPriceImportService
             tickerMap.Values.Distinct().ToList(),
             cancellationToken
         );
+        priceTargets.AddRange(await BuildHistoricalPriceTargets(cancellationToken));
         _logger.LogInformation(
             "Starting Yahoo price sync for {SeriesCount} listed symbols across {StockCount} stocks (enrichment: {Enrichment})",
             priceTargets.Count,
@@ -153,7 +156,9 @@ public class YahooPriceImportService
 
         if (includeEnrichment)
         {
-            var primaryOrder = crawlOrder.Where(target => target.IsPrimary).ToList();
+            var primaryOrder = crawlOrder
+                .Where(target => target.IsPrimary && !target.IsHistorical)
+                .ToList();
             await ImportEnrichment(primaryOrder, cancellationToken);
         }
     }
@@ -235,6 +240,45 @@ public class YahooPriceImportService
         return targets;
     }
 
+    private async Task<List<PriceSeriesTarget>> BuildHistoricalPriceTargets(
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var retryBefore = DateTime.UtcNow.AddDays(
+            -Math.Max(1, _scraperOptions.HistoricalBackfillRetryDays)
+        );
+        var historyFloor = PriceHistoryFloor();
+
+        return await stockRepository
+            .GetAllIncludingInactive()
+            .Where(stock =>
+                !stock.Active
+                && stock.DelistedOn != null
+                && stock.DelistedOn >= historyFloor
+                && !stock.PriceHistoryBackfilledTickers.Contains(stock.Ticker)
+                && (
+                    stock.HistoricalPriceBackfillAttemptedAt == null
+                    || stock.HistoricalPriceBackfillAttemptedAt <= retryBefore
+                )
+            )
+            .OrderBy(stock => stock.HistoricalPriceBackfillAttemptedAt ?? DateTime.MinValue)
+            .ThenBy(stock => stock.DelistedOn)
+            .ThenBy(stock => stock.Ticker)
+            .Take(Math.Max(1, _scraperOptions.HistoricalBackfillBatchSize))
+            .Select(stock => new PriceSeriesTarget(
+                stock.Ticker,
+                stock.Id,
+                IsPrimary: true,
+                RequiresFullHistory: true,
+                YahooEnrichmentAttemptedAt: null,
+                IsHistorical: true,
+                HistoryEndDate: stock.DelistedOn
+            ))
+            .ToListAsync(cancellationToken);
+    }
+
     private static async Task<LockedPriceSeries?> LockPriceSeries(
         CommonStockRepository stockRepository,
         PriceSeriesTarget target,
@@ -242,6 +286,18 @@ public class YahooPriceImportService
     )
     {
         var stock = await stockRepository.GetForUpdate(target.CommonStockId, cancellationToken);
+        if (stock == null)
+            return null;
+        if (
+            target.IsHistorical
+            && (
+                stock.Active
+                || stock.DelistedOn == null
+                || stock.DelistedOn != target.HistoryEndDate
+            )
+        )
+            return null;
+
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, target.Ticker);
         if (
             resolvedTicker == null
@@ -290,6 +346,8 @@ public class YahooPriceImportService
             catch (HttpRequestException ex)
             {
                 _logger.LogWarning(ex, "Failed to fetch prices for {Ticker}, skipping", ticker);
+                if (target.IsHistorical)
+                    await StampHistoricalBackfillAttempt(target, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -300,6 +358,8 @@ public class YahooPriceImportService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error importing prices for {Ticker}", ticker);
+                if (target.IsHistorical)
+                    await StampHistoricalBackfillAttempt(target, cancellationToken);
                 await _errorReporter.Report(
                     ErrorSource.YahooPriceScraper,
                     $"ImportTicker({ticker})",
@@ -476,6 +536,33 @@ public class YahooPriceImportService
             )
         )
             return;
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    private async Task StampHistoricalBackfillAttempt(
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        await using var transaction = await stockRepo.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        var lockedSeries = await LockPriceSeries(stockRepo, target, cancellationToken);
+        if (
+            lockedSeries is not { IsPrimary: true }
+            || lockedSeries.Value.Stock.Active
+            || lockedSeries.Value.Stock.DelistedOn != target.HistoryEndDate
+        )
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return;
+        }
+
+        lockedSeries.Value.Stock.HistoricalPriceBackfillAttemptedAt = DateTime.UtcNow;
+        await stockRepo.SaveChanges();
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -1173,19 +1260,23 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        var startDate = await ResolveStartDate(target, today, cancellationToken);
-        if (!HasSettledTradingDay(startDate, today))
+        var chartEnd = target.HistoryEndDate is { } delisted && delisted < today ? delisted : today;
+        var settledAsOf = target.IsHistorical ? chartEnd.AddDays(1) : today;
+        var startDate = await ResolveStartDate(target, settledAsOf, cancellationToken);
+        if (!HasSettledTradingDay(startDate, settledAsOf))
             return NoFetchNeeded;
 
         // One chart fetch yields the price bars plus any split and dividend
         // events for the window — capture both off the same response, no extra
         // HTTP.
-        var chartData = await _yahooClient.GetChart(target.Ticker, startDate, today);
+        var chartData = await _yahooClient.GetChart(target.Ticker, startDate, chartEnd);
+        if (target.IsHistorical)
+            await StampHistoricalBackfillAttempt(target, cancellationToken);
 
         if (target.RequiresFullHistory)
         {
             await CaptureSplits(target, chartData.Splits, cancellationToken);
-            if (!IsCompleteReferenceHistory(chartData, PriceHistoryFloor(), today))
+            if (!IsCompleteReferenceHistory(chartData, PriceHistoryFloor(), settledAsOf))
             {
                 _logger.LogWarning(
                     "Yahoo returned incomplete full history for reference listing {Ticker}; keeping its grouped bootstrap rows pending",
@@ -1205,7 +1296,7 @@ public class YahooPriceImportService
                             split.Denominator
                         ))
                         .ToList(),
-                    today
+                    settledAsOf
                 )
             )
                 return new TickerImportResult(Fetched: true, Inserted: 0);
@@ -1213,7 +1304,7 @@ public class YahooPriceImportService
             var replaced = await ReplaceStoredPrices(
                 target,
                 PriceHistoryFloor(),
-                today,
+                settledAsOf,
                 chartData.Prices,
                 cancellationToken
             );

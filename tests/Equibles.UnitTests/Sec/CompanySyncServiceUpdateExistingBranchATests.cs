@@ -100,7 +100,7 @@ public class CompanySyncServiceUpdateExistingBranchATests
     }
 
     [Fact]
-    public async Task UpdateExistingStock_TickerHeldByOutOfFeedStock_DeletesObsoleteHolderThenUpdates()
+    public async Task UpdateExistingStock_TickerHeldByOutOfFeedStock_RetiresHolderThenUpdates()
     {
         using var db = NewDb();
         var existing = new CommonStock
@@ -132,9 +132,8 @@ public class CompanySyncServiceUpdateExistingBranchATests
 
         await Invoke(BuildSut(), secCompany, "NEWT", state);
 
-        (await db.Set<CommonStock>().AnyAsync(s => s.Cik == "0000000999"))
-            .Should()
-            .BeFalse("the obsolete holder must have been deleted");
+        var retired = await db.Set<CommonStock>().FirstAsync(s => s.Cik == "0000000999");
+        retired.Active.Should().BeFalse("the historical identity must remain without a live claim");
         var updated = await db.Set<CommonStock>().FirstAsync(s => s.Cik == "0000000002");
         updated.Ticker.Should().Be("NEWT");
         updated.Name.Should().Be("Updated Name");

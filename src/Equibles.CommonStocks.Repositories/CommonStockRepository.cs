@@ -9,6 +9,26 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     public CommonStockRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
+    /// <summary>
+    /// The live stock directory. Historical identities stay stored but do not leak into search,
+    /// screeners, workers, or current ticker resolution.
+    /// </summary>
+    public override IQueryable<CommonStock> GetAll() =>
+        GetAllIncludingInactive().Where(stock => stock.Active);
+
+    public IQueryable<CommonStock> GetAllIncludingInactive() => base.GetAll();
+
+    public override async Task<CommonStock> Get(params object[] key)
+    {
+        var stock = await base.Get(key);
+        return stock?.Active == true ? stock : null;
+    }
+
+    public Task<CommonStock> GetIncludingInactive(params object[] key) => base.Get(key);
+
+    public IQueryable<CommonStock> GetByIdsIncludingInactive(IEnumerable<Guid> ids) =>
+        GetAllIncludingInactive().Where(stock => ids.Contains(stock.Id));
+
     public IQueryable<CommonStock> Search(string search)
     {
         var query = GetAll();
@@ -130,7 +150,7 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     {
         if (!DbContext.Database.IsRelational())
         {
-            return await GetAll()
+            return await GetAllIncludingInactive()
                 .FirstOrDefaultAsync(stock => stock.Id == commonStockId, cancellationToken);
         }
 

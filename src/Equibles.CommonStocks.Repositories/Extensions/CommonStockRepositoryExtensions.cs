@@ -59,7 +59,10 @@ public static class CommonStockRepositoryExtensions
         CancellationToken cancellationToken = default
     )
     {
-        return repository.GetByIds(ids).Select(s => s.Id).ToHashSetAsync(cancellationToken);
+        return repository
+            .GetByIdsIncludingInactive(ids)
+            .Select(s => s.Id)
+            .ToHashSetAsync(cancellationToken);
     }
 
     // Returns the subset of items whose CommonStockId still exists, preserving order.

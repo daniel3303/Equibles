@@ -93,11 +93,13 @@ public class CompanySyncServiceReplaceObsoleteCaseMismatchTests : ParadeDbMcpTes
 
         await using var verify = Fixture.CreateDbContext();
         var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
-        stocks
+        stocks.Should().HaveCount(2, "the retired case variant remains queryable historically");
+        var current = stocks
             .Should()
-            .ContainSingle("the obsolete holder must be replaced, not kept alongside a duplicate");
-        stocks[0].Cik.Should().Be("0000000111");
-        stocks[0].Ticker.Should().Be("REUSED", "listed tickers are persisted canonically");
-        stocks[0].Name.Should().Be("Acquirer Inc.");
+            .ContainSingle(stock => stock.Cik == "0000000111" && stock.Active)
+            .Subject;
+        current.Ticker.Should().Be("REUSED", "listed tickers are persisted canonically");
+        current.Name.Should().Be("Acquirer Inc.");
+        stocks.Should().ContainSingle(stock => stock.Cik != "0000000111" && !stock.Active);
     }
 }
