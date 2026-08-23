@@ -118,4 +118,50 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
 
         result.Should().NotContain("Showing the newest");
     }
+
+    [Fact]
+    public async Task GetOffExchangeVolume_AffectedHistoricalWeek_AppendsCoverageCaveat()
+    {
+        var stock = AddGme();
+        AddWeek(stock, OffExchangeVolumeCoverage.CorrectedSymbolResolutionStartWeek.AddDays(-7));
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetOffExchangeVolume("GME", startDate: "2025-08-01", endDate: "2025-08-10");
+
+        result.Should().Contain(OffExchangeVolumeCoverage.HistoricalCaseFoldCaveat);
+    }
+
+    [Fact]
+    public async Task GetOffExchangeVolume_CorrectedBoundaryWeek_HasNoCoverageCaveat()
+    {
+        var stock = AddGme();
+        AddWeek(stock, OffExchangeVolumeCoverage.CorrectedSymbolResolutionStartWeek);
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetOffExchangeVolume("GME", startDate: "2025-08-11", endDate: "2025-08-17");
+
+        result.Should().NotContain("Historical data caveat");
+    }
+
+    [Fact]
+    public async Task GetOffExchangeVolume_AffectedWeekExcludedByLimit_HasNoCoverageCaveat()
+    {
+        var stock = AddGme();
+        AddWeek(stock, OffExchangeVolumeCoverage.CorrectedSymbolResolutionStartWeek.AddDays(-7));
+        AddWeek(stock, OffExchangeVolumeCoverage.CorrectedSymbolResolutionStartWeek);
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut()
+            .GetOffExchangeVolume(
+                "GME",
+                startDate: "2025-08-01",
+                endDate: "2025-08-17",
+                maxResults: 1
+            );
+
+        result.Should().NotContain("Historical data caveat");
+        result.Should().Contain("Showing the newest 1 of 2 weeks");
+    }
 }

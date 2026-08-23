@@ -23,6 +23,8 @@ If you don't give dates, the assistant defaults to the last six months (about 26
 
 The FINRA file reports only the off-exchange numbers — it does not include consolidated tape (total market) volume, so the assistant cannot tell you what *share* of a stock's overall volume traded off-exchange. To compute that share, compare these figures against a total-volume source such as the stock's daily price history.
 
+Weeks before 2025-08-11 may include volume from a case-variant sibling security. Those weeks predate the ordinal FINRA symbol-map fix and have aged out of FINRA's rolling source window, so they cannot be re-imported. The tool adds this caveat whenever a response includes an affected week.
+
 ## What you should see
 
 A Markdown table in the assistant's reply, one row per week, oldest to newest. If it comes back empty, either the stock has no reported off-exchange activity in that window or the FINRA scraper hasn't imported it yet — confirm your FINRA API key is set and give the worker time to finish its first sync.
