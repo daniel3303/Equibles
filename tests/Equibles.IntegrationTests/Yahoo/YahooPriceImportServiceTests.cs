@@ -133,6 +133,7 @@ public class YahooPriceImportServiceTests : IDisposable
         stock.Active = false;
         stock.DelistedOn = delistedOn;
         await SeedStocks(stock);
+        await SeedPrices(CreatePrice(stock, delistedOn.AddDays(3), 99m));
 
         var prices = Enumerable
             .Range(0, delistedOn.DayNumber - floor.DayNumber + 1)
@@ -167,6 +168,128 @@ public class YahooPriceImportServiceTests : IDisposable
             .Select(price => price.Date)
             .Should()
             .Equal(prices.Select(price => price.Date));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Import_InactiveListing_PurgesPostCutoffRowsWithoutUsableReplacement(
+        bool emptyResponse
+    )
+    {
+        var floor = new DateOnly(2023, 1, 1);
+        var delistedOn = new DateOnly(2023, 1, 10);
+        var retainedDate = delistedOn.AddDays(-1);
+        _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
+        var stock = CreateStock("GONE", "Formerly Listed");
+        stock.Active = false;
+        stock.DelistedOn = delistedOn;
+        await SeedStocks(stock);
+        await SeedPrices(
+            CreatePrice(stock, retainedDate, 10m),
+            CreatePrice(stock, delistedOn.AddDays(3), 99m)
+        );
+        var response = new YahooChartData
+        {
+            FirstTradeDate = floor,
+            Prices = emptyResponse
+                ? []
+                :
+                [
+                    new HistoricalPrice
+                    {
+                        Date = delistedOn,
+                        Open = 10m,
+                        High = 11m,
+                        Low = 9m,
+                        Close = 10m,
+                        AdjustedClose = 10m,
+                        Volume = 1_000,
+                    },
+                ],
+        };
+        _yahooClient.GetChart("GONE", floor, delistedOn).Returns(response);
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        _priceRepo
+            .GetAllSeries()
+            .Where(price => price.CommonStockId == stock.Id)
+            .Select(price => price.Date)
+            .Should()
+            .Equal(retainedDate);
+        stock.PriceHistoryBackfilledTickers.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Import_InactivePendingCorporateAction_FetchesOnlyThroughDelistingDate()
+    {
+        var floor = new DateOnly(2023, 1, 1);
+        var delistedOn = new DateOnly(2023, 1, 10);
+        var splitDate = new DateOnly(2023, 1, 6);
+        _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
+        var stock = CreateStock("GONE", "Formerly Listed");
+        stock.Active = false;
+        stock.DelistedOn = delistedOn;
+        stock.PriceHistoryBackfilledTickers = ["GONE"];
+        await SeedStocks(stock);
+        await SeedPrices(CreatePrice(stock, delistedOn.AddDays(3), 99m));
+        _splitRepo.Add(
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                PriceSeriesTicker = stock.Ticker,
+                EffectiveDate = splitDate,
+                Numerator = 2m,
+                Denominator = 1m,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        var dividend = new CashDividend
+        {
+            CommonStockId = stock.Id,
+            ExDate = delistedOn,
+            AmountPerShare = 0.25m,
+            Source = CashDividendSource.Yahoo,
+        };
+        _dividendRepo.Add(dividend);
+        await _splitRepo.SaveChanges();
+        var chartData = CreateChartData(
+            (splitDate.AddDays(-1), 10m),
+            (splitDate.AddDays(1), 10m),
+            (delistedOn, 10m)
+        );
+        chartData.Dividends =
+        [
+            new CashDividendEvent
+            {
+                Date = delistedOn,
+                Amount = dividend.AmountPerShare,
+            },
+        ];
+        _yahooClient
+            .GetChart("GONE", floor, delistedOn)
+            .Returns(chartData);
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        await _yahooClient.Received(1).GetChart("GONE", floor, delistedOn);
+        await _yahooClient
+            .DidNotReceive()
+            .GetChart(
+                "GONE",
+                Arg.Any<DateOnly>(),
+                Arg.Is<DateOnly>(endDate => endDate > delistedOn)
+            );
+        _priceRepo
+            .GetAllSeries()
+            .Where(price => price.CommonStockId == stock.Id)
+            .OrderBy(price => price.Date)
+            .Select(price => price.Date)
+            .Should()
+            .Equal(splitDate.AddDays(-1), splitDate.AddDays(1), delistedOn);
+        dividend.PriceAdjustmentAppliedAmountPerShare.Should().Be(dividend.AmountPerShare);
+        dividend.PriceAdjustmentAppliedTime.Should().NotBeNull();
     }
 
     [Fact]
@@ -216,6 +339,39 @@ public class YahooPriceImportServiceTests : IDisposable
             .DidNotReceive()
             .GetChart(Arg.Is<string>(ticker => ticker.StartsWith("OLD")), Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
         eligible.PriceHistoryBackfilledTickers.Should().Equal("GONE");
+    }
+
+    [Fact]
+    public async Task Import_PreHistoryDelisting_PurgesRecycledRowsWithoutCertifyingAction()
+    {
+        var floor = new DateOnly(2023, 1, 1);
+        var delistedOn = floor.AddDays(-10);
+        _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
+        var stock = CreateStock("OLD", "Former Listing");
+        stock.Active = false;
+        stock.DelistedOn = delistedOn;
+        await SeedStocks(stock);
+        await SeedPrices(CreatePrice(stock, floor, 99m));
+        var split = new StockSplit
+        {
+            CommonStockId = stock.Id,
+            PriceSeriesTicker = stock.Ticker,
+            EffectiveDate = delistedOn.AddDays(-1),
+            Numerator = 2m,
+            Denominator = 1m,
+            Source = StockSplitSource.Yahoo,
+        };
+        _splitRepo.Add(split);
+        await _splitRepo.SaveChanges();
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        await _yahooClient.DidNotReceive().GetChart("OLD", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+        _priceRepo
+            .GetAllSeries()
+            .Should()
+            .NotContain(price => price.CommonStockId == stock.Id);
+        split.PriceAdjustmentAppliedTime.Should().BeNull();
     }
 
     [Fact]

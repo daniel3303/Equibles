@@ -427,4 +427,62 @@ public class CorporateActionPriceReconciliationManagerStampingTests
             .Which.ListedTicker.Should()
             .Be("MSFT");
     }
+
+    [Fact]
+    public async Task StampApplied_ListingCutoffChangedDuringFetch_LeavesActionsPending()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var expectedDelistedOn = new DateOnly(2026, 7, 31);
+        var stock = Stock(stockId);
+        stock.Active = false;
+        stock.DelistedOn = expectedDelistedOn.AddDays(1);
+        var split = PendingSplit(stockId, new DateOnly(2026, 7, 15));
+        db.Add(stock);
+        db.Add(split);
+        await db.SaveChangesAsync();
+
+        var manager = NewManager(db);
+        var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
+        var stamped = await manager.StampApplied(
+            selected,
+            [],
+            expectedDelistedOn.AddDays(1),
+            DateTime.UtcNow,
+            expectedActive: false,
+            expectedDelistedOn: expectedDelistedOn
+        );
+
+        stamped.Should().Be(0);
+        split.PriceAdjustmentAppliedTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task StampApplied_ListingReactivatedDuringFetch_LeavesActionsPending()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var expectedDelistedOn = new DateOnly(2026, 7, 31);
+        var stock = Stock(stockId);
+        stock.Active = true;
+        stock.DelistedOn = expectedDelistedOn;
+        var split = PendingSplit(stockId, new DateOnly(2026, 7, 15));
+        db.Add(stock);
+        db.Add(split);
+        await db.SaveChangesAsync();
+
+        var manager = NewManager(db);
+        var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
+        var stamped = await manager.StampApplied(
+            selected,
+            [],
+            expectedDelistedOn.AddDays(1),
+            DateTime.UtcNow,
+            expectedActive: false,
+            expectedDelistedOn: expectedDelistedOn
+        );
+
+        stamped.Should().Be(0);
+        split.PriceAdjustmentAppliedTime.Should().BeNull();
+    }
 }
