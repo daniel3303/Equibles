@@ -602,7 +602,7 @@ public class InsiderTradingFilingProcessorTests
     }
 
     [Fact]
-    public async Task Process_NoTransactions_SavesMarkerAndReturnsTrue()
+    public async Task Process_NoTransactions_SavesVersionedNonSectionMarker()
     {
         var xml = """
             <ownershipDocument>
@@ -617,12 +617,48 @@ public class InsiderTradingFilingProcessorTests
         var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(xml);
 
-        var result = await processor.Process(MakeFiling(), MakeCompany());
+        var filing = MakeFiling();
+        var result = await processor.Process(filing, MakeCompany());
 
         result.Should().BeTrue();
-        var markers = txRepo.GetAll().ToList();
-        markers.Should().HaveCount(1);
-        markers[0].SecurityTitle.Should().Be("No Securities Owned");
+        var marker = txRepo.GetAll().Should().ContainSingle().Subject;
+        marker.TransactionCode.Should().Be(TransactionCode.IngestMarker);
+        marker.ParserVersion.Should().Be(InsiderTransaction.CurrentParserVersion);
+        marker.SupersededAccessionNumber.Should().BeNull();
+        (await processor.FilterKnownAccessions([filing.AccessionNumber]))
+            .Should()
+            .Equal(filing.AccessionNumber);
+    }
+
+    [Fact]
+    public async Task Process_StaleEmptyParseMarker_RetriesWithCurrentParser()
+    {
+        const string emptyXml = """
+            <ownershipDocument>
+                <reportingOwner>
+                    <reportingOwnerId>
+                        <rptOwnerCik>0001234567</rptOwnerCik>
+                        <rptOwnerName>John Doe</rptOwnerName>
+                    </reportingOwnerId>
+                </reportingOwner>
+            </ownershipDocument>
+            """;
+        var (processor, _, txRepo, secClient) = CreateProcessorWithDeps();
+        var filing = MakeFiling();
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(emptyXml);
+        (await processor.Process(filing, MakeCompany())).Should().BeTrue();
+
+        var marker = txRepo.GetAll().Single();
+        marker.ParserVersion = InsiderTransaction.CurrentParserVersion - 1;
+        await txRepo.SaveChanges();
+        (await processor.FilterKnownAccessions([filing.AccessionNumber])).Should().BeEmpty();
+
+        secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(ValidForm4Xml);
+        (await processor.Process(filing, MakeCompany())).Should().BeTrue();
+
+        var row = txRepo.GetAll().Should().ContainSingle().Subject;
+        row.TransactionCode.Should().Be(TransactionCode.Purchase);
+        row.AccessionNumber.Should().Be(filing.AccessionNumber);
     }
 
     [Fact]

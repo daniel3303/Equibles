@@ -118,7 +118,8 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
         string issuerCik = IssuerCik,
         string documentType = "4",
         string dateOfOriginalSubmission = null,
-        bool includeOwner = true
+        bool includeOwner = true,
+        bool includeTransaction = false
     )
     {
         var original =
@@ -135,6 +136,21 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
                 </reportingOwner>
                 """
             : "<reportingOwner></reportingOwner>";
+        var transactionTable = includeTransaction
+            ? """
+                <nonDerivativeTable>
+                    <nonDerivativeTransaction>
+                        <securityTitle><value>Common Stock</value></securityTitle>
+                        <transactionDate><value>2023-05-30</value></transactionDate>
+                        <transactionCoding><transactionCode>P</transactionCode></transactionCoding>
+                        <transactionAmounts>
+                            <transactionShares><value>100</value></transactionShares>
+                            <transactionPricePerShare><value>10</value></transactionPricePerShare>
+                        </transactionAmounts>
+                    </nonDerivativeTransaction>
+                </nonDerivativeTable>
+                """
+            : string.Empty;
         return $"""
             <ownershipDocument>
                 <schemaVersion>X0306</schemaVersion>
@@ -147,6 +163,7 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
                     <issuerTradingSymbol>QXO</issuerTradingSymbol>
                 </issuer>
                 {owner}
+                {transactionTable}
             </ownershipDocument>
             """;
     }
@@ -211,7 +228,11 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
 
         var processor = BuildProcessor(
             ctx,
-            OwnershipXml(documentType: "4/A", dateOfOriginalSubmission: "2023-05-25")
+            OwnershipXml(
+                documentType: "4/A",
+                dateOfOriginalSubmission: "2023-05-25",
+                includeTransaction: true
+            )
         );
 
         var processed = await processor.Process(Filing(form: "4/A"), issuer);
@@ -270,8 +291,8 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
             );
         await ctx.SaveChangesAsync();
 
-        // Valid ownership XML with no transaction tables → the 0-transaction
-        // sentinel path, which is a successful ingest (returns true).
+        // Valid ownership XML with no transaction tables → the non-section
+        // marker path, which is a successful ingest (returns true).
         var processor = BuildProcessor(ctx, OwnershipXml());
 
         var processed = await processor.Process(Filing(), Issuer());

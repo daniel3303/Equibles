@@ -72,7 +72,7 @@ public class InsiderFilingParserNoSecuritiesOwnedSentinelTests
         sentinel.SharesOwnedAfter.Should().Be(0);
         sentinel.PricePerShare.Should().Be(0);
         sentinel.TransactionOrder.Should().Be(0);
-        sentinel.TransactionCode.Should().Be(TransactionCode.Other);
+        sentinel.TransactionCode.Should().Be(TransactionCode.Holding);
         sentinel.TransactionDate.Should().Be(filing.ReportDate);
         sentinel.SecurityKind.Should().Be(InsiderSecurityKind.Unknown);
         sentinel.IsPriceValid.Should().BeTrue();
@@ -110,5 +110,42 @@ public class InsiderFilingParserNoSecuritiesOwnedSentinelTests
         );
 
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseTransactions_NoSecuritiesOwnedAmendment_PreservesAmendmentIdentity()
+    {
+        var root = InsiderFilingParser.TryGetOwnershipRoot(
+            NoSecuritiesOwnedForm3
+                .Replace("<documentType>3</documentType>", "<documentType>3/A</documentType>")
+                .Replace(
+                    "<periodOfReport>2023-10-03</periodOfReport>",
+                    "<periodOfReport>2023-10-03</periodOfReport><dateOfOriginalSubmission>2023-10-03</dateOfOriginalSubmission>"
+                )
+        );
+        var filing = new FilingData
+        {
+            AccessionNumber = "0001466258-23-000204",
+            Form = "3/A",
+            FilingDate = new DateOnly(2023, 10, 6),
+            ReportDate = new DateOnly(2023, 10, 3),
+        };
+
+        var sentinel = InsiderFilingParser
+            .ParseTransactions(
+                root,
+                new InsiderOwner { Id = Guid.NewGuid() },
+                Guid.NewGuid(),
+                filing,
+                isAmendment: true
+            )
+            .Should()
+            .ContainSingle()
+            .Subject;
+
+        sentinel.IsAmendment.Should().BeTrue();
+        sentinel.OriginalFilingDate.Should().Be(new DateOnly(2023, 10, 3));
+        sentinel.FilingForm.Should().Be(InsiderOwnershipForm.Form3);
+        sentinel.TransactionCode.Should().Be(TransactionCode.Holding);
     }
 }

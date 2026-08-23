@@ -7,9 +7,8 @@ namespace Equibles.InsiderTrading.Data.Models;
 [Index(nameof(CommonStockId), nameof(TransactionDate))]
 [Index(nameof(InsiderOwnerId), nameof(TransactionDate))]
 [Index(nameof(AccessionNumber), nameof(TransactionOrder), IsUnique = true)]
-// The scraper's known-accession prefilter probes SupersededAccessionNumber with the same
-// candidate list as AccessionNumber; without its own index that arm falls back to a
-// sequential scan of the table on every sweep batch.
+// Late-original amendment resolution probes SupersededAccessionNumber for each
+// accession; without its own index that lookup scans the table on every replay.
 [Index(nameof(SupersededAccessionNumber))]
 [Index(nameof(FilingDate))]
 [Index(nameof(TransactionDate))]
@@ -39,9 +38,11 @@ public class InsiderTransaction
     /// Rule 10b5-1 checkbox during reprocess — the v4 capture parsed it but the
     /// reprocess copy-loop never wrote it, so pre-capture rows (1.4M checkbox-era
     /// rows) stayed null (#7164, EquiblesCommercial); v8 stamps the authoritative
-    /// Form 3/4/5 family so amendments cannot supersede a different ownership form.
+    /// Form 3/4/5 family so amendments cannot supersede a different ownership form;
+    /// v9 tags the no-securities-owned sentinel as a holding so it participates only
+    /// in holding-section supersession.
     /// </summary>
-    public const int CurrentParserVersion = 8;
+    public const int CurrentParserVersion = 9;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -112,10 +113,10 @@ public class InsiderTransaction
     /// <summary>
     /// For rows from a Form 3/A, 4/A, or 5/A: the filing date of the ORIGINAL report the
     /// amendment restates (the XML's <c>dateOfOriginalSubmission</c>). Drives
-    /// supersession — an amendment replaces the original filing's rows, and a
-    /// late-arriving original (or an older chained amendment) is skipped when a row
-    /// referencing its filing date already exists. Null on non-amendment rows and
-    /// on amendments whose XML omits the element.
+    /// section-scoped supersession: transaction rows replace transactions and
+    /// holding snapshots replace holdings. A late-arriving original or older
+    /// chained amendment retains any section the amendment did not restate. Null
+    /// on non-amendment rows and on amendments whose XML omits the element.
     /// </summary>
     public DateOnly? OriginalFilingDate { get; set; }
 
@@ -125,9 +126,10 @@ public class InsiderTransaction
     /// amendment (EDGAR lists newest-first). Resolved at ingest rather than
     /// parsed: the XML only names the original's submission DATE, which can trail
     /// the feed's filing date (an after-17:30 submission indexes the next
-    /// business day), so the accession is the durable link. Also feeds the
-    /// scraper's known-accession prefilter, so a superseded original stops being
-    /// re-fetched from EDGAR every cycle. Null until resolved.
+    /// business day), so the accession is the durable link. It never makes the
+    /// original known by itself: only the original's own parsed row or current
+    /// ingest marker may stop replay, so legacy wholesale deletion can heal.
+    /// Null until resolved.
     /// </summary>
     [MaxLength(32)]
     public string SupersededAccessionNumber { get; set; }

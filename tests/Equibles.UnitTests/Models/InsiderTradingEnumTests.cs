@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using Equibles.Core.Extensions;
+using Equibles.InsiderTrading.Data.Extensions;
 using Equibles.InsiderTrading.Data.Models;
 
 namespace Equibles.UnitTests.Models;
@@ -32,12 +33,29 @@ public class InsiderTradingEnumTests
     [InlineData(TransactionCode.Discretionary, "Discretionary")]
     [InlineData(TransactionCode.Other, "Other")]
     [InlineData(TransactionCode.Holding, "Holding")]
+    [InlineData(TransactionCode.IngestMarker, "Ingest marker")]
     public void TransactionCode_AllValues_HaveCorrectDisplayName(
         TransactionCode code,
         string expected
     )
     {
         code.NameForHumans().Should().Be(expected);
+    }
+
+    [Fact]
+    public void ExcludeHoldings_RemovesHoldingsAndIngestMarkers()
+    {
+        var rows = new[]
+        {
+            new InsiderTransaction { TransactionCode = TransactionCode.Purchase },
+            new InsiderTransaction { TransactionCode = TransactionCode.Holding },
+            new InsiderTransaction { TransactionCode = TransactionCode.IngestMarker },
+        };
+
+        rows.AsQueryable()
+            .ExcludeHoldings()
+            .Should()
+            .ContainSingle(t => t.TransactionCode == TransactionCode.Purchase);
     }
 
     [Fact]
@@ -68,7 +86,7 @@ public class InsiderTradingEnumTests
     public void TransactionCode_AllValues_HaveDisplayAttribute()
     {
         var values = Enum.GetValues<TransactionCode>();
-        values.Should().HaveCount(12);
+        values.Should().HaveCount(13);
 
         foreach (var value in values)
         {

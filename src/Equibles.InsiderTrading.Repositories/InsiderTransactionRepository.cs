@@ -46,8 +46,9 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
     }
 
     /// <summary>
-    /// Rows from any amendment that restates the original report an owner filed for
-    /// this company on <paramref name="originalFilingDate"/> (the filer-entered
+    /// Rows from any amendment that restates transaction and/or holding sections
+    /// of the original report an owner filed for this company on
+    /// <paramref name="originalFilingDate"/> (the filer-entered
     /// <c>dateOfOriginalSubmission</c>, stable across chained amendments), within
     /// the same authoritative Form 3/4/5 family.
     /// </summary>
@@ -64,6 +65,12 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
                 && t.CommonStockId == commonStockId
                 && t.FilingForm == filingForm
                 && t.OriginalFilingDate == originalFilingDate
+                && t.TransactionCode != TransactionCode.IngestMarker
+                && !(
+                    t.TransactionCode == TransactionCode.Other
+                    && t.SecurityTitle == "No Securities Owned"
+                    && t.Shares == 0
+                )
             );
     }
 
@@ -79,7 +86,14 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
     {
         return GetAll()
             .Where(t =>
-                t.SupersededAccessionNumber == accessionNumber && t.FilingForm == filingForm
+                t.SupersededAccessionNumber == accessionNumber
+                && t.FilingForm == filingForm
+                && t.TransactionCode != TransactionCode.IngestMarker
+                && !(
+                    t.TransactionCode == TransactionCode.Other
+                    && t.SecurityTitle == "No Securities Owned"
+                    && t.Shares == 0
+                )
             );
     }
 
@@ -106,6 +120,12 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
                 && t.CommonStockId == commonStockId
                 && t.FilingForm == filingForm
                 && t.IsAmendment
+                && t.TransactionCode != TransactionCode.IngestMarker
+                && !(
+                    t.TransactionCode == TransactionCode.Other
+                    && t.SecurityTitle == "No Securities Owned"
+                    && t.Shares == 0
+                )
                 && t.SupersededAccessionNumber == null
                 && t.OriginalFilingDate != null
                 && t.OriginalFilingDate >= windowStart
@@ -135,6 +155,12 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
                 && t.CommonStockId == commonStockId
                 && t.FilingForm == filingForm
                 && !t.IsAmendment
+                && t.TransactionCode != TransactionCode.IngestMarker
+                && !(
+                    t.TransactionCode == TransactionCode.Other
+                    && t.SecurityTitle == "No Securities Owned"
+                    && t.Shares == 0
+                )
                 && t.FilingDate >= windowStart
                 && t.FilingDate <= windowEnd
             );

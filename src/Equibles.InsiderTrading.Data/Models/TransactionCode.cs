@@ -48,4 +48,14 @@ public enum TransactionCode
     /// </summary>
     [Display(Name = "Holding")]
     Holding,
+
+    /// <summary>
+    /// Internal versioned marker for a valid ownership filing that contributes no
+    /// current rows, either because it parsed none or every section was superseded.
+    /// It is not a transaction or holding and claims no supersession section. A
+    /// stale marker lets a later parser version retry the filing from the SEC feed
+    /// without introducing a schema-level parser version.
+    /// </summary>
+    [Display(Name = "Ingest marker")]
+    IngestMarker,
 }

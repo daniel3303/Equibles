@@ -92,7 +92,10 @@ public class InsiderFilingReprocessManager
         // can briefly nudge past Total and self-corrects.
         var staleTransactionFilingCount = await _transactionRepository
             .GetAll()
-            .Where(t => t.ParserVersion < InsiderTransaction.CurrentParserVersion)
+            .Where(t =>
+                t.TransactionCode != TransactionCode.IngestMarker
+                && t.ParserVersion < InsiderTransaction.CurrentParserVersion
+            )
             .Select(t => t.AccessionNumber)
             .Distinct()
             .CountAsync();
@@ -124,7 +127,10 @@ public class InsiderFilingReprocessManager
             {
                 var pending = _transactionRepository
                     .GetAll()
-                    .Where(t => t.ParserVersion < InsiderTransaction.CurrentParserVersion)
+                    .Where(t =>
+                        t.TransactionCode != TransactionCode.IngestMarker
+                        && t.ParserVersion < InsiderTransaction.CurrentParserVersion
+                    )
                     .Where(t => !failedThisRun.Contains(t.AccessionNumber));
                 var oldestParserVersion = await pending
                     .Select(t => (int?)t.ParserVersion)
@@ -398,11 +404,20 @@ public class InsiderFilingReprocessManager
             ReportDate = InsiderFilingParser.ParsePeriodOfReport(root) ?? first.TransactionDate,
         };
         var filingForm = InsiderFilingParser.ParseOwnershipForm(filing.Form);
+        var isAmendment = filing.Form?.Contains("/A", StringComparison.OrdinalIgnoreCase) == true;
+        var originalFilingDate = isAmendment
+            ? InsiderFilingParser.ParseDateOfOriginalSubmission(root)
+            : null;
 
-        // The family is a document-level fact, so stamp every stored row even
-        // when the current parser produces fewer rows than an older version.
+        // Family and amendment identity are document-level facts, so stamp every
+        // stored row even when the current parser produces fewer rows than an
+        // older version and some rows cannot be mapped by order.
         foreach (var row in rows)
+        {
             row.FilingForm = filingForm;
+            row.IsAmendment = isAmendment;
+            row.OriginalFilingDate = originalFilingDate;
+        }
 
         var storedFiling = await _filingRepository
             .GetByAccessionNumber(accession)
@@ -418,11 +433,28 @@ public class InsiderFilingReprocessManager
             new InsiderOwner { Id = first.InsiderOwnerId },
             first.CommonStockId,
             filing,
-            first.IsAmendment
+            isAmendment
         );
         // TransactionOrder is unique within a parse by construction, so a direct
         // dictionary is safe; a duplicate would be a parser bug worth surfacing.
         var parsedByOrder = parsed.ToDictionary(t => t.TransactionOrder);
+
+        // Older ingest code manufactured an Other/"No Securities Owned" row for
+        // every valid zero-row parse. When the cached XML confirms there are still
+        // no rows, convert that fake holding into the versioned non-section marker
+        // and clear any wholesale-era claim it carried.
+        if (parsed.Count == 0 && rows.All(IsLegacyEmptyParseMarker))
+        {
+            foreach (var row in rows)
+            {
+                row.TransactionCode = TransactionCode.IngestMarker;
+                row.SecurityTitle = null;
+                row.SupersededAccessionNumber = null;
+                row.ParserVersion = InsiderTransaction.CurrentParserVersion;
+                result.Reclassified++;
+            }
+            return;
+        }
 
         // The re-parse should reproduce the stored rows exactly. If the counts
         // diverge, some stored rows won't map to a parsed row — they keep their
@@ -515,6 +547,13 @@ public class InsiderFilingReprocessManager
 
             row.ParserVersion = InsiderTransaction.CurrentParserVersion;
         }
+    }
+
+    private static bool IsLegacyEmptyParseMarker(InsiderTransaction row)
+    {
+        return row.TransactionCode == TransactionCode.Other
+            && row.SecurityTitle == "No Securities Owned"
+            && row.Shares == 0;
     }
 
     // Returns the parsed ownership root for a filing — from the cached XML when
