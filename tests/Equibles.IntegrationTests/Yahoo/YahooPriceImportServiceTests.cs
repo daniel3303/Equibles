@@ -157,9 +157,7 @@ public class YahooPriceImportServiceTests : IDisposable
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         await _yahooClient.Received(1).GetChart("GONE", floor, delistedOn);
-        var retained = _stockRepo
-            .GetAllIncludingInactive()
-            .Single(row => row.Id == stock.Id);
+        var retained = _stockRepo.GetAllIncludingInactive().Single(row => row.Id == stock.Id);
         retained.HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
         retained.PriceHistoryBackfilledTickers.Should().Equal("GONE");
         _priceRepo
@@ -261,15 +259,9 @@ public class YahooPriceImportServiceTests : IDisposable
         );
         chartData.Dividends =
         [
-            new CashDividendEvent
-            {
-                Date = delistedOn,
-                Amount = dividend.AmountPerShare,
-            },
+            new CashDividendEvent { Date = delistedOn, Amount = dividend.AmountPerShare },
         ];
-        _yahooClient
-            .GetChart("GONE", floor, delistedOn)
-            .Returns(chartData);
+        _yahooClient.GetChart("GONE", floor, delistedOn).Returns(chartData);
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
@@ -337,7 +329,11 @@ public class YahooPriceImportServiceTests : IDisposable
         await _yahooClient.Received(1).GetChart("GONE", floor, delistedOn);
         await _yahooClient
             .DidNotReceive()
-            .GetChart(Arg.Is<string>(ticker => ticker.StartsWith("OLD")), Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+            .GetChart(
+                Arg.Is<string>(ticker => ticker.StartsWith("OLD")),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>()
+            );
         eligible.PriceHistoryBackfilledTickers.Should().Equal("GONE");
     }
 
@@ -366,11 +362,10 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        await _yahooClient.DidNotReceive().GetChart("OLD", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
-        _priceRepo
-            .GetAllSeries()
-            .Should()
-            .NotContain(price => price.CommonStockId == stock.Id);
+        await _yahooClient
+            .DidNotReceive()
+            .GetChart("OLD", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+        _priceRepo.GetAllSeries().Should().NotContain(price => price.CommonStockId == stock.Id);
         split.PriceAdjustmentAppliedTime.Should().BeNull();
     }
 
@@ -387,9 +382,7 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        var retained = _stockRepo
-            .GetAllIncludingInactive()
-            .Single(row => row.Id == stock.Id);
+        var retained = _stockRepo.GetAllIncludingInactive().Single(row => row.Id == stock.Id);
         retained.HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
         retained.PriceHistoryBackfilledTickers.Should().BeEmpty();
     }

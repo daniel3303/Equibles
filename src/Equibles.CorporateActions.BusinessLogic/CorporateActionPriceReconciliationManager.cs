@@ -273,10 +273,7 @@ public class CorporateActionPriceReconciliationManager
             stock == null
             || (
                 expectedActive != null
-                && (
-                    stock.Active != expectedActive.Value
-                    || stock.DelistedOn != expectedDelistedOn
-                )
+                && (stock.Active != expectedActive.Value || stock.DelistedOn != expectedDelistedOn)
             )
         )
         {

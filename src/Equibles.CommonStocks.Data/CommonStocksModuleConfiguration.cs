@@ -10,10 +10,7 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
     {
         var commonStock = builder.Entity<CommonStock>();
         commonStock.Property(stock => stock.Active).HasDefaultValue(true);
-        commonStock
-            .HasIndex(stock => stock.Ticker)
-            .IsUnique()
-            .HasFilter("\"Active\"");
+        commonStock.HasIndex(stock => stock.Ticker).IsUnique().HasFilter("\"Active\"");
         builder.Entity<CommonStockCusipAlias>();
         builder.Entity<CommonStockListedCusip>();
         builder.Entity<CommonStockTickerAlias>();

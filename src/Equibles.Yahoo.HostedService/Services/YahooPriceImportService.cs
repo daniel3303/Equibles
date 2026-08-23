@@ -726,8 +726,8 @@ public class YahooPriceImportService
         PriceSeriesTarget target;
         using (var identityScope = _scopeFactory.CreateScope())
         {
-            var stockRepository = identityScope.ServiceProvider
-                .GetRequiredService<CommonStockRepository>();
+            var stockRepository =
+                identityScope.ServiceProvider.GetRequiredService<CommonStockRepository>();
             var stock = await stockRepository
                 .GetAllIncludingInactive()
                 .FirstOrDefaultAsync(

@@ -106,9 +106,7 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
         stocks.Should().HaveCount(2);
-        stocks
-            .Should()
-            .ContainSingle(stock => stock.Cik == "0000000020" && !stock.Active);
+        stocks.Should().ContainSingle(stock => stock.Cik == "0000000020" && !stock.Active);
         stocks
             .Should()
             .ContainSingle(stock =>
