@@ -48,7 +48,8 @@ public class CongressSyncServiceTests
             logger,
             errorReporter,
             filingLedger,
-            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
     }
 

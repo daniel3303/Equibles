@@ -33,7 +33,8 @@ public class CongressionalTradeSyncServiceBuildTradesTests
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
 
         var member = new CongressMember { Id = Guid.NewGuid(), Name = "Jane Smith" };

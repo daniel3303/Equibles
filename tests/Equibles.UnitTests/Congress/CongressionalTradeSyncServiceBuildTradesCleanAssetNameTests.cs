@@ -153,7 +153,8 @@ public class CongressionalTradeSyncServiceBuildTradesCleanAssetNameTests
             Substitute.For<ILogger<CongressionalTradeSyncService>>(),
             errorReporter,
             Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
-            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalTradeImportLedger>((IServiceScopeFactory)null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
     }
 }

@@ -44,7 +44,13 @@ public class CongressionalAnnualDisclosureSyncServiceProcessTests : ParadeDbMcpT
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(EquiblesFinancialDbContext), DbContext),
-            (typeof(CongressMemberRepository), new CongressMemberRepository(DbContext)),
+            (
+                typeof(ICongressMemberIdentityService),
+                new CongressMemberIdentityService(
+                    DbContext,
+                    Substitute.For<ILogger<CongressMemberIdentityService>>()
+                )
+            ),
             (
                 typeof(CongressionalAnnualDisclosureRepository),
                 new CongressionalAnnualDisclosureRepository(DbContext)
@@ -58,7 +64,8 @@ public class CongressionalAnnualDisclosureSyncServiceProcessTests : ParadeDbMcpT
                 Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
-            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null)
+            Substitute.For<CongressionalFilingLedger>((IServiceScopeFactory)null),
+            Substitute.For<ICongressMemberIdentityService>()
         );
     }
 
@@ -77,6 +84,22 @@ public class CongressionalAnnualDisclosureSyncServiceProcessTests : ParadeDbMcpT
             ReportId = reportId,
             IsAmendment = amendment,
             Lines = lines.ToList(),
+        };
+
+    private static AnnualDisclosureReport ReportForMember(
+        string memberName,
+        string reportId,
+        DateOnly filed,
+        bool amendment
+    ) =>
+        new()
+        {
+            MemberName = memberName,
+            Position = CongressPosition.Representative,
+            Year = 2024,
+            FiledDate = filed,
+            ReportId = reportId,
+            IsAmendment = amendment,
         };
 
     private static AnnualDisclosureLineItem Line(
@@ -202,5 +225,34 @@ public class CongressionalAnnualDisclosureSyncServiceProcessTests : ParadeDbMcpT
         (await verify.Set<CongressionalDisclosureLine>().AsNoTracking().CountAsync())
             .Should()
             .Be(1);
+    }
+
+    [Fact]
+    public async Task ProcessReports_ReviewedAliasesInOneBatch_StoresOnlyLatestMemberYear()
+    {
+        var original = ReportForMember(
+            "C. Scott Franklin",
+            "10066169",
+            new DateOnly(2025, 5, 15),
+            amendment: false
+        );
+        var amendment = ReportForMember(
+            "Scott Franklin",
+            "10074000",
+            new DateOnly(2025, 11, 4),
+            amendment: true
+        );
+
+        await ProcessReports(BuildSut(), [original, amendment]);
+
+        await using var verify = Fixture.CreateDbContext();
+        var member = await verify.Set<CongressMember>().AsNoTracking().SingleAsync();
+        member.Name.Should().Be("Scott Franklin");
+        member.BioguideId.Should().Be("F000472");
+        var disclosure = await verify
+            .Set<CongressionalAnnualDisclosure>()
+            .AsNoTracking()
+            .SingleAsync();
+        disclosure.ReportId.Should().Be("10074000");
     }
 }
