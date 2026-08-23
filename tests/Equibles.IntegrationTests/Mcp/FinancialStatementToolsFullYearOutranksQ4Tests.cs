@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -33,6 +34,7 @@ public class FinancialStatementToolsFullYearOutranksQ4Tests : ParadeDbMcpTestBas
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialStatementTools>()
         );

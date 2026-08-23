@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -21,6 +23,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialFactsTools>()
         );
@@ -122,6 +125,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
             new FinancialFactRepository(null),
             new FinancialConceptRepository(null),
             new CommonStockRepository(null),
+            new StockSplitRepository(null),
             new Equibles.Errors.BusinessLogic.ErrorManager(null),
             NullLogger<FinancialFactsTools>()
         );
@@ -152,6 +156,57 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("Skipped:");
         result.Should().Contain("GOOGL (no data)");
         result.Should().Contain("ZZZZ (not found in the tracked SEC issuer set)");
+    }
+
+    [Fact]
+    public async Task CompareFinancialFact_PerShareValue_RestatesEachCompanyAcrossItsSplits()
+    {
+        var alphabet = AddStock("GOOGL", "Alphabet Inc.");
+        var dilutedEps = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "EarningsPerShareDiluted",
+            Label = "Diluted EPS",
+        };
+        DbContext.Set<FinancialConcept>().Add(dilutedEps);
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStockId = alphabet.Id,
+                    EffectiveDate = new DateOnly(2022, 7, 18),
+                    Numerator = 20m,
+                    Denominator = 1m,
+                }
+            );
+        DbContext
+            .Set<FinancialFact>()
+            .Add(
+                new FinancialFact
+                {
+                    CommonStockId = alphabet.Id,
+                    FinancialConceptId = dilutedEps.Id,
+                    Unit = "USD/shares",
+                    PeriodType = FactPeriodType.Duration,
+                    PeriodStart = new DateOnly(2021, 1, 1),
+                    PeriodEnd = new DateOnly(2021, 12, 31),
+                    Value = 20m,
+                    FiscalYear = 2021,
+                    FiscalPeriod = SecFiscalPeriod.FullYear,
+                    Form = DocumentType.TenK,
+                    FiledDate = new DateOnly(2022, 2, 2),
+                    AccessionNumber = "googl-fy21",
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().CompareFinancialFact("GOOGL", "eps-diluted", 2021);
+
+        result.Should().Contain("| GOOGL | Alphabet Inc. | $1.00 | USD/shares |");
+        result.Should().NotContain("| $20.00 | USD/shares |");
+        result.Should().Contain("Per-share values are split-adjusted");
     }
 
     [Fact]

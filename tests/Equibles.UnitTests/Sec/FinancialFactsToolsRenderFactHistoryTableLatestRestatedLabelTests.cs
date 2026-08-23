@@ -1,5 +1,6 @@
 using System.Reflection;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Mcp.Tools;
 
@@ -57,7 +58,11 @@ public class FinancialFactsToolsRenderFactHistoryTableLatestRestatedLabelTests
         var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
         var perPeriod = new List<FinancialFact>();
 
-        var result = (string)method.Invoke(null, ["Revenues", stock, false, perPeriod, 0, null]);
+        var result = (string)
+            method.Invoke(
+                null,
+                ["Revenues", stock, false, perPeriod, 0, null, Array.Empty<StockSplit>()]
+            );
 
         result.Should().Contain("latest restated");
         result.Should().NotContain("as originally reported");

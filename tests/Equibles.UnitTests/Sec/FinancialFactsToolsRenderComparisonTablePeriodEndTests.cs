@@ -1,4 +1,5 @@
 using System.Reflection;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
@@ -43,7 +44,14 @@ public class FinancialFactsToolsRenderComparisonTablePeriodEndTests
         return (string)
             method.Invoke(
                 null,
-                ["eps-diluted", 2025, SecFiscalPeriod.Q2, tableRows, new List<string>()]
+                [
+                    "eps-diluted",
+                    2025,
+                    SecFiscalPeriod.Q2,
+                    tableRows,
+                    new List<string>(),
+                    new Dictionary<Guid, List<StockSplit>>(),
+                ]
             );
     }
 

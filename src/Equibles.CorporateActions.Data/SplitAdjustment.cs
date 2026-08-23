@@ -73,4 +73,22 @@ public static class SplitAdjustment
         var f = ShareCountFactor(asOf, splits);
         return f == 0m ? 1m : 1m / f;
     }
+
+    /// <summary>
+    /// Restates a per-share value filed on <paramref name="filedDate"/> onto today's share
+    /// basis. Filings issued after a split already restate comparative per-share figures, so
+    /// only splits effective strictly after the filing date move the value.
+    /// </summary>
+    public static decimal AdjustPerShareValue(
+        decimal value,
+        DateOnly filedDate,
+        IEnumerable<StockSplit> splits
+    ) => AdjustPerShareValue(value, ShareCountFactor(filedDate, splits));
+
+    /// <summary>
+    /// Restates a per-share value using an already-computed share-count factor. A zero factor
+    /// leaves the value unchanged rather than dividing by zero.
+    /// </summary>
+    public static decimal AdjustPerShareValue(decimal value, decimal shareCountFactor) =>
+        shareCountFactor == 0m ? value : value / shareCountFactor;
 }
