@@ -19,11 +19,10 @@ using Xunit;
 namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
-/// Completes the <c>ReplaceObsoleteStock</c> pins: the replace path is exercised
-/// (obsolete row deleted) but the replacement <c>CommonStockManager.Create</c>
+/// Completes the ticker-reuse pins: the old identity is retired but the replacement
+/// <c>CommonStockManager.Create</c>
 /// fails validation (empty Name) and the catch arm must log and report rather
-/// than rethrow — so one malformed SEC entry can't abort the sync after the
-/// obsolete delete already committed.
+/// than rethrow — so one malformed SEC entry cannot abort the sync.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class CompanySyncServiceReplaceObsoleteCatchTests : ParadeDbMcpTestBase
@@ -32,7 +31,7 @@ public class CompanySyncServiceReplaceObsoleteCatchTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public async Task SyncCompaniesFromSecApi_ReplaceCreateFailsValidation_DeletesObsoleteThenReportsError()
+    public async Task SyncCompaniesFromSecApi_ReplacementFailsValidation_RetainsInactiveIdentity()
     {
         var obsolete = new CommonStock
         {
@@ -46,8 +45,8 @@ public class CompanySyncServiceReplaceObsoleteCatchTests : ParadeDbMcpTestBase
 
         // New CIK (not in feed-scoped existing set) wants REUSED. The obsolete
         // holder's own CIK is absent from the feed → replace path. The new
-        // company has an empty Name → Create throws after the obsolete delete
-        // has already committed, exercising the catch arm.
+        // company has an empty Name → Create throws after the obsolete identity
+        // has been retired, exercising the catch arm.
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
         secEdgarClient
             .GetActiveCompanies()
@@ -89,8 +88,9 @@ public class CompanySyncServiceReplaceObsoleteCatchTests : ParadeDbMcpTestBase
 
         await using var verify = Fixture.CreateDbContext();
         var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
-        stocks
-            .Should()
-            .BeEmpty("the obsolete row was deleted and the invalid replacement was not created");
+        var retained = stocks.Should().ContainSingle().Which;
+        retained.Cik.Should().Be(obsolete.Cik);
+        retained.Ticker.Should().Be(obsolete.Ticker);
+        retained.Active.Should().BeFalse();
     }
 }

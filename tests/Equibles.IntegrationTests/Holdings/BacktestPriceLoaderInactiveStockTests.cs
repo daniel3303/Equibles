@@ -41,7 +41,12 @@ public class BacktestPriceLoaderInactiveStockTests : IDisposable
             Active = false,
             DelistedOn = to,
         };
-        var benchmark = new CommonStock { Ticker = "SPY", Name = "Benchmark", Cik = "222" };
+        var benchmark = new CommonStock
+        {
+            Ticker = "SPY",
+            Name = "Benchmark",
+            Cik = "222",
+        };
         _dbContext.AddRange(delisted, benchmark);
         AddPrice(delisted, from, 10m);
         AddPrice(delisted, to, 12m);

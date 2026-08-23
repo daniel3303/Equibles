@@ -114,7 +114,8 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
         var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
         stocks.Should().HaveCount(2, "ticker reuse must not erase historical identities");
         stocks.Should().ContainSingle(stock => stock.Cik == "0000000111" && stock.Active);
-        var retired = stocks.Should()
+        var retired = stocks
+            .Should()
             .ContainSingle(stock => stock.Cik == "0000000999" && !stock.Active)
             .Subject;
         retired.PriceHistoryBackfilledTickers.Should().BeEmpty();

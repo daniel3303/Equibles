@@ -82,7 +82,7 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task SyncCompaniesFromSecApi_TickerHeldByCompanyNotInFeed_ReplacesObsoleteStock()
+    public async Task SyncCompaniesFromSecApi_TickerReuse_RetainsInactivePriorIdentity()
     {
         DbContext.Add(
             new CommonStock
@@ -102,12 +102,16 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
 
         await BuildSut(client).SyncCompaniesFromSecApi();
 
-        // Old holder (CIK not in feed) deleted; the incoming CIK now owns REPL.
+        // The incoming CIK owns the live ticker while the prior identity remains for history.
         await using var verify = Fixture.CreateDbContext();
         var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
-        stocks.Should().ContainSingle();
-        stocks[0].Cik.Should().Be("0000000021");
-        stocks[0].Ticker.Should().Be("REPL");
+        stocks.Should().HaveCount(2);
+        stocks.Should().ContainSingle(stock => stock.Cik == "0000000020" && !stock.Active);
+        stocks
+            .Should()
+            .ContainSingle(stock =>
+                stock.Cik == "0000000021" && stock.Ticker == "REPL" && stock.Active
+            );
     }
 
     [Fact]

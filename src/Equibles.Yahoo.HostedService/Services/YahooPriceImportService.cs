@@ -297,6 +297,8 @@ public class YahooPriceImportService
             )
         )
             return null;
+        if (!target.IsHistorical && !stock.Active)
+            return null;
 
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, target.Ticker);
         if (
@@ -721,12 +723,58 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        var target = new PriceSeriesTarget(
-            selectedSeries.ListedTicker,
-            selectedSeries.CommonStockId,
-            IsPrimary: false
-        );
-        var chartData = await _yahooClient.GetChart(target.Ticker, floor, today);
+        PriceSeriesTarget target;
+        using (var identityScope = _scopeFactory.CreateScope())
+        {
+            var stockRepository =
+                identityScope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+            var stock = await stockRepository
+                .GetAllIncludingInactive()
+                .FirstOrDefaultAsync(
+                    candidate => candidate.Id == selectedSeries.CommonStockId,
+                    cancellationToken
+                );
+            if (stock == null)
+                return;
+
+            var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(
+                stock,
+                selectedSeries.ListedTicker
+            );
+            if (
+                resolvedTicker == null
+                || !string.Equals(
+                    resolvedTicker,
+                    selectedSeries.ListedTicker,
+                    StringComparison.OrdinalIgnoreCase
+                )
+                || (!stock.Active && stock.DelistedOn == null)
+            )
+                return;
+
+            target = new PriceSeriesTarget(
+                selectedSeries.ListedTicker,
+                selectedSeries.CommonStockId,
+                IsPrimary: string.Equals(
+                    resolvedTicker,
+                    stock.Ticker,
+                    StringComparison.OrdinalIgnoreCase
+                ),
+                IsHistorical: !stock.Active,
+                HistoryEndDate: stock.Active ? null : stock.DelistedOn
+            );
+        }
+
+        var historyEndDate = target.HistoryEndDate ?? today;
+        if (target.IsHistorical)
+        {
+            await PurgePricesAfterHistoricalCutoff(target, cancellationToken);
+            if (historyEndDate < floor)
+                return;
+        }
+
+        var settledBefore = target.IsHistorical ? historyEndDate.AddDays(1) : today;
+        var chartData = await _yahooClient.GetChart(target.Ticker, floor, historyEndDate);
         await CaptureSplits(target, chartData.Splits, cancellationToken);
 
         // A delisted/unresolved ticker returns no prices. Do NOT wipe the existing series in that
@@ -760,7 +808,7 @@ public class YahooPriceImportService
                 target.Ticker,
                 chartData.Prices,
                 splitBoundaries,
-                today
+                settledBefore
             )
         )
             return;
@@ -768,7 +816,8 @@ public class YahooPriceImportService
         var replaced = await ReplaceStoredPrices(
             target,
             floor,
-            today,
+            historyEndDate,
+            settledBefore,
             chartData.Prices,
             cancellationToken
         );
@@ -806,7 +855,7 @@ public class YahooPriceImportService
         // quote-summary or EDGAR enrichment succeeding. Gate on the certifiable set: a provider
         // that has not served the split's first post-effective bar is serving pre-split
         // key statistics too.
-        if (certifiableSeries.Splits.Count > 0)
+        if (!target.IsHistorical && certifiableSeries.Splits.Count > 0)
             await SyncKeyStatistics(target, cancellationToken);
 
         using var scope = _scopeFactory.CreateScope();
@@ -815,9 +864,11 @@ public class YahooPriceImportService
         var stamped = await manager.StampApplied(
             certifiableSeries,
             capturedDividends,
-            today,
+            settledBefore,
             DateTime.UtcNow,
-            cancellationToken
+            expectedActive: !target.IsHistorical,
+            expectedDelistedOn: target.HistoryEndDate,
+            cancellationToken: cancellationToken
         );
         _logger.LogInformation(
             "Reconciled {Ticker}: replaced stored price history and stamped {Count} corporate action(s) applied",
@@ -1063,19 +1114,21 @@ public class YahooPriceImportService
         return Math.Abs(observedRatio - splitRatio) / splitRatio <= SplitRatioMatchTolerance;
     }
 
-    // Transactionally swaps a stock's stored rows in [floor, today] for the fresh provider-served
-    // series. Returns false without touching the stored rows when there is nothing usable to store
+    // Transactionally swaps a stock's stored rows in the authoritative replacement window for the
+    // fresh provider-served series. Returns false without touching the stored rows when there is
+    // nothing usable to store
     // (all rows overflowed the numeric ceiling, or the parent CommonStock was removed) so a stock
     // is never left with an empty series.
     private async Task<bool> ReplaceStoredPrices(
         PriceSeriesTarget target,
         DateOnly floor,
-        DateOnly today,
+        DateOnly replaceThrough,
+        DateOnly settledBefore,
         List<HistoricalPrice> prices,
         CancellationToken cancellationToken
     )
     {
-        var freshRows = MapFreshRows(target.CommonStockId, prices, target.Ticker, today);
+        var freshRows = MapFreshRows(target.CommonStockId, prices, target.Ticker, settledBefore);
         if (freshRows.Count == 0)
         {
             _logger.LogWarning(
@@ -1093,7 +1146,7 @@ public class YahooPriceImportService
             stockRepo,
             target,
             floor,
-            today,
+            replaceThrough,
             freshRows,
             cancellationToken
         );
@@ -1106,7 +1159,42 @@ public class YahooPriceImportService
         return replaced;
     }
 
-    // The transactional core of the replacement: delete the stock's rows in [floor, today], then
+    private async Task PurgePricesAfterHistoricalCutoff(
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        await using var transaction = await repo.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        if (await LockPriceSeries(stockRepo, target, cancellationToken) == null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return;
+        }
+
+        var recycledRows = await repo.GetAllSeries()
+            .Where(price =>
+                price.CommonStockId == target.CommonStockId
+                && price.ListedTicker == target.Ticker
+                && price.Date > target.HistoryEndDate!.Value
+            )
+            .ToListAsync(cancellationToken);
+        if (recycledRows.Count > 0)
+        {
+            repo.Delete(recycledRows);
+            await repo.SaveChanges();
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    // The transactional core of the replacement: delete the stock's rows in the authoritative
+    // window, then
     // bulk-insert the fresh rows in batches, all in one transaction so the stock is never left with
     // a partial series on failure. Takes the repo so it is unit-testable without a live worker.
     private static async Task<bool> ReplacePriceRows(
@@ -1114,7 +1202,7 @@ public class YahooPriceImportService
         CommonStockRepository stockRepo,
         PriceSeriesTarget target,
         DateOnly floor,
-        DateOnly today,
+        DateOnly replaceThrough,
         List<DailyStockPrice> freshRows,
         CancellationToken cancellationToken
     )
@@ -1141,8 +1229,11 @@ public class YahooPriceImportService
                 .Where(p =>
                     p.CommonStockId == target.CommonStockId
                     && p.ListedTicker == target.Ticker
-                    && p.Date >= floor
-                    && p.Date <= today
+                    && (
+                        target.IsHistorical
+                            ? p.Date >= floor || p.Date > target.HistoryEndDate!.Value
+                            : p.Date >= floor && p.Date <= replaceThrough
+                    )
                 )
                 .ToListAsync(cancellationToken);
             if (existing.Count > 0)
@@ -1262,6 +1353,8 @@ public class YahooPriceImportService
     {
         var chartEnd = target.HistoryEndDate is { } delisted && delisted < today ? delisted : today;
         var settledAsOf = target.IsHistorical ? chartEnd.AddDays(1) : today;
+        if (target.IsHistorical)
+            await PurgePricesAfterHistoricalCutoff(target, cancellationToken);
         var startDate = await ResolveStartDate(target, settledAsOf, cancellationToken);
         if (!HasSettledTradingDay(startDate, settledAsOf))
             return NoFetchNeeded;
@@ -1304,6 +1397,7 @@ public class YahooPriceImportService
             var replaced = await ReplaceStoredPrices(
                 target,
                 PriceHistoryFloor(),
+                chartEnd,
                 settledAsOf,
                 chartData.Prices,
                 cancellationToken
@@ -1384,6 +1478,7 @@ public class YahooPriceImportService
             var replaced = await ReplaceStoredPrices(
                 target,
                 floor,
+                today,
                 today,
                 fullChart.Prices,
                 cancellationToken

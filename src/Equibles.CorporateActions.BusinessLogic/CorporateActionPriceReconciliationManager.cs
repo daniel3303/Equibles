@@ -187,6 +187,33 @@ public class CorporateActionPriceReconciliationManager
     }
 
     /// <summary>
+    /// Stamps actions only when the locked issuer still has the listing state that bounded the
+    /// provider response. This prevents a delisting or reactivation race from certifying stale
+    /// price history.
+    /// </summary>
+    public Task<int> StampApplied(
+        PendingPriceReconciliationSeries selectedSeries,
+        IReadOnlyCollection<CapturedDividend> priceSeriesDividends,
+        DateOnly settledBefore,
+        DateTime appliedTime,
+        bool expectedActive,
+        DateOnly? expectedDelistedOn,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return StampAppliedCore(
+            selectedSeries,
+            priceSeriesDividends,
+            true,
+            settledBefore,
+            appliedTime,
+            cancellationToken,
+            expectedActive,
+            expectedDelistedOn
+        );
+    }
+
+    /// <summary>
     /// Clears reconciliation markers whose stored price boundary proves that the replacement did
     /// not put the series on one split basis. The next selection pass retries those exact series.
     /// </summary>
@@ -229,7 +256,9 @@ public class CorporateActionPriceReconciliationManager
         bool requirePriceSeriesDividendMatch,
         DateOnly settledBefore,
         DateTime appliedTime,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool? expectedActive = null,
+        DateOnly? expectedDelistedOn = null
     )
     {
         await using var transaction = await _stockRepository.CreateTransaction(
@@ -240,7 +269,13 @@ public class CorporateActionPriceReconciliationManager
             selectedSeries.CommonStockId,
             cancellationToken
         );
-        if (stock == null)
+        if (
+            stock == null
+            || (
+                expectedActive != null
+                && (stock.Active != expectedActive.Value || stock.DelistedOn != expectedDelistedOn)
+            )
+        )
         {
             await transaction.RollbackAsync(cancellationToken);
             return 0;
