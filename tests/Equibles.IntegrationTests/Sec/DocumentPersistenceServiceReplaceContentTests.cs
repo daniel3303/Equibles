@@ -135,8 +135,13 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
             await concurrent
                 .Set<Document>()
                 .Where(d => d.Id == documentId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(d => d.Items, "7.01"));
+                .ExecuteUpdateAsync(setters =>
+                    setters
+                        .SetProperty(d => d.Items, "7.01")
+                        .SetProperty(d => d.ChunkedAt, DateTime.UtcNow)
+                );
         }
+        tracked.ChunkedAt.Should().BeNull("the replacement context loaded the legacy marker");
         var newBody = "new line 1\nnew line 2\nnew line 3"u8.ToArray();
 
         await BuildSut().ReplaceContent(tracked, newBody);
@@ -146,6 +151,7 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
         saved.LineCount.Should().Be(3);
         saved.Items.Should().Be("7.01");
         saved.NormalizedContentVersion.Should().Be(Document.NormalizedContentBuilderVersion);
+        saved.ChunkedAt.Should().BeNull();
 
         var bodyFile = await verify.Set<File>().SingleAsync(f => f.Id == saved.ContentId);
         bodyFile.StorageProvider.Should().Be(StorageProvider.FileSystem);
@@ -161,5 +167,60 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
 
         var remainingChunks = await verify.Set<Chunk>().CountAsync(c => c.DocumentId == documentId);
         remainingChunks.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ResetChunks_ClearsChunkedMarkerAndDeletesChunks()
+    {
+        var apple = await SeedCompany();
+        await BuildSut()
+            .Save(
+                company: apple,
+                content: "stored body"u8.ToArray(),
+                fileName: "AAPL-10k.txt",
+                documentType: DocumentType.TenK,
+                reportingDate: new DateOnly(2024, 3, 15),
+                reportingForDate: new DateOnly(2023, 12, 31),
+                sourceUrl: "https://example.test/filing"
+            );
+
+        var document = await DbContext
+            .Set<Document>()
+            .SingleAsync(d => d.CommonStockId == apple.Id);
+        DbContext
+            .Set<Chunk>()
+            .Add(
+                new Chunk
+                {
+                    DocumentId = document.Id,
+                    Index = 0,
+                    Content = "stored body",
+                    DocumentType = document.DocumentType,
+                    Ticker = apple.Ticker,
+                    ReportingDate = document.ReportingDate.ToDateTime(
+                        TimeOnly.MinValue,
+                        DateTimeKind.Utc
+                    ),
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        await using (var concurrent = Fixture.CreateDbContext())
+        {
+            await concurrent
+                .Set<Document>()
+                .Where(d => d.Id == document.Id)
+                .ExecuteUpdateAsync(setters =>
+                    setters.SetProperty(d => d.ChunkedAt, DateTime.UtcNow)
+                );
+        }
+        document.ChunkedAt.Should().BeNull("the reset context loaded the legacy marker");
+
+        await BuildSut().ResetChunks(document);
+
+        await using var verify = Fixture.CreateDbContext();
+        var saved = await verify.Set<Document>().SingleAsync(d => d.Id == document.Id);
+        saved.ChunkedAt.Should().BeNull();
+        (await verify.Set<Chunk>().AnyAsync(c => c.DocumentId == document.Id)).Should().BeFalse();
     }
 }

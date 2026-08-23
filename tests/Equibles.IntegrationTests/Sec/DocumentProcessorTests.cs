@@ -61,9 +61,8 @@ public class DocumentProcessorTests
     [Fact]
     public async Task ProcessDocuments_DocumentWithNullContent_LogsErrorAndContinuesBatch()
     {
-        // DocumentProcessor.ProcessDocuments is the worker's main loop —
-        // SecScraperWorker hands it the whole queue of newly-fetched filings
-        // each cycle. If a single document is missing its File envelope
+        // ProcessDocuments is the processor's batch-isolation wrapper. If a single document is
+        // missing its File envelope
         // (Content == null), GetDocumentContent throws Exception("Document
         // content is null"); ProcessDocuments catches that under `catch
         // (Exception ex)` and logs an error so the rest of the batch can
@@ -148,6 +147,7 @@ public class DocumentProcessorTests
         var act = () => sut.ProcessDocuments(documents, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Chunking failed*");
+        documents.Should().OnlyContain(d => d.ChunkedAt == null);
     }
 
     [Fact]
@@ -162,20 +162,19 @@ public class DocumentProcessorTests
             .GetContent(Arg.Any<Equibles.Media.Data.Models.File>())
             .Returns(System.Text.Encoding.UTF8.GetBytes("   \n\t  "));
         var sut = CreateSut(Substitute.For<IEmbeddingClient>(), fileManager: fileManager);
-        var documents = new List<Document>
+        var document = new Document
         {
-            new()
-            {
-                Id = Guid.NewGuid(),
-                DocumentType = DocumentType.TenK,
-                CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
-                Content = new Equibles.Media.Data.Models.File(),
-            },
+            Id = Guid.NewGuid(),
+            DocumentType = DocumentType.TenK,
+            CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
+            Content = new Equibles.Media.Data.Models.File(),
         };
+        var documents = new List<Document> { document };
 
         var act = () => sut.ProcessDocuments(documents, CancellationToken.None);
 
         await act.Should().NotThrowAsync();
+        document.ChunkedAt.Should().NotBeNull();
     }
 
     [Fact]

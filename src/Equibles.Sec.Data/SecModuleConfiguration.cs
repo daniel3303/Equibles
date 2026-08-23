@@ -16,6 +16,10 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<Document>(b =>
         {
             b.Property(e => e.DocumentType).HasConversion(docTypeConversion);
+            b.HasIndex(e => new { e.CreationTime, e.Id })
+                .HasDatabaseName("IX_Document_PendingChunking")
+                .HasFilter("\"ChunkedAt\" IS NULL")
+                .IsCreatedConcurrently();
         });
 
         builder.Entity<Models.Chunks.Chunk>(b =>

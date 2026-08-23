@@ -94,6 +94,7 @@ public class DocumentProcessorCreateChunksTests
         // Index must be assigned sequentially — a regression that reused i or shuffled
         // the order would silently corrupt downstream search/retrieval ordering.
         addedChunks.Select(c => c.Index).Should().Equal(Enumerable.Range(0, addedChunks.Count));
+        document.ChunkedAt.Should().NotBeNull();
         await chunkRepository.Received(1).SaveChanges();
     }
 }

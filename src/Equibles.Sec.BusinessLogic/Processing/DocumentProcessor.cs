@@ -61,7 +61,7 @@ public class DocumentProcessor : IDocumentProcessor
             attempted++;
             try
             {
-                await ChunkDocument(document);
+                await ProcessDocument(document, cancellationToken);
                 progressed++;
             }
             catch (Exception ex)
@@ -86,6 +86,9 @@ public class DocumentProcessor : IDocumentProcessor
             );
         }
     }
+
+    public Task ProcessDocument(Document document, CancellationToken cancellationToken = default) =>
+        ChunkDocument(document);
 
     public async Task GenerateEmbeddings(List<Chunk> chunks, CancellationToken cancellationToken)
     {
@@ -156,6 +159,7 @@ public class DocumentProcessor : IDocumentProcessor
         if (document.Chunks.Any())
         {
             _logger.LogInformation("Document {DocumentId} already chunked, skipping", document.Id);
+            await MarkChunked(document);
             return;
         }
 
@@ -170,10 +174,12 @@ public class DocumentProcessor : IDocumentProcessor
         if (string.IsNullOrWhiteSpace(content))
         {
             _logger.LogWarning("Document {DocumentId} has no content", document.Id);
+            await MarkChunked(document);
             return;
         }
 
-        var chunks = await CreateChunks(document, content);
+        var chunks = CreateChunks(document, content);
+        await MarkChunked(document);
         _logger.LogInformation(
             "Created {ChunkCount} chunks for document {DocumentId}",
             chunks.Count,
@@ -191,7 +197,7 @@ public class DocumentProcessor : IDocumentProcessor
         return Encoding.UTF8.GetString(await _fileManager.GetContent(document.Content));
     }
 
-    private async Task<List<Chunk>> CreateChunks(Document document, string content)
+    private List<Chunk> CreateChunks(Document document, string content)
     {
         var allChunks = new List<Chunk>();
         var currentTime = DateTime.UtcNow;
@@ -224,8 +230,13 @@ public class DocumentProcessor : IDocumentProcessor
             allChunks.Add(chunk);
         }
 
-        await _chunkRepository.SaveChanges();
         return allChunks;
+    }
+
+    private async Task MarkChunked(Document document)
+    {
+        document.ChunkedAt = DateTime.UtcNow;
+        await _chunkRepository.SaveChanges();
     }
 
     /// <summary>

@@ -64,6 +64,24 @@ public class SplitAdjustmentTests
     }
 
     [Fact]
+    public void AdjustPerShareValue_FilingBeforeSplits_DividesByCompoundedShareFactor()
+    {
+        SplitAdjustment
+            .AdjustPerShareValue(120m, new DateOnly(2021, 1, 1), NvdaSplits)
+            .Should()
+            .Be(3m);
+    }
+
+    [Fact]
+    public void AdjustPerShareValue_FilingOnSplitDate_TreatsValueAsAlreadyRestated()
+    {
+        SplitAdjustment
+            .AdjustPerShareValue(3m, new DateOnly(2024, 6, 10), NvdaSplits)
+            .Should()
+            .Be(3m);
+    }
+
+    [Fact]
     public void ShareCountFactor_ReverseSplit_ShrinksPreSplitCount()
     {
         StockSplit[] splits =

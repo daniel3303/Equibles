@@ -177,14 +177,15 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         var file = await SaveTextContent(content, fileName);
         document.Content = file;
         document.LineCount = CountLines(content);
+        await ClearChunkedAt(document, cancellationToken);
 
         // Remove the superseded File row in the same transaction. Filesystem bytes are queued
         // for the reference-checked deletion sweep, so content-addressed blobs shared with the
         // replacement or another File row are never unlinked prematurely.
         _fileManager.DeleteFile(oldContent);
 
-        // Drop the stale chunks (their embeddings cascade at the DB level) so the chunking worker,
-        // which polls for documents that have no chunks, re-chunks the new body on its next pass.
+        // Drop the stale chunks (their embeddings cascade at the DB level). Clearing ChunkedAt
+        // above returns the document to the worker's indexed pending queue after commit.
         await DeleteChunks(document.Id, cancellationToken);
 
         await _documentRepository.SaveChanges();
@@ -198,6 +199,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             cancellationToken
         );
 
+        await ClearChunkedAt(document, cancellationToken);
         await DeleteChunks(document.Id, cancellationToken);
         await _documentRepository.SaveChanges();
         await transaction.CommitAsync(cancellationToken);
@@ -208,6 +210,18 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             .GetAll()
             .Where(c => c.DocumentId == documentId)
             .ExecuteDeleteAsync(cancellationToken);
+
+    private async Task ClearChunkedAt(Document document, CancellationToken cancellationToken)
+    {
+        document.ChunkedAt = null;
+        await _documentRepository
+            .GetAll()
+            .Where(d => d.Id == document.Id)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(d => d.ChunkedAt, (DateTime?)null),
+                cancellationToken
+            );
+    }
 
     // Line count = newline bytes + 1 — identical to the previous
     // GetString(content).Split('\n').Length, without decoding a multi-MB filing

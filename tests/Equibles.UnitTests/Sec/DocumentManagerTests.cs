@@ -11,8 +11,8 @@ namespace Equibles.UnitTests.Sec;
 
 /// <summary>
 /// Tests for <see cref="DocumentManager"/>.
-/// ChunkDocumentBatch uses .Include(d => d.Chunks) which requires PostgreSQL (pgvector),
-/// so we focus on the embedding configuration logic and GenerateEmbeddingBatch guard clauses.
+/// ChunkDocumentBatch uses PostgreSQL row locks, so this unit tier focuses on the embedding
+/// configuration logic and GenerateEmbeddingBatch guard clauses.
 /// </summary>
 public class DocumentManagerTests
 {

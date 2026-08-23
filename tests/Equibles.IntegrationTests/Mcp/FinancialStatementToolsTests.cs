@@ -1,5 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
+using Equibles.CorporateActions.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -22,6 +24,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialStatementTools>()
         );
@@ -257,6 +260,64 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         var result = await Sut().GetFinancialStatement("AAPL", statement: "income");
 
         result.Should().Contain("| EPS (Diluted) | $6.13 | USD/shares |");
+    }
+
+    [Fact]
+    public async Task GetFinancialStatement_PerShareLine_RestatesAcrossSplitWithoutChangingDollarLines()
+    {
+        var stock = Apple();
+        var revenue = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "Revenues",
+            Label = "Revenue",
+        };
+        var dilutedEps = new FinancialConcept
+        {
+            Id = Guid.NewGuid(),
+            Taxonomy = FactTaxonomy.UsGaap,
+            Tag = "EarningsPerShareDiluted",
+            Label = "Diluted EPS",
+        };
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<FinancialConcept>().AddRange(revenue, dilutedEps);
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStockId = stock.Id,
+                    EffectiveDate = new DateOnly(2022, 6, 1),
+                    Numerator = 4m,
+                    Denominator = 1m,
+                }
+            );
+        await SeedRevenue(
+            stock,
+            revenue,
+            2021,
+            SecFiscalPeriod.FullYear,
+            100_000_000m,
+            "USD",
+            "revenue"
+        );
+        await SeedRevenue(
+            stock,
+            dilutedEps,
+            2021,
+            SecFiscalPeriod.FullYear,
+            8m,
+            "USD/shares",
+            "eps"
+        );
+
+        var result = await Sut().GetFinancialStatement("AAPL", statement: "income", year: 2021);
+
+        result.Should().Contain("| Revenue | $100,000,000 | USD |");
+        result.Should().Contain("| EPS (Diluted) | $2.00 | USD/shares |");
+        result.Should().NotContain("| EPS (Diluted) | $8.00 | USD/shares |");
+        result.Should().Contain("Per-share values are split-adjusted");
     }
 
     [Fact]

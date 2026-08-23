@@ -59,6 +59,13 @@ public class Document
     public int LineCount { get; set; }
 
     /// <summary>
+    /// When chunking completed, including deterministic zero-chunk outcomes such as blank text.
+    /// Null means the document still needs chunking. Content replacement and explicit chunk resets
+    /// clear this marker so the document returns to the pending queue.
+    /// </summary>
+    public DateTime? ChunkedAt { get; set; }
+
+    /// <summary>
     /// Version of the HTML-normalization and Markdown-conversion pipeline that produced
     /// <see cref="Content"/>. Existing rows default to 0; the backfill re-fetches their EDGAR
     /// submission and replaces the stored text when this is below
