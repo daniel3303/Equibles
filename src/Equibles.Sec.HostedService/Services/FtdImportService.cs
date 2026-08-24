@@ -51,7 +51,7 @@ public class FtdImportService
     public async Task Import(CancellationToken cancellationToken)
     {
         var asOf = DateOnly.FromDateTime(DateTime.UtcNow);
-        var startDate = await SyncStartDate.Resolve<FailToDeliverRepository>(
+        var importStartDate = await SyncStartDate.Resolve<FailToDeliverRepository>(
             _scopeFactory,
             _workerOptions,
             repo => repo.GetLatestDate(),
@@ -59,97 +59,159 @@ public class FtdImportService
         );
 
         var minimumStartDate = SyncDateResolver.Resolve(default, _workerOptions);
-        startDate = ApplyLiveRecheckWindow(startDate, minimumStartDate);
+        var replayStartDate = ApplyLiveRecheckWindow(importStartDate, minimumStartDate);
+        var replayMonth = asOf.AddMonths(-LiveRecheckMonths)
+            .ToString("yyyyMM", CultureInfo.InvariantCulture);
+        var replayFiles = GetFileNames(replayStartDate, asOf)
+            .Where(fileName => FtdMonthOf(fileName) == replayMonth)
+            .ToList();
+        var importFiles = GetFileNames(importStartDate, asOf);
 
-        var fileNames = GetFileNames(startDate, asOf);
-
-        if (fileNames.Count == 0)
+        if (replayFiles.Count == 0 && importFiles.Count == 0)
         {
             _logger.LogInformation("FTD data is up to date");
             return;
         }
 
         _logger.LogInformation(
-            "Downloading {Count} FTD files from {Start}",
-            fileNames.Count,
-            startDate
+            "Downloading {ReplayCount} FTD identity replay files and {ImportCount} new-data files from {ImportStart}",
+            replayFiles.Count,
+            importFiles.Count,
+            importStartDate
         );
 
         var tickerMap = await BuildTickerMap(cancellationToken);
-        var secondaryMap = new Dictionary<string, (Guid StockId, string Ticker)>(
-            StringComparer.OrdinalIgnoreCase
+        var replayRecords = new Dictionary<string, List<FtdRecord>>(StringComparer.Ordinal);
+        var cusipsSeeded = await ReplayLiveIdentity(
+            replayFiles,
+            replayRecords,
+            tickerMap,
+            cancellationToken
         );
-        var secondaryMapBuilt = false;
-        var replayMonth = asOf.AddMonths(-LiveRecheckMonths)
-            .ToString("yyyyMM", CultureInfo.InvariantCulture);
-        var replayFiles = fileNames.Where(fileName => FtdMonthOf(fileName) == replayMonth).ToList();
-        var liveIdentityEvidence = new Dictionary<string, LiveIdentityEvidence>(
-            StringComparer.OrdinalIgnoreCase
-        );
-        var downloadedIdentityFiles = new HashSet<string>(StringComparer.Ordinal);
-        var cusipsSeeded = 0;
+        if (cusipsSeeded > 0)
+        {
+            _logger.LogInformation("Seeded or updated {Count} CUSIPs from FTD data", cusipsSeeded);
+        }
 
-        foreach (var fileName in fileNames)
+        await ImportNewRecords(
+            importFiles,
+            importStartDate,
+            replayRecords,
+            tickerMap,
+            cancellationToken
+        );
+    }
+
+    private async Task<int> ReplayLiveIdentity(
+        List<string> replayFiles,
+        Dictionary<string, List<FtdRecord>> replayRecords,
+        Dictionary<string, Guid> tickerMap,
+        CancellationToken cancellationToken
+    )
+    {
+        if (replayFiles.Count == 0)
+            return 0;
+
+        foreach (var fileName in replayFiles)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var records = await TryDownload(fileName, cancellationToken);
+            if (records == null)
+                continue;
+
+            replayRecords[fileName] = records;
+        }
+
+        if (!replayFiles.All(replayRecords.ContainsKey))
+            return 0;
+
+        try
+        {
+            var secondaryMap = await BuildSecondaryTickerMap(tickerMap, cancellationToken);
+            var liveIdentityEvidence = new Dictionary<string, LiveIdentityEvidence>(
+                StringComparer.OrdinalIgnoreCase
+            );
+            foreach (var fileName in replayFiles)
+            {
+                var records = replayRecords[fileName];
+                AccumulateLiveIdentityEvidence(
+                    fileName,
+                    records,
+                    tickerMap,
+                    secondaryMap,
+                    liveIdentityEvidence
+                );
+                _logger.LogInformation(
+                    "FTD {File}: scanned {Count} records for identity",
+                    fileName,
+                    records.Count
+                );
+            }
+
+            if (liveIdentityEvidence.Count == 0)
+                return 0;
+
+            var identityRecords = liveIdentityEvidence
+                .Values.SelectMany(evidence => evidence.Records)
+                .ToList();
+            return await SeedCusipsWithSecondaryMap(
+                identityRecords,
+                tickerMap,
+                secondaryMap,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reconciling CUSIPs from live FTD evidence");
+            await _errorReporter.Report(
+                ErrorSource.FtdScraper,
+                "FtdImport.SeedCusips",
+                ex,
+                $"files: {replayFiles.Count}"
+            );
+            return 0;
+        }
+    }
+
+    private async Task ImportNewRecords(
+        List<string> importFiles,
+        DateOnly importStartDate,
+        Dictionary<string, List<FtdRecord>> replayRecords,
+        Dictionary<string, Guid> tickerMap,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var fileName in importFiles)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var records = replayRecords.TryGetValue(fileName, out var replayed)
+                ? replayed
+                : await TryDownload(fileName, cancellationToken);
+            if (records == null)
+                continue;
+
+            var newRecords = records
+                .Where(record => record.SettlementDate >= importStartDate)
+                .ToList();
+            if (newRecords.Count == 0)
+            {
+                _logger.LogInformation("FTD {File}: no new records to import", fileName);
+                continue;
+            }
 
             try
             {
-                var records = await DownloadAndParse(fileName, cancellationToken);
-                if (records.Count == 0)
-                    continue;
-
-                if (FtdMonthOf(fileName) == replayMonth)
-                {
-                    if (!secondaryMapBuilt)
-                    {
-                        secondaryMap = await BuildSecondaryTickerMap(tickerMap, cancellationToken);
-                        secondaryMapBuilt = true;
-                    }
-
-                    AccumulateLiveIdentityEvidence(
-                        fileName,
-                        records,
-                        tickerMap,
-                        secondaryMap,
-                        liveIdentityEvidence
-                    );
-                    downloadedIdentityFiles.Add(fileName);
-                }
-
-                var imported = await ImportRecords(records, tickerMap, cancellationToken);
-
+                var imported = await ImportRecords(newRecords, tickerMap, cancellationToken);
                 _logger.LogInformation("FTD {File}: imported {Count} records", fileName, imported);
             }
             catch (OperationCanceledException)
             {
                 throw;
-            }
-            catch (HttpRequestException ex)
-                when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-            {
-                if (IsRecentFtdFile(fileName))
-                {
-                    _logger.LogInformation(
-                        "FTD file {File} not yet available (404), skipping",
-                        fileName
-                    );
-                }
-                else
-                {
-                    // Pre-2021 FTD ZIPs (cnsfails20*) routinely return 404 — SEC
-                    // moved their archive. The plain warning carries the only
-                    // useful signal ("URL may have changed"); the exception's
-                    // stack trace adds nothing but noise, so drop it.
-                    _logger.LogWarning(
-                        "FTD file {File} returned 404 but is older than 2 months — possible URL change",
-                        fileName
-                    );
-                }
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogWarning(ex, "Failed to download FTD file {File}, skipping", fileName);
             }
             catch (Exception ex)
             {
@@ -162,39 +224,56 @@ public class FtdImportService
                 );
             }
         }
+    }
 
-        if (replayFiles.Count == 0 || !replayFiles.All(downloadedIdentityFiles.Contains))
-            liveIdentityEvidence.Clear();
-
-        if (liveIdentityEvidence.Count > 0)
+    private async Task<List<FtdRecord>> TryDownload(
+        string fileName,
+        CancellationToken cancellationToken
+    )
+    {
+        try
         {
-            try
-            {
-                var identityRecords = liveIdentityEvidence
-                    .Values.SelectMany(evidence => evidence.Records)
-                    .ToList();
-                cusipsSeeded = await SeedCusips(identityRecords, tickerMap, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error reconciling CUSIPs from live FTD evidence");
-                await _errorReporter.Report(
-                    ErrorSource.FtdScraper,
-                    "FtdImport.SeedCusips",
-                    ex,
-                    $"files: {fileNames.Count}"
-                );
-            }
+            return await DownloadAndParse(fileName, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            LogMissingFile(fileName);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to download FTD file {File}, skipping", fileName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing FTD file {File}", fileName);
+            await _errorReporter.Report(
+                ErrorSource.FtdScraper,
+                "FtdImport.ProcessFile",
+                ex,
+                $"file: {fileName}"
+            );
         }
 
-        if (cusipsSeeded > 0)
+        return null;
+    }
+
+    private void LogMissingFile(string fileName)
+    {
+        if (IsRecentFtdFile(fileName))
         {
-            _logger.LogInformation("Seeded or updated {Count} CUSIPs from FTD data", cusipsSeeded);
+            _logger.LogInformation("FTD file {File} not yet available (404), skipping", fileName);
+            return;
         }
+
+        // Pre-2021 FTD ZIPs (cnsfails20*) routinely return 404 — SEC moved their archive.
+        _logger.LogWarning(
+            "FTD file {File} returned 404 but is older than 2 months — possible URL change",
+            fileName
+        );
     }
 
     /// <summary>
@@ -1234,6 +1313,22 @@ public class FtdImportService
         CancellationToken cancellationToken
     )
     {
+        var secondaryMap = await BuildSecondaryTickerMap(tickerMap, cancellationToken);
+        return await SeedCusipsWithSecondaryMap(
+            records,
+            tickerMap,
+            secondaryMap,
+            cancellationToken
+        );
+    }
+
+    private async Task<int> SeedCusipsWithSecondaryMap(
+        List<FtdRecord> records,
+        Dictionary<string, Guid> tickerMap,
+        Dictionary<string, (Guid StockId, string Ticker)> secondaryMap,
+        CancellationToken cancellationToken
+    )
+    {
         var strippedAliases = BuildStrippedTickerAliases(tickerMap);
         // Latest settlement date wins: during a CUSIP transition a single FTD
         // file can carry both the retiring and the replacement CUSIP for one
@@ -1281,7 +1376,6 @@ public class FtdImportService
         if (tickerToCusip.Count == 0)
             return 0;
 
-        var secondaryMap = await BuildSecondaryTickerMap(tickerMap, cancellationToken);
         var secondaryCusips = BuildLatestSecondaryCusips(records, tickerMap, secondaryMap);
 
         using var scope = _scopeFactory.CreateScope();
