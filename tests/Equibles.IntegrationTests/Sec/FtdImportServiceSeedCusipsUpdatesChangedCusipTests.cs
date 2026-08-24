@@ -180,7 +180,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             DelistedOn = stock.DelistedOn.Value,
             HistoricalCusipBackfillRequestedAt = stock.HistoricalCusipBackfillRequestedAt,
         };
-        var sweepStartedAt = stock.HistoricalCusipBackfillRequestedAt!.Value.AddMinutes(1);
+        var sweepBase = stock.HistoricalCusipBackfillRequestedAt!.Value.AddMinutes(1);
+        var sweepStartedAt = new DateTime(sweepBase.Ticks / 10 * 10 + 7, DateTimeKind.Utc);
         StageHistoricalCusip(listing, "123456789", listing.DelistedOn, sweepStartedAt);
         await using (var seed = _fixture.CreateDbContext())
         {

@@ -77,7 +77,7 @@ public class CommonStockManager
             || listing.CommonStockId != stock.Id
             || listing.Cusip != null
             || settlementDate > listing.DelistedOn
-            || listing.HistoricalCusipBackfillSweepStartedAt != sweepStartedAt
+            || !SamePostgresTimestamp(listing.HistoricalCusipBackfillSweepStartedAt, sweepStartedAt)
             || listing.HistoricalCusipBackfillCandidateOn != settlementDate
             || listing.HistoricalCusipBackfillAmbiguous
             || listing.HistoricalCusipBackfillCandidates.Count != 1
@@ -191,6 +191,9 @@ public class CommonStockManager
 
         return DelistedListingCusipSeedResult.Seeded;
     }
+
+    private static bool SamePostgresTimestamp(DateTime? persisted, DateTime expected) =>
+        persisted.HasValue && persisted.Value.Ticks / 10 == expected.Ticks / 10;
 
     /// <summary>
     /// Records CUSIPs a stock USED to trade under, without touching its current one.
