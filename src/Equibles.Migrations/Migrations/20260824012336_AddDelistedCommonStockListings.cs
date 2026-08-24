@@ -97,8 +97,14 @@ namespace Equibles.Migrations.Migrations
                            OR listing."ListedTicker" <> stock."Ticker"
                            OR listing."DelistedOn" IS DISTINCT FROM stock."DelistedOn"
                            OR listing."Cusip" IS DISTINCT FROM stock."Cusip")
+                       OR EXISTS (
+                        SELECT 1
+                        FROM "CommonStock"
+                        WHERE "Ticker" IS NOT NULL
+                        GROUP BY "Ticker"
+                        HAVING COUNT(*) > 1)
                     THEN
-                        RAISE EXCEPTION 'cannot remove per-listing delisting history: exact listing identity would be lost';
+                        RAISE EXCEPTION 'cannot remove per-listing delisting history: exact listing identity or ticker-reuse protection would be lost';
                     END IF;
                 END $$;
 
