@@ -244,6 +244,11 @@ public class CommonStockRepository : BaseRepository<CommonStock>
         return alias;
     }
 
+    public void DeleteCusipAlias(CommonStockCusipAlias alias)
+    {
+        DbContext.Set<CommonStockCusipAlias>().Remove(alias);
+    }
+
     /// <summary>
     /// CUSIPs of a filer's OTHER listed securities (sibling share classes, units),
     /// keyed to the exact secondary ticker they identify. Same aggregate reasoning
@@ -258,6 +263,11 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     {
         DbContext.Set<CommonStockListedCusip>().Add(listedCusip);
         return listedCusip;
+    }
+
+    public void DeleteListedCusip(CommonStockListedCusip listedCusip)
+    {
+        DbContext.Set<CommonStockListedCusip>().Remove(listedCusip);
     }
 
     public IQueryable<CommonStockDelistedListing> GetDelistedListings()

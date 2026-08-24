@@ -437,6 +437,13 @@ public class CommonStockManager
     /// deletes and re-inserts a quarter.
     /// </para>
     /// <para>
+    /// A same-stock alias may be promoted back to current when a newer authoritative
+    /// observation reverses a stale designation. An exact listed-ticker claim may be
+    /// promoted only with <paramref name="displacedListedTicker"/>: the authoritative
+    /// ticker that now owns the displaced CUSIP. This swaps the two designations instead
+    /// of collapsing the sibling security into the primary alias set.
+    /// </para>
+    /// <para>
     /// This is a financial-domain event, so it publishes via the root
     /// <see cref="IBus"/> rather than the scoped <c>IPublishEndpoint</c>. A host
     /// that enables a bus outbox on a different context (e.g. the commercial
@@ -449,56 +456,88 @@ public class CommonStockManager
     /// data sets and heals the gap.
     /// </para>
     /// </summary>
-    public async Task SetCusip(CommonStock commonStock, string cusip)
+    public async Task<bool> SetCusip(
+        CommonStock commonStock,
+        string cusip,
+        string displacedListedTicker = null
+    )
     {
         ArgumentNullException.ThrowIfNull(commonStock);
 
-        if (string.Equals(commonStock.Cusip, cusip, StringComparison.OrdinalIgnoreCase))
+        var observedCusip = commonStock.Cusip;
+        var observedTicker = commonStock.Ticker;
+        if (string.Equals(observedCusip, cusip, StringComparison.OrdinalIgnoreCase))
         {
-            return;
+            return false;
         }
 
-        var previousCusip = commonStock.Cusip;
         var normalizedCusip = cusip?.Trim().ToUpperInvariant();
         await using var transaction = await _commonStockRepository.BeginCusipIdentityWrite();
-
-        var claimedByAnotherPrimary = await _commonStockRepository
-            .GetAllIncludingInactive()
-            .AnyAsync(stock =>
-                stock.Id != commonStock.Id
-                && stock.Cusip != null
-                && stock.Cusip.ToUpper() == normalizedCusip
+        commonStock =
+            await _commonStockRepository.GetForUpdate(commonStock.Id)
+            ?? throw new InvalidOperationException(
+                $"CommonStock {commonStock.Id} no longer exists."
             );
-        var claimedAsAlias = await _commonStockRepository
-            .GetCusipAliases()
-            .AnyAsync(alias => alias.Cusip.ToUpper() == normalizedCusip);
-        var claimedAsListing = await _commonStockRepository
-            .GetListedCusips()
-            .AnyAsync(listing => listing.Cusip.ToUpper() == normalizedCusip);
-        if (claimedByAnotherPrimary || claimedAsAlias || claimedAsListing)
-        {
-            return;
-        }
-
-        // The alias table enforces one CUSIP → one stock, ever (global unique
-        // index): a retired CUSIP already recorded — even for another stock —
-        // is left with its first owner rather than reassigned. The existence
-        // check is case-insensitive so a case-variant CUSIP can't slip past
-        // the index as a duplicate row.
-        var normalizedPrevious = previousCusip?.ToUpperInvariant();
         if (
-            previousCusip != null
-            && !await _commonStockRepository
-                .GetCusipAliases()
-                .AnyAsync(a => a.Cusip.ToUpper() == normalizedPrevious)
+            !string.Equals(commonStock.Cusip, observedCusip, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(
+                commonStock.Ticker,
+                observedTicker,
+                StringComparison.OrdinalIgnoreCase
+            )
         )
-        {
-            _commonStockRepository.AddCusipAlias(
-                new CommonStockCusipAlias { CommonStockId = commonStock.Id, Cusip = previousCusip }
+            return false;
+        if (string.Equals(commonStock.Cusip, normalizedCusip, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var previousCusip = commonStock.Cusip;
+        var claims = await GetCusipClaims(normalizedCusip);
+        if (claims.PrimaryOwnerIds.Any(ownerId => ownerId != commonStock.Id))
+            return false;
+
+        var promotesOwnAlias =
+            claims.Aliases.Count > 0
+            && claims.Aliases.All(alias => alias.CommonStockId == commonStock.Id);
+        var promotesExactListing =
+            claims.Listings.Count > 0
+            && claims.Listings.All(listing =>
+                listing.CommonStockId == commonStock.Id
+                && string.Equals(
+                    listing.ListedTicker,
+                    commonStock.Ticker,
+                    StringComparison.OrdinalIgnoreCase
+                )
             );
+        if (
+            (claims.Aliases.Count > 0 && !promotesOwnAlias)
+            || (claims.Listings.Count > 0 && !promotesExactListing)
+        )
+            return false;
+
+        if (promotesExactListing)
+        {
+            if (
+                !await TryStageExactListingPromotion(
+                    commonStock,
+                    previousCusip,
+                    displacedListedTicker,
+                    claims.Aliases,
+                    claims.Listings
+                )
+            )
+                return false;
+        }
+        else
+        {
+            if (promotesOwnAlias)
+            {
+                foreach (var alias in claims.Aliases)
+                    _commonStockRepository.DeleteCusipAlias(alias);
+            }
+            await StageRetiredCusip(commonStock, previousCusip);
         }
 
-        commonStock.Cusip = cusip;
+        commonStock.Cusip = normalizedCusip;
 
         await _commonStockRepository.SaveChanges();
         if (transaction != null)
@@ -508,8 +547,145 @@ public class CommonStockManager
 
         // Publish via the root bus (bypasses any bus outbox) after the write commits.
         await _bus.Publish(
-            new StockCusipChanged(commonStock.Id, commonStock.Ticker, previousCusip, cusip)
+            new StockCusipChanged(
+                commonStock.Id,
+                commonStock.Ticker,
+                previousCusip,
+                normalizedCusip
+            )
         );
+        return true;
+    }
+
+    private async Task<(
+        List<Guid> PrimaryOwnerIds,
+        List<CommonStockCusipAlias> Aliases,
+        List<CommonStockListedCusip> Listings
+    )> GetCusipClaims(string normalizedCusip)
+    {
+        var primaryOwnerIds = await _commonStockRepository
+            .GetAllIncludingInactive()
+            .Where(stock => stock.Cusip != null && stock.Cusip.ToUpper() == normalizedCusip)
+            .Select(stock => stock.Id)
+            .ToListAsync();
+        var aliases = await _commonStockRepository
+            .GetCusipAliases()
+            .Where(candidate => candidate.Cusip.ToUpper() == normalizedCusip)
+            .ToListAsync();
+        var listings = await _commonStockRepository
+            .GetListedCusips()
+            .Where(candidate => candidate.Cusip.ToUpper() == normalizedCusip)
+            .ToListAsync();
+        return (primaryOwnerIds, aliases, listings);
+    }
+
+    private async Task<bool> TryStageExactListingPromotion(
+        CommonStock commonStock,
+        string previousCusip,
+        string displacedListedTicker,
+        IReadOnlyCollection<CommonStockCusipAlias> promotedAliases,
+        IReadOnlyCollection<CommonStockListedCusip> promotedListings
+    )
+    {
+        var displacedTicker = displacedListedTicker?.Trim().ToUpperInvariant();
+        if (
+            previousCusip == null
+            || displacedTicker == null
+            || !commonStock.SecondaryTickers.Contains(
+                displacedTicker,
+                StringComparer.OrdinalIgnoreCase
+            )
+        )
+            return false;
+
+        var claims = await GetDisplacedCusipClaims(commonStock, previousCusip);
+        if (!CanAssignDisplacedListing(commonStock, displacedTicker, claims))
+            return false;
+
+        foreach (var alias in promotedAliases)
+            _commonStockRepository.DeleteCusipAlias(alias);
+        foreach (var listing in promotedListings)
+            _commonStockRepository.DeleteListedCusip(listing);
+        foreach (var alias in claims.Aliases)
+            _commonStockRepository.DeleteCusipAlias(alias);
+        if (claims.Listings.Count == 0)
+        {
+            _commonStockRepository.AddListedCusip(
+                new CommonStockListedCusip
+                {
+                    CommonStockId = commonStock.Id,
+                    ListedTicker = displacedTicker,
+                    Cusip = previousCusip.ToUpperInvariant(),
+                }
+            );
+        }
+        return true;
+    }
+
+    private async Task<(
+        bool PrimaryClaimedElsewhere,
+        List<CommonStockCusipAlias> Aliases,
+        List<CommonStockListedCusip> Listings
+    )> GetDisplacedCusipClaims(CommonStock commonStock, string previousCusip)
+    {
+        var normalized = previousCusip.ToUpperInvariant();
+        var primaryClaimedElsewhere = await _commonStockRepository
+            .GetAllIncludingInactive()
+            .AnyAsync(stock =>
+                stock.Id != commonStock.Id
+                && stock.Cusip != null
+                && stock.Cusip.ToUpper() == normalized
+            );
+        var aliases = await _commonStockRepository
+            .GetCusipAliases()
+            .Where(alias => alias.Cusip.ToUpper() == normalized)
+            .ToListAsync();
+        var listings = await _commonStockRepository
+            .GetListedCusips()
+            .Where(listing => listing.Cusip.ToUpper() == normalized)
+            .ToListAsync();
+        return (primaryClaimedElsewhere, aliases, listings);
+    }
+
+    private static bool CanAssignDisplacedListing(
+        CommonStock commonStock,
+        string displacedTicker,
+        (
+            bool PrimaryClaimedElsewhere,
+            List<CommonStockCusipAlias> Aliases,
+            List<CommonStockListedCusip> Listings
+        ) claims
+    ) =>
+        !claims.PrimaryClaimedElsewhere
+        && claims.Aliases.All(alias => alias.CommonStockId == commonStock.Id)
+        && claims.Listings.All(listing =>
+            listing.CommonStockId == commonStock.Id
+            && string.Equals(
+                listing.ListedTicker,
+                displacedTicker,
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+    private async Task StageRetiredCusip(CommonStock commonStock, string previousCusip)
+    {
+        if (previousCusip == null)
+            return;
+
+        var normalized = previousCusip.ToUpperInvariant();
+        var alreadyClaimed =
+            await _commonStockRepository
+                .GetCusipAliases()
+                .AnyAsync(alias => alias.Cusip.ToUpper() == normalized)
+            || await _commonStockRepository
+                .GetListedCusips()
+                .AnyAsync(listing => listing.Cusip.ToUpper() == normalized);
+        if (!alreadyClaimed)
+        {
+            _commonStockRepository.AddCusipAlias(
+                new CommonStockCusipAlias { CommonStockId = commonStock.Id, Cusip = normalized }
+            );
+        }
     }
 
     /// <summary>

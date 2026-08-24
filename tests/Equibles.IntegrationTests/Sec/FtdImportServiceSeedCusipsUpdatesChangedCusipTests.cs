@@ -161,6 +161,269 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SeedCusips_CurrentCusipIsOwnAlias_PromotesAliasAndRetiresPreviousCusip()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "TAP",
+            Name = "Molson Coors Beverage Co",
+            Cik = "24545",
+            Cusip = "60871R100",
+            SecondaryTickers = ["TAP-A"],
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            seed.Set<CommonStockCusipAlias>()
+                .Add(new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "60871R209" });
+            await seed.SaveChangesAsync();
+        }
+
+        var bus = Substitute.For<IBus>();
+        var seeded = await InvokeSeedCusips(
+            CreateSut(bus),
+            BuildRecords(("TAP", "60871R209", new DateOnly(2026, 7, 29))),
+            new Dictionary<string, Guid> { ["TAP"] = stock.Id }
+        );
+
+        seeded.Should().Be(1);
+        using var verify = FreshContext();
+        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R209");
+        (await verify.Set<CommonStockCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
+        await bus.Received(1)
+            .Publish(
+                Arg.Is<StockCusipChanged>(change =>
+                    change.PreviousCusip == "60871R100" && change.Cusip == "60871R209"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SeedCusips_ConflictingLatestPrimaryCusips_AbstainsRegardlessOfOrder(
+        bool reverse
+    )
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "TAP",
+            Name = "Molson Coors Beverage Co",
+            Cik = "24545",
+            Cusip = "60871R100",
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var first = ("TAP", "60871R209", new DateOnly(2026, 7, 31));
+        var second = ("TAP", "60871R217", new DateOnly(2026, 7, 31));
+        var records = reverse ? BuildRecords(second, first) : BuildRecords(first, second);
+        var bus = Substitute.For<IBus>();
+
+        var seeded = await InvokeSeedCusips(
+            CreateSut(bus),
+            records,
+            new Dictionary<string, Guid> { ["TAP"] = stock.Id }
+        );
+
+        seeded.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R100");
+        (await verify.Set<CommonStockCusipAlias>().AnyAsync()).Should().BeFalse();
+        await bus.DidNotReceive()
+            .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SeedCusips_ExactPrimaryListingClaim_ReassignsDisplacedCusipToProvenSibling()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "BF-B",
+            Name = "Brown Forman Corp",
+            Cik = "14693",
+            Cusip = "115637100",
+            SecondaryTickers = ["BF-A"],
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            seed.Set<CommonStockListedCusip>()
+                .Add(
+                    new CommonStockListedCusip
+                    {
+                        CommonStockId = stock.Id,
+                        ListedTicker = "BF-B",
+                        Cusip = "115637209",
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        var bus = Substitute.For<IBus>();
+        var seeded = await InvokeSeedCusips(
+            CreateSut(bus),
+            BuildRecords(
+                ("BFB", "115637209", new DateOnly(2026, 7, 29)),
+                ("BFA", "115637100", new DateOnly(2026, 7, 31))
+            ),
+            new Dictionary<string, Guid> { ["BF-B"] = stock.Id }
+        );
+
+        seeded.Should().Be(1);
+        using var verify = FreshContext();
+        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("115637209");
+        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
+        listing.ListedTicker.Should().Be("BF-A");
+        listing.Cusip.Should().Be("115637100");
+        (await verify.Set<CommonStockCusipAlias>().AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SeedCusips_ExactPrimaryListingWithoutDisplacedEvidence_LeavesDesignationsAlone()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "BF-B",
+            Name = "Brown Forman Corp",
+            Cik = "14693",
+            Cusip = "115637100",
+            SecondaryTickers = ["BF-A"],
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            seed.Set<CommonStockListedCusip>()
+                .Add(
+                    new CommonStockListedCusip
+                    {
+                        CommonStockId = stock.Id,
+                        ListedTicker = "BF-B",
+                        Cusip = "115637209",
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        var seeded = await InvokeSeedCusips(
+            CreateSut(Substitute.For<IBus>()),
+            BuildRecords(("BFB", "115637209", new DateOnly(2026, 7, 29))),
+            new Dictionary<string, Guid> { ["BF-B"] = stock.Id }
+        );
+
+        seeded.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("115637100");
+        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
+        listing.ListedTicker.Should().Be("BF-B");
+        listing.Cusip.Should().Be("115637209");
+    }
+
+    [Fact]
+    public async Task SeedCusips_ConflictingLatestSecondaryCusips_LeavesDesignationsAlone()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "BF-B",
+            Name = "Brown Forman Corp",
+            Cik = "14693",
+            Cusip = "115637100",
+            SecondaryTickers = ["BF-A"],
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            seed.Set<CommonStockListedCusip>()
+                .Add(
+                    new CommonStockListedCusip
+                    {
+                        CommonStockId = stock.Id,
+                        ListedTicker = "BF-B",
+                        Cusip = "115637209",
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        var seeded = await InvokeSeedCusips(
+            CreateSut(Substitute.For<IBus>()),
+            BuildRecords(
+                ("BFB", "115637209", new DateOnly(2026, 7, 29)),
+                ("BFA", "115637100", new DateOnly(2026, 7, 31)),
+                ("BFA", "115637118", new DateOnly(2026, 7, 31))
+            ),
+            new Dictionary<string, Guid> { ["BF-B"] = stock.Id }
+        );
+
+        seeded.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("115637100");
+        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
+        listing.ListedTicker.Should().Be("BF-B");
+        listing.Cusip.Should().Be("115637209");
+    }
+
+    [Fact]
+    public async Task SeedCusips_ManagerRejectsCaseVariantForeignClaim_DoesNotCountSeed()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "BF-B",
+            Name = "Brown Forman Corp",
+            Cik = "14693",
+            Cusip = "11563R100",
+            SecondaryTickers = ["BF-A"],
+        };
+        var foreign = new CommonStock
+        {
+            Ticker = "OTHER",
+            Name = "Other Corp",
+            Cik = "99999",
+            Cusip = "999999999",
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.AddRange(stock, foreign);
+            seed.Set<CommonStockListedCusip>()
+                .AddRange(
+                    new CommonStockListedCusip
+                    {
+                        CommonStockId = stock.Id,
+                        ListedTicker = "BF-B",
+                        Cusip = "11563R209",
+                    },
+                    new CommonStockListedCusip
+                    {
+                        CommonStockId = foreign.Id,
+                        ListedTicker = "OTHER-A",
+                        Cusip = "11563r209",
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        var seeded = await InvokeSeedCusips(
+            CreateSut(Substitute.For<IBus>()),
+            BuildRecords(
+                ("BFB", "11563R209", new DateOnly(2026, 7, 29)),
+                ("BFA", "11563R100", new DateOnly(2026, 7, 31))
+            ),
+            new Dictionary<string, Guid> { ["BF-B"] = stock.Id }
+        );
+
+        seeded.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
+            .Cusip.Should()
+            .Be("11563R100");
+        (await verify.Set<CommonStockListedCusip>().CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
     public async Task SeedInactiveCusips_AuthoritativeHistoricalMatch_SeedsRetainedIdentity()
     {
         var stock = new CommonStock
@@ -582,6 +845,99 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SetCusip_ConcurrentDesignationChange_AbstainsFromStaleTransition()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "TAP",
+            Name = "Molson Coors Beverage Co",
+            Cik = "24545",
+            Cusip = "60871R100",
+            SecondaryTickers = ["TAP-A"],
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Add(stock);
+            seed.Set<CommonStockCusipAlias>()
+                .Add(new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "60871R209" });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var staleContext = _fixture.CreateDbContext();
+        var staleStock = await staleContext
+            .Set<CommonStock>()
+            .SingleAsync(row => row.Id == stock.Id);
+        var bus = Substitute.For<IBus>();
+        var staleManager = new CommonStockManager(new CommonStockRepository(staleContext), bus);
+
+        await using var writerContext = _fixture.CreateDbContext();
+        var writerRepository = new CommonStockRepository(writerContext);
+        await using var writerTransaction = await writerRepository.BeginCusipIdentityWrite();
+        var lockedStock = await writerRepository.GetForUpdate(stock.Id);
+        lockedStock.Cusip = "60871R217";
+        await writerRepository.SaveChanges();
+
+        var staleTransition = staleManager.SetCusip(staleStock, "60871R209");
+        var early = await Task.WhenAny(staleTransition, Task.Delay(TimeSpan.FromMilliseconds(250)));
+        early.Should().NotBe(staleTransition, "the shared identity lock must serialize writers");
+
+        await writerTransaction.CommitAsync();
+        await staleTransition;
+
+        await using var verify = _fixture.CreateDbContext();
+        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
+            .Cusip.Should()
+            .Be("60871R217");
+        (await verify.Set<CommonStockCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R209");
+        await bus.DidNotReceive()
+            .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetCusip_CaseVariantForeignAliasClaim_Abstains()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "TAP",
+            Name = "Molson Coors Beverage Co",
+            Cik = "24545",
+            Cusip = "60871R100",
+        };
+        var foreign = new CommonStock
+        {
+            Ticker = "OTHER",
+            Name = "Other Corp",
+            Cik = "99999",
+            Cusip = "999999999",
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.AddRange(stock, foreign);
+            seed.Set<CommonStockCusipAlias>()
+                .AddRange(
+                    new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "60871r209" },
+                    new CommonStockCusipAlias { CommonStockId = foreign.Id, Cusip = "60871R209" }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        await using var context = _fixture.CreateDbContext();
+        var tracked = await context.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id);
+        var bus = Substitute.For<IBus>();
+        var manager = new CommonStockManager(new CommonStockRepository(context), bus);
+
+        await manager.SetCusip(tracked, "60871R209");
+
+        await using var verify = _fixture.CreateDbContext();
+        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
+            .Cusip.Should()
+            .Be("60871R100");
+        (await verify.Set<CommonStockCusipAlias>().CountAsync()).Should().Be(2);
+        await bus.DidNotReceive()
+            .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task SeedCusips_ResolvedCusipBelongsToAnotherStock_SkipsWithoutUpdating()
     {
         // Ticker-recycling shape: a delisted issuer's stale stock still holds
@@ -857,6 +1213,38 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             ),
             Options.Create(new WorkerOptions())
         );
+    }
+
+    private static IList BuildRecords(
+        params (string Symbol, string Cusip, DateOnly SettlementDate)[] rows
+    )
+    {
+        var recordType = typeof(FtdImportService).Assembly.GetType(
+            "Equibles.Sec.HostedService.Models.FtdRecord"
+        )!;
+        var records = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(recordType))!;
+        foreach (var row in rows)
+        {
+            var record = Activator.CreateInstance(recordType)!;
+            recordType.GetProperty("Symbol")!.SetValue(record, row.Symbol);
+            recordType.GetProperty("Cusip")!.SetValue(record, row.Cusip);
+            recordType.GetProperty("SettlementDate")!.SetValue(record, row.SettlementDate);
+            records.Add(record);
+        }
+        return records;
+    }
+
+    private static async Task<int> InvokeSeedCusips(
+        FtdImportService sut,
+        IList records,
+        Dictionary<string, Guid> tickerMap
+    )
+    {
+        var method = typeof(FtdImportService).GetMethod(
+            "SeedCusips",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+        return await (Task<int>)method.Invoke(sut, [records, tickerMap, CancellationToken.None])!;
     }
 
     private static void StageHistoricalCusip(
