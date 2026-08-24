@@ -99,10 +99,12 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Import_ReplayedTransitionMonth_ReconcilesLatestCusipOnlyOnce()
+    public async Task Import_ReplayedTransitionMonth_DoesNotRevertWhenNewerFileTemporarilyFails()
     {
         var currentMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var transitionMonth = currentMonth.AddMonths(-1);
+        var olderMonth = transitionMonth.AddMonths(-1);
+        var olderDate = olderMonth.AddDays(5);
         var retiringDate = transitionMonth.AddDays(5);
         var replacementDate = transitionMonth.AddDays(20);
         var stock = new CommonStock
@@ -126,16 +128,33 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
             "SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE\n"
             + $"{replacementDate:yyyyMMdd}|60871R209|TAP|200|MOLSON COORS|51.00\n";
         var yearMonth = transitionMonth.ToString("yyyyMM");
+        var olderYearMonth = olderMonth.ToString("yyyyMM");
+        var olderCsv =
+            "SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE\n"
+            + $"{olderDate:yyyyMMdd}|60871R100|TAP|50|MOLSON COORS|49.00\n";
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        var replacementFileAvailable = true;
         secEdgarClient
             .DownloadStream(Arg.Any<string>())
             .Returns(call =>
             {
                 var url = call.Arg<string>();
+                if (url.Contains($"cnsfails{olderYearMonth}", StringComparison.Ordinal))
+                    return Task.FromResult<Stream>(BuildFtdZipStream(olderCsv));
                 if (url.EndsWith($"cnsfails{yearMonth}a.zip", StringComparison.Ordinal))
                     return Task.FromResult<Stream>(BuildFtdZipStream(retiringCsv));
                 if (url.EndsWith($"cnsfails{yearMonth}b.zip", StringComparison.Ordinal))
-                    return Task.FromResult<Stream>(BuildFtdZipStream(replacementCsv));
+                {
+                    return replacementFileAvailable
+                        ? Task.FromResult<Stream>(BuildFtdZipStream(replacementCsv))
+                        : Task.FromException<Stream>(
+                            new HttpRequestException(
+                                "Temporary failure",
+                                null,
+                                HttpStatusCode.ServiceUnavailable
+                            )
+                        );
+                }
                 return Task.FromException<Stream>(
                     new HttpRequestException("Not Found", null, HttpStatusCode.NotFound)
                 );
@@ -152,12 +171,14 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
             Options.Create(
                 new WorkerOptions
                 {
-                    MinSyncDate = transitionMonth.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                    MinSyncDate = olderMonth.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
                 }
             )
         );
 
         await sut.Import(CancellationToken.None);
+        await sut.Import(CancellationToken.None);
+        replacementFileAvailable = false;
         await sut.Import(CancellationToken.None);
 
         await bus.Received(1)

@@ -164,4 +164,37 @@ public class FtdImportServiceImportCatchTests
             );
         dbContext.Set<FailToDeliver>().ToList().Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task Import_DownloadIsCancelled_PropagatesWithoutReportingAnError()
+    {
+        var (scopeFactory, dbContext) = BuildScope();
+        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient
+            .DownloadStream(Arg.Any<string>())
+            .Returns<Task<Stream>>(_ => throw new OperationCanceledException("cancelled"));
+        var errorReporter = Substitute.For<ErrorReporter>(
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ILogger<ErrorReporter>>()
+        );
+        var sut = new FtdImportService(
+            scopeFactory,
+            secEdgarClient,
+            Substitute.For<ILogger<FtdImportService>>(),
+            errorReporter,
+            Options.Create(
+                new WorkerOptions
+                {
+                    MinSyncDate = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1),
+                    TickersToSync = [],
+                }
+            )
+        );
+
+        var act = () => sut.Import(CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        errorReporter.ReceivedCalls().Should().BeEmpty();
+        dbContext.Set<FailToDeliver>().ToList().Should().BeEmpty();
+    }
 }
