@@ -39,6 +39,8 @@ public class CommonStockManagerSetCusipTests
             Name = "Apple",
             Cusip = "037833100",
         };
+        db.Set<CommonStock>().Add(stock);
+        await db.SaveChangesAsync();
 
         await sut.SetCusip(stock, "594918104");
 

@@ -1047,7 +1047,7 @@ public class FtdImportService
         // Latest settlement date wins: during a CUSIP transition a single FTD
         // file can carry both the retiring and the replacement CUSIP for one
         // symbol, and the most recent trading day reflects the current security.
-        var tickerToCusip = new Dictionary<string, (string Cusip, DateOnly SettlementDate)>(
+        var primaryObservations = new Dictionary<string, List<FtdRecord>>(
             StringComparer.OrdinalIgnoreCase
         );
         foreach (var record in records)
@@ -1056,17 +1056,42 @@ public class FtdImportService
                 continue;
             if (!TryResolveSymbol(record.Symbol, tickerMap, strippedAliases, out var ticker))
                 continue;
-            if (
-                !tickerToCusip.TryGetValue(ticker, out var current)
-                || record.SettlementDate > current.SettlementDate
-            )
+            if (!primaryObservations.TryGetValue(ticker, out var rows))
             {
-                tickerToCusip[ticker] = (record.Cusip, record.SettlementDate);
+                rows = [];
+                primaryObservations[ticker] = rows;
             }
+            rows.Add(record);
         }
+
+        var tickerToCusip = primaryObservations
+            .Select(pair =>
+            {
+                var latestDate = pair.Value.Max(record => record.SettlementDate);
+                var latestCusips = pair
+                    .Value.Where(record => record.SettlementDate == latestDate)
+                    .Select(record => record.Cusip.Trim().ToUpperInvariant())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(2)
+                    .ToList();
+                return (
+                    Ticker: pair.Key,
+                    Cusip: latestCusips.Count == 1 ? latestCusips[0] : null,
+                    SettlementDate: latestDate
+                );
+            })
+            .Where(candidate => candidate.Cusip != null)
+            .ToDictionary(
+                candidate => candidate.Ticker,
+                candidate => (candidate.Cusip, candidate.SettlementDate),
+                StringComparer.OrdinalIgnoreCase
+            );
 
         if (tickerToCusip.Count == 0)
             return 0;
+
+        var secondaryMap = await BuildSecondaryTickerMap(tickerMap, cancellationToken);
+        var secondaryCusips = BuildLatestSecondaryCusips(records, tickerMap, secondaryMap);
 
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
@@ -1112,12 +1137,16 @@ public class FtdImportService
         {
             AddOwner(owner.Cusip, owner.CommonStockId);
         }
-        var listedClaimValues = await stockRepo
+        var listedClaimRows = await stockRepo
             .GetListedCusips()
             .Where(listing => resolvedCusips.Contains(listing.Cusip))
-            .Select(listing => listing.Cusip)
+            .Select(listing => new
+            {
+                listing.CommonStockId,
+                listing.ListedTicker,
+                listing.Cusip,
+            })
             .ToListAsync(cancellationToken);
-        var listedClaims = new HashSet<string>(listedClaimValues, StringComparer.OrdinalIgnoreCase);
 
         var seeded = 0;
         foreach (var stock in stocks)
@@ -1126,8 +1155,22 @@ public class FtdImportService
                 continue;
             if (string.Equals(stock.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase))
                 continue;
+            var listedClaim = listedClaimRows.FirstOrDefault(listing =>
+                string.Equals(listing.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase)
+            );
+            var promotesExactListing =
+                listedClaim?.CommonStockId == stock.Id
+                && string.Equals(
+                    listedClaim.ListedTicker,
+                    stock.Ticker,
+                    StringComparison.OrdinalIgnoreCase
+                );
+            var displacedTicker = promotesExactListing
+                ? ResolveDisplacedListedTicker(stock, secondaryCusips)
+                : null;
             if (
-                listedClaims.Contains(resolved.Cusip)
+                (listedClaim != null && !promotesExactListing)
+                || (promotesExactListing && displacedTicker == null)
                 || (
                     cusipOwners.TryGetValue(resolved.Cusip, out var ownerIds)
                     && ownerIds.Any(ownerId => ownerId != stock.Id)
@@ -1146,12 +1189,91 @@ public class FtdImportService
             // published (outbox) — lets Holdings backfill any 13F data
             // sets processed before this stock had a CUSIP (or while it
             // still carried the retired one, kept as an alias).
-            await stockManager.SetCusip(stock, resolved.Cusip);
-            AddOwner(resolved.Cusip, stock.Id);
-            seeded++;
+            if (await stockManager.SetCusip(stock, resolved.Cusip, displacedTicker))
+            {
+                AddOwner(resolved.Cusip, stock.Id);
+                seeded++;
+            }
         }
 
         return seeded;
+    }
+
+    private static Dictionary<Guid, List<(string Ticker, string Cusip)>> BuildLatestSecondaryCusips(
+        IEnumerable<FtdRecord> records,
+        Dictionary<string, Guid> primaryMap,
+        Dictionary<string, (Guid StockId, string Ticker)> secondaryMap
+    )
+    {
+        var strippedAliases = BuildStrippedSecondaryAliases(secondaryMap, primaryMap);
+        var observations = new Dictionary<(Guid StockId, string Ticker), List<FtdRecord>>();
+        foreach (var record in records)
+        {
+            if (
+                string.IsNullOrEmpty(record.Cusip)
+                || string.IsNullOrEmpty(record.Symbol)
+                || primaryMap.ContainsKey(record.Symbol)
+            )
+                continue;
+
+            if (
+                !secondaryMap.TryGetValue(record.Symbol, out var listing)
+                && !(
+                    strippedAliases.TryGetValue(record.Symbol, out var spelled)
+                    && secondaryMap.TryGetValue(spelled, out listing)
+                )
+            )
+                continue;
+
+            var key = (listing.StockId, listing.Ticker);
+            if (!observations.TryGetValue(key, out var rows))
+            {
+                rows = [];
+                observations[key] = rows;
+            }
+            rows.Add(record);
+        }
+
+        var unambiguous = observations
+            .Select(pair =>
+            {
+                var latestDate = pair.Value.Max(record => record.SettlementDate);
+                var latestCusips = pair
+                    .Value.Where(record => record.SettlementDate == latestDate)
+                    .Select(record => record.Cusip.Trim().ToUpperInvariant())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(2)
+                    .ToList();
+                return (pair.Key, Cusip: latestCusips.Count == 1 ? latestCusips[0] : null);
+            })
+            .Where(pair => pair.Cusip != null)
+            .ToList();
+
+        return unambiguous
+            .GroupBy(pair => pair.Key.StockId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(pair => (pair.Key.Ticker, pair.Cusip)).ToList()
+            );
+    }
+
+    private static string ResolveDisplacedListedTicker(
+        CommonStock stock,
+        IReadOnlyDictionary<Guid, List<(string Ticker, string Cusip)>> secondaryCusips
+    )
+    {
+        if (stock.Cusip == null || !secondaryCusips.TryGetValue(stock.Id, out var candidates))
+            return null;
+
+        var matches = candidates
+            .Where(candidate =>
+                string.Equals(candidate.Cusip, stock.Cusip, StringComparison.OrdinalIgnoreCase)
+            )
+            .Select(candidate => candidate.Ticker)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(2)
+            .ToList();
+        return matches.Count == 1 ? matches[0] : null;
     }
 
     /// <summary>
