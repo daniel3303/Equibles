@@ -6,6 +6,9 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data;
+using Equibles.Errors.Data.Models;
+using Equibles.Errors.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Media.Data;
 using Equibles.Sec.Data.Models;
@@ -26,10 +29,11 @@ using Xunit;
 namespace Equibles.UnitTests.Sec;
 
 /// <summary>
-/// Pins the two uncovered arms of <c>DocumentScraper.ProcessCompanyDocumentsWithScope</c>:
+/// Pins uncovered arms of <c>DocumentScraper.ProcessCompanyDocumentsWithScope</c>:
 /// a document type with no SEC Edgar filter mapping (warn + continue), and the
 /// per-company catch (a null DocumentTypesToSync makes the foreach throw, which
-/// must be logged/reported as a company error rather than aborting the run).
+/// must be logged/reported as a company error rather than aborting the run), and
+/// a company removed after the no-tracking target list was loaded.
 /// </summary>
 public class DocumentScraperProcessCompanyScopeTests
 {
@@ -49,6 +53,7 @@ public class DocumentScraperProcessCompanyScopeTests
             {
                 new CommonStocksModuleConfiguration(),
                 new DocumentOnlyModuleConfiguration(),
+                new ErrorsModuleConfiguration(),
                 new MediaModuleConfiguration(),
             }
         );
@@ -58,13 +63,19 @@ public class DocumentScraperProcessCompanyScopeTests
 
     private DocumentScraper BuildScraper(
         EquiblesFinancialDbContext dbContext,
-        DocumentScraperOptions options
+        DocumentScraperOptions options,
+        CommonStockRepository companyRepository = null
     )
     {
         var services = new ServiceCollection();
         services.AddSingleton(dbContext);
-        services.AddScoped<CommonStockRepository>();
+        if (companyRepository == null)
+            services.AddScoped<CommonStockRepository>();
+        else
+            services.AddSingleton(companyRepository);
         services.AddScoped<DocumentRepository>();
+        services.AddScoped<ErrorRepository>();
+        services.AddScoped<ErrorManager>();
         // DocumentScraper resolves CommonStockManager per scope to persist the
         // SEC-sourced fiscal year-end; IBus is an unrelated ctor
         // dep (SetCusip outbox event) the fiscal-year path never uses.
@@ -100,7 +111,7 @@ public class DocumentScraperProcessCompanyScopeTests
         return stock;
     }
 
-    private static Task InvokeProcess(
+    private static async Task<bool> InvokeProcess(
         DocumentScraper scraper,
         CommonStock company,
         ScrapingResult result
@@ -110,7 +121,7 @@ public class DocumentScraperProcessCompanyScopeTests
             "ProcessCompanyDocumentsWithScope",
             BindingFlags.NonPublic | BindingFlags.Instance
         );
-        return (Task)m.Invoke(scraper, [company, result]);
+        return await (Task<bool>)m.Invoke(scraper, [company, result]);
     }
 
     [Fact]
@@ -157,5 +168,63 @@ public class DocumentScraperProcessCompanyScopeTests
 
         result.Errors.Should().Be(1, "the loop failure is caught and recorded per company");
         result.ErrorMessages.Should().ContainSingle().Which.Should().Contain("AAPL");
+    }
+
+    [Fact]
+    public async Task ProcessCompanyDocumentsWithScope_CompanyRemovedAfterTargetLoad_SkipsWithoutError()
+    {
+        using var db = NewDbContext();
+        var company = SeedCompany(db);
+        var scraper = BuildScraper(
+            db,
+            new DocumentScraperOptions
+            {
+                UseEventDrivenDiscovery = false,
+                DocumentTypesToSync = [DocumentType.TenK],
+            }
+        );
+        db.Set<CommonStock>().Remove(company);
+        db.SaveChanges();
+        var result = new ScrapingResult();
+
+        var processed = await InvokeProcess(scraper, company, result);
+
+        processed.Should().BeFalse();
+        result
+            .Errors.Should()
+            .Be(0, "a target deleted by the company sync is no longer actionable");
+        await _secEdgarClient.DidNotReceiveWithAnyArgs().GetCompanyMetadata(default);
+    }
+
+    [Fact]
+    public async Task ProcessCompanyDocumentsWithScope_CompanyLookupThrows_ReportsSnapshotIdentity()
+    {
+        using var db = NewDbContext();
+        var company = SeedCompany(db);
+        var companyRepository = Substitute.For<CommonStockRepository>(db);
+        companyRepository
+            .Get(Arg.Any<object[]>())
+            .Returns(
+                Task.FromException<CommonStock>(new InvalidOperationException("lookup failed"))
+            );
+        var scraper = BuildScraper(
+            db,
+            new DocumentScraperOptions
+            {
+                UseEventDrivenDiscovery = false,
+                DocumentTypesToSync = [DocumentType.TenK],
+            },
+            companyRepository
+        );
+        var result = new ScrapingResult();
+
+        var processed = await InvokeProcess(scraper, company, result);
+
+        processed.Should().BeFalse();
+        result.Errors.Should().Be(1);
+        result.ErrorMessages.Should().ContainSingle().Which.Should().Contain("AAPL");
+        var error = db.Set<Error>().Should().ContainSingle().Subject;
+        error.Context.Should().Be("DocumentScraper.ProcessCompany");
+        error.RequestSummary.Should().Contain("ticker: AAPL").And.Contain(company.Id.ToString());
     }
 }
