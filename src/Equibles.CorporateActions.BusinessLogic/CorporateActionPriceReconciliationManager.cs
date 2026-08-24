@@ -186,6 +186,28 @@ public class CorporateActionPriceReconciliationManager
         );
     }
 
+    public Task<int> StampAppliedHistorical(
+        PendingPriceReconciliationSeries selectedSeries,
+        IReadOnlyCollection<CapturedDividend> priceSeriesDividends,
+        DateOnly settledBefore,
+        DateTime appliedTime,
+        Guid historicalListingId,
+        DateOnly expectedDelistedOn,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return StampAppliedCore(
+            selectedSeries,
+            priceSeriesDividends,
+            true,
+            settledBefore,
+            appliedTime,
+            cancellationToken,
+            expectedDelistedOn: expectedDelistedOn,
+            expectedHistoricalListingId: historicalListingId
+        );
+    }
+
     /// <summary>
     /// Stamps actions only when the locked issuer still has the listing state that bounded the
     /// provider response. This prevents a delisting or reactivation race from certifying stale
@@ -258,7 +280,8 @@ public class CorporateActionPriceReconciliationManager
         DateTime appliedTime,
         CancellationToken cancellationToken,
         bool? expectedActive = null,
-        DateOnly? expectedDelistedOn = null
+        DateOnly? expectedDelistedOn = null,
+        Guid? expectedHistoricalListingId = null
     )
     {
         await using var transaction = await _stockRepository.CreateTransaction(
@@ -269,12 +292,31 @@ public class CorporateActionPriceReconciliationManager
             selectedSeries.CommonStockId,
             cancellationToken
         );
-        if (
-            stock == null
-            || (
-                expectedActive != null
-                && (stock.Active != expectedActive.Value || stock.DelistedOn != expectedDelistedOn)
+        if (stock == null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return 0;
+        }
+        if (expectedHistoricalListingId != null)
+        {
+            var listing = await _stockRepository.GetDelistedListingForUpdate(
+                expectedHistoricalListingId.Value,
+                cancellationToken
+            );
+            if (
+                listing == null
+                || listing.CommonStockId != stock.Id
+                || listing.ListedTicker != selectedSeries.ListedTicker
+                || listing.DelistedOn != expectedDelistedOn
             )
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return 0;
+            }
+        }
+        else if (
+            expectedActive != null
+            && (stock.Active != expectedActive.Value || stock.DelistedOn != expectedDelistedOn)
         )
         {
             await transaction.RollbackAsync(cancellationToken);

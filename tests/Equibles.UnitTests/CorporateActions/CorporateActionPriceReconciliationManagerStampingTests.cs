@@ -485,4 +485,36 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         stamped.Should().Be(0);
         split.PriceAdjustmentAppliedTime.Should().BeNull();
     }
+
+    [Fact]
+    public async Task StampAppliedHistorical_ActiveFilerSibling_ValidatesExactListing()
+    {
+        await using var db = NewDb();
+        var stockId = Guid.NewGuid();
+        var delistedOn = new DateOnly(2026, 7, 31);
+        var stock = Stock(stockId, "LIVE");
+        var listing = new CommonStockDelistedListing
+        {
+            CommonStockId = stockId,
+            ListedTicker = "OLD",
+            DelistedOn = delistedOn,
+        };
+        var split = PendingSplit(stockId, new DateOnly(2026, 7, 15), "OLD");
+        db.AddRange(stock, listing, split);
+        await db.SaveChangesAsync();
+
+        var manager = NewManager(db);
+        var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
+        var stamped = await manager.StampAppliedHistorical(
+            selected,
+            [],
+            delistedOn.AddDays(1),
+            DateTime.UtcNow,
+            listing.Id,
+            delistedOn
+        );
+
+        stamped.Should().Be(1);
+        split.PriceAdjustmentAppliedTime.Should().NotBeNull();
+    }
 }

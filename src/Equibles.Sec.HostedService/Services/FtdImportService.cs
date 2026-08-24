@@ -276,7 +276,7 @@ public class FtdImportService
                             record.SettlementDate,
                             tickerMap,
                             strippedAliases,
-                            out var stockId
+                            out var listingId
                         )
                     )
                     {
@@ -284,7 +284,7 @@ public class FtdImportService
                     }
 
                     candidates.Add(
-                        new HistoricalCusipCandidate(stockId, record.Cusip, record.SettlementDate)
+                        new HistoricalCusipCandidate(listingId, record.Cusip, record.SettlementDate)
                     );
                 }
                 lastCompletedFile = fileName;
@@ -497,6 +497,21 @@ public class FtdImportService
             .Where(cs => cs.SecondaryTickers.Count > 0)
             .Select(cs => new { cs.Id, cs.SecondaryTickers })
             .ToListAsync(cancellationToken);
+        var stockIds = stocks.Select(stock => stock.Id).ToList();
+        var delistedRows = await stockRepo
+            .GetDelistedListings()
+            .Where(listing => stockIds.Contains(listing.CommonStockId))
+            .Select(listing => new { listing.CommonStockId, listing.ListedTicker })
+            .ToListAsync(cancellationToken);
+        var delistedByStock = delistedRows
+            .GroupBy(listing => listing.CommonStockId)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                    group
+                        .Select(listing => listing.ListedTicker)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            );
 
         var map = new Dictionary<string, (Guid StockId, string Ticker)>(
             StringComparer.OrdinalIgnoreCase
@@ -506,6 +521,11 @@ public class FtdImportService
         {
             foreach (var ticker in stock.SecondaryTickers.Where(t => !string.IsNullOrWhiteSpace(t)))
             {
+                if (
+                    delistedByStock.TryGetValue(stock.Id, out var delisted)
+                    && delisted.Contains(ticker)
+                )
+                    continue;
                 if (primaryMap.ContainsKey(ticker))
                     continue;
                 if (!map.TryAdd(ticker, (stock.Id, ticker)) && map[ticker].StockId != stock.Id)
@@ -597,39 +617,39 @@ public class FtdImportService
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var query = stockRepo
-            .GetAllIncludingInactive()
-            .Where(stock =>
-                !stock.Active
-                && stock.Cusip == null
-                && stock.DelistedOn != null
+            .GetDelistedListings()
+            .Where(listing =>
+                listing.Cusip == null
                 && (
-                    stock.HistoricalCusipBackfillRequestedAt == null
-                    || stock.HistoricalCusipBackfillRequestedAt <= sweepStartedAt
+                    listing.HistoricalCusipBackfillRequestedAt == null
+                    || listing.HistoricalCusipBackfillRequestedAt <= sweepStartedAt
                 )
             );
         if (_workerOptions.TickersToSync?.Count > 0)
         {
-            query = query.Where(stock => _workerOptions.TickersToSync.Contains(stock.Ticker));
+            query = query.Where(listing =>
+                _workerOptions.TickersToSync.Contains(listing.ListedTicker)
+            );
         }
 
-        var stocks = await query.ToListAsync(cancellationToken);
+        var listings = await query.ToListAsync(cancellationToken);
         foreach (
-            var stock in stocks.Where(stock =>
-                stock.HistoricalCusipBackfillSweepStartedAt != sweepStartedAt
+            var listing in listings.Where(listing =>
+                listing.HistoricalCusipBackfillSweepStartedAt != sweepStartedAt
             )
         )
         {
-            stock.HistoricalCusipBackfillCandidates = [];
-            stock.HistoricalCusipBackfillCandidateOn = null;
-            stock.HistoricalCusipBackfillAmbiguous = false;
-            stock.HistoricalCusipBackfillSweepStartedAt = sweepStartedAt;
+            listing.HistoricalCusipBackfillCandidates = [];
+            listing.HistoricalCusipBackfillCandidateOn = null;
+            listing.HistoricalCusipBackfillAmbiguous = false;
+            listing.HistoricalCusipBackfillSweepStartedAt = sweepStartedAt;
         }
         await stockRepo.SaveChanges();
 
-        var identities = stocks.Select(stock => new HistoricalTickerIdentity(
-            stock.Id,
-            stock.Ticker,
-            stock.DelistedOn!.Value
+        var identities = listings.Select(listing => new HistoricalTickerIdentity(
+            listing.Id,
+            listing.ListedTicker,
+            listing.DelistedOn
         ));
 
         return identities
@@ -647,10 +667,10 @@ public class FtdImportService
         DateOnly settlementDate,
         Dictionary<string, List<HistoricalTickerIdentity>> tickerMap,
         Dictionary<string, string> strippedAliases,
-        out Guid stockId
+        out Guid listingId
     )
     {
-        stockId = default;
+        listingId = default;
         var ticker = tickerMap.ContainsKey(symbol)
             ? symbol
             : strippedAliases.GetValueOrDefault(symbol);
@@ -672,17 +692,17 @@ public class FtdImportService
             return false;
         }
 
-        stockId = eligible[0].StockId;
+        listingId = eligible[0].ListingId;
         return true;
     }
 
     private async Task<int> SeedInactiveCusips(
-        Dictionary<Guid, (string Cusip, DateOnly SettlementDate)> latestByStock,
+        Dictionary<Guid, (string Cusip, DateOnly SettlementDate)> latestByListing,
         DateTime sweepStartedAt,
         CancellationToken cancellationToken
     )
     {
-        if (latestByStock.Count == 0)
+        if (latestByListing.Count == 0)
         {
             return 0;
         }
@@ -690,19 +710,20 @@ public class FtdImportService
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
-        var stocks = await stockRepo
-            .GetByIdsIncludingInactive(latestByStock.Keys)
-            .Where(stock =>
-                !stock.Active
-                && stock.Cusip == null
+        var listings = await stockRepo
+            .GetDelistedListings()
+            .Include(listing => listing.CommonStock)
+            .Where(listing =>
+                latestByListing.Keys.Contains(listing.Id)
+                && listing.Cusip == null
                 && (
-                    stock.HistoricalCusipBackfillRequestedAt == null
-                    || stock.HistoricalCusipBackfillRequestedAt <= sweepStartedAt
+                    listing.HistoricalCusipBackfillRequestedAt == null
+                    || listing.HistoricalCusipBackfillRequestedAt <= sweepStartedAt
                 )
             )
             .ToListAsync(cancellationToken);
 
-        var candidates = latestByStock
+        var candidates = latestByListing
             .Values.Select(value => value.Cusip)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -737,37 +758,109 @@ public class FtdImportService
             AddClaim(claim.Cusip, claim.CommonStockId);
         }
 
-        var listedClaimValues = await stockRepo
+        var listedClaims = await stockRepo
             .GetListedCusips()
             .Where(listing => candidates.Contains(listing.Cusip))
-            .Select(listing => listing.Cusip)
+            .Select(listing => new
+            {
+                listing.CommonStockId,
+                listing.ListedTicker,
+                listing.Cusip,
+            })
             .ToListAsync(cancellationToken);
-        var listedClaims = new HashSet<string>(listedClaimValues, StringComparer.OrdinalIgnoreCase);
+        foreach (var claim in listedClaims)
+        {
+            AddClaim(claim.Cusip, claim.CommonStockId);
+        }
 
         var seeded = 0;
-        foreach (var stock in stocks)
+        foreach (var listing in listings)
         {
-            var resolved = latestByStock[stock.Id];
-            if (
-                listedClaims.Contains(resolved.Cusip)
-                || (
-                    claims.TryGetValue(resolved.Cusip, out var owners)
-                    && owners.Any(ownerId => ownerId != stock.Id)
+            var stock = listing.CommonStock;
+            var resolved = latestByListing[listing.Id];
+            var isPrimary = string.Equals(
+                listing.ListedTicker,
+                stock.Ticker,
+                StringComparison.OrdinalIgnoreCase
+            );
+            var aliasAlreadyClaimsCusip = aliasClaims.Any(claim =>
+                string.Equals(claim.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase)
+            );
+            var listedClaimsForCusip = listedClaims
+                .Where(claim =>
+                    string.Equals(claim.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase)
                 )
+                .ToList();
+            var exactListedClaim = listedClaims.FirstOrDefault(claim =>
+                claim.CommonStockId == stock.Id
+                && string.Equals(
+                    claim.ListedTicker,
+                    listing.ListedTicker,
+                    StringComparison.OrdinalIgnoreCase
+                )
+                && string.Equals(claim.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase)
+            );
+            if (
+                claims.TryGetValue(resolved.Cusip, out var owners)
+                && owners.Any(ownerId => ownerId != stock.Id)
             )
             {
                 _logger.LogWarning(
                     "Inactive FTD identity {Ticker} resolved to CUSIP {Cusip}, but that CUSIP is already claimed by another stock — skipping",
-                    stock.Ticker,
+                    listing.ListedTicker,
                     resolved.Cusip
                 );
                 continue;
             }
+            if (
+                aliasAlreadyClaimsCusip
+                || (isPrimary && listedClaimsForCusip.Count > 0)
+                || (!isPrimary && listedClaimsForCusip.Count > 0 && exactListedClaim == null)
+            )
+            {
+                listing.HistoricalCusipBackfillAmbiguous = true;
+                continue;
+            }
 
-            await stockManager.SetCusip(stock, resolved.Cusip);
+            if (isPrimary)
+            {
+                if (
+                    stock.Cusip != null
+                    && !string.Equals(
+                        stock.Cusip,
+                        resolved.Cusip,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    listing.HistoricalCusipBackfillAmbiguous = true;
+                    continue;
+                }
+                if (stock.Cusip == null)
+                {
+                    await stockManager.SetCusip(stock, resolved.Cusip);
+                }
+            }
+            else if (exactListedClaim == null)
+            {
+                var recorded = await stockManager.RecordListedTickerCusips(
+                    stock,
+                    [(listing.ListedTicker, resolved.Cusip)],
+                    [listing.ListedTicker]
+                );
+                if (recorded == 0)
+                {
+                    listing.HistoricalCusipBackfillAmbiguous = true;
+                    continue;
+                }
+            }
+
+            listing.Cusip = resolved.Cusip;
             AddClaim(resolved.Cusip, stock.Id);
             seeded++;
         }
+
+        await stockRepo.SaveChanges();
 
         return seeded;
     }
@@ -786,80 +879,83 @@ public class FtdImportService
 
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-        var stocks = await stockRepo
-            .GetByIdsIncludingInactive(batch.Select(candidate => candidate.StockId).Distinct())
-            .Where(stock =>
-                !stock.Active
-                && stock.Cusip == null
-                && stock.HistoricalCusipBackfillSweepStartedAt == sweepStartedAt
+        var listings = await stockRepo
+            .GetDelistedListings()
+            .Where(listing =>
+                batch.Select(candidate => candidate.ListingId).Distinct().Contains(listing.Id)
+                && listing.Cusip == null
+                && listing.HistoricalCusipBackfillSweepStartedAt == sweepStartedAt
             )
             .ToListAsync(cancellationToken);
-        foreach (var stock in stocks)
+        foreach (var listing in listings)
         {
             ApplyHistoricalCusipEvidence(
-                stock,
-                batch.Where(candidate => candidate.StockId == stock.Id)
+                listing,
+                batch.Where(candidate => candidate.ListingId == listing.Id)
             );
         }
         await stockRepo.SaveChanges();
 
         var staged = await stockRepo
-            .GetAllIncludingInactive()
-            .Where(stock =>
-                !stock.Active
-                && stock.Cusip == null
-                && stock.HistoricalCusipBackfillSweepStartedAt == sweepStartedAt
+            .GetDelistedListings()
+            .Where(listing =>
+                listing.Cusip == null
+                && listing.HistoricalCusipBackfillSweepStartedAt == sweepStartedAt
             )
             .ToListAsync(cancellationToken);
         RejectContestedHistoricalCusips(staged);
         await stockRepo.SaveChanges();
     }
 
-    internal static void RejectContestedHistoricalCusips(IEnumerable<CommonStock> stocks)
+    internal static void RejectContestedHistoricalCusips(
+        IEnumerable<CommonStockDelistedListing> listings
+    )
     {
-        var contestedStockIds = stocks
-            .SelectMany(stock =>
-                stock
+        var contestedListingIds = listings
+            .SelectMany(listing =>
+                listing
                     .HistoricalCusipBackfillCandidates.Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Select(cusip => new { stock.Id, Cusip = cusip })
+                    .Select(cusip => new { listing.Id, Cusip = cusip })
             )
             .GroupBy(claim => claim.Cusip, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Select(claim => claim.Id).Distinct().Count() > 1)
             .SelectMany(group => group.Select(claim => claim.Id))
             .ToHashSet();
-        foreach (var contested in stocks.Where(stock => contestedStockIds.Contains(stock.Id)))
+        foreach (
+            var contested in listings.Where(listing => contestedListingIds.Contains(listing.Id))
+        )
         {
             contested.HistoricalCusipBackfillAmbiguous = true;
         }
     }
 
     internal static void ApplyHistoricalCusipEvidence(
-        CommonStock stock,
+        CommonStockDelistedListing listing,
         IEnumerable<HistoricalCusipCandidate> candidates
     )
     {
         foreach (var candidate in candidates)
         {
             if (
-                stock.HistoricalCusipBackfillCandidateOn == null
-                || candidate.SettlementDate > stock.HistoricalCusipBackfillCandidateOn
+                listing.HistoricalCusipBackfillCandidateOn == null
+                || candidate.SettlementDate > listing.HistoricalCusipBackfillCandidateOn
             )
             {
-                stock.HistoricalCusipBackfillCandidates = [candidate.Cusip];
-                stock.HistoricalCusipBackfillCandidateOn = candidate.SettlementDate;
-                stock.HistoricalCusipBackfillAmbiguous = false;
+                listing.HistoricalCusipBackfillCandidates = [candidate.Cusip];
+                listing.HistoricalCusipBackfillCandidateOn = candidate.SettlementDate;
+                listing.HistoricalCusipBackfillAmbiguous = false;
                 continue;
             }
             if (
-                candidate.SettlementDate == stock.HistoricalCusipBackfillCandidateOn
-                && !stock.HistoricalCusipBackfillCandidates.Contains(
+                candidate.SettlementDate == listing.HistoricalCusipBackfillCandidateOn
+                && !listing.HistoricalCusipBackfillCandidates.Contains(
                     candidate.Cusip,
                     StringComparer.OrdinalIgnoreCase
                 )
             )
             {
-                stock.HistoricalCusipBackfillCandidates.Add(candidate.Cusip);
-                stock.HistoricalCusipBackfillAmbiguous = true;
+                listing.HistoricalCusipBackfillCandidates.Add(candidate.Cusip);
+                listing.HistoricalCusipBackfillAmbiguous = true;
             }
         }
     }
@@ -872,25 +968,24 @@ public class FtdImportService
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var staged = await stockRepo
-            .GetAllIncludingInactive()
-            .Where(stock =>
-                !stock.Active
-                && stock.Cusip == null
-                && stock.HistoricalCusipBackfillSweepStartedAt == sweepStartedAt
-                && stock.HistoricalCusipBackfillCandidateOn != null
+            .GetDelistedListings()
+            .Where(listing =>
+                listing.Cusip == null
+                && listing.HistoricalCusipBackfillSweepStartedAt == sweepStartedAt
+                && listing.HistoricalCusipBackfillCandidateOn != null
             )
             .ToListAsync(cancellationToken);
         var candidates = staged
-            .Where(stock =>
-                !stock.HistoricalCusipBackfillAmbiguous
-                && stock.HistoricalCusipBackfillCandidates.Count == 1
+            .Where(listing =>
+                !listing.HistoricalCusipBackfillAmbiguous
+                && listing.HistoricalCusipBackfillCandidates.Count == 1
             )
             .ToDictionary(
-                stock => stock.Id,
-                stock =>
+                listing => listing.Id,
+                listing =>
                     (
-                        stock.HistoricalCusipBackfillCandidates[0],
-                        stock.HistoricalCusipBackfillCandidateOn!.Value
+                        listing.HistoricalCusipBackfillCandidates[0],
+                        listing.HistoricalCusipBackfillCandidateOn!.Value
                     )
             );
 
@@ -917,12 +1012,12 @@ public class FtdImportService
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var state = await stateRepo.GetByName(InactiveCusipSweepCursorName);
 
-        var pending = stockRepo
-            .GetAllIncludingInactive()
-            .Where(stock => !stock.Active && stock.Cusip == null && stock.DelistedOn != null);
+        var pending = stockRepo.GetDelistedListings().Where(listing => listing.Cusip == null);
         if (_workerOptions.TickersToSync?.Count > 0)
         {
-            pending = pending.Where(stock => _workerOptions.TickersToSync.Contains(stock.Ticker));
+            pending = pending.Where(listing =>
+                _workerOptions.TickersToSync.Contains(listing.ListedTicker)
+            );
         }
 
         if (state == null)
@@ -961,9 +1056,9 @@ public class FtdImportService
         {
             var startedAt = state.LastFullRescanAt ?? DateTime.MinValue;
             var requestedAfterStart = await pending.AnyAsync(
-                stock =>
-                    stock.HistoricalCusipBackfillRequestedAt != null
-                    && stock.HistoricalCusipBackfillRequestedAt > startedAt,
+                listing =>
+                    listing.HistoricalCusipBackfillRequestedAt != null
+                    && listing.HistoricalCusipBackfillRequestedAt > startedAt,
                 cancellationToken
             );
             if (!requestedAfterStart)
@@ -1228,13 +1323,13 @@ public class FtdImportService
     }
 
     internal sealed record HistoricalTickerIdentity(
-        Guid StockId,
+        Guid ListingId,
         string Ticker,
         DateOnly DelistedOn
     );
 
     internal sealed record HistoricalCusipCandidate(
-        Guid StockId,
+        Guid ListingId,
         string Cusip,
         DateOnly SettlementDate
     );

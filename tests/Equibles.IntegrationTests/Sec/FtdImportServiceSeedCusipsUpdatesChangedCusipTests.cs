@@ -173,9 +173,17 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             DelistedOn = new DateOnly(2020, 6, 30),
             HistoricalCusipBackfillRequestedAt = DateTime.UtcNow,
         };
+        var listing = new CommonStockDelistedListing
+        {
+            CommonStockId = stock.Id,
+            ListedTicker = stock.Ticker,
+            DelistedOn = stock.DelistedOn.Value,
+            HistoricalCusipBackfillRequestedAt = stock.HistoricalCusipBackfillRequestedAt,
+        };
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
+            seed.Set<CommonStockDelistedListing>().Add(listing);
             await seed.SaveChangesAsync();
         }
 
@@ -207,7 +215,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         );
         var matches = new Dictionary<Guid, (string Cusip, DateOnly SettlementDate)>
         {
-            [stock.Id] = ("123456789", new DateOnly(2020, 6, 30)),
+            [listing.Id] = ("123456789", new DateOnly(2020, 6, 30)),
         };
 
         var seedInactive = typeof(FtdImportService).GetMethod(
@@ -228,6 +236,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         using var verify = FreshContext();
         var persisted = await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id);
         persisted.Cusip.Should().Be("123456789");
+        (await verify.Set<CommonStockDelistedListing>().SingleAsync(row => row.Id == listing.Id))
+            .Cusip.Should()
+            .Be("123456789");
         await bus.Received(1)
             .Publish(
                 Arg.Is<StockCusipChanged>(change =>
@@ -250,9 +261,17 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             DelistedOn = new DateOnly(2020, 6, 30),
             HistoricalCusipBackfillRequestedAt = requestedAt,
         };
+        var listing = new CommonStockDelistedListing
+        {
+            CommonStockId = stock.Id,
+            ListedTicker = stock.Ticker,
+            DelistedOn = stock.DelistedOn.Value,
+            HistoricalCusipBackfillRequestedAt = requestedAt,
+        };
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
+            seed.Set<CommonStockDelistedListing>().Add(listing);
             await seed.SaveChangesAsync();
         }
 
@@ -260,7 +279,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         var sut = CreateSut(bus);
         var matches = new Dictionary<Guid, (string Cusip, DateOnly SettlementDate)>
         {
-            [stock.Id] = ("123456789", new DateOnly(2020, 6, 30)),
+            [listing.Id] = ("123456789", new DateOnly(2020, 6, 30)),
         };
         var method = typeof(FtdImportService).GetMethod(
             "SeedInactiveCusips",
@@ -277,6 +296,114 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             .BeNull();
         await bus.DidNotReceive()
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SeedInactiveCusips_DelistedSibling_RecordsExactListedCusip()
+    {
+        var requestedAt = DateTime.UtcNow;
+        var stock = new CommonStock
+        {
+            Ticker = "LIVE",
+            Name = "Still Listed Filer",
+            Cik = "0000000042",
+            Cusip = "111111111",
+        };
+        var listing = new CommonStockDelistedListing
+        {
+            CommonStockId = stock.Id,
+            ListedTicker = "OLD",
+            DelistedOn = new DateOnly(2020, 6, 30),
+            HistoricalCusipBackfillRequestedAt = requestedAt,
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            seed.Set<CommonStockDelistedListing>().Add(listing);
+            await seed.SaveChangesAsync();
+        }
+
+        var bus = Substitute.For<IBus>();
+        var sut = CreateSut(bus);
+        var method = typeof(FtdImportService).GetMethod(
+            "SeedInactiveCusips",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+        var matches = new Dictionary<Guid, (string Cusip, DateOnly SettlementDate)>
+        {
+            [listing.Id] = ("222222222", listing.DelistedOn),
+        };
+
+        var seeded = await (Task<int>)
+            method.Invoke(sut, [matches, requestedAt.AddMinutes(1), CancellationToken.None])!;
+
+        seeded.Should().Be(1);
+        using var verify = FreshContext();
+        var exact = await verify.Set<CommonStockListedCusip>().SingleAsync();
+        exact.CommonStockId.Should().Be(stock.Id);
+        exact.ListedTicker.Should().Be("OLD");
+        exact.Cusip.Should().Be("222222222");
+        (await verify.Set<CommonStockDelistedListing>().SingleAsync(row => row.Id == listing.Id))
+            .Cusip.Should()
+            .Be("222222222");
+    }
+
+    [Fact]
+    public async Task SeedInactiveCusips_PrimaryCandidateClaimedBySameFilerSibling_RefusesMerge()
+    {
+        var requestedAt = DateTime.UtcNow;
+        var stock = new CommonStock
+        {
+            Ticker = "MAIN",
+            Name = "Formerly Listed Filer",
+            Cik = "0000000042",
+            Active = false,
+            DelistedOn = new DateOnly(2020, 6, 30),
+        };
+        var listing = new CommonStockDelistedListing
+        {
+            CommonStockId = stock.Id,
+            ListedTicker = stock.Ticker,
+            DelistedOn = stock.DelistedOn.Value,
+            HistoricalCusipBackfillRequestedAt = requestedAt,
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            seed.Set<CommonStockDelistedListing>().Add(listing);
+            seed.Set<CommonStockListedCusip>()
+                .Add(
+                    new CommonStockListedCusip
+                    {
+                        CommonStockId = stock.Id,
+                        ListedTicker = "SIBLING",
+                        Cusip = "222222222",
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        var sut = CreateSut(Substitute.For<IBus>());
+        var method = typeof(FtdImportService).GetMethod(
+            "SeedInactiveCusips",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+        var matches = new Dictionary<Guid, (string Cusip, DateOnly SettlementDate)>
+        {
+            [listing.Id] = ("222222222", listing.DelistedOn),
+        };
+
+        var seeded = await (Task<int>)
+            method.Invoke(sut, [matches, requestedAt.AddMinutes(1), CancellationToken.None])!;
+
+        seeded.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
+            .Cusip.Should()
+            .BeNull();
+        (await verify.Set<CommonStockDelistedListing>().SingleAsync(row => row.Id == listing.Id))
+            .HistoricalCusipBackfillAmbiguous.Should()
+            .BeTrue();
     }
 
     [Fact]

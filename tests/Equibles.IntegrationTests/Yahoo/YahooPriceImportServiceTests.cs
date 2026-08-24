@@ -121,7 +121,23 @@ public class YahooPriceImportServiceTests : IDisposable
     {
         _stockRepo.AddRange(stocks);
         await _stockRepo.SaveChanges();
+        foreach (var stock in stocks.Where(stock => !stock.Active && stock.DelistedOn != null))
+        {
+            _stockRepo.AddDelistedListing(
+                new CommonStockDelistedListing
+                {
+                    CommonStockId = stock.Id,
+                    ListedTicker = stock.Ticker,
+                    DelistedOn = stock.DelistedOn.Value,
+                    HistoricalPriceBackfillAttemptedAt = stock.HistoricalPriceBackfillAttemptedAt,
+                }
+            );
+        }
+        await _stockRepo.SaveChanges();
     }
+
+    private CommonStockDelistedListing GetDelistedListing(CommonStock stock) =>
+        _stockRepo.GetDelistedListings().Single(listing => listing.CommonStockId == stock.Id);
 
     [Fact]
     public async Task Import_InactiveListing_BackfillsOnlyThroughAuthoritativeDelistingDate()
@@ -158,11 +174,60 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _yahooClient.Received(1).GetChart("GONE", floor, delistedOn);
         var retained = _stockRepo.GetAllIncludingInactive().Single(row => row.Id == stock.Id);
-        retained.HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
+        GetDelistedListing(retained).HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
         retained.PriceHistoryBackfilledTickers.Should().Equal("GONE");
         _priceRepo
             .GetAllSeries()
             .Where(price => price.CommonStockId == stock.Id)
+            .Select(price => price.Date)
+            .Should()
+            .Equal(prices.Select(price => price.Date));
+    }
+
+    [Fact]
+    public async Task Import_DelistedSiblingOfActiveFiler_BackfillsItsExactSeriesAndCutoff()
+    {
+        var floor = new DateOnly(2023, 1, 1);
+        var delistedOn = new DateOnly(2023, 1, 10);
+        _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
+        var stock = CreateStock("LIVE", "Still Listed Filer");
+        await SeedStocks(stock);
+        _stockRepo.AddDelistedListing(
+            new CommonStockDelistedListing
+            {
+                CommonStockId = stock.Id,
+                ListedTicker = "OLD",
+                DelistedOn = delistedOn,
+            }
+        );
+        await _stockRepo.SaveChanges();
+        var prices = Enumerable
+            .Range(0, delistedOn.DayNumber - floor.DayNumber + 1)
+            .Select(floor.AddDays)
+            .Where(UsMarketCalendar.IsTradingDay)
+            .Select(date => new HistoricalPrice
+            {
+                Date = date,
+                Open = 10m,
+                High = 11m,
+                Low = 9m,
+                Close = 10m,
+                AdjustedClose = 10m,
+                Volume = 1_000,
+            })
+            .ToList();
+        _yahooClient
+            .GetChart("OLD", floor, delistedOn)
+            .Returns(new YahooChartData { FirstTradeDate = floor, Prices = prices });
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        await _yahooClient.Received(1).GetChart("OLD", floor, delistedOn);
+        await _yahooClient.Received(1).GetChart("OLD", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
+        stock.PriceHistoryBackfilledTickers.Should().Contain("OLD");
+        _priceRepo
+            .GetAllSeries()
+            .Where(price => price.CommonStockId == stock.Id && price.ListedTicker == "OLD")
             .Select(price => price.Date)
             .Should()
             .Equal(prices.Select(price => price.Date));
@@ -383,7 +448,7 @@ public class YahooPriceImportServiceTests : IDisposable
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         var retained = _stockRepo.GetAllIncludingInactive().Single(row => row.Id == stock.Id);
-        retained.HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
+        GetDelistedListing(retained).HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
         retained.PriceHistoryBackfilledTickers.Should().BeEmpty();
     }
 
@@ -418,6 +483,7 @@ public class YahooPriceImportServiceTests : IDisposable
             {
                 stock.Active = true;
                 stock.DelistedOn = null;
+                _dbContext.Set<CommonStockDelistedListing>().Remove(GetDelistedListing(stock));
                 _dbContext.SaveChanges();
                 return new YahooChartData { FirstTradeDate = floor, Prices = prices };
             });

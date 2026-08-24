@@ -33,6 +33,12 @@ public class TickerMapService
 
         var query =
             tickersToSync?.Count > 0 ? stockRepo.GetByTickers(tickersToSync) : stockRepo.GetAll();
+        var delistedListings = stockRepo.GetDelistedListings();
+        query = query.Where(stock =>
+            !delistedListings.Any(listing =>
+                listing.CommonStockId == stock.Id && listing.ListedTicker == stock.Ticker
+            )
+        );
 
         return await query.ToDictionaryAsync(
             s => s.Ticker,

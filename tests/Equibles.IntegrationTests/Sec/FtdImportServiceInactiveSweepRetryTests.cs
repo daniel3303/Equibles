@@ -29,15 +29,22 @@ public class FtdImportServiceInactiveSweepRetryTests
             new CommonStocksModuleConfiguration(),
             new SecTestModuleConfiguration()
         );
-        db.Set<CommonStock>()
+        var stock = new CommonStock
+        {
+            Ticker = "GONE",
+            Name = "Formerly Listed Corp",
+            Cik = "42",
+            Active = false,
+            DelistedOn = new DateOnly(2020, 6, 30),
+        };
+        db.Set<CommonStock>().Add(stock);
+        db.Set<CommonStockDelistedListing>()
             .Add(
-                new CommonStock
+                new CommonStockDelistedListing
                 {
-                    Ticker = "GONE",
-                    Name = "Formerly Listed Corp",
-                    Cik = "42",
-                    Active = false,
-                    DelistedOn = new DateOnly(2020, 6, 30),
+                    CommonStockId = stock.Id,
+                    ListedTicker = stock.Ticker,
+                    DelistedOn = stock.DelistedOn.Value,
                     HistoricalCusipBackfillRequestedAt = DateTime.UtcNow.AddMinutes(-1),
                 }
             );

@@ -104,6 +104,26 @@ public class TickerMapServiceTests : IDisposable
         result.Should().ContainKey("GOOG").WhoseValue.Should().Be(goog.Id);
     }
 
+    [Fact]
+    public async Task Build_PrimaryWithAuthoritativeDelistedClaim_ExcludesHistoricalSymbol()
+    {
+        var stock = CreateStock("OLD", "Still Listed Under Another Symbol");
+        await SeedStocks(stock);
+        _stockRepo.AddDelistedListing(
+            new CommonStockDelistedListing
+            {
+                CommonStockId = stock.Id,
+                ListedTicker = stock.Ticker,
+                DelistedOn = new DateOnly(2023, 1, 10),
+            }
+        );
+        await _stockRepo.SaveChanges();
+
+        var result = await _service.Build(null, CancellationToken.None);
+
+        result.Should().NotContainKey("OLD");
+    }
+
     // ── Build filters by tickers ──────────────────────────────────────
     // These tests use _clientEvalService because GetByTickers uses
     // SecondaryTickers.Any() which the in-memory provider cannot translate.

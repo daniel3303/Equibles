@@ -140,7 +140,8 @@ public class CommonStockManager
     /// </summary>
     public async Task<int> RecordListedTickerCusips(
         CommonStock commonStock,
-        IReadOnlyCollection<(string ListedTicker, string Cusip)> candidates
+        IReadOnlyCollection<(string ListedTicker, string Cusip)> candidates,
+        IReadOnlyCollection<string> authoritativeHistoricalTickers = null
     )
     {
         ArgumentNullException.ThrowIfNull(commonStock);
@@ -150,6 +151,7 @@ public class CommonStockManager
             commonStock.SecondaryTickers ?? [],
             StringComparer.OrdinalIgnoreCase
         );
+        secondaryTickers.UnionWith(authoritativeHistoricalTickers ?? []);
         var cleaned = candidates
             .Where(c =>
                 !string.IsNullOrWhiteSpace(c.ListedTicker) && !string.IsNullOrWhiteSpace(c.Cusip)
