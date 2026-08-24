@@ -103,7 +103,12 @@ public class DocumentScraper : IDocumentScraper
                 if (cancellationToken.IsCancellationRequested)
                     break;
 
-                await ProcessCompanyDocumentsWithScope(companyUntracked, result);
+                var companyExists = await ProcessCompanyDocumentsWithScope(
+                    companyUntracked,
+                    result
+                );
+                if (!companyExists)
+                    continue;
 
                 if (_options.UseEventDrivenDiscovery)
                     await StampFilingSyncState(companyUntracked);
@@ -294,7 +299,7 @@ public class DocumentScraper : IDocumentScraper
         return await commonStockRepository.GetAll().AsNoTracking().ToListAsync();
     }
 
-    private async Task ProcessCompanyDocumentsWithScope(
+    private async Task<bool> ProcessCompanyDocumentsWithScope(
         CommonStock companyUntracked,
         ScrapingResult result
     )
@@ -309,10 +314,21 @@ public class DocumentScraper : IDocumentScraper
         var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
         var documentRepository = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
 
-        var company = await companyRepository.Get(companyUntracked.Id);
+        CommonStock company = null;
 
         try
         {
+            company = await companyRepository.Get(companyUntracked.Id);
+            if (company == null)
+            {
+                _logger.LogInformation(
+                    "Skipping documents for {Ticker} ({CompanyId}) because the company was removed after the scrape target list was loaded",
+                    companyUntracked.Ticker,
+                    companyUntracked.Id
+                );
+                return false;
+            }
+
             _logger.LogInformation(
                 "Processing documents for company: {Ticker} - {Name}",
                 company.Ticker,
@@ -380,10 +396,17 @@ public class DocumentScraper : IDocumentScraper
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing documents for company {Ticker}", company.Ticker);
-            RecordError(result, $"Company {company.Ticker}", ex);
-            await ReportError("ProcessCompany", ex, $"ticker: {company.Ticker}");
+            var ticker = company?.Ticker ?? companyUntracked.Ticker;
+            _logger.LogError(ex, "Error processing documents for company {Ticker}", ticker);
+            RecordError(result, $"Company {ticker}", ex);
+            await ReportError(
+                "ProcessCompany",
+                ex,
+                $"ticker: {ticker}, company id: {companyUntracked.Id}"
+            );
         }
+
+        return company != null;
     }
 
     /// <summary>
