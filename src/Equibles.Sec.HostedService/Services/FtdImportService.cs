@@ -50,6 +50,7 @@ public class FtdImportService
 
     public async Task Import(CancellationToken cancellationToken)
     {
+        var asOf = DateOnly.FromDateTime(DateTime.UtcNow);
         var startDate = await SyncStartDate.Resolve<FailToDeliverRepository>(
             _scopeFactory,
             _workerOptions,
@@ -60,7 +61,7 @@ public class FtdImportService
         var minimumStartDate = SyncDateResolver.Resolve(default, _workerOptions);
         startDate = ApplyLiveRecheckWindow(startDate, minimumStartDate);
 
-        var fileNames = GetFileNames(startDate);
+        var fileNames = GetFileNames(startDate, asOf);
 
         if (fileNames.Count == 0)
         {
@@ -79,9 +80,13 @@ public class FtdImportService
             StringComparer.OrdinalIgnoreCase
         );
         var secondaryMapBuilt = false;
+        var replayMonth = asOf.AddMonths(-LiveRecheckMonths)
+            .ToString("yyyyMM", CultureInfo.InvariantCulture);
+        var replayFiles = fileNames.Where(fileName => FtdMonthOf(fileName) == replayMonth).ToList();
         var liveIdentityEvidence = new Dictionary<string, LiveIdentityEvidence>(
             StringComparer.OrdinalIgnoreCase
         );
+        var downloadedIdentityFiles = new HashSet<string>(StringComparer.Ordinal);
         var cusipsSeeded = 0;
 
         foreach (var fileName in fileNames)
@@ -94,23 +99,31 @@ public class FtdImportService
                 if (records.Count == 0)
                     continue;
 
-                if (!secondaryMapBuilt)
+                if (FtdMonthOf(fileName) == replayMonth)
                 {
-                    secondaryMap = await BuildSecondaryTickerMap(tickerMap, cancellationToken);
-                    secondaryMapBuilt = true;
-                }
+                    if (!secondaryMapBuilt)
+                    {
+                        secondaryMap = await BuildSecondaryTickerMap(tickerMap, cancellationToken);
+                        secondaryMapBuilt = true;
+                    }
 
-                AccumulateLiveIdentityEvidence(
-                    fileName,
-                    records,
-                    tickerMap,
-                    secondaryMap,
-                    liveIdentityEvidence
-                );
+                    AccumulateLiveIdentityEvidence(
+                        fileName,
+                        records,
+                        tickerMap,
+                        secondaryMap,
+                        liveIdentityEvidence
+                    );
+                    downloadedIdentityFiles.Add(fileName);
+                }
 
                 var imported = await ImportRecords(records, tickerMap, cancellationToken);
 
                 _logger.LogInformation("FTD {File}: imported {Count} records", fileName, imported);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (HttpRequestException ex)
                 when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -150,6 +163,9 @@ public class FtdImportService
             }
         }
 
+        if (replayFiles.Count == 0 || !replayFiles.All(downloadedIdentityFiles.Contains))
+            liveIdentityEvidence.Clear();
+
         if (liveIdentityEvidence.Count > 0)
         {
             try
@@ -158,6 +174,10 @@ public class FtdImportService
                     .Values.SelectMany(evidence => evidence.Records)
                     .ToList();
                 cusipsSeeded = await SeedCusips(identityRecords, tickerMap, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -1085,6 +1105,8 @@ public class FtdImportService
         FtdRecord Record
     );
 
+    private static string FtdMonthOf(string fileName) => fileName[8..14];
+
     private static void AccumulateLiveIdentityEvidence(
         string fileName,
         List<FtdRecord> records,
@@ -1148,46 +1170,53 @@ public class FtdImportService
                 candidateRecords
             );
 
-            if (!evidenceByTicker.TryGetValue(pair.Key, out var current))
-            {
-                evidenceByTicker[pair.Key] = candidate;
-                continue;
-            }
-            if (candidate.LatestPrimaryDate > current.LatestPrimaryDate)
-            {
-                evidenceByTicker[pair.Key] = candidate;
-                continue;
-            }
-            if (candidate.LatestPrimaryDate < current.LatestPrimaryDate)
-                continue;
-
-            var latestCusips = current
-                .PrimaryRecords.Concat(candidate.PrimaryRecords)
-                .Select(record => record.Cusip.Trim().ToUpperInvariant())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(2)
-                .ToList();
-            if (latestCusips.Count > 1)
-            {
-                var ambiguousPrimaryRecords = current
-                    .PrimaryRecords.Concat(candidate.PrimaryRecords)
-                    .ToList();
-                evidenceByTicker[pair.Key] = new LiveIdentityEvidence(
-                    string.CompareOrdinal(candidate.SourceFile, current.SourceFile) > 0
-                        ? candidate.SourceFile
-                        : current.SourceFile,
-                    latestDate,
-                    ambiguousPrimaryRecords,
-                    ambiguousPrimaryRecords
-                );
-                continue;
-            }
-
-            if (string.CompareOrdinal(candidate.SourceFile, current.SourceFile) > 0)
-            {
-                evidenceByTicker[pair.Key] = candidate;
-            }
+            MergeLiveIdentityEvidence(pair.Key, candidate, evidenceByTicker);
         }
+    }
+
+    private static void MergeLiveIdentityEvidence(
+        string ticker,
+        LiveIdentityEvidence candidate,
+        Dictionary<string, LiveIdentityEvidence> evidenceByTicker
+    )
+    {
+        if (!evidenceByTicker.TryGetValue(ticker, out var current))
+        {
+            evidenceByTicker[ticker] = candidate;
+            return;
+        }
+        if (candidate.LatestPrimaryDate > current.LatestPrimaryDate)
+        {
+            evidenceByTicker[ticker] = candidate;
+            return;
+        }
+        if (candidate.LatestPrimaryDate < current.LatestPrimaryDate)
+            return;
+
+        var latestCusips = current
+            .PrimaryRecords.Concat(candidate.PrimaryRecords)
+            .Select(record => record.Cusip.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(2)
+            .ToList();
+        if (latestCusips.Count > 1)
+        {
+            var ambiguousPrimaryRecords = current
+                .PrimaryRecords.Concat(candidate.PrimaryRecords)
+                .ToList();
+            evidenceByTicker[ticker] = new LiveIdentityEvidence(
+                string.CompareOrdinal(candidate.SourceFile, current.SourceFile) > 0
+                    ? candidate.SourceFile
+                    : current.SourceFile,
+                candidate.LatestPrimaryDate,
+                ambiguousPrimaryRecords,
+                ambiguousPrimaryRecords
+            );
+            return;
+        }
+
+        if (string.CompareOrdinal(candidate.SourceFile, current.SourceFile) > 0)
+            evidenceByTicker[ticker] = candidate;
     }
 
     /// <summary>
@@ -1736,17 +1765,19 @@ public class FtdImportService
     /// Generates FTD file names from a start date to now.
     /// Format: cnsfails{YYYYMM}{a|b}.zip (a = first half, b = second half)
     /// </summary>
-    internal static List<string> GetFileNames(DateOnly startDate)
+    internal static List<string> GetFileNames(DateOnly startDate) =>
+        GetFileNames(startDate, DateOnly.FromDateTime(DateTime.UtcNow));
+
+    private static List<string> GetFileNames(DateOnly startDate, DateOnly asOf)
     {
         var fileNames = new List<string>();
-        var now = DateOnly.FromDateTime(DateTime.UtcNow);
 
         if (startDate < OldestAvailableDate)
             startDate = OldestAvailableDate;
 
         var current = new DateOnly(startDate.Year, startDate.Month, 1);
 
-        while (current <= now)
+        while (current <= asOf)
         {
             var yearMonth = current.ToString("yyyyMM", CultureInfo.InvariantCulture);
 
