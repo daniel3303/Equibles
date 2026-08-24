@@ -153,4 +153,39 @@ public class YahooPriceImportServiceCrawlOrderTests
 
         ordered.Select(target => target.Ticker).Should().Equal("GOOGL", "GOOG");
     }
+
+    [Fact]
+    public void CurrentListings_LeadHistoricalRegardlessOfFreshness()
+    {
+        var liveRecent = new PriceSeriesTarget("LIVE", Guid.NewGuid(), IsPrimary: true);
+        var liveNeverSynced = new PriceSeriesTarget("NEW", Guid.NewGuid(), IsPrimary: true);
+        var historicalRecent = new PriceSeriesTarget(
+            "OLD-LIVE",
+            Guid.NewGuid(),
+            IsPrimary: true,
+            IsHistorical: true
+        );
+        var historicalNeverSynced = new PriceSeriesTarget(
+            "OLD-NEW",
+            Guid.NewGuid(),
+            IsPrimary: true,
+            IsHistorical: true
+        );
+        var lastDates = new Dictionary<PriceSeriesKey, DateOnly>
+        {
+            [liveRecent.Key] = Today.AddDays(-1),
+            [historicalRecent.Key] = Today.AddDays(-1),
+        };
+
+        var ordered = YahooPriceImportService.BuildCrawlOrder(
+            [historicalRecent, liveNeverSynced, historicalNeverSynced, liveRecent],
+            lastDates,
+            Today
+        );
+
+        ordered
+            .Select(target => target.Ticker)
+            .Should()
+            .Equal("LIVE", "NEW", "OLD-LIVE", "OLD-NEW");
+    }
 }
