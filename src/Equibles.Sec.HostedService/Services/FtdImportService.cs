@@ -25,6 +25,7 @@ public class FtdImportService
 {
     private const string BaseUrl = "https://www.sec.gov/files/data/fails-deliver-data";
     private const int InsertBatchSize = 1000;
+    private const int LiveRecheckMonths = 1;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ISecEdgarClient _secEdgarClient;
@@ -56,6 +57,9 @@ public class FtdImportService
             cancellationToken
         );
 
+        var minimumStartDate = SyncDateResolver.Resolve(default, _workerOptions);
+        startDate = ApplyLiveRecheckWindow(startDate, minimumStartDate);
+
         var fileNames = GetFileNames(startDate);
 
         if (fileNames.Count == 0)
@@ -71,6 +75,13 @@ public class FtdImportService
         );
 
         var tickerMap = await BuildTickerMap(cancellationToken);
+        var secondaryMap = new Dictionary<string, (Guid StockId, string Ticker)>(
+            StringComparer.OrdinalIgnoreCase
+        );
+        var secondaryMapBuilt = false;
+        var liveIdentityEvidence = new Dictionary<string, LiveIdentityEvidence>(
+            StringComparer.OrdinalIgnoreCase
+        );
         var cusipsSeeded = 0;
 
         foreach (var fileName in fileNames)
@@ -83,7 +94,19 @@ public class FtdImportService
                 if (records.Count == 0)
                     continue;
 
-                cusipsSeeded += await SeedCusips(records, tickerMap, cancellationToken);
+                if (!secondaryMapBuilt)
+                {
+                    secondaryMap = await BuildSecondaryTickerMap(tickerMap, cancellationToken);
+                    secondaryMapBuilt = true;
+                }
+
+                AccumulateLiveIdentityEvidence(
+                    fileName,
+                    records,
+                    tickerMap,
+                    secondaryMap,
+                    liveIdentityEvidence
+                );
 
                 var imported = await ImportRecords(records, tickerMap, cancellationToken);
 
@@ -123,6 +146,27 @@ public class FtdImportService
                     "FtdImport.ProcessFile",
                     ex,
                     $"file: {fileName}"
+                );
+            }
+        }
+
+        if (liveIdentityEvidence.Count > 0)
+        {
+            try
+            {
+                var identityRecords = liveIdentityEvidence
+                    .Values.SelectMany(evidence => evidence.Records)
+                    .ToList();
+                cusipsSeeded = await SeedCusips(identityRecords, tickerMap, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reconciling CUSIPs from live FTD evidence");
+                await _errorReporter.Report(
+                    ErrorSource.FtdScraper,
+                    "FtdImport.SeedCusips",
+                    ex,
+                    $"files: {fileNames.Count}"
                 );
             }
         }
@@ -1028,6 +1072,124 @@ public class FtdImportService
     // FTD worker's run long.
     private const int AliasSweepFilesPerCycle = 12;
 
+    private sealed record LiveIdentityEvidence(
+        string SourceFile,
+        DateOnly LatestPrimaryDate,
+        List<FtdRecord> PrimaryRecords,
+        List<FtdRecord> Records
+    );
+
+    private sealed record SecondaryIdentityObservation(
+        Guid StockId,
+        string Ticker,
+        FtdRecord Record
+    );
+
+    private static void AccumulateLiveIdentityEvidence(
+        string fileName,
+        List<FtdRecord> records,
+        Dictionary<string, Guid> primaryMap,
+        Dictionary<string, (Guid StockId, string Ticker)> secondaryMap,
+        Dictionary<string, LiveIdentityEvidence> evidenceByTicker
+    )
+    {
+        var strippedPrimaryAliases = BuildStrippedTickerAliases(primaryMap);
+        var primaryObservations = new Dictionary<string, List<FtdRecord>>(
+            StringComparer.OrdinalIgnoreCase
+        );
+        foreach (var record in records)
+        {
+            if (
+                string.IsNullOrEmpty(record.Cusip)
+                || string.IsNullOrEmpty(record.Symbol)
+                || !TryResolveSymbol(
+                    record.Symbol,
+                    primaryMap,
+                    strippedPrimaryAliases,
+                    out var ticker
+                )
+            )
+            {
+                continue;
+            }
+
+            if (!primaryObservations.TryGetValue(ticker, out var rows))
+            {
+                rows = [];
+                primaryObservations[ticker] = rows;
+            }
+            rows.Add(record);
+        }
+
+        var secondaryObservations = BuildLatestSecondaryObservations(
+            records,
+            primaryMap,
+            secondaryMap
+        );
+
+        foreach (var pair in primaryObservations)
+        {
+            var latestDate = pair.Value.Max(record => record.SettlementDate);
+            var latestPrimaryRecords = pair
+                .Value.Where(record => record.SettlementDate == latestDate)
+                .ToList();
+            var stockId = primaryMap[pair.Key];
+            var candidateRecords = latestPrimaryRecords
+                .Concat(
+                    secondaryObservations.TryGetValue(stockId, out var secondaryRows)
+                        ? secondaryRows.Select(observation => observation.Record)
+                        : []
+                )
+                .ToList();
+            var candidate = new LiveIdentityEvidence(
+                fileName,
+                latestDate,
+                latestPrimaryRecords,
+                candidateRecords
+            );
+
+            if (!evidenceByTicker.TryGetValue(pair.Key, out var current))
+            {
+                evidenceByTicker[pair.Key] = candidate;
+                continue;
+            }
+            if (candidate.LatestPrimaryDate > current.LatestPrimaryDate)
+            {
+                evidenceByTicker[pair.Key] = candidate;
+                continue;
+            }
+            if (candidate.LatestPrimaryDate < current.LatestPrimaryDate)
+                continue;
+
+            var latestCusips = current
+                .PrimaryRecords.Concat(candidate.PrimaryRecords)
+                .Select(record => record.Cusip.Trim().ToUpperInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(2)
+                .ToList();
+            if (latestCusips.Count > 1)
+            {
+                var ambiguousPrimaryRecords = current
+                    .PrimaryRecords.Concat(candidate.PrimaryRecords)
+                    .ToList();
+                evidenceByTicker[pair.Key] = new LiveIdentityEvidence(
+                    string.CompareOrdinal(candidate.SourceFile, current.SourceFile) > 0
+                        ? candidate.SourceFile
+                        : current.SourceFile,
+                    latestDate,
+                    ambiguousPrimaryRecords,
+                    ambiguousPrimaryRecords
+                );
+                continue;
+            }
+
+            if (string.CompareOrdinal(candidate.SourceFile, current.SourceFile) > 0)
+            {
+                evidenceByTicker[pair.Key] = candidate;
+            }
+        }
+    }
+
     /// <summary>
     /// Seeds and updates CUSIP values on CommonStock records by matching FTD
     /// ticker→CUSIP pairs. Beyond filling stocks that have no CUSIP yet, this is
@@ -1205,6 +1367,49 @@ public class FtdImportService
         Dictionary<string, (Guid StockId, string Ticker)> secondaryMap
     )
     {
+        var observations = BuildLatestSecondaryObservations(records, primaryMap, secondaryMap);
+        var unambiguous = observations
+            .SelectMany(pair =>
+                pair.Value.GroupBy(
+                        observation => observation.Ticker,
+                        StringComparer.OrdinalIgnoreCase
+                    )
+                    .Select(group =>
+                    {
+                        var latestCusips = group
+                            .Select(observation =>
+                                observation.Record.Cusip.Trim().ToUpperInvariant()
+                            )
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .Take(2)
+                            .ToList();
+                        return (
+                            StockId: pair.Key,
+                            Ticker: group.Key,
+                            Cusip: latestCusips.Count == 1 ? latestCusips[0] : null
+                        );
+                    })
+            )
+            .Where(pair => pair.Cusip != null)
+            .ToList();
+
+        return unambiguous
+            .GroupBy(pair => pair.StockId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(pair => (pair.Ticker, pair.Cusip)).ToList()
+            );
+    }
+
+    private static Dictionary<
+        Guid,
+        List<SecondaryIdentityObservation>
+    > BuildLatestSecondaryObservations(
+        IEnumerable<FtdRecord> records,
+        Dictionary<string, Guid> primaryMap,
+        Dictionary<string, (Guid StockId, string Ticker)> secondaryMap
+    )
+    {
         var strippedAliases = BuildStrippedSecondaryAliases(secondaryMap, primaryMap);
         var observations = new Dictionary<(Guid StockId, string Ticker), List<FtdRecord>>();
         foreach (var record in records)
@@ -1234,27 +1439,20 @@ public class FtdImportService
             rows.Add(record);
         }
 
-        var unambiguous = observations
-            .Select(pair =>
+        return observations
+            .SelectMany(pair =>
             {
                 var latestDate = pair.Value.Max(record => record.SettlementDate);
-                var latestCusips = pair
+                return pair
                     .Value.Where(record => record.SettlementDate == latestDate)
-                    .Select(record => record.Cusip.Trim().ToUpperInvariant())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Take(2)
-                    .ToList();
-                return (pair.Key, Cusip: latestCusips.Count == 1 ? latestCusips[0] : null);
+                    .Select(record => new SecondaryIdentityObservation(
+                        pair.Key.StockId,
+                        pair.Key.Ticker,
+                        record
+                    ));
             })
-            .Where(pair => pair.Cusip != null)
-            .ToList();
-
-        return unambiguous
-            .GroupBy(pair => pair.Key.StockId)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Select(pair => (pair.Key.Ticker, pair.Cusip)).ToList()
-            );
+            .GroupBy(observation => observation.StockId)
+            .ToDictionary(group => group.Key, group => group.ToList());
     }
 
     private static string ResolveDisplacedListedTicker(
@@ -1510,6 +1708,29 @@ public class FtdImportService
     // Oldest FTD file available on SEC EDGAR is cnsfails201706b.zip (second half of June 2017).
     // Some individual files within the range may 404 (handled gracefully above).
     private static readonly DateOnly OldestAvailableDate = new(2017, 6, 1);
+
+    /// <summary>
+    /// Replays the prior calendar month so late identity corrections can be applied from
+    /// recent FTD evidence without turning the live import into an unbounded backfill.
+    /// </summary>
+    internal static DateOnly ApplyLiveRecheckWindow(
+        DateOnly syncStartDate,
+        DateOnly minimumStartDate
+    )
+    {
+        var syncMonth = new DateOnly(syncStartDate.Year, syncStartDate.Month, 1);
+        var configuredMinimumMonth = new DateOnly(minimumStartDate.Year, minimumStartDate.Month, 1);
+        var minimumMonth =
+            configuredMinimumMonth < OldestAvailableDate
+                ? OldestAvailableDate
+                : configuredMinimumMonth;
+
+        if (syncMonth <= minimumMonth)
+            return minimumMonth;
+
+        var recheckStart = syncMonth.AddMonths(-LiveRecheckMonths);
+        return recheckStart < minimumMonth ? minimumMonth : recheckStart;
+    }
 
     /// <summary>
     /// Generates FTD file names from a start date to now.
