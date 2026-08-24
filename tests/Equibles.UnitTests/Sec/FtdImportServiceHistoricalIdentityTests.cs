@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Xunit;
 
@@ -26,11 +27,11 @@ public class FtdImportServiceHistoricalIdentityTests
             new DateOnly(2020, 6, 30),
             map,
             [],
-            out var stockId
+            out var listingId
         );
 
         resolved.Should().BeTrue();
-        stockId.Should().Be(oldId);
+        listingId.Should().Be(oldId);
     }
 
     [Fact]
@@ -79,66 +80,60 @@ public class FtdImportServiceHistoricalIdentityTests
     [Fact]
     public void SelectCusips_DifferentValuesOnLatestDate_DropsStock()
     {
-        var stockId = Guid.NewGuid();
-        var stock = new Equibles.CommonStocks.Data.Models.CommonStock { Id = stockId };
+        var listingId = Guid.NewGuid();
+        var listing = new CommonStockDelistedListing { Id = listingId };
         FtdImportService.ApplyHistoricalCusipEvidence(
-            stock,
-            [new(stockId, "111111111", new DateOnly(2020, 6, 30))]
+            listing,
+            [new(listingId, "111111111", new DateOnly(2020, 6, 30))]
         );
         FtdImportService.ApplyHistoricalCusipEvidence(
-            stock,
-            [new(stockId, "222222222", new DateOnly(2020, 6, 30))]
+            listing,
+            [new(listingId, "222222222", new DateOnly(2020, 6, 30))]
         );
         FtdImportService.ApplyHistoricalCusipEvidence(
-            stock,
-            [new(stockId, "000000000", new DateOnly(2020, 6, 29))]
+            listing,
+            [new(listingId, "000000000", new DateOnly(2020, 6, 29))]
         );
 
-        stock.HistoricalCusipBackfillCandidates.Should().Equal("111111111", "222222222");
-        stock.HistoricalCusipBackfillAmbiguous.Should().BeTrue();
-        stock.HistoricalCusipBackfillCandidateOn.Should().Be(new DateOnly(2020, 6, 30));
+        listing.HistoricalCusipBackfillCandidates.Should().Equal("111111111", "222222222");
+        listing.HistoricalCusipBackfillAmbiguous.Should().BeTrue();
+        listing.HistoricalCusipBackfillCandidateOn.Should().Be(new DateOnly(2020, 6, 30));
     }
 
     [Fact]
     public void SelectCusips_SameValueClaimsMultipleStocks_DropsEveryOwner()
     {
-        var stocks = new[]
+        var listings = new[]
         {
-            new Equibles.CommonStocks.Data.Models.CommonStock
-            {
-                HistoricalCusipBackfillCandidates = ["111111111"],
-            },
-            new Equibles.CommonStocks.Data.Models.CommonStock
-            {
-                HistoricalCusipBackfillCandidates = ["111111111"],
-            },
+            new CommonStockDelistedListing { HistoricalCusipBackfillCandidates = ["111111111"] },
+            new CommonStockDelistedListing { HistoricalCusipBackfillCandidates = ["111111111"] },
         };
 
-        FtdImportService.RejectContestedHistoricalCusips(stocks);
+        FtdImportService.RejectContestedHistoricalCusips(listings);
 
-        stocks
+        listings
             .Should()
-            .OnlyContain(stock =>
-                stock.HistoricalCusipBackfillCandidates.Count == 1
-                && stock.HistoricalCusipBackfillCandidates[0] == "111111111"
+            .OnlyContain(listing =>
+                listing.HistoricalCusipBackfillCandidates.Count == 1
+                && listing.HistoricalCusipBackfillCandidates[0] == "111111111"
             );
-        stocks.Should().OnlyContain(stock => stock.HistoricalCusipBackfillAmbiguous);
+        listings.Should().OnlyContain(listing => listing.HistoricalCusipBackfillAmbiguous);
     }
 
     [Fact]
     public void SelectCusips_ContestedClaimFromEarlierBatch_RemainsVisibleToLaterOwner()
     {
-        var first = new Equibles.CommonStocks.Data.Models.CommonStock
+        var first = new CommonStockDelistedListing
         {
             HistoricalCusipBackfillCandidates = ["111111111"],
         };
-        var second = new Equibles.CommonStocks.Data.Models.CommonStock
+        var second = new CommonStockDelistedListing
         {
             HistoricalCusipBackfillCandidates = ["111111111"],
         };
         FtdImportService.RejectContestedHistoricalCusips([first, second]);
 
-        var later = new Equibles.CommonStocks.Data.Models.CommonStock
+        var later = new CommonStockDelistedListing
         {
             HistoricalCusipBackfillCandidates = ["111111111"],
         };
@@ -146,6 +141,6 @@ public class FtdImportServiceHistoricalIdentityTests
 
         new[] { first, second, later }
             .Should()
-            .OnlyContain(stock => stock.HistoricalCusipBackfillAmbiguous);
+            .OnlyContain(listing => listing.HistoricalCusipBackfillAmbiguous);
     }
 }

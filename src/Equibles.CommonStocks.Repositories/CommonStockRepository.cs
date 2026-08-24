@@ -227,6 +227,63 @@ public class CommonStockRepository : BaseRepository<CommonStock>
         return listedCusip;
     }
 
+    public IQueryable<CommonStockDelistedListing> GetDelistedListings()
+    {
+        return DbContext.Set<CommonStockDelistedListing>().AsQueryable();
+    }
+
+    public CommonStockDelistedListing AddDelistedListing(CommonStockDelistedListing delistedListing)
+    {
+        DbContext.Set<CommonStockDelistedListing>().Add(delistedListing);
+        return delistedListing;
+    }
+
+    public void DeleteDelistedListing(CommonStockDelistedListing delistedListing)
+    {
+        DbContext.Set<CommonStockDelistedListing>().Remove(delistedListing);
+    }
+
+    public async Task<CommonStockDelistedListing> GetDelistedListingForUpdate(
+        Guid delistedListingId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var listings = DbContext.Set<CommonStockDelistedListing>();
+        if (!DbContext.Database.IsRelational())
+        {
+            return await listings.FirstOrDefaultAsync(
+                listing => listing.Id == delistedListingId,
+                cancellationToken
+            );
+        }
+
+        if (DbContext.Database.CurrentTransaction == null)
+            throw new InvalidOperationException(
+                "GetDelistedListingForUpdate requires an active transaction."
+            );
+
+        var trackedEntry = DbContext
+            .ChangeTracker.Entries<CommonStockDelistedListing>()
+            .FirstOrDefault(entry => entry.Entity.Id == delistedListingId);
+        if (trackedEntry != null && trackedEntry.State != EntityState.Unchanged)
+        {
+            throw new InvalidOperationException(
+                $"GetDelistedListingForUpdate cannot refresh listing {delistedListingId} while "
+                    + $"its tracked state is {trackedEntry.State}."
+            );
+        }
+
+        var listing = await listings
+            .FromSqlInterpolated(
+                $"""SELECT * FROM "CommonStockDelistedListing" WHERE "Id" = {delistedListingId} FOR UPDATE"""
+            )
+            .FirstOrDefaultAsync(cancellationToken);
+        if (listing != null && trackedEntry != null)
+            await DbContext.Entry(listing).ReloadAsync(cancellationToken);
+
+        return listing;
+    }
+
     /// <summary>
     /// Retired primary tickers recorded when the SEC sync renamed a stock's symbol.
     /// Same aggregate reasoning as the CUSIP aliases: no independent lifecycle, so
