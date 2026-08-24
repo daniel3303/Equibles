@@ -708,159 +708,30 @@ public class FtdImportService
         }
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
-        var listings = await stockRepo
-            .GetDelistedListings()
-            .Include(listing => listing.CommonStock)
-            .Where(listing =>
-                latestByListing.Keys.Contains(listing.Id)
-                && listing.Cusip == null
-                && (
-                    listing.HistoricalCusipBackfillRequestedAt == null
-                    || listing.HistoricalCusipBackfillRequestedAt <= sweepStartedAt
-                )
-            )
-            .ToListAsync(cancellationToken);
-
-        var candidates = latestByListing
-            .Values.Select(value => value.Cusip)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var claims = new Dictionary<string, HashSet<Guid>>(StringComparer.OrdinalIgnoreCase);
-        void AddClaim(string cusip, Guid ownerId)
-        {
-            if (!claims.TryGetValue(cusip, out var owners))
-            {
-                owners = [];
-                claims[cusip] = owners;
-            }
-            owners.Add(ownerId);
-        }
-
-        var primaryClaims = await stockRepo
-            .GetAllIncludingInactive()
-            .Where(stock => stock.Cusip != null && candidates.Contains(stock.Cusip))
-            .Select(stock => new { stock.Id, stock.Cusip })
-            .ToListAsync(cancellationToken);
-        foreach (var claim in primaryClaims)
-        {
-            AddClaim(claim.Cusip, claim.Id);
-        }
-
-        var aliasClaims = await stockRepo
-            .GetCusipAliases()
-            .Where(alias => candidates.Contains(alias.Cusip))
-            .Select(alias => new { alias.CommonStockId, alias.Cusip })
-            .ToListAsync(cancellationToken);
-        foreach (var claim in aliasClaims)
-        {
-            AddClaim(claim.Cusip, claim.CommonStockId);
-        }
-
-        var listedClaims = await stockRepo
-            .GetListedCusips()
-            .Where(listing => candidates.Contains(listing.Cusip))
-            .Select(listing => new
-            {
-                listing.CommonStockId,
-                listing.ListedTicker,
-                listing.Cusip,
-            })
-            .ToListAsync(cancellationToken);
-        foreach (var claim in listedClaims)
-        {
-            AddClaim(claim.Cusip, claim.CommonStockId);
-        }
-
         var seeded = 0;
-        foreach (var listing in listings)
+        foreach (var candidate in latestByListing.OrderBy(candidate => candidate.Key))
         {
-            var stock = listing.CommonStock;
-            var resolved = latestByListing[listing.Id];
-            var isPrimary = string.Equals(
-                listing.ListedTicker,
-                stock.Ticker,
-                StringComparison.OrdinalIgnoreCase
+            var result = await stockManager.SeedDelistedListingCusip(
+                candidate.Key,
+                candidate.Value.Cusip,
+                candidate.Value.SettlementDate,
+                sweepStartedAt,
+                cancellationToken
             );
-            var aliasAlreadyClaimsCusip = aliasClaims.Any(claim =>
-                string.Equals(claim.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase)
-            );
-            var listedClaimsForCusip = listedClaims
-                .Where(claim =>
-                    string.Equals(claim.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase)
-                )
-                .ToList();
-            var exactListedClaim = listedClaims.FirstOrDefault(claim =>
-                claim.CommonStockId == stock.Id
-                && string.Equals(
-                    claim.ListedTicker,
-                    listing.ListedTicker,
-                    StringComparison.OrdinalIgnoreCase
-                )
-                && string.Equals(claim.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase)
-            );
-            if (
-                claims.TryGetValue(resolved.Cusip, out var owners)
-                && owners.Any(ownerId => ownerId != stock.Id)
-            )
+            if (result == DelistedListingCusipSeedResult.ClaimedByAnotherStock)
             {
                 _logger.LogWarning(
-                    "Inactive FTD identity {Ticker} resolved to CUSIP {Cusip}, but that CUSIP is already claimed by another stock — skipping",
-                    listing.ListedTicker,
-                    resolved.Cusip
+                    "Inactive FTD listing {ListingId} resolved to CUSIP {Cusip}, but that CUSIP is already claimed by another stock — skipping",
+                    candidate.Key,
+                    candidate.Value.Cusip
                 );
-                continue;
             }
-            if (
-                aliasAlreadyClaimsCusip
-                || (isPrimary && listedClaimsForCusip.Count > 0)
-                || (!isPrimary && listedClaimsForCusip.Count > 0 && exactListedClaim == null)
-            )
+            if (result == DelistedListingCusipSeedResult.Seeded)
             {
-                listing.HistoricalCusipBackfillAmbiguous = true;
-                continue;
+                seeded++;
             }
-
-            if (isPrimary)
-            {
-                if (
-                    stock.Cusip != null
-                    && !string.Equals(
-                        stock.Cusip,
-                        resolved.Cusip,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                {
-                    listing.HistoricalCusipBackfillAmbiguous = true;
-                    continue;
-                }
-                if (stock.Cusip == null)
-                {
-                    await stockManager.SetCusip(stock, resolved.Cusip);
-                }
-            }
-            else if (exactListedClaim == null)
-            {
-                var recorded = await stockManager.RecordListedTickerCusips(
-                    stock,
-                    [(listing.ListedTicker, resolved.Cusip)],
-                    [listing.ListedTicker]
-                );
-                if (recorded == 0)
-                {
-                    listing.HistoricalCusipBackfillAmbiguous = true;
-                    continue;
-                }
-            }
-
-            listing.Cusip = resolved.Cusip;
-            AddClaim(resolved.Cusip, stock.Id);
-            seeded++;
         }
-
-        await stockRepo.SaveChanges();
 
         return seeded;
     }

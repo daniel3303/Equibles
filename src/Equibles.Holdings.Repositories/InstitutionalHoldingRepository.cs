@@ -558,6 +558,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         ExtendCommandTimeoutForMarketWideAggregates();
         return GetAll()
             .Where(Is13F)
+            .Where(holding => holding.CommonStock.Active)
             .Where(h => h.ReportDate == current || h.ReportDate == previous);
     }
 
@@ -726,7 +727,14 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // HoldingsAggregateRefreshService. The conviction heat map reads this instead
     // of deriving GetQuarterlyActivity + GetQuarterlyNewSoldOutPositions live.
     public IQueryable<StockQuarterlyActivity> GetStockActivitySnapshots(DateOnly reportDate) =>
-        DbContext.Set<StockQuarterlyActivity>().Where(s => s.ReportDate == reportDate);
+        DbContext
+            .Set<StockQuarterlyActivity>()
+            .Where(snapshot =>
+                snapshot.ReportDate == reportDate
+                && DbContext
+                    .Set<CommonStock>()
+                    .Any(stock => stock.Id == snapshot.CommonStockId && stock.Active)
+            );
 
     public IQueryable<StockQuarterlyActivity> GetStockActivitySnapshotsByStock(CommonStock stock) =>
         DbContext.Set<StockQuarterlyActivity>().Where(s => s.CommonStockId == stock.Id);
@@ -1039,7 +1047,15 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // when no rows match.
     public IQueryable<StockQuarterlyActivityCombined> GetStockActivitySnapshotsCombined(
         DateOnly reportDate
-    ) => DbContext.Set<StockQuarterlyActivityCombined>().Where(s => s.ReportDate == reportDate);
+    ) =>
+        DbContext
+            .Set<StockQuarterlyActivityCombined>()
+            .Where(snapshot =>
+                snapshot.ReportDate == reportDate
+                && DbContext
+                    .Set<CommonStock>()
+                    .Any(stock => stock.Id == snapshot.CommonStockId && stock.Active)
+            );
 
     public IQueryable<StockQuarterlyListingActivity> GetStockListingActivitySnapshots(
         DateOnly reportDate,
@@ -1742,6 +1758,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     {
         return GetAll()
             .Where(Is13F)
+            .Where(holding => holding.CommonStock.Active)
             .Where(h =>
                 h.ReportDate == current
                 || (

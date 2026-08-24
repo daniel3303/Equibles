@@ -8,6 +8,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.BusinessLogic;
 
+public enum DelistedListingCusipSeedResult
+{
+    Skipped,
+    Seeded,
+    Ambiguous,
+    ClaimedByAnotherStock,
+}
+
 [Service]
 public class CommonStockManager
 {
@@ -19,6 +27,173 @@ public class CommonStockManager
         _commonStockRepository = commonStockRepository;
         _bus = bus;
     }
+
+    /// <summary>
+    /// Finalizes an authoritative historical CUSIP for one retained listed identity.
+    /// The stock row is locked before the listing row so company-sync reactivation and
+    /// historical-identity finalization cannot interleave. The listing cutoff and request
+    /// checkpoint are revalidated under those locks before any identity is written.
+    /// </summary>
+    public async Task<DelistedListingCusipSeedResult> SeedDelistedListingCusip(
+        Guid listingId,
+        string cusip,
+        DateOnly settlementDate,
+        DateTime sweepStartedAt,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var normalizedCusip = cusip?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(normalizedCusip))
+        {
+            return DelistedListingCusipSeedResult.Skipped;
+        }
+
+        await using var transaction = await _commonStockRepository.BeginCusipIdentityWrite(
+            cancellationToken
+        );
+        var stockId = await _commonStockRepository
+            .GetDelistedListings()
+            .AsNoTracking()
+            .Where(listing => listing.Id == listingId)
+            .Select(listing => (Guid?)listing.CommonStockId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (stockId == null)
+        {
+            return DelistedListingCusipSeedResult.Skipped;
+        }
+
+        var stock = await _commonStockRepository.GetForUpdate(stockId.Value, cancellationToken);
+        if (stock == null)
+        {
+            return DelistedListingCusipSeedResult.Skipped;
+        }
+
+        var listing = await _commonStockRepository.GetDelistedListingForUpdate(
+            listingId,
+            cancellationToken
+        );
+        if (
+            listing == null
+            || listing.CommonStockId != stock.Id
+            || listing.Cusip != null
+            || settlementDate > listing.DelistedOn
+            || !SamePostgresTimestamp(listing.HistoricalCusipBackfillSweepStartedAt, sweepStartedAt)
+            || listing.HistoricalCusipBackfillCandidateOn != settlementDate
+            || listing.HistoricalCusipBackfillAmbiguous
+            || listing.HistoricalCusipBackfillCandidates.Count != 1
+            || !string.Equals(
+                listing.HistoricalCusipBackfillCandidates[0],
+                normalizedCusip,
+                StringComparison.OrdinalIgnoreCase
+            )
+            || (
+                listing.HistoricalCusipBackfillRequestedAt != null
+                && listing.HistoricalCusipBackfillRequestedAt > sweepStartedAt
+            )
+        )
+        {
+            return DelistedListingCusipSeedResult.Skipped;
+        }
+
+        var primaryClaims = await _commonStockRepository
+            .GetAllIncludingInactive()
+            .Where(candidate =>
+                candidate.Cusip != null && candidate.Cusip.ToUpper() == normalizedCusip
+            )
+            .Select(candidate => candidate.Id)
+            .ToListAsync(cancellationToken);
+        var aliasClaims = await _commonStockRepository
+            .GetCusipAliases()
+            .Where(alias => alias.Cusip.ToUpper() == normalizedCusip)
+            .Select(alias => alias.CommonStockId)
+            .ToListAsync(cancellationToken);
+        var listedClaims = await _commonStockRepository
+            .GetListedCusips()
+            .Where(candidate => candidate.Cusip.ToUpper() == normalizedCusip)
+            .Select(candidate => new { candidate.CommonStockId, candidate.ListedTicker })
+            .ToListAsync(cancellationToken);
+        if (
+            primaryClaims.Any(ownerId => ownerId != stock.Id)
+            || aliasClaims.Any(ownerId => ownerId != stock.Id)
+            || listedClaims.Any(candidate => candidate.CommonStockId != stock.Id)
+        )
+        {
+            return DelistedListingCusipSeedResult.ClaimedByAnotherStock;
+        }
+
+        var isPrimary = string.Equals(
+            listing.ListedTicker,
+            stock.Ticker,
+            StringComparison.OrdinalIgnoreCase
+        );
+        var exactListedClaim = listedClaims.FirstOrDefault(candidate =>
+            candidate.CommonStockId == stock.Id
+            && string.Equals(
+                candidate.ListedTicker,
+                listing.ListedTicker,
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+        if (
+            aliasClaims.Count > 0
+            || (isPrimary && listedClaims.Count > 0)
+            || (!isPrimary && primaryClaims.Count > 0)
+            || (!isPrimary && listedClaims.Count > 0 && exactListedClaim == null)
+            || (
+                isPrimary
+                && stock.Cusip != null
+                && !string.Equals(stock.Cusip, normalizedCusip, StringComparison.OrdinalIgnoreCase)
+            )
+        )
+        {
+            listing.HistoricalCusipBackfillAmbiguous = true;
+            await _commonStockRepository.SaveChanges();
+            if (transaction != null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+            return DelistedListingCusipSeedResult.Ambiguous;
+        }
+
+        var identityAdded = false;
+        if (isPrimary && stock.Cusip == null)
+        {
+            stock.Cusip = normalizedCusip;
+            identityAdded = true;
+        }
+        else if (!isPrimary && exactListedClaim == null)
+        {
+            _commonStockRepository.AddListedCusip(
+                new CommonStockListedCusip
+                {
+                    CommonStockId = stock.Id,
+                    ListedTicker = listing.ListedTicker,
+                    Cusip = normalizedCusip,
+                }
+            );
+            identityAdded = true;
+        }
+
+        listing.Cusip = normalizedCusip;
+        await _commonStockRepository.SaveChanges();
+        if (transaction != null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        if (identityAdded)
+        {
+            await _bus.Publish(
+                new StockCusipChanged(stock.Id, stock.Ticker, null, stock.Cusip),
+                cancellationToken
+            );
+        }
+
+        return DelistedListingCusipSeedResult.Seeded;
+    }
+
+    private static bool SamePostgresTimestamp(DateTime? persisted, DateTime expected) =>
+        persisted.HasValue && persisted.Value.Ticks / 10 == expected.Ticks / 10;
 
     /// <summary>
     /// Records CUSIPs a stock USED to trade under, without touching its current one.
@@ -62,6 +237,7 @@ public class CommonStockManager
             return 0;
         }
 
+        await using var transaction = await _commonStockRepository.BeginCusipIdentityWrite();
         var alreadyRecorded = await _commonStockRepository
             .GetCusipAliases()
             .Where(a => candidates.Contains(a.Cusip.ToUpper()))
@@ -101,6 +277,10 @@ public class CommonStockManager
         }
 
         await _commonStockRepository.SaveChanges();
+        if (transaction != null)
+        {
+            await transaction.CommitAsync();
+        }
 
         // Root bus, after the write commits — same reasoning as SetCusip: this flow only
         // saves the financial context, so a bus outbox on another context would capture
@@ -182,6 +362,7 @@ public class CommonStockManager
             return 0;
         }
 
+        await using var transaction = await _commonStockRepository.BeginCusipIdentityWrite();
         var candidateCusips = cleaned.Select(c => c.Cusip).ToList();
         var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         taken.UnionWith(
@@ -226,6 +407,10 @@ public class CommonStockManager
         }
 
         await _commonStockRepository.SaveChanges();
+        if (transaction != null)
+        {
+            await transaction.CommitAsync();
+        }
 
         // Root bus, after the write commits — same reasoning as SetCusip: this flow only
         // saves the financial context, so a bus outbox on another context would capture
@@ -274,6 +459,26 @@ public class CommonStockManager
         }
 
         var previousCusip = commonStock.Cusip;
+        var normalizedCusip = cusip?.Trim().ToUpperInvariant();
+        await using var transaction = await _commonStockRepository.BeginCusipIdentityWrite();
+
+        var claimedByAnotherPrimary = await _commonStockRepository
+            .GetAllIncludingInactive()
+            .AnyAsync(stock =>
+                stock.Id != commonStock.Id
+                && stock.Cusip != null
+                && stock.Cusip.ToUpper() == normalizedCusip
+            );
+        var claimedAsAlias = await _commonStockRepository
+            .GetCusipAliases()
+            .AnyAsync(alias => alias.Cusip.ToUpper() == normalizedCusip);
+        var claimedAsListing = await _commonStockRepository
+            .GetListedCusips()
+            .AnyAsync(listing => listing.Cusip.ToUpper() == normalizedCusip);
+        if (claimedByAnotherPrimary || claimedAsAlias || claimedAsListing)
+        {
+            return;
+        }
 
         // The alias table enforces one CUSIP → one stock, ever (global unique
         // index): a retired CUSIP already recorded — even for another stock —
@@ -296,6 +501,10 @@ public class CommonStockManager
         commonStock.Cusip = cusip;
 
         await _commonStockRepository.SaveChanges();
+        if (transaction != null)
+        {
+            await transaction.CommitAsync();
+        }
 
         // Publish via the root bus (bypasses any bus outbox) after the write commits.
         await _bus.Publish(

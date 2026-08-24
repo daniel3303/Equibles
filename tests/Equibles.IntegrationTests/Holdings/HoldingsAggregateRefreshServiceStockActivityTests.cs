@@ -2,6 +2,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -163,6 +164,67 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
                 && row.PreviousShares == 10
             );
         rows.Should().OnlyContain(row => !row.IsCombined);
+    }
+
+    [Fact]
+    public async Task RebuildQuarterAsync_ExcludesInactiveStocksFromLiveActivitySnapshots()
+    {
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        var active = await SeedStock(seed, "LIVE", industry);
+        var inactive = await SeedStock(seed, "GONE", industry);
+        inactive.Active = false;
+        inactive.DelistedOn = QCur.AddDays(-1);
+        var holder = await SeedHolder(seed, "H001");
+        seed.AddRange(
+            MakeHolding(active, holder, QCur, 100_000, "live-cur"),
+            MakeHolding(inactive, holder, QCur, 900_000, "gone-cur")
+        );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildQuarterAsync(QCur, CancellationToken.None);
+
+        await using var read = FreshContext();
+        var activity = await read.Set<StockQuarterlyActivity>()
+            .Where(row => row.ReportDate == QCur)
+            .ToListAsync();
+        activity.Should().ContainSingle(row => row.CommonStockId == active.Id);
+        activity.Should().NotContain(row => row.CommonStockId == inactive.Id);
+
+        var listingActivity = await read.Set<StockQuarterlyListingActivity>()
+            .Where(row => row.ReportDate == QCur && !row.IsCombined)
+            .ToListAsync();
+        listingActivity.Should().ContainSingle(row => row.CommonStockId == active.Id);
+        listingActivity.Should().NotContain(row => row.CommonStockId == inactive.Id);
+    }
+
+    [Fact]
+    public async Task MarketActivityRead_ExcludesStockDeactivatedAfterSnapshotGeneration()
+    {
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        var stock = await SeedStock(seed, "GONE", industry);
+        var holder = await SeedHolder(seed, "H001");
+        seed.Add(MakeHolding(stock, holder, QCur, 100_000, "gone-cur"));
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildQuarterAsync(QCur, CancellationToken.None);
+
+        await using (var deactivate = FreshContext())
+        {
+            var persisted = await deactivate
+                .Set<CommonStock>()
+                .SingleAsync(row => row.Id == stock.Id);
+            persisted.Active = false;
+            persisted.DelistedOn = QCur.AddDays(1);
+            await deactivate.SaveChangesAsync();
+        }
+
+        await using var read = FreshContext();
+        var repository = new InstitutionalHoldingRepository(read);
+        (await repository.GetMarketActivitySnapshots(QCur, false))
+            .Should()
+            .BeEmpty("inactive stocks must disappear before an aggregate rebuild catches up");
     }
 
     private static async Task<Guid> SeedTaxonomy(Equibles.Data.EquiblesFinancialDbContext ctx)

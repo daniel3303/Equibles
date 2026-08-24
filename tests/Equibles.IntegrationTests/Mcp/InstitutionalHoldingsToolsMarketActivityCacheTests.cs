@@ -96,6 +96,75 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
     }
 
     [Fact]
+    public async Task GetMarketWide13FActivity_CachedQuarterRefiltersDeactivatedStock()
+    {
+        var prior = new DateOnly(2024, 9, 30);
+        var current = new DateOnly(2024, 12, 31);
+        var stock = new CommonStock
+        {
+            Ticker = "GONE",
+            Name = "Formerly Listed Inc.",
+            Cik = "C-DELISTED",
+        };
+        var holder = new InstitutionalHolder { Cik = "H-DELISTED", Name = "Test Filer" };
+        DbContext.AddRange(stock, holder);
+        var computedAt = DateTime.UtcNow;
+        DbContext.AddRange(
+            MakeHolding(stock, holder, prior, shares: 100, value: 100_000),
+            MakeHolding(stock, holder, current, shares: 200, value: 200_000),
+            new StockQuarterlyActivity
+            {
+                CommonStockId = stock.Id,
+                ReportDate = current,
+                PreviousReportDate = prior,
+                CurrentShares = 200,
+                PreviousShares = 100,
+                CurrentValue = 200_000,
+                PreviousValue = 100_000,
+                CurrentFilerCount = 1,
+                PreviousFilerCount = 1,
+                ComputedAt = computedAt,
+            },
+            new StockQuarterlyListingActivity
+            {
+                CommonStockId = stock.Id,
+                ReportDate = current,
+                PriceSeriesTicker = stock.Ticker,
+                CurrentShares = 200,
+                PreviousShares = 100,
+                ComputedAt = computedAt,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        await using var read = Fixture.CreateDbContext();
+        var sut = BuildTool(read, cache);
+        var active = await sut.GetMarketWide13FActivity(
+            bucket: "top-buys",
+            reportDate: "2024-12-31"
+        );
+        active.Should().Contain("GONE");
+
+        await using (var update = Fixture.CreateDbContext())
+        {
+            var deactivated = await update
+                .Set<CommonStock>()
+                .SingleAsync(row => row.Id == stock.Id);
+            deactivated.Active = false;
+            await update.SaveChangesAsync();
+        }
+
+        var inactive = await sut.GetMarketWide13FActivity(
+            bucket: "top-buys",
+            reportDate: "2024-12-31"
+        );
+        inactive.Should().NotContain("GONE");
+        inactive.Should().NotContain("Unknown");
+    }
+
+    [Fact]
     public async Task GetMarketWide13FActivity_DirtyQuarterReadsSnapshotWithoutCachingIt()
     {
         var prior = new DateOnly(2024, 9, 30);
