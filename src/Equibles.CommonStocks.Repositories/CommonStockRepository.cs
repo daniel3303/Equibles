@@ -1,11 +1,16 @@
+using System.Data;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Equibles.CommonStocks.Repositories;
 
 public class CommonStockRepository : BaseRepository<CommonStock>
 {
+    private const string CusipIdentityWriteLockSql =
+        "SELECT pg_advisory_xact_lock(1163282519, 7456)";
+
     public CommonStockRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
@@ -17,6 +22,34 @@ public class CommonStockRepository : BaseRepository<CommonStock>
         GetAllIncludingInactive().Where(stock => stock.Active);
 
     public IQueryable<CommonStock> GetAllIncludingInactive() => base.GetAll();
+
+    /// <summary>
+    /// Serializes the rare cross-table CUSIP identity writes. PostgreSQL cannot express one
+    /// unique constraint across CommonStock, CommonStockCusipAlias and CommonStockListedCusip,
+    /// so every writer takes this transaction-scoped database lock before checking ownership.
+    /// Returns the transaction when this call created it; callers commit only that transaction.
+    /// </summary>
+    public async Task<IDbContextTransaction> BeginCusipIdentityWrite(
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!DbContext.Database.IsRelational())
+        {
+            return null;
+        }
+
+        IDbContextTransaction ownedTransaction = null;
+        if (DbContext.Database.CurrentTransaction == null)
+        {
+            ownedTransaction = await DbContext.Database.BeginTransactionAsync(
+                IsolationLevel.ReadCommitted,
+                cancellationToken
+            );
+        }
+
+        await DbContext.Database.ExecuteSqlRawAsync(CusipIdentityWriteLockSql, cancellationToken);
+        return ownedTransaction;
+    }
 
     public override async Task<CommonStock> Get(params object[] key)
     {

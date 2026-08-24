@@ -1245,9 +1245,13 @@ public class InstitutionalHoldingsTools
             }
         );
 
+        var activeIds = await GetActiveStockIds(cached.Select(row => row.CommonStockId));
         // Split restatement mutates the returned rows. Keep the cached source pristine so a
         // second request cannot compound the adjustment applied by the first request.
-        return cached.Select(CloneActivity).ToList();
+        return cached
+            .Where(row => activeIds.Contains(row.CommonStockId))
+            .Select(CloneActivity)
+            .ToList();
     }
 
     // Churn twin of LoadMarketActivity — same lanes, same empty-snapshot fallback.
@@ -1289,7 +1293,25 @@ public class InstitutionalHoldingsTools
             }
         );
 
-        return cached.Select(CloneChurn).ToList();
+        var activeIds = await GetActiveStockIds(cached.Select(row => row.CommonStockId));
+        return cached
+            .Where(row => activeIds.Contains(row.CommonStockId))
+            .Select(CloneChurn)
+            .ToList();
+    }
+
+    private async Task<HashSet<Guid>> GetActiveStockIds(IEnumerable<Guid> stockIds)
+    {
+        var ids = stockIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await _commonStockRepository
+            .GetByIds(ids)
+            .Select(stock => stock.Id)
+            .ToHashSetAsync();
     }
 
     // Only resolved 13F quarter dates reach this key builder, so the process-wide lock set grows

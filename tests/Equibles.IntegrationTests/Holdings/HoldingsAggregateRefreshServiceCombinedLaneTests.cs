@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -171,6 +172,59 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
         row.PreviousShares.Should().Be(1_500);
         listing.CurrentShares.Should().Be(2_200);
         listing.PreviousShares.Should().Be(1_500);
+    }
+
+    [Fact]
+    public async Task RebuildQuarterAsync_WindowOpen_ExcludesInactiveStocksAtReadAndGeneration()
+    {
+        await using var seed = FreshContext();
+        var industry = await SeedTaxonomy(seed);
+        var active = await SeedStock(seed, "LIVE", industry);
+        var inactive = await SeedStock(seed, "GONE", industry);
+        var holder = await SeedHolder(seed, "H020");
+        seed.AddRange(
+            MakeHolding(active, holder, OpenPrev, 100_000, "live-prev"),
+            MakeHolding(active, holder, OpenCur, 120_000, "live-cur"),
+            MakeHolding(inactive, holder, OpenPrev, 900_000, "gone-prev"),
+            MakeHolding(inactive, holder, OpenCur, 950_000, "gone-cur")
+        );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildQuarterAsync(OpenCur, CancellationToken.None);
+
+        await using (var deactivate = FreshContext())
+        {
+            var persisted = await deactivate
+                .Set<CommonStock>()
+                .SingleAsync(row => row.Id == inactive.Id);
+            persisted.Active = false;
+            persisted.DelistedOn = OpenCur;
+            await deactivate.SaveChangesAsync();
+        }
+
+        await using (var staleRead = FreshContext())
+        {
+            (await staleRead.Set<StockQuarterlyActivityCombined>().CountAsync())
+                .Should()
+                .Be(2, "the materialized generation predates the directory change");
+            var repository = new InstitutionalHoldingRepository(staleRead);
+            var visible = await repository.GetMarketActivitySnapshots(OpenCur, true);
+            visible.Should().ContainSingle(row => row.CommonStockId == active.Id);
+            visible.Should().NotContain(row => row.CommonStockId == inactive.Id);
+        }
+
+        await BuildService().RebuildQuarterAsync(OpenCur, CancellationToken.None);
+
+        await using var rebuilt = FreshContext();
+        var rows = await rebuilt.Set<StockQuarterlyActivityCombined>().ToListAsync();
+        rows.Should().ContainSingle(row => row.CommonStockId == active.Id);
+        rows.Should().NotContain(row => row.CommonStockId == inactive.Id);
+        var listings = await rebuilt
+            .Set<StockQuarterlyListingActivity>()
+            .Where(row => row.IsCombined)
+            .ToListAsync();
+        listings.Should().ContainSingle(row => row.CommonStockId == active.Id);
+        listings.Should().NotContain(row => row.CommonStockId == inactive.Id);
     }
 
     [Fact]

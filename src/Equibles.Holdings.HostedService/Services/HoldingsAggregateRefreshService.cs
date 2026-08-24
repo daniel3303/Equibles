@@ -693,6 +693,7 @@ public class HoldingsAggregateRefreshService
             .Where(h =>
                 (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
                 && h.FilingType == FilingType.Form13F
+                && h.CommonStock.Active
             )
             .GroupBy(h => h.CommonStockId)
             .Select(g => new
@@ -723,12 +724,13 @@ public class HoldingsAggregateRefreshService
                 dbContext.Set<CommonStock>(),
                 holding => holding.CommonStockId,
                 stock => stock.Id,
-                (holding, stock) => new { Holding = holding, stock.Ticker }
+                (holding, stock) => new { Holding = holding, Stock = stock }
             )
+            .Where(row => row.Stock.Active)
             .GroupBy(row => new
             {
                 row.Holding.CommonStockId,
-                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
+                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Stock.Ticker,
             })
             .Select(group => new
             {
@@ -881,6 +883,7 @@ public class HoldingsAggregateRefreshService
             .Where(h =>
                 (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
                 && h.FilingType == FilingType.Form13F
+                && h.CommonStock.Active
             )
             .GroupBy(h => new { h.CommonStockId, h.InstitutionalHolderId })
             .Select(g => new
