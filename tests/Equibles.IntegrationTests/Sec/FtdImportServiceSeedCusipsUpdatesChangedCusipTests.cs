@@ -161,6 +161,125 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SeedInactiveCusips_AuthoritativeHistoricalMatch_SeedsRetainedIdentity()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "GONE",
+            Name = "Formerly Listed Corp",
+            Cik = "0000000042",
+            Active = false,
+            DelistedOn = new DateOnly(2020, 6, 30),
+            HistoricalCusipBackfillRequestedAt = DateTime.UtcNow,
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var bus = Substitute.For<IBus>();
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory
+            .CreateScope()
+            .Returns(_ =>
+            {
+                var ctx = FreshContext();
+                var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(CommonStockRepository))
+                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(CommonStockManager))
+                    .Returns(new CommonStockManager(new CommonStockRepository(ctx), bus));
+                var scope = Substitute.For<IServiceScope>();
+                scope.ServiceProvider.Returns(sp);
+                return scope;
+            });
+        var sut = new FtdImportService(
+            scopeFactory,
+            Substitute.For<ISecEdgarClient>(),
+            Substitute.For<ILogger<FtdImportService>>(),
+            new ErrorReporter(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(new WorkerOptions())
+        );
+        var matches = new Dictionary<Guid, (string Cusip, DateOnly SettlementDate)>
+        {
+            [stock.Id] = ("123456789", new DateOnly(2020, 6, 30)),
+        };
+
+        var seedInactive = typeof(FtdImportService).GetMethod(
+            "SeedInactiveCusips",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+        var seeded = await (Task<int>)
+            seedInactive.Invoke(
+                sut,
+                [
+                    matches,
+                    stock.HistoricalCusipBackfillRequestedAt!.Value.AddMinutes(1),
+                    CancellationToken.None,
+                ]
+            )!;
+
+        seeded.Should().Be(1);
+        using var verify = FreshContext();
+        var persisted = await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id);
+        persisted.Cusip.Should().Be("123456789");
+        await bus.Received(1)
+            .Publish(
+                Arg.Is<StockCusipChanged>(change =>
+                    change.CommonStockId == stock.Id && change.Cusip == "123456789"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task SeedInactiveCusips_RequestChangedAfterSweepStarted_LeavesIdentityForNextPass()
+    {
+        var requestedAt = DateTime.UtcNow;
+        var stock = new CommonStock
+        {
+            Ticker = "GONE",
+            Name = "Formerly Listed Corp",
+            Cik = "0000000042",
+            Active = false,
+            DelistedOn = new DateOnly(2020, 6, 30),
+            HistoricalCusipBackfillRequestedAt = requestedAt,
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var bus = Substitute.For<IBus>();
+        var sut = CreateSut(bus);
+        var matches = new Dictionary<Guid, (string Cusip, DateOnly SettlementDate)>
+        {
+            [stock.Id] = ("123456789", new DateOnly(2020, 6, 30)),
+        };
+        var method = typeof(FtdImportService).GetMethod(
+            "SeedInactiveCusips",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+
+        var seeded = await (Task<int>)
+            method.Invoke(sut, [matches, requestedAt.AddMinutes(-1), CancellationToken.None])!;
+
+        seeded.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
+            .Cusip.Should()
+            .BeNull();
+        await bus.DidNotReceive()
+            .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task SeedCusips_ResolvedCusipBelongsToAnotherStock_SkipsWithoutUpdating()
     {
         // Ticker-recycling shape: a delisted issuer's stale stock still holds
@@ -182,6 +301,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             Name = "New Owner Corp",
             Cik = "0000000002",
             Cusip = "222222222",
+            Active = false,
         };
         await using (var seed = _fixture.CreateDbContext())
         {
@@ -250,6 +370,87 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         using var verify = FreshContext();
         var persistedStale = await verify.Set<CommonStock>().FirstAsync(s => s.Id == staleStock.Id);
         persistedStale.Cusip.Should().Be("111111111");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SeedCusips_ResolvedCusipIsHistoricalOrListingClaim_SkipsWithoutUpdating(
+        bool listingClaim
+    )
+    {
+        var target = new CommonStock
+        {
+            Ticker = "TICK",
+            Name = "Target Corp",
+            Cik = "0000000001",
+            Cusip = "111111111",
+        };
+        var owner = new CommonStock
+        {
+            Ticker = "OWNER",
+            Name = "Identity Owner Corp",
+            Cik = "0000000002",
+            Cusip = "333333333",
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().AddRange(target, owner);
+            if (listingClaim)
+            {
+                seed.Set<CommonStockListedCusip>()
+                    .Add(
+                        new CommonStockListedCusip
+                        {
+                            CommonStockId = owner.Id,
+                            ListedTicker = "OWNER-A",
+                            Cusip = "222222222",
+                        }
+                    );
+            }
+            else
+            {
+                seed.Set<CommonStockCusipAlias>()
+                    .Add(
+                        new CommonStockCusipAlias { CommonStockId = owner.Id, Cusip = "222222222" }
+                    );
+            }
+            await seed.SaveChangesAsync();
+        }
+
+        var bus = Substitute.For<IBus>();
+        var sut = CreateSut(bus);
+        var recordType = typeof(FtdImportService).Assembly.GetType(
+            "Equibles.Sec.HostedService.Models.FtdRecord"
+        )!;
+        var record = Activator.CreateInstance(recordType)!;
+        recordType.GetProperty("Cusip")!.SetValue(record, "222222222");
+        recordType.GetProperty("Symbol")!.SetValue(record, "TICK");
+        recordType.GetProperty("SettlementDate")!.SetValue(record, new DateOnly(2026, 6, 12));
+        var records = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(recordType))!;
+        records.Add(record);
+        var method = typeof(FtdImportService).GetMethod(
+            "SeedCusips",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+
+        var seeded = await (Task<int>)
+            method.Invoke(
+                sut,
+                [
+                    records,
+                    new Dictionary<string, Guid> { ["TICK"] = target.Id },
+                    CancellationToken.None,
+                ]
+            )!;
+
+        seeded.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<CommonStock>().SingleAsync(stock => stock.Id == target.Id))
+            .Cusip.Should()
+            .Be("111111111");
+        await bus.DidNotReceive()
+            .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -325,5 +526,34 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         using var verify = FreshContext();
         (await verify.Set<CommonStockCusipAlias>().AnyAsync()).Should().BeFalse();
+    }
+
+    private FtdImportService CreateSut(IBus bus)
+    {
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        scopeFactory
+            .CreateScope()
+            .Returns(_ =>
+            {
+                var ctx = FreshContext();
+                var repository = new CommonStockRepository(ctx);
+                var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(CommonStockRepository)).Returns(repository);
+                sp.GetService(typeof(CommonStockManager))
+                    .Returns(new CommonStockManager(repository, bus));
+                var scope = Substitute.For<IServiceScope>();
+                scope.ServiceProvider.Returns(sp);
+                return scope;
+            });
+        return new FtdImportService(
+            scopeFactory,
+            Substitute.For<ISecEdgarClient>(),
+            Substitute.For<ILogger<FtdImportService>>(),
+            new ErrorReporter(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(new WorkerOptions())
+        );
     }
 }

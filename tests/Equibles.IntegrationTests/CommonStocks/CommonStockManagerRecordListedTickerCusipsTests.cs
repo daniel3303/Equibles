@@ -37,7 +37,8 @@ public class CommonStockManagerRecordListedTickerCusipsTests
         string ticker,
         string cik,
         string cusip = null,
-        List<string> secondaryTickers = null
+        List<string> secondaryTickers = null,
+        bool active = true
     )
     {
         var stock = new CommonStock
@@ -47,6 +48,7 @@ public class CommonStockManagerRecordListedTickerCusipsTests
             Cik = cik,
             Cusip = cusip,
             SecondaryTickers = secondaryTickers ?? [],
+            Active = active,
         };
         _repository.Add(stock);
         await _repository.SaveChanges();
@@ -121,11 +123,11 @@ public class CommonStockManagerRecordListedTickerCusipsTests
     }
 
     [Fact]
-    public async Task RecordListedTickerCusips_CusipAlreadyOwned_FirstOwnerKeepsIt()
+    public async Task RecordListedTickerCusips_CusipOwnedByInactivePrimary_FirstOwnerKeepsIt()
     {
         // One CUSIP identifies one security, ever. Whether the prior owner holds it as a
         // primary, an alias, or another listing, a later claim is dropped silently.
-        var owner = await SeedStock("AAA", "0000000001", cusip: "111111111");
+        var owner = await SeedStock("AAA", "0000000001", cusip: "111111111", active: false);
         var claimant = await SeedStock(
             "BBB",
             "0000000002",
@@ -137,6 +139,20 @@ public class CommonStockManagerRecordListedTickerCusipsTests
 
         recorded.Should().Be(0);
         (await _repository.GetListedCusips().AnyAsync()).Should().BeFalse();
+        await _bus.DidNotReceive()
+            .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RecordRetiredCusipAliases_CusipOwnedByInactivePrimary_RecordsNothing()
+    {
+        await SeedStock("OLD", "0000000001", cusip: "111111111", active: false);
+        var claimant = await SeedStock("LIVE", "0000000002", cusip: "222222222");
+
+        var recorded = await _sut.RecordRetiredCusipAliases(claimant, ["111111111"]);
+
+        recorded.Should().Be(0);
+        (await _repository.GetCusipAliases().AnyAsync()).Should().BeFalse();
         await _bus.DidNotReceive()
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
     }

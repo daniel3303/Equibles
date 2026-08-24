@@ -35,6 +35,26 @@ public class CommonStock : IActivable
     /// </summary>
     public DateTime? HistoricalPriceBackfillAttemptedAt { get; set; }
 
+    /// <summary>
+    /// When an authoritative inactive-listing directory requested an SEC FTD archive scan to
+    /// recover this security's historical CUSIP. The sweep snapshots this timestamp so an
+    /// identity discovered during a running scan receives a complete pass on the next cycle.
+    /// </summary>
+    public DateTime? HistoricalCusipBackfillRequestedAt { get; set; }
+
+    /// <summary>
+    /// CUSIPs observed on the newest eligible FTD settlement date during the current historical
+    /// identity sweep. Claims remain staged until the entire archive has been read so a conflict
+    /// discovered in a later batch cannot be forgotten.
+    /// </summary>
+    public List<string> HistoricalCusipBackfillCandidates { get; set; } = [];
+
+    public DateOnly? HistoricalCusipBackfillCandidateOn { get; set; }
+
+    public bool HistoricalCusipBackfillAmbiguous { get; set; }
+
+    public DateTime? HistoricalCusipBackfillSweepStartedAt { get; set; }
+
     [MaxLength(256)]
     public string Name { get; set; }
 

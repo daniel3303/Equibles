@@ -68,6 +68,13 @@ public class CommonStockManager
             .Select(a => a.Cusip)
             .ToListAsync();
         var taken = new HashSet<string>(alreadyRecorded, StringComparer.OrdinalIgnoreCase);
+        taken.UnionWith(
+            await _commonStockRepository
+                .GetAllIncludingInactive()
+                .Where(stock => stock.Cusip != null && candidates.Contains(stock.Cusip.ToUpper()))
+                .Select(stock => stock.Cusip)
+                .ToListAsync()
+        );
         // A CUSIP recorded as a sibling LISTING is a different security's current identity —
         // aliasing it would outrank the listing at resolution time and merge the two classes'
         // positions into one row. One CUSIP identifies one security, in both directions.
@@ -191,7 +198,7 @@ public class CommonStockManager
         );
         taken.UnionWith(
             await _commonStockRepository
-                .GetAll()
+                .GetAllIncludingInactive()
                 .Where(cs => cs.Cusip != null && candidateCusips.Contains(cs.Cusip.ToUpper()))
                 .Select(cs => cs.Cusip)
                 .ToListAsync()

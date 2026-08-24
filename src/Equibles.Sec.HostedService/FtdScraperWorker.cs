@@ -67,6 +67,10 @@ public class FtdScraperWorker : BaseScraperWorker
         // that happen while it is running.
         await ftdService.BackfillRetiredCusips(stoppingToken);
 
+        // Newly materialized inactive identities have no CUSIP yet. Resolve them from the
+        // authoritative SEC symbol+CUSIP archive before Holdings retries historical filings.
+        await ftdService.BackfillInactiveCusips(stoppingToken);
+
         // And the sibling-listing sweep: secondary tickers' CUSIPs (share classes, units)
         // recorded against the exact listed symbol so 13F lines filed under them resolve.
         await ftdService.BackfillListedTickerCusips(stoppingToken);

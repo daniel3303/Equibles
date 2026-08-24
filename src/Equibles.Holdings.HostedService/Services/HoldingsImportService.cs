@@ -453,10 +453,19 @@ public class HoldingsImportService
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var uniqueCusipsList = uniqueCusips.ToList();
 
-        var query =
-            _workerOptions.TickersToSync?.Count > 0
-                ? stockRepo.GetByTickers(_workerOptions.TickersToSync)
-                : stockRepo.GetAll();
+        // Historical filings must resolve identities that are no longer in the live directory.
+        // The default repository surface is active-only by design, so this importer opts into
+        // retained inactive rows explicitly.
+        var query = stockRepo.GetAllIncludingInactive();
+        if (_workerOptions.TickersToSync?.Count > 0)
+        {
+            query = query.Where(stock =>
+                _workerOptions.TickersToSync.Contains(stock.Ticker)
+                || stock.SecondaryTickers.Any(ticker =>
+                    _workerOptions.TickersToSync.Contains(ticker)
+                )
+            );
+        }
 
         var stocksWithCusip = await query
             .Where(cs => cs.Cusip != null && uniqueCusipsList.Contains(cs.Cusip))
@@ -557,7 +566,7 @@ public class HoldingsImportService
         var mappedStockIds = cusipMapping.Values.Select(t => t.CommonStockId).Distinct().ToList();
         context.IssuerSizes = await LoadIssuerSizes(stockRepo, mappedStockIds, cancellationToken);
         var tickerIdentities = await stockRepo
-            .GetByIds(mappedStockIds)
+            .GetByIdsIncludingInactive(mappedStockIds)
             .Select(cs => new
             {
                 cs.Id,
@@ -597,7 +606,7 @@ public class HoldingsImportService
     )
     {
         var sizes = await stockRepo
-            .GetAll()
+            .GetAllIncludingInactive()
             .Where(cs => stockIds.Contains(cs.Id))
             .Select(cs => new
             {
