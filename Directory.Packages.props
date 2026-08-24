@@ -13,7 +13,7 @@
          the stealth client respawns a dead driver. Bump only after upstream fixes the assert. -->
     <PackageVersion Include="Microsoft.Playwright" Version="1.60.0" />
     <!-- HTML / Markdown -->
-    <PackageVersion Include="AngleSharp" Version="1.7.1" />
+    <PackageVersion Include="AngleSharp" Version="1.7.2" />
     <PackageVersion Include="FlexLabs.EntityFrameworkCore.Upsert" Version="10.1.0" />
     <PackageVersion Include="HtmlAgilityPack" Version="1.12.4" />
     <PackageVersion Include="Markdig" Version="1.3.2" />
