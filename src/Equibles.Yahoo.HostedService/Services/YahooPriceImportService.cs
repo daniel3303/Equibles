@@ -139,9 +139,9 @@ public class YahooPriceImportService
             cancellationToken
         );
 
-        // Crawl the recently-active stocks first, stalest-first within them, and the long-dormant
-        // tail afterwards (see OrderByCrawlPriority for why the plain stalest-first order starved
-        // the daily lane).
+        // Crawl current listings before historical recovery targets. Within each partition,
+        // recently-active stocks lead stalest-first and the long-dormant tail follows (see
+        // OrderByCrawlPriority for why the plain stalest-first order starved the daily lane).
         var crawlOrder = await OrderByCrawlPriority(priceTargets, cancellationToken);
 
         // Prices for the WHOLE universe first, enrichment only afterwards. The two used to be
@@ -611,9 +611,9 @@ public class YahooPriceImportService
     // holiday, so a healthy stock can never fall out of the set just because the market was shut.
     private const int ActivelyTradedWindowDays = 10;
 
-    // Orders the crawl: actively-traded stocks first (stalest of them leading), long-dormant and
-    // never-synced stocks after them, stalest-first within each group. One grouped MAX(Date) query
-    // over the price table per cycle.
+    // Orders the crawl: current listings before historical recovery targets; inside each
+    // partition, actively-traded stocks lead stalest-first and long-dormant or never-synced stocks
+    // follow stalest-first. One grouped MAX(Date) query over the price table per cycle.
     //
     // Plain stalest-first is the obvious order and it was actively harmful. Sorting the whole
     // universe by last stored date puts the stocks that will never return data — delisted tickers,
@@ -669,8 +669,10 @@ public class YahooPriceImportService
                     ? lastDate
                     : DateOnly.MinValue,
             })
+            // Current listings lead every historical recovery target. Within each partition,
             // false (0) sorts before true (1), so the actively-traded group leads.
-            .OrderBy(x => x.LastDate < activeSince)
+            .OrderBy(x => x.Target.IsHistorical)
+            .ThenBy(x => x.LastDate < activeSince)
             .ThenBy(x => x.LastDate)
             .ThenBy(x => x.Target.Ticker, StringComparer.Ordinal)
             .ThenBy(x => x.Target.CommonStockId)
