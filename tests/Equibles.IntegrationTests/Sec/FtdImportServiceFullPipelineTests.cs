@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Net;
 using System.Text;
 using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Data.Models;
@@ -8,6 +9,7 @@ using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.IntegrationTests.Helpers;
+using Equibles.Messaging.Contracts.CommonStocks;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
@@ -70,7 +72,9 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
     /// TickerMapService is registered with this same factory so its inner CreateScope()
     /// also lands on a fresh context.
     /// </summary>
-    private IServiceScopeFactory CreateScopeFactory()
+    private IServiceScopeFactory CreateScopeFactory() => CreateScopeFactory(Substitute.For<IBus>());
+
+    private IServiceScopeFactory CreateScopeFactory(IBus bus)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory
@@ -83,12 +87,7 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
                 sp.GetService(typeof(CommonStockRepository))
                     .Returns(new CommonStockRepository(ctx));
                 sp.GetService(typeof(CommonStockManager))
-                    .Returns(
-                        new CommonStockManager(
-                            new CommonStockRepository(ctx),
-                            Substitute.For<IBus>()
-                        )
-                    );
+                    .Returns(new CommonStockManager(new CommonStockRepository(ctx), bus));
                 sp.GetService(typeof(FailToDeliverRepository))
                     .Returns(new FailToDeliverRepository(ctx));
                 sp.GetService(typeof(TickerMapService)).Returns(new TickerMapService(scopeFactory));
@@ -97,6 +96,84 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
                 return scope;
             });
         return scopeFactory;
+    }
+
+    [Fact]
+    public async Task Import_ReplayedTransitionMonth_ReconcilesLatestCusipOnlyOnce()
+    {
+        var currentMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        var transitionMonth = currentMonth.AddMonths(-1);
+        var retiringDate = transitionMonth.AddDays(5);
+        var replacementDate = transitionMonth.AddDays(20);
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "TAP",
+            Name = "Molson Coors Beverage Co",
+            Cik = "24545",
+            Cusip = "60871R100",
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var retiringCsv =
+            "SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE\n"
+            + $"{retiringDate:yyyyMMdd}|60871R100|TAP|100|MOLSON COORS|50.00\n";
+        var replacementCsv =
+            "SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE\n"
+            + $"{replacementDate:yyyyMMdd}|60871R209|TAP|200|MOLSON COORS|51.00\n";
+        var yearMonth = transitionMonth.ToString("yyyyMM");
+        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient
+            .DownloadStream(Arg.Any<string>())
+            .Returns(call =>
+            {
+                var url = call.Arg<string>();
+                if (url.EndsWith($"cnsfails{yearMonth}a.zip", StringComparison.Ordinal))
+                    return Task.FromResult<Stream>(BuildFtdZipStream(retiringCsv));
+                if (url.EndsWith($"cnsfails{yearMonth}b.zip", StringComparison.Ordinal))
+                    return Task.FromResult<Stream>(BuildFtdZipStream(replacementCsv));
+                return Task.FromException<Stream>(
+                    new HttpRequestException("Not Found", null, HttpStatusCode.NotFound)
+                );
+            });
+        var bus = Substitute.For<IBus>();
+        var sut = new FtdImportService(
+            CreateScopeFactory(bus),
+            secEdgarClient,
+            Substitute.For<ILogger<FtdImportService>>(),
+            new ErrorReporter(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(
+                new WorkerOptions
+                {
+                    MinSyncDate = transitionMonth.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                }
+            )
+        );
+
+        await sut.Import(CancellationToken.None);
+        await sut.Import(CancellationToken.None);
+
+        await bus.Received(1)
+            .Publish(
+                Arg.Is<StockCusipChanged>(change =>
+                    change.CommonStockId == stock.Id
+                    && change.PreviousCusip == "60871R100"
+                    && change.Cusip == "60871R209"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+        await bus.Received(1).Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
+
+        await using var verify = _fixture.CreateDbContext();
+        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R209");
+        (await verify.Set<CommonStockCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
     }
 
     [Fact]

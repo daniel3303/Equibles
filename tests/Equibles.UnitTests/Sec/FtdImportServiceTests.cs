@@ -4,6 +4,45 @@ namespace Equibles.UnitTests.Sec;
 
 public class FtdImportServiceTests
 {
+    // ── ApplyLiveRecheckWindow ──
+
+    [Fact]
+    public void ApplyLiveRecheckWindow_IncrementalSync_ReplaysPriorCalendarMonth()
+    {
+        var startDate = FtdImportService.ApplyLiveRecheckWindow(
+            new DateOnly(2026, 8, 1),
+            new DateOnly(2020, 1, 1)
+        );
+
+        startDate.Should().Be(new DateOnly(2026, 7, 1));
+        FtdImportService
+            .GetFileNames(startDate)
+            .Should()
+            .StartWith("cnsfails202607a.zip", "cnsfails202607b.zip");
+    }
+
+    [Fact]
+    public void ApplyLiveRecheckWindow_InitialSync_DoesNotCrossConfiguredFloor()
+    {
+        var startDate = FtdImportService.ApplyLiveRecheckWindow(
+            new DateOnly(2020, 1, 1),
+            new DateOnly(2020, 1, 15)
+        );
+
+        startDate.Should().Be(new DateOnly(2020, 1, 1));
+    }
+
+    [Fact]
+    public void ApplyLiveRecheckWindow_PreArchiveFloor_ClampsToOldestAvailableMonth()
+    {
+        var startDate = FtdImportService.ApplyLiveRecheckWindow(
+            new DateOnly(2017, 6, 1),
+            new DateOnly(2010, 1, 1)
+        );
+
+        startDate.Should().Be(new DateOnly(2017, 6, 1));
+    }
+
     // ── GetFileNames ──
 
     [Fact]
