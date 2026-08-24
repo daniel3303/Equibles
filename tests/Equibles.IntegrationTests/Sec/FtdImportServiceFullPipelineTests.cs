@@ -7,6 +7,8 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
+using Equibles.Errors.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Messaging.Contracts.CommonStocks;
@@ -74,13 +76,18 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
     /// </summary>
     private IServiceScopeFactory CreateScopeFactory() => CreateScopeFactory(Substitute.For<IBus>());
 
-    private IServiceScopeFactory CreateScopeFactory(IBus bus)
+    private IServiceScopeFactory CreateScopeFactory(IBus bus, int? failingScope = null)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scopeNumber = 0;
         scopeFactory
             .CreateScope()
             .Returns(_ =>
             {
+                scopeNumber++;
+                if (scopeNumber == failingScope)
+                    throw new InvalidOperationException("Simulated identity-query failure");
+
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
@@ -90,6 +97,9 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
                     .Returns(new CommonStockManager(new CommonStockRepository(ctx), bus));
                 sp.GetService(typeof(FailToDeliverRepository))
                     .Returns(new FailToDeliverRepository(ctx));
+                var errorRepository = new ErrorRepository(ctx);
+                sp.GetService(typeof(ErrorRepository)).Returns(errorRepository);
+                sp.GetService(typeof(ErrorManager)).Returns(new ErrorManager(errorRepository));
                 sp.GetService(typeof(TickerMapService)).Returns(new TickerMapService(scopeFactory));
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
@@ -107,6 +117,7 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
         var olderDate = olderMonth.AddDays(5);
         var retiringDate = transitionMonth.AddDays(5);
         var replacementDate = transitionMonth.AddDays(20);
+        var latestSettledDate = currentMonth.AddDays(-1);
         var stock = new CommonStock
         {
             Id = Guid.NewGuid(),
@@ -118,6 +129,16 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
+            seed.Set<FailToDeliver>()
+                .Add(
+                    new FailToDeliver
+                    {
+                        CommonStockId = stock.Id,
+                        SettlementDate = latestSettledDate,
+                        Quantity = 777,
+                        Price = 52.00m,
+                    }
+                );
             await seed.SaveChangesAsync();
         }
 
@@ -195,6 +216,109 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R209");
         (await verify.Set<CommonStockCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
+        var storedFtd = await verify.Set<FailToDeliver>().SingleAsync();
+        storedFtd.SettlementDate.Should().Be(latestSettledDate);
+        storedFtd.Quantity.Should().Be(777);
+        storedFtd.Price.Should().Be(52.00m);
+    }
+
+    [Fact]
+    public async Task Import_CurrentFileCancelledAfterCompleteReplay_ReconcilesBeforeCancellation()
+    {
+        var currentMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        var replayMonth = currentMonth.AddMonths(-1);
+        var retiringDate = replayMonth.AddDays(5);
+        var replacementDate = replayMonth.AddDays(20);
+        var latestSettledDate = currentMonth.AddDays(-1);
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "TAP",
+            Name = "Molson Coors Beverage Co",
+            Cik = "24545",
+            Cusip = "60871R100",
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            seed.Set<FailToDeliver>()
+                .Add(
+                    new FailToDeliver
+                    {
+                        CommonStockId = stock.Id,
+                        SettlementDate = latestSettledDate,
+                        Quantity = 777,
+                        Price = 52.00m,
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        var retiringCsv =
+            "SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE\n"
+            + $"{retiringDate:yyyyMMdd}|60871R100|TAP|100|MOLSON COORS|50.00\n";
+        var replacementCsv =
+            "SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE\n"
+            + $"{replacementDate:yyyyMMdd}|60871R209|TAP|200|MOLSON COORS|51.00\n";
+        var replayYearMonth = replayMonth.ToString("yyyyMM");
+        var currentYearMonth = currentMonth.ToString("yyyyMM");
+        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient
+            .DownloadStream(Arg.Any<string>())
+            .Returns(call =>
+            {
+                var url = call.Arg<string>();
+                if (url.EndsWith($"cnsfails{replayYearMonth}a.zip", StringComparison.Ordinal))
+                    return Task.FromResult<Stream>(BuildFtdZipStream(retiringCsv));
+                if (url.EndsWith($"cnsfails{replayYearMonth}b.zip", StringComparison.Ordinal))
+                    return Task.FromResult<Stream>(BuildFtdZipStream(replacementCsv));
+                if (url.Contains($"cnsfails{currentYearMonth}", StringComparison.Ordinal))
+                {
+                    return Task.FromException<Stream>(
+                        new OperationCanceledException("Current file request cancelled")
+                    );
+                }
+                return Task.FromException<Stream>(
+                    new HttpRequestException("Not Found", null, HttpStatusCode.NotFound)
+                );
+            });
+        var bus = Substitute.For<IBus>();
+        var sut = new FtdImportService(
+            CreateScopeFactory(bus),
+            secEdgarClient,
+            Substitute.For<ILogger<FtdImportService>>(),
+            new ErrorReporter(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(
+                new WorkerOptions
+                {
+                    MinSyncDate = replayMonth.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                }
+            )
+        );
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            sut.Import(CancellationToken.None)
+        );
+
+        await bus.Received(1)
+            .Publish(
+                Arg.Is<StockCusipChanged>(change =>
+                    change.CommonStockId == stock.Id
+                    && change.PreviousCusip == "60871R100"
+                    && change.Cusip == "60871R209"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+
+        await using var verify = _fixture.CreateDbContext();
+        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R209");
+        (await verify.Set<CommonStockCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
+        var storedFtd = await verify.Set<FailToDeliver>().SingleAsync();
+        storedFtd.SettlementDate.Should().Be(latestSettledDate);
+        storedFtd.Quantity.Should().Be(777);
     }
 
     [Fact]
@@ -253,6 +377,24 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
 
         await sut.Import(CancellationToken.None);
 
+        var replayYearMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1)
+            .AddMonths(-1)
+            .ToString("yyyyMM");
+        await secEdgarClient
+            .Received(1)
+            .DownloadStream(
+                Arg.Is<string>(url =>
+                    url.EndsWith($"cnsfails{replayYearMonth}a.zip", StringComparison.Ordinal)
+                )
+            );
+        await secEdgarClient
+            .Received(1)
+            .DownloadStream(
+                Arg.Is<string>(url =>
+                    url.EndsWith($"cnsfails{replayYearMonth}b.zip", StringComparison.Ordinal)
+                )
+            );
+
         await using var verify = _fixture.CreateDbContext();
 
         var ftdRow = await verify
@@ -278,6 +420,133 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
                 "037833100",
                 "SeedCusips should lift the FTD-derived CUSIP onto a Cusip-less CommonStock row"
             );
+    }
+
+    [Fact]
+    public async Task Import_OverlapArchive_PersistsOnlyRecordsAfterDatabaseWatermark()
+    {
+        var replayMonth = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1).AddMonths(
+            -1
+        );
+        var oldDate = replayMonth.AddDays(14);
+        var newDate = replayMonth.AddDays(19);
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+            Cusip = "037833100",
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            seed.Set<FailToDeliver>()
+                .Add(
+                    new FailToDeliver
+                    {
+                        CommonStockId = stock.Id,
+                        SettlementDate = oldDate,
+                        Quantity = 777,
+                        Price = 180m,
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        var csv =
+            "SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE\n"
+            + $"{oldDate:yyyyMMdd}|037833100|AAPL|999|APPLE INC|181.00\n"
+            + $"{newDate:yyyyMMdd}|037833100|AAPL|123|APPLE INC|182.00\n";
+        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient
+            .DownloadStream(Arg.Any<string>())
+            .Returns(_ => Task.FromResult<Stream>(BuildFtdZipStream(csv)));
+        var sut = new FtdImportService(
+            CreateScopeFactory(),
+            secEdgarClient,
+            Substitute.For<ILogger<FtdImportService>>(),
+            new ErrorReporter(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(
+                new WorkerOptions
+                {
+                    MinSyncDate = replayMonth.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                }
+            )
+        );
+
+        await sut.Import(CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        var stored = await verify
+            .Set<FailToDeliver>()
+            .OrderBy(record => record.SettlementDate)
+            .ToListAsync();
+        stored.Should().HaveCount(2);
+        stored[0].SettlementDate.Should().Be(oldDate);
+        stored[0].Quantity.Should().Be(777);
+        stored[0].Price.Should().Be(180m);
+        stored[1].SettlementDate.Should().Be(newDate);
+        stored[1].Quantity.Should().Be(123);
+        stored[1].Price.Should().Be(182m);
+    }
+
+    [Fact]
+    public async Task Import_IdentityPreparationFails_StillImportsNewRecords()
+    {
+        var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(-1).AddDays(-1);
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var csv =
+            "SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE\n"
+            + $"{settlementDate:yyyyMMdd}|037833100|AAPL|12345|APPLE INC|187.50\n";
+        var secEdgarClient = Substitute.For<ISecEdgarClient>();
+        secEdgarClient
+            .DownloadStream(Arg.Any<string>())
+            .Returns(_ => Task.FromResult<Stream>(BuildFtdZipStream(csv)));
+        var scopeFactory = CreateScopeFactory(Substitute.For<IBus>(), failingScope: 4);
+        var errorReporter = new ErrorReporter(
+            scopeFactory,
+            Substitute.For<ILogger<ErrorReporter>>()
+        );
+        var sut = new FtdImportService(
+            scopeFactory,
+            secEdgarClient,
+            Substitute.For<ILogger<FtdImportService>>(),
+            errorReporter,
+            Options.Create(
+                new WorkerOptions
+                {
+                    MinSyncDate = settlementDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                }
+            )
+        );
+
+        await sut.Import(CancellationToken.None);
+
+        await using var verify = _fixture.CreateDbContext();
+        var stored = await verify.Set<FailToDeliver>().SingleAsync();
+        stored.CommonStockId.Should().Be(stock.Id);
+        stored.SettlementDate.Should().Be(settlementDate);
+        stored.Quantity.Should().Be(12345);
+        var report = await verify.Set<Error>().SingleAsync();
+        report.Source.Should().Be(ErrorSource.FtdScraper);
+        report.Context.Should().Be("FtdImport.SeedCusips");
+        report.Message.Should().Contain("Simulated identity-query failure");
     }
 
     private static Stream BuildFtdZipStream(string csvBody)
