@@ -190,6 +190,56 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ImportDataSet_FilingReferencesInactiveStock_ResolvesRetainedIdentity()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "GONE",
+            Name = "Formerly Listed Corp",
+            Cik = "0000000042",
+            Cusip = "123456789",
+            Active = false,
+            DelistedOn = new DateOnly(2021, 6, 30),
+        };
+        using (var seed = FreshContext())
+        {
+            seed.Set<CommonStock>().Add(stock);
+            await seed.SaveChangesAsync();
+        }
+
+        var reportDate = new DateOnly(2020, 12, 31);
+        var submission =
+            "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
+            + "13F-HR\tACC-INACTIVE\t2021-02-12\t2020-12-31\t0001142031\n";
+        var coverPage =
+            "ACCESSION_NUMBER\tISAMENDMENT\tFILINGMANAGER_NAME\tFILINGMANAGER_CITY\tFILINGMANAGER_STATEORCOUNTRY\tFORM13FFILENUMBER\tCRDNUMBER\n"
+            + "ACC-INACTIVE\tN\tHistorical Manager\tBoston\tMA\t028-04556\t105909\n";
+        var infoTable =
+            "ACCESSION_NUMBER\tCUSIP\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
+            + "ACC-INACTIVE\t123456789\t2500\tSH\t\tSOLE\t2500\t0\t0\tCOM\t\n";
+
+        using var archive = BuildArchive(
+            ("SUBMISSION.tsv", submission),
+            ("COVERPAGE.tsv", coverPage),
+            ("INFOTABLE.tsv", infoTable)
+        );
+        var prices = new Dictionary<(Guid, string, DateOnly), decimal>
+        {
+            [(stock.Id, null, reportDate)] = 20m,
+        };
+
+        var result = await CreateImporter(PriceProviderReturning(prices))
+            .ImportDataSet(archive, new DateOnly(2020, 10, 1), CancellationToken.None);
+
+        result.IsComplete.Should().BeTrue();
+        using var verify = FreshContext();
+        var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
+        holding.CommonStockId.Should().Be(stock.Id);
+        holding.Shares.Should().Be(2500);
+    }
+
+    [Fact]
     public async Task ImportDataSet_AliasCollidesWithAnotherStocksCurrentCusip_CurrentCusipWins()
     {
         // Precedence pin: if a CUSIP is simultaneously stock A's CURRENT value

@@ -86,6 +86,19 @@ public class FtdImportServiceTests
     }
 
     [Fact]
+    public void GetStableHistoricalFileNames_ExcludesPublicationWindowAndMovingCurrentHead()
+    {
+        var fileNames = FtdImportService.GetStableHistoricalFileNames(
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2026, 8, 24)
+        );
+
+        fileNames.TakeLast(2).Should().Equal("cnsfails202605a.zip", "cnsfails202605b.zip");
+        fileNames.Should().NotContain(file => file.Contains("202606"));
+        fileNames.Should().NotContain(file => file.Contains("202608"));
+    }
+
+    [Fact]
     public void GetFileNames_StartBeforeOldestAvailableDate_OmitsJune2017AFile()
     {
         // June 2017 is the oldest month SEC publishes FTD data for, and uniquely has

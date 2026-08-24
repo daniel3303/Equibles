@@ -28,6 +28,7 @@ public class SecTestModuleConfiguration : Equibles.Data.IModuleConfiguration
         });
 
         builder.Entity<FailToDeliver>();
+        builder.Entity<BackfillState>();
         builder.Entity<FundSeries>();
         builder.Entity<FormDFiling>();
         builder.Entity<FormDRelatedPerson>();
