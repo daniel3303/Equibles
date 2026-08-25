@@ -779,6 +779,56 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task ProcessTransactions_FilingStatusOnlyPollutedLegacyName_ReplayDeletesTheTwin()
+    {
+        // The Chip Roy shape: the compact filing-status label rode the asset line with NO
+        // subholding field, so the legacy row stored "... F S: New" inside AssetName. The old
+        // repair only recognized rows with a separable subholding and skipped these, leaving a
+        // polluted twin beside the clean replayed row forever.
+        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
+        DbContext.AddRange(stock, member);
+        DbContext.Add(
+            new CongressionalTrade
+            {
+                CongressMember = member,
+                CongressMemberId = member.Id,
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                TransactionDate = new DateOnly(2024, 6, 1),
+                FilingDate = new DateOnly(2024, 6, 14),
+                TransactionType = CongressTransactionType.Purchase,
+                OwnerType = "self",
+                AssetName = "Apple Inc. (AAPL) F S: New",
+                AssetType = "ST",
+                Subholding = "",
+                AmountFrom = 1_001,
+                AmountTo = 15_000,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await (Task)
+            ProcessTransactionsMethod.Invoke(
+                BuildSut(),
+                [
+                    new List<DisclosureTransaction>
+                    {
+                        Txn("Jane Doe", "AAPL", assetName: "Apple Inc. (AAPL)"),
+                    },
+                    CancellationToken.None,
+                ]
+            );
+
+        await using var verify = Fixture.CreateDbContext();
+        var stored = await verify.Set<CongressionalTrade>().AsNoTracking().ToListAsync();
+        var trade = stored.Should().ContainSingle().Subject;
+        trade.AssetName.Should().Be("Apple Inc. (AAPL)");
+        trade.SourceId.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task ProcessTransactions_TwoPollutedLegacyAccounts_ReplaySeparatesBothAccounts()
     {
         const string firstSubholding = "Brokerage Account A";

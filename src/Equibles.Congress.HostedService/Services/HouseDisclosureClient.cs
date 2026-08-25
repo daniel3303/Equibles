@@ -542,10 +542,10 @@ public partial class HouseDisclosureClient
         // subholding before removing that metadata suffix from the asset name.
         var inlineDetails = ExtractInlineAssetDetails(assetText);
         if (inlineDetails.Subholding != null)
-        {
             subholding = inlineDetails.Subholding;
-            assetText = inlineDetails.AssetName;
-        }
+        // Always adopt the returned name: a filing-status-only suffix is cut even when no
+        // subholding field is present (the extractor returns the text unchanged otherwise).
+        assetText = inlineDetails.AssetName;
 
         // The PDF's row checkboxes extract as "gfedc"/"gfedcb" glued onto the asset name — strip
         // them before the name is stored or mined for a ticker (see CleanAssetName).
@@ -667,11 +667,24 @@ public partial class HouseDisclosureClient
     internal static HouseInlineAssetDetails ExtractInlineAssetDetails(string assetText)
     {
         var subholdingMatch = InlineSubholdingRegex().Match(assetText);
+        var filingStatusMatch = InlineFilingStatusRegex().Match(assetText);
         if (!subholdingMatch.Success)
-            return new HouseInlineAssetDetails(assetText, null);
+        {
+            // No subholding field, but the compact filing-status label is still row metadata
+            // the word clustering glues onto the asset name ("Apple Inc. (AAPL) [ST] F S: New").
+            // Cut there; a bare "D:"/"Description:" stays untouched because names such as
+            // "Series D:" are legitimate. A line that IS entirely metadata keeps its text —
+            // it is not an asset row and must not become an empty name.
+            if (!filingStatusMatch.Success)
+                return new HouseInlineAssetDetails(assetText, null);
+
+            var nameBeforeStatus = assetText[..filingStatusMatch.Index].Trim();
+            return nameBeforeStatus.Length == 0
+                ? new HouseInlineAssetDetails(assetText, null)
+                : new HouseInlineAssetDetails(nameBeforeStatus, null);
+        }
 
         var metadataStart = subholdingMatch.Index;
-        var filingStatusMatch = InlineFilingStatusRegex().Match(assetText);
         if (filingStatusMatch.Success && filingStatusMatch.Index < metadataStart)
             metadataStart = filingStatusMatch.Index;
 
