@@ -12,6 +12,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - SEC document chunking now reads an indexed pending-state queue instead of scanning every stored document and probing the chunk corpus on each drained poll. Closes #3823.
 - Fails-to-deliver replays reconcile CUSIP identity only from a complete prior calendar month and no longer rewrite settled rows on every daily cycle. PRs #4461 and #4462.
 - Split adjustment of financial facts now applies only to share-denominated units, so ratio units such as USD/bbl or USD/MMBTU stay as filed. PR #4463.
+- Document chunking counts failed attempts per document and parks a document after five failures instead of letting it burn a batch slot every cycle; a content replacement or chunk reset returns it to the queue with a fresh budget. Closes #4464.
+- 13F imports no longer delete and reinsert a holding's manager-attribution legs when the re-parsed legs match the stored ones, which was burning the leg table's synthetic key space on every unchanged re-import. PR #4466.
 
 ## [1.6.1] — 2026-08-22
 

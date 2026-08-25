@@ -306,6 +306,28 @@ public class DocumentRepository : BaseRepository<Document>
             );
     }
 
+    /// <summary>
+    /// Persists chunk-retry bookkeeping after a failed attempt whose transaction rolled back,
+    /// and returns the new attempt count. The increment runs store-side so concurrent workers
+    /// cannot lose an attempt to a stale in-memory value.
+    /// </summary>
+    public async Task<int> PersistChunkAttempt(
+        Guid documentId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await GetAll()
+            .Where(d => d.Id == documentId)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(x => x.ChunkAttempts, x => x.ChunkAttempts + 1),
+                cancellationToken
+            );
+        return await GetAll()
+            .Where(d => d.Id == documentId)
+            .Select(d => d.ChunkAttempts)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public virtual async Task<Document> GetWithContent(
         Guid id,
         CancellationToken cancellationToken = default

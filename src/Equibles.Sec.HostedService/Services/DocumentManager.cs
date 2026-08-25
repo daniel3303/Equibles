@@ -53,7 +53,11 @@ public class DocumentManager
 
         var pendingDocumentIds = await _documentRepository
             .GetAll()
-            .Where(d => d.ChunkedAt == null && d.Content != null)
+            .Where(d =>
+                d.ChunkedAt == null
+                && d.Content != null
+                && d.ChunkAttempts < Document.MaxChunkAttempts
+            )
             .OrderBy(d => d.CreationTime)
             .ThenBy(d => d.Id)
             .Select(d => d.Id)
@@ -93,6 +97,13 @@ public class DocumentManager
             {
                 await transaction.RollbackAsync(cancellationToken);
                 _logger.LogError(ex, "Error chunking document {DocumentId}", documentId);
+
+                // A shutdown mid-chunk is not a document fault, so only a genuine failure
+                // consumes retry budget.
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    await RecordChunkAttempt(documentId, cancellationToken);
+                }
             }
             finally
             {
@@ -113,6 +124,40 @@ public class DocumentManager
 
     private Task<int> BackfillChunkedAtBatch(CancellationToken cancellationToken) =>
         _documentRepository.BackfillLegacyChunked(_loadSize, DateTime.UtcNow, cancellationToken);
+
+    // The failed transaction rolled back every tracked change, so the retry bookkeeping is
+    // persisted separately, exactly like the normalization lane's attempt counter. A document
+    // that reaches the ceiling stays pending-but-parked: visible to queries, no longer selected.
+    private async Task RecordChunkAttempt(Guid documentId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var attempts = await _documentRepository.PersistChunkAttempt(
+                documentId,
+                cancellationToken
+            );
+            if (attempts >= Document.MaxChunkAttempts)
+            {
+                _logger.LogWarning(
+                    "Document {DocumentId} failed chunking {Attempts} times and leaves the "
+                        + "pending queue; a content replacement or chunk reset returns it "
+                        + "with a fresh budget",
+                    documentId,
+                    attempts
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            // Bookkeeping must never mask the original failure; the document simply stays
+            // pending and the next cycle retries both the chunking and this counter.
+            _logger.LogError(
+                ex,
+                "Failed to record the chunk attempt for document {DocumentId}",
+                documentId
+            );
+        }
+    }
 
     public async Task<bool> GenerateEmbeddingBatch(
         BackfillCursor cursor,

@@ -66,6 +66,19 @@ public class Document
     public DateTime? ChunkedAt { get; set; }
 
     /// <summary>
+    /// How many chunking attempts for this document have failed. The pending queue stops
+    /// selecting it at <see cref="MaxChunkAttempts"/> so a deterministically failing document
+    /// cannot occupy a FIFO batch slot every cycle. A parked document (null
+    /// <see cref="ChunkedAt"/> at the ceiling) stays queryable rather than being marked
+    /// complete; content replacement and explicit chunk resets clear the counter together
+    /// with <see cref="ChunkedAt"/> so the returning document gets a fresh budget.
+    /// </summary>
+    public int ChunkAttempts { get; set; }
+
+    /// <summary>Retry ceiling for <see cref="ChunkAttempts"/>.</summary>
+    public const int MaxChunkAttempts = 5;
+
+    /// <summary>
     /// Version of the HTML-normalization and Markdown-conversion pipeline that produced
     /// <see cref="Content"/>. Existing rows default to 0; the backfill re-fetches their EDGAR
     /// submission and replaces the stored text when this is below
