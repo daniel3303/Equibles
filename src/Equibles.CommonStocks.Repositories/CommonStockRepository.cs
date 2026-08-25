@@ -62,9 +62,14 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     public IQueryable<CommonStock> GetByIdsIncludingInactive(IEnumerable<Guid> ids) =>
         GetAllIncludingInactive().Where(stock => ids.Contains(stock.Id));
 
-    public IQueryable<CommonStock> Search(string search)
+    /// <param name="includeInactive">
+    /// When true, retained delisted identities (<c>Active == false</c>) are searched too —
+    /// for operator surfaces that must audit what a delisting sync retired. Reader-facing
+    /// surfaces keep the default active-only universe.
+    /// </param>
+    public IQueryable<CommonStock> Search(string search, bool includeInactive = false)
     {
-        var query = GetAll();
+        var query = includeInactive ? GetAllIncludingInactive() : GetAll();
 
         if (string.IsNullOrEmpty(search))
         {

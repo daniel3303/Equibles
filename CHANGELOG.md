@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- `CommonStockRepository.Search` accepts an `includeInactive` flag so operator surfaces can audit retained delisted identities; reader-facing surfaces keep the active-only default.
+
 ### Fixed
 
 - SEC document chunking now reads an indexed pending-state queue instead of scanning every stored document and probing the chunk corpus on each drained poll. Closes #3823.
