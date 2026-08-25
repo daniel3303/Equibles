@@ -213,12 +213,18 @@ public class DocumentPersistenceService : IDocumentPersistenceService
 
     private async Task ClearChunkedAt(Document document, CancellationToken cancellationToken)
     {
+        // A returning document gets a fresh retry budget: the failures that parked it were
+        // about the content being replaced or the chunks being reset, not the new state.
         document.ChunkedAt = null;
+        document.ChunkAttempts = 0;
         await _documentRepository
             .GetAll()
             .Where(d => d.Id == document.Id)
             .ExecuteUpdateAsync(
-                setters => setters.SetProperty(d => d.ChunkedAt, (DateTime?)null),
+                setters =>
+                    setters
+                        .SetProperty(d => d.ChunkedAt, (DateTime?)null)
+                        .SetProperty(d => d.ChunkAttempts, 0),
                 cancellationToken
             );
     }

@@ -645,6 +645,134 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             );
     }
 
+    [Fact]
+    public async Task ChunkDocumentBatch_FailingDocument_CountsTheAttemptAndStaysPending()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+        };
+        var file = MakeFile();
+        var document = MakeDocument(
+            stock,
+            file,
+            contentId: file.Id,
+            createdAt: DateTime.UtcNow.AddMinutes(-5)
+        );
+
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<File>().Add(file);
+        DbContext.Set<Document>().Add(document);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        _processor
+            .ProcessDocument(Arg.Any<Document>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("content store down")));
+
+        var sut = NewChunkingManager();
+        var act = () => sut.ChunkDocumentBatch(CancellationToken.None);
+
+        // Every document in the batch failed, so the systemic-outage backoff guard surfaces —
+        // but the attempt must already be persisted despite the chunking transaction's rollback.
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Backing off*");
+
+        var stored = await DbContext
+            .Set<Document>()
+            .AsNoTracking()
+            .SingleAsync(d => d.Id == document.Id);
+        stored.ChunkedAt.Should().BeNull("a failed document stays pending");
+        stored.ChunkAttempts.Should().Be(1, "the rolled-back attempt is still counted");
+    }
+
+    [Fact]
+    public async Task ChunkDocumentBatch_DocumentAtTheAttemptCeiling_IsParkedNotSelected()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+        };
+        var file = MakeFile();
+        var document = MakeDocument(
+            stock,
+            file,
+            contentId: file.Id,
+            createdAt: DateTime.UtcNow.AddMinutes(-5)
+        );
+        document.ChunkAttempts = Document.MaxChunkAttempts;
+
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<File>().Add(file);
+        DbContext.Set<Document>().Add(document);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var sut = NewChunkingManager();
+        var workDone = await sut.ChunkDocumentBatch(CancellationToken.None);
+
+        workDone.Should().BeFalse("a parked document must not occupy a batch slot");
+        _processor.ReceivedCalls().Should().BeEmpty();
+
+        // Parked means still visibly pending — never silently marked complete.
+        var stored = await DbContext
+            .Set<Document>()
+            .AsNoTracking()
+            .SingleAsync(d => d.Id == document.Id);
+        stored.ChunkedAt.Should().BeNull();
+        stored.ChunkAttempts.Should().Be(Document.MaxChunkAttempts);
+    }
+
+    [Fact]
+    public async Task ResetChunks_ParkedDocument_ReturnsItWithAFreshRetryBudget()
+    {
+        var stock = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+        };
+        var file = MakeFile();
+        var document = MakeDocument(
+            stock,
+            file,
+            contentId: file.Id,
+            createdAt: DateTime.UtcNow.AddMinutes(-10)
+        );
+        document.ChunkedAt = DateTime.UtcNow.AddMinutes(-9);
+        document.ChunkAttempts = Document.MaxChunkAttempts;
+
+        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<File>().Add(file);
+        DbContext.Set<Document>().Add(document);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        var tracked = await DbContext.Set<Document>().SingleAsync(d => d.Id == document.Id);
+        await NewResetService(DbContext).ResetChunks(tracked, CancellationToken.None);
+        DbContext.ChangeTracker.Clear();
+
+        var stored = await DbContext
+            .Set<Document>()
+            .AsNoTracking()
+            .SingleAsync(d => d.Id == document.Id);
+        stored.ChunkedAt.Should().BeNull("the reset returns the document to the pending queue");
+        stored.ChunkAttempts.Should().Be(0, "a returning document gets a fresh retry budget");
+    }
+
+    private DocumentManager NewChunkingManager() =>
+        new(
+            new DocumentRepository(DbContext),
+            new ChunkRepository(DbContext),
+            new BackfillStateRepository(DbContext),
+            _processor,
+            Options.Create(new EmbeddingConfig { Enabled = false }),
+            NullLogger<DocumentManager>()
+        );
+
     private DocumentManager NewEmbeddingManager() =>
         new(
             new DocumentRepository(DbContext),
