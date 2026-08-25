@@ -2015,17 +2015,83 @@ public class HoldingsImportService
 
         foreach (var dbHolding in dbHoldings)
         {
-            if (entriesByKey.TryGetValue(BuildHoldingKey(dbHolding), out var entries))
-            {
-                dbHolding.ManagerEntries.Clear();
-                dbHolding.ManagerEntries.AddRange(entries);
-            }
+            if (!entriesByKey.TryGetValue(BuildHoldingKey(dbHolding), out var entries))
+                continue;
+
+            // Replacing the collection deletes every stored row and re-inserts it, and each
+            // re-insert draws a fresh value from the owned type's synthetic key sequence. A
+            // re-import re-derives identical attribution for almost every position it revisits,
+            // so rewriting unconditionally burned roughly 45 keys per surviving row and
+            // exhausted the int sequence — halting the entire lane — five months after the table
+            // was created. Rewrite only when the attribution actually changed.
+            if (ManagerEntriesMatch(dbHolding.ManagerEntries, entries))
+                continue;
+
+            dbHolding.ManagerEntries.Clear();
+            dbHolding.ManagerEntries.AddRange(entries);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
     }
+
+    /// <summary>
+    /// True when the stored attribution already says exactly what the re-parsed filing says.
+    /// Stored rows come back in whatever order Postgres returns them, which need not be the
+    /// order the filing was parsed in, so the two sides are compared as multisets rather than
+    /// as sequences — otherwise a re-ordered read would be mistaken for a real change.
+    /// </summary>
+    private static bool ManagerEntriesMatch(
+        List<HoldingManagerEntry> stored,
+        List<HoldingManagerEntry> incoming
+    )
+    {
+        if (stored.Count != incoming.Count)
+            return false;
+
+        var remaining = new Dictionary<ManagerEntryIdentity, int>();
+        foreach (var entry in stored)
+        {
+            var identity = ToIdentity(entry);
+            remaining[identity] = remaining.GetValueOrDefault(identity) + 1;
+        }
+
+        foreach (var entry in incoming)
+        {
+            var identity = ToIdentity(entry);
+            if (!remaining.TryGetValue(identity, out var count) || count == 0)
+                return false;
+
+            remaining[identity] = count - 1;
+        }
+
+        return true;
+    }
+
+    private static ManagerEntryIdentity ToIdentity(HoldingManagerEntry entry) =>
+        new(
+            entry.ManagerNumber,
+            entry.ManagerName,
+            entry.SharedManagerNumbers,
+            entry.Shares,
+            entry.Value,
+            entry.InvestmentDiscretion
+        );
+
+    /// <summary>
+    /// Every persisted column of a manager entry except the synthetic key. Record-struct
+    /// equality compares the names ordinally, so no culture rule can report two different
+    /// attributions as the same one and suppress a write that was needed.
+    /// </summary>
+    private readonly record struct ManagerEntryIdentity(
+        int? ManagerNumber,
+        string ManagerName,
+        string SharedManagerNumbers,
+        long Shares,
+        long Value,
+        InvestmentDiscretion InvestmentDiscretion
+    );
 
     // Recomputes the InstitutionalFiling rollup for every (holder, quarter) this
     // import touched, straight from the resulting holdings. The latest-filings feed
