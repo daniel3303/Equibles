@@ -8,7 +8,7 @@ public class CongressionalTradeReplayGateTests
     [InlineData(true, false, 4)]
     [InlineData(true, true, 4)]
     [InlineData(false, true, 4)]
-    [InlineData(false, false, 5)]
+    [InlineData(false, false, 6)]
     public void SelectTradeParserVersion_EvidenceAndTickerScope_ActivatesExpectedVersion(
         bool evidenceBackfillPending,
         bool tickerScopeRestricted,
