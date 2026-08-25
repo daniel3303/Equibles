@@ -537,6 +537,25 @@ public class CommonStockRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void Search_DefaultUniverse_ExcludesRetainedDelistedIdentities()
+    {
+        var live = MakeStock(ticker: "LIVE", cik: "111");
+        var delisted = MakeStock(ticker: "GONE", cik: "222");
+        delisted.Active = false;
+        _dbContext.Set<CommonStock>().AddRange(live, delisted);
+        _dbContext.SaveChanges();
+
+        var readers = _repository.Search("").Select(s => s.Ticker).ToList();
+        var operators = _repository
+            .Search("", includeInactive: true)
+            .Select(s => s.Ticker)
+            .ToList();
+
+        readers.Should().Equal("LIVE");
+        operators.Should().Equal("GONE", "LIVE");
+    }
+
+    [Fact]
     public void Search_WithNull_ReturnsAllStocks()
     {
         _dbContext
