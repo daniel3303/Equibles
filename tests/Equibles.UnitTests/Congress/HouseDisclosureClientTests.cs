@@ -177,6 +177,36 @@ public class HouseDisclosureClientTests
     }
 
     [Fact]
+    public void ParseTransactionLines_InlineFilingStatusWithoutSubholding_StripsTheMetadataSuffix()
+    {
+        // The compact filing-status label can ride the asset line with NO subholding field.
+        // Before the cut, the suffix was stored inside AssetName ("... F S: New"), creating a
+        // polluted twin of the clean row a later replay produced (Chip Roy, 2026-08).
+        var result = Parse(
+            "Apple Inc. (AAPL) [ST] F S: New P 03/03/2025 03/05/2025 $1,001 - $15,000"
+        );
+
+        var tx = result.Should().ContainSingle().Subject;
+        tx.Ticker.Should().Be("AAPL");
+        tx.AssetType.Should().Be("ST");
+        tx.Subholding.Should().BeNull();
+        tx.AssetName.Should().Be("Apple Inc. (AAPL)");
+    }
+
+    [Fact]
+    public void ParseTransactionLines_ExpandedFilingStatusWithoutSubholding_StripsTheMetadataSuffix()
+    {
+        var result = Parse(
+            "Tesla Inc. (TSLA) [ST] Filing Status: Amended P 03/03/2025 03/05/2025 $1,001 - $15,000"
+        );
+
+        var tx = result.Should().ContainSingle().Subject;
+        tx.Ticker.Should().Be("TSLA");
+        tx.Subholding.Should().BeNull();
+        tx.AssetName.Should().Be("Tesla Inc. (TSLA)");
+    }
+
+    [Fact]
     public void ParseTransactionLines_SeriesDAssetNameWithoutSubholding_PreservesAssetName()
     {
         var result = Parse(

@@ -106,8 +106,23 @@ public static class FinancialConceptAliases
         // line, never a fallback for operating-expenses.
         ["total-costs-and-expenses"] = [G("CostsAndExpenses")],
         ["operating-income"] = [G("OperatingIncomeLoss")],
-        ["interest-expense"] = [G("InterestExpense"), G("InterestExpenseNonoperating")],
-        ["interest-income"] = [G("InvestmentIncomeInterest")],
+        // InterestExpense was deprecated from the 2024 taxonomy; banks continue the
+        // series under the operating variant (nonfinancial filers moved to the
+        // nonoperating one), so without the fallback a bank's interest-expense
+        // series ends mid-2024 (JPM stops at 2024-03-31 without it).
+        ["interest-expense"] =
+        [
+            G("InterestExpense"),
+            G("InterestExpenseNonoperating"),
+            G("InterestExpenseOperating"),
+        ],
+        // Banks report the income statement's gross interest-income line under the
+        // operating tag while ALSO tagging the narrow investment-interest sub-item
+        // (JPM FY2024: $193.9B vs $23.1B). Preferring the narrow tag printed it as
+        // the bank's "Interest Income" beside a five-times-larger Net Interest
+        // Income — arithmetically impossible on one statement. Nonfinancial filers
+        // never tag the operating variant, so their series are unaffected.
+        ["interest-income"] = [G("InterestIncomeOperating"), G("InvestmentIncomeInterest")],
         ["other-nonoperating-income"] =
         [
             G("NonoperatingIncomeExpense"),

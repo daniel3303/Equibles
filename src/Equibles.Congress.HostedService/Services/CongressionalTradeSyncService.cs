@@ -47,7 +47,11 @@ public class CongressionalTradeSyncService
     // Congressional trade disclosures are available from 2012 (STOCK Act).
     private static readonly DateOnly EarliestAvailableDate = new(2012, 4, 1);
     private const int LegacyTradeParserVersion = 4;
-    private const int CurrentTradeParserVersion = 5;
+
+    // v6: reopens filings whose rows carried a filing-status-only inline metadata suffix
+    // ("... F S: New" with no subholding field) — earlier parses stored it inside AssetName,
+    // and the replay's repair deletes those polluted twins once the cleaned rows arrive.
+    private const int CurrentTradeParserVersion = 6;
     private const int ReprocessPerCycleLimit = 1_000;
 
     public async Task SyncAll(CancellationToken ct)
@@ -489,13 +493,18 @@ public class CongressionalTradeSyncService
         foreach (var legacy in legacyRows)
         {
             var details = HouseDisclosureClient.ExtractInlineAssetDetails(legacy.AssetName);
-            if (details.Subholding == null)
+            // A row can carry a filing-status-only suffix and no subholding field; the
+            // extractor still separates the metadata (Subholding stays null). Only rows the
+            // extractor left untouched hold no separable metadata and are skipped — a
+            // legitimate name such as "Series D:" never enters the repair.
+            if (details.Subholding == null && details.AssetName == legacy.AssetName)
                 continue;
 
             var cleanedName = DisclosureParsingHelper.CleanAssetName(details.AssetName);
-            var cleanedSubholding = CleanStoredText(
-                DisclosureParsingHelper.Truncate(details.Subholding, 256)
-            );
+            var cleanedSubholding =
+                details.Subholding == null
+                    ? ""
+                    : CleanStoredText(DisclosureParsingHelper.Truncate(details.Subholding, 256));
             legacyCandidates.Add(
                 new LegacyInlineMetadataCandidate(
                     legacy,
