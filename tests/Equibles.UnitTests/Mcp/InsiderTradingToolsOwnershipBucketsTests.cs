@@ -1,6 +1,8 @@
 using Equibles.CommonStocks.Data;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data;
@@ -9,8 +11,6 @@ using Equibles.InsiderTrading.Data;
 using Equibles.InsiderTrading.Data.Models;
 using Equibles.InsiderTrading.Mcp.Tools;
 using Equibles.InsiderTrading.Repositories;
-using Equibles.CommonStocks.Repositories;
-using Equibles.CorporateActions.Repositories;
 using Equibles.Media.Data;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;

@@ -110,7 +110,8 @@ public static class FinancialConceptAliases
         // series under the operating variant (nonfinancial filers moved to the
         // nonoperating one), so without the fallback a bank's interest-expense
         // series ends mid-2024 (JPM stops at 2024-03-31 without it).
-        ["interest-expense"] = [
+        ["interest-expense"] =
+        [
             G("InterestExpense"),
             G("InterestExpenseNonoperating"),
             G("InterestExpenseOperating"),

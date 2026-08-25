@@ -501,9 +501,10 @@ public class CongressionalTradeSyncService
                 continue;
 
             var cleanedName = DisclosureParsingHelper.CleanAssetName(details.AssetName);
-            var cleanedSubholding = details.Subholding == null
-                ? ""
-                : CleanStoredText(DisclosureParsingHelper.Truncate(details.Subholding, 256));
+            var cleanedSubholding =
+                details.Subholding == null
+                    ? ""
+                    : CleanStoredText(DisclosureParsingHelper.Truncate(details.Subholding, 256));
             legacyCandidates.Add(
                 new LegacyInlineMetadataCandidate(
                     legacy,
