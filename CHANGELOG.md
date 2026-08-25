@@ -10,6 +10,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Fixed
 
 - SEC document chunking now reads an indexed pending-state queue instead of scanning every stored document and probing the chunk corpus on each drained poll. Closes #3823.
+- Fails-to-deliver replays reconcile CUSIP identity only from a complete prior calendar month and no longer rewrite settled rows on every daily cycle. PRs #4461 and #4462.
+- Split adjustment of financial facts now applies only to share-denominated units, so ratio units such as USD/bbl or USD/MMBTU stay as filed. PR #4463.
 
 ## [1.6.1] — 2026-08-22
 
