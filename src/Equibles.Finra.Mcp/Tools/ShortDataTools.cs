@@ -551,6 +551,15 @@ public class ShortDataTools
         return $"| {leadCell} | {McpFormat.WholeNumber(position)} | {changeStr} | {advStr} | {dtcStr} |";
     }
 
+    // Squeeze-score days-to-cover: the manager already nulls FINRA's zero-volume 999.99
+    // placeholder at build time, so any remaining at-or-above-cap value is a genuine
+    // "999.99 or more" floor — spell it as the history rows do instead of letting an
+    // "0.0" format round it to a fictitious "1000.0".
+    private static string FormatSqueezeDaysToCover(decimal? daysToCover) =>
+        daysToCover == null ? "-"
+        : daysToCover >= FinraDaysToCoverCap ? ">=999.99 (FINRA cap)"
+        : daysToCover.Value.ToString("0.0", CultureInfo.InvariantCulture);
+
     // Strict replacement for McpToolExecutor.ParseDateRange: a supplied date must be ISO
     // yyyy-MM-dd (no silent fallback onto the default window) and the range must not be
     // inverted — a caller typo must never silently answer for a window it did not ask about,
@@ -744,7 +753,7 @@ public class ShortDataTools
                         // continues 26, 27, … instead of restarting at 1.
                         return $"| {offset + rank} | {score.Ticker} | {score.Score.ToString("0", CultureInfo.InvariantCulture)} | "
                             + $"{score.ShortInterestPercentOfShares.ToString("P1", CultureInfo.InvariantCulture)} | "
-                            + $"{score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"} | "
+                            + $"{FormatSqueezeDaysToCover(score.DaysToCover)} | "
                             + $"{FormatSignedPercent(score.ShortVolumeShareTrend)} | "
                             + $"{FormatSignedPercent(score.ShortInterestChangePercent)} | "
                             + $"{McpFormat.OrDash(score.FailsToDeliverPercentOfShares, "P2")} | "
@@ -811,7 +820,7 @@ public class ShortDataTools
             $"- Short interest: {score.ShortInterestPercentOfShares.ToString("P1", CultureInfo.InvariantCulture)} of shares outstanding{Percentile(score.ShortInterestPercentile)}"
         );
         sb.AppendLine(
-            $"- Days to cover: {score.DaysToCover?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"}{Percentile(score.DaysToCoverPercentile)}"
+            $"- Days to cover: {FormatSqueezeDaysToCover(score.DaysToCover)}{Percentile(score.DaysToCoverPercentile)}"
         );
         sb.AppendLine(
             $"- Short-volume trend: {FormatSignedPercent(score.ShortVolumeShareTrend)}{Percentile(score.ShortVolumeTrendPercentile)}"
