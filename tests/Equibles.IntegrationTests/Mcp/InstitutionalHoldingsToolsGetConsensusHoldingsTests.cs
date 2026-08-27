@@ -75,7 +75,7 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
             "Consensus A LP, Consensus B LP, Consensus C LP"
         );
 
-        output.Should().Contain("Consensus holdings — **3 funds**");
+        output.Should().Contain("Consensus holdings — **3 institutions**");
         output.Should().Contain("AAPL");
         output.Should().Contain("MSFT");
         output.Should().Contain("NVDA");
@@ -118,7 +118,10 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetInstitutionConsensusHoldings("Filter A LP, Filter B LP", minFunds: 2);
+        var output = await sut.GetInstitutionConsensusHoldings(
+            "Filter A LP, Filter B LP",
+            minFunds: 2
+        );
 
         output.Should().Contain("AAPL");
         output.Should().NotContain("NVDA");

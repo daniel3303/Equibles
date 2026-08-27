@@ -148,7 +148,11 @@ public class StockPriceTools
         );
     }
 
-    [McpServerTool(Name = "GetLatestClosingPrices", Title = "Latest Closing Prices", ReadOnly = true)]
+    [McpServerTool(
+        Name = "GetLatestClosingPrices",
+        Title = "Latest Closing Prices",
+        ReadOnly = true
+    )]
     [Description(
         "Get each ticker's newest traded, settled daily close in USD, with one-session change, volume, and trailing 52-week closing range. Rows can have different dates while a session settles; use the Date column. Change is omitted when the immediately prior trading session is absent. Split-limited or partial 52-week ranges are marked in the response. This is settled history, not an intraday quote."
     )]
@@ -409,9 +413,7 @@ public class StockPriceTools
     }
 
     public Task<string> GetLatestClosingPrices(string tickers) =>
-        GetLatestClosingPrices(
-            tickers?.Split(',', StringSplitOptions.TrimEntries)
-        );
+        GetLatestClosingPrices(tickers?.Split(',', StringSplitOptions.TrimEntries));
 
     [McpServerTool(
         Name = "GetStochasticOscillator",

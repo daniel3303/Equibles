@@ -77,7 +77,10 @@ public class McpServerMismatchedArgumentTypeTests : IAsyncLifetime
                 "the client should be told its arguments were the problem, not given an opaque server error"
             );
         text.Should()
-            .Contain("GetLatestClosingPrices", "the error should name the tool that rejected the call");
+            .Contain(
+                "GetLatestClosingPrices",
+                "the error should name the tool that rejected the call"
+            );
     }
 
     [Fact]

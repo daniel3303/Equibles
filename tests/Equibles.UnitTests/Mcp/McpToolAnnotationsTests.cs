@@ -104,23 +104,33 @@ public class McpToolAnnotationsTests
             .Select(t => $"{t.Name}: {t.Description?.Length ?? 0} characters")
             .ToList();
 
-        invalid.Should().BeEmpty("tool descriptions should be concise enough for reliable selection");
+        invalid
+            .Should()
+            .BeEmpty("tool descriptions should be concise enough for reliable selection");
     }
 
     [Fact]
     public void ToolParameterDescriptions_StayFocusedForInvocation()
     {
         var invalid = EnumerateTools()
-            .SelectMany(t => t.Method.GetParameters()
-                .Where(parameter => parameter.ParameterType != typeof(CancellationToken))
-                .Select(parameter => new
-                {
-                    Tool = t.Attribute.Name ?? t.Method.Name,
-                    Parameter = parameter.Name,
-                    Description = parameter.GetCustomAttribute<DescriptionAttribute>()?.Description,
-                }))
-            .Where(item => string.IsNullOrWhiteSpace(item.Description) || item.Description.Length > 500)
-            .Select(item => $"{item.Tool}.{item.Parameter}: {item.Description?.Length ?? 0} characters")
+            .SelectMany(t =>
+                t.Method.GetParameters()
+                    .Where(parameter => parameter.ParameterType != typeof(CancellationToken))
+                    .Select(parameter => new
+                    {
+                        Tool = t.Attribute.Name ?? t.Method.Name,
+                        Parameter = parameter.Name,
+                        Description = parameter
+                            .GetCustomAttribute<DescriptionAttribute>()
+                            ?.Description,
+                    })
+            )
+            .Where(item =>
+                string.IsNullOrWhiteSpace(item.Description) || item.Description.Length > 500
+            )
+            .Select(item =>
+                $"{item.Tool}.{item.Parameter}: {item.Description?.Length ?? 0} characters"
+            )
             .ToList();
 
         invalid.Should().BeEmpty("every model-facing parameter needs concise invocation guidance");
@@ -152,8 +162,9 @@ public class McpToolAnnotationsTests
         };
 
         names.Should().NotContain(retired);
-        names.Should().Contain(
-            [
+        names
+            .Should()
+            .Contain([
                 "GetFundProfile",
                 "SearchDocuments",
                 "SearchDocument",
@@ -169,8 +180,7 @@ public class McpToolAnnotationsTests
                 "GetInstitutionConsensusHoldings",
                 "GetInstitutionalOwnershipHistory",
                 "GetTopInstitutionalBuyersSellers",
-            ]
-        );
+            ]);
     }
 
     [Fact]

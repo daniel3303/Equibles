@@ -132,7 +132,11 @@ public class InstitutionalHoldingsToolsCompareInstitutionPortfoliosTests : Parad
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.CompareInstitutionPortfolios("Dated A LP", "Dated B LP", reportDate: "2024-09-30");
+        var output = await sut.CompareInstitutionPortfolios(
+            "Dated A LP",
+            "Dated B LP",
+            reportDate: "2024-09-30"
+        );
 
         output.Should().Contain("as of 2024-09-30");
     }

@@ -298,8 +298,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
 
         // A near-miss type ('10K', 'Transcript') must not silently search unfiltered —
         // the caller would present mixed-type results as filtered ones.
-        var result = await Sut()
-            .SearchDocuments("cloud revenue", "AAPL", documentTypes: ["10K"]);
+        var result = await Sut().SearchDocuments("cloud revenue", "AAPL", documentTypes: ["10K"]);
 
         result.Should().StartWith("Unknown documentTypes '10K'.");
         result.Should().Contain("'TenK' (10-K)");
