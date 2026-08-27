@@ -64,7 +64,7 @@ public class FinancialFactsToolsPickBestFactAccessionTiebreakTests
         );
 
         var result = (FinancialFact)
-            method!.Invoke(null, [new[] { earlierAcc, laterAcc }, conceptPriority, false]);
+            method!.Invoke(null, [new[] { earlierAcc, laterAcc }, conceptPriority, false, null]);
 
         result.Value.Should().Be(200m);
         result.AccessionNumber.Should().Be("0000320193-24-000999");

@@ -44,7 +44,7 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
         );
 
         var result = (FinancialFact)
-            method!.Invoke(null, [new[] { yearToDate, discreteQuarter }, conceptPriority, false]);
+            method!.Invoke(null, [new[] { yearToDate, discreteQuarter }, conceptPriority, false, null]);
 
         result.Value.Should().Be(96_428m, "the discrete quarter wins over the year-to-date span");
     }
@@ -77,8 +77,8 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
         );
 
         var picked = (FinancialFact)
-            method!.Invoke(null, [new[] { inceptionToDate, validAnnual }, conceptPriority, false]);
-        var rejected = method.Invoke(null, [new[] { inceptionToDate }, conceptPriority, false]);
+            method!.Invoke(null, [new[] { inceptionToDate, validAnnual }, conceptPriority, false, null]);
+        var rejected = method.Invoke(null, [new[] { inceptionToDate }, conceptPriority, false, null]);
 
         picked.Should().BeSameAs(validAnnual);
         rejected.Should().BeNull("a multi-year duration is not a fiscal-year fact");
@@ -112,8 +112,8 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
         );
 
         var picked = (FinancialFact)
-            method!.Invoke(null, [new[] { inceptionToDate, validQuarter }, conceptPriority, false]);
-        var rejected = method.Invoke(null, [new[] { inceptionToDate }, conceptPriority, false]);
+            method!.Invoke(null, [new[] { inceptionToDate, validQuarter }, conceptPriority, false, null]);
+        var rejected = method.Invoke(null, [new[] { inceptionToDate }, conceptPriority, false, null]);
 
         picked.Should().BeSameAs(validQuarter);
         rejected.Should().BeNull("a fiscal stamp cannot turn an inception duration into a quarter");
@@ -138,7 +138,7 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        var rejected = method!.Invoke(null, [new[] { yearToDate }, conceptPriority, false]);
+        var rejected = method!.Invoke(null, [new[] { yearToDate }, conceptPriority, false, null]);
 
         rejected.Should().BeNull("a six-month YTD span is not a discrete fiscal quarter");
     }
