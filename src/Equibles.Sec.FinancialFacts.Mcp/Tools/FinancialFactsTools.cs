@@ -373,10 +373,11 @@ public class FinancialFactsTools
         string fiscalPeriod = "FY"
     ) =>
         CompareFinancialFact(
-            tickers?.Split(
-                ',',
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-            ),
+            // Empty segments are kept, never dropped: a batch like "AAPL,,MSFT" is
+            // malformed and must reach ParseComparisonTickers to be reported as an
+            // invalid ticker. Removing them here silently narrows the caller's
+            // request and answers for fewer companies than were asked for.
+            tickers?.Split(',', StringSplitOptions.TrimEntries),
             concept,
             fiscalYear,
             fiscalPeriod
@@ -546,10 +547,11 @@ public class FinancialFactsTools
 
     internal static (List<string> Tickers, string Error) ParseComparisonTickers(string tickers) =>
         ParseComparisonTickers(
-            tickers?.Split(
-                ',',
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-            )
+            // Empty segments are kept, never dropped: a batch like "AAPL,,MSFT" is
+            // malformed and must reach ParseComparisonTickers to be reported as an
+            // invalid ticker. Removing them here silently narrows the caller's
+            // request and answers for fewer companies than were asked for.
+            tickers?.Split(',', StringSplitOptions.TrimEntries)
         );
 
     private static CommonStock ResolveComparisonStock(
