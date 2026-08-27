@@ -61,7 +61,7 @@ public class FinancialFactsToolsPickBestFactLatestReportedTests
         );
 
         var result = (FinancialFact)
-            method!.Invoke(null, [new[] { original, restated }, conceptPriority, false]);
+            method!.Invoke(null, [new[] { original, restated }, conceptPriority, false, null]);
 
         result.Value.Should().Be(1_200m);
         result.FiledDate.Should().Be(new DateOnly(2024, 9, 15));

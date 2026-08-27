@@ -187,7 +187,12 @@ public class FinancialFactsTools
                 var perPeriod = DedupeByReportingSpan(
                         filtered
                             .GroupBy(f => (f.FiscalYear, f.FiscalPeriod))
-                            .Select(g => PickBestFact(g, conceptPriority, asOriginallyReported))
+                            // The full unfiltered history is the corroboration
+                            // context: a transition stub's neighbouring annual
+                            // windows can sit outside the caller's date window.
+                            .Select(g =>
+                                PickBestFact(g, conceptPriority, asOriginallyReported, facts)
+                            )
                             .Where(f => f != null)
                     )
                     .OrderByDescending(f => f.PeriodEnd)
@@ -634,7 +639,8 @@ public class FinancialFactsTools
     private static FinancialFact PickBestFact(
         IEnumerable<FinancialFact> facts,
         IReadOnlyDictionary<Guid, int> conceptPriority,
-        bool asOriginallyReported = false
+        bool asOriginallyReported = false,
+        IReadOnlyCollection<FinancialFact> corroborationContext = null
     )
     {
         var candidates = facts.ToList();
@@ -643,8 +649,8 @@ public class FinancialFactsTools
         // quarter reads as the discrete three months and never the year-to-date total a
         // 10-Q tags under the same fiscal Q2/Q3 (the financials tab handles this in
         // FinancialStatementsHelper.PickCurrentlyReportedFact). Instants (balance sheet,
-        // zero span) always qualify. A source-stamped short transition year remains a
-        // fallback; a duration above the annual ceiling is removed before fallback.
+        // zero span) always qualify. A corroborated fiscal-calendar transition stub
+        // remains a fallback; a duration above the annual ceiling is removed before it.
         var fiscalPeriod = candidates[0].FiscalPeriod;
         candidates = candidates
             .Where(f =>
@@ -669,9 +675,29 @@ public class FinancialFactsTools
             })
             .ToList();
         if (preferredSpan.Count > 0)
+        {
             candidates = preferredSpan;
-        else if (fiscalPeriod != SecFiscalPeriod.FullYear)
+        }
+        else if (fiscalPeriod == SecFiscalPeriod.FullYear)
+        {
+            // A FullYear bucket with no annual-span fact holds either a genuine
+            // fiscal-calendar transition stub or a misclassified sub-annual span (a
+            // year-to-date, a lone discrete quarter — FullYear is the enum's zero
+            // value, so unclassified periods land here too). Only a stub the
+            // surrounding annual windows corroborate on both sides may publish as
+            // the year; a caller with no corroboration context (the cross-company
+            // comparison, which loads a single fiscal slice — where a short stub
+            // would not be comparable anyway) fails closed instead.
+            candidates = candidates
+                .Where(f => AnnualTransitionStubs.IsCorroborated(f, corroborationContext))
+                .ToList();
+            if (candidates.Count == 0)
+                return null;
+        }
+        else
+        {
             return null;
+        }
 
         // Latest period end first: a filing re-reports comparative prior periods (the
         // prior-year quarter, prior fiscal years, the prior year-end balance instant)

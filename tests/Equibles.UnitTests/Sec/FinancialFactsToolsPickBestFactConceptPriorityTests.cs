@@ -70,7 +70,7 @@ public class FinancialFactsToolsPickBestFactConceptPriorityTests
         );
 
         var result = (FinancialFact)
-            method!.Invoke(null, [new[] { synonym, primary }, conceptPriority, false]);
+            method!.Invoke(null, [new[] { synonym, primary }, conceptPriority, false, null]);
 
         result.Value.Should().Be(100m);
         result.FinancialConceptId.Should().Be(primaryConceptId);
