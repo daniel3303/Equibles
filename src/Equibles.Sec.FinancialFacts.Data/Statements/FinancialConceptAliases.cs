@@ -101,13 +101,13 @@ public static class FinancialConceptAliases
             G("ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost"),
             I("ResearchAndDevelopmentExpense"),
         ],
-        ["selling-general-and-administrative"] =
-        [
-            G("SellingGeneralAndAdministrativeExpense"),
-        ],
+        ["selling-general-and-administrative"] = [G("SellingGeneralAndAdministrativeExpense")],
         ["selling-and-marketing"] = [G("SellingAndMarketingExpense"), I("DistributionCosts")],
         ["general-and-administrative"] =
-        [G("GeneralAndAdministrativeExpense"), I("AdministrativeExpense")],
+        [
+            G("GeneralAndAdministrativeExpense"),
+            I("AdministrativeExpense"),
+        ],
         ["amortization-of-intangibles"] = [G("AmortizationOfIntangibleAssets")],
         ["restructuring"] = [G("RestructuringCharges")],
         ["operating-expenses"] = [G("OperatingExpenses")],
@@ -148,8 +148,7 @@ public static class FinancialConceptAliases
                 "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"
             ),
         ],
-        ["income-tax"] =
-        [G("IncomeTaxExpenseBenefit"), I("IncomeTaxExpenseContinuingOperations")],
+        ["income-tax"] = [G("IncomeTaxExpenseBenefit"), I("IncomeTaxExpenseContinuingOperations")],
         // ProfitLoss (net income including noncontrolling interests) last: it
         // only fills filers that never report the parent-attributable figure.
         ["net-income"] = [G("NetIncomeLoss"), G("ProfitLoss"), I("ProfitLoss")],
@@ -192,7 +191,10 @@ public static class FinancialConceptAliases
         ["inventory"] = [G("InventoryNet"), I("Inventories")],
         ["current-assets"] = [G("AssetsCurrent"), I("CurrentAssets")],
         ["property-plant-and-equipment"] =
-        [G("PropertyPlantAndEquipmentNet"), I("PropertyPlantAndEquipment")],
+        [
+            G("PropertyPlantAndEquipmentNet"),
+            I("PropertyPlantAndEquipment"),
+        ],
         ["operating-lease-assets"] = [G("OperatingLeaseRightOfUseAsset"), I("RightofuseAssets")],
         ["goodwill"] = [G("Goodwill"), I("Goodwill")],
         ["intangible-assets"] =
@@ -283,7 +285,9 @@ public static class FinancialConceptAliases
         ["share-based-compensation"] =
         [
             G("ShareBasedCompensation"),
-            I("ExpenseFromSharebasedPaymentTransactionsInWhichGoodsOrServicesReceivedDidNotQualifyForRecognitionAsAssets"),
+            I(
+                "ExpenseFromSharebasedPaymentTransactionsInWhichGoodsOrServicesReceivedDidNotQualifyForRecognitionAsAssets"
+            ),
         ],
         ["deferred-income-taxes"] =
         [
@@ -310,7 +314,10 @@ public static class FinancialConceptAliases
             I("CashFlowsFromUsedInInvestingActivities"),
         ],
         ["share-repurchases"] =
-        [G("PaymentsForRepurchaseOfCommonStock"), I("PaymentsToAcquireOrRedeemEntitysShares")],
+        [
+            G("PaymentsForRepurchaseOfCommonStock"),
+            I("PaymentsToAcquireOrRedeemEntitysShares"),
+        ],
         ["dividends-paid"] =
         [
             G("PaymentsOfDividends"),

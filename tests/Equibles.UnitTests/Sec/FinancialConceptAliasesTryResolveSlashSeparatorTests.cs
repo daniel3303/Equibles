@@ -18,9 +18,10 @@ public class FinancialConceptAliasesTryResolveSlashSeparatorTests
         var success = FinancialConceptAliases.TryResolve("operating/income", out var concepts);
 
         success.Should().BeTrue();
-        concepts.Should().Contain(concept =>
-            concept.Taxonomy == FactTaxonomy.UsGaap
-            && concept.Tag == "OperatingIncomeLoss"
-        );
+        concepts
+            .Should()
+            .Contain(concept =>
+                concept.Taxonomy == FactTaxonomy.UsGaap && concept.Tag == "OperatingIncomeLoss"
+            );
     }
 }

@@ -20,7 +20,10 @@ public class FinancialConceptAliasesIfrsTests
             { "total-liabilities", "Liabilities" },
             { "stockholders-equity", "EquityAttributableToOwnersOfParent" },
             { "operating-cash-flow", "CashFlowsFromUsedInOperatingActivities" },
-            { "capital-expenditures", "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities" },
+            {
+                "capital-expenditures",
+                "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"
+            },
             { "dividends-paid", "DividendsPaid" },
         };
 

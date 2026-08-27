@@ -21,9 +21,10 @@ public class FinancialConceptAliasesTryResolveOperatingProfitSynonymTests
         var success = FinancialConceptAliases.TryResolve("Operating Profit", out var concepts);
 
         success.Should().BeTrue();
-        concepts.Should().Contain(concept =>
-            concept.Taxonomy == FactTaxonomy.UsGaap
-            && concept.Tag == "OperatingIncomeLoss"
-        );
+        concepts
+            .Should()
+            .Contain(concept =>
+                concept.Taxonomy == FactTaxonomy.UsGaap && concept.Tag == "OperatingIncomeLoss"
+            );
     }
 }
