@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
+using Equibles.Finra.BusinessLogic;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.Repositories;
 using Equibles.Mcp;
@@ -64,6 +65,13 @@ public class OffExchangeVolumeTools
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
+                var listingError = FinraTickerScope.SecondaryListingUnavailable(
+                    stock,
+                    ticker,
+                    "off-exchange-volume"
+                );
+                if (listingError != null)
+                    return listingError;
 
                 var (startWeek, endWeek, rangeError) = ParseStrictDateRange(
                     startDate,

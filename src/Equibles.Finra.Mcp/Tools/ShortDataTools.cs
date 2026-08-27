@@ -88,6 +88,13 @@ public class ShortDataTools
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
+                var listingError = FinraTickerScope.SecondaryListingUnavailable(
+                    stock,
+                    ticker,
+                    "short-volume"
+                );
+                if (listingError != null)
+                    return listingError;
 
                 var (start, end, rangeError) = ParseStrictDateRange(
                     startDate,
@@ -179,6 +186,13 @@ public class ShortDataTools
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
+                var listingError = FinraTickerScope.SecondaryListingUnavailable(
+                    stock,
+                    ticker,
+                    "short-interest"
+                );
+                if (listingError != null)
+                    return listingError;
 
                 var (start, end, rangeError) = ParseStrictDateRange(
                     startDate,
@@ -688,6 +702,22 @@ public class ShortDataTools
         return _runner.Execute(
             async () =>
             {
+                CommonStock requestedStock = null;
+                if (!string.IsNullOrWhiteSpace(ticker))
+                {
+                    var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
+                    if (stockError != null)
+                        return stockError;
+                    var listingError = FinraTickerScope.SecondaryListingUnavailable(
+                        stock,
+                        ticker,
+                        "short-squeeze score"
+                    );
+                    if (listingError != null)
+                        return listingError;
+                    requestedStock = stock;
+                }
+
                 // The score is peer-relative, so it is always computed for the whole
                 // universe at once — a per-call Compute() made every request pay that
                 // multi-second build. Cached under the manager-owned shared key so a
@@ -709,8 +739,8 @@ public class ShortDataTools
 
                 var settlementDate = scores[0].SettlementDate;
 
-                if (!string.IsNullOrWhiteSpace(ticker))
-                    return await RenderSingleSqueezeScore(ticker, scores, settlementDate);
+                if (requestedStock != null)
+                    return RenderSingleSqueezeScore(requestedStock, scores, settlementDate);
 
                 // Liquidity gates are a view over the scored universe, applied after the
                 // peer-relative percentiles so a stock's score never depends on the
@@ -784,16 +814,12 @@ public class ShortDataTools
     // One stock's score card: composite, rank in the score-descending universe, and the
     // factor breakdown (raw reading + universe percentile per factor). The board answers
     // "what looks squeeze-prone"; this answers "does MY stock look squeeze-prone".
-    private async Task<string> RenderSingleSqueezeScore(
-        string ticker,
+    private static string RenderSingleSqueezeScore(
+        CommonStock stock,
         IReadOnlyList<ShortSqueezeScore> scores,
         DateOnly settlementDate
     )
     {
-        var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
-        if (stockError != null)
-            return stockError;
-
         var index = -1;
         for (var i = 0; i < scores.Count; i++)
         {
