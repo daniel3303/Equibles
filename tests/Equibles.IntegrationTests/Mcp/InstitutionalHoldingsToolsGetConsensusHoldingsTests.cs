@@ -75,7 +75,7 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
             "Consensus A LP, Consensus B LP, Consensus C LP"
         );
 
-        output.Should().Contain("Consensus holdings — **3 funds**");
+        output.Should().Contain("Consensus holdings — **3 institutions**");
         output.Should().Contain("AAPL");
         output.Should().Contain("MSFT");
         output.Should().Contain("NVDA");
