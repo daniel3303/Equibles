@@ -118,7 +118,10 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetInstitutionConsensusHoldings("Filter A LP, Filter B LP", minFunds: 2);
+        var output = await sut.GetInstitutionConsensusHoldings(
+            "Filter A LP, Filter B LP",
+            minFunds: 2
+        );
 
         output.Should().Contain("AAPL");
         output.Should().NotContain("NVDA");

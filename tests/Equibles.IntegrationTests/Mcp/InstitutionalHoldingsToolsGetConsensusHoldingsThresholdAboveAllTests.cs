@@ -64,7 +64,10 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsThresholdA
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetInstitutionConsensusHoldings("Threshold A, Threshold B", minFunds: 3);
+        var output = await sut.GetInstitutionConsensusHoldings(
+            "Threshold A, Threshold B",
+            minFunds: 3
+        );
 
         output.Should().Contain("No stocks meet the minInstitutions threshold");
         output.Should().NotContain("| # | Ticker |");

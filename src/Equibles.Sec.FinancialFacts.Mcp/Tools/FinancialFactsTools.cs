@@ -373,7 +373,10 @@ public class FinancialFactsTools
         string fiscalPeriod = "FY"
     ) =>
         CompareFinancialFact(
-            tickers?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            tickers?.Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            ),
             concept,
             fiscalYear,
             fiscalPeriod
@@ -543,7 +546,10 @@ public class FinancialFactsTools
 
     internal static (List<string> Tickers, string Error) ParseComparisonTickers(string tickers) =>
         ParseComparisonTickers(
-            tickers?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            tickers?.Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            )
         );
 
     private static CommonStock ResolveComparisonStock(
