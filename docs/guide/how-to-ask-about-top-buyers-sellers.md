@@ -15,7 +15,7 @@ Name a stock and ask about the quarter's institutional flow:
 - "Which funds added the most Tesla last quarter?"
 - "Did any institutions sell out of AAPL?"
 
-The assistant picks the `GetTopBuyersSellers` tool and returns the result for the stock.
+The assistant picks the `GetTopInstitutionalBuyersSellers` tool and returns the result for the stock.
 
 ## What you should see
 

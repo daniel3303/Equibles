@@ -81,7 +81,7 @@ public class McpServerEndpointTests : IAsyncLifetime
         toolNames.Should().Contain("GetTopHolders");
         toolNames.Should().Contain("GetInsiderTransactions");
         toolNames.Should().Contain("GetEconomicIndicator");
-        toolNames.Should().Contain("SearchCompanyDocuments");
+        toolNames.Should().Contain("SearchDocuments");
         toolNames.Should().Contain("GetCongressionalTrades");
         toolNames.Should().Contain("GetStockPrices");
         // Government contracts shipped as a module for a long time while the server never

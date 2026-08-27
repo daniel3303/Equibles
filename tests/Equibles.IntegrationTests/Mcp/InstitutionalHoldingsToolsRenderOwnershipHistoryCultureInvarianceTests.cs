@@ -31,7 +31,7 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
     // on every host. de-DE swaps the thousand separator (1,234,567 → 1.234.567),
     // forking the response — same bug class as the fixed sibling RenderTopHoldersTable (#2628).
     [Fact]
-    public async Task GetOwnershipHistory_UnderNonInvariantCulture_RendersTotalSharesCultureInvariantly()
+    public async Task GetInstitutionalOwnershipHistory_UnderNonInvariantCulture_RendersTotalSharesCultureInvariantly()
     {
         var stock = new CommonStock
         {
@@ -71,7 +71,7 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
         try
         {
             CultureInfo.CurrentCulture = new CultureInfo("de-DE");
-            output = await sut.GetOwnershipHistory("AAPL");
+            output = await sut.GetInstitutionalOwnershipHistory("AAPL");
         }
         finally
         {

@@ -11,20 +11,20 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
-/// Adversarial cover for <c>GetProposedSales</c>'s monetary/share cells under a non-invariant host
+/// Adversarial cover for <c>GetForm144ProposedSales</c>'s monetary/share cells under a non-invariant host
 /// culture. MCP markdown must render byte-identically on every host (the established repo contract
 /// behind the sibling GetInsiderOwnership / GetInsiderTransactions culture-invariance pins); a
 /// de-DE host swaps the separators (87,500,000 → 87.500.000), forking the response. Guards the
 /// Form 144 amount/share columns against a future bare-:N0 regression of the GH-3058 / GH-3068 class.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class InsiderTradingToolsGetProposedSalesCultureInvarianceTests : ParadeDbMcpTestBase
+public class InsiderTradingToolsGetForm144ProposedSalesCultureInvarianceTests : ParadeDbMcpTestBase
 {
-    public InsiderTradingToolsGetProposedSalesCultureInvarianceTests(ParadeDbFixture fixture)
+    public InsiderTradingToolsGetForm144ProposedSalesCultureInvarianceTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     [Fact]
-    public async Task GetProposedSales_UnderNonInvariantCulture_RendersAmountsCultureInvariantly()
+    public async Task GetForm144ProposedSales_UnderNonInvariantCulture_RendersAmountsCultureInvariantly()
     {
         var stock = new CommonStock
         {
@@ -60,7 +60,7 @@ public class InsiderTradingToolsGetProposedSalesCultureInvarianceTests : ParadeD
         try
         {
             CultureInfo.CurrentCulture = new CultureInfo("de-DE");
-            result = await Sut().GetProposedSales("AAPL");
+            result = await Sut().GetForm144ProposedSales("AAPL");
         }
         finally
         {

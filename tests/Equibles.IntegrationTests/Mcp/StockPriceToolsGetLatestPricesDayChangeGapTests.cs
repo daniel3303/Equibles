@@ -21,9 +21,9 @@ namespace Equibles.IntegrationTests.Mcp;
 /// must appear, so a caller cannot read the em-dash as missing coverage.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class StockPriceToolsGetLatestPricesDayChangeGapTests : ParadeDbMcpTestBase
+public class StockPriceToolsGetLatestClosingPricesDayChangeGapTests : ParadeDbMcpTestBase
 {
-    public StockPriceToolsGetLatestPricesDayChangeGapTests(ParadeDbFixture fixture)
+    public StockPriceToolsGetLatestClosingPricesDayChangeGapTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     private StockPriceTools Sut() =>
@@ -68,25 +68,25 @@ public class StockPriceToolsGetLatestPricesDayChangeGapTests : ParadeDbMcpTestBa
     }
 
     [Fact]
-    public async Task GetLatestPrices_ConsecutiveSessions_RendersTheChange()
+    public async Task GetLatestClosingPrices_ConsecutiveSessions_RendersTheChange()
     {
         // Thu 2026-07-30 -> Fri 2026-07-31, adjacent sessions: a real +10% day.
         await Seed("ADJ", (new DateOnly(2026, 7, 30), 100m), (new DateOnly(2026, 7, 31), 110m));
 
-        var result = await Sut().GetLatestPrices("ADJ");
+        var result = await Sut().GetLatestClosingPrices("ADJ");
 
         result.Should().Contain("+10.00").And.Contain("+10.00%");
         result.Should().NotContain("no row for the session before");
     }
 
     [Fact]
-    public async Task GetLatestPrices_SessionSkipped_BlanksTheChangeAndExplains()
+    public async Task GetLatestClosingPrices_SessionSkipped_BlanksTheChangeAndExplains()
     {
         // Mon 2026-07-27 over Thu 2026-07-23 with Friday missing — the reported failure. Four
         // calendar days apart, so no day-count tolerance can tell it from the holiday case below.
         await Seed("GAP", (new DateOnly(2026, 7, 23), 100m), (new DateOnly(2026, 7, 27), 110m));
 
-        var result = await Sut().GetLatestPrices("GAP");
+        var result = await Sut().GetLatestClosingPrices("GAP");
 
         // The +10% multi-session move may appear in the 52-week range columns — it IS the
         // window's span — but never in the Change cells, which stay em-dashed. Pinning the
@@ -100,41 +100,41 @@ public class StockPriceToolsGetLatestPricesDayChangeGapTests : ParadeDbMcpTestBa
     }
 
     [Fact]
-    public async Task GetLatestPrices_GapOverAMarketHoliday_StillRendersTheChange()
+    public async Task GetLatestClosingPrices_GapOverAMarketHoliday_StillRendersTheChange()
     {
         // Thu 2026-07-02 -> Mon 2026-07-06: also four calendar days, but adjacent sessions
         // because Jul 4 2026 falls on a Saturday and the NYSE observes it on Fri Jul 3. The
         // trading calendar is the only thing that separates this from the case above.
         await Seed("HOL", (new DateOnly(2026, 7, 2), 100m), (new DateOnly(2026, 7, 6), 110m));
 
-        var result = await Sut().GetLatestPrices("HOL");
+        var result = await Sut().GetLatestClosingPrices("HOL");
 
         result.Should().Contain("+10.00%");
         result.Should().NotContain("no row for the session before");
     }
 
     [Fact]
-    public async Task GetLatestPrices_PriorBarOnAnNyseClosure_StillRendersTheChange()
+    public async Task GetLatestClosingPrices_PriorBarOnAnNyseClosure_StillRendersTheChange()
     {
         // Fri 2026-07-03 is the observed Independence Day close, yet 297 securities in production
         // carry a bar for it — foreign ordinaries quoted here trade on their home calendar. No
         // NYSE session sits between the two bars, so this is a real one-session move.
         await Seed("FGN", (new DateOnly(2026, 7, 3), 100m), (new DateOnly(2026, 7, 6), 110m));
 
-        var result = await Sut().GetLatestPrices("FGN");
+        var result = await Sut().GetLatestClosingPrices("FGN");
 
         result.Should().Contain("+10.00%");
         result.Should().NotContain("no row for the session before");
     }
 
     [Fact]
-    public async Task GetLatestPrices_SingleRow_BlanksTheChangeWithoutTheFootnote()
+    public async Task GetLatestClosingPrices_SingleRow_BlanksTheChangeWithoutTheFootnote()
     {
         // One stored bar is not a gap — there is no prior row to have skipped a session, so the
         // footnote would misdescribe it.
         await Seed("ONE", (new DateOnly(2026, 7, 31), 110m));
 
-        var result = await Sut().GetLatestPrices("ONE");
+        var result = await Sut().GetLatestClosingPrices("ONE");
 
         result.Should().Contain("| ONE | 2026-07-31 | 110.00 | — | — |");
         result.Should().NotContain("no row for the session before");

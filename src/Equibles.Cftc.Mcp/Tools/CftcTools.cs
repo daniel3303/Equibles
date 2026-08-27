@@ -114,7 +114,7 @@ public class CftcTools
     }
 
     [McpServerTool(
-        Name = "GetLatestCftcData",
+        Name = "GetLatestCftcPositioning",
         Title = "Latest CFTC Positioning Snapshot",
         ReadOnly = true
     )]
@@ -125,7 +125,7 @@ public class CftcTools
             + "counts from the legacy futures-only COT report (positions as of each Tuesday, "
             + "published Friday). Each row carries the market code accepted by GetCftcPositioning."
     )]
-    public Task<string> GetLatestCftcData(
+    public Task<string> GetLatestCftcPositioning(
         [Description(
             "Category filter: Agriculture, Energy, Metals, EquityIndices, InterestRates, Currencies (defaults to all)"
         )]
@@ -205,7 +205,7 @@ public class CftcTools
 
                 return result.ToString();
             },
-            "GetLatestCftcData",
+            "GetLatestCftcPositioning",
             $"category: {category}"
         );
     }

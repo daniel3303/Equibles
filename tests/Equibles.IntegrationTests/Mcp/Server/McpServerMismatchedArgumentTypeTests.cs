@@ -6,8 +6,8 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp.Server;
 
 /// <summary>
-/// A client that sends a required argument with the wrong JSON type — an array where
-/// the tool declares a string — made a mistake in its request, not in our server: the
+/// A client that sends a required argument with the wrong JSON type — a string where
+/// the tool declares an array — made a mistake in its request, not in our server: the
 /// SDK's binder throws <see cref="System.Text.Json.JsonException"/> before the tool
 /// body runs, and without translation that surfaces as an unhandled exception logged
 /// at error level with an opaque message. The contract pinned here is that such a call
@@ -42,7 +42,7 @@ public class McpServerMismatchedArgumentTypeTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CallTool_GetLatestPricesWithArrayForStringTickers_ReturnsInvalidParamsError()
+    public async Task CallTool_GetLatestClosingPricesWithStringForArrayTickers_ReturnsInvalidParamsError()
     {
         var httpClient = _serverFixture.CreateClient();
         httpClient.BaseAddress = new Uri("http://localhost/");
@@ -58,12 +58,12 @@ public class McpServerMismatchedArgumentTypeTests : IAsyncLifetime
 
         await using var client = await McpClient.CreateAsync(transport);
 
-        // GetLatestPrices declares 'tickers' as a comma-separated string — sending a
-        // JSON array instead is the natural mistake for a client to make and trips
+        // GetLatestClosingPrices declares 'tickers' as a JSON string array — sending a
+        // comma-separated JSON string instead trips
         // the binder's deserialization rather than its missing-argument check.
         var result = await client.CallToolAsync(
-            toolName: "GetLatestPrices",
-            arguments: new Dictionary<string, object> { ["tickers"] = new[] { "AAPL", "MSFT" } }
+            toolName: "GetLatestClosingPrices",
+            arguments: new Dictionary<string, object> { ["tickers"] = "AAPL,MSFT" }
         );
 
         result
@@ -77,6 +77,30 @@ public class McpServerMismatchedArgumentTypeTests : IAsyncLifetime
                 "the client should be told its arguments were the problem, not given an opaque server error"
             );
         text.Should()
-            .Contain("GetLatestPrices", "the error should name the tool that rejected the call");
+            .Contain("GetLatestClosingPrices", "the error should name the tool that rejected the call");
+    }
+
+    [Fact]
+    public async Task CallTool_GetLatestClosingPricesWithArrayTickers_IsAccepted()
+    {
+        var httpClient = _serverFixture.CreateClient();
+        httpClient.BaseAddress = new Uri("http://localhost/");
+
+        var transport = new HttpClientTransport(
+            new HttpClientTransportOptions
+            {
+                Endpoint = new Uri("http://localhost/mcp"),
+                TransportMode = HttpTransportMode.StreamableHttp,
+            },
+            httpClient
+        );
+
+        await using var client = await McpClient.CreateAsync(transport);
+        var result = await client.CallToolAsync(
+            toolName: "GetLatestClosingPrices",
+            arguments: new Dictionary<string, object> { ["tickers"] = new[] { "AAPL", "MSFT" } }
+        );
+
+        result.IsError.Should().NotBe(true, "a JSON string array matches the tool schema");
     }
 }

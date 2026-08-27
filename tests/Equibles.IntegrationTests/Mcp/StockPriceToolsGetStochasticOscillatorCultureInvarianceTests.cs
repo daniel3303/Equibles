@@ -28,7 +28,7 @@ public class StockPriceToolsGetStochasticOscillatorCultureInvarianceTests : Para
     // sites): LLM-facing markdown must render numbers identically on every host locale. The
     // %K/%D cells already route through McpFormat.OrDash (invariant), but the Close cell uses
     // the culture-implicit :F2 specifier, so de-DE renders the decimal comma — forking the
-    // response and making one column disagree with the next. Same bug class as GetLatestPrices
+    // response and making one column disagree with the next. Same bug class as GetLatestClosingPrices
     // (#3100) and the already-fixed GetStockPrices (#2628).
     [Fact]
     public async Task GetStochasticOscillator_UnderNonInvariantCulture_RendersCloseCultureInvariantly()

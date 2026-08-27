@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
-/// Adversarial cover for <c>GetExemptOfferings</c>'s monetary cells under a non-invariant host
+/// Adversarial cover for <c>GetFormDOfferings</c>'s monetary cells under a non-invariant host
 /// culture. MCP markdown must render byte-identically on every host (the established repo contract
 /// behind the sibling culture-invariance pins); a de-DE host swaps the separators
 /// (5,000,000 → 5.000.000), forking the response. FormDTools is the one MCP tool in this area
@@ -41,7 +41,7 @@ public class FormDExemptOfferingsToolCultureInvarianceTests : IDisposable
     public void Dispose() => _dbContext.Dispose();
 
     [Fact]
-    public async Task GetExemptOfferings_UnderNonInvariantCulture_RendersOfferingAmountInvariantly()
+    public async Task GetFormDOfferings_UnderNonInvariantCulture_RendersOfferingAmountInvariantly()
     {
         var stock = new CommonStock
         {
@@ -81,7 +81,7 @@ public class FormDExemptOfferingsToolCultureInvarianceTests : IDisposable
         try
         {
             CultureInfo.CurrentCulture = new CultureInfo("de-DE");
-            result = await _tools.GetExemptOfferings("AAPL");
+            result = await _tools.GetFormDOfferings("AAPL");
         }
         finally
         {

@@ -8,7 +8,7 @@ namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
 /// Pins the MCP-audit fixes on the CFTC tools: strict category validation on
-/// GetLatestCftcData (no silent all-categories fallback, display spellings accepted,
+/// GetLatestCftcPositioning (no silent all-categories fallback, display spellings accepted,
 /// numeric strings rejected), the market-code column and units footer, the
 /// query-optional list-all mode and truncation note on SearchCftcMarkets, and strict
 /// dates plus the truncation note on GetCftcPositioning.
@@ -53,10 +53,10 @@ public class CftcToolsStrictArgsAndDiscoveryTests : ParadeDbMcpTestBase
             NonRptShort = 5_000,
         };
 
-    // ── GetLatestCftcData category validation ────────────────────────────
+    // ── GetLatestCftcPositioning category validation ────────────────────────────
 
     [Fact]
-    public async Task GetLatestCftcData_UnknownCategory_ReturnsErrorListingAccepted()
+    public async Task GetLatestCftcPositioning_UnknownCategory_ReturnsErrorListingAccepted()
     {
         // An invalid category used to silently fall back to ALL categories — the caller
         // got the full 30+ row table and could misreport it as the filtered set.
@@ -65,7 +65,7 @@ public class CftcToolsStrictArgsAndDiscoveryTests : ParadeDbMcpTestBase
             .Add(Contract("067651", "Crude Oil, Light Sweet (NYMEX)", CftcContractCategory.Energy));
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestCftcData(category: "ZZZZZT");
+        var result = await Sut().GetLatestCftcPositioning(category: "ZZZZZT");
 
         result
             .Should()
@@ -75,7 +75,7 @@ public class CftcToolsStrictArgsAndDiscoveryTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestCftcData_DisplaySpellingWithSpace_IsAccepted()
+    public async Task GetLatestCftcPositioning_DisplaySpellingWithSpace_IsAccepted()
     {
         // The tool's own output prints display names ("Interest Rates"), so a caller
         // copying that spelling back must not be rejected: whitespace folds before
@@ -88,14 +88,14 @@ public class CftcToolsStrictArgsAndDiscoveryTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestCftcData(category: "Interest Rates");
+        var result = await Sut().GetLatestCftcPositioning(category: "Interest Rates");
 
         result.Should().Contain("10-Year T-Notes");
         result.Should().NotContain("Gold");
     }
 
     [Fact]
-    public async Task GetLatestCftcData_NumericCategory_IsRejected()
+    public async Task GetLatestCftcPositioning_NumericCategory_IsRejected()
     {
         // Enum.TryParse accepts numeric strings (even undefined ones); the name-based
         // match must reject them so "999" can't slip into a bogus filtered query.
@@ -104,15 +104,15 @@ public class CftcToolsStrictArgsAndDiscoveryTests : ParadeDbMcpTestBase
             .Add(Contract("088691", "Gold (COMEX)", CftcContractCategory.Metals));
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestCftcData(category: "999");
+        var result = await Sut().GetLatestCftcPositioning(category: "999");
 
         result.Should().StartWith("Unknown category '999'");
     }
 
-    // ── GetLatestCftcData market-code handoff ────────────────────────────
+    // ── GetLatestCftcPositioning market-code handoff ────────────────────────────
 
     [Fact]
-    public async Task GetLatestCftcData_RowsCarryMarketCodeForPositioningHandoff()
+    public async Task GetLatestCftcPositioning_RowsCarryMarketCodeForPositioningHandoff()
     {
         // GetCftcPositioning requires a market code; the snapshot must include it so a
         // consumer doesn't need an extra SearchCftcMarkets round-trip per drill-down.
@@ -121,7 +121,7 @@ public class CftcToolsStrictArgsAndDiscoveryTests : ParadeDbMcpTestBase
         DbContext.Set<CftcPositionReport>().Add(ReportFor(gold, new DateOnly(2026, 7, 7)));
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestCftcData();
+        var result = await Sut().GetLatestCftcPositioning();
 
         result.Should().Contain("| Gold (COMEX) | 088691 |");
         result.Should().Contain("GetCftcPositioning(marketCode)");

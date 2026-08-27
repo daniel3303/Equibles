@@ -15,7 +15,7 @@ Name two to twenty-five institutions:
 - "Show me the top picks shared by Citadel, Millennium, and Two Sigma."
 - "Which stocks are held by at least three of Tiger Global, Coatue, Lone Pine, and Viking?"
 
-The assistant calls the `GetConsensusHoldings` tool. It picks the institutions' latest common report date by default — pass a date (YYYY-MM-DD) to use a specific quarter — and returns up to 30 stocks by default (ask for more or fewer). You can also ask it to show only stocks held by at least a given number of the funds.
+The assistant calls the `GetInstitutionConsensusHoldings` tool. It picks the institutions' latest common report date by default — pass a date (YYYY-MM-DD) to use a specific quarter — and returns up to 30 stocks by default (ask for more or fewer). You can also ask it to show only stocks held by at least a given number of the funds.
 
 ## What you should see
 

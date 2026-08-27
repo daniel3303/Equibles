@@ -4,7 +4,7 @@ using Equibles.Sec.Data.Models;
 namespace Equibles.Sec.Mcp.Tools;
 
 // Line and document-header rendering shared by the document text tools (ReadDocumentLines,
-// SearchDocumentKeyword) and the keyword scan SearchDocument's exact mode reuses.
+// SearchDocument exact-mode results) and the keyword scan reuse.
 internal static class DocumentTextFormat
 {
     internal static string Line(int lineNumber, string content)

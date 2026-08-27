@@ -14,7 +14,7 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
-/// Pins <c>GetTopBuyersSellers</c>. The tool ranks institutions by absolute Δ shares
+/// Pins <c>GetTopInstitutionalBuyersSellers</c>. The tool ranks institutions by absolute Δ shares
 /// versus the immediately prior 13F report date — buyers (Δ &gt; 0) descending, sellers
 /// (Δ &lt; 0) ascending — and handles four boundary cases that the implementation has to
 /// get right: a fresh new position (no prior row), a sold-out position (no current row),
@@ -23,13 +23,13 @@ namespace Equibles.IntegrationTests.Mcp;
 /// empty).
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTestBase
+public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : ParadeDbMcpTestBase
 {
-    public InstitutionalHoldingsToolsGetTopBuyersSellersTests(ParadeDbFixture fixture)
+    public InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     [Fact]
-    public async Task GetTopBuyersSellers_TickerWithQoQMovement_RanksBuyersDescAndSellersAsc()
+    public async Task GetTopInstitutionalBuyersSellers_TickerWithQoQMovement_RanksBuyersDescAndSellersAsc()
     {
         var stock = new CommonStock
         {
@@ -89,7 +89,7 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetTopBuyersSellers("AAPL");
+        var output = await sut.GetTopInstitutionalBuyersSellers("AAPL");
 
         // Headline + sections
         output.Should().Contain("Top buyers and sellers of Apple Inc. (AAPL) as of 2024-12-31");
@@ -122,7 +122,7 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
     }
 
     [Fact]
-    public async Task GetTopBuyersSellers_NoPriorQuarter_TreatsAllHoldersAsBuyers()
+    public async Task GetTopInstitutionalBuyersSellers_NoPriorQuarter_TreatsAllHoldersAsBuyers()
     {
         var stock = new CommonStock
         {
@@ -155,7 +155,7 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetTopBuyersSellers("MSFT");
+        var output = await sut.GetTopInstitutionalBuyersSellers("MSFT");
 
         // No prior quarter → both holders surface as buyers with their full positions.
         var buyersSection = output.Substring(
@@ -174,7 +174,7 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
     }
 
     [Fact]
-    public async Task GetTopBuyersSellers_UnknownTicker_ReportsStockNotFound()
+    public async Task GetTopInstitutionalBuyersSellers_UnknownTicker_ReportsStockNotFound()
     {
         await using var verify = Fixture.CreateDbContext();
         var sut = new InstitutionalHoldingsTools(
@@ -190,13 +190,13 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetTopBuyersSellers("DOESNOTEXIST");
+        var output = await sut.GetTopInstitutionalBuyersSellers("DOESNOTEXIST");
 
         output.Should().Contain("not found");
     }
 
     [Fact]
-    public async Task GetTopBuyersSellers_StockExistsButHasNoHoldings_ReportsNoData()
+    public async Task GetTopInstitutionalBuyersSellers_StockExistsButHasNoHoldings_ReportsNoData()
     {
         var stock = new CommonStock
         {
@@ -222,13 +222,13 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetTopBuyersSellers("TSLA");
+        var output = await sut.GetTopInstitutionalBuyersSellers("TSLA");
 
         output.Should().Contain("No institutional holdings data");
     }
 
     [Fact]
-    public async Task GetTopBuyersSellers_OnlyUnchangedHolders_ReportsNoMovement()
+    public async Task GetTopInstitutionalBuyersSellers_OnlyUnchangedHolders_ReportsNoMovement()
     {
         var stock = new CommonStock
         {
@@ -262,7 +262,7 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetTopBuyersSellers("NVDA");
+        var output = await sut.GetTopInstitutionalBuyersSellers("NVDA");
 
         // No buyers and no sellers — early-return message, not the per-section tables.
         output.Should().Contain("No quarter-over-quarter movement found");
@@ -271,7 +271,7 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
     }
 
     [Fact]
-    public async Task GetTopBuyersSellers_CurrentZeroShareRowStillProvesAReportedExit()
+    public async Task GetTopInstitutionalBuyersSellers_CurrentZeroShareRowStillProvesAReportedExit()
     {
         var stock = new CommonStock
         {
@@ -303,14 +303,14 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetTopBuyersSellers("META");
+        var output = await sut.GetTopInstitutionalBuyersSellers("META");
 
         output.Should().Contain("Zero Row Capital");
         output.Should().Contain("-1,000");
     }
 
     [Fact]
-    public async Task GetTopBuyersSellers_ExplicitReportDate_HonorsArgument()
+    public async Task GetTopInstitutionalBuyersSellers_ExplicitReportDate_HonorsArgument()
     {
         var stock = new CommonStock
         {
@@ -344,7 +344,7 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
         );
 
         // Explicit Q4 date — Δ is +400 vs the immediately prior Q3 row.
-        var output = await sut.GetTopBuyersSellers("GOOG", reportDate: "2024-12-31");
+        var output = await sut.GetTopInstitutionalBuyersSellers("GOOG", reportDate: "2024-12-31");
 
         output.Should().Contain("as of 2024-12-31");
         output.Should().Contain("vs prior quarter 2024-09-30");
@@ -352,7 +352,7 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
     }
 
     [Fact]
-    public async Task GetTopBuyersSellers_PrimaryRowsIgnoreSiblingListingSplits()
+    public async Task GetTopInstitutionalBuyersSellers_PrimaryRowsIgnoreSiblingListingSplits()
     {
         var stock = new CommonStock
         {
@@ -394,7 +394,7 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersTests : ParadeDbMcpTes
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetTopBuyersSellers("GOOGL");
+        var output = await sut.GetTopInstitutionalBuyersSellers("GOOGL");
 
         output.Should().Contain("No quarter-over-quarter movement found");
     }

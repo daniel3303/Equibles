@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
-/// Adversarial cover for <c>GetFundOperations</c>'s service-provider sections. The latest-report
+/// Adversarial cover for <c>GetFundNcenReports</c>'s service-provider sections. The latest-report
 /// table must never borrow providers from an older report, while the history must preserve every
 /// exact filed-name state — including omitted roles, punctuation differences, and hostile
 /// Markdown text — without claiming that a heuristic identity match proves no change.
@@ -39,7 +39,7 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
     public void Dispose() => _dbContext.Dispose();
 
     [Fact]
-    public async Task GetFundOperations_NewestFilingHasNoProviders_SeparatesLatestSnapshotFromHistory()
+    public async Task GetFundNcenReports_NewestFilingHasNoProviders_SeparatesLatestSnapshotFromHistory()
     {
         var stock = new CommonStock
         {
@@ -65,7 +65,7 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
         _dbContext.Set<NCenFiling>().Add(MakeFiling(stock.Id, "newer", new DateOnly(2025, 1, 15)));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetFundOperations("MXF");
+        var result = await _tools.GetFundNcenReports("MXF");
 
         // The latest snapshot does not borrow an older provider, while the separately labelled
         // history preserves the older filed state and the newest omission.
@@ -77,7 +77,7 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
     }
 
     [Fact]
-    public async Task GetFundOperations_HistoryPreservesOmissionsExactNamesAndMarkdownBoundaries()
+    public async Task GetFundNcenReports_HistoryPreservesOmissionsExactNamesAndMarkdownBoundaries()
     {
         var stock = new CommonStock
         {
@@ -111,7 +111,7 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
             .AddRange(older, MakeFiling(stock.Id, "middle", new DateOnly(2024, 1, 10)), newest);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetFundOperations("MXF");
+        var result = await _tools.GetFundNcenReports("MXF");
 
         result.Should().Contain("| Independent Public Accountant | AB\\\\\\|LLP | U\\\\\\|S |");
         result
@@ -123,7 +123,7 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
     }
 
     [Fact]
-    public async Task GetFundOperations_SameDayAmendmentWinsAndHistoryIsDeterministic()
+    public async Task GetFundNcenReports_SameDayAmendmentWinsAndHistoryIsDeterministic()
     {
         var stock = new CommonStock
         {
@@ -157,7 +157,7 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
         _dbContext.Set<NCenFiling>().AddRange(original, amendment);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetFundOperations("MXF");
+        var result = await _tools.GetFundNcenReports("MXF");
         var latestSection = result[..result.IndexOf("Service-provider history")];
 
         latestSection.Should().Contain("AMENDED AUDITOR LLP");

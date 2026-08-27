@@ -1,6 +1,6 @@
 # Enable semantic search over SEC filings
 
-Apply the embedding Compose override so the MCP `SearchDocuments` / `SearchCompanyDocuments` tools can do meaning-based ("semantic") search across SEC filings — e.g. find every passage about supply-chain risk in Apple's 10-K, even when the words don't match. Without this, only exact-keyword search works.
+Apply the embedding Compose override so the MCP `SearchDocuments` / `SearchDocument` tools add meaning-based ("semantic") ranking to SEC filing search — e.g. find passages about supply-chain risk in Apple's 10-K even when the words do not match. Without embeddings, semantic-mode requests retain ranked BM25 lexical search, and exact mode still performs literal matching.
 
 The override adds a local Ollama runtime and the Qwen3-Embedding-0.6B embedding model. Expect a one-time ~2.6 GB download (~2 GB Ollama image + ~640 MB model) and around 3 GB of additional RAM use while running.
 

@@ -38,18 +38,18 @@ public class NCenTools
     }
 
     [McpServerTool(
-        Name = "GetFundOperations",
+        Name = "GetFundNcenReports",
         Title = "Fund Operations (Form N-CEN)",
         ReadOnly = true
     )]
     [Description(
         "Get operational data for a registered investment company from its SEC Form N-CEN annual reports. Accepts an exchange-listed ticker or an exact fund identifier from SearchFunds, including a profile id, SEC series id, stored series ticker, or verified share-class alias. Each N-CEN shows the registrant's classification, Investment Company Act file number, reporting period, first/last-filing flags, latest service providers, and an exact filed-name provider history. N-CEN is filed at registrant level; this dataset currently ingests it through tracked issuer feeds, so a series inside an untracked multi-series trust can resolve correctly but still have no N-CEN report on record. Only registered funds file N-CEN; operating companies return no data."
     )]
-    public Task<string> GetFundOperations(
+    public Task<string> GetFundNcenReports(
         [Description(
             "Fund or ETF ticker, profile id, SEC series id, or verified share-class alias (e.g., MXF, IVV, S000004344, VOO)"
         )]
-            string ticker,
+            string fund,
         [Description("Maximum number of annual reports to return (default: 10, max: 500)")]
             int maxResults = 10
     )
@@ -57,12 +57,12 @@ public class NCenTools
         return _runner.Execute(
             async () =>
             {
-                if (string.IsNullOrWhiteSpace(ticker))
+                if (string.IsNullOrWhiteSpace(fund))
                     return "Provide a fund ticker or an exact identifier from SearchFunds.";
 
-                var safeTicker = MarkdownText(ticker);
+                var safeFund = MarkdownText(fund);
                 var series = await _fundSeriesRepository
-                    .ResolveIdentifier(ticker)
+                    .ResolveIdentifier(fund)
                     .OrderByDescending(f => f.NetAssets)
                     .FirstOrDefaultAsync();
                 CommonStock stock = null;
@@ -70,7 +70,7 @@ public class NCenTools
                 {
                     if (series.CommonStockId == null)
                     {
-                        return $"'{safeTicker}' resolves to {MarkdownText(series.SeriesName ?? series.RegistrantName)}"
+                        return $"'{safeFund}' resolves to {MarkdownText(series.SeriesName ?? series.RegistrantName)}"
                             + (series.Ticker == null ? "" : $" ({MarkdownText(series.Ticker)})")
                             + $", a series of {MarkdownText(series.RegistrantName) ?? "its registered-fund trust"}. Form N-CEN is filed at registrant level, but this dataset currently ingests N-CEN through tracked issuer feeds and has no registrant-level report on record for this untracked multi-series trust. This is a coverage result, not an identifier-resolution failure.";
                     }
@@ -79,13 +79,13 @@ public class NCenTools
                         .GetByIds([series.CommonStockId.Value])
                         .FirstOrDefaultAsync();
                     if (stock == null)
-                        return $"'{safeTicker}' resolves to {MarkdownText(series.SeriesName ?? series.RegistrantName)}, but its linked tracked issuer is no longer available; no Form N-CEN report can be selected. This is a coverage result, not evidence that the fund has no N-CEN filing.";
+                        return $"'{safeFund}' resolves to {MarkdownText(series.SeriesName ?? series.RegistrantName)}, but its linked tracked issuer is no longer available; no Form N-CEN report can be selected. This is a coverage result, not evidence that the fund has no N-CEN filing.";
                 }
                 else
                 {
-                    (stock, _) = await _commonStockRepository.ResolveByTicker(ticker);
+                    (stock, _) = await _commonStockRepository.ResolveByTicker(fund);
                     if (stock == null)
-                        return $"No registered fund found for '{safeTicker}' in the tracked Form NPORT-P/N-CEN datasets. Use SearchFunds to find an exact profile id. Registered management investment companies and ETFs are in scope; vehicles outside those filing regimes may be absent, and fixed-income-only series can be missing from the tracked NPORT-P directory. This is a coverage result, not evidence that the fund does not exist.";
+                        return $"No registered fund found for '{safeFund}' in the tracked Form NPORT-P/N-CEN datasets. Use SearchFunds to find an exact profile id. Registered management investment companies and ETFs are in scope; vehicles outside those filing regimes may be absent, and fixed-income-only series can be missing from the tracked NPORT-P directory. This is a coverage result, not evidence that the fund does not exist.";
                 }
 
                 var filings = await _nCenRepository
@@ -102,7 +102,7 @@ public class NCenTools
                     return $"No Form N-CEN annual reports found for {MarkdownText(series?.SeriesName ?? stock.Name)} ({MarkdownText(stock.Ticker)}). Form N-CEN is registrant-level and this dataset currently ingests it through tracked issuer feeds. This is a coverage result, not evidence that the fund has no N-CEN filing.";
 
                 var result = MarkdownTable.Start(
-                    $"Form N-CEN annual reports for {MarkdownText(stock.Name)} ({safeTicker}) — showing {filings.Count} most recent:",
+                    $"Form N-CEN annual reports for {MarkdownText(stock.Name)} ({safeFund}) — showing {filings.Count} most recent:",
                     "| Filed | Period End | Type | File Number | Amendment | First Filing | Last Filing |",
                     "|-------|------------|------|-------------|-----------|--------------|-------------|"
                 );
@@ -118,8 +118,8 @@ public class NCenTools
 
                 return result.ToString();
             },
-            "GetFundOperations",
-            $"ticker: {ticker}"
+            "GetFundNcenReports",
+            $"fund: {fund}"
         );
     }
 

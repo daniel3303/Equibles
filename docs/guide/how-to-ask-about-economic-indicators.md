@@ -24,7 +24,7 @@ To see where the economy stands across the board:
 - "Give me a snapshot of current macro conditions."
 - "What are the latest readings on rates, inflation, and employment?"
 
-The assistant uses `GetLatestEconomicData`, which returns the most recent value for key indicators grouped by category — interest rates, yield spreads, inflation, employment, GDP, money supply, sentiment, housing, exchange rates, and market indicators.
+The assistant uses `GetLatestEconomicIndicators`, which returns the most recent value for key indicators grouped by category — interest rates, yield spreads, inflation, employment, GDP, money supply, sentiment, housing, exchange rates, and market indicators.
 
 ## What you should see
 

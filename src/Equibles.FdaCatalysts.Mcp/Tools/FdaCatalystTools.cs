@@ -28,14 +28,14 @@ public class FdaCatalystTools
     }
 
     [McpServerTool(
-        Name = "GetFdaCatalysts",
+        Name = "GetFdaAdvisoryCommitteeMeetings",
         Title = "FDA Advisory Committee Calendar",
         ReadOnly = true
     )]
     [Description(
         "Get scheduled FDA advisory-committee (AdComm) meetings, sourced from the FDA.gov advisory-committee calendar, each with a link to its FDA meeting page. Defaults to meetings in the next 90 days; pass a date range to look further ahead. This is a forward-looking calendar of announced meetings, not a historical archive — coverage starts in late 2025 — and entries are the FDA's own listings, not linked to stock tickers."
     )]
-    public Task<string> GetFdaCatalysts(
+    public Task<string> GetFdaAdvisoryCommitteeMeetings(
         [Description("Start date in YYYY-MM-DD format (defaults to today)")]
             string startDate = null,
         [Description("End date in YYYY-MM-DD format (defaults to 90 days after the start)")]
@@ -94,7 +94,7 @@ public class FdaCatalystTools
                 var truncation = McpOutput.TruncationNote(records.Count, total);
                 return truncation.Length == 0 ? result : result + "\n" + truncation + "\n";
             },
-            "GetFdaCatalysts",
+            "GetFdaAdvisoryCommitteeMeetings",
             $"startDate: {startDate}"
         );
     }

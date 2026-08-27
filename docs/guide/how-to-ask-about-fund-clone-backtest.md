@@ -15,10 +15,10 @@ Name an institutional filer and, optionally, a benchmark and window:
 - "Backtest cloning CIK 0001067983 versus QQQ over the last 10 years."
 - "If I'd copied Bridgewater's 13F portfolio for 5 years, how would I have done versus SPY?"
 
-The assistant calls the `GetFundCloneBacktest` tool. It reconstructs the filer's portfolio at each quarterly 13F snapshot, rebalances on the SEC filing lag so the simulation uses only information available at the time, and values it forward against the benchmark. The benchmark defaults to SPY and the window to 3 years; you can ask for any benchmark ticker and a window from 1 to 20 years.
+The assistant calls the `GetInstitutionCloneBacktest` tool. It reconstructs the filer's portfolio at each quarterly 13F snapshot, rebalances on the SEC filing lag so the simulation uses only information available at the time, and values it forward against the benchmark. The benchmark defaults to SPY and the window to 3 years; you can ask for any benchmark ticker and a window from 1 to 20 years.
 
 ## What you should see
 
-A reply comparing the cloned portfolio with the benchmark: raw-closing-price return, annualized price return (CAGR), and maximum drawdown for each, plus the price-return alpha between them. Dividends are excluded, and a captured split can shorten the comparable window.
+A reply comparing the cloned portfolio with the benchmark: raw-closing-price return, annualized price return (CAGR), and maximum drawdown for each, plus the price-return alpha between them. Dividends are excluded. Captured split ratios restate closes onto one basis; only an unusable ratio can exclude earlier closes for that listing.
 
 A few things shape the result. The simulation only sees holdings as of each 13F filing (quarterly, after the filing lag), so it captures the filer's disclosed long U.S.-equity positions, not intra-quarter trades, options, or short positions. If the reply says it couldn't run, the filer's holdings or the price history for the window probably haven't been imported yet — try a large, long-tenured filer such as Berkshire Hathaway to confirm the data is flowing.

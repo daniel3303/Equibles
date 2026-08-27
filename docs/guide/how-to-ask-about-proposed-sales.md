@@ -15,7 +15,7 @@ Name a stock and ask about intended insider selling:
 - "Has anyone at Tesla filed to sell shares recently?"
 - "Show me NVDA's Form 144 filings."
 
-The assistant picks the `GetProposedSales` tool and returns the company's recent Form 144 notices.
+The assistant picks the `GetForm144ProposedSales` tool and returns the company's recent Form 144 notices.
 
 ## What you should see
 

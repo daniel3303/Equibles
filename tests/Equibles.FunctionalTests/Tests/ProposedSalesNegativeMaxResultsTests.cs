@@ -9,14 +9,14 @@ using Xunit;
 namespace Equibles.FunctionalTests.Tests;
 
 /// <summary>
-/// Adversarial end-to-end test for the GetProposedSales MCP tool's <c>maxResults</c> parameter.
-/// Once a ticker resolves, GetProposedSales feeds the raw client value straight into EF Core's
+/// Adversarial end-to-end test for the GetForm144ProposedSales MCP tool's <c>maxResults</c> parameter.
+/// Once a ticker resolves, GetForm144ProposedSales feeds the raw client value straight into EF Core's
 /// <c>.Take(maxResults)</c>, so a negative cap becomes a negative SQL <c>LIMIT</c> that
 /// PostgreSQL rejects; the exception is swallowed and the caller gets the generic
 /// internal-failure sentinel. The parameter contract ("Maximum number of notices to return")
 /// makes a negative value nonsensical input that must degrade gracefully — never surface as the
 /// tool's internal error. Same defect class as GH-2931 (GetStockPrices) and GH-2978
-/// (GetExemptOfferings), sibling MCP tools with the identical unclamped <c>.Take(maxResults)</c>.
+/// (GetFormDOfferings), sibling MCP tools with the identical unclamped <c>.Take(maxResults)</c>.
 /// </summary>
 [Trait("Category", "Functional")]
 public class ProposedSalesNegativeMaxResultsTests
@@ -52,7 +52,7 @@ public class ProposedSalesNegativeMaxResultsTests
     }
 
     [Fact]
-    public async Task GetProposedSales_NegativeMaxResults_DoesNotSurfaceInternalError()
+    public async Task GetForm144ProposedSales_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
@@ -87,7 +87,7 @@ public class ProposedSalesNegativeMaxResultsTests
         });
 
         var tools = await _client.ListToolsAsync();
-        var tool = tools.First(t => t.Name == "GetProposedSales");
+        var tool = tools.First(t => t.Name == "GetForm144ProposedSales");
 
         // A negative notice cap is invalid input for a "maximum number of notices" parameter;
         // the tool must degrade gracefully rather than let the value reach the database as a

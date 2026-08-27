@@ -34,7 +34,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryNegativeMaxPeriodsTests :
         );
 
     [Fact]
-    public async Task GetOwnershipHistory_NegativeMaxPeriods_DoesNotSurfaceInternalError()
+    public async Task GetInstitutionalOwnershipHistory_NegativeMaxPeriods_DoesNotSurfaceInternalError()
     {
         var stock = new CommonStock
         {
@@ -80,7 +80,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryNegativeMaxPeriodsTests :
         // GetReportDatesByStock(stock).Take(maxPeriods), so a negative cap would reach
         // PostgreSQL as a negative LIMIT. The tool must degrade gracefully rather than
         // leak the executor's internal-error sentinel to the caller.
-        var result = await Sut().GetOwnershipHistory("AAPL", maxPeriods: -1);
+        var result = await Sut().GetInstitutionalOwnershipHistory("AAPL", maxPeriods: -1);
 
         result.Should().NotContain("An error occurred while executing");
     }

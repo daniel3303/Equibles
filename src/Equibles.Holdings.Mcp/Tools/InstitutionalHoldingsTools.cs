@@ -341,14 +341,14 @@ public class InstitutionalHoldingsTools
     }
 
     [McpServerTool(
-        Name = "GetOwnershipHistory",
+        Name = "GetInstitutionalOwnershipHistory",
         Title = "Institutional Ownership History",
         ReadOnly = true
     )]
     [Description(
         "Get the historical trend of institutional ownership for a stock across multiple quarters. Shows how total institutional shares, market value, and number of institutional holders have changed over time based on SEC 13F-HR filings. While the newest quarter's 13F filing window is open, that quarter is a provisional combined view (funds that have not filed yet carry their prior-quarter positions — flagged in the output). Use this to understand whether institutional interest in a company is growing or declining."
     )]
-    public Task<string> GetOwnershipHistory(
+    public Task<string> GetInstitutionalOwnershipHistory(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
         [Description(
             "Maximum number of quarterly periods to return (default: 8, clamped to 1-500)"
@@ -399,7 +399,7 @@ public class InstitutionalHoldingsTools
                 await _marketActivityShareRestater.RestateStockActivity(stock, selected);
                 return RenderOwnershipHistory(stock, ticker, selected, anchor);
             },
-            "GetOwnershipHistory",
+            "GetInstitutionalOwnershipHistory",
             $"ticker: {ticker}"
         );
     }
@@ -790,14 +790,14 @@ public class InstitutionalHoldingsTools
         value == null ? "—" : McpFormat.WholeNumber(value.Value);
 
     [McpServerTool(
-        Name = "GetTopBuyersSellers",
+        Name = "GetTopInstitutionalBuyersSellers",
         Title = "Top Institutional Buyers and Sellers",
         ReadOnly = true
     )]
     [Description(
         "Get the institutions that moved the needle the most on a stock this quarter — biggest absolute share additions (Top Buyers) and biggest absolute share reductions (Top Sellers) versus the previous 13F report date. Includes new positions (Δ = full position) and sold-out positions (Δ = −prior position); a previous holder counts as a seller only if it filed a 13F for the target quarter, so a fund that stopped filing (CIK migration, deregistration) is not shown as a mass seller. While the newest quarter's filing window is open, results cover only the funds that have already filed (noted in the output). Returns a markdown table with two sections. Use this to surface the most actionable quarterly signal from 13F filings."
     )]
-    public Task<string> GetTopBuyersSellers(
+    public Task<string> GetTopInstitutionalBuyersSellers(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
         [Description(
             "Quarter-end 13F report date in YYYY-MM-DD format, e.g. 2026-03-31 (defaults to the latest available; an off-quarter date snaps to the nearest report on or before it)"
@@ -1000,7 +1000,7 @@ public class InstitutionalHoldingsTools
                     JoinNotes(dateNote, comparisonNote)
                 );
             },
-            "GetTopBuyersSellers",
+            "GetTopInstitutionalBuyersSellers",
             $"ticker: {ticker}"
         );
     }
@@ -2032,14 +2032,14 @@ public class InstitutionalHoldingsTools
     }
 
     [McpServerTool(
-        Name = "GetFundOverlap",
+        Name = "CompareInstitutionPortfolios",
         Title = "Portfolio Overlap Between Institutions",
         ReadOnly = true
     )]
     [Description(
-        "Get the 13F portfolio overlap between two institutions for their latest common report date — Jaccard similarity, dollar-weighted overlap ($-weighted = shared dollars, taking the smaller of the two funds' values per stock, as a share of union dollars), per-fund position counts and totals, and a side-by-side table of stocks with per-fund shares + percent of portfolio. Covers 13F institutional managers only — find names with SearchInstitutions; for mutual-fund/ETF (NPORT) portfolios use GetFundHoldings. Use this to answer 'do these two funds own the same stocks?' or 'where do their portfolios diverge?'"
+        "Compare two institutions' 13F portfolios on their latest common report date. Returns Jaccard and dollar-weighted overlap, portfolio totals, and shared or unique positions. Resolve filer names with SearchInstitutions. For mutual-fund or ETF NPORT portfolios, use GetFundProfile."
     )]
-    public Task<string> GetFundOverlap(
+    public Task<string> CompareInstitutionPortfolios(
         [Description(
             "First institution name or CIK (a unique partial resolves; ambiguous partials return candidate CIKs)"
         )]
@@ -2099,8 +2099,8 @@ public class InstitutionalHoldingsTools
                     JoinNotes(matchNote1, matchNote2, dateNote)
                 );
             },
-            "GetFundOverlap",
-            $"funds: {institutionName1}, {institutionName2}"
+            "CompareInstitutionPortfolios",
+            $"institutions: {institutionName1}, {institutionName2}"
         );
     }
 
@@ -2202,26 +2202,26 @@ public class InstitutionalHoldingsTools
     }
 
     [McpServerTool(
-        Name = "GetConsensusHoldings",
+        Name = "GetInstitutionConsensusHoldings",
         Title = "Consensus Holdings Across Institutions",
         ReadOnly = true
     )]
     [Description(
-        "Get the consensus / combined portfolio of 2-25 institutions for their latest common report date. Returns stocks ranked by how many of the supplied funds hold them (descending), then by combined value. Filter by `minFunds` to only show stocks held by at least that many funds. Use this to answer 'what do these funds agree on?' or 'show me the top picks across these N investors combined.'"
+        "Combine 2-25 institutions' 13F portfolios on their latest common report date. Ranks stocks by holder count, then combined value. Set minInstitutions to 2 or more for positions shared by multiple filers."
     )]
-    public Task<string> GetConsensusHoldings(
+    public Task<string> GetInstitutionConsensusHoldings(
         [Description(
-            "Comma- or semicolon-separated institution names or CIKs. Unique partial names and verified brand aliases resolve; ambiguous partials return candidate CIKs. 2-25 names."
+            "Institution names or CIKs (2-25). Unique partial names and verified aliases resolve; ambiguous partials return candidate CIKs."
         )]
-            string institutionNames,
+            string[] institutionNames,
         [Description(
             "Quarter-end 13F report date in YYYY-MM-DD format (defaults to the latest common quarter; an off-quarter date snaps to the nearest common report on or before it)"
         )]
             string reportDate = null,
         [Description(
-            "Minimum number of funds a stock must be held by to appear (default: 1 — note that 1 also includes stocks held by a single fund; set 2+ for true consensus)"
+            "Minimum number of institutions that must hold a stock (default: 1; set 2 or more for shared positions)"
         )]
-            int minFunds = 1,
+            int minInstitutions = 1,
         [Description("Maximum number of stocks to return (default: 30, clamped to 1-500)")]
             int maxResults = 30
     )
@@ -2229,15 +2229,13 @@ public class InstitutionalHoldingsTools
         return _runner.Execute(
             async () =>
             {
-                var names = (institutionNames ?? string.Empty)
-                    .Split(
-                        [',', ';'],
-                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-                    )
+                var names = (institutionNames ?? [])
+                    .Select(name => name?.Trim())
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 if (names.Count < 2)
-                    return "Pass at least two institution names (comma-separated).";
+                    return "Pass at least two institution names or CIKs in the institutionNames array.";
                 if (names.Count > 25)
                     return "At most 25 institutions can be combined.";
 
@@ -2294,7 +2292,7 @@ public class InstitutionalHoldingsTools
 
                 var matchingRows = overlap
                     .Rows.Select(r => (Row: r, HeldBy: r.Slices.Count(s => s.Value > 0)))
-                    .Where(x => x.HeldBy >= Math.Max(1, minFunds))
+                    .Where(x => x.HeldBy >= Math.Max(1, minInstitutions))
                     .OrderByDescending(x => x.HeldBy)
                     .ThenByDescending(x => x.Row.CombinedValue)
                     .ToList();
@@ -2309,10 +2307,26 @@ public class InstitutionalHoldingsTools
                     dateNote
                 );
             },
-            "GetConsensusHoldings",
-            $"names: {institutionNames}"
+            "GetInstitutionConsensusHoldings",
+            $"institutions: {string.Join(",", institutionNames ?? [])}"
         );
     }
+
+    public Task<string> GetInstitutionConsensusHoldings(
+        string institutionNames,
+        string reportDate = null,
+        int minFunds = 1,
+        int maxResults = 30
+    ) =>
+        GetInstitutionConsensusHoldings(
+            institutionNames?.Split(
+                [',', ';'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            ),
+            reportDate,
+            minFunds,
+            maxResults
+        );
 
     private static string RenderConsensusHoldingsTable(
         List<InstitutionalHolder> holders,
@@ -2325,23 +2339,23 @@ public class InstitutionalHoldingsTools
     {
         var result = new StringBuilder();
         result.AppendLine(
-            $"Consensus holdings — **{holders.Count} funds** as of {FormatDate(selected)}"
+            $"Consensus holdings — **{holders.Count} institutions** as of {FormatDate(selected)}"
         );
         if (missing.Count > 0)
             result.AppendLine($"_Could not resolve: {string.Join(", ", missing)}._");
         if (notes != null)
             result.AppendLine(notes);
         result.AppendLine();
-        result.AppendLine("Funds:");
+        result.AppendLine("Institutions:");
         foreach (var h in holders)
             result.AppendLine($"- {h.Name} (CIK {h.Cik})");
         result.AppendLine();
 
         if (rowsWithConsensus.Count == 0)
-            return result + "_No stocks meet the minFunds threshold._";
+            return result + "_No stocks meet the minInstitutions threshold._";
 
         result.AppendNumberedTable(
-            "| # | Ticker | Company | # Funds | Combined ($M) |",
+            "| # | Ticker | Company | # Institutions | Combined ($M) |",
             "|---|--------|---------|---------|---------------|",
             rowsWithConsensus,
             (rank, x) =>

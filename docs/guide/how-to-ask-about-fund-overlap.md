@@ -15,7 +15,7 @@ Name two institutions:
 - "Compare the portfolios of Renaissance Technologies and Two Sigma."
 - "Where do Citadel and Millennium diverge in their holdings?"
 
-The assistant calls the `GetFundOverlap` tool. It picks the two filers' latest common report date by default — pass a date (YYYY-MM-DD) to compare a specific quarter — and returns up to 30 stocks by default (ask for more or fewer).
+The assistant calls the `CompareInstitutionPortfolios` tool. It picks the two filers' latest common report date by default — pass a date (YYYY-MM-DD) to compare a specific quarter — and returns up to 30 stocks by default (ask for more or fewer).
 
 ## What you should see
 

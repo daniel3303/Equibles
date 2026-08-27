@@ -197,7 +197,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             chunkContents: new[] { "Quarterly results show steady growth." }
         );
 
-        var result = await Sut().SearchDocuments("quarterly results", documentType: "TenQ");
+        var result = await Sut().SearchDocuments("quarterly results", documentTypes: ["TenQ"]);
 
         result.Should().Contain("Microsoft Corp (MSFT)");
         result.Should().NotContain("Apple Inc (AAPL)");
@@ -252,10 +252,10 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("services segment");
     }
 
-    // ── SearchCompanyDocuments ──────────────────────────────────────────
+    // ── SearchDocuments ──────────────────────────────────────────
 
     [Fact]
-    public async Task SearchCompanyDocuments_OnlyReturnsRequestedTicker()
+    public async Task SearchDocuments_OnlyReturnsRequestedTicker()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
@@ -267,14 +267,14 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             chunkContents: new[] { "Cloud revenue increased substantially." }
         );
 
-        var result = await Sut().SearchCompanyDocuments("cloud revenue", "MSFT");
+        var result = await Sut().SearchDocuments("cloud revenue", "MSFT");
 
         result.Should().Contain("Microsoft Corp (MSFT)");
         result.Should().NotContain("Apple Inc (AAPL)");
     }
 
     [Fact]
-    public async Task SearchCompanyDocuments_UnknownTicker_ReturnsStockNotFound()
+    public async Task SearchDocuments_UnknownTicker_ReturnsStockNotFound()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
@@ -283,13 +283,13 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
 
         // A mistyped ticker must be distinguishable from "this company's filings say
         // nothing about the topic": the tool checks the stock exists before searching.
-        var result = await Sut().SearchCompanyDocuments("cloud revenue", "ZZZZ");
+        var result = await Sut().SearchDocuments("cloud revenue", "ZZZZ");
 
         result.Should().Be("Stock 'ZZZZ' not found.");
     }
 
     [Fact]
-    public async Task SearchCompanyDocuments_UnknownDocumentType_ReturnsAcceptedValues()
+    public async Task SearchDocuments_UnknownDocumentType_ReturnsAcceptedValues()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
@@ -299,9 +299,9 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         // A near-miss type ('10K', 'Transcript') must not silently search unfiltered —
         // the caller would present mixed-type results as filtered ones.
         var result = await Sut()
-            .SearchCompanyDocuments("cloud revenue", "AAPL", documentType: "10K");
+            .SearchDocuments("cloud revenue", "AAPL", documentTypes: ["10K"]);
 
-        result.Should().StartWith("Unknown documentType '10K'.");
+        result.Should().StartWith("Unknown documentTypes '10K'.");
         result.Should().Contain("'TenK' (10-K)");
     }
 

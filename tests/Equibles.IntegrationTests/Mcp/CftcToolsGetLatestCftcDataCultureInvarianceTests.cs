@@ -8,7 +8,7 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 [Collection(ParadeDbCollection.Name)]
-public class CftcToolsGetLatestCftcDataCultureInvarianceTests : ParadeDbMcpTestBase
+public class CftcToolsGetLatestCftcPositioningCultureInvarianceTests : ParadeDbMcpTestBase
 {
     private CftcTools Sut() =>
         new(
@@ -18,18 +18,18 @@ public class CftcToolsGetLatestCftcDataCultureInvarianceTests : ParadeDbMcpTestB
             NullLogger<CftcTools>()
         );
 
-    public CftcToolsGetLatestCftcDataCultureInvarianceTests(ParadeDbFixture fixture)
+    public CftcToolsGetLatestCftcPositioningCultureInvarianceTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     // Contract: every MCP tool renders LLM-facing markdown the same on every host locale
     // (McpFormat.OrDash and the sibling tools all force CultureInfo.InvariantCulture so the
-    // separators "do not fork by host locale"). GetLatestCftcData honours this for the date
+    // separators "do not fork by host locale"). GetLatestCftcPositioning honours this for the date
     // and open-interest cells (via McpFormat) but renders the Comm Net / Non-Comm Net cells
     // with a bare .ToString("N0"), which follows the thread CurrentCulture — under de-DE the
     // grouping separator becomes "." (1,460,000 → 1.460.000), forking the response. Same bug
     // class as the fixed Holdings render methods (#2628).
     [Fact]
-    public async Task GetLatestCftcData_UnderNonInvariantCulture_RendersNetPositionsCultureInvariantly()
+    public async Task GetLatestCftcPositioning_UnderNonInvariantCulture_RendersNetPositionsCultureInvariantly()
     {
         var contract = new CftcContract
         {
@@ -64,7 +64,7 @@ public class CftcToolsGetLatestCftcDataCultureInvarianceTests : ParadeDbMcpTestB
         try
         {
             CultureInfo.CurrentCulture = new CultureInfo("de-DE");
-            result = await Sut().GetLatestCftcData();
+            result = await Sut().GetLatestCftcPositioning();
         }
         finally
         {

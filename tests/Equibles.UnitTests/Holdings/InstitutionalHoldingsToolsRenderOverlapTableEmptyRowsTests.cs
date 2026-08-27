@@ -7,7 +7,7 @@ namespace Equibles.UnitTests.Holdings;
 
 public class InstitutionalHoldingsToolsRenderOverlapTableEmptyRowsTests
 {
-    // RenderOverlapTable renders the GetFundOverlap LLM-facing report. When
+    // RenderOverlapTable renders the CompareInstitutionPortfolios LLM-facing report. When
     // FundOverlapCalculator returns no rows (both funds had no positions on
     // the selected date, or both reported only options), the renderer must
     // emit an explicit operator-readable diagnostic — not a bare markdown

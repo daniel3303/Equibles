@@ -8,7 +8,7 @@ namespace Equibles.UnitTests.Models;
 public class FdaCatalystsEnumTests
 {
     // Contract: these are the human-readable catalyst-type labels surfaced to users — the
-    // MCP GetFdaCatalysts "Type" column renders CatalystType.NameForHumans() verbatim, and
+    // MCP GetFdaAdvisoryCommitteeMeetings "Type" column renders CatalystType.NameForHumans() verbatim, and
     // the portal/API use the same mapping. A typo or a dropped [Display] attribute would
     // silently degrade the label (e.g. "PDUFA Decision" falling back to the bare enum name
     // "Pdufa"), so the exact strings are pinned here, not derived from the enum at runtime.

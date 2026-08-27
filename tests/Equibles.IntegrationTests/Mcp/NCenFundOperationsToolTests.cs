@@ -47,26 +47,26 @@ public class NCenFundOperationsToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetFundOperations_StockNotFound_ReturnsNotFoundMessage()
+    public async Task GetFundNcenReports_StockNotFound_ReturnsNotFoundMessage()
     {
-        var result = await _tools.GetFundOperations("ZZZZ");
+        var result = await _tools.GetFundNcenReports("ZZZZ");
 
         result.Should().Contain("ZZZZ");
     }
 
     [Fact]
-    public async Task GetFundOperations_NoFilings_ReturnsEmptyMessage()
+    public async Task GetFundNcenReports_NoFilings_ReturnsEmptyMessage()
     {
         SeedStock();
 
-        var result = await _tools.GetFundOperations("MXF");
+        var result = await _tools.GetFundNcenReports("MXF");
 
         result.Should().Contain("No Form N-CEN annual reports found for Mexico Fund Inc (MXF).");
         result.Should().Contain("coverage result, not evidence that the fund has no N-CEN filing");
     }
 
     [Fact]
-    public async Task GetFundOperations_WithFilings_RendersTableNewestFirstWithProviders()
+    public async Task GetFundNcenReports_WithFilings_RendersTableNewestFirstWithProviders()
     {
         var stock = SeedStock();
         _dbContext.Set<NCenFiling>().Add(MakeFiling(stock.Id, "older", new DateOnly(2023, 1, 5)));
@@ -84,7 +84,7 @@ public class NCenFundOperationsToolTests : IDisposable
         _dbContext.Set<NCenFiling>().Add(newer);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetFundOperations("MXF");
+        var result = await _tools.GetFundNcenReports("MXF");
 
         result.Should().Contain("Mexico Fund Inc");
         result.Should().Contain("811-02409");
@@ -98,7 +98,7 @@ public class NCenFundOperationsToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetFundOperations_RespectsMaxResults()
+    public async Task GetFundNcenReports_RespectsMaxResults()
     {
         var stock = SeedStock();
         for (var i = 0; i < 5; i++)
@@ -109,25 +109,25 @@ public class NCenFundOperationsToolTests : IDisposable
         }
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetFundOperations("MXF", maxResults: 2);
+        var result = await _tools.GetFundNcenReports("MXF", maxResults: 2);
 
         result.Should().Contain("showing 2 most recent");
     }
 
     [Fact]
-    public async Task GetFundOperations_GlossesRegistrationTypeCode()
+    public async Task GetFundNcenReports_GlossesRegistrationTypeCode()
     {
         var stock = SeedStock();
         _dbContext.Set<NCenFiling>().Add(MakeFiling(stock.Id, "acc", new DateOnly(2025, 1, 15)));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetFundOperations("MXF");
+        var result = await _tools.GetFundNcenReports("MXF");
 
         result.Should().Contain("N-2 (closed-end fund)");
     }
 
     [Fact]
-    public async Task GetFundOperations_FlattensAndEscapesFiledTableCodes()
+    public async Task GetFundNcenReports_FlattensAndEscapesFiledTableCodes()
     {
         var stock = SeedStock();
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2025, 1, 15));
@@ -136,7 +136,7 @@ public class NCenFundOperationsToolTests : IDisposable
         _dbContext.Add(filing);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetFundOperations("MXF");
+        var result = await _tools.GetFundNcenReports("MXF");
 
         result.Should().Contain("N\\|2 # TYPE");
         result.Should().Contain("811\\|02409 # FILE");
@@ -145,7 +145,7 @@ public class NCenFundOperationsToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetFundOperations_SeriesTicker_ResolvesBeforeReportingRegistrantCoverageGap()
+    public async Task GetFundNcenReports_SeriesTicker_ResolvesBeforeReportingRegistrantCoverageGap()
     {
         _dbContext.Add(
             new FundSeries
@@ -163,14 +163,14 @@ public class NCenFundOperationsToolTests : IDisposable
         );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetFundOperations("ivv");
+        var result = await _tools.GetFundNcenReports("ivv");
 
         result.Should().Contain("resolves to ISHARES CORE S&P 500 ETF (IVV)");
         result.Should().Contain("coverage result, not an identifier-resolution failure");
     }
 
     [Fact]
-    public async Task GetFundOperations_VerifiedAliasWinsOverConflictingTrackedStockTicker()
+    public async Task GetFundNcenReports_VerifiedAliasWinsOverConflictingTrackedStockTicker()
     {
         var conflictingStock = SeedStock("VOO");
         _dbContext.Add(MakeFiling(conflictingStock.Id, "wrong-series", new DateOnly(2026, 5, 16)));
@@ -189,7 +189,7 @@ public class NCenFundOperationsToolTests : IDisposable
         );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetFundOperations("VOO");
+        var result = await _tools.GetFundNcenReports("VOO");
 
         result.Should().Contain("resolves to VANGUARD 500 INDEX FUND");
         result.Should().Contain("coverage result, not an identifier-resolution failure");
@@ -197,7 +197,7 @@ public class NCenFundOperationsToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetFundOperations_CoverageMessageFlattensFiledMarkdownBoundaries()
+    public async Task GetFundNcenReports_CoverageMessageFlattensFiledMarkdownBoundaries()
     {
         _dbContext.Add(
             new FundSeries
@@ -214,7 +214,7 @@ public class NCenFundOperationsToolTests : IDisposable
         );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetFundOperations("unsafe-fund-s000004310");
+        var result = await _tools.GetFundNcenReports("unsafe-fund-s000004310");
 
         result.Should().Contain("ISHARES # SYNTHETIC \\| FUND");
         result.Should().Contain("ISHARES  TRUST \\| EXTRA");
@@ -222,9 +222,9 @@ public class NCenFundOperationsToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetFundOperations_UnknownIdentifierStatesDirectoryCoverageLimits()
+    public async Task GetFundNcenReports_UnknownIdentifierStatesDirectoryCoverageLimits()
     {
-        var result = await _tools.GetFundOperations("UNKNOWN");
+        var result = await _tools.GetFundNcenReports("UNKNOWN");
 
         result.Should().Contain("fixed-income-only series");
         result.Should().Contain("coverage result, not evidence that the fund does not exist");

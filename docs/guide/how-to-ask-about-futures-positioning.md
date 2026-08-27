@@ -23,7 +23,7 @@ To see positioning across everything at once:
 - "Give me the latest COT snapshot across all futures."
 - "Where are speculators most net-long right now?"
 
-The assistant uses `GetLatestCftcData`, which returns the latest positioning grouped by category — Agriculture, Energy, Metals, Equity Indices, Interest Rates, and Currencies — with commercial and non-commercial net positions.
+The assistant uses `GetLatestCftcPositioning`, which returns the latest positioning grouped by category — Agriculture, Energy, Metals, Equity Indices, Interest Rates, and Currencies — with commercial and non-commercial net positions.
 
 ## What you should see
 

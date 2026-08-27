@@ -5,7 +5,7 @@ using Equibles.Holdings.Mcp.Tools;
 namespace Equibles.UnitTests.Holdings;
 
 /// <summary>
-/// Regression pin for the "-+0.0%" glitch in GetOwnershipHistory's Change column (MCP audit
+/// Regression pin for the "-+0.0%" glitch in GetInstitutionalOwnershipHistory's Change column (MCP audit
 /// 2026-07). The old two-section format "+0.0;-0.0" let a negative change that rounds to zero
 /// re-format through the POSITIVE section while the negative-zero double kept its sign,
 /// emitting the garbled "-+0.0" — and the combined current-quarter row's carried-forward

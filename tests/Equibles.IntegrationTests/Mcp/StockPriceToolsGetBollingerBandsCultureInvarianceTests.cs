@@ -30,7 +30,7 @@ public class StockPriceToolsGetBollingerBandsCultureInvarianceTests : ParadeDbMc
     // Close cell uses the culture-implicit :F2 specifier, so de-DE renders the decimal comma —
     // forking the response and making the Close column disagree with the band columns. Same bug
     // class as GetStochasticOscillator / GetAverageTrueRange / GetOnBalanceVolume (#3103, the
-    // "sibling indicator tools") and GetLatestPrices (#3100).
+    // "sibling indicator tools") and GetLatestClosingPrices (#3100).
     [Fact]
     public async Task GetBollingerBands_UnderNonInvariantCulture_RendersCloseCultureInvariantly()
     {

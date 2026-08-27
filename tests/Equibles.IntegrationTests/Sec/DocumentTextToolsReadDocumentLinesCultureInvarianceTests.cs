@@ -27,7 +27,7 @@ public class DocumentTextToolsReadDocumentLinesCultureInvarianceTests : ParadeDb
     // commenting "MCP markdown must not fork the separators by host locale" — is that
     // the LLM-facing banner renders identically on every host. de-DE swaps the
     // thousand separator (1,500 -> 1.500), forking the response. Same bug class as
-    // the fixed GetStockPrices volume cell and the GetLatestPrices repro (GH-3100).
+    // the fixed GetStockPrices volume cell and the GetLatestClosingPrices repro (GH-3100).
     [Fact]
     public async Task ReadDocumentLines_UnderNonInvariantCulture_RendersLineCountsCultureInvariantly()
     {

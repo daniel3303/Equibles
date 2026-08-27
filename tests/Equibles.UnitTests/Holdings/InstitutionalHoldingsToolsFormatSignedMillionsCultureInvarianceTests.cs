@@ -16,7 +16,7 @@ public class InstitutionalHoldingsToolsFormatSignedMillionsCultureInvarianceTest
         (string)FormatSignedMillionsMethod.Invoke(null, [value]);
 
     // FormatSignedMillions is the shared Δ Value ($M) formatter feeding the
-    // delta-value cells across GetInstitutionQuarterlyActivity, GetTopBuyersSellers,
+    // delta-value cells across GetInstitutionQuarterlyActivity, GetTopInstitutionalBuyersSellers,
     // GetMarketWide13FActivity and GetMostHeldStocks. It applies the custom format
     // "+#,##0.0;-#,##0.0;0.0" with no IFormatProvider, so it follows CurrentCulture.
     // Its sibling FormatMillions threads InvariantCulture and every other numeric

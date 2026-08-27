@@ -30,7 +30,7 @@ public class StockPriceToolsGetAverageTrueRangeCultureInvarianceTests : ParadeDb
     // the culture-implicit :F2 specifier, so de-DE renders the decimal comma — forking the
     // response and making one column disagree with the next. Same bug class as
     // GetStochasticOscillator (#3103, which enumerates this method at StockPriceTools.cs:283)
-    // and GetLatestPrices (#3100).
+    // and GetLatestClosingPrices (#3100).
     [Fact]
     public async Task GetAverageTrueRange_UnderNonInvariantCulture_RendersCloseCultureInvariantly()
     {

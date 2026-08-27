@@ -12,7 +12,7 @@ namespace Equibles.IntegrationTests.Mcp;
 /// Pins the MCP-audit fixes on the Yahoo price tools: strict yyyy-MM-dd date parsing
 /// (no silent fallback to the default window), inverted-range errors, newest-kept
 /// truncation notes, the maxResults clamp on the indicator tools, the dot→dash
-/// class-share ticker fold, the day-over-day change columns on GetLatestPrices, the
+/// class-share ticker fold, the day-over-day change columns on GetLatestClosingPrices, the
 /// pre-startDate warm-up look-back on windowed indicators, and the OBV anchor footnote.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -265,7 +265,7 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
     // ── Dot class-share notation ─────────────────────────────────────────
 
     [Fact]
-    public async Task GetLatestPrices_DotClassTicker_ResolvesDashStoredForm()
+    public async Task GetLatestClosingPrices_DotClassTicker_ResolvesDashStoredForm()
     {
         // Price data stores class shares in the Yahoo dash form (BRK-B). The dot form
         // (BRK.B) is the same symbol in a different notation — a mechanical format
@@ -278,7 +278,7 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
             .Add(PriceFor(brk, new DateOnly(2026, 4, 5), close: 412.34m));
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestPrices("BRK.B");
+        var result = await Sut().GetLatestClosingPrices("BRK.B");
 
         result.Should().Contain("412.34");
         result.Should().NotContain("Not found");
@@ -300,14 +300,14 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
         result.Should().Contain("412.34");
     }
 
-    // ── GetLatestPrices change columns ───────────────────────────────────
+    // ── GetLatestClosingPrices change columns ───────────────────────────────────
 
     [Fact]
-    public async Task GetLatestPrices_TwoBars_RendersDayOverDayChange()
+    public async Task GetLatestClosingPrices_TwoBars_RendersDayOverDayChange()
     {
         await SeedDailyCloses(new DateOnly(2026, 4, 1), 100m, 110m);
 
-        var result = await Sut().GetLatestPrices("AAPL");
+        var result = await Sut().GetLatestClosingPrices("AAPL");
 
         result.Should().Contain("| +10.00 |");
         result.Should().Contain("| +10.00% |");
@@ -315,13 +315,13 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestPrices_SingleBar_RendersDashChangeCells()
+    public async Task GetLatestClosingPrices_SingleBar_RendersDashChangeCells()
     {
         // With no prior close the change columns must degrade to dashes, not crash
         // or fabricate a zero change.
         await SeedDailyCloses(new DateOnly(2026, 4, 1), 100m);
 
-        var result = await Sut().GetLatestPrices("AAPL");
+        var result = await Sut().GetLatestClosingPrices("AAPL");
 
         result.Should().Contain("| 100.00 | — | — |");
     }

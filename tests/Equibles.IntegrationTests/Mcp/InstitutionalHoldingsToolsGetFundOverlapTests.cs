@@ -13,29 +13,29 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
-/// Pins <c>GetFundOverlap</c>. Each test exercises one path: unknown lookups on either
+/// Pins <c>CompareInstitutionPortfolios</c>. Each test exercises one path: unknown lookups on either
 /// side, no-common-quarter, two-fund partial overlap, and the explicit reportDate
 /// argument.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class InstitutionalHoldingsToolsGetFundOverlapTests : ParadeDbMcpTestBase
+public class InstitutionalHoldingsToolsCompareInstitutionPortfoliosTests : ParadeDbMcpTestBase
 {
-    public InstitutionalHoldingsToolsGetFundOverlapTests(ParadeDbFixture fixture)
+    public InstitutionalHoldingsToolsCompareInstitutionPortfoliosTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     [Fact]
-    public async Task GetFundOverlap_UnknownFirstInstitution_ReportsNotFound()
+    public async Task CompareInstitutionPortfolios_UnknownFirstInstitution_ReportsNotFound()
     {
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetFundOverlap("Nobody", "Anybody");
+        var output = await sut.CompareInstitutionPortfolios("Nobody", "Anybody");
 
         output.Should().Contain("No match for 'Nobody' in the tracked 13F filer set");
     }
 
     [Fact]
-    public async Task GetFundOverlap_NoCommonQuarter_ReportsNoOverlap()
+    public async Task CompareInstitutionPortfolios_NoCommonQuarter_ReportsNoOverlap()
     {
         var stock = new CommonStock
         {
@@ -54,13 +54,13 @@ public class InstitutionalHoldingsToolsGetFundOverlapTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetFundOverlap("Fund A LP", "Fund B LP");
+        var output = await sut.CompareInstitutionPortfolios("Fund A LP", "Fund B LP");
 
         output.Should().Contain("share no common report dates");
     }
 
     [Fact]
-    public async Task GetFundOverlap_TwoFundsWithPartialOverlap_RendersStatsAndTable()
+    public async Task CompareInstitutionPortfolios_TwoFundsWithPartialOverlap_RendersStatsAndTable()
     {
         var aapl = new CommonStock
         {
@@ -95,7 +95,7 @@ public class InstitutionalHoldingsToolsGetFundOverlapTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetFundOverlap("Overlap A LP", "Overlap B LP");
+        var output = await sut.CompareInstitutionPortfolios("Overlap A LP", "Overlap B LP");
 
         output.Should().Contain("Portfolio overlap — **Overlap A LP** vs **Overlap B LP**");
         output.Should().Contain("Union positions");
@@ -108,7 +108,7 @@ public class InstitutionalHoldingsToolsGetFundOverlapTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetFundOverlap_ExplicitReportDate_HonorsArgument()
+    public async Task CompareInstitutionPortfolios_ExplicitReportDate_HonorsArgument()
     {
         var stock = new CommonStock
         {
@@ -132,7 +132,7 @@ public class InstitutionalHoldingsToolsGetFundOverlapTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetFundOverlap("Dated A LP", "Dated B LP", reportDate: "2024-09-30");
+        var output = await sut.CompareInstitutionPortfolios("Dated A LP", "Dated B LP", reportDate: "2024-09-30");
 
         output.Should().Contain("as of 2024-09-30");
     }

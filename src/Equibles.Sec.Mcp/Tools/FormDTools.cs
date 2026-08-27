@@ -34,14 +34,14 @@ public class FormDTools
     }
 
     [McpServerTool(
-        Name = "GetExemptOfferings",
+        Name = "GetFormDOfferings",
         Title = "Exempt Offerings (Form D)",
         ReadOnly = true
     )]
     [Description(
         "Get recent exempt securities offerings (private placements) for a company from SEC Form D notices. Each Form D reports a Regulation D offering, showing the issuer, the date of first sale, the total offering amount (a dollar figure or \"Indefinite\"), the amounts sold and remaining, the minimum investment, the number of investors, the claimed exemptions, whether the notice is an amendment (D/A), and its SEC accession number. Ongoing offerings are re-noticed through D/A amendments that RESTATE the same offering — group rows by first-sale date and offering amount and use only the latest notice of each chain, or capital raised will be counted several times over. Use this to track how a company is raising private capital alongside its public filings."
     )]
-    public Task<string> GetExemptOfferings(
+    public Task<string> GetFormDOfferings(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
         [Description(
             "Maximum number of notices to return (default: 50, max: 500; values outside 1-500 are clamped)"
@@ -115,7 +115,7 @@ public class FormDTools
 
                 return result.ToString();
             },
-            "GetExemptOfferings",
+            "GetFormDOfferings",
             $"ticker: {ticker}"
         );
     }

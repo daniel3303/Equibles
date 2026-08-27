@@ -22,18 +22,18 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 `InstitutionalHoldingsTools`:
 
 - `GetTopHolders` — top institutional holders of a given ticker for a `ReportDate`.
-- `GetOwnershipHistory` — historical ownership trend (shares, value, holder count) per quarter.
+- `GetInstitutionalOwnershipHistory` — historical ownership trend (shares, value, holder count) per quarter.
 - `GetInstitutionPortfolio` — full portfolio of one institution for a `ReportDate`.
 - `SearchInstitutions` — punctuation-independent all-token name/CIK search with a sparse any-token fallback, largest within the recently-active 13F bucket first. Rows include CIK, latest report date, reported 13F AUM, tracked position count, and location. Verified flagship aliases include Fidelity/FMR, Vanguard, and BlackRock; institution-scoped tools stay strict, reject an ambiguous partial name, and return candidate CIKs.
-- `GetTopBuyersSellers` — biggest absolute share additions and reductions for a ticker vs. the prior `ReportDate`; flags new and sold-out positions.
+- `GetTopInstitutionalBuyersSellers` — biggest absolute share additions and reductions for a ticker vs. the prior `ReportDate`; flags new and sold-out positions.
 - `GetMarketWide13FActivity` — market-wide leaderboard for a quarter, selected by `bucket`: `top-buys`, `top-sells`, `new-positions`, `sold-out-positions`; Δ value includes the quarter's price move on held shares, so Δ shares is the position-change measure.
 - `GetInstitutionSummary` — portfolio header for one filer at a `ReportDate`: AUM, position count, top-10 / top-25 concentration, QoQ turnover, latest / prior dates.
 - `GetInstitutionSectorAllocation` — one filer's portfolio grouped by industry / sector for its latest 13F report; stocks lacking a classification collapse into an "Unclassified" row.
 - `GetInstitutionQuarterlyActivity` — one filer's position changes vs. the prior quarter, bucketed into Initiated / Increased / Reduced / Exited; optional `bucket` filter to a single bucket.
-- `GetFundOverlap` — 13F portfolio overlap between two filers at their latest common `ReportDate`: Jaccard similarity, dollar-weighted overlap, and a side-by-side stock table with per-fund shares + percent of portfolio.
-- `GetConsensusHoldings` — combined portfolio of 2-25 filers at their latest common `ReportDate`; stocks ranked by holder count then combined value, with optional `minFunds` floor.
+- `CompareInstitutionPortfolios` — 13F portfolio overlap between two filers at their latest common `ReportDate`: Jaccard similarity, dollar-weighted overlap, and a side-by-side stock table with per-fund shares + percent of portfolio.
+- `GetInstitutionConsensusHoldings` — combined portfolio of 2-25 filers at their latest common `ReportDate`; stocks ranked by holder count then combined value, with optional `minInstitutions` floor.
 - `GetMostHeldStocks` — cross-sectional ranking of stocks by institutional 13F breadth for a quarter, ordered by filer count (default), quarter-over-quarter change in filer count (warming / cooling), or total reported value; includes Δ filers, total value, Δ value, and the stock's share of the 13F universe.
-- `GetFundCloneBacktest` — backtest cloning a filer's reported 13F portfolio against a benchmark over a trailing window, rebalancing on the SEC filing lag; uses raw closing prices for each exact listing, excludes dividends, and returns price return, price CAGR, max drawdown, and price-return alpha. Captured splits can shorten the comparable window.
+- `GetInstitutionCloneBacktest` — backtest cloning a filer's reported 13F portfolio against a benchmark over a trailing window, rebalancing on the SEC filing lag; uses raw closing prices for each exact listing, excludes dividends, and returns price return, price CAGR, max drawdown, and price-return alpha. Usable captured split ratios restate closes onto one basis; an unusable ratio can exclude that listing's earlier closes.
 
 ### `mcp.AddInsiderTrading()` — Forms 3 / 4 / 5
 
@@ -42,20 +42,18 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `GetInsiderTransactions` — recent transactions for a ticker, filterable by transaction code.
 - `GetInsiderOwnership` — current insider ownership summary for a ticker.
 - `SearchInsiders` — punctuation-independent all-whole-word search of SEC-filed owner names with a sparse any-word fallback, plus verified public-name aliases such as Jensen Huang → filed `HUANG JEN HSUN`.
-- `GetProposedSales` — recent proposed insider sales for a ticker from SEC Form 144 notices: seller, relationship to the company, shares and aggregate market value to be sold, percent of shares outstanding, approximate sale date, broker, and filer remarks such as a stated 10b5-1 plan.
+- `GetForm144ProposedSales` — recent proposed insider sales for a ticker from SEC Form 144 notices: seller, relationship to the company, shares and aggregate market value to be sold, percent of shares outstanding, approximate sale date, broker, and filer remarks such as a stated 10b5-1 plan.
 
 ### `mcp.AddSec()` — SEC filings
 
 `DocumentTextTools`:
 
-- `SearchDocumentKeyword` — BM25 keyword search inside a specific document.
 - `ReadDocumentLines` — read a slice of a normalized SEC document by line range.
 
-`RagSearchTools` (semantic search; requires `EmbeddingConfig.Enabled = true`):
+`RagSearchTools` (BM25 lexical ranking is always available; embeddings add semantic ranking; exact mode does literal matching):
 
-- `SearchDocuments` — vector search across all indexed SEC documents.
-- `SearchCompanyDocuments` — vector search scoped to one company.
-- `SearchDocument` — vector search within a single document.
+- `SearchDocuments` — hybrid BM25 and semantic search across indexed SEC documents, optionally scoped by `ticker`; without embeddings it retains ranked BM25 results.
+- `SearchDocument` — semantic or exact literal search inside a specific document.
 - `ListCompanyDocuments` — list documents available for a company.
 
 `FailToDeliverTools`:
@@ -64,11 +62,10 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `FormDTools`:
 
-- `GetExemptOfferings` — recent exempt offerings (Regulation D private placements) for a company from SEC Form D notices: offering amount, amount sold (dollar figure or `Indefinite`), minimum investment, investor count, claimed exemptions, and amendment flag.
+- `GetFormDOfferings` — recent exempt offerings (Regulation D private placements) for a company from SEC Form D notices: offering amount, amount sold (dollar figure or `Indefinite`), minimum investment, investor count, claimed exemptions, and amendment flag.
 
 `NportTools`:
 
-- `GetFundHoldings` — largest stored holdings of a fund or ETF from its latest SEC Form NPORT-P monthly report: series, reporting period, net assets, full reported holding count when available, stored holding count, and position details. For multi-series trusts the stored rows are only positions whose CUSIPs match tracked stocks; the reported count and net assets still describe the full filing. Accepts a profile id, SEC series id, stored ticker, or verified share-class alias from `SearchFunds`.
 - `GetFundsHoldingStock` — reverse lookup: the registered funds and ETFs holding a given stock, matched by CUSIP against each fund series' most recent NPORT-P report (so an exited position never shows as current). Returns registrant and series, reporting period, position size, USD value, share of the fund's net assets, and payoff profile (Long/Short), largest positions first.
 
 `FundDirectoryTools`:
@@ -78,7 +75,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `NCenTools`:
 
-- `GetFundOperations` — operational data for a fund, ETF or closed-end fund from SEC Form N-CEN annual reports: registrant classification, Investment Company Act file number, reporting period, first/last-filing flags, the latest filing's named service providers, and an exact filed-name provider timeline. Uses the same exact fund identifiers and verified aliases as the directory. N-CEN is registrant-level and currently ingested through tracked issuer feeds, so a series in an untracked multi-series trust can resolve but still have no N-CEN report on record.
+- `GetFundNcenReports` — operational data for a fund, ETF or closed-end fund from SEC Form N-CEN annual reports: registrant classification, Investment Company Act file number, reporting period, first/last-filing flags, the latest filing's named service providers, and an exact filed-name provider timeline. Uses the same exact fund identifiers and verified aliases as the directory. N-CEN is registrant-level and currently ingested through tracked issuer feeds, so a series in an untracked multi-series trust can resolve but still have no N-CEN report on record.
 
 `InvestmentAdviserTools`:
 
@@ -114,7 +111,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 `FredTools`:
 
 - `GetEconomicIndicator` — observations for a FRED series (e.g. `DGS10`, `UNRATE`), with units, frequency, and seasonal-adjustment metadata.
-- `GetLatestEconomicData` — latest snapshot across the curated macro indicators.
+- `GetLatestEconomicIndicators` — latest snapshot across the curated macro indicators.
 - `SearchEconomicIndicators` — punctuation-independent all-token search across tracked series IDs, titles, and categories with a sparse any-token fallback, plus standard aliases such as fed funds rate, jobless claims, payrolls, yield curve, and core CPI. Each result includes seasonal adjustment, latest observation date, and exact UTC series-sync time; an empty result says only that the curated tracked set has no match.
 - `GetEconomicCalendar` — scheduled and recent US macro release dates (CPI, Employment Situation, GDP, …) and the FRED series each updates; defaults to the next 30 days.
 
@@ -127,7 +124,7 @@ exchange listings keep independent series, so `GOOG` never substitutes `GOOGL` a
 never substitutes `BRK-B`; dot share-class spelling such as `BRK.A` resolves to `BRK-A`.
 
 - `GetStockPrices` — daily OHLCV + `AdjustedClose` for a ticker over a date range.
-- `GetLatestPrices` — latest close for one or more tickers.
+- `GetLatestClosingPrices` — latest close for one or more tickers.
 - `GetStochasticOscillator` — Stochastic Oscillator (%K and %D) for a ticker over a date range.
 - `GetAverageTrueRange` — Wilder's Average True Range (ATR) volatility measure for a ticker over a date range.
 - `GetOnBalanceVolume` — On-Balance Volume (OBV) cumulative-flow indicator for a ticker over a date range.
@@ -152,7 +149,7 @@ never substitutes `BRK-B`; dot share-class spelling such as `BRK.A` resolves to 
 `CftcTools`:
 
 - `GetCftcPositioning` — non-commercial / commercial / non-reportable positions over time for a contract.
-- `GetLatestCftcData` — latest weekly snapshot across all tracked contracts.
+- `GetLatestCftcPositioning` — latest weekly snapshot across all tracked contracts.
 - `SearchCftcMarkets` — token-AND search of the curated CFTC contract set by name/code, plus common contract names and standard futures symbols such as WTI/CL and ES.
 
 ### `mcp.AddCboe()` — CBOE indicators
@@ -173,7 +170,7 @@ never substitutes `BRK-B`; dot share-class spelling such as `BRK.A` resolves to 
 
 `FdaCatalystTools`:
 
-- `GetFdaCatalysts` — scheduled FDA advisory-committee (AdComm) meetings from the FDA.gov calendar — the regulatory catalyst dates that move biotech and pharma stocks.
+- `GetFdaAdvisoryCommitteeMeetings` — scheduled FDA advisory-committee (AdComm) meetings from the FDA.gov calendar — the regulatory catalyst dates that move biotech and pharma stocks.
 
 ## Tool implementation conventions
 

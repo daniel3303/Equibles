@@ -38,7 +38,7 @@ Raising **Min funds holding** makes the basket more selective; raising **Max hol
    - **Price CAGR** — the annualized raw-closing-price return.
    - **Max drawdown** — the largest peak-to-trough drop.
 
-3. A **Cumulative price return** chart plots the index against the benchmark, both starting at 100, so you can see how they diverge over time. A captured split can shorten the comparable window.
+3. A **Cumulative price return** chart plots the index against the benchmark, both starting at 100, so you can see how they diverge over time. Captured split ratios restate closes onto one basis; only an unusable ratio can exclude earlier closes for that listing.
 
 4. A **Constituents** table lists the stocks in the basket, with columns for Ticker, Name, **Held by** (how many top funds hold it), **Avg position weight**, and **Index weight**.
 
