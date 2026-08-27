@@ -32,6 +32,8 @@ public static class FinancialConceptAliases
 
     private static ConceptRef G(string tag) => new(FactTaxonomy.UsGaap, tag);
 
+    private static ConceptRef I(string tag) => new(FactTaxonomy.IfrsFull, tag);
+
     private static readonly Dictionary<string, IReadOnlyList<ConceptRef>> Map = new()
     {
         // ── Income statement ────────────────────────────────────────────────
@@ -61,6 +63,8 @@ public static class FinancialConceptAliases
             // REITs filed it instead of SalesRevenueNet, so without it their
             // revenue series starts at the ASC 606 transition.
             G("RealEstateRevenueNet"),
+            I("Revenue"),
+            I("RevenueFromContractsWithCustomers"),
         ],
         // Financial-sector top lines: banks, broker-dealers and insurers never
         // file the operating-company revenue tags above.
@@ -85,8 +89,9 @@ public static class FinancialConceptAliases
             G("CostOfRevenue"),
             G("CostOfGoodsAndServicesSold"),
             G("CostOfGoodsSold"),
+            I("CostOfSales"),
         ],
-        ["gross-profit"] = [G("GrossProfit")],
+        ["gross-profit"] = [G("GrossProfit"), I("GrossProfit")],
         ["research-and-development"] =
         [
             G("ResearchAndDevelopmentExpense"),
@@ -94,10 +99,15 @@ public static class FinancialConceptAliases
             // software-development-cost variant instead of the generic tag.
             G("ResearchAndDevelopmentExpenseSoftwareExcludingAcquiredInProcessCost"),
             G("ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost"),
+            I("ResearchAndDevelopmentExpense"),
         ],
         ["selling-general-and-administrative"] = [G("SellingGeneralAndAdministrativeExpense")],
-        ["selling-and-marketing"] = [G("SellingAndMarketingExpense")],
-        ["general-and-administrative"] = [G("GeneralAndAdministrativeExpense")],
+        ["selling-and-marketing"] = [G("SellingAndMarketingExpense"), I("DistributionCosts")],
+        ["general-and-administrative"] =
+        [
+            G("GeneralAndAdministrativeExpense"),
+            I("AdministrativeExpense"),
+        ],
         ["amortization-of-intangibles"] = [G("AmortizationOfIntangibleAssets")],
         ["restructuring"] = [G("RestructuringCharges")],
         ["operating-expenses"] = [G("OperatingExpenses")],
@@ -105,7 +115,7 @@ public static class FinancialConceptAliases
         // figure instead; it INCLUDES cost of revenue, so it is a separate
         // line, never a fallback for operating-expenses.
         ["total-costs-and-expenses"] = [G("CostsAndExpenses")],
-        ["operating-income"] = [G("OperatingIncomeLoss")],
+        ["operating-income"] = [G("OperatingIncomeLoss"), I("ProfitLossFromOperatingActivities")],
         // InterestExpense was deprecated from the 2024 taxonomy; banks continue the
         // series under the operating variant (nonfinancial filers moved to the
         // nonoperating one), so without the fallback a bank's interest-expense
@@ -115,6 +125,7 @@ public static class FinancialConceptAliases
             G("InterestExpense"),
             G("InterestExpenseNonoperating"),
             G("InterestExpenseOperating"),
+            I("FinanceCosts"),
         ],
         // Banks report the income statement's gross interest-income line under the
         // operating tag while ALSO tagging the narrow investment-interest sub-item
@@ -137,13 +148,13 @@ public static class FinancialConceptAliases
                 "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"
             ),
         ],
-        ["income-tax"] = [G("IncomeTaxExpenseBenefit")],
+        ["income-tax"] = [G("IncomeTaxExpenseBenefit"), I("IncomeTaxExpenseContinuingOperations")],
         // ProfitLoss (net income including noncontrolling interests) last: it
         // only fills filers that never report the parent-attributable figure.
-        ["net-income"] = [G("NetIncomeLoss"), G("ProfitLoss")],
+        ["net-income"] = [G("NetIncomeLoss"), G("ProfitLoss"), I("ProfitLoss")],
         ["comprehensive-income"] = [G("ComprehensiveIncomeNetOfTax")],
-        ["eps-basic"] = [G("EarningsPerShareBasic")],
-        ["eps-diluted"] = [G("EarningsPerShareDiluted")],
+        ["eps-basic"] = [G("EarningsPerShareBasic"), I("BasicEarningsLossPerShare")],
+        ["eps-diluted"] = [G("EarningsPerShareDiluted"), I("DilutedEarningsLossPerShare")],
         ["weighted-average-shares-basic"] =
         [
             G("WeightedAverageNumberOfSharesOutstandingBasic"),
@@ -167,21 +178,33 @@ public static class FinancialConceptAliases
             // Post-ASU 2016-18 filers may only report the restricted-cash-
             // inclusive total; it fills periods the pure tag lacks.
             G("CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"),
+            I("CashAndCashEquivalents"),
         ],
         ["short-term-investments"] = [G("ShortTermInvestments"), G("MarketableSecuritiesCurrent")],
-        ["accounts-receivable"] = [G("AccountsReceivableNetCurrent"), G("ReceivablesNetCurrent")],
-        ["inventory"] = [G("InventoryNet")],
-        ["current-assets"] = [G("AssetsCurrent")],
-        ["property-plant-and-equipment"] = [G("PropertyPlantAndEquipmentNet")],
-        ["operating-lease-assets"] = [G("OperatingLeaseRightOfUseAsset")],
-        ["goodwill"] = [G("Goodwill")],
+        ["accounts-receivable"] =
+        [
+            G("AccountsReceivableNetCurrent"),
+            G("ReceivablesNetCurrent"),
+            I("CurrentTradeReceivables"),
+            I("TradeAndOtherCurrentReceivables"),
+        ],
+        ["inventory"] = [G("InventoryNet"), I("Inventories")],
+        ["current-assets"] = [G("AssetsCurrent"), I("CurrentAssets")],
+        ["property-plant-and-equipment"] =
+        [
+            G("PropertyPlantAndEquipmentNet"),
+            I("PropertyPlantAndEquipment"),
+        ],
+        ["operating-lease-assets"] = [G("OperatingLeaseRightOfUseAsset"), I("RightofuseAssets")],
+        ["goodwill"] = [G("Goodwill"), I("Goodwill")],
         ["intangible-assets"] =
         [
             G("FiniteLivedIntangibleAssetsNet"),
             G("IntangibleAssetsNetExcludingGoodwill"),
+            I("IntangibleAssetsOtherThanGoodwill"),
         ],
         ["long-term-investments"] = [G("LongTermInvestments"), G("MarketableSecuritiesNoncurrent")],
-        ["total-assets"] = [G("Assets")],
+        ["total-assets"] = [G("Assets"), I("Assets")],
         ["accounts-payable"] = [G("AccountsPayableCurrent"), G("AccountsPayableTradeCurrent")],
         ["accrued-liabilities"] = [G("AccruedLiabilitiesCurrent")],
         ["deferred-revenue"] =
@@ -194,11 +217,20 @@ public static class FinancialConceptAliases
             G("DebtCurrent"),
             G("LongTermDebtCurrent"),
             G("ShortTermBorrowings"),
+            I("CurrentBorrowings"),
+            I("CurrentPortionOfLongtermBorrowings"),
+            I("ShorttermBorrowings"),
         ],
-        ["current-liabilities"] = [G("LiabilitiesCurrent")],
+        ["current-liabilities"] = [G("LiabilitiesCurrent"), I("CurrentLiabilities")],
         // LongTermDebt (the total including the current portion) last: it only
         // fills filers that never split out the noncurrent portion.
-        ["long-term-debt"] = [G("LongTermDebtNoncurrent"), G("LongTermDebt")],
+        ["long-term-debt"] =
+        [
+            G("LongTermDebtNoncurrent"),
+            G("LongTermDebt"),
+            I("LongtermBorrowings"),
+            I("NoncurrentPortionOfNoncurrentLoansReceived"),
+        ],
         ["operating-lease-liabilities"] =
         [
             G("OperatingLeaseLiabilityNoncurrent"),
@@ -209,20 +241,22 @@ public static class FinancialConceptAliases
             G("ContractWithCustomerLiabilityNoncurrent"),
             G("DeferredRevenueNoncurrent"),
         ],
-        ["total-liabilities"] = [G("Liabilities")],
+        ["total-liabilities"] = [G("Liabilities"), I("Liabilities")],
         ["common-stock-value"] =
         [
             G("CommonStockValue"),
             G("CommonStocksIncludingAdditionalPaidInCapital"),
         ],
         ["additional-paid-in-capital"] = [G("AdditionalPaidInCapital")],
-        ["retained-earnings"] = [G("RetainedEarningsAccumulatedDeficit")],
+        ["retained-earnings"] = [G("RetainedEarningsAccumulatedDeficit"), I("RetainedEarnings")],
         ["accumulated-oci"] = [G("AccumulatedOtherComprehensiveIncomeLossNetOfTax")],
         ["treasury-stock"] = [G("TreasuryStockValue"), G("TreasuryStockCommonValue")],
         ["stockholders-equity"] =
         [
             G("StockholdersEquity"),
             G("StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"),
+            I("EquityAttributableToOwnersOfParent"),
+            I("Equity"),
         ],
         ["total-liabilities-and-equity"] = [G("LiabilitiesAndStockholdersEquity")],
         // The issuer's common shares outstanding at a point in time. The dei cover-page
@@ -245,8 +279,16 @@ public static class FinancialConceptAliases
             // Capital-heavy filers (REITs) tag the cash-flow add-back with the
             // plain income-statement element instead of the DD&A variants.
             G("DepreciationAndAmortization"),
+            I("DepreciationAndAmortisationExpense"),
+            I("DepreciationExpense"),
         ],
-        ["share-based-compensation"] = [G("ShareBasedCompensation")],
+        ["share-based-compensation"] =
+        [
+            G("ShareBasedCompensation"),
+            I(
+                "ExpenseFromSharebasedPaymentTransactionsInWhichGoodsOrServicesReceivedDidNotQualifyForRecognitionAsAssets"
+            ),
+        ],
         ["deferred-income-taxes"] =
         [
             G("DeferredIncomeTaxExpenseBenefit"),
@@ -256,27 +298,52 @@ public static class FinancialConceptAliases
         [
             G("NetCashProvidedByUsedInOperatingActivities"),
             G("NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"),
+            I("CashFlowsFromUsedInOperatingActivities"),
         ],
         ["capital-expenditures"] =
         [
             G("PaymentsToAcquirePropertyPlantAndEquipment"),
             G("PaymentsToAcquireProductiveAssets"),
+            I("PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"),
         ],
         ["acquisitions"] = [G("PaymentsToAcquireBusinessesNetOfCashAcquired")],
         ["investing-cash-flow"] =
         [
             G("NetCashProvidedByUsedInInvestingActivities"),
             G("NetCashProvidedByUsedInInvestingActivitiesContinuingOperations"),
+            I("CashFlowsFromUsedInInvestingActivities"),
         ],
-        ["share-repurchases"] = [G("PaymentsForRepurchaseOfCommonStock")],
-        ["dividends-paid"] = [G("PaymentsOfDividends"), G("PaymentsOfDividendsCommonStock")],
-        ["debt-issued"] = [G("ProceedsFromIssuanceOfLongTermDebt")],
-        ["debt-repaid"] = [G("RepaymentsOfLongTermDebt"), G("RepaymentsOfDebt")],
-        ["stock-issued"] = [G("ProceedsFromIssuanceOfCommonStock")],
+        ["share-repurchases"] =
+        [
+            G("PaymentsForRepurchaseOfCommonStock"),
+            I("PaymentsToAcquireOrRedeemEntitysShares"),
+        ],
+        ["dividends-paid"] =
+        [
+            G("PaymentsOfDividends"),
+            G("PaymentsOfDividendsCommonStock"),
+            I("DividendsPaid"),
+            I("DividendsPaidClassifiedAsFinancingActivities"),
+        ],
+        ["debt-issued"] =
+        [
+            G("ProceedsFromIssuanceOfLongTermDebt"),
+            I("ProceedsFromCurrentBorrowings"),
+            I("ProceedsFromNoncurrentBorrowings"),
+        ],
+        ["debt-repaid"] =
+        [
+            G("RepaymentsOfLongTermDebt"),
+            G("RepaymentsOfDebt"),
+            I("RepaymentsOfNoncurrentBorrowings"),
+            I("RepaymentsOfBondsNotesAndDebentures"),
+        ],
+        ["stock-issued"] = [G("ProceedsFromIssuanceOfCommonStock"), I("ProceedsFromIssuingShares")],
         ["financing-cash-flow"] =
         [
             G("NetCashProvidedByUsedInFinancingActivities"),
             G("NetCashProvidedByUsedInFinancingActivitiesContinuingOperations"),
+            I("CashFlowsFromUsedInFinancingActivities"),
         ],
         ["fx-effect-on-cash"] =
         [
@@ -284,6 +351,7 @@ public static class FinancialConceptAliases
                 "EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"
             ),
             G("EffectOfExchangeRateOnCashAndCashEquivalents"),
+            I("EffectOfExchangeRateChangesOnCashAndCashEquivalents"),
         ],
         ["net-change-in-cash"] =
         [
@@ -297,6 +365,7 @@ public static class FinancialConceptAliases
             G(
                 "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseExcludingExchangeRateEffect"
             ),
+            I("IncreaseDecreaseInCashAndCashEquivalents"),
         ],
     };
 

@@ -8,7 +8,8 @@ namespace Equibles.Fred.HostedService.Services;
 // Curated rather than swept: FRED publishes around 800,000 series and almost all of them are a
 // county-level or vintage-specific slice nobody asks for. The list below is the set a reader
 // (or a model answering about the US economy) actually names, chosen against FRED's own
-// popularity score with a floor of 50, and it deliberately fills out the families already here
+// popularity score with a floor of 50, plus official series consumed by a product calculation,
+// and it deliberately fills out the families already here
 // rather than opening new ones. Two series that cleared the floor are excluded on purpose:
 // USSLIND stopped updating in April 2020, and FPCPITOTLZGUSA is an annual World Bank restatement
 // of CPI that lags the series we already carry. A frozen series is worse than a missing one; it
@@ -67,6 +68,9 @@ public static class CuratedSeriesRegistry
         // Exchange Rates
         new("DTWEXBGS", FredSeriesCategory.ExchangeRates),
         new("DEXUSEU", FredSeriesCategory.ExchangeRates),
+        // New Taiwan dollars per US dollar, used to translate Taiwan issuers' native
+        // financial statements without licensing a commercial fundamentals feed.
+        new("DEXTAUS", FredSeriesCategory.ExchangeRates),
         // Market
         new("SP500", FredSeriesCategory.Market),
         new("VIXCLS", FredSeriesCategory.Market),
