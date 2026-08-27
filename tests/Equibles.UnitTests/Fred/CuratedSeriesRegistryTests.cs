@@ -51,6 +51,7 @@ public class CuratedSeriesRegistryTests
     [InlineData("M2SL")]
     [InlineData("ICSA")]
     [InlineData("HOUST")]
+    [InlineData("DEXTAUS")]
     public void Series_ContainsExpectedKeySeriesId(string expectedSeriesId)
     {
         CuratedSeriesRegistry.Series.Should().Contain(s => s.SeriesId == expectedSeriesId);
@@ -75,6 +76,7 @@ public class CuratedSeriesRegistryTests
     [InlineData("M2SL", FredSeriesCategory.MoneySupply)]
     [InlineData("UMCSENT", FredSeriesCategory.Sentiment)]
     [InlineData("DTWEXBGS", FredSeriesCategory.ExchangeRates)]
+    [InlineData("DEXTAUS", FredSeriesCategory.ExchangeRates)]
     public void WellKnownSeries_HasExpectedCategory(
         string seriesId,
         FredSeriesCategory expectedCategory

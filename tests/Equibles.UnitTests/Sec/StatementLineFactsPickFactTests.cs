@@ -87,7 +87,7 @@ public class StatementLineFactsPickFactTests
     {
         var (taxonomies, tags) = StatementLineFacts.CollectConceptPairs([RdLine()]);
 
-        taxonomies.Should().Equal(FactTaxonomy.UsGaap);
+        taxonomies.Should().Contain([FactTaxonomy.UsGaap, FactTaxonomy.IfrsFull]);
         tags.Should()
             .Contain([
                 "ResearchAndDevelopmentExpense",
