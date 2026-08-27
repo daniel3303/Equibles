@@ -69,6 +69,19 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     }
 
     [Fact]
+    public async Task GetOffExchangeVolume_SecondaryListing_DoesNotReturnPrimarySeries()
+    {
+        var stock = AddGme();
+        stock.SecondaryTickers = ["GME-A"];
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetOffExchangeVolume("GME-A");
+
+        result.Should().Contain("No exact off-exchange-volume series is available for GME-A");
+        result.Should().Contain("GME's FINRA rows are not substituted");
+    }
+
+    [Fact]
     public async Task GetOffExchangeVolume_InvertedRange_ReturnsExplicitError()
     {
         var stock = AddGme();

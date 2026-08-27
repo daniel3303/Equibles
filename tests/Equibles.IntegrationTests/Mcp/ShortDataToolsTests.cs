@@ -83,6 +83,20 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task GetShortVolume_SecondaryListing_DoesNotReturnPrimarySeries()
+    {
+        var stock = GmeStock();
+        stock.SecondaryTickers = ["GME-A"];
+        DbContext.Set<CommonStock>().Add(stock);
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetShortVolume("GME-A");
+
+        result.Should().Contain("No exact short-volume series is available for GME-A");
+        result.Should().Contain("GME's FINRA rows are not substituted");
+    }
+
+    [Fact]
     public async Task GetShortVolume_StockWithData_RendersAscendingTable()
     {
         var stock = GmeStock();
@@ -201,6 +215,20 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
         var result = await Sut().GetShortInterest("ZZZZ");
 
         result.Should().Be("Stock 'ZZZZ' not found.");
+    }
+
+    [Fact]
+    public async Task GetShortInterest_SecondaryListing_DoesNotReturnPrimarySeries()
+    {
+        var stock = GmeStock();
+        stock.SecondaryTickers = ["GME-A"];
+        DbContext.Set<CommonStock>().Add(stock);
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetShortInterest("GME-A");
+
+        result.Should().Contain("No exact short-interest series is available for GME-A");
+        result.Should().Contain("GME's FINRA rows are not substituted");
     }
 
     [Fact]

@@ -101,6 +101,29 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
         result.Should().Contain("No short-squeeze scores available");
     }
 
+    [Fact]
+    public async Task GetShortSqueezeScores_SecondaryTicker_IsRefusedBeforeEmptyUniverse()
+    {
+        DbContext
+            .Set<CommonStock>()
+            .Add(
+                new CommonStock
+                {
+                    Ticker = "AAXJ",
+                    Name = "iShares Trust",
+                    Cik = "0000000199",
+                    SecondaryTickers = ["SOXX"],
+                }
+            );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetShortSqueezeScores(ticker: "SOXX");
+
+        result.Should().Contain("No exact short-squeeze score series is available for SOXX");
+        result.Should().Contain("AAXJ's FINRA rows are not substituted");
+        result.Should().NotContain("No short-squeeze scores available");
+    }
+
     // The raw board is dominated by untradeable micro-caps; the liquidity gates must
     // drop them from the view (nulls fail an active gate) while leaving the scored
     // universe — and therefore every score — untouched.
