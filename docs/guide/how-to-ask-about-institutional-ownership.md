@@ -23,7 +23,7 @@ To see whether institutional interest is rising or falling:
 - "Has institutional ownership of NVDA been growing or shrinking?"
 - "Show me Tesla's institutional ownership trend over the last few quarters."
 
-The assistant uses `GetOwnershipHistory`, which reports the total institutional shares, market value, and number of holders across recent quarters.
+The assistant uses `GetInstitutionalOwnershipHistory`, which reports the total institutional shares, market value, and number of holders across recent quarters.
 
 ## See who bought and sold last quarter
 
@@ -31,7 +31,7 @@ For the most actionable quarterly signal:
 
 - "Which institutions added or cut the most AAPL last quarter?"
 
-The assistant calls `GetTopBuyersSellers` and returns two sections — the biggest share additions (including brand-new positions) and the biggest reductions (including positions sold out entirely) versus the previous 13F report date.
+The assistant calls `GetTopInstitutionalBuyersSellers` and returns two sections — the biggest share additions (including brand-new positions) and the biggest reductions (including positions sold out entirely) versus the previous 13F report date.
 
 ## What you should see
 

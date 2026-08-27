@@ -11,10 +11,9 @@ using ModelContextProtocol.Server;
 namespace Equibles.Sec.Mcp.Tools;
 
 /// <summary>
-/// Browse the registered-fund directory built from SEC Form NPORT-P reports. Unlike
-/// <c>GetFundHoldings</c> (which is keyed by a fund's own ticker), these tools reach every fund
-/// series we ingest — including the big multi-series fund-family trusts (iShares, Vanguard,
-/// Fidelity) that have no ticker of their own — via the materialised fund directory.
+/// Browse the registered-fund directory built from SEC Form NPORT-P reports. Search and profile
+/// lookup cover every ingested series, including multi-series trusts without a stored ticker,
+/// through profile IDs, SEC series IDs, stored tickers, and verified aliases.
 /// </summary>
 [McpServerToolType]
 public class FundDirectoryTools
@@ -37,7 +36,7 @@ public class FundDirectoryTools
 
     [McpServerTool(Name = "SearchFunds", Title = "Search Funds and ETFs", ReadOnly = true)]
     [Description(
-        "Search the tracked SEC Form NPORT-P fund directory by fund name, ticker, or registrant. Search first requires every punctuation-independent query word anywhere across those fields, then broadens to any word only when no strict row matches. Verified share-class aliases such as VOO and VFIAX resolve to their SEC fund series even when N-PORT carries no class ticker. Returns profile id, ticker when present, registration type, net assets, stored holding count, the fund's full reported holding count when available, and latest report date, largest funds first. For multi-series trusts the stored count includes only positions whose CUSIPs match tracked stocks. Form NPORT-P covers registered management investment companies and ETFs organized as unit investment trusts; money market funds and small business investment companies do not file it. Fixed-income-only series can be absent because trust reports enter this tracked directory after a tracked-stock match."
+        "Search the tracked SEC Form NPORT-P fund directory by fund name, ticker, SEC series ID, or registrant. Returns one canonical profile per series with ticker, registration type, latest report date, assets, and reported-versus-stored holding counts. Exact stored tickers outrank verified share-class aliases. Use the profile ID with GetFundProfile. The directory covers NPORT-P filers; a miss is a dataset-coverage result, not proof that a fund does not exist."
     )]
     public Task<string> SearchFunds(
         [Description(
@@ -99,7 +98,7 @@ public class FundDirectoryTools
         ReadOnly = true
     )]
     [Description(
-        "Get a registered fund's profile and largest stored holdings from its most recent SEC Form NPORT-P report. Accepts a profile id, stored series ticker, SEC series id, or verified share-class alias from SearchFunds. Returns the fund's registrant and series, reporting period, net and total assets, full reported holding count when available, stored holding count, then its largest stored holdings — issuer name, CUSIP, position size, U.S.-dollar value, share of net assets and asset category. Prefer this after SearchFunds; GetFundHoldings is the equivalent view, and GetFundsHoldingStock answers the inverse question. For large multi-series trusts only positions in tracked stocks are stored; the reported count and asset totals still describe the fund's full filing."
+        "Get a registered fund's profile and largest stored holdings from its latest SEC Form NPORT-P report. Accepts a profile ID, SEC series ID, stored ticker, or verified alias from SearchFunds. Returns registrant, series, assets, reported and stored holding counts, and the largest stored positions. Some multi-series trusts store only tracked-stock positions; reported counts and asset totals still describe the full filing. Use GetFundsHoldingStock for the inverse lookup."
     )]
     public Task<string> GetFundProfile(
         [Description(
@@ -134,6 +133,8 @@ public class FundDirectoryTools
                     )
                     .Include(f => f.Holdings)
                     .OrderByDescending(f => f.ReportPeriodDate)
+                    .ThenByDescending(f => f.FilingDate)
+                    .ThenByDescending(f => f.AccessionNumber)
                     .FirstOrDefaultAsync();
 
                 if (latest == null)

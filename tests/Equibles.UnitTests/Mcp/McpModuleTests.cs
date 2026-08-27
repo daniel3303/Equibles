@@ -253,7 +253,7 @@ public class McpModuleToolDiscoveryTests
         var toolNames = GetToolNamesFromAssembly(typeof(FredTools).Assembly);
 
         toolNames.Should().Contain("GetEconomicIndicator");
-        toolNames.Should().Contain("GetLatestEconomicData");
+        toolNames.Should().Contain("GetLatestEconomicIndicators");
         toolNames.Should().Contain("SearchEconomicIndicators");
     }
 
@@ -265,17 +265,17 @@ public class McpModuleToolDiscoveryTests
         var toolNames = GetToolNamesFromAssembly(typeof(InstitutionalHoldingsTools).Assembly);
 
         toolNames.Should().Contain("GetTopHolders");
-        toolNames.Should().Contain("GetOwnershipHistory");
+        toolNames.Should().Contain("GetInstitutionalOwnershipHistory");
         toolNames.Should().Contain("GetInstitutionPortfolio");
         toolNames.Should().Contain("SearchInstitutions");
-        toolNames.Should().Contain("GetTopBuyersSellers");
+        toolNames.Should().Contain("GetTopInstitutionalBuyersSellers");
         toolNames.Should().Contain("GetMarketWide13FActivity");
         toolNames.Should().Contain("GetMostHeldStocks");
         toolNames.Should().Contain("GetInstitutionSummary");
         toolNames.Should().Contain("GetInstitutionSectorAllocation");
         toolNames.Should().Contain("GetInstitutionQuarterlyActivity");
-        toolNames.Should().Contain("GetFundOverlap");
-        toolNames.Should().Contain("GetConsensusHoldings");
+        toolNames.Should().Contain("CompareInstitutionPortfolios");
+        toolNames.Should().Contain("GetInstitutionConsensusHoldings");
     }
 
     // ── InsiderTrading module specific ──────────────────────────────────
@@ -288,7 +288,7 @@ public class McpModuleToolDiscoveryTests
         toolNames.Should().Contain("GetInsiderTransactions");
         toolNames.Should().Contain("GetInsiderOwnership");
         toolNames.Should().Contain("SearchInsiders");
-        toolNames.Should().Contain("GetProposedSales");
+        toolNames.Should().Contain("GetForm144ProposedSales");
     }
 
     // ── SEC module specific ─────────────────────────────────────────────
@@ -299,15 +299,13 @@ public class McpModuleToolDiscoveryTests
         var toolNames = GetToolNamesFromAssembly(typeof(RagSearchTools).Assembly);
 
         toolNames.Should().Contain("SearchDocuments");
-        toolNames.Should().Contain("SearchCompanyDocuments");
         toolNames.Should().Contain("SearchDocument");
         toolNames.Should().Contain("ListCompanyDocuments");
-        toolNames.Should().Contain("SearchDocumentKeyword");
         toolNames.Should().Contain("ReadDocumentLines");
         toolNames.Should().Contain("GetFailsToDeliver");
-        toolNames.Should().Contain("GetExemptOfferings");
-        toolNames.Should().Contain("GetFundOperations");
-        toolNames.Should().Contain("GetFundHoldings");
+        toolNames.Should().Contain("GetFormDOfferings");
+        toolNames.Should().Contain("GetFundNcenReports");
+        toolNames.Should().Contain("GetFundProfile");
         toolNames.Should().Contain("SearchInvestmentAdvisers");
         toolNames.Should().Contain("GetInvestmentAdviser");
     }
@@ -361,7 +359,7 @@ public class McpModuleToolDiscoveryTests
                 {
                     "GetEconomicCalendar",
                     "GetEconomicIndicator",
-                    "GetLatestEconomicData",
+                    "GetLatestEconomicIndicators",
                     "SearchEconomicIndicators",
                 }
             },
@@ -370,18 +368,18 @@ public class McpModuleToolDiscoveryTests
                 new[]
                 {
                     "GetTopHolders",
-                    "GetOwnershipHistory",
+                    "GetInstitutionalOwnershipHistory",
                     "GetInstitutionPortfolio",
                     "SearchInstitutions",
-                    "GetTopBuyersSellers",
+                    "GetTopInstitutionalBuyersSellers",
                     "GetMarketWide13FActivity",
                     "GetMostHeldStocks",
                     "GetInstitutionSummary",
                     "GetInstitutionSectorAllocation",
                     "GetInstitutionQuarterlyActivity",
-                    "GetFundOverlap",
-                    "GetConsensusHoldings",
-                    "GetFundCloneBacktest",
+                    "CompareInstitutionPortfolios",
+                    "GetInstitutionConsensusHoldings",
+                    "GetInstitutionCloneBacktest",
                 }
             },
             {
@@ -391,7 +389,7 @@ public class McpModuleToolDiscoveryTests
                     "GetInsiderTransactions",
                     "GetInsiderOwnership",
                     "SearchInsiders",
-                    "GetProposedSales",
+                    "GetForm144ProposedSales",
                 }
             },
             {
@@ -399,18 +397,15 @@ public class McpModuleToolDiscoveryTests
                 new[]
                 {
                     "SearchDocuments",
-                    "SearchCompanyDocuments",
                     "SearchDocument",
                     "ListCompanyDocuments",
-                    "SearchDocumentKeyword",
                     "ReadDocumentLines",
                     "GetFailsToDeliver",
-                    "GetExemptOfferings",
-                    "GetFundOperations",
-                    "GetFundHoldings",
+                    "GetFormDOfferings",
+                    "GetFundNcenReports",
+                    "GetFundProfile",
                     "GetFundsHoldingStock",
                     "SearchFunds",
-                    "GetFundProfile",
                     "SearchInvestmentAdvisers",
                     "GetInvestmentAdviser",
                 }
@@ -418,9 +413,9 @@ public class McpModuleToolDiscoveryTests
             { typeof(CboeTools), new[] { "GetPutCallRatios", "GetVixHistory" } },
             {
                 typeof(CftcTools),
-                new[] { "GetCftcPositioning", "GetLatestCftcData", "SearchCftcMarkets" }
+                new[] { "GetCftcPositioning", "GetLatestCftcPositioning", "SearchCftcMarkets" }
             },
-            { typeof(FdaCatalystTools), new[] { "GetFdaCatalysts" } },
+            { typeof(FdaCatalystTools), new[] { "GetFdaAdvisoryCommitteeMeetings" } },
             {
                 typeof(CongressTools),
                 new[]
@@ -452,7 +447,7 @@ public class McpModuleToolDiscoveryTests
                 new[]
                 {
                     "GetStockPrices",
-                    "GetLatestPrices",
+                    "GetLatestClosingPrices",
                     "GetStochasticOscillator",
                     "GetAverageTrueRange",
                     "GetOnBalanceVolume",

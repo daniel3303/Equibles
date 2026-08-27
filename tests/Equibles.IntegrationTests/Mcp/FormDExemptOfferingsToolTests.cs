@@ -46,25 +46,25 @@ public class FormDExemptOfferingsToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetExemptOfferings_StockNotFound_ReturnsNotFoundMessage()
+    public async Task GetFormDOfferings_StockNotFound_ReturnsNotFoundMessage()
     {
-        var result = await _tools.GetExemptOfferings("ZZZZ");
+        var result = await _tools.GetFormDOfferings("ZZZZ");
 
         result.Should().Contain("ZZZZ");
     }
 
     [Fact]
-    public async Task GetExemptOfferings_NoFilings_ReturnsEmptyMessage()
+    public async Task GetFormDOfferings_NoFilings_ReturnsEmptyMessage()
     {
         SeedStock();
 
-        var result = await _tools.GetExemptOfferings("AAPL");
+        var result = await _tools.GetFormDOfferings("AAPL");
 
         result.Should().Contain("No Form D exempt offerings found for AAPL.");
     }
 
     [Fact]
-    public async Task GetExemptOfferings_WithFilings_RendersTableNewestFirst()
+    public async Task GetFormDOfferings_WithFilings_RendersTableNewestFirst()
     {
         var stock = SeedStock();
         _dbContext
@@ -75,7 +75,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
             .Add(MakeFiling(stock.Id, "newer", new DateOnly(2025, 5, 27), offeringAmount: 5000000));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetExemptOfferings("AAPL");
+        var result = await _tools.GetFormDOfferings("AAPL");
 
         result.Should().Contain("Apple Inc.");
         result.Should().Contain("5,000,000"); // invariant-culture grouping
@@ -87,7 +87,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetExemptOfferings_IndefiniteAmount_RendersIndefinite()
+    public async Task GetFormDOfferings_IndefiniteAmount_RendersIndefinite()
     {
         var stock = SeedStock();
         _dbContext
@@ -95,13 +95,13 @@ public class FormDExemptOfferingsToolTests : IDisposable
             .Add(MakeFiling(stock.Id, "acc", new DateOnly(2025, 2, 28), indefinite: true));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetExemptOfferings("AAPL");
+        var result = await _tools.GetFormDOfferings("AAPL");
 
         result.Should().Contain("Indefinite");
     }
 
     [Fact]
-    public async Task GetExemptOfferings_RespectsMaxResults()
+    public async Task GetFormDOfferings_RespectsMaxResults()
     {
         var stock = SeedStock();
         for (var i = 0; i < 5; i++)
@@ -112,14 +112,14 @@ public class FormDExemptOfferingsToolTests : IDisposable
         }
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetExemptOfferings("AAPL", maxResults: 2);
+        var result = await _tools.GetFormDOfferings("AAPL", maxResults: 2);
 
         result.Should().Contain("showing 2 most recent notices");
         result.Should().Contain("Showing first 2 of 5 results");
     }
 
     [Fact]
-    public async Task GetExemptOfferings_RendersOfferingIdentityColumns()
+    public async Task GetFormDOfferings_RendersOfferingIdentityColumns()
     {
         var stock = SeedStock();
         var filing = MakeFiling(stock.Id, "0001213900-25-000001", new DateOnly(2025, 3, 1));
@@ -128,7 +128,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
         _dbContext.Set<FormDFiling>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetExemptOfferings("AAPL");
+        var result = await _tools.GetFormDOfferings("AAPL");
 
         // The chain anchor (first-sale date), the remaining amount, and the accession number
         // are what lets a consumer group D/A restatements of the same offering.
@@ -138,7 +138,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetExemptOfferings_WithAmendment_AppendsChainGroupingNote()
+    public async Task GetFormDOfferings_WithAmendment_AppendsChainGroupingNote()
     {
         var stock = SeedStock();
         var amendment = MakeFiling(stock.Id, "acc-a", new DateOnly(2025, 3, 1));
@@ -146,26 +146,26 @@ public class FormDExemptOfferingsToolTests : IDisposable
         _dbContext.Set<FormDFiling>().Add(amendment);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetExemptOfferings("AAPL");
+        var result = await _tools.GetFormDOfferings("AAPL");
 
         result.Should().Contain("restate a prior notice");
         result.Should().Contain("do not sum Sold across a chain");
     }
 
     [Fact]
-    public async Task GetExemptOfferings_WithoutAmendments_OmitsChainGroupingNote()
+    public async Task GetFormDOfferings_WithoutAmendments_OmitsChainGroupingNote()
     {
         var stock = SeedStock();
         _dbContext.Set<FormDFiling>().Add(MakeFiling(stock.Id, "acc", new DateOnly(2025, 3, 1)));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetExemptOfferings("AAPL");
+        var result = await _tools.GetFormDOfferings("AAPL");
 
         result.Should().NotContain("restate a prior notice");
     }
 
     [Fact]
-    public async Task GetExemptOfferings_DateRange_FiltersByFilingDate()
+    public async Task GetFormDOfferings_DateRange_FiltersByFilingDate()
     {
         var stock = SeedStock();
         _dbContext
@@ -176,7 +176,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
             .Add(MakeFiling(stock.Id, "late", new DateOnly(2025, 6, 10), offeringAmount: 250_000));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetExemptOfferings(
+        var result = await _tools.GetFormDOfferings(
             "AAPL",
             fromDate: "2025-03-01",
             toDate: "2025-12-31"
@@ -187,11 +187,11 @@ public class FormDExemptOfferingsToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetExemptOfferings_MalformedDate_ReturnsAcceptedFormatError()
+    public async Task GetFormDOfferings_MalformedDate_ReturnsAcceptedFormatError()
     {
         SeedStock();
 
-        var result = await _tools.GetExemptOfferings("AAPL", fromDate: "01/13/2025");
+        var result = await _tools.GetFormDOfferings("AAPL", fromDate: "01/13/2025");
 
         result.Should().Contain("Unknown fromDate '01/13/2025'");
         result.Should().Contain("yyyy-MM-dd");

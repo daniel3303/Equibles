@@ -8,9 +8,8 @@ namespace Equibles.UnitTests.Sec;
 public class RagSearchToolsParseDocumentTypeContractTests
 {
     // RagSearchTools.DocumentTypeDescription is the [Description] attribute the
-    // MCP framework hands to the LLM as the contract for the `documentType`
-    // argument on SearchDocuments / SearchCompanyDocuments / SearchDocument /
-    // ListCompanyDocuments. Every value quoted in that string must round-trip
+    // MCP framework hands to the LLM as the contract for document-type filters
+    // on the SEC search entry points. Every value quoted in that string must round-trip
     // through ParseDocumentType to a non-null DocumentType — otherwise the LLM
     // follows the documented contract and the server silently drops the filter
     // (null parsedType = no document-type filter), returning results from every

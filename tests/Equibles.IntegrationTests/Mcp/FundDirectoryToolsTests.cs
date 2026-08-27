@@ -170,6 +170,24 @@ public class FundDirectoryToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task GetFundProfile_SamePeriodAmendment_UsesNewestFilingDeterministically()
+    {
+        var series = SeedSeries("ACME FUND", "S000001");
+        var original = MakeFiling(series, "acc-1", new DateOnly(2026, 5, 15));
+        original.Holdings.Add(MakeHolding("ORIGINAL CO", 1_000m));
+        var amendment = MakeFiling(series, "acc-2", new DateOnly(2026, 5, 20));
+        amendment.IsAmendment = true;
+        amendment.Holdings.Add(MakeHolding("AMENDED CO", 2_000m));
+        _dbContext.AddRange(original, amendment);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundProfile(series.Slug);
+
+        result.Should().Contain("AMENDED CO");
+        result.Should().NotContain("ORIGINAL CO");
+    }
+
+    [Fact]
     public async Task GetFundProfile_NoStoredReport_StatesDatasetCoverageBoundary()
     {
         var series = SeedSeries("ACME FUND", "S000001");

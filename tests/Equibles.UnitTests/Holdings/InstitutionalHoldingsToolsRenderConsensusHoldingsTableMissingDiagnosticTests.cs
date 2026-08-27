@@ -13,10 +13,10 @@ public class InstitutionalHoldingsToolsRenderConsensusHoldingsTableMissingDiagno
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-    // RenderConsensusHoldingsTable renders the GetConsensusHoldings output for
+    // RenderConsensusHoldingsTable renders the GetInstitutionConsensusHoldings output for
     // the LLM consumer. When the caller supplies institution names that don't
     // resolve to a holder (missing is non-empty), they must be surfaced even
-    // when the minFunds threshold filters out every consensus row — otherwise
+    // when the minInstitutions threshold filters out every consensus row — otherwise
     // the operator can't tell whether the empty result is due to the threshold
     // or to a typo in their fund list. A refactor that placed the missing-line
     // render inside the `rowsWithConsensus.Count > 0` branch (i.e. after the
@@ -39,6 +39,6 @@ public class InstitutionalHoldingsToolsRenderConsensusHoldingsTableMissingDiagno
             );
 
         rendered.Should().Contain("FAKE FUND, ANOTHER FAKE");
-        rendered.Should().Contain("_No stocks meet the minFunds threshold._");
+        rendered.Should().Contain("_No stocks meet the minInstitutions threshold._");
     }
 }

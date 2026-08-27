@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection;
 using Equibles.Cboe.Mcp.Tools;
 using Equibles.Cftc.Mcp.Tools;
@@ -91,6 +92,100 @@ public class McpToolAnnotationsTests
     }
 
     [Fact]
+    public void ToolDescriptions_StayFocusedForModelSelection()
+    {
+        var invalid = EnumerateTools()
+            .Select(t => new
+            {
+                Name = t.Attribute.Name ?? t.Method.Name,
+                Description = t.Method.GetCustomAttribute<DescriptionAttribute>()?.Description,
+            })
+            .Where(t => string.IsNullOrWhiteSpace(t.Description) || t.Description.Length > 1000)
+            .Select(t => $"{t.Name}: {t.Description?.Length ?? 0} characters")
+            .ToList();
+
+        invalid.Should().BeEmpty("tool descriptions should be concise enough for reliable selection");
+    }
+
+    [Fact]
+    public void ToolParameterDescriptions_StayFocusedForInvocation()
+    {
+        var invalid = EnumerateTools()
+            .SelectMany(t => t.Method.GetParameters()
+                .Where(parameter => parameter.ParameterType != typeof(CancellationToken))
+                .Select(parameter => new
+                {
+                    Tool = t.Attribute.Name ?? t.Method.Name,
+                    Parameter = parameter.Name,
+                    Description = parameter.GetCustomAttribute<DescriptionAttribute>()?.Description,
+                }))
+            .Where(item => string.IsNullOrWhiteSpace(item.Description) || item.Description.Length > 500)
+            .Select(item => $"{item.Tool}.{item.Parameter}: {item.Description?.Length ?? 0} characters")
+            .ToList();
+
+        invalid.Should().BeEmpty("every model-facing parameter needs concise invocation guidance");
+    }
+
+    [Fact]
+    public void ConsolidatedAndRenamedTools_ExposeOnlyTheCanonicalNames()
+    {
+        var names = EnumerateTools()
+            .Select(t => t.Attribute.Name ?? t.Method.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        var retired = new[]
+        {
+            "GetFundHoldings",
+            "SearchCompanyDocuments",
+            "SearchDocumentKeyword",
+            "GetLatestPrices",
+            "GetFdaCatalysts",
+            "GetLatestCftcData",
+            "GetLatestEconomicData",
+            "GetProposedSales",
+            "GetExemptOfferings",
+            "GetFundOperations",
+            "GetFundOverlap",
+            "GetFundCloneBacktest",
+            "GetConsensusHoldings",
+            "GetOwnershipHistory",
+            "GetTopBuyersSellers",
+        };
+
+        names.Should().NotContain(retired);
+        names.Should().Contain(
+            [
+                "GetFundProfile",
+                "SearchDocuments",
+                "SearchDocument",
+                "GetLatestClosingPrices",
+                "GetFdaAdvisoryCommitteeMeetings",
+                "GetLatestCftcPositioning",
+                "GetLatestEconomicIndicators",
+                "GetForm144ProposedSales",
+                "GetFormDOfferings",
+                "GetFundNcenReports",
+                "CompareInstitutionPortfolios",
+                "GetInstitutionCloneBacktest",
+                "GetInstitutionConsensusHoldings",
+                "GetInstitutionalOwnershipHistory",
+                "GetTopInstitutionalBuyersSellers",
+            ]
+        );
+    }
+
+    [Fact]
+    public void MultiValueToolArguments_UseJsonArrays()
+    {
+        ParameterType("GetLatestClosingPrices", "tickers").Should().Be(typeof(string[]));
+        ParameterType("CompareFinancialFact", "tickers").Should().Be(typeof(string[]));
+        ParameterType("SearchDocuments", "documentTypes").Should().Be(typeof(string[]));
+        ParameterType("SearchDocuments", "excludeTickers").Should().Be(typeof(string[]));
+        ParameterType("GetInstitutionConsensusHoldings", "institutionNames")
+            .Should()
+            .Be(typeof(string[]));
+    }
+
+    [Fact]
     public void EnumerateTools_FindsTheWholeToolSurface()
     {
         // Guards the reflection itself: if a marker type is dropped or an assembly stops
@@ -115,4 +210,11 @@ public class McpToolAnnotationsTests
             .Select(t => (t.Attribute!, t.Method))
             .ToList();
     }
+
+    private static Type ParameterType(string toolName, string parameterName) =>
+        EnumerateTools()
+            .Single(t => (t.Attribute.Name ?? t.Method.Name) == toolName)
+            .Method.GetParameters()
+            .Single(parameter => parameter.Name == parameterName)
+            .ParameterType;
 }

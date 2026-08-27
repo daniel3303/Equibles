@@ -8,24 +8,24 @@ using Xunit;
 namespace Equibles.FunctionalTests.Tests;
 
 /// <summary>
-/// Adversarial end-to-end test for the GetFundOperations MCP tool's <c>maxResults</c> parameter.
-/// Once the ticker resolves, GetFundOperations feeds the raw client value straight into EF Core's
+/// Adversarial end-to-end test for the GetFundNcenReports MCP tool's <c>maxResults</c> parameter.
+/// Once the ticker resolves, GetFundNcenReports feeds the raw client value straight into EF Core's
 /// <c>.Take(maxResults)</c> with no clamping, so a negative cap becomes a negative SQL <c>LIMIT</c>
 /// that PostgreSQL rejects; the exception is swallowed and the caller gets the generic
 /// internal-failure sentinel. The parameter contract ("Maximum number of annual reports to return")
 /// makes a negative value nonsensical input that must degrade gracefully — never surface as the
 /// tool's internal error. Same defect class as GH-2931 (GetStockPrices) and GH-2980
-/// (GetProposedSales), sibling MCP tools with the identical unclamped <c>.Take(maxResults)</c>.
+/// (GetForm144ProposedSales), sibling MCP tools with the identical unclamped <c>.Take(maxResults)</c>.
 /// </summary>
 [Trait("Category", "Functional")]
-public class GetFundOperationsNegativeMaxResultsTests
+public class GetFundNcenReportsNegativeMaxResultsTests
     : IClassFixture<McpServerAppFixture>,
         IAsyncLifetime
 {
     private readonly McpServerAppFixture _fixture;
     private McpClient _client;
 
-    public GetFundOperationsNegativeMaxResultsTests(McpServerAppFixture fixture)
+    public GetFundNcenReportsNegativeMaxResultsTests(McpServerAppFixture fixture)
     {
         _fixture = fixture;
     }
@@ -51,7 +51,7 @@ public class GetFundOperationsNegativeMaxResultsTests
     }
 
     [Fact]
-    public async Task GetFundOperations_NegativeMaxResults_DoesNotSurfaceInternalError()
+    public async Task GetFundNcenReports_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
@@ -68,7 +68,7 @@ public class GetFundOperationsNegativeMaxResultsTests
         });
 
         var tools = await _client.ListToolsAsync();
-        var tool = tools.First(t => t.Name == "GetFundOperations");
+        var tool = tools.First(t => t.Name == "GetFundNcenReports");
 
         // A negative report cap is invalid input for a "maximum number of annual reports" parameter;
         // the tool must degrade gracefully rather than let the value reach the database as a

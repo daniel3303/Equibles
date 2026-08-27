@@ -304,12 +304,12 @@ public class FredToolsTests : ParadeDbMcpTestBase
         jun.Should().BeLessThan(sep);
     }
 
-    // ── GetLatestEconomicData ──────────────────────────────────────────
+    // ── GetLatestEconomicIndicators ──────────────────────────────────────────
 
     [Fact]
-    public async Task GetLatestEconomicData_AllCategories_ReturnsAllSeries()
+    public async Task GetLatestEconomicIndicators_AllCategories_ReturnsAllSeries()
     {
-        var result = await Sut().GetLatestEconomicData();
+        var result = await Sut().GetLatestEconomicIndicators();
 
         result.Should().Contain("Latest Economic Indicators");
         result.Should().Contain("FEDFUNDS");
@@ -321,9 +321,9 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestEconomicData_SpecificCategoryFilter_ReturnsOnlyMatchingCategory()
+    public async Task GetLatestEconomicIndicators_SpecificCategoryFilter_ReturnsOnlyMatchingCategory()
     {
-        var result = await Sut().GetLatestEconomicData("InterestRates");
+        var result = await Sut().GetLatestEconomicIndicators("InterestRates");
 
         result.Should().Contain("FEDFUNDS");
         result.Should().Contain("Federal Funds Effective Rate");
@@ -332,16 +332,16 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestEconomicData_CaseInsensitiveCategoryFilter()
+    public async Task GetLatestEconomicIndicators_CaseInsensitiveCategoryFilter()
     {
-        var result = await Sut().GetLatestEconomicData("interestrates");
+        var result = await Sut().GetLatestEconomicIndicators("interestrates");
 
         result.Should().Contain("FEDFUNDS");
         result.Should().NotContain("CPIAUCSL");
     }
 
     [Fact]
-    public async Task GetLatestEconomicData_EmptyDatabase_ReturnsNoSeriesMessage()
+    public async Task GetLatestEconomicIndicators_EmptyDatabase_ReturnsNoSeriesMessage()
     {
         // Wipe the seeded data from THIS test's instance — Respawn runs before each test, but
         // InitializeAsync re-seeds. To test the empty path we delete in-place.
@@ -349,15 +349,15 @@ public class FredToolsTests : ParadeDbMcpTestBase
         DbContext.Set<FredSeries>().RemoveRange(DbContext.Set<FredSeries>().ToList());
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestEconomicData();
+        var result = await Sut().GetLatestEconomicIndicators();
 
         result.Should().Contain("No economic indicator series found");
     }
 
     [Fact]
-    public async Task GetLatestEconomicData_ShowsLatestObservationValues()
+    public async Task GetLatestEconomicIndicators_ShowsLatestObservationValues()
     {
-        var result = await Sut().GetLatestEconomicData();
+        var result = await Sut().GetLatestEconomicIndicators();
 
         result.Should().Contain("2025-09-01");
         result.Should().Contain("4");
@@ -370,10 +370,10 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestEconomicData_InvalidCategory_ReturnsExplicitErrorNotEverything()
+    public async Task GetLatestEconomicIndicators_InvalidCategory_ReturnsExplicitErrorNotEverything()
     {
         // A failed filter must surface, not silently return the unfiltered snapshot.
-        var result = await Sut().GetLatestEconomicData("InvalidCategory");
+        var result = await Sut().GetLatestEconomicIndicators("InvalidCategory");
 
         result.Should().Contain("Unknown category 'InvalidCategory'");
         result.Should().Contain("InterestRates");
@@ -382,19 +382,19 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestEconomicData_NumericCategory_IsRejectedNotParsedByOrdinal()
+    public async Task GetLatestEconomicIndicators_NumericCategory_IsRejectedNotParsedByOrdinal()
     {
         // Enum.TryParse would accept "5" as an ordinal; the tool must reject it.
-        var result = await Sut().GetLatestEconomicData("5");
+        var result = await Sut().GetLatestEconomicIndicators("5");
 
         result.Should().Contain("Unknown category '5'");
         result.Should().NotContain("FEDFUNDS");
     }
 
     [Fact]
-    public async Task GetLatestEconomicData_RendersMarkdownTableHeaders()
+    public async Task GetLatestEconomicIndicators_RendersMarkdownTableHeaders()
     {
-        var result = await Sut().GetLatestEconomicData();
+        var result = await Sut().GetLatestEconomicIndicators();
 
         result
             .Should()
@@ -405,9 +405,9 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestEconomicData_ShowsPreviousValueAndChange()
+    public async Task GetLatestEconomicIndicators_ShowsPreviousValueAndChange()
     {
-        var result = await Sut().GetLatestEconomicData();
+        var result = await Sut().GetLatestEconomicIndicators();
 
         // FEDFUNDS: latest 4.00 (2025-09-01), previous 4.25 (2025-06-01) → -0.25.
         result.Should().Contain("-0.25");
@@ -417,9 +417,9 @@ public class FredToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestEconomicData_GroupsByCategory()
+    public async Task GetLatestEconomicIndicators_GroupsByCategory()
     {
-        var result = await Sut().GetLatestEconomicData();
+        var result = await Sut().GetLatestEconomicIndicators();
 
         result.Should().Contain($"**{FredSeriesCategory.InterestRates}**");
         result.Should().Contain($"**{FredSeriesCategory.Inflation}**");

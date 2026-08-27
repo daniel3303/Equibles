@@ -7,7 +7,7 @@ using Equibles.Sec.Repositories;
 
 namespace Equibles.Sec.Mcp.Tools;
 
-// The exact-match scan shared by SearchDocumentKeyword and SearchDocument's searchMode="exact":
+// The exact-match scan used by SearchDocument's searchMode="exact" and its test seam:
 // loads the document text, matches the keyword as a typography-folded case-insensitive substring
 // per line, and renders each match with one line of context, grep-style. One implementation so the
 // two tools can never drift on folding, counting, or rendering.

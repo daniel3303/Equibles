@@ -20,8 +20,6 @@ public class DocumentTextTools
     private readonly IDocumentExcerptLinkBuilder _excerptLinkBuilder;
     private readonly McpToolRunner _runner;
 
-    // The excerpt link builder is optional by design — no framework registration exists,
-    // and the container falls back to null on deployments without a public viewer.
     public DocumentTextTools(
         DocumentRepository documentRepository,
         ErrorManager errorManager,
@@ -36,22 +34,14 @@ public class DocumentTextTools
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
-    [McpServerTool(
-        Name = "SearchDocumentKeyword",
-        Title = "Keyword Search Within a Filing",
-        ReadOnly = true
-    )]
-    [Description(
-        "Perform a case-insensitive keyword search within a specific SEC filing or earnings call transcript by document ID. Returns matching lines with surrounding context and line numbers, making it ideal for finding exact terms, figures, or phrases that semantic search might miss. Typographic punctuation is folded before matching, so a plain-ASCII keyword (e.g. \"world's\") matches the smart punctuation stored in filings. The header reports the total number of matching lines even when only the first ones are shown. Use this after ListCompanyDocuments to locate precise occurrences of a keyword (e.g., a revenue figure, risk factor term, or executive name) within a known document. Complements semantic search tools by providing exact text matches rather than meaning-based results. Use ReadDocumentLines to read broader sections around matches."
-    )]
+    // Kept as a non-tool seam for exact-search tests and callers migrating to
+    // SearchDocument(searchMode: "exact").
     public Task<string> SearchDocumentKeyword(
-        [Description("Document ID obtained from ListCompanyDocuments")] Guid documentId,
-        [Description("Keyword or phrase to search for (case-insensitive)")] string keyword,
-        [Description("Maximum number of matching lines to return (default: 20, max: 500)")]
-            int maxResults = 20
-    )
-    {
-        return _runner.Execute(
+        Guid documentId,
+        string keyword,
+        int maxResults = 20
+    ) =>
+        _runner.Execute(
             () =>
                 DocumentKeywordScan.Run(
                     _documentRepository,
@@ -61,11 +51,10 @@ public class DocumentTextTools
                     maxResults,
                     _excerptLinkBuilder
                 ),
-            "SearchDocumentKeyword",
-            $"documentId: {documentId}, keyword: {keyword}",
+            "SearchDocument",
+            $"documentId: {documentId}, query: {keyword}, searchMode: exact",
             "An error occurred while searching the document. Please try again."
         );
-    }
 
     // Ceiling on the number of lines a single call returns: prod documents reach 500k+
     // lines, and an uncapped range request would return megabytes in one MCP response,
@@ -75,7 +64,7 @@ public class DocumentTextTools
 
     [McpServerTool(Name = "ReadDocumentLines", Title = "Read Filing Lines", ReadOnly = true)]
     [Description(
-        "Read a specific range of lines from an SEC filing or earnings call transcript by document ID. Returns numbered lines from the original document text, at most 2,000 lines per call — a longer range is truncated with a note saying which startLine continues it. Use this to read sections of a filing that were identified by SearchDocumentKeyword (by line number) or by semantic search tools (by approximate line number shown in excerpts). Ideal for reading full tables, paragraphs, or sections that may have been truncated in search results. The document ID and line range must be known beforehand — use ListCompanyDocuments to find documents and SearchDocumentKeyword or semantic search to identify relevant line numbers."
+        "Read numbered lines from one SEC filing or earnings-call transcript. Use line numbers returned by SearchDocument or request a known range. Returns at most 2,000 lines and identifies the next startLine when truncated."
     )]
     public Task<string> ReadDocumentLines(
         [Description("Document ID obtained from ListCompanyDocuments")] Guid documentId,

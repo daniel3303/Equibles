@@ -15,7 +15,7 @@ Name a company and ask about its private fundraising:
 - "Show me Stripe's recent private placements."
 - "How much has this company raised privately, and from how many investors?"
 
-The assistant picks the `GetExemptOfferings` tool and returns the company's recent Form D notices.
+The assistant picks the `GetFormDOfferings` tool and returns the company's recent Form D notices.
 
 ## What you should see
 

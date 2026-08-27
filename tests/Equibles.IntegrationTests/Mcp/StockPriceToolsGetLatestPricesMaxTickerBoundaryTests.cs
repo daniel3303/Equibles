@@ -7,7 +7,7 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
-/// Contract: GetLatestPrices accepts up to 25 tickers per request ("Maximum 25
+/// Contract: GetLatestClosingPrices accepts up to 25 tickers per request ("Maximum 25
 /// tickers per request"). The over-limit case (26 → reject) is pinned; this pins
 /// the lower edge of the same boundary — exactly 25 tickers must be ACCEPTED and
 /// rendered, not rejected. Guards the off-by-one risk (`> 25` silently becoming
@@ -15,7 +15,7 @@ namespace Equibles.IntegrationTests.Mcp;
 /// documented cap before reading the body.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class StockPriceToolsGetLatestPricesMaxTickerBoundaryTests : ParadeDbMcpTestBase
+public class StockPriceToolsGetLatestClosingPricesMaxTickerBoundaryTests : ParadeDbMcpTestBase
 {
     private StockPriceTools Sut() =>
         new(
@@ -26,18 +26,18 @@ public class StockPriceToolsGetLatestPricesMaxTickerBoundaryTests : ParadeDbMcpT
             NullLogger<StockPriceTools>()
         );
 
-    public StockPriceToolsGetLatestPricesMaxTickerBoundaryTests(ParadeDbFixture fixture)
+    public StockPriceToolsGetLatestClosingPricesMaxTickerBoundaryTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     [Fact]
-    public async Task GetLatestPrices_ExactlyMaxTickers_IsAcceptedNotRejected()
+    public async Task GetLatestClosingPrices_ExactlyMaxTickers_IsAcceptedNotRejected()
     {
         // 25 distinct tickers is the documented maximum, so it must pass the cap and
         // render the table (unseeded tickers produce "Not found" rows), never the
         // over-limit message reserved for 26+.
         var tickers = string.Join(",", Enumerable.Range(1, 25).Select(i => $"T{i:D3}"));
 
-        var result = await Sut().GetLatestPrices(tickers);
+        var result = await Sut().GetLatestClosingPrices(tickers);
 
         result.Should().NotContain("Maximum 25 tickers per request");
         result

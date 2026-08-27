@@ -241,10 +241,10 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("25.00%");
     }
 
-    // ── GetOwnershipHistory ─────────────────────────────────────────────
+    // ── GetInstitutionalOwnershipHistory ─────────────────────────────────────────────
 
     [Fact]
-    public async Task GetOwnershipHistory_StockWithMultipleReportDates_ReturnsChronologicalTable()
+    public async Task GetInstitutionalOwnershipHistory_StockWithMultipleReportDates_ReturnsChronologicalTable()
     {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder = CreateHolder();
@@ -279,7 +279,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetOwnershipHistory("AAPL");
+        var result = await Sut().GetInstitutionalOwnershipHistory("AAPL");
 
         result.Should().Contain("Institutional ownership history for Apple Inc (AAPL)");
         result.Should().Contain("2024-03-31");
@@ -288,26 +288,26 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_StockNotFound_ReturnsNotFoundMessage()
+    public async Task GetInstitutionalOwnershipHistory_StockNotFound_ReturnsNotFoundMessage()
     {
-        var result = await Sut().GetOwnershipHistory("ZZZZ");
+        var result = await Sut().GetInstitutionalOwnershipHistory("ZZZZ");
 
         result.Should().Be("Stock 'ZZZZ' not found.");
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_StockFoundNoHistory_ReturnsNoDataMessage()
+    public async Task GetInstitutionalOwnershipHistory_StockFoundNoHistory_ReturnsNoDataMessage()
     {
         DbContext.Set<CommonStock>().Add(CreateStock("AAPL", "Apple Inc"));
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetOwnershipHistory("AAPL");
+        var result = await Sut().GetInstitutionalOwnershipHistory("AAPL");
 
         result.Should().Contain("No institutional holdings history available for AAPL");
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_ShowsChangePercentageBetweenPeriods()
+    public async Task GetInstitutionalOwnershipHistory_ShowsChangePercentageBetweenPeriods()
     {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder = CreateHolder();
@@ -323,7 +323,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetOwnershipHistory("AAPL");
+        var result = await Sut().GetInstitutionalOwnershipHistory("AAPL");
 
         // First period has em-dash (no previous), second has +20.0%
         result.Should().Contain("—");
@@ -331,7 +331,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_MaxPeriodsLimitsOutput()
+    public async Task GetInstitutionalOwnershipHistory_MaxPeriodsLimitsOutput()
     {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder = CreateHolder();
@@ -349,7 +349,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
         DbContext.Set<InstitutionalHolding>().AddRange(holdings);
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetOwnershipHistory("AAPL", maxPeriods: 3);
+        var result = await Sut().GetInstitutionalOwnershipHistory("AAPL", maxPeriods: 3);
 
         result.Should().Contain(dates[4].ToString("yyyy-MM-dd"));
         result.Should().Contain(dates[3].ToString("yyyy-MM-dd"));
@@ -358,7 +358,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_MultipleHoldersPerPeriod_AggregatesCorrectly()
+    public async Task GetInstitutionalOwnershipHistory_MultipleHoldersPerPeriod_AggregatesCorrectly()
     {
         var stock = CreateStock("AAPL", "Apple Inc");
         var holder1 = CreateHolder("0001", "Fund A");
@@ -376,14 +376,14 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetOwnershipHistory("AAPL");
+        var result = await Sut().GetInstitutionalOwnershipHistory("AAPL");
 
         result.Should().Contain("15,000");
         result.Should().Contain("1.5");
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_UsesSnapshotAndRestatesEachExactListing()
+    public async Task GetInstitutionalOwnershipHistory_UsesSnapshotAndRestatesEachExactListing()
     {
         var stock = CreateStock("GOOGL", "Alphabet Inc");
         var holder = CreateHolder("0000000021", "Raw Holder");
@@ -435,7 +435,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
         );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetOwnershipHistory("GOOGL");
+        var result = await Sut().GetInstitutionalOwnershipHistory("GOOGL");
 
         result.Should().Contain("| 2024-12-31 | 2 | 2,500 | 0.1 | — |");
         result.Should().NotContain("99,999");

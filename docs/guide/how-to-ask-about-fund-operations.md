@@ -15,7 +15,7 @@ Name a fund by its ticker or use an exact profile id, SEC series id, or verified
 - "What service providers does VOO use?"
 - "Show me the operational filings for the Mexico Fund (MXF)."
 
-The assistant calls the `GetFundOperations` tool with that identifier and returns up to 10 annual reports by default (ask for more or fewer), newest first.
+The assistant calls the `GetFundNcenReports` tool with that identifier and returns up to 10 annual reports by default (ask for more or fewer), newest first.
 
 ## What you should see
 

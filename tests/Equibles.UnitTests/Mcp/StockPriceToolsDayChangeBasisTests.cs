@@ -4,7 +4,7 @@ using Equibles.Yahoo.Mcp.Tools;
 
 namespace Equibles.UnitTests.Mcp;
 
-// Pins the date guard on GetLatestPrices' Change / Change % columns.
+// Pins the date guard on GetLatestClosingPrices' Change / Change % columns.
 //
 // The defect this defends against: the tool takes the two newest DailyStockPrice rows and
 // differences them. The end-of-day lane crawls the whole common-stock universe and can finish

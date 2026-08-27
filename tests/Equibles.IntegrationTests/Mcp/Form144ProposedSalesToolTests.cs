@@ -23,7 +23,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     {
         _dbContext = TestDbContextFactory.Create(
             new CommonStocksModuleConfiguration(),
-            // GetProposedSales restates the percent numerator onto today's split
+            // GetForm144ProposedSales restates the percent numerator onto today's split
             // basis, so the tool now reads StockSplit rows.
             new CorporateActionsModuleConfiguration(),
             new InsiderTradingModuleConfiguration()
@@ -61,25 +61,25 @@ public class Form144ProposedSalesToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetProposedSales_StockNotFound_ReturnsNotFoundMessage()
+    public async Task GetForm144ProposedSales_StockNotFound_ReturnsNotFoundMessage()
     {
-        var result = await _tools.GetProposedSales("ZZZZ");
+        var result = await _tools.GetForm144ProposedSales("ZZZZ");
 
         result.Should().Contain("ZZZZ");
     }
 
     [Fact]
-    public async Task GetProposedSales_NoFilings_ReturnsEmptyMessage()
+    public async Task GetForm144ProposedSales_NoFilings_ReturnsEmptyMessage()
     {
         SeedStock();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         result.Should().Contain("No Form 144 proposed sales found for AAPL.");
     }
 
     [Fact]
-    public async Task GetProposedSales_WithFilings_RendersTableNewestFirst()
+    public async Task GetForm144ProposedSales_WithFilings_RendersTableNewestFirst()
     {
         var stock = SeedStock();
         _dbContext
@@ -92,7 +92,7 @@ public class Form144ProposedSalesToolTests : IDisposable
             );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         result.Should().Contain("Apple Inc.");
         result.Should().Contain("LEVINSON ARTHUR D");
@@ -106,7 +106,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetProposedSales_TiedDates_UseAccessionBeforeTheLimit()
+    public async Task GetForm144ProposedSales_TiedDates_UseAccessionBeforeTheLimit()
     {
         var stock = SeedStock();
         var day = new DateOnly(2026, 5, 27);
@@ -120,7 +120,7 @@ public class Form144ProposedSalesToolTests : IDisposable
             );
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL", maxResults: 2);
+        var result = await _tools.GetForm144ProposedSales("AAPL", maxResults: 2);
 
         result.Should().Contain("ALPHA SELLER");
         result.Should().Contain("BRAVO SELLER");
@@ -129,7 +129,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetProposedSales_RespectsMaxResults()
+    public async Task GetForm144ProposedSales_RespectsMaxResults()
     {
         var stock = SeedStock();
         for (var i = 0; i < 5; i++)
@@ -148,14 +148,14 @@ public class Form144ProposedSalesToolTests : IDisposable
         }
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL", maxResults: 2);
+        var result = await _tools.GetForm144ProposedSales("AAPL", maxResults: 2);
 
         result.Should().Contain("Showing 2 of 5 most recent notices");
         result.Should().Contain("Showing first 2 of 5 results");
     }
 
     [Fact]
-    public async Task GetProposedSales_AllNoticesShown_OmitsTruncationNote()
+    public async Task GetForm144ProposedSales_AllNoticesShown_OmitsTruncationNote()
     {
         var stock = SeedStock();
         _dbContext
@@ -163,14 +163,14 @@ public class Form144ProposedSalesToolTests : IDisposable
             .Add(MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         result.Should().Contain("Showing 1 of 1 most recent notices");
         result.Should().NotContain("raise maxResults");
     }
 
     [Fact]
-    public async Task GetProposedSales_DateRange_FiltersByFilingDate()
+    public async Task GetForm144ProposedSales_DateRange_FiltersByFilingDate()
     {
         var stock = SeedStock();
         _dbContext
@@ -181,7 +181,7 @@ public class Form144ProposedSalesToolTests : IDisposable
             .Add(MakeFiling(stock.Id, "late", new DateOnly(2026, 6, 10), "LATE SELLER", 2000));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales(
+        var result = await _tools.GetForm144ProposedSales(
             "AAPL",
             fromDate: "2026-03-01",
             toDate: "2026-12-31"
@@ -193,18 +193,18 @@ public class Form144ProposedSalesToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetProposedSales_MalformedDate_ReturnsAcceptedFormatError()
+    public async Task GetForm144ProposedSales_MalformedDate_ReturnsAcceptedFormatError()
     {
         SeedStock();
 
-        var result = await _tools.GetProposedSales("AAPL", toDate: "June 2026");
+        var result = await _tools.GetForm144ProposedSales("AAPL", toDate: "June 2026");
 
         result.Should().Contain("Unknown toDate 'June 2026'");
         result.Should().Contain("yyyy-MM-dd");
     }
 
     [Fact]
-    public async Task GetProposedSales_RendersPercentOfIssuerSharesOutstanding()
+    public async Task GetForm144ProposedSales_RendersPercentOfIssuerSharesOutstanding()
     {
         var stock = SeedStock(sharesOutstanding: 2_000_000_000);
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1_000_000);
@@ -215,7 +215,7 @@ public class Form144ProposedSalesToolTests : IDisposable
         _dbContext.Set<Form144Filing>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         // 1,000,000 / 2,000,000,000 (the issuer record's share count) = 0.05%.
         result.Should().Contain("% Outstanding");
@@ -224,7 +224,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetProposedSales_NoIssuerShareCount_RendersDash()
+    public async Task GetForm144ProposedSales_NoIssuerShareCount_RendersDash()
     {
         // Issuer record carries no share count — serve "-" rather than trusting the
         // notice's self-reported field.
@@ -234,13 +234,13 @@ public class Form144ProposedSalesToolTests : IDisposable
         _dbContext.Set<Form144Filing>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         result.Should().Contain("| - |");
     }
 
     [Fact]
-    public async Task GetProposedSales_NoticeBeforeSplit_PercentUsesTheSplitAdjustedShareCount()
+    public async Task GetForm144ProposedSales_NoticeBeforeSplit_PercentUsesTheSplitAdjustedShareCount()
     {
         // The filed share count sits on the pre-split basis while the issuer record's
         // count is current — restate the numerator so the ratio compares like with like
@@ -262,7 +262,7 @@ public class Form144ProposedSalesToolTests : IDisposable
         _dbContext.Set<Form144Filing>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         // The Shares column stays as filed; only the percent numerator is restated.
         result.Should().Contain("| 10,000 |");
@@ -270,7 +270,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     }
 
     [Fact]
-    public async Task GetProposedSales_RemarksPreserveCompleteUnicodeText()
+    public async Task GetForm144ProposedSales_RemarksPreserveCompleteUnicodeText()
     {
         var stock = SeedStock();
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
@@ -278,13 +278,13 @@ public class Form144ProposedSalesToolTests : IDisposable
         _dbContext.Set<Form144Filing>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         result.Should().Contain(new string('a', 89) + "😀 trailing text");
     }
 
     [Fact]
-    public async Task GetProposedSales_RemarksPreserveCompleteEscapedPipeText()
+    public async Task GetForm144ProposedSales_RemarksPreserveCompleteEscapedPipeText()
     {
         var stock = SeedStock();
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
@@ -292,13 +292,13 @@ public class Form144ProposedSalesToolTests : IDisposable
         _dbContext.Set<Form144Filing>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         result.Should().Contain(new string('a', 89) + "\\|trailing text");
     }
 
     [Fact]
-    public async Task GetProposedSales_RemarksPreserveLateRule10b5OneDisclosure()
+    public async Task GetForm144ProposedSales_RemarksPreserveLateRule10b5OneDisclosure()
     {
         var stock = SeedStock();
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
@@ -307,13 +307,13 @@ public class Form144ProposedSalesToolTests : IDisposable
         _dbContext.Set<Form144Filing>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         result.Should().Contain("Sale will be made pursuant to a Rule 10b5-1 plan.");
     }
 
     [Fact]
-    public async Task GetProposedSales_RemarksBackslashBeforePipe_KeepsPipeInsideCell()
+    public async Task GetForm144ProposedSales_RemarksBackslashBeforePipe_KeepsPipeInsideCell()
     {
         var stock = SeedStock();
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
@@ -321,13 +321,13 @@ public class Form144ProposedSalesToolTests : IDisposable
         _dbContext.Set<Form144Filing>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         result.Should().Contain("Sale under plan A\\\\\\|renewed");
     }
 
     [Fact]
-    public async Task GetProposedSales_AllFiledTextCellsStayInsideTheirColumns()
+    public async Task GetForm144ProposedSales_AllFiledTextCellsStayInsideTheirColumns()
     {
         var stock = SeedStock();
         var filing = MakeFiling(
@@ -342,7 +342,7 @@ public class Form144ProposedSalesToolTests : IDisposable
         _dbContext.Set<Form144Filing>().Add(filing);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _tools.GetProposedSales("AAPL");
+        var result = await _tools.GetForm144ProposedSales("AAPL");
 
         result.Should().Contain("SELLER\\\\\\|NAME SECOND");
         result.Should().Contain("Officer\\\\\\|Director Affiliate");

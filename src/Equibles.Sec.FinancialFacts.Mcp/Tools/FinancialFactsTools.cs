@@ -251,7 +251,7 @@ public class FinancialFactsTools
             + "different calendar months — check the Period End column."
     )]
     public Task<string> CompareFinancialFact(
-        [Description("Comma-separated tickers, e.g. 'AAPL,MSFT,GOOGL' (max 25)")] string tickers,
+        [Description("Ticker symbols to compare (max 25).")] string[] tickers,
         [Description(
             "Concept alias, e.g. 'revenue', 'net-income', 'eps-diluted'. Call with an "
                 + "unknown value to list supported aliases."
@@ -361,10 +361,23 @@ public class FinancialFactsTools
                 );
             },
             "CompareFinancialFact",
-            $"tickers: {FactMarkdown.Clean(tickers)}, concept: {FactMarkdown.Clean(concept)}, "
+            $"tickers: {FactMarkdown.Clean(string.Join(",", tickers ?? []))}, concept: {FactMarkdown.Clean(concept)}, "
                 + $"year: {fiscalYear}, period: {FactMarkdown.Clean(fiscalPeriod)}"
         );
     }
+
+    public Task<string> CompareFinancialFact(
+        string tickers,
+        string concept,
+        int fiscalYear,
+        string fiscalPeriod = "FY"
+    ) =>
+        CompareFinancialFact(
+            tickers?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            concept,
+            fiscalYear,
+            fiscalPeriod
+        );
 
     private static string RenderFactHistoryTable(
         string concept,
@@ -501,12 +514,12 @@ public class FinancialFactsTools
         return stockByTicker;
     }
 
-    internal static (List<string> Tickers, string Error) ParseComparisonTickers(string tickers)
+    internal static (List<string> Tickers, string Error) ParseComparisonTickers(string[] tickers)
     {
-        if (string.IsNullOrWhiteSpace(tickers))
+        if (tickers == null || tickers.Length == 0)
             return ([], "At least one ticker is required.");
 
-        var segments = tickers.Split(',').Select(ticker => ticker.Trim()).ToList();
+        var segments = tickers.Select(ticker => ticker?.Trim()).ToList();
         if (segments.All(string.IsNullOrWhiteSpace))
             return ([], "At least one ticker is required.");
         if (segments.Count > MaxTickers)
@@ -527,6 +540,11 @@ public class FinancialFactsTools
         }
         return (requested, null);
     }
+
+    internal static (List<string> Tickers, string Error) ParseComparisonTickers(string tickers) =>
+        ParseComparisonTickers(
+            tickers?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        );
 
     private static CommonStock ResolveComparisonStock(
         IReadOnlyList<CommonStock> stocks,

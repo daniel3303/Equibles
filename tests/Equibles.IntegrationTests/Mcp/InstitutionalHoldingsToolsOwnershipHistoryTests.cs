@@ -14,7 +14,7 @@ namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
 /// Sibling to <see cref="InstitutionalHoldingsToolsSearchTests"/>. Pins
-/// <c>GetOwnershipHistory</c> — the second-most complex of the four tools.
+/// <c>GetInstitutionalOwnershipHistory</c> — the second-most complex of the four tools.
 /// The percent-change column is computed against the prior quarter's total,
 /// rendered with the production format string <c>+0.0;-0.0</c>. A regression
 /// that swapped the format to a default <c>F1</c> would lose the sign prefix
@@ -28,7 +28,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryTests : ParadeDbMcpTestBa
         : base(fixture) { }
 
     [Fact]
-    public async Task GetOwnershipHistory_QuarterOverQuarterIncrease_RendersPlusSignedPercentChange()
+    public async Task GetInstitutionalOwnershipHistory_QuarterOverQuarterIncrease_RendersPlusSignedPercentChange()
     {
         var stock = new CommonStock
         {
@@ -65,7 +65,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryTests : ParadeDbMcpTestBa
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetOwnershipHistory("AAPL");
+        var output = await sut.GetInstitutionalOwnershipHistory("AAPL");
 
         // First quarter has no prior — change column is "—".
         output.Should().Contain("2024-09-30");

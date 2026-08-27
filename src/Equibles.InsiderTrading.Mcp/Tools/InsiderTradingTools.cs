@@ -442,14 +442,14 @@ public class InsiderTradingTools
     }
 
     [McpServerTool(
-        Name = "GetProposedSales",
+        Name = "GetForm144ProposedSales",
         Title = "Proposed Insider Sales (Form 144)",
         ReadOnly = true
     )]
     [Description(
         "Get recent proposed insider sales for a stock from SEC Form 144 notices. Each Form 144 is an affiliate's declaration of intent to sell restricted or control securities, showing the seller, their relationship to the company, the number of shares and aggregate market value to be sold, the proposed sale as a share of the issuer's current shares outstanding, the approximate sale date, the broker, and the filer's remarks (including any stated 10b5-1 plan). Results are the most recent notices first and a note flags when more exist than were returned; use fromDate/toDate to scope a period (heavy 10b5-1 filers can flood the recency window with small daily notices). A proposal may never execute; a completed sale may later appear on Form 4 or 5 only when it is reportable there."
     )]
-    public Task<string> GetProposedSales(
+    public Task<string> GetForm144ProposedSales(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
         [Description(
             "Maximum number of notices to return (default: 50, max: 500; values outside 1-500 are clamped)"
@@ -549,7 +549,7 @@ public class InsiderTradingTools
 
                 return result.ToString();
             },
-            "GetProposedSales",
+            "GetForm144ProposedSales",
             $"ticker: {ticker}"
         );
     }

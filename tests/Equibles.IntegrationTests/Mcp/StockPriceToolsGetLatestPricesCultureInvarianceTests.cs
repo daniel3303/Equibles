@@ -10,7 +10,7 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 [Collection(ParadeDbCollection.Name)]
-public class StockPriceToolsGetLatestPricesCultureInvarianceTests : ParadeDbMcpTestBase
+public class StockPriceToolsGetLatestClosingPricesCultureInvarianceTests : ParadeDbMcpTestBase
 {
     private StockPriceTools Sut() =>
         new(
@@ -21,17 +21,17 @@ public class StockPriceToolsGetLatestPricesCultureInvarianceTests : ParadeDbMcpT
             NullLogger<StockPriceTools>()
         );
 
-    public StockPriceToolsGetLatestPricesCultureInvarianceTests(ParadeDbFixture fixture)
+    public StockPriceToolsGetLatestClosingPricesCultureInvarianceTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     // Contract (the repo-wide MCP rule, asserted by McpFormat and the dozens of
     // InvariantCulture call sites): LLM-facing markdown must render numbers the same
-    // on every host locale. GetLatestPrices renders its Close (:F2) and Volume (:N0)
+    // on every host locale. GetLatestClosingPrices renders its Close (:F2) and Volume (:N0)
     // cells with the culture-implicit specifiers, which honour the thread
     // CurrentCulture — so de-DE swaps the decimal point and thousand separator,
     // forking the response. Same bug class as the already-fixed GetStockPrices (#2628).
     [Fact]
-    public async Task GetLatestPrices_UnderNonInvariantCulture_RendersCloseAndVolumeCultureInvariantly()
+    public async Task GetLatestClosingPrices_UnderNonInvariantCulture_RendersCloseAndVolumeCultureInvariantly()
     {
         var stock = new CommonStock
         {
@@ -62,7 +62,7 @@ public class StockPriceToolsGetLatestPricesCultureInvarianceTests : ParadeDbMcpT
         try
         {
             CultureInfo.CurrentCulture = new CultureInfo("de-DE");
-            result = await Sut().GetLatestPrices("AAPL");
+            result = await Sut().GetLatestClosingPrices("AAPL");
         }
         finally
         {

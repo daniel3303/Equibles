@@ -13,16 +13,16 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 [Collection(ParadeDbCollection.Name)]
-public class InstitutionalHoldingsToolsGetTopBuyersSellersNegativeMaxResultsTests
+public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersNegativeMaxResultsTests
     : ParadeDbMcpTestBase
 {
-    public InstitutionalHoldingsToolsGetTopBuyersSellersNegativeMaxResultsTests(
+    public InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersNegativeMaxResultsTests(
         ParadeDbFixture fixture
     )
         : base(fixture) { }
 
     [Fact]
-    public async Task GetTopBuyersSellers_NegativeMaxResults_DoesNotSurfaceInternalError()
+    public async Task GetTopInstitutionalBuyersSellers_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
@@ -47,7 +47,7 @@ public class InstitutionalHoldingsToolsGetTopBuyersSellersNegativeMaxResultsTest
         // movers.Take(maxResults) on the in-memory list, so a negative cap throws
         // ArgumentOutOfRangeException. The tool must clamp the value and degrade gracefully
         // rather than leak the executor's internal-error sentinel to the caller.
-        var output = await sut.GetTopBuyersSellers(ticker: "AAPL", maxResults: -1);
+        var output = await sut.GetTopInstitutionalBuyersSellers(ticker: "AAPL", maxResults: -1);
 
         output.Should().NotContain("An error occurred while executing");
     }

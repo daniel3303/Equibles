@@ -77,7 +77,7 @@ public class DocumentTextToolsSearchKeywordErrorTests : ParadeDbMcpTestBase
         var reported = await verify
             .Set<Error>()
             .AsNoTracking()
-            .AnyAsync(e => e.Context == "SearchDocumentKeyword");
+            .AnyAsync(e => e.Context == "SearchDocument");
         reported.Should().BeTrue("the catch arm must persist the failure via the error manager");
     }
 }

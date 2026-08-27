@@ -15,7 +15,7 @@ Ask your assistant about scheduled meetings:
 - "Are there any FDA catalysts scheduled between 2024-09-01 and 2024-12-31?"
 - "List the next 20 FDA AdComm meetings."
 
-The assistant calls the `GetFdaCatalysts` tool and replies with a table of meetings, soonest first. Each row shows the meeting date, the meeting title, the FDA center holding it, the catalyst type, and an end date for multi-day meetings.
+The assistant calls the `GetFdaAdvisoryCommitteeMeetings` tool and replies with a table of meetings, soonest first. Each row shows the meeting date, the meeting title, the FDA center holding it, the catalyst type, and an end date for multi-day meetings.
 
 When you don't give dates, the assistant looks at the next 90 days starting today. Mention a date range to look further ahead or back.
 

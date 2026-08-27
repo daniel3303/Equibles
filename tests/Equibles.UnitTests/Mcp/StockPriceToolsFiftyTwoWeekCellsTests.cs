@@ -4,7 +4,7 @@ using Equibles.Yahoo.Mcp.Tools;
 
 namespace Equibles.UnitTests.Mcp;
 
-// Pins GetLatestPrices' 52-week range cells: the absolute high/low of daily closes over the
+// Pins GetLatestClosingPrices' 52-week range cells: the absolute high/low of daily closes over the
 // 365 days ending on the row's own session, the percent distance of the close from each
 // bound, and the short-history star.
 //

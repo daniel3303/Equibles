@@ -13,7 +13,7 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
-/// Sibling to GetConsensusHoldings_MinFundsFilter_ExcludesBelowThreshold (which
+/// Sibling to GetInstitutionConsensusHoldings_MinFundsFilter_ExcludesBelowThreshold (which
 /// pins the filter dropping below-threshold rows but still leaving non-zero
 /// rows). The empty-table fallback at line 1261 fires when minFunds is set
 /// higher than the maximum consensus across any stock — every stock is
@@ -23,16 +23,16 @@ namespace Equibles.IntegrationTests.Mcp;
 /// message.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class InstitutionalHoldingsToolsGetConsensusHoldingsThresholdAboveAllTests
+public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsThresholdAboveAllTests
     : ParadeDbMcpTestBase
 {
-    public InstitutionalHoldingsToolsGetConsensusHoldingsThresholdAboveAllTests(
+    public InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsThresholdAboveAllTests(
         ParadeDbFixture fixture
     )
         : base(fixture) { }
 
     [Fact]
-    public async Task GetConsensusHoldings_MinFundsHigherThanAnyStocksConsensus_ReportsNoMatches()
+    public async Task GetInstitutionConsensusHoldings_MinFundsHigherThanAnyStocksConsensus_ReportsNoMatches()
     {
         var aapl = new CommonStock
         {
@@ -64,9 +64,9 @@ public class InstitutionalHoldingsToolsGetConsensusHoldingsThresholdAboveAllTest
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetConsensusHoldings("Threshold A, Threshold B", minFunds: 3);
+        var output = await sut.GetInstitutionConsensusHoldings("Threshold A, Threshold B", minFunds: 3);
 
-        output.Should().Contain("No stocks meet the minFunds threshold");
+        output.Should().Contain("No stocks meet the minInstitutions threshold");
         output.Should().NotContain("| # | Ticker |");
     }
 

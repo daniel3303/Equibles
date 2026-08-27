@@ -193,7 +193,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
     }
 
     [Fact]
-    public async Task GetProposedSales_NoticeBeforeSplit_KeepsSharesAsFiledBesideMarketValue()
+    public async Task GetForm144ProposedSales_NoticeBeforeSplit_KeepsSharesAsFiledBesideMarketValue()
     {
         await using var db = NewDb();
 
@@ -232,7 +232,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
         );
         await db.SaveChangesAsync();
 
-        var output = await Sut(db).GetProposedSales("NVDA");
+        var output = await Sut(db).GetForm144ProposedSales("NVDA");
 
         // Proposed Shares pair with the notice's own Aggregate Market Value; both stay
         // as filed, so the row is not restated to the post-split 400,000 count.

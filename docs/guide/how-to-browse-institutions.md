@@ -44,7 +44,7 @@ Click **Download CSV** at the top of the institution profile to export the full 
 
    - A cumulative raw-closing-price return chart against a benchmark (S&P 500 by default); dividends are excluded.
    - Quarter-by-quarter returns for both the clone and the benchmark.
-   - Summary statistics: raw-closing-price return, annualised price return, and maximum drawdown; dividends are excluded and captured splits can shorten the comparable window.
+   - Summary statistics: raw-closing-price return, annualised price return, and maximum drawdown; dividends are excluded, and captured split ratios restate closes onto one basis unless a ratio is unusable.
 
 3. Use the date-range controls to narrow the simulation window if you want to focus on a specific period.
 

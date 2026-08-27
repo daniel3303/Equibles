@@ -15,7 +15,7 @@ using Xunit;
 namespace Equibles.UnitTests.FdaCatalysts;
 
 /// <summary>
-/// Contract: <c>GetFdaCatalysts</c> renders the requested window's meetings with the
+/// Contract: <c>GetFdaAdvisoryCommitteeMeetings</c> renders the requested window's meetings with the
 /// per-meeting FDA page link, rejects malformed or inverted date arguments instead of
 /// silently substituting a different window, signposts truncation, and reports the
 /// calendar's covered span when a window turns up nothing.
@@ -64,7 +64,7 @@ public class FdaCatalystToolsTests
         );
 
     [Fact]
-    public async Task GetFdaCatalysts_RendersTheMeetingWithItsFdaPageLink()
+    public async Task GetFdaAdvisoryCommitteeMeetings_RendersTheMeetingWithItsFdaPageLink()
     {
         var options = NewDbOptions();
         await using var ctx = NewContext(options);
@@ -79,7 +79,7 @@ public class FdaCatalystToolsTests
         );
         await ctx.SaveChangesAsync();
 
-        var result = await Tools(ctx).GetFdaCatalysts();
+        var result = await Tools(ctx).GetFdaAdvisoryCommitteeMeetings();
 
         result
             .Should()
@@ -92,14 +92,14 @@ public class FdaCatalystToolsTests
     }
 
     [Fact]
-    public async Task GetFdaCatalysts_MalformedStartDate_ReturnsAnErrorInsteadOfSilentlyDefaulting()
+    public async Task GetFdaAdvisoryCommitteeMeetings_MalformedStartDate_ReturnsAnErrorInsteadOfSilentlyDefaulting()
     {
         var options = NewDbOptions();
         await using var ctx = NewContext(options);
         ctx.Add(Meeting(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(5), "Meeting", "slug-1"));
         await ctx.SaveChangesAsync();
 
-        var result = await Tools(ctx).GetFdaCatalysts(startDate: "23/07/2026");
+        var result = await Tools(ctx).GetFdaAdvisoryCommitteeMeetings(startDate: "23/07/2026");
 
         result.Should().Contain("Unknown startDate '23/07/2026'");
         result
@@ -111,13 +111,13 @@ public class FdaCatalystToolsTests
     }
 
     [Fact]
-    public async Task GetFdaCatalysts_InvertedRange_ReturnsAnErrorInsteadOfClampingToOneDay()
+    public async Task GetFdaAdvisoryCommitteeMeetings_InvertedRange_ReturnsAnErrorInsteadOfClampingToOneDay()
     {
         var options = NewDbOptions();
         await using var ctx = NewContext(options);
 
         var result = await Tools(ctx)
-            .GetFdaCatalysts(startDate: "2026-09-01", endDate: "2026-08-01");
+            .GetFdaAdvisoryCommitteeMeetings(startDate: "2026-09-01", endDate: "2026-08-01");
 
         result
             .Should()
@@ -129,7 +129,7 @@ public class FdaCatalystToolsTests
     }
 
     [Fact]
-    public async Task GetFdaCatalysts_EmptyWindow_ReportsTheCalendarsCoveredSpan()
+    public async Task GetFdaAdvisoryCommitteeMeetings_EmptyWindow_ReportsTheCalendarsCoveredSpan()
     {
         var options = NewDbOptions();
         await using var ctx = NewContext(options);
@@ -138,7 +138,7 @@ public class FdaCatalystToolsTests
         await ctx.SaveChangesAsync();
 
         var result = await Tools(ctx)
-            .GetFdaCatalysts(startDate: "2024-01-01", endDate: "2024-12-31");
+            .GetFdaAdvisoryCommitteeMeetings(startDate: "2024-01-01", endDate: "2024-12-31");
 
         result
             .Should()
@@ -152,7 +152,7 @@ public class FdaCatalystToolsTests
     }
 
     [Fact]
-    public async Task GetFdaCatalysts_MaxResultsClip_AppendsTheTruncationNote()
+    public async Task GetFdaAdvisoryCommitteeMeetings_MaxResultsClip_AppendsTheTruncationNote()
     {
         var options = NewDbOptions();
         await using var ctx = NewContext(options);
@@ -161,20 +161,20 @@ public class FdaCatalystToolsTests
             ctx.Add(Meeting(start.AddDays(i), $"Meeting {i}", $"slug-{i}"));
         await ctx.SaveChangesAsync();
 
-        var result = await Tools(ctx).GetFdaCatalysts(maxResults: 2);
+        var result = await Tools(ctx).GetFdaAdvisoryCommitteeMeetings(maxResults: 2);
 
         result.Should().Contain("Showing first 2 of 3 results");
     }
 
     [Fact]
-    public async Task GetFdaCatalysts_FullResult_HasNoTruncationNote()
+    public async Task GetFdaAdvisoryCommitteeMeetings_FullResult_HasNoTruncationNote()
     {
         var options = NewDbOptions();
         await using var ctx = NewContext(options);
         ctx.Add(Meeting(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(3), "Meeting", "slug-1"));
         await ctx.SaveChangesAsync();
 
-        var result = await Tools(ctx).GetFdaCatalysts();
+        var result = await Tools(ctx).GetFdaAdvisoryCommitteeMeetings();
 
         result.Should().NotContain("Showing first");
     }

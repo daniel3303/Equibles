@@ -16,14 +16,14 @@ Name a company and ask what its filings say:
 - "Search Microsoft's filings for commentary on cloud margins."
 - "What risk factors does NVDA call out in its most recent annual report?"
 
-The assistant searches that company's filings with the `SearchCompanyDocuments` tool and replies with the most relevant excerpts, each labelled with the document type and filing date. If you don't know which company holds the answer, ask a broader question — for example, "Which companies discuss tariff exposure in their recent filings?" — and the assistant uses `SearchDocuments` to search across every company at once.
+The assistant searches that company's filings with the `SearchDocuments` tool and replies with the most relevant excerpts, each labelled with the document type and filing date. If you don't know which company holds the answer, ask a broader question — for example, "Which companies discuss tariff exposure in their recent filings?" — and the assistant uses `SearchDocuments` to search across every company at once.
 
 ## Drill into one filing
 
 To work inside a single filing rather than across many:
 
 - "List Apple's recent SEC filings." — the assistant calls `ListCompanyDocuments` and returns each filing's type, filing date, and reporting period.
-- "Search that 10-K for what they say about supply-chain risk." — the assistant uses `SearchDocument` to find the relevant passages, `SearchDocumentKeyword` to match an exact word or phrase, and `ReadDocumentLines` to read a passage in full.
+- "Search that 10-K for what they say about supply-chain risk." — the assistant uses `SearchDocument` in semantic mode for relevant passages or exact mode for a literal word or phrase, then `ReadDocumentLines` to read a passage in full.
 
 You can narrow any of these by document type (10-K, 10-Q, or 8-K) or by filing-date range — for example, "only 10-Qs filed in 2024."
 

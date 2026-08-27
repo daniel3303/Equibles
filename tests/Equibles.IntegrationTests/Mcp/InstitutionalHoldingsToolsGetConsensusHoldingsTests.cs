@@ -13,28 +13,28 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 /// <summary>
-/// Pins <c>GetConsensusHoldings</c>. Each test exercises one path: too-few-names guard,
+/// Pins <c>GetInstitutionConsensusHoldings</c>. Each test exercises one path: too-few-names guard,
 /// no-common-quarter, multi-fund consensus ordering, and the <c>minFunds</c> filter.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
-public class InstitutionalHoldingsToolsGetConsensusHoldingsTests : ParadeDbMcpTestBase
+public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : ParadeDbMcpTestBase
 {
-    public InstitutionalHoldingsToolsGetConsensusHoldingsTests(ParadeDbFixture fixture)
+    public InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     [Fact]
-    public async Task GetConsensusHoldings_OnlyOneName_ReportsTooFew()
+    public async Task GetInstitutionConsensusHoldings_OnlyOneName_ReportsTooFew()
     {
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetConsensusHoldings("Solo Fund");
+        var output = await sut.GetInstitutionConsensusHoldings("Solo Fund");
 
         output.Should().Contain("at least two institution names");
     }
 
     [Fact]
-    public async Task GetConsensusHoldings_ThreeFunds_RanksConsensusFirst()
+    public async Task GetInstitutionConsensusHoldings_ThreeFunds_RanksConsensusFirst()
     {
         var aapl = new CommonStock
         {
@@ -71,7 +71,7 @@ public class InstitutionalHoldingsToolsGetConsensusHoldingsTests : ParadeDbMcpTe
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetConsensusHoldings(
+        var output = await sut.GetInstitutionConsensusHoldings(
             "Consensus A LP, Consensus B LP, Consensus C LP"
         );
 
@@ -90,7 +90,7 @@ public class InstitutionalHoldingsToolsGetConsensusHoldingsTests : ParadeDbMcpTe
     }
 
     [Fact]
-    public async Task GetConsensusHoldings_MinFundsFilter_ExcludesBelowThreshold()
+    public async Task GetInstitutionConsensusHoldings_MinFundsFilter_ExcludesBelowThreshold()
     {
         var aapl = new CommonStock
         {
@@ -118,14 +118,14 @@ public class InstitutionalHoldingsToolsGetConsensusHoldingsTests : ParadeDbMcpTe
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetConsensusHoldings("Filter A LP, Filter B LP", minFunds: 2);
+        var output = await sut.GetInstitutionConsensusHoldings("Filter A LP, Filter B LP", minFunds: 2);
 
         output.Should().Contain("AAPL");
         output.Should().NotContain("NVDA");
     }
 
     [Fact]
-    public async Task GetConsensusHoldings_NoCommonQuarter_ReportsNoOverlap()
+    public async Task GetInstitutionConsensusHoldings_NoCommonQuarter_ReportsNoOverlap()
     {
         var stock = new CommonStock
         {
@@ -144,7 +144,7 @@ public class InstitutionalHoldingsToolsGetConsensusHoldingsTests : ParadeDbMcpTe
         await using var verify = Fixture.CreateDbContext();
         var sut = NewSut(verify);
 
-        var output = await sut.GetConsensusHoldings("Mismatch A LP, Mismatch B LP");
+        var output = await sut.GetInstitutionConsensusHoldings("Mismatch A LP, Mismatch B LP");
 
         output.Should().Contain("share no common report dates");
     }

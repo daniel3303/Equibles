@@ -9,8 +9,8 @@ using Xunit;
 namespace Equibles.FunctionalTests.Tests;
 
 /// <summary>
-/// Adversarial end-to-end test for the GetExemptOfferings MCP tool's <c>maxResults</c> parameter.
-/// Once a ticker resolves, GetExemptOfferings feeds the raw client value straight into EF Core's
+/// Adversarial end-to-end test for the GetFormDOfferings MCP tool's <c>maxResults</c> parameter.
+/// Once a ticker resolves, GetFormDOfferings feeds the raw client value straight into EF Core's
 /// <c>.Take(maxResults)</c>, so a negative cap becomes a negative SQL <c>LIMIT</c> that
 /// PostgreSQL rejects; the exception is swallowed and the caller gets the generic
 /// internal-failure sentinel. The parameter contract ("Maximum number of notices to return")
@@ -52,7 +52,7 @@ public class ExemptOfferingsNegativeMaxResultsTests
     }
 
     [Fact]
-    public async Task GetExemptOfferings_NegativeMaxResults_DoesNotSurfaceInternalError()
+    public async Task GetFormDOfferings_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
@@ -87,7 +87,7 @@ public class ExemptOfferingsNegativeMaxResultsTests
         });
 
         var tools = await _client.ListToolsAsync();
-        var tool = tools.First(t => t.Name == "GetExemptOfferings");
+        var tool = tools.First(t => t.Name == "GetFormDOfferings");
 
         // A negative notice cap is invalid input for a "maximum number of notices" parameter;
         // the tool must degrade gracefully rather than let the value reach the database as a

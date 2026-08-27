@@ -10,9 +10,9 @@ using Xunit;
 namespace Equibles.IntegrationTests.Mcp;
 
 [Collection(ParadeDbCollection.Name)]
-public class InsiderTradingToolsGetProposedSalesTests : ParadeDbMcpTestBase
+public class InsiderTradingToolsGetForm144ProposedSalesTests : ParadeDbMcpTestBase
 {
-    public InsiderTradingToolsGetProposedSalesTests(ParadeDbFixture fixture)
+    public InsiderTradingToolsGetForm144ProposedSalesTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     private InsiderTradingTools Sut() =>
@@ -26,12 +26,12 @@ public class InsiderTradingToolsGetProposedSalesTests : ParadeDbMcpTestBase
             NullLogger<InsiderTradingTools>()
         );
 
-    // GetProposedSales had no happy-path coverage — only the skipped negative-maxResults
+    // GetForm144ProposedSales had no happy-path coverage — only the skipped negative-maxResults
     // repro (GH-2980) referenced it. Pin that a seeded Form 144 renders into the table with
     // the seller, share count, aggregate market value, approximate sale date, and broker so
     // the success path is guarded against regression (e.g. a dropped or reordered column).
     [Fact]
-    public async Task GetProposedSales_StockWithFiling_RendersForm144Row()
+    public async Task GetForm144ProposedSales_StockWithFiling_RendersForm144Row()
     {
         var stock = new CommonStock
         {
@@ -62,7 +62,7 @@ public class InsiderTradingToolsGetProposedSalesTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetProposedSales("AAPL");
+        var result = await Sut().GetForm144ProposedSales("AAPL");
 
         result.Should().Contain("Jane Insider");
         result.Should().Contain("| Director |");

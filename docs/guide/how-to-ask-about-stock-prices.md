@@ -16,11 +16,11 @@ Name a stock and the period you want, or list several tickers for a quick check:
 - "How did NVDA's stock move between 2024-01-01 and 2024-03-31?"
 - "What are the latest prices for AAPL, MSFT, and GOOG?"
 
-For a single stock over a date range the assistant picks `GetStockPrices`; for the most recent close across one or more tickers it picks `GetLatestPrices`. Mention a start and end date or a number of days and the assistant passes them through — otherwise it returns about the last year of daily bars, newest first.
+For a single stock over a date range the assistant picks `GetStockPrices`; for the most recent close across one or more tickers it picks `GetLatestClosingPrices`. Mention a start and end date or a number of days and the assistant passes them through — otherwise it returns about the last year of daily bars, newest first.
 
 ## What you should see
 
 - **`GetStockPrices`** — a table of daily bars with one row per trading day: Date, Open, High, Low, Close, and Volume. When the provider-adjusted close differs, the table also includes `Adj Close`. Captured split and cash-dividend changes trigger a full-history refresh of the exact listed series, but stored rows do not certify which split basis the provider returned; do not infer a consistent total-return window from reconciliation status alone. Use the bars for charting, trend questions, or as the basis for the [technical indicators](how-to-ask-about-technical-indicators.md) Equibles computes on top of the same history.
-- **`GetLatestPrices`** — the most recent closing price, volume, and trailing closing range for each ticker you named, ideal for a one-line portfolio or watchlist check. If the requested year crosses a recorded split, the starred range begins at the latest split so it never compares raw closes whose split basis is unknown.
+- **`GetLatestClosingPrices`** — the most recent closing price, volume, and trailing closing range for each ticker you named, ideal for a one-line portfolio or watchlist check. If the requested year crosses a recorded split, the starred range begins at the latest split so it never compares raw closes whose split basis is unknown.
 
 If the reply says there's no price data, the stock's prices probably haven't been imported yet — confirm the worker has run, then try a large, liquid ticker such as AAPL.

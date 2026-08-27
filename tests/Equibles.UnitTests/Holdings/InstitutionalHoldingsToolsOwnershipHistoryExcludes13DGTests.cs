@@ -21,7 +21,7 @@ using Xunit;
 namespace Equibles.UnitTests.Holdings;
 
 /// <summary>
-/// Pins that <c>GetOwnershipHistory</c> sums only 13F holdings per quarter. The same filer can
+/// Pins that <c>GetInstitutionalOwnershipHistory</c> sums only 13F holdings per quarter. The same filer can
 /// also have a Schedule 13D/G row whose event ReportDate coincides with the 13F quarter end and
 /// shares the InstitutionalHolding table; the per-quarter "Total Shares" sum must exclude it or
 /// the quarter's institutional ownership is inflated by the 13D/G stake (GH-4449 named the
@@ -51,7 +51,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryExcludes13DGTests
     }
 
     [Fact]
-    public async Task GetOwnershipHistory_FilerHasBoth13FAnd13GAtSameDate_TotalSharesExcludesThe13GRow()
+    public async Task GetInstitutionalOwnershipHistory_FilerHasBoth13FAnd13GAtSameDate_TotalSharesExcludesThe13GRow()
     {
         await using var db = NewDb();
 
@@ -112,7 +112,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryExcludes13DGTests
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetOwnershipHistory("AAPL");
+        var output = await sut.GetInstitutionalOwnershipHistory("AAPL");
 
         // The quarter's total reflects the 13F holding alone (guards against an error string too).
         output.Should().Contain("953,847,648");

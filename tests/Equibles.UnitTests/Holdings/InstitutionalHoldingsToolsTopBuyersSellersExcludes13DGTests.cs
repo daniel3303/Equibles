@@ -21,12 +21,12 @@ using Xunit;
 namespace Equibles.UnitTests.Holdings;
 
 /// <summary>
-/// Pins that <c>GetTopBuyersSellers</c> aggregates only 13F holdings when computing a filer's
+/// Pins that <c>GetTopInstitutionalBuyersSellers</c> aggregates only 13F holdings when computing a filer's
 /// quarter-over-quarter share delta. A filer can also file a Schedule 13D/G whose event
 /// ReportDate coincides with the 13F quarter end and shares the InstitutionalHolding table; the
 /// current-quarter aggregate must exclude it or the filer's "new shares" (and therefore its
 /// Δ shares) is inflated by the 13D/G stake (GH-4449 named the buyers/sellers surface among
-/// those the double-count inflated). <c>GetTopHolders</c> / <c>GetOwnershipHistory</c> carry the
+/// those the double-count inflated). <c>GetTopHolders</c> / <c>GetInstitutionalOwnershipHistory</c> carry the
 /// sibling pins; this pins the buyers/sellers surface's per-holder share total.
 /// </summary>
 public class InstitutionalHoldingsToolsTopBuyersSellersExcludes13DGTests
@@ -52,7 +52,7 @@ public class InstitutionalHoldingsToolsTopBuyersSellersExcludes13DGTests
     }
 
     [Fact]
-    public async Task GetTopBuyersSellers_FilerHasBoth13FAnd13GAtCurrentQuarter_DeltaUsesThe13FShareCountOnly()
+    public async Task GetTopInstitutionalBuyersSellers_FilerHasBoth13FAnd13GAtCurrentQuarter_DeltaUsesThe13FShareCountOnly()
     {
         await using var db = NewDb();
 
@@ -127,7 +127,7 @@ public class InstitutionalHoldingsToolsTopBuyersSellersExcludes13DGTests
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetTopBuyersSellers("AAPL");
+        var output = await sut.GetTopInstitutionalBuyersSellers("AAPL");
 
         // The current-quarter new-share total is the 13F holding alone (guards against an error
         // string and confirms the 13F-only current aggregate rendered).

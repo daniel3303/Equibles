@@ -19,7 +19,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-Everything marked **Self-hosted** is scraped, stored, and served by this repo — **64 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **61 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
 
 | Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
@@ -299,51 +299,48 @@ Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP trans
 
 ## Tools
 
-This self-hosted build exposes 64 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 61 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
-- GetFundCloneBacktest — backtest cloning a filer's 13F portfolio vs a benchmark
+- GetInstitutionCloneBacktest — backtest cloning a filer's 13F portfolio vs a benchmark
 - GetTopHolders — top institutional holders of a stock (13F-HR)
-- GetOwnershipHistory — institutional ownership trend across quarters
+- GetInstitutionalOwnershipHistory — institutional ownership trend across quarters
 - GetInstitutionPortfolio — an institution's 13F portfolio
 - SearchInstitutions — strict-first tokenized name/CIK search with filing date, 13F AUM, and position count
-- GetTopBuyersSellers — biggest adds/reductions on a stock this quarter
+- GetTopInstitutionalBuyersSellers — biggest adds/reductions on a stock this quarter
 - GetMarketWide13FActivity — market-wide 13F leaderboards
 - GetMostHeldStocks — stocks by institutional breadth
 - GetInstitutionSummary — filer summary (value, concentration, turnover)
 - GetInstitutionSectorAllocation — allocation by sector
 - GetInstitutionQuarterlyActivity — initiated/increased/reduced/exited vs prior quarter
-- GetFundOverlap — portfolio overlap between two institutions
-- GetConsensusHoldings — consensus portfolio of 2–25 institutions
+- CompareInstitutionPortfolios — portfolio overlap between two institutions
+- GetInstitutionConsensusHoldings — consensus portfolio of 2–25 institutions
 
 **Insider trading**
 
 - GetInsiderTransactions — insider transactions from Forms 4/5
 - GetInsiderOwnership — insider ownership ranked by shares
-- GetProposedSales — proposed sales from Form 144
+- GetForm144ProposedSales — proposed sales from Form 144
 - SearchInsiders — strict-first whole-word filed-name search with verified public-name aliases
 
 **SEC filings search**
 
-- SearchDocuments — hybrid keyword+semantic search across all filings
-- SearchCompanyDocuments — one company's filings by ticker
+- SearchDocuments — hybrid keyword+semantic search across all filings, optionally scoped by ticker
 - SearchDocument — search within a single filing
 - ListCompanyDocuments — browse a company's filings
-- SearchDocumentKeyword — keyword search in one filing
 - ReadDocumentLines — read a line range from a filing
 
 **Funds, ETFs & advisers**
 
 - SearchInvestmentAdvisers — strict-first tokenized adviser-name search (Form ADV)
 - GetInvestmentAdviser — ADV profile by CRD
-- GetFundOperations — fund ops from N-CEN with exact directory-identifier resolution
-- GetFundHoldings — NPORT-P holdings with full reported versus stored counts; trust-series rows identify their tracked-stock subset
+- GetFundNcenReports — fund ops from N-CEN with exact directory-identifier resolution
 - GetFundsHoldingStock — funds holding a stock
-- GetExemptOfferings — private placements (Form D)
+- GetFormDOfferings — private placements (Form D)
 - GetFailsToDeliver — SEC FTD data
 - SearchFunds — strict-first tokenized fund/registrant/ticker search with verified share-class aliases
-- GetFundProfile — fund profile + largest stored holdings with explicit coverage counts
+- GetFundProfile — fund profile + NPORT-P holdings with explicit reported-versus-stored coverage counts
 
 **Fundamentals (XBRL)**
 
@@ -355,14 +352,14 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 **Economic data (FRED)**
 
 - GetEconomicIndicator — a FRED series
-- GetLatestEconomicData — latest values by category
+- GetLatestEconomicIndicators — latest values by category
 - SearchEconomicIndicators — strict-first tokenized curated-series search with standard macro aliases
 - GetEconomicCalendar — US macro release calendar
 
 **Futures (CFTC COT)**
 
 - GetCftcPositioning — COT positioning for a contract
-- GetLatestCftcData — latest COT snapshot
+- GetLatestCftcPositioning — latest COT snapshot
 - SearchCftcMarkets — strict-first tokenized search by name, code, or standard futures symbol
 
 **Volatility (CBOE)**
@@ -372,7 +369,7 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 
 **FDA calendar**
 
-- GetFdaCatalysts — scheduled FDA advisory-committee meetings
+- GetFdaAdvisoryCommitteeMeetings — scheduled FDA advisory-committee meetings
 
 **Congressional trading**
 
@@ -393,7 +390,7 @@ This self-hosted build exposes 64 tools over MCP. The hosted server at `https://
 **Stock prices**
 
 - GetStockPrices — daily OHLCV plus the stored auxiliary adjusted close when it differs
-- GetLatestPrices — latest close/change/volume
+- GetLatestClosingPrices — latest close/change/volume
 - GetStochasticOscillator — stochastic oscillator (%K/%D)
 - GetAverageTrueRange — average true range (ATR)
 - GetOnBalanceVolume — on-balance volume (OBV)

@@ -41,7 +41,7 @@ public class McpServerMissingRequiredArgumentTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CallTool_GetLatestPricesWithoutRequiredTickers_ReturnsInvalidParamsError()
+    public async Task CallTool_GetLatestClosingPricesWithoutRequiredTickers_ReturnsInvalidParamsError()
     {
         var httpClient = _serverFixture.CreateClient();
         httpClient.BaseAddress = new Uri("http://localhost/");
@@ -57,10 +57,10 @@ public class McpServerMissingRequiredArgumentTests : IAsyncLifetime
 
         await using var client = await McpClient.CreateAsync(transport);
 
-        // GetLatestPrices declares 'tickers' with no default — omitting it is the
+        // GetLatestClosingPrices declares 'tickers' with no default — omitting it is the
         // simplest possible malformed request a real MCP client can produce.
         var result = await client.CallToolAsync(
-            toolName: "GetLatestPrices",
+            toolName: "GetLatestClosingPrices",
             arguments: new Dictionary<string, object>()
         );
 
@@ -75,6 +75,6 @@ public class McpServerMissingRequiredArgumentTests : IAsyncLifetime
                 "the client should be told its arguments were the problem, not given an opaque server error"
             );
         text.Should()
-            .Contain("GetLatestPrices", "the error should name the tool that rejected the call");
+            .Contain("GetLatestClosingPrices", "the error should name the tool that rejected the call");
     }
 }

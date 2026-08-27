@@ -24,7 +24,7 @@ public class RagSearchToolsExcludedTickerValidationTests
     [InlineData("AAPL,,MSFT")]
     public async Task SearchDocuments_InvalidExcludedTickerFailsBeforeSearch(string tickers)
     {
-        var result = await Tool().SearchDocuments("revenue", excludeTickers: tickers);
+        var result = await Tool().SearchDocuments("revenue", excludeTickers: [tickers]);
 
         result.Should().Contain("Invalid excluded ticker");
     }
@@ -32,7 +32,7 @@ public class RagSearchToolsExcludedTickerValidationTests
     [Fact]
     public async Task SearchDocuments_TooManyExcludedTickersFailsBeforeSearch()
     {
-        var tickers = string.Join(',', Enumerable.Range(1, 26).Select(index => $"T{index}"));
+        var tickers = Enumerable.Range(1, 26).Select(index => $"T{index}").ToArray();
 
         var result = await Tool().SearchDocuments("revenue", excludeTickers: tickers);
 

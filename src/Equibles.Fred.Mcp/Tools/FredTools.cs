@@ -135,14 +135,14 @@ public class FredTools
     }
 
     [McpServerTool(
-        Name = "GetLatestEconomicData",
+        Name = "GetLatestEconomicIndicators",
         Title = "Latest Economic Indicators",
         ReadOnly = true
     )]
     [Description(
         "Get the latest values for key economic indicators across categories: interest rates, yield spreads, inflation, employment, GDP, money supply, sentiment, housing, exchange rates, and market indicators. Each row shows a series' latest stored observation with its date, plus the previous observation and the change between them for direction — check the Latest Date column for freshness. Returns a snapshot of current macro conditions."
     )]
-    public Task<string> GetLatestEconomicData(
+    public Task<string> GetLatestEconomicIndicators(
         [Description(
             "Category filter: InterestRates, YieldSpreads, CorporateBondSpreads, Inflation, Employment, GdpAndOutput, MoneySupply, Sentiment, Housing, ExchangeRates, Market (defaults to all)"
         )]
@@ -240,7 +240,7 @@ public class FredTools
 
                 return result.ToString();
             },
-            "GetLatestEconomicData",
+            "GetLatestEconomicIndicators",
             $"category: {category}"
         );
     }

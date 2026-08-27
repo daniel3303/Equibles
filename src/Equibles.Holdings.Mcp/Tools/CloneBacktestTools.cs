@@ -39,14 +39,14 @@ public class CloneBacktestTools
     }
 
     [McpServerTool(
-        Name = "GetFundCloneBacktest",
+        Name = "GetInstitutionCloneBacktest",
         Title = "13F Portfolio Clone Backtest",
         ReadOnly = true
     )]
     [Description(
-        "Backtest how cloning an institutional filer's reported 13F portfolio would have performed against a market benchmark, either over a trailing window (windowYears) or an explicit fromDate/toDate range. Reconstructs the filer's portfolio at each quarterly 13F snapshot, rebalances on the SEC filing lag (so the simulation uses only information available at the time), and values each exact listed security on raw closing prices. Returns price return (dividends excluded), annualized price return (CAGR), and max drawdown for both the cloned portfolio and the benchmark, plus the price-return alpha between them. Closes on opposite sides of a captured split are restated onto one basis with the captured ratio, so a split never shortens the window. Use this to answer 'how would cloning fund X have performed against the market'."
+        "Backtest how cloning an institutional filer's reported 13F portfolio would have performed against a market benchmark, either over a trailing window (windowYears) or an explicit fromDate/toDate range. Reconstructs the filer's portfolio at each quarterly 13F snapshot, rebalances on the SEC filing lag, and values each exact listed security on raw closing prices. Returns price return (dividends excluded), CAGR, and max drawdown for the clone and benchmark, plus price-return alpha. Usable captured split ratios restate closes onto one basis; an unusable ratio can exclude that listing's earlier closes."
     )]
-    public Task<string> GetFundCloneBacktest(
+    public Task<string> GetInstitutionCloneBacktest(
         [Description(
             "Institution name or SEC CIK (e.g., 'Berkshire Hathaway', '1067983', or zero-padded '0001067983'). Unique partials and verified aliases resolve; ambiguous partials return candidate CIKs."
         )]
@@ -124,7 +124,7 @@ public class CloneBacktestTools
                 );
                 return Render(holder, outcome, notes);
             },
-            "GetFundCloneBacktest",
+            "GetInstitutionCloneBacktest",
             $"institution: {institution}"
         );
     }
@@ -210,8 +210,8 @@ public class CloneBacktestTools
                 + $"{result.Points.Count} daily points simulated."
         );
         output.AppendLine(
-            "Raw closing prices are used, so dividends are excluded; closes are restated "
-                + "across captured splits so a split never shortens the window."
+            "Raw closing prices are used, so dividends are excluded. Usable captured split ratios "
+                + "restate closes onto one basis; an unusable ratio can exclude that listing's earlier closes."
         );
 
         // A clone is long-only, so a filer who expresses its thesis in options is only partly

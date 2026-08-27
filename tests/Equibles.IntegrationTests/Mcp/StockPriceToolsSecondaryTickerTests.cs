@@ -79,11 +79,11 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestPrices_SecondaryAndPrimarySymbolsReportTheirOwnPrices()
+    public async Task GetLatestClosingPrices_SecondaryAndPrimarySymbolsReportTheirOwnPrices()
     {
         await SeedBerkshire();
 
-        var result = await Sut().GetLatestPrices("BRK-A,BRK-B");
+        var result = await Sut().GetLatestClosingPrices("BRK-A,BRK-B");
 
         result.Should().Contain("| BRK-B | 2026-07-31 | 511.54 |", "the primary still answers");
         result.Should().Contain("| BRK-A | 2026-07-31 | 749200.00 |", "Class A has its own series");
@@ -91,7 +91,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestPrices_LegacyPrimarySplit_DoesNotClipSecondaryRange()
+    public async Task GetLatestClosingPrices_LegacyPrimarySplit_DoesNotClipSecondaryRange()
     {
         var stock = await SeedBerkshire();
         DbContext
@@ -125,14 +125,14 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestPrices("BRK-A");
+        var result = await Sut().GetLatestClosingPrices("BRK-A");
 
         result.Should().Contain("| 900000.00 | 749200.00 |");
         result.Should().NotContain("latest recorded split");
     }
 
     [Fact]
-    public async Task GetLatestPrices_LegacyNullSplit_ClipsPrimaryRange()
+    public async Task GetLatestClosingPrices_LegacyNullSplit_ClipsPrimaryRange()
     {
         var stock = await SeedBerkshire();
         DbContext
@@ -166,7 +166,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestPrices("BRK-B");
+        var result = await Sut().GetLatestClosingPrices("BRK-B");
 
         result.Should().Contain("| 511.54\\* | 511.54\\* |");
         result.Should().NotContain("600.00");
@@ -174,7 +174,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestPrices_SecondarySplit_ClipsOnlyThatSecondaryRange()
+    public async Task GetLatestClosingPrices_SecondarySplit_ClipsOnlyThatSecondaryRange()
     {
         var stock = await SeedBerkshire();
         DbContext
@@ -208,7 +208,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestPrices("BRK-A");
+        var result = await Sut().GetLatestClosingPrices("BRK-A");
 
         result.Should().Contain("| 749200.00\\* | 749200.00\\* |");
         result.Should().NotContain("900000.00");

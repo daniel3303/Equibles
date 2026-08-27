@@ -148,40 +148,22 @@ public class StockPriceTools
         );
     }
 
-    [McpServerTool(Name = "GetLatestPrices", Title = "Latest Prices", ReadOnly = true)]
+    [McpServerTool(Name = "GetLatestClosingPrices", Title = "Latest Closing Prices", ReadOnly = true)]
     [Description(
-        "Get the most recent closing price (USD), daily change, volume, and trailing 52-week "
-            + "range for one or more stocks. Useful for quick price checks across a portfolio "
-            + "or watchlist. The change columns are a ONE-SESSION move: they are shown only "
-            + "when the stored series holds the trading day immediately before the date on the "
-            + "row, and are \"—\" otherwise, so a change is never a multi-session move in "
-            + "disguise. Each row is that ticker's newest TRADED, SETTLED daily bar; zero-volume "
-            + "carry-forward candles are excluded. The Date column "
-            + "names its session: for a few hours after a US close some tickers still show the "
-            + "prior session while the fresh bar settles, so dates within one response can "
-            + "differ — anchor on the Date column, never the wall clock. 52W High/Low are the "
-            + "highest and lowest daily closes in the 365 days ending on the row's date. If "
-            + "that window crosses a recorded split, it starts at the latest split because raw "
-            + "rows carry no split-basis metadata; the partial values are marked *. They are CLOSING "
-            + "extremes, never intraday highs and lows, and they are not dividend-adjusted, so "
-            + "a source quoting an intraday range reads higher and one quoting a "
-            + "dividend-adjusted range reads lower without either being wrong. Off High / Above "
-            + "Low are the close's percent distance from those bounds."
+        "Get each ticker's newest traded, settled daily close in USD, with one-session change, volume, and trailing 52-week closing range. Rows can have different dates while a session settles; use the Date column. Change is omitted when the immediately prior trading session is absent. Split-limited or partial 52-week ranges are marked in the response. This is settled history, not an intraday quote."
     )]
-    public Task<string> GetLatestPrices(
-        [Description(
-            "Comma-separated list of ticker symbols (e.g., 'AAPL,MSFT,GOOG,TSLA'). Maximum 25 per request. Class shares use a dash (BRK-B); the dot form (BRK.B) is also accepted."
-        )]
-            string tickers
+    public Task<string> GetLatestClosingPrices(
+        [Description("Ticker symbols (max 25). Class shares may use BRK-B or BRK.B.")]
+            string[] tickers
     )
     {
         return _runner.Execute(
             async () =>
             {
-                if (string.IsNullOrWhiteSpace(tickers))
+                if (tickers == null || tickers.Length == 0)
                     return "No tickers provided.";
 
-                var segments = tickers.Split(',').Select(ticker => ticker.Trim()).ToList();
+                var segments = tickers.Select(ticker => ticker?.Trim()).ToList();
                 if (segments.All(string.IsNullOrWhiteSpace))
                     return "No tickers provided.";
                 if (segments.Count > 25)
@@ -421,10 +403,15 @@ public class StockPriceTools
 
                 return result.ToString();
             },
-            "GetLatestPrices",
-            $"tickers: {tickers}"
+            "GetLatestClosingPrices",
+            $"tickers: {string.Join(",", tickers ?? [])}"
         );
     }
+
+    public Task<string> GetLatestClosingPrices(string tickers) =>
+        GetLatestClosingPrices(
+            tickers?.Split(',', StringSplitOptions.TrimEntries)
+        );
 
     [McpServerTool(
         Name = "GetStochasticOscillator",

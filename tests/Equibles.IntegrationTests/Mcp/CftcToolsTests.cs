@@ -144,18 +144,18 @@ public class CftcToolsTests : ParadeDbMcpTestBase
         result.Should().NotContain("not found");
     }
 
-    // ── GetLatestCftcData ────────────────────────────────────────────────
+    // ── GetLatestCftcPositioning ────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetLatestCftcData_EmptyDatabase_ReturnsNoDataMessage()
+    public async Task GetLatestCftcPositioning_EmptyDatabase_ReturnsNoDataMessage()
     {
-        var result = await Sut().GetLatestCftcData();
+        var result = await Sut().GetLatestCftcPositioning();
 
         result.Should().Be("No CFTC contracts found in the database.");
     }
 
     [Fact]
-    public async Task GetLatestCftcData_GroupsContractsByCategory_AndUsesLatestReport()
+    public async Task GetLatestCftcPositioning_GroupsContractsByCategory_AndUsesLatestReport()
     {
         var crude = CrudeOilContract();
         var gold = GoldContract();
@@ -170,7 +170,7 @@ public class CftcToolsTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestCftcData();
+        var result = await Sut().GetLatestCftcPositioning();
 
         result.Should().Contain("**Energy**");
         result.Should().Contain("**Metals**");
@@ -181,24 +181,24 @@ public class CftcToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestCftcData_FiltersByCategory()
+    public async Task GetLatestCftcPositioning_FiltersByCategory()
     {
         DbContext.Set<CftcContract>().AddRange(CrudeOilContract(), GoldContract());
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestCftcData(category: "Energy");
+        var result = await Sut().GetLatestCftcPositioning(category: "Energy");
 
         result.Should().Contain("CRUDE OIL");
         result.Should().NotContain("GOLD");
     }
 
     [Fact]
-    public async Task GetLatestCftcData_ContractWithoutReport_RendersEmDashes()
+    public async Task GetLatestCftcPositioning_ContractWithoutReport_RendersEmDashes()
     {
         DbContext.Set<CftcContract>().Add(CrudeOilContract());
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetLatestCftcData();
+        var result = await Sut().GetLatestCftcPositioning();
 
         result.Should().Contain("CRUDE OIL");
         result.Should().Contain("| — | — |");
