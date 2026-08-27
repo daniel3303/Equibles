@@ -17,7 +17,8 @@ public class FinraTickerScopeTests
     [Fact]
     public void SecondaryListingUnavailable_PrimaryTicker_IsSupported()
     {
-        FinraTickerScope.SecondaryListingUnavailable(Stock, "AAXJ", "short-volume")
+        FinraTickerScope
+            .SecondaryListingUnavailable(Stock, "AAXJ", "short-volume")
             .Should()
             .BeNull();
     }
@@ -25,11 +26,7 @@ public class FinraTickerScopeTests
     [Fact]
     public void SecondaryListingUnavailable_SecondaryTicker_RefusesPrimaryRows()
     {
-        var result = FinraTickerScope.SecondaryListingUnavailable(
-            Stock,
-            "SOXX",
-            "short-volume"
-        );
+        var result = FinraTickerScope.SecondaryListingUnavailable(Stock, "SOXX", "short-volume");
 
         result.Should().Contain("No exact short-volume series is available for SOXX");
         result.Should().Contain("AAXJ's FINRA rows are not substituted");
@@ -38,7 +35,8 @@ public class FinraTickerScopeTests
     [Fact]
     public void SecondaryListingUnavailable_CompanyName_IsNotTreatedAsAListing()
     {
-        FinraTickerScope.SecondaryListingUnavailable(Stock, "iShares Trust", "short-volume")
+        FinraTickerScope
+            .SecondaryListingUnavailable(Stock, "iShares Trust", "short-volume")
             .Should()
             .BeNull();
     }

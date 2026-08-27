@@ -104,13 +104,17 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortSqueezeScores_SecondaryTicker_IsRefusedBeforeEmptyUniverse()
     {
-        DbContext.Set<CommonStock>().Add(new CommonStock
-        {
-            Ticker = "AAXJ",
-            Name = "iShares Trust",
-            Cik = "0000000199",
-            SecondaryTickers = ["SOXX"],
-        });
+        DbContext
+            .Set<CommonStock>()
+            .Add(
+                new CommonStock
+                {
+                    Ticker = "AAXJ",
+                    Name = "iShares Trust",
+                    Cik = "0000000199",
+                    SecondaryTickers = ["SOXX"],
+                }
+            );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetShortSqueezeScores(ticker: "SOXX");
