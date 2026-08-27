@@ -149,4 +149,19 @@ public class AnnualTransitionStubsTests
         AnnualTransitionStubs.IsCorroborated(stub, null).Should().BeFalse();
         AnnualTransitionStubs.IsCorroborated(stub, [instant]).Should().BeFalse();
     }
+
+    // FinancialFactsTools mixes two constant sets in one code path: the Mcp-internal
+    // FiscalPeriodSpanDays gates the preferred annual filter while AnnualTransitionStubs
+    // carries its own bounds for the fallback. If they drift, a span one side calls
+    // annual stops seaming the other side's stubs.
+    [Fact]
+    public void AnnualBounds_MatchTheMcpSpanConstants()
+    {
+        AnnualTransitionStubs
+            .MinAnnualSpanDays.Should()
+            .Be(Equibles.Sec.FinancialFacts.Mcp.Helpers.FiscalPeriodSpanDays.MinAnnualSpanDays);
+        AnnualTransitionStubs
+            .MaxAnnualSpanDays.Should()
+            .Be(Equibles.Sec.FinancialFacts.Mcp.Helpers.FiscalPeriodSpanDays.MaxAnnualSpanDays);
+    }
 }
