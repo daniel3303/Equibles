@@ -353,7 +353,8 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             DateOnly start,
             DateOnly end,
             decimal value,
-            string accession
+            string accession,
+            SecFiscalPeriod fiscalPeriod = SecFiscalPeriod.Q2
         ) =>
             new()
             {
@@ -365,7 +366,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
                 PeriodEnd = end,
                 Value = value,
                 FiscalYear = 2025,
-                FiscalPeriod = SecFiscalPeriod.Q2,
+                FiscalPeriod = fiscalPeriod,
                 Form = DocumentType.TenQ,
                 FiledDate = new DateOnly(2025, 8, 1),
                 AccessionNumber = accession,
@@ -380,6 +381,14 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
                     new DateOnly(2025, 6, 30),
                     25_000_000m,
                     "revenue"
+                ),
+                Fact(
+                    netIncome,
+                    new DateOnly(2025, 1, 1),
+                    new DateOnly(2025, 3, 31),
+                    3_000_000m,
+                    "net-income-q1",
+                    SecFiscalPeriod.Q1
                 ),
                 Fact(
                     netIncome,
@@ -401,10 +410,16 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         var result = await Sut()
             .GetFinancialStatement("AAPL", statement: "income", year: 2025, period: "Q2");
 
-        result.Should().Contain("| Revenue | $25,000,000 | USD | 2025-04-01 | 2025-06-30 |");
-        result.Should().Contain("| Net Income | $4,000,000 | USD | 2025-01-01 | 2025-06-30 |");
+        result
+            .Should()
+            .Contain("| Revenue | $25,000,000 | USD | Reported | 2025-04-01 | 2025-06-30 |");
+        result
+            .Should()
+            .Contain(
+                "| Net Income | $1,000,000 | USD | Derived quarter | 2025-04-01 | 2025-06-30 |"
+            );
         result.Should().NotContain("$99,000,000");
-        result.Should().Contain("discrete-quarter and fiscal-year-to-date facts");
+        result.Should().Contain("All flow rows span one discrete quarter");
     }
 
     [Fact]

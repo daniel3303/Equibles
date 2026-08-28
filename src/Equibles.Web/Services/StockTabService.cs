@@ -717,7 +717,6 @@ public class StockTabService
             .GetConsolidatedByStock(stock)
             .Where(f =>
                 f.FiscalYear == fiscalYear
-                && f.FiscalPeriod == fiscalPeriod
                 && conceptIds.Contains(f.FinancialConceptId)
                 && (
                     f.PeriodType != FactPeriodType.Duration
@@ -727,6 +726,23 @@ public class StockTabService
                 )
             )
             .ToListAsync();
+
+        if (statementType != FinancialStatementType.BalanceSheet)
+        {
+            var rejectNegativeConceptIds = StatementQuarterDerivation.GetNonNegativeConceptIds(
+                statementLines,
+                conceptIdByKey
+            );
+            facts = StatementQuarterDerivation
+                .AppendDerived(facts, rejectNegativeConceptIds)
+                .ToList();
+        }
+        facts = facts.Where(f => f.FiscalPeriod == fiscalPeriod).ToList();
+        if (facts.Count > 0)
+        {
+            var statementPeriodEnd = facts.Max(f => f.PeriodEnd);
+            facts = facts.Where(f => f.PeriodEnd == statementPeriodEnd).ToList();
+        }
 
         // The currently-reported fact per concept: span-aware so a quarter never
         // shows the 10-Q's year-to-date figure, latest-ending so a comparative
@@ -778,6 +794,7 @@ public class StockTabService
                     row.PeriodEnd = fact.PeriodEnd;
                     row.Form = fact.Form?.DisplayName;
                     row.FiledDate = fact.FiledDate;
+                    row.Derived = StatementQuarterDerivation.IsDerived(fact);
                 }
                 return row;
             })

@@ -52,8 +52,9 @@ public class FinancialStatementTools
             + "given fiscal year and period, sourced from SEC Company Facts (structured XBRL). "
             + "Returns the standard line items (e.g. revenue, net income, total assets, "
             + "operating cash flow) with the latest-restated value for one exact statement "
-            + "period end. Each row carries its actual period start/end so discrete-quarter "
-            + "and fiscal-year-to-date flow facts remain distinguishable. "
+            + "period end. Quarterly flow rows are always discrete quarters: when the filer "
+            + "reports only cumulative year-to-date USD values, the quarter is derived by "
+            + "exact subtraction from the preceding cumulative period and marked Derived. "
             + "Company-specific dimensional facts (e.g. product-segment revenue) are not "
             + "included — use GetRevenueBreakdown for segment/geographic revenue, and "
             + "GetFinancialFact or CompareFinancialFact for one line item across periods "
@@ -135,7 +136,6 @@ public class FinancialStatementTools
                     .GetConsolidatedByStock(stock)
                     .Where(f =>
                         f.FiscalYear == selectedYear
-                        && f.FiscalPeriod == selectedPeriod
                         && conceptIds.Contains(f.FinancialConceptId)
                         && (
                             f.PeriodType != FactPeriodType.Duration
@@ -147,6 +147,19 @@ public class FinancialStatementTools
                         )
                     )
                     .ToListAsync();
+
+                if (statementType != FinancialStatementType.BalanceSheet)
+                {
+                    var rejectNegativeConceptIds =
+                        StatementQuarterDerivation.GetNonNegativeConceptIds(
+                            statementLines,
+                            conceptIdByKey
+                        );
+                    facts = StatementQuarterDerivation
+                        .AppendDerived(facts, rejectNegativeConceptIds)
+                        .ToList();
+                }
+                facts = facts.Where(f => f.FiscalPeriod == selectedPeriod).ToList();
 
                 if (facts.Count == 0)
                     return $"No {statementType.NameForHumans().ToLowerInvariant()} line items "
@@ -211,8 +224,8 @@ public class FinancialStatementTools
             $"{statementType.NameForHumans()} for {stock.Ticker} "
                 + $"({FactMarkdown.Cell(stock.Name)}) — "
                 + $"FY{selectedYear} {selectedPeriod.NameForHumans()}:",
-            "| Line Item | Value | Unit | Period Start | Period End | Form | Filed |",
-            "|-----------|------:|------|--------------|------------|------|-------|"
+            "| Line Item | Value | Unit | Basis | Period Start | Period End | Form | Filed |",
+            "|-----------|------:|------|-------|--------------|------------|------|-------|"
         );
 
         var rendered = 0;
@@ -238,6 +251,7 @@ public class FinancialStatementTools
                 $"| {FactMarkdown.Cell(line.Label)} | "
                     + $"{FactMarkdown.Value(value, fact.Unit)} | "
                     + $"{FactMarkdown.Cell(fact.Unit)} | "
+                    + $"{(StatementQuarterDerivation.IsDerived(fact) ? "Derived quarter" : "Reported")} | "
                     + $"{fact.PeriodStart:yyyy-MM-dd} | "
                     + $"{fact.PeriodEnd:yyyy-MM-dd} | "
                     + $"{FactMarkdown.Cell(fact.Form?.DisplayName)} | "
@@ -268,9 +282,9 @@ public class FinancialStatementTools
             && statementType != FinancialStatementType.BalanceSheet
         )
             result.AppendLine(
-                "\n_Quarterly flow rows preserve the exact SEC-reported span. A period can "
-                    + "contain discrete-quarter and fiscal-year-to-date facts; use Period Start "
-                    + "and Period End to distinguish them._"
+                "\n_All flow rows span one discrete quarter. A Derived quarter is exact "
+                    + "subtraction of consecutive cumulative USD facts with the same concept, "
+                    + "unit and fiscal-year start; an unprovable YTD-only line is omitted._"
             );
 
         // Each line independently takes its latest restatement, so one

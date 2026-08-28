@@ -91,7 +91,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 `FinancialStatementTools`:
 
-- `GetFinancialStatement` — full income statement / balance sheet / cash flow for a ticker + fiscal period, anchored to one actual period end with each line's exact start/end span.
+- `GetFinancialStatement` — full income statement / balance sheet / cash flow for a ticker + fiscal period, anchored to one actual period end. Quarterly USD flows are discrete quarters; a missing quarter is derived only by exact subtraction of compatible cumulative facts and marked in the `Basis` column.
 
 `RevenueBreakdownTools`:
 

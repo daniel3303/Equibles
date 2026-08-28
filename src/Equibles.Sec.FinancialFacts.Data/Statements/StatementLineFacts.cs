@@ -55,9 +55,8 @@ public static class StatementLineFacts
     {
         var candidates = facts.ToList();
 
-        // A source-stamped duration remains the fallback when no ordinary span
-        // exists, but multi-year/inception durations cannot represent any one
-        // fiscal period — even when the source stamped them Q1..Q4.
+        // A source stamp never turns a cumulative or inception duration into
+        // one quarter or one fiscal year.
         candidates = candidates
             .Where(f =>
             {
@@ -80,8 +79,9 @@ public static class StatementLineFacts
                     : spanDays <= MaxDiscreteQuarterDays;
             })
             .ToList();
-        if (preferred.Count > 0)
-            candidates = preferred;
+        if (preferred.Count == 0)
+            return null;
+        candidates = preferred;
 
         return candidates
             .OrderByDescending(f => f.PeriodEnd)
@@ -109,8 +109,8 @@ public static class StatementLineFacts
     }
 
     /// <summary>
-    /// The fact to render for a line: its first variant with a fact for the
-    /// period, or null when the company reported none of them.
+    /// The fact to render for a line: the first reported variant, otherwise the
+    /// first derived variant, or null when the company reported none of them.
     /// </summary>
     public static FinancialFact PickFact(
         StatementLine line,
@@ -118,14 +118,19 @@ public static class StatementLineFacts
         IReadOnlyDictionary<Guid, FinancialFact> factByConceptId
     )
     {
+        FinancialFact derivedFallback = null;
         foreach (var reference in line.Concepts)
         {
             if (
                 conceptIdByKey.TryGetValue((reference.Taxonomy, reference.Tag), out var conceptId)
                 && factByConceptId.TryGetValue(conceptId, out var fact)
             )
-                return fact;
+            {
+                if (!StatementQuarterDerivation.IsDerived(fact))
+                    return fact;
+                derivedFallback ??= fact;
+            }
         }
-        return null;
+        return derivedFallback;
     }
 }
