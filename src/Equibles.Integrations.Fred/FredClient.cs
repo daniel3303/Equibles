@@ -59,6 +59,25 @@ public class FredClient : IFredClient
         return response?.Series?.FirstOrDefault();
     }
 
+    public async Task<List<FredSeriesRecord>> SearchSeries(string searchText, int limit = 25)
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+            return [];
+
+        var boundedLimit = Math.Clamp(limit, 1, 100);
+        _logger.LogDebug("Searching FRED series for {SearchText}", searchText);
+        var url =
+            $"{ApiBaseUrl}/fred/series/search"
+            + $"?search_text={Uri.EscapeDataString(searchText.Trim())}"
+            + $"&api_key={_options.ApiKey}"
+            + "&file_type=json"
+            + "&order_by=popularity"
+            + "&sort_order=desc"
+            + $"&limit={boundedLimit}";
+        var content = await SendWithRetry(url);
+        return JsonConvert.DeserializeObject<FredSeriesResponse>(content)?.Series ?? [];
+    }
+
     public async Task<List<FredObservationRecord>> GetObservations(
         string seriesId,
         DateOnly? startDate = null

@@ -6,6 +6,7 @@ public interface IFredClient
 {
     bool IsConfigured { get; }
     Task<FredSeriesRecord> GetSeriesMetadata(string seriesId);
+    Task<List<FredSeriesRecord>> SearchSeries(string searchText, int limit = 25);
     Task<List<FredObservationRecord>> GetObservations(string seriesId, DateOnly? startDate = null);
     Task<FredReleaseRecord> GetSeriesRelease(string seriesId);
     Task<List<FredReleaseDateRecord>> GetReleaseDates(
