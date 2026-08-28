@@ -11,9 +11,11 @@ public class FredClientSearchSeriesTests
     [Fact]
     public async Task SearchSeries_EncodesQueryBoundsLimitAndReturnsMetadata()
     {
-        var handler = new CapturingHandler("""
+        var handler = new CapturingHandler(
+            """
             {"seriess":[{"id":"DEXTAUS","title":"Taiwan Dollars to U.S. Dollar Exchange Rate","frequency":"Daily","units":"New Taiwan Dollars to One U.S. Dollar","notes":"Noon buying rates."}]}
-            """);
+            """
+        );
         var client = new FredClient(
             new HttpClient(handler),
             Substitute.For<ILogger<FredClient>>(),
@@ -55,9 +57,12 @@ public class FredClientSearchSeriesTests
         )
         {
             RequestUri = request.RequestUri;
-            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
-                Content = new StringContent(response),
-            });
+            return Task.FromResult(
+                new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(response),
+                }
+            );
         }
     }
 }
