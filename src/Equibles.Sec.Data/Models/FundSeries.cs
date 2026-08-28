@@ -29,6 +29,7 @@ namespace Equibles.Sec.Data.Models;
 /// </summary>
 [Index(nameof(IdentityKey), IsUnique = true)]
 [Index(nameof(Slug), IsUnique = true)]
+[Index(nameof(LatestNportFilingId), IsUnique = true)]
 [Index(nameof(CommonStockId))]
 [Index(nameof(RegistrantCik), nameof(SeriesId))]
 public class FundSeries
@@ -82,6 +83,12 @@ public class FundSeries
     public DateOnly LatestReportPeriodDate { get; set; }
 
     public DateOnly LatestFilingDate { get; set; }
+
+    /// <summary>
+    /// The exact NPORT-P filing selected by the directory materializer. Readers join through this
+    /// reference instead of repeating the latest-report identity and amendment rules.
+    /// </summary>
+    public Guid LatestNportFilingId { get; set; }
 
     /// <summary>Net assets in USD, from the latest report header.</summary>
     public decimal NetAssets { get; set; }

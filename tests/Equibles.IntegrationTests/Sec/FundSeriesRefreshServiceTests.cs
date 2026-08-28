@@ -124,6 +124,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         tracked.TotalAssets.Should().Be(1_100m);
         tracked.PositionCount.Should().Be(2);
         tracked.ReportedHoldingCount.Should().Be(2);
+        tracked.LatestNportFilingId.Should().Be(trackedFiling.Id);
         tracked.LatestReportPeriodDate.Should().Be(new DateOnly(2025, 3, 31));
 
         var trust = await read.Set<FundSeries>().SingleAsync(s => s.RegistrantCik == "0001100663");
@@ -134,6 +135,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         trust.NetAssets.Should().Be(2_000m);
         trust.PositionCount.Should().Be(1, "only the tracked-CUSIP holding is stored for a trust");
         trust.ReportedHoldingCount.Should().Be(347, "the full filing count survives filtering");
+        trust.LatestNportFilingId.Should().Be(trustFiling.Id);
     }
 
     [Fact]
@@ -175,6 +177,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         var row = await read.Set<FundSeries>().SingleAsync(s => s.CommonStockId == cef.Id);
         row.NetAssets.Should().Be(900m, "the newest report wins");
         row.PositionCount.Should().Be(2);
+        row.LatestNportFilingId.Should().Be(newer.Id);
         row.LatestReportPeriodDate.Should().Be(new DateOnly(2025, 3, 31));
     }
 
@@ -272,6 +275,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             .Add(
                 new FundSeries
                 {
+                    LatestNportFilingId = tracked.Id,
                     IdentityKey = $"cs:{trust.Id}:S000002277",
                     Slug = "ishares-russell-2000-etf-s000002277",
                     CommonStockId = trust.Id,
@@ -312,6 +316,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         seed.Add(swept);
         var previous = new FundSeries
         {
+            LatestNportFilingId = Guid.NewGuid(),
             IdentityKey = $"cs:{trust.Id}:S000002277",
             Slug = "ishares-russell-2000-etf-s000002277",
             CommonStockId = trust.Id,
@@ -406,6 +411,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         seed.AddRange(
             new FundSeries
             {
+                LatestNportFilingId = Guid.NewGuid(),
                 IdentityKey = "rc:9999999999:S000099999",
                 Slug = "ghost-fund-s000099999",
                 RegistrantCik = "9999999999",
@@ -420,6 +426,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             },
             new FundSeries
             {
+                LatestNportFilingId = Guid.NewGuid(),
                 IdentityKey = $"cs:{cef.Id}",
                 Slug = "stale-slug",
                 CommonStockId = cef.Id,
@@ -454,6 +461,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         db.AddRange(
             new FundSeries
             {
+                LatestNportFilingId = Guid.NewGuid(),
                 IdentityKey = "rc:1100663:S000004310",
                 Slug = "ishares-core-sp-500-etf-s000004310",
                 RegistrantCik = "1100663",
@@ -464,6 +472,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             },
             new FundSeries
             {
+                LatestNportFilingId = Guid.NewGuid(),
                 IdentityKey = "rc:0000102909:S000002839",
                 Slug = "vanguard-500-index-fund-s000002839",
                 RegistrantCik = "0000102909",

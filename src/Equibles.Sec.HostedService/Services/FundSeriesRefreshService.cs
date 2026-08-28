@@ -67,6 +67,7 @@ public class FundSeriesRefreshService
             .GetLatestPerSeries(DateOnly.MinValue)
             .Select(f => new FundSeriesAggregate
             {
+                LatestNportFilingId = f.Id,
                 CommonStockId = f.CommonStockId,
                 RegistrantCik = f.RegistrantCik,
                 SeriesId = f.SeriesId,
@@ -127,6 +128,7 @@ public class FundSeriesRefreshService
                             SeriesName = incoming.SeriesName,
                             RegistrantName = incoming.RegistrantName,
                             Ticker = incoming.Ticker,
+                            LatestNportFilingId = incoming.LatestNportFilingId,
                             LatestReportPeriodDate = incoming.LatestReportPeriodDate,
                             LatestFilingDate = incoming.LatestFilingDate,
                             NetAssets = incoming.NetAssets,
@@ -273,6 +275,7 @@ public class FundSeriesRefreshService
             SeriesName = a.SeriesName,
             RegistrantName = a.RegistrantName,
             Ticker = ticker,
+            LatestNportFilingId = a.LatestNportFilingId,
             LatestReportPeriodDate = a.LatestReportPeriodDate,
             LatestFilingDate = a.LatestFilingDate,
             NetAssets = a.NetAssets,
@@ -334,6 +337,7 @@ public class FundSeriesRefreshService
 
     private class FundSeriesAggregate
     {
+        public Guid LatestNportFilingId { get; set; }
         public Guid? CommonStockId { get; set; }
         public string RegistrantCik { get; set; }
         public string SeriesId { get; set; }

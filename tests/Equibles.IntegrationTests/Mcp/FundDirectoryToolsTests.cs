@@ -264,6 +264,7 @@ public class FundDirectoryToolsTests : IDisposable
     {
         var series = new FundSeries
         {
+            LatestNportFilingId = Guid.NewGuid(),
             IdentityKey = $"rc:0000999999:{seriesId}",
             Slug = $"{name.ToLower().Replace(' ', '-').Replace("--", "-")}-{seriesId.ToLower()}",
             RegistrantCik = "0000999999",

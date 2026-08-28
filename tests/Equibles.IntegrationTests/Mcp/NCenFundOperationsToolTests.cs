@@ -150,6 +150,7 @@ public class NCenFundOperationsToolTests : IDisposable
         _dbContext.Add(
             new FundSeries
             {
+                LatestNportFilingId = Guid.NewGuid(),
                 IdentityKey = "rc:1100663:S000004310",
                 Slug = "ishares-core-sp-500-etf-s000004310",
                 RegistrantCik = "1100663",
@@ -177,6 +178,7 @@ public class NCenFundOperationsToolTests : IDisposable
         _dbContext.Add(
             new FundSeries
             {
+                LatestNportFilingId = Guid.NewGuid(),
                 IdentityKey = "rc:0000102909:S000002839",
                 Slug = "vanguard-500-index-fund-s000002839",
                 RegistrantCik = "0000102909",
@@ -202,6 +204,7 @@ public class NCenFundOperationsToolTests : IDisposable
         _dbContext.Add(
             new FundSeries
             {
+                LatestNportFilingId = Guid.NewGuid(),
                 IdentityKey = "rc:1100663:S000004310",
                 Slug = "unsafe-fund-s000004310",
                 RegistrantCik = "1100663",
