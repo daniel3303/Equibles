@@ -298,6 +298,49 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RebuildAll_ReprocessedFilingChangesIdentity_ReplacesPriorFilingOwner()
+    {
+        await using var seed = FreshContext();
+        var stock = await SeedStock(seed, "IVV", "0001100663");
+        var filing = MakeFiling(
+            stock.Id,
+            null,
+            "0001100663-25-000001",
+            "S000002277",
+            "iShares Core S&P 500 ETF",
+            "iShares Trust",
+            new DateOnly(2025, 1, 31),
+            netAssets: 2_100m,
+            totalAssets: 2_150m
+        );
+        seed.Add(filing);
+        seed.Set<FundSeries>()
+            .Add(
+                new FundSeries
+                {
+                    LatestNportFilingId = filing.Id,
+                    IdentityKey = $"cs:{stock.Id}",
+                    Slug = "ishares-trust-ivv",
+                    CommonStockId = stock.Id,
+                    SeriesId = "",
+                    SeriesName = "iShares Trust",
+                    LatestReportPeriodDate = filing.ReportPeriodDate,
+                    LatestFilingDate = filing.FilingDate,
+                }
+            );
+        await seed.SaveChangesAsync();
+
+        await BuildService().RebuildAllAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var row = await read.Set<FundSeries>().SingleAsync();
+        row.LatestNportFilingId.Should().Be(filing.Id);
+        row.IdentityKey.Should().Be($"cs:{stock.Id}:S000002277");
+        row.Slug.Should().Be("ishares-core-s-p-500-etf-s000002277");
+        row.SeriesId.Should().Be("S000002277");
+    }
+
+    [Fact]
     public async Task RebuildAll_ReplacementUpsertFails_RollsBackConflictingSlugDeletion()
     {
         await using var seed = FreshContext();

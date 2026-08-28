@@ -100,16 +100,21 @@ public class FundSeriesRefreshService
 
         if (rows.Count > 0)
         {
-            // A series can move between the issuer-feed and sweep populations while retaining its
-            // canonical route slug. Remove the superseded identity first so the unique Slug index
-            // cannot block the replacement; the transaction preserves the old directory if the
-            // subsequent rebuild fails.
+            // Reprocessing can change a filing's resolved identity while retaining its filing ID,
+            // and a series can move populations while retaining its route slug. Remove either
+            // superseded owner before upsert so both unique indexes permit the replacement; the
+            // transaction preserves the old directory if the subsequent rebuild fails.
             var currentIdentityKeys = rows.Select(s => s.IdentityKey).ToList();
             var currentSlugs = rows.Select(s => s.Slug).ToList();
+            var currentFilingIds = rows.Select(s => s.LatestNportFilingId).ToList();
             await dbContext
                 .Set<FundSeries>()
                 .Where(s =>
-                    currentSlugs.Contains(s.Slug) && !currentIdentityKeys.Contains(s.IdentityKey)
+                    !currentIdentityKeys.Contains(s.IdentityKey)
+                    && (
+                        currentSlugs.Contains(s.Slug)
+                        || currentFilingIds.Contains(s.LatestNportFilingId)
+                    )
                 )
                 .ExecuteDeleteAsync(cancellationToken);
 
