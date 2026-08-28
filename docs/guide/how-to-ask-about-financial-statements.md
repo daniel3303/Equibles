@@ -15,7 +15,7 @@ Name a company, a statement, and a period:
 - "What did Microsoft's balance sheet look like last fiscal year?"
 - "Pull NVDA's cash-flow statement for its latest annual period."
 
-The assistant calls the `GetFinancialStatement` tool and replies with the standard line items — revenue, net income, total assets, operating cash flow, and the rest — for the fiscal year and period you asked for, using the latest restated values. Every line is anchored to one statement period end and includes its actual period start, so a discrete quarter and a fiscal-year-to-date flow remain visibly different.
+The assistant calls the `GetFinancialStatement` tool and replies with the standard line items — revenue, net income, total assets, operating cash flow, and the rest — for the fiscal year and period you asked for, using the latest restated values. Every line is anchored to one statement period end. Quarterly flow rows always span one quarter: when a filer reports only cumulative USD facts, the tool derives the quarter by exact subtraction from the compatible preceding cumulative fact and marks its basis; an unprovable YTD-only line is omitted.
 
 ## Follow one metric over time
 

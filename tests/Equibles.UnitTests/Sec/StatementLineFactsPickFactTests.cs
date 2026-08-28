@@ -69,6 +69,40 @@ public class StatementLineFactsPickFactTests
     }
 
     [Fact]
+    public void PickFact_LaterReportedVariant_WinsOverPreferredDerivedVariant()
+    {
+        var line = RdLine();
+        var genericId = Guid.NewGuid();
+        var softwareId = Guid.NewGuid();
+        var conceptIdByKey = new Dictionary<(FactTaxonomy, string), Guid>
+        {
+            [(FactTaxonomy.UsGaap, "ResearchAndDevelopmentExpense")] = genericId,
+            [
+                (
+                    FactTaxonomy.UsGaap,
+                    "ResearchAndDevelopmentExpenseSoftwareExcludingAcquiredInProcessCost"
+                )
+            ] = softwareId,
+        };
+        var derived = new FinancialFact { Value = 100m };
+        var reported = new FinancialFact
+        {
+            Value = 200m,
+            Form = Equibles.Sec.Data.Models.DocumentType.TenQ,
+            AccessionNumber = "reported",
+        };
+        var facts = new Dictionary<Guid, FinancialFact>
+        {
+            [genericId] = derived,
+            [softwareId] = reported,
+        };
+
+        var picked = StatementLineFacts.PickFact(line, conceptIdByKey, facts);
+
+        picked.Should().BeSameAs(reported);
+    }
+
+    [Fact]
     public void PickFact_NothingReported_ReturnsNull()
     {
         var line = RdLine();
@@ -201,5 +235,23 @@ public class StatementLineFactsPickFactTests
             .PickCurrentlyReported([inceptionToDate], SecFiscalPeriod.Q2)
             .Should()
             .BeNull("a fiscal stamp cannot turn an inception duration into a quarter");
+    }
+
+    [Fact]
+    public void PickCurrentlyReported_QuarterWithOnlyYearToDateFact_ReturnsNull()
+    {
+        var yearToDate = new FinancialFact
+        {
+            Value = 40m,
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = new DateOnly(2026, 1, 1),
+            PeriodEnd = new DateOnly(2026, 6, 30),
+            FiscalPeriod = SecFiscalPeriod.Q2,
+        };
+
+        StatementLineFacts
+            .PickCurrentlyReported([yearToDate], SecFiscalPeriod.Q2)
+            .Should()
+            .BeNull("a cumulative fact must never appear as one discrete quarter");
     }
 }

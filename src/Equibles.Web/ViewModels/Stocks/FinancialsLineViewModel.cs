@@ -13,6 +13,8 @@ public class FinancialsLineViewModel
 
     public decimal Value { get; set; }
 
+    public bool Derived { get; set; }
+
     public string Unit { get; set; }
 
     public DateOnly PeriodEnd { get; set; }
