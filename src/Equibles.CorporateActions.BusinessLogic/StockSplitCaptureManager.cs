@@ -58,7 +58,7 @@ public class StockSplitCaptureManager
 
         foreach (var split in splits)
         {
-            if (split.Denominator <= 0)
+            if (split.Numerator <= 0 || split.Denominator <= 0)
                 continue;
 
             var match = existing.FirstOrDefault(s => s.EffectiveDate == split.EffectiveDate);

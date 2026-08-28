@@ -15,14 +15,14 @@ public static class SplitAdjustment
     /// <see cref="StockSplit.Numerator"/>/<see cref="StockSplit.Denominator"/>
     /// ratio. The comparison is strict (<c>&gt;</c>) because a report dated on the
     /// effective date already reflects the post-split count. Splits with a
-    /// non-positive denominator are skipped to guard against divide-by-zero.
+    /// non-positive ratio arm are skipped because they cannot describe a split.
     /// </summary>
     public static decimal ShareCountFactor(DateOnly asOf, IEnumerable<StockSplit> splits)
     {
         var factor = 1m;
         foreach (var split in splits)
         {
-            if (split.EffectiveDate > asOf && split.Denominator > 0)
+            if (split.EffectiveDate > asOf && split.Numerator > 0 && split.Denominator > 0)
             {
                 factor *= split.Numerator / split.Denominator;
             }

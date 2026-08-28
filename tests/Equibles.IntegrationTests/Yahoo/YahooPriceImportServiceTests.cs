@@ -1601,6 +1601,223 @@ public class YahooPriceImportServiceTests : IDisposable
             .And.AllSatisfy(split => split.PriceAdjustmentAppliedTime.Should().BeNull());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Import_FullResponseOmitsOlderCapturedSplit_StillValidatesItsBoundary(
+        bool legacyNullAttribution
+    )
+    {
+        var stock = CreateStock("DBSP", "Captured Split Company");
+        await SeedStocks(stock);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
+        var priorSettled = UsMarketCalendar.PreviousTradingDay(latestSettled);
+        var olderEffectiveDate = UsMarketCalendar.PreviousTradingDay(priorSettled);
+        var olderBeforeDate = UsMarketCalendar.PreviousTradingDay(olderEffectiveDate);
+        await SeedPrices(
+            CreatePrice(stock, olderBeforeDate, 3.00m),
+            CreatePrice(stock, olderEffectiveDate, 57.10m),
+            CreatePrice(stock, priorSettled, 56.00m)
+        );
+        _splitRepo.Add(
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                PriceSeriesTicker = legacyNullAttribution ? null : stock.Ticker,
+                EffectiveDate = olderEffectiveDate,
+                Numerator = 1m,
+                Denominator = 16m,
+                Source = StockSplitSource.Yahoo,
+                PriceAdjustmentAppliedTime = olderEffectiveDate
+                    .AddDays(1)
+                    .ToDateTime(TimeOnly.MinValue),
+            }
+        );
+        await _splitRepo.SaveChanges();
+
+        var incremental = new YahooChartData
+        {
+            Prices = CreateHistoricalPrices((latestSettled, 60m)),
+            Splits =
+            [
+                new StockSplitEvent
+                {
+                    Date = latestSettled,
+                    Numerator = 2m,
+                    Denominator = 1m,
+                },
+            ],
+        };
+        var fullHistory = CreateChartData(
+            (olderBeforeDate, 3.20m),
+            (olderEffectiveDate, 58.00m),
+            (priorSettled, 57.00m),
+            (latestSettled, 60.00m)
+        );
+        var floor = new DateOnly(2020, 1, 1);
+        _yahooClient
+            .GetChart("DBSP", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(call => call.ArgAt<DateOnly>(1) == floor ? fullHistory : incremental);
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        // The full response omitted the older 1:16 event, but the applicable database row is
+        // still authoritative. Primary-series legacy null attribution follows the same rule.
+        _priceRepo
+            .GetAll()
+            .OrderBy(price => price.Date)
+            .Select(price => price.Close)
+            .Should()
+            .Equal(51.20m, 58.00m, 57.00m, 60.00m);
+    }
+
+    [Fact]
+    public async Task Import_FullResponseWithInvalidCapturedBoundary_RefusesReplacement()
+    {
+        var stock = CreateStock("BADR", "Malformed Split Company");
+        await SeedStocks(stock);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
+        var priorSettled = UsMarketCalendar.PreviousTradingDay(latestSettled);
+        var malformedEffectiveDate = UsMarketCalendar.PreviousTradingDay(priorSettled);
+        var beforeMalformedDate = UsMarketCalendar.PreviousTradingDay(malformedEffectiveDate);
+        await SeedPrices(
+            CreatePrice(stock, beforeMalformedDate, 10.00m),
+            CreatePrice(stock, malformedEffectiveDate, 10.50m),
+            CreatePrice(stock, priorSettled, 11.00m)
+        );
+        _splitRepo.Add(
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                PriceSeriesTicker = stock.Ticker,
+                EffectiveDate = malformedEffectiveDate,
+                Numerator = 0m,
+                Denominator = 1m,
+                Source = StockSplitSource.Yahoo,
+                PriceAdjustmentAppliedTime = malformedEffectiveDate
+                    .AddDays(1)
+                    .ToDateTime(TimeOnly.MinValue),
+            }
+        );
+        await _splitRepo.SaveChanges();
+
+        var incremental = new YahooChartData
+        {
+            Prices = CreateHistoricalPrices((latestSettled, 12m)),
+            Splits =
+            [
+                new StockSplitEvent
+                {
+                    Date = latestSettled,
+                    Numerator = 2m,
+                    Denominator = 1m,
+                },
+            ],
+        };
+        var fullHistory = CreateChartData(
+            (beforeMalformedDate, 10.00m),
+            (malformedEffectiveDate, 10.50m),
+            (priorSettled, 11.00m),
+            (latestSettled, 12.00m)
+        );
+        var floor = new DateOnly(2020, 1, 1);
+        _yahooClient
+            .GetChart("BADR", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(call => call.ArgAt<DateOnly>(1) == floor ? fullHistory : incremental);
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        // A legacy malformed row cannot certify how the two segments relate. Keep the previous
+        // store intact until a valid authoritative capture replaces the bad boundary.
+        _priceRepo
+            .GetAll()
+            .OrderBy(price => price.Date)
+            .Select(price => price.Close)
+            .Should()
+            .Equal(10.00m, 10.50m, 11.00m);
+    }
+
+    [Fact]
+    public async Task Import_PrimaryBecomesSecondaryBeforeReplacement_ExcludesLegacyPrimarySplit()
+    {
+        var stock = CreateStock("OLD", "Designation Change Company");
+        await SeedStocks(stock);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
+        var priorSettled = UsMarketCalendar.PreviousTradingDay(latestSettled);
+        var malformedEffectiveDate = UsMarketCalendar.PreviousTradingDay(priorSettled);
+        var beforeMalformedDate = UsMarketCalendar.PreviousTradingDay(malformedEffectiveDate);
+        await SeedPrices(
+            CreatePrice(stock, beforeMalformedDate, 10.00m),
+            CreatePrice(stock, malformedEffectiveDate, 10.50m),
+            CreatePrice(stock, priorSettled, 11.00m)
+        );
+        _splitRepo.Add(
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                PriceSeriesTicker = null,
+                EffectiveDate = malformedEffectiveDate,
+                Numerator = 0m,
+                Denominator = 1m,
+                Source = StockSplitSource.Yahoo,
+                PriceAdjustmentAppliedTime = malformedEffectiveDate
+                    .AddDays(1)
+                    .ToDateTime(TimeOnly.MinValue),
+            }
+        );
+        await _splitRepo.SaveChanges();
+
+        var incremental = new YahooChartData
+        {
+            Prices = CreateHistoricalPrices((latestSettled, 12m)),
+            Splits =
+            [
+                new StockSplitEvent
+                {
+                    Date = latestSettled,
+                    Numerator = 2m,
+                    Denominator = 1m,
+                },
+            ],
+        };
+        var fullHistory = CreateChartData(
+            (beforeMalformedDate, 10.00m),
+            (malformedEffectiveDate, 10.50m),
+            (priorSettled, 11.00m),
+            (latestSettled, 12.00m)
+        );
+        var floor = new DateOnly(2020, 1, 1);
+        var designationChanged = false;
+        _yahooClient
+            .GetChart("OLD", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(call =>
+            {
+                if (!designationChanged)
+                {
+                    stock.Ticker = "NEW";
+                    stock.SecondaryTickers = ["OLD"];
+                    _dbContext.SaveChanges();
+                    designationChanged = true;
+                }
+                return call.ArgAt<DateOnly>(1) == floor ? fullHistory : incremental;
+            });
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        // OLD was primary when the crawl target was built but secondary at the locked write. The
+        // legacy null split belongs only to the current primary, so it cannot block or restate OLD.
+        _priceRepo
+            .GetAllSeries()
+            .Where(price => price.ListedTicker == "OLD")
+            .OrderBy(price => price.Date)
+            .Select(price => price.Close)
+            .Should()
+            .Equal(10.00m, 10.50m, 11.00m, 12.00m);
+    }
+
     [Fact]
     public async Task Import_PendingReconcileResponseHasNewMixedSplit_RestatesAndStampsTheSelected()
     {
@@ -1667,6 +1884,95 @@ public class YahooPriceImportServiceTests : IDisposable
         splits[0].PriceAdjustmentAppliedTime.Should().NotBeNull();
         splits[1].EffectiveDate.Should().Be(newEffectiveDate);
         splits[1].PriceAdjustmentAppliedTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Import_PendingSplitRatioChangesDuringFetch_RefusesStaleRestatement()
+    {
+        var stock = CreateStock("RREV", "Revised Split Company");
+        await SeedStocks(stock);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var effectiveDate = today.AddDays(-10);
+        var beforeDate = effectiveDate.AddDays(-1);
+        var afterDate = effectiveDate.AddDays(1);
+        var latestDate = today.AddDays(-1);
+        await SeedPrices(
+            CreatePrice(stock, beforeDate, 90m),
+            CreatePrice(stock, afterDate, 45m),
+            CreatePrice(stock, latestDate, 44m)
+        );
+        var split = new StockSplit
+        {
+            CommonStockId = stock.Id,
+            PriceSeriesTicker = stock.Ticker,
+            EffectiveDate = effectiveDate,
+            Numerator = 2m,
+            Denominator = 1m,
+            Source = StockSplitSource.Yahoo,
+        };
+        _splitRepo.Add(split);
+        await _splitRepo.SaveChanges();
+
+        var response = CreateChartData((beforeDate, 100m), (afterDate, 50m), (latestDate, 49m));
+        _yahooClient
+            .GetChart("RREV", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(_ =>
+            {
+                // Selection snapshotted 2:1. The authoritative row changes before replacement
+                // locks and reloads it, so the stale ratio must not restate or certify the serve.
+                split.Numerator = 3m;
+                _dbContext.SaveChanges();
+                return response;
+            });
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        _priceRepo
+            .GetAllSeries()
+            .Where(price => price.ListedTicker == "RREV")
+            .OrderBy(price => price.Date)
+            .Select(price => price.Close)
+            .Should()
+            .Equal(90m, 45m, 44m);
+        split.Numerator.Should().Be(3m);
+        split.PriceAdjustmentAppliedTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Import_EmptySeriesWithOmittedInvalidCapturedSplit_PublishesNothing()
+    {
+        var stock = CreateStock("EBAD", "Empty Invalid Split Company");
+        await SeedStocks(stock);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var effectiveDate = today.AddDays(-4);
+        _splitRepo.Add(
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                PriceSeriesTicker = stock.Ticker,
+                EffectiveDate = effectiveDate,
+                Numerator = 0m,
+                Denominator = 1m,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        await _splitRepo.SaveChanges();
+
+        // Yahoo omits the known boundary. Both the pending reconciliation and the ordinary
+        // first-history path must still reload the stored split and refuse publication.
+        _yahooClient
+            .GetChart("EBAD", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(
+                CreateChartData(
+                    (effectiveDate.AddDays(-1), 10m),
+                    (effectiveDate.AddDays(1), 10.5m),
+                    (today.AddDays(-1), 11m)
+                )
+            );
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        _priceRepo.GetAllSeries().Should().NotContain(price => price.CommonStockId == stock.Id);
     }
 
     [Fact]

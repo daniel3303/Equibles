@@ -148,4 +148,27 @@ public class StockSplitCaptureManagerTests
         attributed.Numerator.Should().Be(20m);
         attributed.PriceAdjustmentAppliedTime.Should().BeNull();
     }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(-2, 1)]
+    [InlineData(2, 0)]
+    [InlineData(2, -1)]
+    public async Task Capture_NonPositiveRatioArm_DoesNotPersist(
+        decimal numerator,
+        decimal denominator
+    )
+    {
+        await using var context = NewDb();
+        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "SAFE" };
+        context.Add(stock);
+        await context.SaveChangesAsync();
+        var split = Split(numerator);
+        split.Denominator = denominator;
+
+        var changes = await NewManager(context).Capture(stock.Id, stock.Ticker, [split]);
+
+        changes.Should().Be(0);
+        (await context.Set<StockSplit>().ToListAsync()).Should().BeEmpty();
+    }
 }
