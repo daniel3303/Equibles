@@ -1241,7 +1241,7 @@ public class YahooPriceImportService
         try
         {
             var lockedSeries = await LockPriceSeries(stockRepo, target, cancellationToken);
-            if (lockedSeries == null)
+            if (lockedSeries is not LockedPriceSeries currentSeries)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 _logger.LogWarning(
@@ -1256,7 +1256,7 @@ public class YahooPriceImportService
                 .GetEffectiveByStock(target.CommonStockId, settledBefore)
                 .Where(split =>
                     split.PriceSeriesTicker == target.Ticker
-                    || (lockedSeries.Value.IsPrimary && split.PriceSeriesTicker == null)
+                    || (currentSeries.IsPrimary && split.PriceSeriesTicker == null)
                 )
                 .Select(split => new SplitBasisDefinition(
                     split.EffectiveDate,
@@ -1305,7 +1305,7 @@ public class YahooPriceImportService
                 floor,
                 replaceThrough,
                 freshRows,
-                lockedSeries.Value,
+                currentSeries,
                 cancellationToken
             );
             await transaction.CommitAsync(cancellationToken);
