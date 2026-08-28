@@ -1913,11 +1913,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(split);
         await _splitRepo.SaveChanges();
 
-        var response = CreateChartData(
-            (beforeDate, 100m),
-            (afterDate, 50m),
-            (latestDate, 49m)
-        );
+        var response = CreateChartData((beforeDate, 100m), (afterDate, 50m), (latestDate, 49m));
         _yahooClient
             .GetChart("RREV", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(_ =>
@@ -1976,10 +1972,7 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        _priceRepo
-            .GetAllSeries()
-            .Should()
-            .NotContain(price => price.CommonStockId == stock.Id);
+        _priceRepo.GetAllSeries().Should().NotContain(price => price.CommonStockId == stock.Id);
     }
 
     [Fact]

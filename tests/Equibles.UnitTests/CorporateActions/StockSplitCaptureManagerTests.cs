@@ -154,14 +154,13 @@ public class StockSplitCaptureManagerTests
     [InlineData(-2, 1)]
     [InlineData(2, 0)]
     [InlineData(2, -1)]
-    public async Task Capture_NonPositiveRatioArm_DoesNotPersist(decimal numerator, decimal denominator)
+    public async Task Capture_NonPositiveRatioArm_DoesNotPersist(
+        decimal numerator,
+        decimal denominator
+    )
     {
         await using var context = NewDb();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "SAFE",
-        };
+        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "SAFE" };
         context.Add(stock);
         await context.SaveChangesAsync();
         var split = Split(numerator);

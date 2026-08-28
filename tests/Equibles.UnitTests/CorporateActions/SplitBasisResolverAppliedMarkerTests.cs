@@ -58,15 +58,7 @@ public class SplitBasisResolverAppliedMarkerTests
             EffectiveDate = new DateOnly(2026, 8, 12),
             Numerator = numerator,
             Denominator = denominator,
-            PriceAdjustmentAppliedTime = new DateTime(
-                2026,
-                8,
-                13,
-                12,
-                0,
-                0,
-                DateTimeKind.Utc
-            ),
+            PriceAdjustmentAppliedTime = new DateTime(2026, 8, 13, 12, 0, 0, DateTimeKind.Utc),
         };
 
         var resolved = SplitBasisResolver.TryResolveFactor(

@@ -843,11 +843,13 @@ public class YahooPriceImportService
                 split.Numerator,
                 split.Denominator
             ))
-            .Concat(chartData.Splits.Select(split => new SplitBasisDefinition(
-                split.Date,
-                split.Numerator,
-                split.Denominator
-            )));
+            .Concat(
+                chartData.Splits.Select(split => new SplitBasisDefinition(
+                    split.Date,
+                    split.Numerator,
+                    split.Denominator
+                ))
+            );
 
         var replaced = await ReplaceStoredPrices(
             target,
@@ -1016,8 +1018,7 @@ public class YahooPriceImportService
     {
         var invalid = splits
             .Where(split =>
-                split.EffectiveDate <= today
-                && (split.Numerator <= 0m || split.Denominator <= 0m)
+                split.EffectiveDate <= today && (split.Numerator <= 0m || split.Denominator <= 0m)
             )
             .Select(split => (SplitBasisDefinition?)split)
             .FirstOrDefault();
