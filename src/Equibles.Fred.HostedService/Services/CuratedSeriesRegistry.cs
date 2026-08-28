@@ -68,9 +68,6 @@ public static class CuratedSeriesRegistry
         // Exchange Rates
         new("DTWEXBGS", FredSeriesCategory.ExchangeRates),
         new("DEXUSEU", FredSeriesCategory.ExchangeRates),
-        // New Taiwan dollars per US dollar, used to translate Taiwan issuers' native
-        // financial statements without licensing a commercial fundamentals feed.
-        new("DEXTAUS", FredSeriesCategory.ExchangeRates),
         // Market
         new("SP500", FredSeriesCategory.Market),
         new("VIXCLS", FredSeriesCategory.Market),
