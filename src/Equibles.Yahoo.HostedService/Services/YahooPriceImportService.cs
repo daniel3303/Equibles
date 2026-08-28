@@ -837,30 +837,17 @@ public class YahooPriceImportService
             return;
         }
 
-        var splitBoundaries = selectedSeries
+        var responseBoundaries = selectedSeries
             .Splits.Select(split => new SplitBasisDefinition(
                 split.EffectiveDate,
                 split.Numerator,
                 split.Denominator
             ))
-            .Concat(
-                chartData.Splits.Select(split => new SplitBasisDefinition(
-                    split.Date,
-                    split.Numerator,
-                    split.Denominator
-                ))
-            )
-            .Distinct()
-            .ToList();
-        if (
-            !TryPutHistoryOnSingleSplitBasis(
-                target.Ticker,
-                chartData.Prices,
-                splitBoundaries,
-                settledBefore
-            )
-        )
-            return;
+            .Concat(chartData.Splits.Select(split => new SplitBasisDefinition(
+                split.Date,
+                split.Numerator,
+                split.Denominator
+            )));
 
         var replaced = await ReplaceStoredPrices(
             target,
@@ -868,6 +855,7 @@ public class YahooPriceImportService
             historyEndDate,
             settledBefore,
             chartData.Prices,
+            responseBoundaries,
             cancellationToken
         );
         if (!replaced)
@@ -1026,6 +1014,26 @@ public class YahooPriceImportService
         DateOnly today
     )
     {
+        var invalid = splits
+            .Where(split =>
+                split.EffectiveDate <= today
+                && (split.Numerator <= 0m || split.Denominator <= 0m)
+            )
+            .Select(split => (SplitBasisDefinition?)split)
+            .FirstOrDefault();
+        if (invalid.HasValue)
+        {
+            var boundary = invalid.Value;
+            _logger.LogWarning(
+                "Refusing full history for {Ticker}: captured split {EffectiveDate} has invalid ratio {Numerator}:{Denominator}",
+                ticker,
+                boundary.EffectiveDate,
+                boundary.Numerator,
+                boundary.Denominator
+            );
+            return false;
+        }
+
         var restated = RestateHistoryAcrossKnownSplits(prices, splits, today);
         if (restated > 0)
         {
@@ -1184,38 +1192,167 @@ public class YahooPriceImportService
         DateOnly replaceThrough,
         DateOnly settledBefore,
         List<HistoricalPrice> prices,
+        IEnumerable<SplitBasisDefinition> responseBoundaries,
         CancellationToken cancellationToken
     )
     {
-        var freshRows = MapFreshRows(target.CommonStockId, prices, target.Ticker, settledBefore);
-        if (freshRows.Count == 0)
-        {
-            _logger.LogWarning(
-                "No storable prices for {Ticker} after the numeric range guard; keeping existing rows",
-                target.Ticker
-            );
-            return false;
-        }
-
         using var scope = _scopeFactory.CreateScope();
         var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var splitRepo = scope.ServiceProvider.GetRequiredService<StockSplitRepository>();
         var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
-        var replaced = await ReplacePriceRows(
+        return await ReplaceValidatedPriceRows(
             repo,
             stockRepo,
+            splitRepo,
             target,
             floor,
             replaceThrough,
-            freshRows,
+            settledBefore,
+            prices,
+            responseBoundaries,
             cancellationToken
         );
-        if (!replaced)
-            _logger.LogWarning(
-                "Skipping reconcile for {Ticker}: it no longer belongs to CommonStock {Id}",
+    }
+
+    // Full-history basis validation and replacement share the same parent-row lock and transaction.
+    // Split capture takes that lock too, so no effective boundary or primary designation can change
+    // between the applicable-split read and the final row swap.
+    private async Task<bool> ReplaceValidatedPriceRows(
+        DailyStockPriceRepository repo,
+        CommonStockRepository stockRepo,
+        StockSplitRepository splitRepo,
+        PriceSeriesTarget target,
+        DateOnly floor,
+        DateOnly replaceThrough,
+        DateOnly settledBefore,
+        List<HistoricalPrice> prices,
+        IEnumerable<SplitBasisDefinition> responseBoundaries,
+        CancellationToken cancellationToken
+    )
+    {
+        if (prices.Count == 0)
+            return false;
+
+        await using var transaction = await repo.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        try
+        {
+            var lockedSeries = await LockPriceSeries(stockRepo, target, cancellationToken);
+            if (lockedSeries == null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _logger.LogWarning(
+                    "Skipping full-history replacement for {Ticker}: it no longer belongs to CommonStock {Id}",
+                    target.Ticker,
+                    target.CommonStockId
+                );
+                return false;
+            }
+
+            var capturedBoundaries = await splitRepo
+                .GetEffectiveByStock(target.CommonStockId, settledBefore)
+                .Where(split =>
+                    split.PriceSeriesTicker == target.Ticker
+                    || (lockedSeries.Value.IsPrimary && split.PriceSeriesTicker == null)
+                )
+                .Select(split => new SplitBasisDefinition(
+                    split.EffectiveDate,
+                    split.Numerator,
+                    split.Denominator
+                ))
+                .ToListAsync(cancellationToken);
+            if (
+                !TryResolveSplitBoundaries(
+                    target.Ticker,
+                    capturedBoundaries,
+                    responseBoundaries,
+                    out var boundaries
+                )
+            )
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return false;
+            }
+            if (!TryPutHistoryOnSingleSplitBasis(target.Ticker, prices, boundaries, settledBefore))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return false;
+            }
+
+            var freshRows = MapFreshRows(
+                target.CommonStockId,
+                prices,
                 target.Ticker,
-                target.CommonStockId
+                settledBefore
             );
-        return replaced;
+            if (freshRows.Count == 0)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _logger.LogWarning(
+                    "No storable prices for {Ticker} after the numeric range guard; keeping existing rows",
+                    target.Ticker
+                );
+                return false;
+            }
+
+            await ReplaceLockedPriceRows(
+                repo,
+                stockRepo,
+                target,
+                floor,
+                replaceThrough,
+                freshRows,
+                lockedSeries.Value,
+                cancellationToken
+            );
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    // The locked database row is the current authoritative definition, while selection and chart
+    // definitions can predate a concurrent correction. Two ratios for one effective date make the
+    // fetched basis ambiguous, so fail closed instead of restating with whichever ratio happens to
+    // be enumerated first.
+    private bool TryResolveSplitBoundaries(
+        string ticker,
+        IReadOnlyCollection<SplitBasisDefinition> capturedBoundaries,
+        IEnumerable<SplitBasisDefinition> responseBoundaries,
+        out IReadOnlyList<SplitBasisDefinition> resolved
+    )
+    {
+        var candidates = capturedBoundaries.Concat(responseBoundaries).ToList();
+        var conflict = candidates
+            .GroupBy(boundary => boundary.EffectiveDate)
+            .Select(group => new
+            {
+                EffectiveDate = group.Key,
+                Ratios = group
+                    .Select(boundary => (boundary.Numerator, boundary.Denominator))
+                    .Distinct()
+                    .ToList(),
+            })
+            .FirstOrDefault(group => group.Ratios.Count > 1);
+        if (conflict != null)
+        {
+            _logger.LogWarning(
+                "Refusing full history for {Ticker}: split {EffectiveDate} has conflicting ratio definitions",
+                ticker,
+                conflict.EffectiveDate
+            );
+            resolved = [];
+            return false;
+        }
+
+        resolved = candidates.Distinct().OrderBy(boundary => boundary.EffectiveDate).ToList();
+        return true;
     }
 
     private async Task PurgePricesAfterHistoricalCutoff(
@@ -1284,40 +1421,16 @@ public class YahooPriceImportService
                 await transaction.RollbackAsync(cancellationToken);
                 return false;
             }
-            var existing = await repo.GetAllSeries()
-                .Where(p =>
-                    p.CommonStockId == target.CommonStockId
-                    && p.ListedTicker == target.Ticker
-                    && (
-                        target.IsHistorical
-                            ? p.Date >= floor || p.Date > target.HistoryEndDate!.Value
-                            : p.Date >= floor && p.Date <= replaceThrough
-                    )
-                )
-                .ToListAsync(cancellationToken);
-            if (existing.Count > 0)
-            {
-                repo.Delete(existing);
-                await repo.SaveChanges();
-            }
-
-            foreach (var batch in freshRows.Chunk(InsertBatchSize))
-            {
-                repo.AddRange(batch);
-                await repo.SaveChanges();
-            }
-
-            if (target.RequiresFullHistory)
-            {
-                lockedSeries.Value.Stock.PriceHistoryBackfilledTickers = lockedSeries
-                    .Value.Stock.PriceHistoryBackfilledTickers.Append(target.Ticker)
-                    .Select(TickerNormalizer.NormalizeListed)
-                    .Where(ticker => ticker != null)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(ticker => ticker, StringComparer.Ordinal)
-                    .ToList();
-                await stockRepo.SaveChanges();
-            }
+            await ReplaceLockedPriceRows(
+                repo,
+                stockRepo,
+                target,
+                floor,
+                replaceThrough,
+                freshRows,
+                lockedSeries.Value,
+                cancellationToken
+            );
 
             await transaction.CommitAsync(cancellationToken);
             return true;
@@ -1326,6 +1439,53 @@ public class YahooPriceImportService
         {
             await transaction.RollbackAsync(cancellationToken);
             throw;
+        }
+    }
+
+    private static async Task ReplaceLockedPriceRows(
+        DailyStockPriceRepository repo,
+        CommonStockRepository stockRepo,
+        PriceSeriesTarget target,
+        DateOnly floor,
+        DateOnly replaceThrough,
+        List<DailyStockPrice> freshRows,
+        LockedPriceSeries lockedSeries,
+        CancellationToken cancellationToken
+    )
+    {
+        var existing = await repo.GetAllSeries()
+            .Where(p =>
+                p.CommonStockId == target.CommonStockId
+                && p.ListedTicker == target.Ticker
+                && (
+                    target.IsHistorical
+                        ? p.Date >= floor || p.Date > target.HistoryEndDate!.Value
+                        : p.Date >= floor && p.Date <= replaceThrough
+                )
+            )
+            .ToListAsync(cancellationToken);
+        if (existing.Count > 0)
+        {
+            repo.Delete(existing);
+            await repo.SaveChanges();
+        }
+
+        foreach (var batch in freshRows.Chunk(InsertBatchSize))
+        {
+            repo.AddRange(batch);
+            await repo.SaveChanges();
+        }
+
+        if (target.RequiresFullHistory)
+        {
+            lockedSeries.Stock.PriceHistoryBackfilledTickers = lockedSeries
+                .Stock.PriceHistoryBackfilledTickers.Append(target.Ticker)
+                .Select(TickerNormalizer.NormalizeListed)
+                .Where(ticker => ticker != null)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(ticker => ticker, StringComparer.Ordinal)
+                .ToList();
+            await stockRepo.SaveChanges();
         }
     }
 
@@ -1437,28 +1597,17 @@ public class YahooPriceImportService
                 return new TickerImportResult(Fetched: true, Inserted: 0);
             }
 
-            if (
-                !TryPutHistoryOnSingleSplitBasis(
-                    target.Ticker,
-                    chartData.Prices,
-                    chartData
-                        .Splits.Select(split => new SplitBasisDefinition(
-                            split.Date,
-                            split.Numerator,
-                            split.Denominator
-                        ))
-                        .ToList(),
-                    settledAsOf
-                )
-            )
-                return new TickerImportResult(Fetched: true, Inserted: 0);
-
             var replaced = await ReplaceStoredPrices(
                 target,
                 PriceHistoryFloor(),
                 chartEnd,
                 settledAsOf,
                 chartData.Prices,
+                chartData.Splits.Select(split => new SplitBasisDefinition(
+                    split.Date,
+                    split.Numerator,
+                    split.Denominator
+                )),
                 cancellationToken
             );
             if (replaced)
@@ -1481,24 +1630,34 @@ public class YahooPriceImportService
         // harmless. Issuer-level action capture below independently locks and requires whichever
         // listing is primary at write time.
         var floor = PriceHistoryFloor();
-        if (chartData.Splits.Count > 0 && startDate == floor)
+        if (startDate == floor)
         {
             await CaptureSplits(target, chartData.Splits, cancellationToken);
-            if (
-                !TryPutHistoryOnSingleSplitBasis(
-                    target.Ticker,
-                    chartData.Prices,
-                    chartData
-                        .Splits.Select(split => new SplitBasisDefinition(
-                            split.Date,
-                            split.Numerator,
-                            split.Denominator
-                        ))
-                        .ToList(),
-                    today
-                )
-            )
-                return new TickerImportResult(Fetched: true, Inserted: 0);
+            var replaced = await ReplaceStoredPrices(
+                target,
+                floor,
+                chartEnd,
+                today,
+                chartData.Prices,
+                chartData.Splits.Select(split => new SplitBasisDefinition(
+                    split.Date,
+                    split.Numerator,
+                    split.Denominator
+                )),
+                cancellationToken
+            );
+            if (replaced)
+            {
+                _logger.LogInformation(
+                    "Reconciled {Ticker}: replaced its full listed price history",
+                    target.Ticker
+                );
+                await CaptureDividends(target, chartData.Dividends, cancellationToken);
+            }
+            return new TickerImportResult(
+                Fetched: true,
+                Inserted: replaced ? chartData.Prices.Count : 0
+            );
         }
 
         if (chartData.Splits.Count > 0 && startDate > floor)
@@ -1515,31 +1674,19 @@ public class YahooPriceImportService
                 return new TickerImportResult(Fetched: true, Inserted: 0);
             }
 
-            var splitBoundaries = chartData
-                .Splits.Concat(fullChart.Splits)
-                .Select(split => new SplitBasisDefinition(
-                    split.Date,
-                    split.Numerator,
-                    split.Denominator
-                ))
-                .Distinct()
-                .ToList();
-            if (
-                !TryPutHistoryOnSingleSplitBasis(
-                    target.Ticker,
-                    fullChart.Prices,
-                    splitBoundaries,
-                    today
-                )
-            )
-                return new TickerImportResult(Fetched: true, Inserted: 0);
-
             var replaced = await ReplaceStoredPrices(
                 target,
                 floor,
                 today,
                 today,
                 fullChart.Prices,
+                chartData
+                    .Splits.Concat(fullChart.Splits)
+                    .Select(split => new SplitBasisDefinition(
+                        split.Date,
+                        split.Numerator,
+                        split.Denominator
+                    )),
                 cancellationToken
             );
             if (replaced)
@@ -1553,7 +1700,17 @@ public class YahooPriceImportService
             return new TickerImportResult(Fetched: true, Inserted: 0);
         }
 
-        var inserted = await PersistPrices(target, chartData.Prices, today, cancellationToken);
+        var inserted = await PersistPrices(
+            target,
+            chartData.Prices,
+            today,
+            chartData.Splits.Select(split => new SplitBasisDefinition(
+                split.Date,
+                split.Numerator,
+                split.Denominator
+            )),
+            cancellationToken
+        );
 
         // The capture paths lock and revalidate the current primary. A stale crawl target can
         // therefore keep its exact prices but cannot write issuer-level actions.
@@ -1612,6 +1769,7 @@ public class YahooPriceImportService
         PriceSeriesTarget target,
         List<HistoricalPrice> prices,
         DateOnly today,
+        IEnumerable<SplitBasisDefinition> responseBoundaries,
         CancellationToken cancellationToken
     )
     {
@@ -1627,16 +1785,13 @@ public class YahooPriceImportService
         // or the complete backfill, never the first 500-row batch of a multi-batch insert.
         if (!await HasStoredSeries(target, cancellationToken))
         {
-            using var scope = _scopeFactory.CreateScope();
-            var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-            var repo = scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
-            var stored = await ReplacePriceRows(
-                repo,
-                stockRepo,
+            var stored = await ReplaceStoredPrices(
                 target,
                 PriceHistoryFloor(),
                 today,
-                freshRows,
+                today,
+                prices,
+                responseBoundaries,
                 cancellationToken
             );
             return stored ? freshRows.Count : 0;

@@ -91,11 +91,10 @@ public class HoldingValueBasisBoundaryAndCompoundTests
     }
 
     [Fact]
-    public void TryResolveShareCountFactor_MalformedRatio_SkipsItRatherThanDividingByZero()
+    public void TryResolveShareCountFactor_MalformedRatio_DefersInsteadOfCorruptingTheFactor()
     {
-        // A zero denominator is a broken capture, not an ambiguous basis: it moves no count, so it
-        // must neither divide by zero nor park the row as unresolvable. The good split beside it
-        // still has to apply.
+        // A malformed stored action leaves the basis unprovable. It must not divide by zero,
+        // return a zero factor, or silently apply only the well-formed split beside it.
         var splits = new List<StockSplit>
         {
             Applied(new DateOnly(2025, 1, 2), 3m, 0m),
@@ -112,8 +111,8 @@ public class HoldingValueBasisBoundaryAndCompoundTests
                 out var factor
             )
             .Should()
-            .BeTrue();
+            .BeFalse();
 
-        factor.Should().Be(2m);
+        factor.Should().Be(1m);
     }
 }

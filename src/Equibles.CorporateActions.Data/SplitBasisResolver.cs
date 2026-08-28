@@ -105,12 +105,11 @@ public static class SplitBasisResolver
                 return false;
             }
 
-            // Mirrors SplitAdjustment: a non-positive denominator is a malformed ratio, skipped
-            // rather than allowed to divide by zero. It cannot make the basis ambiguous because
-            // it moves no figure.
-            if (split.Denominator <= 0)
+            // A malformed stored action makes the basis unprovable. Returning a factor of zero or
+            // silently ignoring the row would corrupt or overstate every downstream restatement.
+            if (split.Numerator <= 0 || split.Denominator <= 0)
             {
-                continue;
+                return false;
             }
 
             resolved *= split.Numerator / split.Denominator;

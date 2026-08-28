@@ -114,6 +114,22 @@ public class SplitAdjustmentTests
     }
 
     [Fact]
+    public void ShareCountFactor_ZeroNumerator_IsSkippedWithoutZeroingShares()
+    {
+        StockSplit[] splits =
+        [
+            new()
+            {
+                EffectiveDate = new DateOnly(2024, 1, 1),
+                Numerator = 0m,
+                Denominator = 1m,
+            },
+        ];
+
+        SplitAdjustment.ShareCountFactor(new DateOnly(2023, 1, 1), splits).Should().Be(1m);
+    }
+
+    [Fact]
     public void AdjustShareCount_NoSplits_ReturnsCountUnchanged()
     {
         SplitAdjustment.AdjustShareCount(1_000, new DateOnly(2020, 1, 1), []).Should().Be(1_000);
