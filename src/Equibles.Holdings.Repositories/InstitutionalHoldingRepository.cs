@@ -984,11 +984,19 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .OrderBy(row => row.ReportDate)
             .ToListAsync(cancellationToken);
         var exact = await Get13FHistoryByStock(stock)
-            .GroupBy(holding => new { holding.ReportDate, holding.ListedTicker })
+            // A primary-listing holding can be stored either with a null ListedTicker (legacy
+            // meaning "the stock's primary ticker") or with that ticker stated explicitly. Coalesce
+            // before grouping so the two identities sum into one series instead of colliding when
+            // the result is materialised as a ticker dictionary.
+            .GroupBy(holding => new
+            {
+                holding.ReportDate,
+                PriceSeriesTicker = holding.ListedTicker ?? stock.Ticker,
+            })
             .Select(group => new
             {
                 group.Key.ReportDate,
-                PriceSeriesTicker = group.Key.ListedTicker ?? stock.Ticker,
+                group.Key.PriceSeriesTicker,
                 Shares = group.Sum(holding => holding.Shares),
             })
             .ToListAsync(cancellationToken);

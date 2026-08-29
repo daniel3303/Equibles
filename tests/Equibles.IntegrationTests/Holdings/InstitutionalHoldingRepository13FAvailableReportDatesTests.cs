@@ -358,6 +358,39 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     }
 
     [Fact]
+    public async Task GetStockActivitySnapshotsByStockSnapshotBacked_MergesImplicitAndExplicitPrimaryListing()
+    {
+        var stock = Stock("LBRDK");
+        var first = Holder("0000000020");
+        var second = Holder("0000000021");
+        var quarter = new DateOnly(2026, 3, 31);
+        var implicitPrimary = Holding(
+            stock.Id,
+            first.Id,
+            quarter,
+            FilingType.Form13F,
+            "13F-IMPLICIT-PRIMARY"
+        );
+        var explicitPrimary = Holding(
+            stock.Id,
+            second.Id,
+            quarter,
+            FilingType.Form13F,
+            "13F-EXPLICIT-PRIMARY"
+        );
+        explicitPrimary.ListedTicker = stock.Ticker;
+        _dbContext.AddRange(stock, first, second, implicitPrimary, explicitPrimary);
+        await _dbContext.SaveChangesAsync(CancellationToken.None);
+
+        var rows = await _repository.GetStockActivitySnapshotsByStockSnapshotBacked(stock);
+
+        var activity = rows.Should().ContainSingle().Which;
+        var listing = activity.ListingShares.Should().ContainSingle().Which;
+        listing.PriceSeriesTicker.Should().Be(stock.Ticker);
+        listing.CurrentShares.Should().Be(200);
+    }
+
+    [Fact]
     public async Task GetStockActivitySnapshotsByStockSnapshotBacked_BoundsStaleRowsAndAppendsRefreshLag()
     {
         var stock = Stock("TREND-LAG");
