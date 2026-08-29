@@ -102,11 +102,17 @@ public static class FinancialConceptAliases
             I("ResearchAndDevelopmentExpense"),
         ],
         ["selling-general-and-administrative"] = [G("SellingGeneralAndAdministrativeExpense")],
-        ["selling-and-marketing"] = [G("SellingAndMarketingExpense"), I("DistributionCosts")],
+        ["selling-and-marketing"] =
+        [
+            G("SellingAndMarketingExpense"),
+            I("DistributionCosts"),
+            I("SalesAndMarketingExpense"),
+        ],
         ["general-and-administrative"] =
         [
             G("GeneralAndAdministrativeExpense"),
             I("AdministrativeExpense"),
+            I("GeneralAndAdministrativeExpense"),
         ],
         ["amortization-of-intangibles"] = [G("AmortizationOfIntangibleAssets")],
         ["restructuring"] = [G("RestructuringCharges")],
@@ -147,11 +153,18 @@ public static class FinancialConceptAliases
             G(
                 "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"
             ),
+            I("ProfitLossBeforeTax"),
         ],
         ["income-tax"] = [G("IncomeTaxExpenseBenefit"), I("IncomeTaxExpenseContinuingOperations")],
         // ProfitLoss (net income including noncontrolling interests) last: it
         // only fills filers that never report the parent-attributable figure.
-        ["net-income"] = [G("NetIncomeLoss"), G("ProfitLoss"), I("ProfitLoss")],
+        ["net-income"] =
+        [
+            G("NetIncomeLoss"),
+            I("ProfitLossAttributableToOwnersOfParent"),
+            G("ProfitLoss"),
+            I("ProfitLoss"),
+        ],
         ["comprehensive-income"] = [G("ComprehensiveIncomeNetOfTax")],
         ["eps-basic"] = [G("EarningsPerShareBasic"), I("BasicEarningsLossPerShare")],
         ["eps-diluted"] = [G("EarningsPerShareDiluted"), I("DilutedEarningsLossPerShare")],
@@ -181,6 +194,18 @@ public static class FinancialConceptAliases
             I("CashAndCashEquivalents"),
         ],
         ["short-term-investments"] = [G("ShortTermInvestments"), G("MarketableSecuritiesCurrent")],
+        // IFRS filers may report the current investment balance as three additive
+        // measurement-category siblings. Keep them separate here; consumers must sum an exact
+        // same-statement column and must never treat these aliases as alternatives.
+        ["current-financial-assets-fvtpl"] =
+        [
+            I("CurrentFinancialAssetsAtFairValueThroughProfitOrLoss"),
+        ],
+        ["current-financial-assets-fvoci"] =
+        [
+            I("CurrentFinancialAssetsAtFairValueThroughOtherComprehensiveIncome"),
+        ],
+        ["current-financial-assets-amortised-cost"] = [I("CurrentFinancialAssetsAtAmortisedCost")],
         ["accounts-receivable"] =
         [
             G("AccountsReceivableNetCurrent"),
@@ -281,6 +306,9 @@ public static class FinancialConceptAliases
             G("DepreciationAndAmortization"),
             I("DepreciationAndAmortisationExpense"),
             I("DepreciationExpense"),
+            I("AdjustmentsForDepreciationExpense"),
+            I("AdjustmentsForAmortisationExpense"),
+            I("AdjustmentsForAmortizationExpense"),
         ],
         ["share-based-compensation"] =
         [
@@ -288,6 +316,7 @@ public static class FinancialConceptAliases
             I(
                 "ExpenseFromSharebasedPaymentTransactionsInWhichGoodsOrServicesReceivedDidNotQualifyForRecognitionAsAssets"
             ),
+            I("AdjustmentsForSharebasedPayments"),
         ],
         ["deferred-income-taxes"] =
         [
@@ -322,8 +351,8 @@ public static class FinancialConceptAliases
         [
             G("PaymentsOfDividends"),
             G("PaymentsOfDividendsCommonStock"),
-            I("DividendsPaid"),
             I("DividendsPaidClassifiedAsFinancingActivities"),
+            I("DividendsPaid"),
         ],
         ["debt-issued"] =
         [

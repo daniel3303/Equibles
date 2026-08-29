@@ -147,6 +147,8 @@ public class ReportedStatementsCaptureService
         document.ReportedStatementsUncompressedSize = uncompressedSize;
         // A fresh bundle invalidates any earlier parse — let the parse sweep re-derive it.
         document.ReportedStatementsParseVersion = 0;
+        document.ReportedStatementsParseAttempts = 0;
+        document.ReportedStatementsParseAttemptVersion = Document.ReportedStatementsParserVersion;
         return XbrlCaptureStatus.Captured;
     }
 }

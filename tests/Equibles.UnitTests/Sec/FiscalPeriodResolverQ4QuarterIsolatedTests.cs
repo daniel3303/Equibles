@@ -54,4 +54,17 @@ public class FiscalPeriodResolverQ4QuarterIsolatedTests
 
         result.Should().Be((2024, SecFiscalPeriod.Q4));
     }
+
+    [Fact]
+    public void Resolve_WeekBasedQuarterSpillingPastNominalFye_RemainsQ4()
+    {
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2026, 7, 4),
+            periodEnd: new DateOnly(2026, 10, 2),
+            fyeMonth: 9,
+            fyeDay: 30
+        );
+
+        result.Should().Be((2026, SecFiscalPeriod.Q4));
+    }
 }
