@@ -90,6 +90,23 @@ public class ReportedStatementsParseService
         return entities.Count;
     }
 
+    /// <summary>
+    /// Retires a captured-bundle row whose filesystem payload has disappeared and reopens the
+    /// document for the network capture sweep. Existing parsed statements stay available until a
+    /// replacement bundle is captured and parsed successfully.
+    /// </summary>
+    public void RequeueMissingBundle(Document document)
+    {
+        _fileManager.DeleteFile(document.ReportedStatementsContent);
+        document.ReportedStatementsContent = null;
+        document.ReportedStatementsContentId = null;
+        document.ReportedStatementsUncompressedSize = null;
+        document.ReportedStatementsStatus = XbrlCaptureStatus.NotChecked;
+        document.ReportedStatementsCaptureAttempts = 0;
+        document.ReportedStatementsParseAttempts = 0;
+        document.ReportedStatementsParseAttemptVersion = Document.ReportedStatementsParserVersion;
+    }
+
     private static ReportedFinancialStatement Build(
         Document document,
         FilingSummaryReport report,

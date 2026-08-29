@@ -1,6 +1,10 @@
+using Equibles.Media.BusinessLogic;
+using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.HostedService;
 using Equibles.Sec.FinancialFacts.HostedService.Services;
+using NSubstitute;
+using MediaFile = Equibles.Media.Data.Models.File;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -69,5 +73,37 @@ public class ReportedStatementsParseWorkerVersionTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         document.ReportedStatementsParseVersion.Should().Be(oldVersion);
+    }
+
+    [Fact]
+    public void RequeueMissingBundle_RetiresStaleFileAndReopensCapture()
+    {
+        var file = new MediaFile
+        {
+            StorageProvider = StorageProvider.FileSystem,
+            RelativePath = "blob/sha256/aa/bb/missing",
+            ContentHash = "sha256:missing",
+        };
+        var document = new Document
+        {
+            ReportedStatementsContent = file,
+            ReportedStatementsContentId = file.Id,
+            ReportedStatementsUncompressedSize = 123,
+            ReportedStatementsStatus = XbrlCaptureStatus.Captured,
+            ReportedStatementsCaptureAttempts = Document.MaxReportedStatementsCaptureAttempts,
+            ReportedStatementsParseAttempts = Document.MaxReportedStatementsParseAttempts,
+        };
+        var fileManager = Substitute.For<IFileManager>();
+        var service = new ReportedStatementsParseService(null!, fileManager);
+
+        service.RequeueMissingBundle(document);
+
+        fileManager.Received(1).DeleteFile(file);
+        document.ReportedStatementsContent.Should().BeNull();
+        document.ReportedStatementsContentId.Should().BeNull();
+        document.ReportedStatementsUncompressedSize.Should().BeNull();
+        document.ReportedStatementsStatus.Should().Be(XbrlCaptureStatus.NotChecked);
+        document.ReportedStatementsCaptureAttempts.Should().Be(0);
+        document.ReportedStatementsParseAttempts.Should().Be(0);
     }
 }

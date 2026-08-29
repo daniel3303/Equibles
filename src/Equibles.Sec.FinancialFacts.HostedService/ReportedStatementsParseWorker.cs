@@ -111,6 +111,20 @@ public class ReportedStatementsParseWorker : BaseScraperWorker
                 {
                     throw;
                 }
+                // The database row can outlive a lost filesystem blob after a storage restore or
+                // manual volume repair. Retire that stale row and let the capture sweep fetch a
+                // fresh bundle instead of spending the parse retry budget on the same missing path.
+                catch (Exception ex)
+                    when (ex is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    parseService.RequeueMissingBundle(document);
+                    Logger.LogWarning(
+                        ex,
+                        "As-reported statements bundle is missing for document {DocumentId} ({Accession}); requeued for capture.",
+                        document.Id,
+                        document.AccessionNumber
+                    );
+                }
                 // Per-document fault isolation: count the attempt and keep the cycle going.
                 catch (Exception ex)
                 {
