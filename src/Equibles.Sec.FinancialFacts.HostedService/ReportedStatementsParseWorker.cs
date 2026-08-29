@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Sec.Data.Models;
@@ -27,6 +28,36 @@ public class ReportedStatementsParseWorker : BaseScraperWorker
     // Let live capture land bundles first after a deploy; this sweep has no external budget.
     protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(12);
 
+    internal static Expression<Func<Document, bool>> NeedsCurrentParser =>
+        document =>
+            document.ReportedStatementsParseVersion < Document.ReportedStatementsParserVersion
+            && (
+                document.ReportedStatementsParseAttemptVersion
+                    < Document.ReportedStatementsParserVersion
+                || document.ReportedStatementsParseAttempts
+                    < Document.MaxReportedStatementsParseAttempts
+            );
+
+    internal static void BeginCurrentParserAttempt(Document document)
+    {
+        if (
+            document.ReportedStatementsParseAttemptVersion
+            == Document.ReportedStatementsParserVersion
+        )
+        {
+            return;
+        }
+        document.ReportedStatementsParseAttemptVersion = Document.ReportedStatementsParserVersion;
+        document.ReportedStatementsParseAttempts = 0;
+    }
+
+    internal static void CompleteCurrentParserAttempt(Document document)
+    {
+        document.ReportedStatementsParseVersion = Document.ReportedStatementsParserVersion;
+        document.ReportedStatementsParseAttemptVersion = Document.ReportedStatementsParserVersion;
+        document.ReportedStatementsParseAttempts = 0;
+    }
+
     public ReportedStatementsParseWorker(
         ILogger<ReportedStatementsParseWorker> logger,
         IServiceScopeFactory scopeFactory,
@@ -53,11 +84,7 @@ public class ReportedStatementsParseWorker : BaseScraperWorker
             // Captured bundles whose parse is below the current parser version, newest first.
             var batch = await documentRepository
                 .GetByReportedStatementsStatus(XbrlCaptureStatus.Captured)
-                .Where(d =>
-                    d.ReportedStatementsParseVersion < Document.ReportedStatementsParserVersion
-                    && d.ReportedStatementsParseAttempts
-                        < Document.MaxReportedStatementsParseAttempts
-                )
+                .Where(NeedsCurrentParser)
                 .OrderByDescending(d => d.ReportingDate)
                 .Take(batchSize)
                 .ToListAsync(stoppingToken);
@@ -73,9 +100,9 @@ public class ReportedStatementsParseWorker : BaseScraperWorker
                 stoppingToken.ThrowIfCancellationRequested();
                 try
                 {
+                    BeginCurrentParserAttempt(document);
                     statements += await parseService.Parse(document, stoppingToken);
-                    document.ReportedStatementsParseVersion =
-                        Document.ReportedStatementsParserVersion;
+                    CompleteCurrentParserAttempt(document);
                 }
                 // Shutdown mid-batch is not a document failure: let it surface so the
                 // base loop winds down quietly instead of burning one of the document's

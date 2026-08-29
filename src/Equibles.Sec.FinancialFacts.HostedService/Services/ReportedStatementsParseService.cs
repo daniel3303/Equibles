@@ -43,13 +43,17 @@ public class ReportedStatementsParseService
     {
         if (document.ReportedStatementsContent == null)
         {
-            return 0;
+            throw new InvalidOperationException(
+                $"Captured reported-statements content is missing for document {document.Id}."
+            );
         }
 
         var bytes = await _fileManager.GetContent(document.ReportedStatementsContent);
         if (bytes is not { Length: > 0 })
         {
-            return 0;
+            throw new InvalidOperationException(
+                $"Captured reported-statements content is empty for document {document.Id}."
+            );
         }
 
         var files = ReportedStatementsBundle.Unpack(bytes);

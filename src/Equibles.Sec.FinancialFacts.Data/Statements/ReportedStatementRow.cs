@@ -27,6 +27,12 @@ public class ReportedStatementRow
     /// <summary>A subtotal / total line (rendered emphasized), e.g. <c>"Total current assets"</c>.</summary>
     public bool IsTotal { get; set; }
 
+    /// <summary>
+    /// The authoritative SEC R-file presentation-member handle inherited from the nearest
+    /// <c>tr.rh</c> row; null means the row is on the statement's unqualified primary basis.
+    /// </summary>
+    public string PresentationContext { get; set; }
+
     /// <summary>The value per period column, aligned to <see cref="ReportedStatementColumn"/>; null = blank cell.</summary>
     public List<decimal?> Values { get; set; } = [];
 }

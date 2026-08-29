@@ -26,23 +26,43 @@ public static class RFileStatementParser
         RegexOptions.Compiled
     );
 
+    private static readonly Regex PresentationContextPattern = new(
+        @"defref_[A-Za-z0-9_-]+=[A-Za-z0-9_-]+",
+        RegexOptions.Compiled
+    );
+
     private static readonly Regex DurationMonthsPattern = new(
         @"(\d+)\s+Month",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
+
+    private static readonly Regex DurationWeeksPattern = new(
+        @"(\d+)\s+Week",
         RegexOptions.Compiled | RegexOptions.IgnoreCase
     );
 
     // One "<subject> in <magnitude>" segment of the scale note; segments are
     // comma-separated, so the subject is everything since the last comma.
     private static readonly Regex ScaleSegmentPattern = new(
-        @"([^,]*?)\s*\bin\s+(Thousands|Millions|Billions)\b",
+        @"(?:^|,)\s*(?<before>.*?)(?:\bin\s+)?(?<scale>Units|Unscaled|Thousands|Millions|Billions)\b(?<after>[^,]*)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase
     );
 
     // The note's leading ISO currency code, rendered as "<code> (<symbol>)" —
     // "USD ($)", "EUR (€)", "CAD ($)".
     private static readonly Regex CurrencyCodePattern = new(
-        @"^([A-Za-z]{3})\s*\(",
+        @"(?<![A-Za-z])([A-Za-z]{3})\s*\(",
         RegexOptions.Compiled
+    );
+
+    private static readonly Regex ColumnCurrencyCodePattern = new(
+        @"(?<![A-Za-z])([A-Za-z]{3})\s*\(",
+        RegexOptions.Compiled
+    );
+
+    private static readonly Regex DatePattern = new(
+        @"(?<![A-Za-z])(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)(?:\.|[a-z]+)?\s+\d{1,2},\s+\d{4}(?!\d)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
     );
 
     public static RFileStatement Parse(string html)
@@ -61,7 +81,7 @@ public static class RFileStatementParser
         }
 
         var (scaleNote, currency, scale) = ParseTitle(table);
-        var columns = ParseColumns(table, out var durationByColumn);
+        var columns = ParseColumns(table, scaleNote, out var durationByColumn);
         var rows = ParseRows(table);
         if (rows.Count == 0)
         {
@@ -82,7 +102,8 @@ public static class RFileStatementParser
 
     private static (string ScaleNote, string Currency, long Scale) ParseTitle(IElement table)
     {
-        var title = Clean(table.QuerySelector("th.tl")?.TextContent);
+        var titleCell = table.QuerySelector("th.tl");
+        var title = Clean(titleCell?.TextContent);
         if (string.IsNullOrEmpty(title))
         {
             return (null, null, 1);
@@ -91,10 +112,29 @@ public static class RFileStatementParser
         // The scale / currency note is the tail after the last " - ", e.g.
         // "... OPERATIONS (Unaudited) - USD ($)  shares in Thousands, $ in Millions".
         var dash = title.LastIndexOf(" - ", StringComparison.Ordinal);
-        var note = dash >= 0 ? title[(dash + 3)..].Trim() : null;
-        var haystack = note ?? title;
+        var breakTail = TextAfterLastBreak(titleCell);
+        var note =
+            dash >= 0 ? title[(dash + 3)..].Trim()
+            : !string.IsNullOrWhiteSpace(breakTail) ? breakTail
+            : title;
+        var haystack = note;
 
         return (note, ParseCurrency(haystack), ParseMoneyScale(haystack));
+    }
+
+    private static string TextAfterLastBreak(IElement element)
+    {
+        var lineBreak = element?.QuerySelectorAll("br").LastOrDefault();
+        if (lineBreak == null)
+        {
+            return null;
+        }
+        var builder = new StringBuilder();
+        for (var node = lineBreak.NextSibling; node != null; node = node.NextSibling)
+        {
+            builder.Append(' ').Append(node.TextContent);
+        }
+        return Clean(builder.ToString());
     }
 
     private static string ParseCurrency(string haystack)
@@ -103,6 +143,13 @@ public static class RFileStatementParser
         return match.Success ? match.Groups[1].Value.ToUpperInvariant() : null;
     }
 
+    private static IReadOnlyList<string> ParseCurrencies(string haystack) =>
+        CurrencyCodePattern
+            .Matches(haystack ?? string.Empty)
+            .Select(match => match.Groups[1].Value.ToUpperInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
     // The note scales each unit family in its own segment — "$ in Thousands",
     // "shares in Millions", "$ / shares in Thousands" — and only the money segment may
     // set the statement scale: "USD ($) shares in Thousands" presents dollars UNSCALED,
@@ -110,20 +157,7 @@ public static class RFileStatementParser
     // downstream. A subject-less "(In Thousands)" (old-style title) applies to money.
     private static long ParseMoneyScale(string haystack)
     {
-        foreach (Match match in ScaleSegmentPattern.Matches(haystack))
-        {
-            if (match.Groups[1].Value.Contains("share", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            return match.Groups[2].Value.ToLowerInvariant() switch
-            {
-                "billions" => 1_000_000_000L,
-                "millions" => 1_000_000L,
-                _ => 1_000L,
-            };
-        }
-        return 1L;
+        return MoneyScaleSegments(haystack).FirstOrDefault()?.Scale ?? 1L;
     }
 
     // Columns come from the header rows: the row of period-end dates is the column set; an earlier
@@ -131,6 +165,7 @@ public static class RFileStatementParser
     // column. A balance sheet has only the date row (no durations) — its columns are instants.
     private static List<ReportedStatementColumn> ParseColumns(
         IElement table,
+        string scaleNote,
         out List<string> durationByColumn
     )
     {
@@ -168,12 +203,27 @@ public static class RFileStatementParser
 
         var columns = new List<ReportedStatementColumn>();
         var dateCells = dateRow.QuerySelectorAll("th.th").ToList();
+        var titleCurrencies = ParseCurrencies(scaleNote);
+        var unambiguousStatementCurrency = titleCurrencies.Count == 1 ? titleCurrencies[0] : null;
         for (var i = 0; i < dateCells.Count; i++)
         {
+            var header = Clean(dateCells[i].TextContent);
+            var (label, periodEnd) = ParseDateLabel(header);
+            var explicitCurrency = ParseColumnCurrency(header);
+            var scaleCurrency = explicitCurrency ?? unambiguousStatementCurrency;
+            var ambiguousCurrency = explicitCurrency == null && titleCurrencies.Count > 1;
             columns.Add(
                 new ReportedStatementColumn
                 {
-                    Label = Clean(dateCells[i].TextContent),
+                    Label = label,
+                    PeriodEnd = periodEnd,
+                    Currency = explicitCurrency ?? unambiguousStatementCurrency,
+                    Scale = ambiguousCurrency
+                        ? null
+                        : ParseColumnMoneyScale(header, scaleCurrency, scaleNote),
+                    PerShareScale = ambiguousCurrency
+                        ? null
+                        : ParseColumnPerShareScale(header, scaleCurrency, scaleNote),
                     Duration = i < durationByColumn.Count ? durationByColumn[i] : null,
                     IsInstant = !hasDurations,
                 }
@@ -182,13 +232,155 @@ public static class RFileStatementParser
         return columns;
     }
 
+    private static long? ParseColumnMoneyScale(string header, string currency, string scaleNote)
+    {
+        var headerSegments = MoneyScaleSegments(header);
+        if (headerSegments.Count > 0)
+        {
+            return ResolveColumnMoneyScale(headerSegments, currency);
+        }
+
+        var titleSegments = MoneyScaleSegments(scaleNote);
+        return titleSegments.Count == 0 ? 1L : ResolveColumnMoneyScale(titleSegments, currency);
+    }
+
+    private static long? ResolveColumnMoneyScale(
+        IReadOnlyList<MoneyScaleSegment> segments,
+        string currency
+    )
+    {
+        if (!string.IsNullOrWhiteSpace(currency))
+        {
+            var currencyScales = segments
+                .Where(segment => segment.Currencies.Contains(currency, StringComparer.Ordinal))
+                .Select(segment => segment.Scale)
+                .Distinct()
+                .ToList();
+            if (currencyScales.Count == 1)
+            {
+                return currencyScales[0];
+            }
+            if (currencyScales.Count > 1)
+            {
+                return null;
+            }
+        }
+
+        var globalScales = segments
+            .Where(segment => segment.Currencies.Count == 0)
+            .Select(segment => segment.Scale)
+            .Distinct()
+            .ToList();
+        if (globalScales.Count == 1)
+        {
+            return globalScales[0];
+        }
+        if (globalScales.Count > 1)
+        {
+            return null;
+        }
+
+        if (
+            !string.IsNullOrWhiteSpace(currency)
+            && segments.Any(segment => segment.Currencies.Count > 0)
+        )
+        {
+            return null;
+        }
+
+        var allScales = segments.Select(segment => segment.Scale).Distinct().ToList();
+        return allScales.Count == 1 ? allScales[0] : null;
+    }
+
+    private static long? ParseColumnPerShareScale(string header, string currency, string scaleNote)
+    {
+        var headerSegments = PerShareScaleSegments(header);
+        if (headerSegments.Count > 0)
+        {
+            return ResolveColumnMoneyScale(headerSegments, currency);
+        }
+
+        var titleSegments = PerShareScaleSegments(scaleNote);
+        return titleSegments.Count == 0 ? 1L : ResolveColumnMoneyScale(titleSegments, currency);
+    }
+
+    private static List<MoneyScaleSegment> MoneyScaleSegments(string haystack)
+    {
+        var result = new List<MoneyScaleSegment>();
+        foreach (Match match in ScaleSegmentPattern.Matches(haystack ?? string.Empty))
+        {
+            var subject = $"{match.Groups["before"].Value} {match.Groups["after"].Value}";
+            if (subject.Contains("share", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            var scale = match.Groups["scale"].Value.ToLowerInvariant() switch
+            {
+                "billions" => 1_000_000_000L,
+                "millions" => 1_000_000L,
+                "thousands" => 1_000L,
+                _ => 1L,
+            };
+            var currencies = CurrencyCodePattern
+                .Matches(subject)
+                .Select(match => match.Groups[1].Value.ToUpperInvariant())
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            result.Add(new MoneyScaleSegment(scale, currencies));
+        }
+        return result;
+    }
+
+    private static List<MoneyScaleSegment> PerShareScaleSegments(string haystack)
+    {
+        var result = new List<MoneyScaleSegment>();
+        foreach (Match match in ScaleSegmentPattern.Matches(haystack ?? string.Empty))
+        {
+            var subject = $"{match.Groups["before"].Value} {match.Groups["after"].Value}";
+            if (
+                !subject.Contains("per share", StringComparison.OrdinalIgnoreCase)
+                && !Regex.IsMatch(subject, @"/\s*shares?\b", RegexOptions.IgnoreCase)
+            )
+            {
+                continue;
+            }
+            var scale = match.Groups["scale"].Value.ToLowerInvariant() switch
+            {
+                "billions" => 1_000_000_000L,
+                "millions" => 1_000_000L,
+                "thousands" => 1_000L,
+                _ => 1L,
+            };
+            var currencies = CurrencyCodePattern
+                .Matches(subject)
+                .Select(match => match.Groups[1].Value.ToUpperInvariant())
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            result.Add(new MoneyScaleSegment(scale, currencies));
+        }
+        return result;
+    }
+
     private static List<ReportedStatementRow> ParseRows(IElement table)
     {
         var rows = new List<ReportedStatementRow>();
         var inSection = false;
+        string presentationContext = null;
 
         foreach (var tr in table.QuerySelectorAll("tr"))
         {
+            if (tr.ClassList.Contains("rh"))
+            {
+                var contextCell = tr.QuerySelector("td.pl");
+                var onclick = contextCell?.QuerySelector("a")?.GetAttribute("onclick");
+                var match = PresentationContextPattern.Match(onclick ?? string.Empty);
+                presentationContext = match.Success
+                    ? match.Value
+                    : $"r-file-heading:{Clean(contextCell?.TextContent)}";
+                inSection = false;
+                continue;
+            }
+
             var isTotal = tr.ClassList.Contains("reu") || tr.ClassList.Contains("rou");
             var isData = isTotal || tr.ClassList.Contains("re") || tr.ClassList.Contains("ro");
             if (!isData)
@@ -240,6 +432,7 @@ public static class RFileStatementParser
                     Depth = depth,
                     IsAbstract = isAbstract,
                     IsTotal = isTotal,
+                    PresentationContext = presentationContext,
                     Values = values,
                 }
             );
@@ -256,7 +449,7 @@ public static class RFileStatementParser
     )
     {
         var dated = columns
-            .Select(c => (Column: c, End: ParseDate(c.Label)))
+            .Select(c => (Column: c, End: c.PeriodEnd ?? ParseDate(c.Label)))
             .Where(x => x.End != null)
             .ToList();
         if (dated.Count == 0)
@@ -267,14 +460,20 @@ public static class RFileStatementParser
         var maxEnd = dated.Max(x => x.End.Value);
         var primary = dated
             .Where(x => x.End.Value == maxEnd)
-            .OrderBy(x => DurationMonths(x.Column.Duration))
+            .OrderBy(x => DurationDays(x.Column.Duration))
             .First();
 
         var end = primary.End.Value;
-        var months = DurationMonths(primary.Column.Duration);
+        var durationDays = DurationDays(primary.Column.Duration);
         result.PrimaryPeriodEnd = end;
-        result.PrimaryIsInstant = primary.Column.IsInstant || months == 0;
-        result.PrimaryPeriodStart = result.PrimaryIsInstant ? end : end.AddMonths(-months);
+        result.PrimaryIsInstant = primary.Column.IsInstant || durationDays == 0;
+        result.PrimaryPeriodStart = result.PrimaryIsInstant
+            ? end
+            : DurationStart(end, primary.Column.Duration);
+        result.Currency ??= primary.Column.Currency;
+        // Statement.Scale remains compatibility/display metadata. Current consumers bind to
+        // Column.Scale; zero records that the primary column's scale was ambiguous.
+        result.Scale = primary.Column.Scale ?? 0L;
     }
 
     private static (string Taxonomy, string Concept) ParseConcept(string onclick)
@@ -319,10 +518,24 @@ public static class RFileStatementParser
 
     private static DateOnly? ParseDate(string text)
     {
+        var (_, date) = ParseDateLabel(text);
+        return date;
+    }
+
+    private static (string Label, DateOnly? Date) ParseDateLabel(string text)
+    {
         var cleaned = Clean(text);
+        var match = DatePattern.Match(cleaned ?? string.Empty);
+        var candidate = match.Success ? match.Value : cleaned;
+        var parseCandidate = Regex.Replace(
+            candidate ?? string.Empty,
+            @"\bSept(?=\.?\s)",
+            "Sep",
+            RegexOptions.IgnoreCase
+        );
         if (
             DateOnly.TryParseExact(
-                cleaned,
+                parseCandidate,
                 DateFormats,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
@@ -330,9 +543,15 @@ public static class RFileStatementParser
             )
         )
         {
-            return date;
+            return (candidate, date);
         }
-        return null;
+        return (cleaned, null);
+    }
+
+    private static string ParseColumnCurrency(string text)
+    {
+        var match = ColumnCurrencyCodePattern.Match(text ?? string.Empty);
+        return match.Success ? match.Groups[1].Value.ToUpperInvariant() : null;
     }
 
     private static bool IsDate(string text) => ParseDate(text) != null;
@@ -349,6 +568,39 @@ public static class RFileStatementParser
             return months;
         }
         return duration.Contains("Year", StringComparison.OrdinalIgnoreCase) ? 12 : 0;
+    }
+
+    private static int DurationWeeks(string duration)
+    {
+        if (string.IsNullOrEmpty(duration))
+        {
+            return 0;
+        }
+        var match = DurationWeeksPattern.Match(duration);
+        if (!match.Success || !int.TryParse(match.Groups[1].Value, out var weeks))
+        {
+            return 0;
+        }
+        return weeks is 13 or 14 or 26 or 27 or 39 or 40 or 41 or 52 or 53 ? weeks : 0;
+    }
+
+    private static int DurationDays(string duration)
+    {
+        var weeks = DurationWeeks(duration);
+        if (weeks > 0)
+        {
+            return weeks * 7;
+        }
+        var months = DurationMonths(duration);
+        return months * 31;
+    }
+
+    private static DateOnly DurationStart(DateOnly end, string duration)
+    {
+        var weeks = DurationWeeks(duration);
+        return weeks > 0
+            ? end.AddDays(1 - weeks * 7)
+            : end.AddDays(1).AddMonths(-DurationMonths(duration));
     }
 
     private static int ParseSpan(string colspan) =>
@@ -382,4 +634,6 @@ public static class RFileStatementParser
         }
         return builder.ToString().Trim();
     }
+
+    private sealed record MoneyScaleSegment(long Scale, IReadOnlyList<string> Currencies);
 }

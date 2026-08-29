@@ -157,6 +157,33 @@ public class FiscalPeriodResolverTests
     }
 
     [Fact]
+    public void Resolve_Q3_NonCalendarFiler_AcceptsFortyOneWeekCumulativePeriod()
+    {
+        var result = FiscalPeriodResolver.Resolve(
+            periodStart: new DateOnly(2025, 1, 5),
+            periodEnd: new DateOnly(2025, 10, 18),
+            fyeMonth: 1,
+            fyeDay: 3
+        );
+
+        result.Should().Be((2025, SecFiscalPeriod.Q3));
+    }
+
+    [Fact]
+    public void SharedResolver_Q3_NonCalendarFiler_AcceptsFortyOneWeekCumulativePeriod()
+    {
+        var result =
+            Equibles.Sec.FinancialFacts.Data.FiscalPeriods.ReportedFiscalPeriodResolver.Resolve(
+                periodStart: new DateOnly(2025, 1, 5),
+                periodEnd: new DateOnly(2025, 10, 18),
+                fyeMonth: 1,
+                fyeDay: 3
+            );
+
+        result.Should().Be((2025, SecFiscalPeriod.Q3));
+    }
+
+    [Fact]
     public void Resolve_Q1_MarchFye()
     {
         // Q1 for a March FYE filer: Apr 1 to Jun 30

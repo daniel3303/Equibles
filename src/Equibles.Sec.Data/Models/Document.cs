@@ -291,6 +291,12 @@ public class Document
     /// </summary>
     public int ReportedStatementsParseAttempts { get; set; }
 
+    /// <summary>
+    /// Parser version whose failures <see cref="ReportedStatementsParseAttempts"/> counts.
+    /// A version upgrade receives a fresh bounded retry budget.
+    /// </summary>
+    public int ReportedStatementsParseAttemptVersion { get; set; }
+
     /// <summary>Retry ceiling for <see cref="ReportedStatementsParseAttempts"/>.</summary>
     public const int MaxReportedStatementsParseAttempts = 5;
 
@@ -300,7 +306,7 @@ public class Document
     /// backoffice "pending" metric can reference it without depending on the hosted-service
     /// assembly. Bump after a parser change to re-derive the corpus.
     /// </summary>
-    public const int ReportedStatementsParserVersion = 1;
+    public const int ReportedStatementsParserVersion = 3;
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

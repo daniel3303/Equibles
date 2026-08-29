@@ -32,6 +32,12 @@ public class RFileStatementParserScaleNoteTests
     [InlineData("STATEMENT - USD ($) shares in Thousands", 1L, "USD")]
     [InlineData("STATEMENT - USD ($) shares in Millions", 1L, "USD")]
     [InlineData("STATEMENT - USD ($) $ / shares in Thousands", 1L, "USD")]
+    [InlineData("STATEMENT - USD ($) amounts in Thousands of shares", 1L, "USD")]
+    [InlineData(
+        "STATEMENT - USD ($) amounts in Thousands of shares, $ in Millions",
+        1_000_000L,
+        "USD"
+    )]
     [InlineData("STATEMENT - $ / shares shares in Thousands", 1L, null)]
     [InlineData("STATEMENT - shares shares in Millions", 1L, null)]
     // No scale segments at all.
@@ -59,5 +65,17 @@ public class RFileStatementParserScaleNoteTests
         statement.IsEmpty.Should().BeFalse();
         statement.Scale.Should().Be(expectedScale);
         statement.Currency.Should().Be(expectedCurrency);
+    }
+
+    [Fact]
+    public void Parse_NoDashBreakSeparatedTitle_PreservesTheScaleBearingText()
+    {
+        var statement = RFileStatementParser.Parse(
+            RFile("CONSOLIDATED STATEMENTS OF INCOME<br>USD ($) $ in Millions, shares in Thousands")
+        );
+
+        statement.Currency.Should().Be("USD");
+        statement.Scale.Should().Be(1_000_000L);
+        statement.Payload.ScaleNote.Should().Contain("shares in Thousands");
     }
 }
