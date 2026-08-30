@@ -90,9 +90,9 @@ namespace Equibles.Holdings.HostedService.Services;
 /// Filed population) or re-exhausts into a retry stamp this phase excludes. Phase 3 terminates
 /// because the recalculator guards the same number this phase tests — the effective per-share
 /// price (factor × close) — so a reset row can never re-derive back above the cap and be reset
-/// again. The candidate predicates are not index-served (none are selective enough to earn one),
-/// so a drained backlog still costs bounded sequential scans per daily cycle — accepted for a 24h
-/// cadence. Affected filing rollups and AUM quarters are re-derived through
+/// again. The stuck-zero phase is served by a partial Id worklist index whose entries disappear
+/// as rows heal. The other candidate predicates are not index-served. Affected filing rollups and
+/// AUM quarters are re-derived through
 /// <see cref="HoldingsRollupRefresher"/> in the same pass — a healed position with a stale rollup
 /// would just move the lie one aggregate up.
 /// </para>
@@ -397,13 +397,10 @@ public class HoldingValueFallbackRepairService
     /// <summary>
     /// Publishes the filed value on rows the old ladder abandoned at <c>Value = 0</c>.
     /// </summary>
-    private async Task<int> HealStuckZeros(CancellationToken cancellationToken)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-        ExtendCommandTimeout(dbContext);
-
-        var rows = await dbContext
+    internal static IQueryable<InstitutionalHolding> BuildStuckZeroCandidateQuery(
+        EquiblesFinancialDbContext dbContext
+    ) =>
+        dbContext
             .Set<InstitutionalHolding>()
             .Include(h => h.ManagerEntries)
             .Where(h =>
@@ -414,8 +411,15 @@ public class HoldingValueFallbackRepairService
                 && h.FiledValue > 0
             )
             .OrderBy(h => h.Id)
-            .Take(MaxRowsPerCycle)
-            .ToListAsync(cancellationToken);
+            .Take(MaxRowsPerCycle);
+
+    private async Task<int> HealStuckZeros(CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        ExtendCommandTimeout(dbContext);
+
+        var rows = await BuildStuckZeroCandidateQuery(dbContext).ToListAsync(cancellationToken);
 
         if (rows.Count == 0)
         {

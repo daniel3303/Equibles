@@ -165,6 +165,21 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             .HasDatabaseName("IX_InstitutionalHolding_ValuePending_Pairs")
             .HasFilter("\"ValuePending\"");
 
+        // Worklist for the bounded stuck-zero repair. The table holds tens of millions of
+        // historical rows, while only the abandoned zero backlog matches this predicate.
+        // Leading with Id satisfies ORDER BY Id + LIMIT without scanning and heap-filtering the
+        // primary key. Entries disappear as the repair publishes FiledValue, so the index
+        // converges toward an empty steady state instead of indexing the holdings corpus.
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(h => h.Id)
+            .HasDatabaseName("IX_InstitutionalHolding_StuckZeroRepair")
+            .HasFilter(
+                "\"Value\" = 0 AND NOT \"ValuePending\" AND NOT \"ValueUnavailable\" "
+                    + "AND \"FiledValue\" IS NOT NULL AND \"FiledValue\" > 0"
+            )
+            .IsCreatedConcurrently();
+
         builder.Entity<UnmappedCusip>();
         builder.Entity<FilingOtherManager>();
         builder.Entity<ProcessedDataSet>();
