@@ -15,9 +15,9 @@ using File = Equibles.Media.Data.Models.File;
 namespace Equibles.IntegrationTests.Mcp;
 
 [Collection(ParadeDbCollection.Name)]
-public class RagSearchToolsListCompanyDocumentsCultureInvarianceTests : ParadeDbMcpTestBase
+public class RagSearchToolsListFilingsCultureInvarianceTests : ParadeDbMcpTestBase
 {
-    public RagSearchToolsListCompanyDocumentsCultureInvarianceTests(ParadeDbFixture fixture)
+    public RagSearchToolsListFilingsCultureInvarianceTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
     private RagSearchTools Sut()
@@ -42,15 +42,8 @@ public class RagSearchToolsListCompanyDocumentsCultureInvarianceTests : ParadeDb
         );
     }
 
-    // Contract (the repo-wide MCP rule, enforced by McpFormat and the dozens of InvariantCulture
-    // MCP call sites that comment "MCP markdown must not fork the separators by host locale"):
-    // LLM-facing markdown must render numbers identically on every host locale. The
-    // ListCompanyDocuments table builds the Lines cell with the culture-implicit :N0 specifier
-    // (RagSearchTools.cs:174), which honours the thread CurrentCulture — de-DE swaps the thousand
-    // separator (1,500 -> 1.500), forking the response by host locale. Same bug class as the
-    // already-pinned ReadDocumentLines (GH-3110) and GetLatestClosingPrices (GH-3100) repros.
     [Fact]
-    public async Task ListCompanyDocuments_UnderNonInvariantCulture_RendersLineCountCultureInvariantly()
+    public async Task ListFilings_UnderNonGregorianCulture_RendersDatesAndCountsInvariantly()
     {
         var stock = new CommonStock
         {
@@ -85,27 +78,21 @@ public class RagSearchToolsListCompanyDocumentsCultureInvarianceTests : ParadeDb
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
-        // Pin de-DE only for the rendering call; CurrentCulture flows through the tool's await
-        // chain via ExecutionContext. Base class restores invariant.
         var previous = CultureInfo.CurrentCulture;
         string result;
         try
         {
-            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
-            result = await Sut().ListCompanyDocuments("AAPL");
+            CultureInfo.CurrentCulture = new CultureInfo("ar-SA");
+            result = await Sut().ListFilings("AAPL");
         }
         finally
         {
             CultureInfo.CurrentCulture = previous;
         }
 
-        // The Lines cell must render with the en-US thousand comma on any host locale;
-        // de-DE would produce "| 1.500".
+        result.Should().Contain("2026-03-15 | 2026-02-15");
         result
             .Should()
-            .Contain(
-                "| 1,500",
-                "the MCP document-listing table must not fork the thousand separator by host locale"
-            );
+            .Contain("| 1,500", "the MCP filing table must not fork numbers by host locale");
     }
 }

@@ -300,7 +300,7 @@ public class McpModuleToolDiscoveryTests
 
         toolNames.Should().Contain("SearchDocuments");
         toolNames.Should().Contain("SearchDocument");
-        toolNames.Should().Contain("ListCompanyDocuments");
+        toolNames.Should().Contain("ListFilings");
         toolNames.Should().Contain("ReadDocumentLines");
         toolNames.Should().Contain("GetFailsToDeliver");
         toolNames.Should().Contain("GetFormDOfferings");
@@ -398,7 +398,7 @@ public class McpModuleToolDiscoveryTests
                 {
                     "SearchDocuments",
                     "SearchDocument",
-                    "ListCompanyDocuments",
+                    "ListFilings",
                     "ReadDocumentLines",
                     "GetFailsToDeliver",
                     "GetFormDOfferings",
@@ -448,6 +448,7 @@ public class McpModuleToolDiscoveryTests
                 {
                     "GetStockPrices",
                     "GetLatestClosingPrices",
+                    "GetDividendHistory",
                     "GetStochasticOscillator",
                     "GetAverageTrueRange",
                     "GetOnBalanceVolume",

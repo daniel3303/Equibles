@@ -42,4 +42,9 @@ public class SecDocumentInfo
     /// Total number of lines in the document content.
     /// </summary>
     public int LineCount { get; set; }
+
+    /// <summary>
+    /// Comma-separated SEC item numbers reported by the filing, such as 2.02 and 9.01.
+    /// </summary>
+    public string Items { get; set; }
 }

@@ -22,10 +22,11 @@ The assistant searches that company's filings with the `SearchDocuments` tool an
 
 To work inside a single filing rather than across many:
 
-- "List Apple's recent SEC filings." — the assistant calls `ListCompanyDocuments` and returns each filing's type, filing date, and reporting period.
+- "List Apple's recent SEC filings." — the assistant calls `ListFilings` and returns each filing's type, filing date, and reporting period.
+- "List recent 8-Ks across the market that report Item 2.02 results." — the assistant calls `ListFilings` without a ticker and filters by document type and exact SEC item number.
 - "Search that 10-K for what they say about supply-chain risk." — the assistant uses `SearchDocument` in semantic mode for relevant passages or exact mode for a literal word or phrase, then `ReadDocumentLines` to read a passage in full.
 
-You can narrow any of these by document type (10-K, 10-Q, or 8-K) or by filing-date range — for example, "only 10-Qs filed in 2024."
+You can narrow any of these by document type (10-K, 10-Q, or 8-K), filing-date range, or exact 8-K item number — for example, "only Item 5.02 8-Ks filed this week."
 
 ## What you should see
 

@@ -86,7 +86,7 @@ public partial class Program
         );
         // EmbeddingClient resolves IHttpClientFactory unconditionally in its constructor,
         // even when embeddings are disabled -- without this, any Sec search tool
-        // (ListCompanyDocuments, SearchDocuments, SearchDocument) fails to activate.
+        // (ListFilings, SearchDocuments, SearchDocument) fails to activate.
         builder.Services.AddHttpClient();
         builder.Services.Configure<Equibles.Media.BusinessLogic.Configuration.FileStorageOptions>(
             builder.Configuration.GetSection("FileStorage")

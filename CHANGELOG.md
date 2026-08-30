@@ -10,6 +10,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 - `CommonStockRepository.Search` accepts an `includeInactive` flag so operator surfaces can audit retained delisted identities; reader-facing surfaces keep the active-only default.
+- `ListFilings` provides company-scoped or market-wide filing discovery with date, document-type, exact 8-K item-number, and paging filters.
+- `GetDividendHistory` returns stored cash-dividend history newest first with date and paging controls.
+
+### Changed
+
+- `ListFilings` replaces the retired `ListCompanyDocuments` public MCP tool; clients with cached tool catalogs must refresh their MCP connection.
 
 ### Fixed
 

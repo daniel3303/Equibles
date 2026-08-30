@@ -131,7 +131,7 @@ public class McpServerToolInvocationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CallTool_ListCompanyDocuments_EmbeddingsDisabled_ActivatesSecSearchGraph()
+    public async Task CallTool_ListFilings_EmbeddingsDisabled_ActivatesSecSearchGraph()
     {
         var httpClient = _serverFixture.CreateClient();
         httpClient.BaseAddress = new Uri("http://localhost/");
@@ -147,7 +147,7 @@ public class McpServerToolInvocationTests : IAsyncLifetime
 
         await using var client = await McpClient.CreateAsync(transport);
         var result = await client.CallToolAsync(
-            toolName: "ListCompanyDocuments",
+            toolName: "ListFilings",
             arguments: new Dictionary<string, object> { ["ticker"] = "ZZZZ" }
         );
 

@@ -6,12 +6,13 @@ namespace Equibles.Sec.BusinessLogic.Search;
 public interface ISecDocumentService
 {
     Task<List<SecDocumentInfo>> GetRecentDocuments(
-        string ticker,
+        string ticker = null,
         DateTime? startDate = null,
         DateTime? endDate = null,
         int maxItems = 10,
         int page = 1,
-        DocumentType documentType = null
+        DocumentType documentType = null,
+        string itemNumber = null
     );
 
     /// <summary>
@@ -20,9 +21,10 @@ public interface ISecDocumentService
     /// so callers can report totals and page counts alongside a page of results.
     /// </summary>
     Task<int> CountDocuments(
-        string ticker,
+        string ticker = null,
         DateTime? startDate = null,
         DateTime? endDate = null,
-        DocumentType documentType = null
+        DocumentType documentType = null,
+        string itemNumber = null
     );
 }

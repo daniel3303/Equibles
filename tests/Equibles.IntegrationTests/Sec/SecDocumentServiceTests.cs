@@ -46,7 +46,8 @@ public class SecDocumentServiceTests
         CommonStock stock,
         DocumentType docType,
         DateOnly reportingDate,
-        DateOnly reportingForDate
+        DateOnly reportingForDate,
+        string items = null
     )
     {
         var file = new Equibles.Media.Data.Models.File
@@ -65,6 +66,7 @@ public class SecDocumentServiceTests
             DocumentType = docType,
             ReportingDate = reportingDate,
             ReportingForDate = reportingForDate,
+            Items = items,
             LineCount = 100,
             Content = file,
             ContentId = file.Id,
@@ -75,11 +77,26 @@ public class SecDocumentServiceTests
     }
 
     [Fact]
-    public async Task GetRecentDocuments_NullTicker_ThrowsApplicationException()
+    public async Task GetRecentDocuments_NullTicker_ReturnsMarketWideDocuments()
     {
-        var act = () => _sut.GetRecentDocuments(null);
+        var apple = CreateStock("AAPL", "Apple Inc.");
+        var microsoft = CreateStock("MSFT", "Microsoft Corp.");
+        CreateDocument(
+            apple,
+            DocumentType.TenK,
+            new DateOnly(2024, 1, 1),
+            new DateOnly(2023, 12, 31)
+        );
+        CreateDocument(
+            microsoft,
+            DocumentType.TenQ,
+            new DateOnly(2024, 4, 1),
+            new DateOnly(2024, 3, 31)
+        );
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("*Ticker*null*");
+        var result = await _sut.GetRecentDocuments();
+
+        result.Select(document => document.Ticker).Should().Equal("MSFT", "AAPL");
     }
 
     [Fact]
@@ -177,6 +194,31 @@ public class SecDocumentServiceTests
 
         result.Should().ContainSingle();
         result[0].DocumentType.Should().Be(DocumentType.TenQ);
+    }
+
+    [Fact]
+    public async Task GetRecentDocuments_FilterByItemNumber_UsesExactTokenMatch()
+    {
+        var stock = CreateStock("AAPL");
+        CreateDocument(
+            stock,
+            DocumentType.EightK,
+            new DateOnly(2024, 1, 1),
+            new DateOnly(2023, 12, 31),
+            "2.02,9.01"
+        );
+        CreateDocument(
+            stock,
+            DocumentType.EightK,
+            new DateOnly(2024, 2, 1),
+            new DateOnly(2024, 1, 31),
+            "1.02"
+        );
+
+        var result = await _sut.GetRecentDocuments("AAPL", itemNumber: "2.02");
+
+        result.Should().ContainSingle();
+        result[0].Items.Should().Be("2.02,9.01");
     }
 
     [Fact]

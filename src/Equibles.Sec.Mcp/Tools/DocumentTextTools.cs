@@ -67,7 +67,7 @@ public class DocumentTextTools
         "Read numbered lines from one SEC filing or earnings-call transcript. Use line numbers returned by SearchDocument or request a known range. Returns at most 2,000 lines and identifies the next startLine when truncated."
     )]
     public Task<string> ReadDocumentLines(
-        [Description("Document ID obtained from ListCompanyDocuments")] Guid documentId,
+        [Description("Document ID obtained from ListFilings")] Guid documentId,
         [Description("First line to read (1-based, inclusive)")] int startLine,
         [Description(
             "Last line to read (1-based, inclusive). At most 2,000 lines are returned per call; a longer range is truncated with a note on how to continue."
