@@ -24,23 +24,39 @@ public class SecDocumentService : ISecDocumentService
     }
 
     public async Task<List<SecDocumentInfo>> GetRecentDocuments(
-        string ticker,
+        string ticker = null,
         DateTime? startDate = null,
         DateTime? endDate = null,
         int maxItems = 10,
         int page = 1,
-        DocumentType documentType = null
+        DocumentType documentType = null,
+        string itemNumber = null
     )
     {
-        if (ticker == null)
-        {
-            throw new ApplicationException("Ticker cannot be null");
-        }
         try
         {
-            var documents = await BuildDocumentsQuery(ticker, startDate, endDate, documentType)
+            if (page < 1)
+                throw new ArgumentOutOfRangeException(nameof(page), "Page must be at least 1.");
+            if (maxItems < 1)
+                throw new ArgumentOutOfRangeException(
+                    nameof(maxItems),
+                    "Maximum items must be at least 1."
+                );
+
+            var offset = ((long)page - 1) * maxItems;
+            if (offset > int.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(page), "Page offset is too large.");
+
+            var documents = await BuildDocumentsQuery(
+                    ticker,
+                    startDate,
+                    endDate,
+                    documentType,
+                    itemNumber
+                )
                 .OrderByDescending(d => d.ReportingDate)
-                .Skip((page - 1) * maxItems)
+                .ThenByDescending(d => d.Id)
+                .Skip((int)offset)
                 .Take(maxItems)
                 .Select(d => new SecDocumentInfo
                 {
@@ -51,11 +67,12 @@ public class SecDocumentService : ISecDocumentService
                     ReportingDate = d.ReportingDate,
                     ReportingForDate = d.ReportingForDate,
                     LineCount = d.LineCount,
+                    Items = d.Items,
                 })
                 .ToListAsync();
 
             _logger.LogInformation(
-                "Found {Count} recent documents for ticker {Ticker}",
+                "Found {Count} recent documents for ticker filter {Ticker}",
                 documents.Count,
                 ticker
             );
@@ -63,34 +80,38 @@ public class SecDocumentService : ISecDocumentService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving recent documents for ticker {Ticker}", ticker);
+            _logger.LogError(
+                ex,
+                "Error retrieving recent documents for ticker filter {Ticker}",
+                ticker
+            );
             throw;
         }
     }
 
     public async Task<int> CountDocuments(
-        string ticker,
+        string ticker = null,
         DateTime? startDate = null,
         DateTime? endDate = null,
-        DocumentType documentType = null
+        DocumentType documentType = null,
+        string itemNumber = null
     )
     {
-        if (ticker == null)
-        {
-            throw new ApplicationException("Ticker cannot be null");
-        }
-
-        return await BuildDocumentsQuery(ticker, startDate, endDate, documentType).CountAsync();
+        return await BuildDocumentsQuery(ticker, startDate, endDate, documentType, itemNumber)
+            .CountAsync();
     }
 
     private IQueryable<Document> BuildDocumentsQuery(
         string ticker,
         DateTime? startDate,
         DateTime? endDate,
-        DocumentType documentType
+        DocumentType documentType,
+        string itemNumber
     )
     {
-        var query = _documentRepository.GetByTicker(ticker);
+        var query = string.IsNullOrWhiteSpace(ticker)
+            ? _documentRepository.GetAll()
+            : _documentRepository.GetByTicker(ticker);
 
         if (startDate.HasValue)
         {
@@ -106,17 +127,32 @@ public class SecDocumentService : ISecDocumentService
 
         if (documentType != null)
         {
-            return query.Where(d => d.DocumentType == documentType);
+            query = query.Where(d => d.DocumentType == documentType);
+        }
+        else
+        {
+            // No explicit type filter: honor DocumentType.HiddenFromFilingLists — types registered
+            // as hidden (e.g. investor-relations news) are news-like content, not filings, and must
+            // not crowd real filings out of the recent-documents list. They stay reachable through
+            // search and through an explicit documentType request.
+            var hiddenTypes = DocumentType.GetAll().Where(t => t.HiddenFromFilingLists).ToList();
+            if (hiddenTypes.Count > 0)
+            {
+                query = query.Where(d => !hiddenTypes.Contains(d.DocumentType));
+            }
         }
 
-        // No explicit type filter: honor DocumentType.HiddenFromFilingLists — types registered
-        // as hidden (e.g. investor-relations news) are news-like content, not filings, and must
-        // not crowd real filings out of the recent-documents list. They stay reachable through
-        // search and through an explicit documentType request (the branch above).
-        var hiddenTypes = DocumentType.GetAll().Where(t => t.HiddenFromFilingLists).ToList();
-        if (hiddenTypes.Count > 0)
+        if (itemNumber != null)
         {
-            query = query.Where(d => !hiddenTypes.Contains(d.DocumentType));
+            var first = itemNumber + ",";
+            var middle = "," + itemNumber + ",";
+            var last = "," + itemNumber;
+            query = query.Where(d =>
+                d.Items == itemNumber
+                || d.Items.StartsWith(first)
+                || d.Items.Contains(middle)
+                || d.Items.EndsWith(last)
+            );
         }
 
         return query;

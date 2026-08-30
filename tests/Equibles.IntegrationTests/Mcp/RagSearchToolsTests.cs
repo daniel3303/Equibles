@@ -71,7 +71,8 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         string ticker = "AAPL",
         string companyName = "Apple Inc",
         DocumentType documentType = null,
-        DateOnly? reportingDate = null
+        DateOnly? reportingDate = null,
+        string items = null
     )
     {
         documentType ??= DocumentType.TenK;
@@ -115,6 +116,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             DocumentType = documentType,
             ReportingDate = docReportingDate,
             ReportingForDate = docReportingDate.AddDays(-30),
+            Items = items,
             LineCount = chunkContents.Length,
         };
         DbContext.Set<Document>().Add(document);
@@ -331,7 +333,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         var result = await Sut().SearchDocuments("services segment revenue");
 
         // The ID feeds SearchDocument/ReadDocumentLines directly — without it the caller
-        // must re-derive it from ListCompanyDocuments by fuzzy type+date matching.
+        // must re-derive it from ListFilings by fuzzy type+date matching.
         result.Should().Contain($"(ID: {document.Id})");
     }
 
@@ -368,9 +370,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         // topic" — the caller needs to know the ID itself is wrong.
         result
             .Should()
-            .Be(
-                $"Document {missingId} not found — obtain a valid document ID from ListCompanyDocuments."
-            );
+            .Be($"Document {missingId} not found — obtain a valid document ID from ListFilings.");
     }
 
     [Fact]
@@ -461,12 +461,12 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             .Be("Unknown searchMode \"fuzzy\" — pass 'semantic' (default) or 'exact'.");
     }
 
-    // ── ListCompanyDocuments ────────────────────────────────────────────
+    // ── ListFilings ────────────────────────────────────────────
 
     [Fact]
-    public async Task ListCompanyDocuments_UnknownTicker_ReturnsStockNotFound()
+    public async Task ListFilings_UnknownTicker_ReturnsStockNotFound()
     {
-        var result = await Sut().ListCompanyDocuments("ZZZZ");
+        var result = await Sut().ListFilings("ZZZZ");
 
         // An unknown ticker is not the same empty state as "known company, nothing
         // ingested" — the caller must be told the ticker itself missed.
@@ -474,7 +474,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_KnownTickerNoDocuments_ReturnsNoDocumentsMessage()
+    public async Task ListFilings_KnownTickerNoDocuments_ReturnsNoDocumentsMessage()
     {
         DbContext
             .Set<CommonStock>()
@@ -488,13 +488,13 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().ListCompanyDocuments("NODOC");
+        var result = await Sut().ListFilings("NODOC");
 
         result.Should().Contain("No documents found for ticker NODOC");
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_FiltersExcludeEverything_SaysDocumentsExistWithoutThem()
+    public async Task ListFilings_FiltersExcludeEverything_SaysDocumentsExistWithoutThem()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
@@ -504,7 +504,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         );
 
         var result = await Sut()
-            .ListCompanyDocuments(
+            .ListFilings(
                 "AAPL",
                 startDate: new DateTime(1990, 1, 1),
                 endDate: new DateTime(1990, 12, 31)
@@ -516,7 +516,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_UnknownDocumentType_ReturnsAcceptedValues()
+    public async Task ListFilings_UnknownDocumentType_ReturnsAcceptedValues()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
@@ -525,14 +525,14 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
 
         // The old lenient behavior returned an UNFILTERED list for a near-miss like
         // 'AnnualReport' — indistinguishable from a correctly filtered one.
-        var result = await Sut().ListCompanyDocuments("AAPL", documentType: "AnnualReport");
+        var result = await Sut().ListFilings("AAPL", documentType: "AnnualReport");
 
         result.Should().StartWith("Unknown documentType 'AnnualReport'.");
         result.Should().Contain("'TenK' (10-K)");
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_PageZero_ReturnsExplicitError()
+    public async Task ListFilings_PageZero_ReturnsExplicitError()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
@@ -541,13 +541,21 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
 
         // page=0 used to flow into Skip(-maxItems) — a negative OFFSET PostgreSQL rejects,
         // surfacing as the generic internal-error sentinel.
-        var result = await Sut().ListCompanyDocuments("AAPL", page: 0);
+        var result = await Sut().ListFilings("AAPL", page: 0);
 
         result.Should().Be("Invalid page 0 — pages are numbered from 1.");
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_PagePastEnd_ReturnsOutOfRangeMessage()
+    public async Task ListFilings_PageBeyondMaximumOffset_ReturnsExplicitError()
+    {
+        var result = await Sut().ListFilings(page: int.MaxValue, maxItems: 500);
+
+        result.Should().Contain("maximum supported offset of 100,000");
+    }
+
+    [Fact]
+    public async Task ListFilings_PagePastEnd_ReturnsOutOfRangeMessage()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
@@ -556,14 +564,14 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
 
         // Paging past the end used to return "No documents found for ticker AAPL" even
         // though documents plainly exist — the caller would conclude the company has none.
-        var result = await Sut().ListCompanyDocuments("AAPL", page: 5);
+        var result = await Sut().ListFilings("AAPL", page: 5);
 
         result.Should().Contain("Page 5 is out of range");
         result.Should().Contain("1 matching document(s)");
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_HiddenDocumentType_ExcludedUnlessExplicitlyRequested()
+    public async Task ListFilings_HiddenDocumentType_ExcludedUnlessExplicitlyRequested()
     {
         // Registration is process-global and idempotent (TryAdd); the type is test-only
         // and no other test filters on it.
@@ -587,9 +595,8 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             chunkContents: new[] { "News item content." }
         );
 
-        var unfiltered = await Sut().ListCompanyDocuments("AAPL");
-        var explicitlyRequested = await Sut()
-            .ListCompanyDocuments("AAPL", documentType: "TestHiddenNews");
+        var unfiltered = await Sut().ListFilings("AAPL");
+        var explicitlyRequested = await Sut().ListFilings("AAPL", documentType: "TestHiddenNews");
 
         // Hidden types are news, not filings: they must not crowd the unfiltered list,
         // but an explicit request for the type still returns them.
@@ -601,7 +608,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_RendersDocumentsForCompany()
+    public async Task ListFilings_RendersDocumentsForCompany()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
@@ -616,17 +623,94 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             chunkContents: new[] { "Quarterly content." }
         );
 
-        var result = await Sut().ListCompanyDocuments("AAPL");
+        var result = await Sut().ListFilings("AAPL");
 
         result.Should().Contain("Financial documents for Apple Inc (AAPL)");
         result.Should().Contain("10-K");
         result.Should().Contain("10-Q");
         result.Should().Contain("page 1");
-        result.Should().Contain("ID | Type | Filed | Reporting For | Lines");
+        result
+            .Should()
+            .Contain("Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines");
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_OrdersNewestFirst()
+    public async Task ListFilings_WithoutTicker_ReturnsMarketWideFilings()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            companyName: "Apple Inc",
+            reportingDate: new DateOnly(2026, 3, 15),
+            chunkContents: new[] { "Apple filing." }
+        );
+        await SeedDocumentWithChunks(
+            ticker: "MSFT",
+            companyName: "Microsoft Corp",
+            reportingDate: new DateOnly(2026, 4, 30),
+            chunkContents: new[] { "Microsoft filing." }
+        );
+
+        var result = await Sut().ListFilings();
+
+        result.Should().Contain("Market-wide filings");
+        result.Should().Contain("AAPL | Apple Inc");
+        result.Should().Contain("MSFT | Microsoft Corp");
+    }
+
+    [Fact]
+    public async Task ListFilings_EscapesUntrustedMarkdownCells()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "PIPE",
+            companyName: "Pipe | Corp\\Line\nTwo",
+            reportingDate: new DateOnly(2026, 4, 30),
+            items: "2.02|9.01",
+            chunkContents: new[] { "Filing." }
+        );
+
+        var result = await Sut().ListFilings("PIPE");
+
+        result.Should().Contain(@"PIPE | Pipe \| Corp\\Line Two");
+        result.Should().Contain(@"2.02\|9.01");
+        result.Should().NotContain("Corp\\Line\nTwo");
+    }
+
+    [Fact]
+    public async Task ListFilings_FiltersByExactItemNumber()
+    {
+        await SeedDocumentWithChunks(
+            ticker: "AAPL",
+            documentType: DocumentType.EightK,
+            reportingDate: new DateOnly(2026, 4, 10),
+            items: "2.02,9.01",
+            chunkContents: new[] { "Earnings release." }
+        );
+        await SeedDocumentWithChunks(
+            ticker: "MSFT",
+            companyName: "Microsoft Corp",
+            documentType: DocumentType.EightK,
+            reportingDate: new DateOnly(2026, 4, 11),
+            items: "1.02",
+            chunkContents: new[] { "Agreement." }
+        );
+
+        var result = await Sut().ListFilings(itemNumber: "2.02");
+
+        result.Should().Contain("AAPL | Apple Inc");
+        result.Should().Contain("2.02,9.01");
+        result.Should().NotContain("MSFT | Microsoft Corp");
+    }
+
+    [Fact]
+    public async Task ListFilings_InvalidItemNumber_ReturnsCorrectiveError()
+    {
+        var result = await Sut().ListFilings(itemNumber: "2.2");
+
+        result.Should().StartWith("Invalid itemNumber '2.2'.");
+    }
+
+    [Fact]
+    public async Task ListFilings_OrdersNewestFirst()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
@@ -640,13 +724,13 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             chunkContents: new[] { "Newer filing." }
         );
 
-        var result = await Sut().ListCompanyDocuments("AAPL");
+        var result = await Sut().ListFilings("AAPL");
 
         result.IndexOf("2026-04-30").Should().BeLessThan(result.IndexOf("2025-06-30"));
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_FiltersByDocumentType()
+    public async Task ListFilings_FiltersByDocumentType()
     {
         await SeedDocumentWithChunks(
             ticker: "AAPL",
@@ -661,14 +745,14 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             chunkContents: new[] { "Current report." }
         );
 
-        var result = await Sut().ListCompanyDocuments("AAPL", documentType: "EightK");
+        var result = await Sut().ListFilings("AAPL", documentType: "EightK");
 
         result.Should().Contain("8-K");
         result.Should().NotContain("10-K");
     }
 
     [Fact]
-    public async Task ListCompanyDocuments_PaginatesAcrossPages()
+    public async Task ListFilings_PaginatesAcrossPages()
     {
         // Seed 12 docs so pages 1 and 2 each have content; page 2 should return docs 11-12.
         for (var i = 0; i < 12; i++)
@@ -680,8 +764,8 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
             );
         }
 
-        var page1 = await Sut().ListCompanyDocuments("AAPL", page: 1);
-        var page2 = await Sut().ListCompanyDocuments("AAPL", page: 2);
+        var page1 = await Sut().ListFilings("AAPL", page: 1);
+        var page2 = await Sut().ListFilings("AAPL", page: 2);
 
         page1.Should().Contain("page 1");
         page2.Should().Contain("page 2");

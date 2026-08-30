@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -72,7 +73,7 @@ public class RagSearchTools
 
     [McpServerTool(Name = "SearchDocuments", Title = "Search SEC Filings", ReadOnly = true)]
     [Description(
-        "Search SEC filings and earnings-call transcripts with hybrid keyword and semantic retrieval. Omit ticker to search every company, or provide one ticker to search only that company. Returns excerpts with document IDs for SearchDocument or ReadDocumentLines. Use excludeTickers and maxResultsPerCompany only for market-wide discovery; use ListCompanyDocuments to browse one company's available filings."
+        "Search SEC filings and earnings-call transcripts with hybrid keyword and semantic retrieval. Omit ticker to search every company, or provide one ticker to search only that company. Returns excerpts with document IDs for SearchDocument or ReadDocumentLines. Use excludeTickers and maxResultsPerCompany only for market-wide discovery; use ListFilings to browse filings newest first without a text query."
     )]
     public Task<string> SearchDocuments(
         [Description(
@@ -164,16 +165,14 @@ public class RagSearchTools
 
     [McpServerTool(Name = "SearchDocument", Title = "Search Within One Filing", ReadOnly = true)]
     [Description(
-        "Search one SEC filing or earnings-call transcript by document ID. semantic mode uses hybrid relevance and returns excerpts in document order with approximate line numbers. exact mode performs a literal case-insensitive substring match and returns precise matching lines. Get document IDs from SearchDocuments or ListCompanyDocuments; use ReadDocumentLines for surrounding text."
+        "Search one SEC filing or earnings-call transcript by document ID. semantic mode uses hybrid relevance and returns excerpts in document order with approximate line numbers. exact mode performs a literal case-insensitive substring match and returns precise matching lines. Get document IDs from SearchDocuments or ListFilings; use ReadDocumentLines for surrounding text."
     )]
     public Task<string> SearchDocument(
         [Description(
             "Search query — plain keywords or a short natural-language phrase. When too few excerpts match every word, the search automatically broadens to match any of the words. In searchMode 'exact', matched as a literal case-insensitive substring."
         )]
             string query,
-        [Description(
-            "Document ID obtained from ListCompanyDocuments or a SearchDocuments result header"
-        )]
+        [Description("Document ID obtained from ListFilings or a SearchDocuments result header")]
             Guid documentId,
         [Description("Maximum number of results to return (default: 5)")] int maxResults = 5,
         [Description(MaxExcerptCharsDescription)] int maxExcerptChars = 0,
@@ -217,7 +216,7 @@ public class RagSearchTools
                     // about the topic" — tell the caller the ID itself is wrong.
                     var document = await _documentRepository.Get(documentId);
                     if (document == null)
-                        return $"Document {documentId} not found — obtain a valid document ID from ListCompanyDocuments.";
+                        return $"Document {documentId} not found — obtain a valid document ID from ListFilings.";
 
                     return $"No matching excerpts found in this document ({document.DocumentType} filed {McpFormat.Invariant(document.ReportingDate, "yyyy-MM-dd")}). Try searchMode 'exact' for literal-term matches.";
                 }
@@ -236,21 +235,20 @@ public class RagSearchTools
         );
     }
 
-    [McpServerTool(
-        Name = "ListCompanyDocuments",
-        Title = "Browse Company Filings",
-        ReadOnly = true
-    )]
+    [McpServerTool(Name = "ListFilings", Title = "List Filings", ReadOnly = true)]
     [Description(
-        "List a company's stored SEC filings and earnings-call transcripts newest first. Returns document IDs, types, filing and reporting dates, line counts, and page totals. Supports date and document-type filters. Hidden document types remain excluded unless explicitly requested. Pass a returned ID to SearchDocument or ReadDocumentLines."
+        "List stored SEC filings and earnings-call transcripts newest first. Omit ticker for a market-wide feed or provide one ticker for a company-specific list. Returns company identity, document IDs, types, filing and reporting dates, SEC item numbers, line counts, and page totals. Supports date, document-type, and exact SEC item-number filters. Hidden document types remain excluded unless explicitly requested. Pass a returned ID to SearchDocument or ReadDocumentLines."
     )]
-    public Task<string> ListCompanyDocuments(
-        [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
+    public Task<string> ListFilings(
+        [Description("Optional company ticker symbol (e.g., AAPL, MSFT). Omit for all companies.")]
+            string ticker = null,
         [Description("Page number for pagination (default: 1)")] int page = 1,
         [Description("Maximum number of documents per page (default: 10)")] int maxItems = 10,
         [Description("Optional start date filter in YYYY-MM-DD format")] DateTime? startDate = null,
         [Description("Optional end date filter in YYYY-MM-DD format")] DateTime? endDate = null,
-        [Description(DocumentTypeDescription)] string documentType = null
+        [Description(DocumentTypeDescription)] string documentType = null,
+        [Description("Optional exact SEC current-report item number, e.g. 2.02, 5.02, or 1.01.")]
+            string itemNumber = null
     )
     {
         return _runner.Execute(
@@ -271,33 +269,46 @@ public class RagSearchTools
                         return UnknownDocumentType("documentType", documentType);
                 }
 
-                var normalizedTicker = McpToolExecutor.NormalizeTicker(ticker);
-                if (normalizedTicker == null)
-                    return McpToolExecutor.StockNotFound(ticker);
+                var normalizedItemNumber = SecFilingItemNumber.Normalize(itemNumber);
+                if (!string.IsNullOrWhiteSpace(itemNumber) && normalizedItemNumber == null)
+                    return $"Invalid itemNumber '{itemNumber}'. Use an SEC item number such as 2.02, 5.02, or 1.01.";
 
-                var stock = await _commonStockRepository.GetByTicker(normalizedTicker);
-                if (stock == null)
-                    return McpToolExecutor.StockNotFound(ticker);
+                CommonStock stock = null;
+                if (!string.IsNullOrWhiteSpace(ticker))
+                {
+                    var normalizedTicker = McpToolExecutor.NormalizeTicker(ticker);
+                    if (normalizedTicker == null)
+                        return McpToolExecutor.StockNotFound(ticker);
+
+                    stock = await _commonStockRepository.GetByTicker(normalizedTicker);
+                    if (stock == null)
+                        return McpToolExecutor.StockNotFound(ticker);
+                }
 
                 maxItems = McpLimit.Clamp(maxItems);
+                var offset = ((long)page - 1) * maxItems;
+                if (offset > McpLimit.MaxOffset)
+                    return $"Page {page} starts beyond the maximum supported offset of {McpFormat.WholeNumber(McpLimit.MaxOffset)} — lower page or narrow the filing filters.";
 
                 int totalCount;
                 List<SecDocumentInfo> documents;
                 try
                 {
                     totalCount = await _secDocumentService.CountDocuments(
-                        stock.Ticker,
+                        stock?.Ticker,
                         startDate,
                         endDate,
-                        parsedType
+                        parsedType,
+                        normalizedItemNumber
                     );
                     documents = await _secDocumentService.GetRecentDocuments(
-                        stock.Ticker,
+                        stock?.Ticker,
                         startDate,
                         endDate,
                         maxItems,
                         page,
-                        parsedType
+                        parsedType,
+                        normalizedItemNumber
                     );
                 }
                 catch (ApplicationException ex)
@@ -309,12 +320,19 @@ public class RagSearchTools
                 {
                     // Distinguish "the filters excluded everything" from "nothing is
                     // ingested for this company" — the ticker itself is already known good.
-                    var hasFilters = startDate.HasValue || endDate.HasValue || parsedType != null;
+                    var hasFilters =
+                        startDate.HasValue
+                        || endDate.HasValue
+                        || parsedType != null
+                        || normalizedItemNumber != null;
                     if (!hasFilters)
-                        return $"No documents found for ticker {stock.Ticker}";
+                        return stock == null
+                            ? "No filings are stored."
+                            : $"No documents found for ticker {stock.Ticker}";
 
-                    var unfiltered = await _secDocumentService.CountDocuments(stock.Ticker);
-                    return $"No documents match the given filters for {stock.Ticker} — {McpFormat.WholeNumber(unfiltered)} document(s) exist without them. Relax documentType/startDate/endDate.";
+                    var scope = stock == null ? "the market-wide corpus" : stock.Ticker;
+                    var unfiltered = await _secDocumentService.CountDocuments(stock?.Ticker);
+                    return $"No documents match the given filters for {scope} — {McpFormat.WholeNumber(unfiltered)} document(s) exist without them. Relax documentType/itemNumber/startDate/endDate.";
                 }
 
                 var totalPages = (totalCount + maxItems - 1) / maxItems;
@@ -322,21 +340,26 @@ public class RagSearchTools
                     return $"Page {page} is out of range — {McpFormat.WholeNumber(totalCount)} matching document(s) fill only {McpFormat.WholeNumber(totalPages)} page(s) of {maxItems}.";
 
                 var result = MarkdownTable.Start(
-                    $"Financial documents for {stock.Name} ({stock.Ticker}) — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):",
-                    "ID | Type | Filed | Reporting For | Lines",
-                    "---|------|-------|---------------|------"
+                    stock == null
+                        ? $"Market-wide filings — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):"
+                        : $"Financial documents for {MarkdownTable.EscapeCell(stock.Name)} ({MarkdownTable.EscapeCell(stock.Ticker)}) — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):",
+                    "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines",
+                    "-------|---------|----|------|-------|---------------|-------|------"
                 );
 
                 result.AppendRows(
                     documents,
                     doc =>
-                        $"{doc.Id} | {doc.DocumentType} | {doc.ReportingDate:yyyy-MM-dd} | {doc.ReportingForDate:yyyy-MM-dd} | {McpFormat.WholeNumber(doc.LineCount)}"
+                    {
+                        var items = string.Join(",", SecFilingItemNumber.ParseStored(doc.Items));
+                        return $"{MarkdownTable.EscapeCell(doc.Ticker)} | {MarkdownTable.EscapeCell(doc.CompanyName)} | {doc.Id} | {doc.DocumentType} | {McpFormat.Invariant(doc.ReportingDate, "yyyy-MM-dd")} | {McpFormat.Invariant(doc.ReportingForDate, "yyyy-MM-dd")} | {MarkdownTable.EscapeCell(items, "—")} | {McpFormat.WholeNumber(doc.LineCount)}";
+                    }
                 );
 
                 return result.ToString();
             },
-            "ListCompanyDocuments",
-            $"ticker: {ticker}"
+            "ListFilings",
+            $"ticker: {ticker}, itemNumber: {itemNumber}"
         );
     }
 

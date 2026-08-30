@@ -54,7 +54,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 
 - `SearchDocuments` — hybrid BM25 and semantic search across indexed SEC documents, optionally scoped by `ticker`; without embeddings it retains ranked BM25 results.
 - `SearchDocument` — semantic or exact literal search inside a specific document.
-- `ListCompanyDocuments` — list documents available for a company.
+- `ListFilings` — list stored filings newest first, market-wide or for one company, with date, document-type, and exact 8-K item-number filters.
 
 `FailToDeliverTools`:
 
@@ -125,6 +125,7 @@ never substitutes `BRK-B`; dot share-class spelling such as `BRK.A` resolves to 
 
 - `GetStockPrices` — daily OHLCV + `AdjustedClose` for a ticker over a date range.
 - `GetLatestClosingPrices` — latest close for one or more tickers.
+- `GetDividendHistory` — declared cash-dividend history by ex-date for a company's current primary ticker.
 - `GetStochasticOscillator` — Stochastic Oscillator (%K and %D) for a ticker over a date range.
 - `GetAverageTrueRange` — Wilder's Average True Range (ATR) volatility measure for a ticker over a date range.
 - `GetOnBalanceVolume` — On-Balance Volume (OBV) cumulative-flow indicator for a ticker over a date range.

@@ -19,7 +19,7 @@ See [`docs/`](docs/README.md) for the user guide and technical documentation.
 
 ## What's Included
 
-Everything marked **Self-hosted** is scraped, stored, and served by this repo — **61 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
+Everything marked **Self-hosted** is scraped, stored, and served by this repo — **62 MCP tools**, no account, no key. [Equibles Cloud](https://equibles.com) runs this exact core over the same protocol with the same tool names, and adds more tools on top.
 
 | Domain | Data Source | Self-hosted | [Equibles Cloud](https://equibles.com) | Description |
 |--------|------------|:---:|:---:|-------------|
@@ -299,7 +299,7 @@ Any MCP-compatible client can connect to `http://localhost:8081/mcp` (HTTP trans
 
 ## Tools
 
-This self-hosted build exposes 61 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
+This self-hosted build exposes 62 tools over MCP. The hosted server at `https://mcp.equibles.com/mcp` runs this same core and [adds more on top](#whats-included). Full catalog and client setup: [daniel3303/stock-market-mcp-server](https://github.com/daniel3303/stock-market-mcp-server).
 
 **13F institutional holdings**
 
@@ -328,7 +328,7 @@ This self-hosted build exposes 61 tools over MCP. The hosted server at `https://
 
 - SearchDocuments — hybrid keyword+semantic search across all filings, optionally scoped by ticker
 - SearchDocument — search within a single filing
-- ListCompanyDocuments — browse a company's filings
+- ListFilings — browse filings market-wide or for one company, with date/type/8-K item filters
 - ReadDocumentLines — read a line range from a filing
 
 **Funds, ETFs & advisers**
@@ -391,6 +391,7 @@ This self-hosted build exposes 61 tools over MCP. The hosted server at `https://
 
 - GetStockPrices — daily OHLCV plus the stored auxiliary adjusted close when it differs
 - GetLatestClosingPrices — latest close/change/volume
+- GetDividendHistory — stored declared cash dividends for a company's primary ticker
 - GetStochasticOscillator — stochastic oscillator (%K/%D)
 - GetAverageTrueRange — average true range (ATR)
 - GetOnBalanceVolume — on-balance volume (OBV)

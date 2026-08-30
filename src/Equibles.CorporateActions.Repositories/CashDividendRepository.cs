@@ -15,6 +15,21 @@ public class CashDividendRepository : BaseRepository<CashDividend>
         return GetAll().Where(d => d.CommonStockId == commonStockId);
     }
 
+    public IQueryable<CashDividend> GetHistory(
+        Guid commonStockId,
+        DateOnly? startDate = null,
+        DateOnly? endDate = null
+    )
+    {
+        var query = GetByStock(commonStockId);
+        if (startDate.HasValue)
+            query = query.Where(d => d.ExDate >= startDate.Value);
+        if (endDate.HasValue)
+            query = query.Where(d => d.ExDate <= endDate.Value);
+
+        return query.OrderByDescending(d => d.ExDate).ThenByDescending(d => d.Id);
+    }
+
     public IQueryable<CashDividend> GetPendingPriceAdjustment()
     {
         return GetAll()
