@@ -52,7 +52,9 @@ public class NportTools
             "Optional registrant or series name filter (case-insensitive contains, e.g. 'Vanguard') — reaches positions beyond the largest 500"
         )]
             string registrantOrSeries = null,
-        [Description("Number of matching fund positions to skip before returning rows (default: 0)")]
+        [Description(
+            "Number of matching fund positions to skip before returning rows (default: 0)"
+        )]
             int offset = 0
     )
     {
@@ -141,11 +143,7 @@ public class NportTools
                         $"| {MarkdownText(p.RegistrantName) ?? "-"} | {MarkdownText(p.SeriesName) ?? "-"} | {p.ReportPeriodDate:yyyy-MM-dd} | {FormatAmount(p.Balance)} | {MarkdownText(FundCodes.Unit(p.Units))} | ${FormatAmount(p.ValueUsd)} | {FormatPercent(p.PercentValue)} | {MarkdownText(p.PayoffProfile) ?? "-"} |"
                 );
 
-                var pagingNote = McpOutput.PagedTruncationNote(
-                    positions.Count,
-                    totalCount,
-                    offset
-                );
+                var pagingNote = McpOutput.PagedTruncationNote(positions.Count, totalCount, offset);
                 if (pagingNote.Length > 0)
                 {
                     result.AppendLine();

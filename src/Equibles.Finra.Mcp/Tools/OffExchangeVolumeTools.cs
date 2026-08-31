@@ -162,11 +162,10 @@ public class OffExchangeVolumeTools
     // DISPLAYS them oldest-first: "first N" would read as the oldest N, so the note names
     // the kept end explicitly. Empty when nothing was cut.
     private static string NewestKeptNote(int shown, int total, string unit) =>
-        shown >= total
-            ? string.Empty
-            : shown >= McpLimit.MaxResults
-                ? $"_Showing the newest {shown} of {total} {unit} in the range — narrow the date range to see earlier ones._"
-                : $"_Showing the newest {shown} of {total} {unit} in the range — raise maxResults (max {McpLimit.MaxResults}) or narrow the date range to see earlier ones._";
+        shown >= total ? string.Empty
+        : shown >= McpLimit.MaxResults
+            ? $"_Showing the newest {shown} of {total} {unit} in the range — narrow the date range to see earlier ones._"
+        : $"_Showing the newest {shown} of {total} {unit} in the range — raise maxResults (max {McpLimit.MaxResults}) or narrow the date range to see earlier ones._";
 
     private static string HistoricalCoverageNote(IReadOnlyCollection<OffExchangeVolume> records) =>
         records.Any(record =>

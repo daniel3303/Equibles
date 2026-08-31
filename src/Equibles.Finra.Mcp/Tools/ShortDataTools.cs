@@ -623,11 +623,10 @@ public class ShortDataTools
     // to start where the range starts), so the note names the kept end explicitly. Empty
     // when nothing was cut, so callers can append it unconditionally via AppendNote.
     private static string NewestKeptNote(int shown, int total, string unit) =>
-        shown >= total
-            ? string.Empty
-            : shown >= McpLimit.MaxResults
-                ? $"_Showing the newest {shown} of {total} {unit} in the range — narrow the date range to see earlier ones._"
-                : $"_Showing the newest {shown} of {total} {unit} in the range — raise maxResults (max {McpLimit.MaxResults}) or narrow the date range to see earlier ones._";
+        shown >= total ? string.Empty
+        : shown >= McpLimit.MaxResults
+            ? $"_Showing the newest {shown} of {total} {unit} in the range — narrow the date range to see earlier ones._"
+        : $"_Showing the newest {shown} of {total} {unit} in the range — raise maxResults (max {McpLimit.MaxResults}) or narrow the date range to see earlier ones._";
 
     // Appends a note line under a rendered table (blank line first so strict CommonMark
     // renderers keep the table intact); a no-op for the empty note or an empty-state message.

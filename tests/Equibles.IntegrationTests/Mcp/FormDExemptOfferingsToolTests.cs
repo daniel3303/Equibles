@@ -215,11 +215,13 @@ public class FormDExemptOfferingsToolTests : IDisposable
     public async Task GetFormDOfferings_OffsetPagesNewestFirst_AndRejectsPastEnd()
     {
         var stock = SeedStock();
-        _dbContext.Set<FormDFiling>().AddRange(
-            MakeFiling(stock.Id, "old", new DateOnly(2025, 1, 1), offeringAmount: 100_001),
-            MakeFiling(stock.Id, "middle", new DateOnly(2025, 2, 1), offeringAmount: 100_002),
-            MakeFiling(stock.Id, "new", new DateOnly(2025, 3, 1), offeringAmount: 100_003)
-        );
+        _dbContext
+            .Set<FormDFiling>()
+            .AddRange(
+                MakeFiling(stock.Id, "old", new DateOnly(2025, 1, 1), offeringAmount: 100_001),
+                MakeFiling(stock.Id, "middle", new DateOnly(2025, 2, 1), offeringAmount: 100_002),
+                MakeFiling(stock.Id, "new", new DateOnly(2025, 3, 1), offeringAmount: 100_003)
+            );
         await _dbContext.SaveChangesAsync();
 
         var page = await _tools.GetFormDOfferings("AAPL", maxResults: 1, offset: 1);

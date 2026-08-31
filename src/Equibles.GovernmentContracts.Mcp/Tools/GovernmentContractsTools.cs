@@ -102,11 +102,7 @@ public class GovernmentContractsTools
                     var pattern = LikePattern.Contains(agency.Trim());
                     query = query.Where(c =>
                         c.AwardingAgency != null
-                        && EF.Functions.ILike(
-                            c.AwardingAgency,
-                            pattern,
-                            LikePattern.EscapeChar
-                        )
+                        && EF.Functions.ILike(c.AwardingAgency, pattern, LikePattern.EscapeChar)
                     );
                 }
 

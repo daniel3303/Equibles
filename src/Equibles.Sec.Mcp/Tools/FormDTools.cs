@@ -126,11 +126,7 @@ public class FormDTools
                     );
                 }
 
-                var pagingNote = McpOutput.PagedTruncationNote(
-                    filings.Count,
-                    totalCount,
-                    offset
-                );
+                var pagingNote = McpOutput.PagedTruncationNote(filings.Count, totalCount, offset);
                 if (pagingNote.Length > 0)
                 {
                     result.AppendLine();

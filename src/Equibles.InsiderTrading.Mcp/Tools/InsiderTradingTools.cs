@@ -211,7 +211,9 @@ public class InsiderTradingTools
 
                 var sb = new StringBuilder();
                 sb.AppendLine($"Recent insider transactions for {stock.Name} ({stock.Ticker}):");
-                sb.AppendLine($"Showing transactions {offset + 1}-{offset + transactions.Count} of {total}");
+                sb.AppendLine(
+                    $"Showing transactions {offset + 1}-{offset + transactions.Count} of {total}"
+                );
                 sb.AppendLine(
                     "_Shares/Price/Value are as filed; Owned After is the post-transaction balance restated onto today's split basis. Security is the filed security title (kind when the filing names none) — balances are tracked per security and ownership form (see Security/Ownership), not as one running total per insider, so an issuer with several listed securities (e.g. ordinary shares and ADS) shows separate balances. 10b5-1 '-' means the filing predates the 2023 checkbox._"
                 );
@@ -261,11 +263,7 @@ public class InsiderTradingTools
                     }
                 );
 
-                var truncation = McpOutput.PagedTruncationNote(
-                    transactions.Count,
-                    total,
-                    offset
-                );
+                var truncation = McpOutput.PagedTruncationNote(transactions.Count, total, offset);
                 if (truncation.Length > 0)
                 {
                     sb.AppendLine();

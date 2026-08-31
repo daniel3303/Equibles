@@ -431,14 +431,23 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         var owner = CreateOwner();
         await SeedStock(stock);
         await SeedOwner(owner);
-        await SeedTransaction(CreateTransaction(stock, owner, new DateOnly(2024, 1, 1), accessionNumber: "old"));
-        await SeedTransaction(CreateTransaction(stock, owner, new DateOnly(2024, 2, 1), accessionNumber: "middle"));
-        await SeedTransaction(CreateTransaction(stock, owner, new DateOnly(2024, 3, 1), accessionNumber: "new"));
+        await SeedTransaction(
+            CreateTransaction(stock, owner, new DateOnly(2024, 1, 1), accessionNumber: "old")
+        );
+        await SeedTransaction(
+            CreateTransaction(stock, owner, new DateOnly(2024, 2, 1), accessionNumber: "middle")
+        );
+        await SeedTransaction(
+            CreateTransaction(stock, owner, new DateOnly(2024, 3, 1), accessionNumber: "new")
+        );
 
         var page = await Sut().GetInsiderTransactions("AAPL", maxResults: 1, offset: 1);
         var pastEnd = await Sut().GetInsiderTransactions("AAPL", offset: 3);
 
-        page.Should().Contain("2024-02-01").And.NotContain("2024-03-01").And.NotContain("2024-01-01");
+        page.Should()
+            .Contain("2024-02-01")
+            .And.NotContain("2024-03-01")
+            .And.NotContain("2024-01-01");
         page.Should().Contain("Showing results 2-2 of 3");
         pastEnd.Should().Contain("No results at offset 3 - only 3 insider transactions match");
     }
@@ -449,11 +458,8 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         var stock = CreateStock();
         await SeedStock(stock);
 
-        var result = await Sut().GetInsiderTransactions(
-            "AAPL",
-            fromDate: "2024-12-31",
-            toDate: "2024-01-01"
-        );
+        var result = await Sut()
+            .GetInsiderTransactions("AAPL", fromDate: "2024-12-31", toDate: "2024-01-01");
 
         result.Should().Be("fromDate must be on or before toDate.");
     }

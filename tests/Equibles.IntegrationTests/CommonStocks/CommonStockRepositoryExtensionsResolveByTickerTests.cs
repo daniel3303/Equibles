@@ -50,13 +50,15 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     [Fact]
     public async Task ResolveByTicker_DottedClassShareFallsBackToStoredDashForm()
     {
-        _dbContext.Add(new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BRK-B",
-            Name = "Berkshire Hathaway Class B",
-            Cik = "0001067983",
-        });
+        _dbContext.Add(
+            new CommonStock
+            {
+                Id = Guid.NewGuid(),
+                Ticker = "BRK-B",
+                Name = "Berkshire Hathaway Class B",
+                Cik = "0001067983",
+            }
+        );
         await _dbContext.SaveChangesAsync();
 
         var (stock, error) = await _repository.ResolveByTicker("BRK.B");
@@ -69,8 +71,20 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     public async Task ResolveByTicker_ExactDottedTickerWinsBeforeDashFallback()
     {
         _dbContext.AddRange(
-            new CommonStock { Id = Guid.NewGuid(), Ticker = "TEST.B", Name = "Exact", Cik = "1001" },
-            new CommonStock { Id = Guid.NewGuid(), Ticker = "TEST-B", Name = "Fallback", Cik = "1002" }
+            new CommonStock
+            {
+                Id = Guid.NewGuid(),
+                Ticker = "TEST.B",
+                Name = "Exact",
+                Cik = "1001",
+            },
+            new CommonStock
+            {
+                Id = Guid.NewGuid(),
+                Ticker = "TEST-B",
+                Name = "Fallback",
+                Cik = "1002",
+            }
         );
         await _dbContext.SaveChangesAsync();
 

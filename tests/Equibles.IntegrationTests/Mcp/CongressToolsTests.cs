@@ -255,19 +255,21 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         result.Should().NotContain("Charlie Lot");
         result.Should().NotContain("Delta Lot");
 
-        var secondPage = await Sut().GetCongressionalTrades(
-            "NVDA",
-            startDate: "2026-01-01",
-            endDate: "2026-04-30",
-            maxResults: 2,
-            offset: 2
-        );
-        var pastEnd = await Sut().GetCongressionalTrades(
-            "NVDA",
-            startDate: "2026-01-01",
-            endDate: "2026-04-30",
-            offset: 4
-        );
+        var secondPage = await Sut()
+            .GetCongressionalTrades(
+                "NVDA",
+                startDate: "2026-01-01",
+                endDate: "2026-04-30",
+                maxResults: 2,
+                offset: 2
+            );
+        var pastEnd = await Sut()
+            .GetCongressionalTrades(
+                "NVDA",
+                startDate: "2026-01-01",
+                endDate: "2026-04-30",
+                offset: 4
+            );
 
         secondPage.Should().Contain("Charlie Lot").And.Contain("Delta Lot");
         secondPage.Should().NotContain("Alpha Lot").And.NotContain("Bravo Lot");
@@ -386,22 +388,30 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     public async Task GetMemberTrades_TickerFilterUsesResolvedStockIdentity()
     {
         var nvda = NvdaStock();
-        var apple = new CommonStock { Ticker = "AAPL", Name = "Apple Inc.", Cik = "0000320193" };
+        var apple = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "0000320193",
+        };
         var pelosi = PelosiMember();
         DbContext.Set<CommonStock>().AddRange(nvda, apple);
         DbContext.Set<CongressMember>().Add(pelosi);
-        DbContext.Set<CongressionalTrade>().AddRange(
-            TradeFor(pelosi, nvda, new DateOnly(2026, 3, 15), assetName: "Nvidia Position"),
-            TradeFor(pelosi, apple, new DateOnly(2026, 3, 16), assetName: "Apple Position")
-        );
+        DbContext
+            .Set<CongressionalTrade>()
+            .AddRange(
+                TradeFor(pelosi, nvda, new DateOnly(2026, 3, 15), assetName: "Nvidia Position"),
+                TradeFor(pelosi, apple, new DateOnly(2026, 3, 16), assetName: "Apple Position")
+            );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetMemberTrades(
-            "Nancy Pelosi",
-            startDate: "2026-01-01",
-            endDate: "2026-04-30",
-            ticker: "NVDA"
-        );
+        var result = await Sut()
+            .GetMemberTrades(
+                "Nancy Pelosi",
+                startDate: "2026-01-01",
+                endDate: "2026-04-30",
+                ticker: "NVDA"
+            );
 
         result.Should().Contain("Nvidia Position").And.NotContain("Apple Position");
         result.Should().Contain("in NVDA");
@@ -634,9 +644,11 @@ public class CongressToolsTests : ParadeDbMcpTestBase
                 maxResults: 2
             );
 
-        result.Should().Contain(
-            "Showing results 1-2 of 3 - raise maxResults (max 500) or pass offset=2 to continue."
-        );
+        result
+            .Should()
+            .Contain(
+                "Showing results 1-2 of 3 - raise maxResults (max 500) or pass offset=2 to continue."
+            );
     }
 
     [Fact]
