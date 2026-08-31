@@ -254,6 +254,25 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("Bravo Lot");
         result.Should().NotContain("Charlie Lot");
         result.Should().NotContain("Delta Lot");
+
+        var secondPage = await Sut().GetCongressionalTrades(
+            "NVDA",
+            startDate: "2026-01-01",
+            endDate: "2026-04-30",
+            maxResults: 2,
+            offset: 2
+        );
+        var pastEnd = await Sut().GetCongressionalTrades(
+            "NVDA",
+            startDate: "2026-01-01",
+            endDate: "2026-04-30",
+            offset: 4
+        );
+
+        secondPage.Should().Contain("Charlie Lot").And.Contain("Delta Lot");
+        secondPage.Should().NotContain("Alpha Lot").And.NotContain("Bravo Lot");
+        secondPage.Should().Contain("Showing results 3-4 of 4 (the last page)");
+        pastEnd.Should().Contain("No results at offset 4 - only 4 trades match");
     }
 
     // ── GetMemberTrades ──────────────────────────────────────────────────
@@ -361,6 +380,31 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         onPage1.Intersect(onPage2).Should().BeEmpty();
         onPage1.Concat(onPage2).Should().BeEquivalentTo(markers);
         page2.Should().Contain("Showing results 3-4 of 4 (the last page).");
+    }
+
+    [Fact]
+    public async Task GetMemberTrades_TickerFilterUsesResolvedStockIdentity()
+    {
+        var nvda = NvdaStock();
+        var apple = new CommonStock { Ticker = "AAPL", Name = "Apple Inc.", Cik = "0000320193" };
+        var pelosi = PelosiMember();
+        DbContext.Set<CommonStock>().AddRange(nvda, apple);
+        DbContext.Set<CongressMember>().Add(pelosi);
+        DbContext.Set<CongressionalTrade>().AddRange(
+            TradeFor(pelosi, nvda, new DateOnly(2026, 3, 15), assetName: "Nvidia Position"),
+            TradeFor(pelosi, apple, new DateOnly(2026, 3, 16), assetName: "Apple Position")
+        );
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetMemberTrades(
+            "Nancy Pelosi",
+            startDate: "2026-01-01",
+            endDate: "2026-04-30",
+            ticker: "NVDA"
+        );
+
+        result.Should().Contain("Nvidia Position").And.NotContain("Apple Position");
+        result.Should().Contain("in NVDA");
     }
 
     [Fact]
@@ -590,7 +634,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
                 maxResults: 2
             );
 
-        result.Should().Contain("Showing first 2 of 3 results - raise maxResults to see more.");
+        result.Should().Contain(
+            "Showing results 1-2 of 3 - raise maxResults (max 500) or pass offset=2 to continue."
+        );
     }
 
     [Fact]

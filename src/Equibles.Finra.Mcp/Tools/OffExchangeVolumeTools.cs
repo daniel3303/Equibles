@@ -164,7 +164,9 @@ public class OffExchangeVolumeTools
     private static string NewestKeptNote(int shown, int total, string unit) =>
         shown >= total
             ? string.Empty
-            : $"_Showing the newest {shown} of {total} {unit} in the range — raise maxResults (max {McpLimit.MaxResults}) or narrow the date range to see earlier ones._";
+            : shown >= McpLimit.MaxResults
+                ? $"_Showing the newest {shown} of {total} {unit} in the range — narrow the date range to see earlier ones._"
+                : $"_Showing the newest {shown} of {total} {unit} in the range — raise maxResults (max {McpLimit.MaxResults}) or narrow the date range to see earlier ones._";
 
     private static string HistoricalCoverageNote(IReadOnlyCollection<OffExchangeVolume> records) =>
         records.Any(record =>

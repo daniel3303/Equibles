@@ -6,6 +6,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Mcp;
 using Equibles.Mcp.Helpers;
+using Equibles.Sec.Data.Extensions;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -54,7 +55,9 @@ public class FormDTools
         [Description(
             "Optional latest filing date to include, ISO format yyyy-MM-dd (e.g., 2024-12-31)"
         )]
-            string toDate = null
+            string toDate = null,
+        [Description("Number of matching notices to skip before returning rows (default: 0)")]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -66,33 +69,45 @@ public class FormDTools
 
                 var query = _formDRepository.GetByStock(stock);
 
+                DateOnly? fromDay = null;
+                DateOnly? toDay = null;
+
                 if (!string.IsNullOrWhiteSpace(fromDate))
                 {
                     if (!McpOutput.TryParseDate(fromDate, out var from))
                         return McpOutput.InvalidArgument("fromDate", fromDate, "yyyy-MM-dd");
-                    var fromDay = DateOnly.FromDateTime(from);
-                    query = query.Where(f => f.FilingDate >= fromDay);
+                    fromDay = DateOnly.FromDateTime(from);
                 }
 
                 if (!string.IsNullOrWhiteSpace(toDate))
                 {
                     if (!McpOutput.TryParseDate(toDate, out var to))
                         return McpOutput.InvalidArgument("toDate", toDate, "yyyy-MM-dd");
-                    var toDay = DateOnly.FromDateTime(to);
-                    query = query.Where(f => f.FilingDate <= toDay);
+                    toDay = DateOnly.FromDateTime(to);
                 }
+
+                if (fromDay.HasValue && toDay.HasValue && fromDay.Value > toDay.Value)
+                    return "fromDate must be on or before toDate.";
+                if (fromDay.HasValue)
+                    query = query.Where(f => f.FilingDate >= fromDay.Value);
+                if (toDay.HasValue)
+                    query = query.Where(f => f.FilingDate <= toDay.Value);
 
                 var totalCount = await query.CountAsync();
                 if (totalCount == 0)
                     return $"No Form D exempt offerings found for {ticker}.";
 
+                offset = McpLimit.ClampOffset(offset);
                 var filings = await query
-                    .OrderByDescending(f => f.FilingDate)
+                    .OrderNewestFirst()
+                    .Skip(offset)
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
+                if (filings.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {totalCount} Form D notices match; lower offset.";
 
                 var result = MarkdownTable.Start(
-                    $"Recent exempt offerings (Form D) for {stock.Name} ({ticker}) — showing {filings.Count} most recent notices:",
+                    $"Recent exempt offerings (Form D) for {stock.Name} ({ticker}) — showing notices {offset + 1}-{offset + filings.Count} of {totalCount}, newest first:",
                     "| Filed | Amendment | First Sale | Industry | Offering Amount | Sold | Remaining | Min. Investment | Investors | Exemptions | Accession |",
                     "|-------|-----------|------------|----------|-----------------|------|-----------|-----------------|-----------|------------|-----------|"
                 );
@@ -111,12 +126,21 @@ public class FormDTools
                     );
                 }
 
-                TruncationNotes.Append(result, filings.Count, totalCount);
+                var pagingNote = McpOutput.PagedTruncationNote(
+                    filings.Count,
+                    totalCount,
+                    offset
+                );
+                if (pagingNote.Length > 0)
+                {
+                    result.AppendLine();
+                    result.AppendLine(pagingNote);
+                }
 
                 return result.ToString();
             },
             "GetFormDOfferings",
-            $"ticker: {ticker}"
+            $"ticker: {ticker}, fromDate: {fromDate}, toDate: {toDate}, offset: {offset}"
         );
     }
 

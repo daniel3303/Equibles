@@ -16,6 +16,8 @@ public static class CommonStockRepositoryExtensions
             return (null, $"Stock '{ticker}' not found.");
 
         var stock = await repository.GetByTicker(normalized);
+        if (stock == null && normalized.Contains('.'))
+            stock = await repository.GetByTicker(normalized.Replace('.', '-'));
         return stock == null ? (null, $"Stock '{ticker}' not found.") : (stock, null);
     }
 
