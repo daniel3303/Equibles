@@ -149,12 +149,12 @@ public class InsiderTradingTools
                     filtered = true;
                 }
 
-                if (fromDay.HasValue && toDay.HasValue && fromDay.Value > toDay.Value)
+                if (fromDay is { } parsedFrom && toDay is { } parsedTo && parsedFrom > parsedTo)
                     return "fromDate must be on or before toDate.";
-                if (fromDay.HasValue)
-                    query = query.Where(t => t.TransactionDate >= fromDay.Value);
-                if (toDay.HasValue)
-                    query = query.Where(t => t.TransactionDate <= toDay.Value);
+                if (fromDay is { } earliestDay)
+                    query = query.Where(t => t.TransactionDate >= earliestDay);
+                if (toDay is { } latestDay)
+                    query = query.Where(t => t.TransactionDate <= latestDay);
 
                 if (!string.IsNullOrWhiteSpace(transactionType))
                 {
@@ -511,12 +511,12 @@ public class InsiderTradingTools
                     toDay = DateOnly.FromDateTime(to);
                 }
 
-                if (fromDay.HasValue && toDay.HasValue && fromDay.Value > toDay.Value)
+                if (fromDay is { } parsedFrom && toDay is { } parsedTo && parsedFrom > parsedTo)
                     return "fromDate must be on or before toDate.";
-                if (fromDay.HasValue)
-                    query = query.Where(f => f.FilingDate >= fromDay.Value);
-                if (toDay.HasValue)
-                    query = query.Where(f => f.FilingDate <= toDay.Value);
+                if (fromDay is { } earliestDay)
+                    query = query.Where(f => f.FilingDate >= earliestDay);
+                if (toDay is { } latestDay)
+                    query = query.Where(f => f.FilingDate <= latestDay);
 
                 var totalCount = await query.CountAsync();
                 if (totalCount == 0)
