@@ -193,6 +193,26 @@ public class Form144ProposedSalesToolTests : IDisposable
     }
 
     [Fact]
+    public async Task GetForm144ProposedSales_DateRangeWithoutMatches_NamesTheAppliedRange()
+    {
+        var stock = SeedStock();
+        _dbContext
+            .Set<Form144Filing>()
+            .Add(MakeFiling(stock.Id, "old", new DateOnly(2026, 1, 10), "EARLY SELLER", 1000));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetForm144ProposedSales(
+            "AAPL",
+            fromDate: " 2026-03-01 ",
+            toDate: ""
+        );
+
+        result.Should().Contain("match the requested filing-date range");
+        result.Should().Contain("fromDate=2026-03-01, toDate=unbounded");
+        result.Should().NotBe("No Form 144 proposed sales found for AAPL.");
+    }
+
+    [Fact]
     public async Task GetForm144ProposedSales_OffsetPagesNewestFirst_AndRejectsPastEnd()
     {
         var stock = SeedStock();

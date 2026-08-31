@@ -520,7 +520,11 @@ public class InsiderTradingTools
 
                 var totalCount = await query.CountAsync();
                 if (totalCount == 0)
+                {
+                    if (fromDay.HasValue || toDay.HasValue)
+                        return $"No Form 144 proposed sales match the requested filing-date range for {stock.Ticker} (fromDate={fromDay?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unbounded"}, toDate={toDay?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unbounded"}).";
                     return $"No Form 144 proposed sales found for {stock.Ticker}.";
+                }
 
                 offset = McpLimit.ClampOffset(offset);
                 var filings = await query

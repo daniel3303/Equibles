@@ -95,7 +95,11 @@ public class FormDTools
 
                 var totalCount = await query.CountAsync();
                 if (totalCount == 0)
+                {
+                    if (fromDay.HasValue || toDay.HasValue)
+                        return $"No Form D exempt offerings match the requested filing-date range for {ticker} (fromDate={fromDay?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unbounded"}, toDate={toDay?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unbounded"}).";
                     return $"No Form D exempt offerings found for {ticker}.";
+                }
 
                 offset = McpLimit.ClampOffset(offset);
                 var filings = await query

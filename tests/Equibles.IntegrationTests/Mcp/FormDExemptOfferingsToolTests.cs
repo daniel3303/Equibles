@@ -187,6 +187,20 @@ public class FormDExemptOfferingsToolTests : IDisposable
     }
 
     [Fact]
+    public async Task GetFormDOfferings_DateRangeWithoutMatches_NamesTheAppliedRange()
+    {
+        var stock = SeedStock();
+        _dbContext.Set<FormDFiling>().Add(MakeFiling(stock.Id, "old", new DateOnly(2025, 1, 10)));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFormDOfferings("AAPL", fromDate: " 2025-03-01 ", toDate: "");
+
+        result.Should().Contain("match the requested filing-date range");
+        result.Should().Contain("fromDate=2025-03-01, toDate=unbounded");
+        result.Should().NotBe("No Form D exempt offerings found for AAPL.");
+    }
+
+    [Fact]
     public async Task GetFormDOfferings_MalformedDate_ReturnsAcceptedFormatError()
     {
         SeedStock();
