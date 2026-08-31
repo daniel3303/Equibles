@@ -163,6 +163,31 @@ public class NportFundsHoldingStockToolTests : IDisposable
         result.Should().Contain("dataset coverage result");
     }
 
+    [Fact]
+    public async Task GetFundsHoldingStock_OffsetPagesAfterValueRanking_AndRejectsPastEnd()
+    {
+        SeedStock("AAPL", HeldCusip);
+        var lowFund = SeedStock("LOWF", cusip: null, cik: "0000001001");
+        var highFund = SeedStock("HIGHF", cusip: null, cik: "0000001002");
+        var low = MakeFiling(lowFund.Id, "low", RecentFilingDate);
+        low.SeriesId = "SLOW";
+        low.SeriesName = "Low Value Fund";
+        low.Holdings.Add(MakeHolding(HeldCusip, 1_000m));
+        var high = MakeFiling(highFund.Id, "high", RecentFilingDate);
+        high.SeriesId = "SHIGH";
+        high.SeriesName = "High Value Fund";
+        high.Holdings.Add(MakeHolding(HeldCusip, 2_000m));
+        _dbContext.Set<NportFiling>().AddRange(low, high);
+        await _dbContext.SaveChangesAsync();
+
+        var page = await _tools.GetFundsHoldingStock("AAPL", maxResults: 1, offset: 1);
+        var pastEnd = await _tools.GetFundsHoldingStock("AAPL", offset: 2);
+
+        page.Should().Contain("Low Value Fund").And.NotContain("High Value Fund");
+        page.Should().Contain("Showing results 2-2 of 2 (the last page)");
+        pastEnd.Should().Contain("No results at offset 2 - only 2 current fund positions match");
+    }
+
     private CommonStock SeedStock(string ticker, string cusip, string cik = null)
     {
         var stock = new CommonStock

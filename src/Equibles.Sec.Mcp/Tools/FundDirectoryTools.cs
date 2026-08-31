@@ -106,7 +106,9 @@ public class FundDirectoryTools
         )]
             string fund,
         [Description("Maximum number of holdings to return, largest first (default: 20, max: 500)")]
-            int maxResults = 20
+            int maxResults = 20,
+        [Description("Number of ranked holdings to skip before returning rows (default: 0)")]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -140,10 +142,22 @@ public class FundDirectoryTools
                 if (latest == null)
                     return $"No stored Form NPORT-P report is on record for {MarkdownText(series.SeriesName ?? series.RegistrantName)}. This is a dataset coverage result, not evidence that no SEC filing exists; the report may be outside the filing scope or absent from this ingestion, fetch, or replay state.";
 
+                var totalHoldings = latest.Holdings.Count;
+                if (totalHoldings == 0)
+                    return $"{MarkdownText(series.SeriesName ?? series.RegistrantName)} has a stored Form NPORT-P report for {latest.ReportPeriodDate:yyyy-MM-dd} with {FormatCount(latest.ReportedHoldingCount)} holdings reported, but no {(latest.CommonStockId == null ? "tracked-stock " : "")}holding rows are stored for that report.";
+
+                offset = McpLimit.ClampOffset(offset);
                 var holdings = latest
                     .Holdings.OrderByDescending(h => h.ValueUsd)
+                    .ThenBy(h => h.Id)
+                    .Skip(offset)
                     .Take(McpLimit.Clamp(maxResults))
                     .ToList();
+                if (holdings.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {totalHoldings} stored holdings exist; lower offset.";
+
+                var first = offset + 1;
+                var last = offset + holdings.Count;
 
                 var header =
                     $"{MarkdownText(series.SeriesName ?? series.RegistrantName)}"
@@ -153,7 +167,7 @@ public class FundDirectoryTools
                     + $"net assets ${FormatAmount(latest.NetAssets)}, total assets ${FormatAmount(latest.TotalAssets)}, "
                     + $"{FormatCount(latest.ReportedHoldingCount)} holdings reported, {latest.Holdings.Count} stored"
                     + (latest.CommonStockId == null ? " tracked-stock holdings" : " holdings")
-                    + $", showing the largest {holdings.Count} stored rows:";
+                    + $", showing stored rows {first}-{last} by value:";
 
                 var result = MarkdownTable.Start(
                     header,
@@ -167,12 +181,21 @@ public class FundDirectoryTools
                         $"| {MarkdownText(h.Name) ?? "-"} | {MarkdownText(h.Cusip) ?? "-"} | {FundCodes.Balance(h.Balance)} | {MarkdownText(FundCodes.Unit(h.Units))} | ${FormatAmount(h.ValueUsd)} | {FormatPercent(h.PercentValue)} | {MarkdownText(FundCodes.AssetCategory(h.AssetCategory))} | {MarkdownText(h.InvestmentCountry) ?? "-"} |"
                 );
 
-                TruncationNotes.Append(result, holdings.Count, latest.Holdings.Count);
+                var pagingNote = McpOutput.PagedTruncationNote(
+                    holdings.Count,
+                    totalHoldings,
+                    offset
+                );
+                if (pagingNote.Length > 0)
+                {
+                    result.AppendLine();
+                    result.AppendLine(pagingNote);
+                }
 
                 return result.ToString();
             },
             "GetFundProfile",
-            $"fund: {fund}"
+            $"fund: {fund}, offset: {offset}"
         );
     }
 

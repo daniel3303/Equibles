@@ -150,8 +150,8 @@ public class Form144ProposedSalesToolTests : IDisposable
 
         var result = await _tools.GetForm144ProposedSales("AAPL", maxResults: 2);
 
-        result.Should().Contain("Showing 2 of 5 most recent notices");
-        result.Should().Contain("Showing first 2 of 5 results");
+        result.Should().Contain("Showing notices 1-2 of 5, newest first");
+        result.Should().Contain("Showing results 1-2 of 5");
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class Form144ProposedSalesToolTests : IDisposable
 
         var result = await _tools.GetForm144ProposedSales("AAPL");
 
-        result.Should().Contain("Showing 1 of 1 most recent notices");
+        result.Should().Contain("Showing notices 1-1 of 1, newest first");
         result.Should().NotContain("raise maxResults");
     }
 
@@ -189,7 +189,31 @@ public class Form144ProposedSalesToolTests : IDisposable
 
         result.Should().Contain("LATE SELLER");
         result.Should().NotContain("EARLY SELLER");
-        result.Should().Contain("Showing 1 of 1 most recent notices");
+        result.Should().Contain("Showing notices 1-1 of 1, newest first");
+    }
+
+    [Fact]
+    public async Task GetForm144ProposedSales_OffsetPagesNewestFirst_AndRejectsPastEnd()
+    {
+        var stock = SeedStock();
+        _dbContext
+            .Set<Form144Filing>()
+            .AddRange(
+                MakeFiling(stock.Id, "old", new DateOnly(2026, 1, 1), "OLD SELLER", 100),
+                MakeFiling(stock.Id, "middle", new DateOnly(2026, 2, 1), "MIDDLE SELLER", 100),
+                MakeFiling(stock.Id, "new", new DateOnly(2026, 3, 1), "NEW SELLER", 100)
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var page = await _tools.GetForm144ProposedSales("AAPL", maxResults: 1, offset: 1);
+        var pastEnd = await _tools.GetForm144ProposedSales("AAPL", offset: 3);
+
+        page.Should()
+            .Contain("MIDDLE SELLER")
+            .And.NotContain("NEW SELLER")
+            .And.NotContain("OLD SELLER");
+        page.Should().Contain("Showing results 2-2 of 3");
+        pastEnd.Should().Contain("No results at offset 3 - only 3 Form 144 notices match");
     }
 
     [Fact]
@@ -201,6 +225,20 @@ public class Form144ProposedSalesToolTests : IDisposable
 
         result.Should().Contain("Unknown toDate 'June 2026'");
         result.Should().Contain("yyyy-MM-dd");
+    }
+
+    [Fact]
+    public async Task GetForm144ProposedSales_InvertedDateRange_ReturnsExplicitError()
+    {
+        SeedStock();
+
+        var result = await _tools.GetForm144ProposedSales(
+            "AAPL",
+            fromDate: "2026-12-31",
+            toDate: "2026-01-01"
+        );
+
+        result.Should().Be("fromDate must be on or before toDate.");
     }
 
     [Fact]

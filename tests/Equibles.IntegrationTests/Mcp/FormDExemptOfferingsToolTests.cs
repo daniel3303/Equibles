@@ -114,8 +114,8 @@ public class FormDExemptOfferingsToolTests : IDisposable
 
         var result = await _tools.GetFormDOfferings("AAPL", maxResults: 2);
 
-        result.Should().Contain("showing 2 most recent notices");
-        result.Should().Contain("Showing first 2 of 5 results");
+        result.Should().Contain("showing notices 1-2 of 5, newest first");
+        result.Should().Contain("Showing results 1-2 of 5");
     }
 
     [Fact]
@@ -195,6 +195,41 @@ public class FormDExemptOfferingsToolTests : IDisposable
 
         result.Should().Contain("Unknown fromDate '01/13/2025'");
         result.Should().Contain("yyyy-MM-dd");
+    }
+
+    [Fact]
+    public async Task GetFormDOfferings_InvertedDateRange_ReturnsExplicitError()
+    {
+        SeedStock();
+
+        var result = await _tools.GetFormDOfferings(
+            "AAPL",
+            fromDate: "2025-12-31",
+            toDate: "2025-01-01"
+        );
+
+        result.Should().Be("fromDate must be on or before toDate.");
+    }
+
+    [Fact]
+    public async Task GetFormDOfferings_OffsetPagesNewestFirst_AndRejectsPastEnd()
+    {
+        var stock = SeedStock();
+        _dbContext
+            .Set<FormDFiling>()
+            .AddRange(
+                MakeFiling(stock.Id, "old", new DateOnly(2025, 1, 1), offeringAmount: 100_001),
+                MakeFiling(stock.Id, "middle", new DateOnly(2025, 2, 1), offeringAmount: 100_002),
+                MakeFiling(stock.Id, "new", new DateOnly(2025, 3, 1), offeringAmount: 100_003)
+            );
+        await _dbContext.SaveChangesAsync();
+
+        var page = await _tools.GetFormDOfferings("AAPL", maxResults: 1, offset: 1);
+        var pastEnd = await _tools.GetFormDOfferings("AAPL", offset: 3);
+
+        page.Should().Contain("100,002").And.NotContain("100,003").And.NotContain("100,001");
+        page.Should().Contain("Showing results 2-2 of 3");
+        pastEnd.Should().Contain("No results at offset 3 - only 3 Form D notices match");
     }
 
     private static FormDFiling MakeFiling(

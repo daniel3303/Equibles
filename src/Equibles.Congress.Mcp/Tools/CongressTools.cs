@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Congress.Data;
@@ -60,7 +61,9 @@ public class CongressTools
             string startDate = null,
         [Description("End date in YYYY-MM-DD format (defaults to today)")] string endDate = null,
         [Description("Maximum number of trades to return (default: 50, max: 500, newest first)")]
-            int maxResults = 50
+            int maxResults = 50,
+        [Description("Number of matching trades to skip before returning rows (default: 0)")]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -83,13 +86,17 @@ public class CongressTools
                     query = query.Where(t => t.TransactionType == typeFilter);
 
                 maxResults = McpLimit.Clamp(maxResults);
+                offset = McpLimit.ClampOffset(offset);
                 var totalCount = await query.CountAsync();
 
                 var trades = await query
                     .Include(t => t.CongressMember)
                     .OrderNewestFirst()
+                    .Skip(offset)
                     .Take(maxResults)
                     .ToListAsync();
+                if (trades.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {totalCount} trades match; lower offset.";
 
                 var table = MarkdownTable.Render(
                     trades,
@@ -108,10 +115,11 @@ public class CongressTools
                         return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {t.CongressMember.Name} | {position} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
                     }
                 );
-                return AppendTruncationNote(table, trades.Count, totalCount);
+                var note = McpOutput.PagedTruncationNote(trades.Count, totalCount, offset);
+                return note.Length == 0 ? table : $"{table}\n{note}";
             },
             "GetCongressionalTrades",
-            $"ticker: {ticker}"
+            $"ticker: {ticker}, offset: {offset}"
         );
     }
 
@@ -136,12 +144,17 @@ public class CongressTools
         [Description(
             "Number of trades to skip before returning rows — pass the previous call's shown count to page past the maxResults cap (default: 0)"
         )]
-            int offset = 0
+            int offset = 0,
+        [Description("Optional stock ticker to combine with the member filter (e.g., AAPL)")]
+            string ticker = null
     )
     {
         return _runner.Execute(
             async () =>
             {
+                if (string.IsNullOrWhiteSpace(memberName))
+                    return "Provide a congress member name. Use SearchCongressMembers to inspect the tracked roster.";
+
                 var member = await ResolveMember(memberName.Trim());
                 if (member == null)
                     return $"Member '{memberName}' not found in the tracked congressional roster. Use SearchCongressMembers to inspect the tracked roster and find the exact filed name.";
@@ -154,11 +167,24 @@ public class CongressTools
                 if (typeError != null)
                     return typeError;
 
+                CommonStock stock = null;
+                if (!string.IsNullOrWhiteSpace(ticker))
+                {
+                    var (resolvedStock, stockError) = await _commonStockRepository.ResolveByTicker(
+                        ticker
+                    );
+                    if (stockError != null)
+                        return stockError;
+                    stock = resolvedStock;
+                }
+
                 var query = _tradeRepository
                     .GetByMember(member)
                     .Where(t => t.TransactionDate >= start && t.TransactionDate <= end);
                 if (typeFilter != null)
                     query = query.Where(t => t.TransactionType == typeFilter);
+                if (stock != null)
+                    query = query.Where(t => t.CommonStockId == stock.Id);
 
                 maxResults = McpLimit.Clamp(maxResults);
                 offset = McpLimit.ClampOffset(offset);
@@ -175,8 +201,8 @@ public class CongressTools
 
                 var table = MarkdownTable.Render(
                     trades,
-                    $"No trades found for {member.Name} ({DescribeMember(member)}) between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
-                    $"Trades by {member.Name} ({DescribeMember(member)}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
+                    $"No trades found for {member.Name} ({DescribeMember(member)}){(stock == null ? "" : $" in {stock.Ticker}")} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
+                    $"Trades by {member.Name} ({DescribeMember(member)}){(stock == null ? "" : $" in {stock.Ticker}")}, {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
                     "| Date | Filed | Ticker | Type | Amount Range | Asset | Asset Type | Owner | Account |",
                     "|------|-------|--------|------|-------------|-------|------------|-------|---------|",
                     t =>
@@ -191,7 +217,7 @@ public class CongressTools
                 return note.Length == 0 ? table : $"{table}\n{note}";
             },
             "GetMemberTrades",
-            $"memberName: {memberName}, offset: {offset}"
+            $"memberName: {memberName}, ticker: {ticker}, offset: {offset}"
         );
     }
 
@@ -290,6 +316,9 @@ public class CongressTools
         return _runner.Execute(
             async () =>
             {
+                if (string.IsNullOrWhiteSpace(query))
+                    return "Provide part or all of a congress member's name.";
+
                 var (positionFilter, positionError) = ParsePositionArgument(position);
                 if (positionError != null)
                     return positionError;
@@ -318,7 +347,7 @@ public class CongressTools
                 return AppendTruncationNote(table, members.Count, totalCount);
             },
             "SearchCongressMembers",
-            $"query: {query}"
+            $"query: {query}, position: {position}"
         );
     }
 

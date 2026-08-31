@@ -116,7 +116,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("BlackRock Inc");
         result.Should().Contain("10,000");
         result.Should().Contain("5,000");
-        result.Should().Contain("2 of 2 institutions");
+        result.Should().Contain("Showing rows 1-2 of 2 across 2 institutions");
     }
 
     [Fact]
@@ -210,10 +210,18 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetTopHolders("AAPL", maxResults: 2);
 
-        result.Should().Contain("2 of 5 institutions");
+        result.Should().Contain("Showing rows 1-2 of 5 across 5 institutions");
         result.Should().Contain("Fund 1");
         result.Should().Contain("Fund 2");
         result.Should().NotContain("Fund 5");
+
+        var page = await Sut().GetTopHolders("AAPL", maxResults: 2, offset: 2);
+        var pastEnd = await Sut().GetTopHolders("AAPL", offset: 5);
+
+        page.Should().Contain("| 3 | Fund 3 |").And.Contain("| 4 | Fund 4 |");
+        page.Should().NotContain("| 1 | Fund 1 |");
+        page.Should().Contain("Showing results 3-4 of 5");
+        pastEnd.Should().Contain("No results at offset 5 - only 5 holding rows exist");
     }
 
     [Fact]

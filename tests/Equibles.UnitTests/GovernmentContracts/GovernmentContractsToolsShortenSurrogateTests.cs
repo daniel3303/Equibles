@@ -98,6 +98,21 @@ public class GovernmentContractsToolsShortenSurrogateTests
                 Description = "Missile systems",
             }
         );
+        context.Add(
+            new GovernmentContract
+            {
+                CommonStockId = stock.Id,
+                AwardUniqueKey = "award-2",
+                AwardId = "NNH26C0002",
+                RecipientName = "Older Recipient LLC",
+                AwardType = GovernmentContractAwardType.DefinitiveContract,
+                AwardingAgency = "National Aeronautics and Space Administration",
+                Amount = 500_000m,
+                ActionDate = new DateOnly(2026, 5, 1),
+                EndDate = new DateOnly(2027, 5, 1),
+                Description = "Flight systems",
+            }
+        );
         await context.SaveChangesAsync();
         var tools = new GovernmentContractsTools(
             new GovernmentContractRepository(context),
@@ -122,6 +137,25 @@ public class GovernmentContractsToolsShortenSurrogateTests
                 "Recipient is the awarded entity",
                 "the market-wide ranking has no Recipient column"
             );
+
+        var secondPage = await tools.GetGovernmentContracts(
+            "RTX",
+            "2026-01-01",
+            "2026-12-31",
+            maxResults: 1,
+            sortBy: "date",
+            offset: 1
+        );
+        secondPage.Should().Contain("Older Recipient LLC");
+        secondPage.Should().Contain("Showing results 2-2 of 2");
+
+        var pastEnd = await tools.GetGovernmentContracts(
+            "RTX",
+            "2026-01-01",
+            "2026-12-31",
+            offset: 2
+        );
+        pastEnd.Should().Contain("No results at offset 2 - only 2 federal contract awards match");
     }
 
     private static bool HasUnpairedSurrogate(string value)

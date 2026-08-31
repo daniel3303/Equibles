@@ -107,7 +107,9 @@ public class InsiderTradingTools
         [Description(
             "Only include transactions by insiders whose SEC-filed name contains every word of this value, case-insensitive (e.g. 'Huang') (optional)"
         )]
-            string insiderName = null
+            string insiderName = null,
+        [Description("Number of matching transactions to skip before returning rows (default: 0)")]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -118,6 +120,7 @@ public class InsiderTradingTools
                     return stockError;
 
                 maxResults = McpLimit.Clamp(maxResults);
+                offset = McpLimit.ClampOffset(offset);
 
                 var query = _transactionRepository
                     .GetByStockWithOwner(stock)
@@ -128,12 +131,13 @@ public class InsiderTradingTools
                     .Where(t => t.Shares != 0 || t.SharesOwnedAfter != 0);
 
                 var filtered = false;
+                DateOnly? fromDay = null;
+                DateOnly? toDay = null;
                 if (!string.IsNullOrWhiteSpace(fromDate))
                 {
                     if (!McpOutput.TryParseDate(fromDate, out var from))
                         return McpOutput.InvalidArgument("fromDate", fromDate, "yyyy-MM-dd");
-                    var fromDay = DateOnly.FromDateTime(from);
-                    query = query.Where(t => t.TransactionDate >= fromDay);
+                    fromDay = DateOnly.FromDateTime(from);
                     filtered = true;
                 }
 
@@ -141,10 +145,16 @@ public class InsiderTradingTools
                 {
                     if (!McpOutput.TryParseDate(toDate, out var to))
                         return McpOutput.InvalidArgument("toDate", toDate, "yyyy-MM-dd");
-                    var toDay = DateOnly.FromDateTime(to);
-                    query = query.Where(t => t.TransactionDate <= toDay);
+                    toDay = DateOnly.FromDateTime(to);
                     filtered = true;
                 }
+
+                if (fromDay is { } parsedFrom && toDay is { } parsedTo && parsedFrom > parsedTo)
+                    return "fromDate must be on or before toDate.";
+                if (fromDay is { } earliestDay)
+                    query = query.Where(t => t.TransactionDate >= earliestDay);
+                if (toDay is { } latestDay)
+                    query = query.Where(t => t.TransactionDate <= latestDay);
 
                 if (!string.IsNullOrWhiteSpace(transactionType))
                 {
@@ -176,8 +186,14 @@ public class InsiderTradingTools
                 }
 
                 var total = await query.CountAsync();
-                var transactions = await query.OrderNewestFirst().Take(maxResults).ToListAsync();
+                var transactions = await query
+                    .OrderNewestFirst()
+                    .Skip(offset)
+                    .Take(maxResults)
+                    .ToListAsync();
 
+                if (transactions.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {total} insider transactions match; lower offset.";
                 if (transactions.Count == 0)
                     return filtered
                         ? $"No insider transactions found for {stock.Ticker} matching the given filters."
@@ -195,7 +211,9 @@ public class InsiderTradingTools
 
                 var sb = new StringBuilder();
                 sb.AppendLine($"Recent insider transactions for {stock.Name} ({stock.Ticker}):");
-                sb.AppendLine($"Showing {transactions.Count} most recent transactions");
+                sb.AppendLine(
+                    $"Showing transactions {offset + 1}-{offset + transactions.Count} of {total}"
+                );
                 sb.AppendLine(
                     "_Shares/Price/Value are as filed; Owned After is the post-transaction balance restated onto today's split basis. Security is the filed security title (kind when the filing names none) — balances are tracked per security and ownership form (see Security/Ownership), not as one running total per insider, so an issuer with several listed securities (e.g. ordinary shares and ADS) shows separate balances. 10b5-1 '-' means the filing predates the 2023 checkbox._"
                 );
@@ -245,7 +263,7 @@ public class InsiderTradingTools
                     }
                 );
 
-                var truncation = McpOutput.TruncationNote(transactions.Count, total);
+                var truncation = McpOutput.PagedTruncationNote(transactions.Count, total, offset);
                 if (truncation.Length > 0)
                 {
                     sb.AppendLine();
@@ -255,7 +273,7 @@ public class InsiderTradingTools
                 return sb.ToString();
             },
             "GetInsiderTransactions",
-            $"ticker: {ticker}, fromDate: {fromDate}, toDate: {toDate}, transactionType: {transactionType}, insiderName: {insiderName}"
+            $"ticker: {ticker}, fromDate: {fromDate}, toDate: {toDate}, transactionType: {transactionType}, insiderName: {insiderName}, offset: {offset}"
         );
     }
 
@@ -462,7 +480,9 @@ public class InsiderTradingTools
         [Description(
             "Optional latest filing date to include, ISO format yyyy-MM-dd (e.g., 2025-12-31)"
         )]
-            string toDate = null
+            string toDate = null,
+        [Description("Number of matching notices to skip before returning rows (default: 0)")]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -474,30 +494,42 @@ public class InsiderTradingTools
 
                 var query = _form144Repository.GetByStock(stock);
 
+                DateOnly? fromDay = null;
+                DateOnly? toDay = null;
+
                 if (!string.IsNullOrWhiteSpace(fromDate))
                 {
                     if (!McpOutput.TryParseDate(fromDate, out var from))
                         return McpOutput.InvalidArgument("fromDate", fromDate, "yyyy-MM-dd");
-                    var fromDay = DateOnly.FromDateTime(from);
-                    query = query.Where(f => f.FilingDate >= fromDay);
+                    fromDay = DateOnly.FromDateTime(from);
                 }
 
                 if (!string.IsNullOrWhiteSpace(toDate))
                 {
                     if (!McpOutput.TryParseDate(toDate, out var to))
                         return McpOutput.InvalidArgument("toDate", toDate, "yyyy-MM-dd");
-                    var toDay = DateOnly.FromDateTime(to);
-                    query = query.Where(f => f.FilingDate <= toDay);
+                    toDay = DateOnly.FromDateTime(to);
                 }
+
+                if (fromDay is { } parsedFrom && toDay is { } parsedTo && parsedFrom > parsedTo)
+                    return "fromDate must be on or before toDate.";
+                if (fromDay is { } earliestDay)
+                    query = query.Where(f => f.FilingDate >= earliestDay);
+                if (toDay is { } latestDay)
+                    query = query.Where(f => f.FilingDate <= latestDay);
 
                 var totalCount = await query.CountAsync();
                 if (totalCount == 0)
                     return $"No Form 144 proposed sales found for {stock.Ticker}.";
 
+                offset = McpLimit.ClampOffset(offset);
                 var filings = await query
                     .OrderNewestFirst()
+                    .Skip(offset)
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
+                if (filings.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {totalCount} Form 144 notices match; lower offset.";
 
                 // Each Form 144 is an as-filed notice: the proposed Shares pair with the
                 // notice's own Aggregate Market Value, so both stay exactly as reported. The
@@ -513,7 +545,7 @@ public class InsiderTradingTools
                     .ToListAsync();
                 var result = MarkdownTable.Start(
                     $"Recent proposed sales (Form 144) for {stock.Name} ({stock.Ticker}):",
-                    $"Showing {filings.Count} of {totalCount} most recent notices",
+                    $"Showing notices {offset + 1}-{offset + filings.Count} of {totalCount}, newest first",
                     "| Filed | Seller | Relationship | Shares | Market Value | % Outstanding | Approx. Sale Date | Broker | Remarks |",
                     "|-------|--------|--------------|--------|--------------|---------------|-------------------|--------|---------|"
                 );
@@ -540,7 +572,7 @@ public class InsiderTradingTools
                     }
                 );
 
-                var note = McpOutput.TruncationNote(filings.Count, totalCount);
+                var note = McpOutput.PagedTruncationNote(filings.Count, totalCount, offset);
                 if (note.Length > 0)
                 {
                     result.AppendLine();
@@ -550,7 +582,7 @@ public class InsiderTradingTools
                 return result.ToString();
             },
             "GetForm144ProposedSales",
-            $"ticker: {ticker}"
+            $"ticker: {ticker}, fromDate: {fromDate}, toDate: {toDate}, offset: {offset}"
         );
     }
 

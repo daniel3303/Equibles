@@ -165,8 +165,27 @@ public class FundDirectoryToolsTests : IDisposable
 
         var result = await _tools.GetFundProfile(series.Slug, maxResults: 2);
 
-        result.Should().Contain("showing the largest 2");
-        result.Should().Contain("Showing first 2 of 5 results");
+        result.Should().Contain("showing stored rows 1-2 by value");
+        result.Should().Contain("Showing results 1-2 of 5");
+    }
+
+    [Fact]
+    public async Task GetFundProfile_OffsetPagesByValue_AndRejectsPastEnd()
+    {
+        var series = SeedSeries("PAGED FUND", "S000020");
+        var filing = MakeFiling(series, "acc-page", new DateOnly(2026, 5, 15));
+        filing.Holdings.Add(MakeHolding("LOW CO", 1_000m));
+        filing.Holdings.Add(MakeHolding("MID CO", 2_000m));
+        filing.Holdings.Add(MakeHolding("HIGH CO", 3_000m));
+        _dbContext.Set<NportFiling>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var page = await _tools.GetFundProfile(series.Slug, maxResults: 1, offset: 1);
+        var pastEnd = await _tools.GetFundProfile(series.Slug, offset: 3);
+
+        page.Should().Contain("MID CO").And.NotContain("HIGH CO").And.NotContain("LOW CO");
+        page.Should().Contain("Showing results 2-2 of 3");
+        pastEnd.Should().Contain("No results at offset 3 - only 3 stored holdings exist");
     }
 
     [Fact]
@@ -196,6 +215,22 @@ public class FundDirectoryToolsTests : IDisposable
 
         result.Should().Contain("No stored Form NPORT-P report is on record for ACME FUND");
         result.Should().Contain("dataset coverage result, not evidence that no SEC filing exists");
+    }
+
+    [Fact]
+    public async Task GetFundProfile_StoredReportWithoutHoldingRows_ExplainsEmptyStorage()
+    {
+        var series = SeedSeries("EMPTY FUND", "S000099", reportedHoldingCount: 12);
+        var filing = MakeFiling(series, "acc-empty", new DateOnly(2026, 5, 15));
+        filing.ReportedHoldingCount = 12;
+        _dbContext.Set<NportFiling>().Add(filing);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundProfile(series.Slug);
+
+        result.Should().Contain("12 holdings reported");
+        result.Should().Contain("no tracked-stock holding rows are stored");
+        result.Should().NotContain("rows 0-0");
     }
 
     [Fact]

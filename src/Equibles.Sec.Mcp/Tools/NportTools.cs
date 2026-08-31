@@ -51,7 +51,11 @@ public class NportTools
         [Description(
             "Optional registrant or series name filter (case-insensitive contains, e.g. 'Vanguard') — reaches positions beyond the largest 500"
         )]
-            string registrantOrSeries = null
+            string registrantOrSeries = null,
+        [Description(
+            "Number of matching fund positions to skip before returning rows (default: 0)"
+        )]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -78,6 +82,7 @@ public class NportTools
                         (h, f) =>
                             new
                             {
+                                h.Id,
                                 f.RegistrantName,
                                 f.SeriesName,
                                 f.ReportPeriodDate,
@@ -110,17 +115,23 @@ public class NportTools
                         ? $"No current position in {safeTicker} matched the ingested latest Form NPORT-P reports. This is a dataset coverage result, not evidence that no fund reports one."
                         : $"No current position in {safeTicker} for a fund matching '{MarkdownText(registrantOrSeries)}' matched the ingested latest Form NPORT-P reports. This is a dataset coverage result, not evidence that no fund reports one.";
 
+                offset = McpLimit.ClampOffset(offset);
                 var positions = await currentPositions
                     .OrderByDescending(p => p.ValueUsd)
+                    .ThenBy(p => p.Id)
+                    .Skip(offset)
                     .Take(McpLimit.Clamp(maxResults))
                     .ToListAsync();
+                if (positions.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {totalCount} current fund positions match; lower offset.";
 
                 var filterLabel = string.IsNullOrWhiteSpace(registrantOrSeries)
                     ? ""
                     : $" matching '{MarkdownText(registrantOrSeries)}'";
                 var result = MarkdownTable.Start(
                     $"Funds holding {MarkdownText(stock.Name)} ({safeTicker}) on each series' most recent Form NPORT-P — "
-                        + $"{totalCount} current fund positions{filterLabel}, showing the largest {positions.Count}. "
+                        + $"{totalCount} current fund positions{filterLabel}, showing rows "
+                        + $"{offset + 1}-{offset + positions.Count} by value. "
                         + "Report dates differ per series (each fund's own fiscal quarter):",
                     "| Registrant | Series | Report Date | Balance | Units | Value (USD) | % Net Assets | Long/Short |",
                     "|------------|--------|-------------|---------|-------|-------------|--------------|------------|"
@@ -132,10 +143,17 @@ public class NportTools
                         $"| {MarkdownText(p.RegistrantName) ?? "-"} | {MarkdownText(p.SeriesName) ?? "-"} | {p.ReportPeriodDate:yyyy-MM-dd} | {FormatAmount(p.Balance)} | {MarkdownText(FundCodes.Unit(p.Units))} | ${FormatAmount(p.ValueUsd)} | {FormatPercent(p.PercentValue)} | {MarkdownText(p.PayoffProfile) ?? "-"} |"
                 );
 
+                var pagingNote = McpOutput.PagedTruncationNote(positions.Count, totalCount, offset);
+                if (pagingNote.Length > 0)
+                {
+                    result.AppendLine();
+                    result.AppendLine(pagingNote);
+                }
+
                 return result.ToString();
             },
             "GetFundsHoldingStock",
-            $"ticker: {ticker}"
+            $"ticker: {ticker}, registrantOrSeries: {registrantOrSeries}, offset: {offset}"
         );
     }
 

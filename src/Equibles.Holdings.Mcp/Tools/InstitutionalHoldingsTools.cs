@@ -107,8 +107,10 @@ public class InstitutionalHoldingsTools
             "Quarter-end 13F report date in YYYY-MM-DD format, e.g. 2026-03-31 (defaults to the latest available; an off-quarter date snaps to the nearest report on or before it)"
         )]
             string reportDate = null,
-        [Description("Maximum number of holders to return (default: 20, clamped to 1-500)")]
-            int maxResults = 20
+        [Description("Maximum number of holding rows to return (default: 20, clamped to 1-500)")]
+            int maxResults = 20,
+        [Description("Number of ranked holding rows to skip before returning results (default: 0)")]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -181,14 +183,19 @@ public class InstitutionalHoldingsTools
                     .Select(h => h.InstitutionalHolderId)
                     .Distinct()
                     .Count();
+                var totalRows = holdings.Count;
                 var totalShares = holdings.Sum(h => h.Shares);
                 var totalValue = holdings.Sum(h => h.Value);
                 maxResults = McpLimit.Clamp(maxResults);
+                offset = McpLimit.ClampOffset(offset);
                 holdings = holdings
                     .OrderByDescending(h => h.Shares)
                     .ThenBy(h => h.Id)
+                    .Skip(offset)
                     .Take(maxResults)
                     .ToList();
+                if (holdings.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {totalRows} holding rows exist; lower offset.";
 
                 return RenderAdjustedTopHoldersTable(
                     stock,
@@ -198,6 +205,8 @@ public class InstitutionalHoldingsTools
                     totalShares,
                     totalValue,
                     holdings,
+                    totalRows,
+                    offset,
                     JoinNotes(
                         dateNote,
                         presentCombined ? CombinedViewNote(targetDate, anchor) : null
@@ -205,7 +214,7 @@ public class InstitutionalHoldingsTools
                 );
             },
             "GetTopHolders",
-            $"ticker: {ticker}"
+            $"ticker: {ticker}, reportDate: {reportDate}, offset: {offset}"
         );
     }
 
@@ -268,6 +277,8 @@ public class InstitutionalHoldingsTools
             adjustedTotalShares,
             totalValueAll,
             adjustedRows,
+            adjustedRows.Count,
+            0,
             combinedNote
         );
     }
@@ -280,11 +291,15 @@ public class InstitutionalHoldingsTools
         long totalSharesAll,
         long totalValueAll,
         List<TopHolderRow> holdings,
+        int totalRows,
+        int offset,
         string combinedNote
     )
     {
+        var first = holdings.Count == 0 ? 0 : offset + 1;
+        var last = offset + holdings.Count;
         var subtitle =
-            $"Showing {holdings.Count} of {totalInstitutions} institutions. Total: "
+            $"Showing rows {first}-{last} of {totalRows} across {totalInstitutions} institutions. Total: "
             + $"{McpFormat.WholeNumber(totalSharesAll)} shares, "
             + $"${FormatMillions(totalValueAll)}M value";
         if (combinedNote != null)
@@ -307,7 +322,7 @@ public class InstitutionalHoldingsTools
                     h.ListedTicker == null
                         ? PositionType(h.OptionType)
                         : $"{PositionType(h.OptionType)} ({h.ListedTicker})";
-                return $"| {rank} | {h.InstitutionName} | "
+                return $"| {offset + rank} | {h.InstitutionName} | "
                     + $"{positionType} | "
                     + $"{McpFormat.WholeNumber(h.Shares)} | "
                     + $"{FormatMillions(h.Value)} | "
@@ -324,6 +339,13 @@ public class InstitutionalHoldingsTools
                 + "underlying's notional value. A PUT IS A BEARISH POSITION, so a large put line is a "
                 + "holder betting against this stock, not accumulating it._"
         );
+
+        var pagingNote = McpOutput.PagedTruncationNote(holdings.Count, totalRows, offset);
+        if (pagingNote.Length > 0)
+        {
+            result.AppendLine();
+            result.AppendLine(pagingNote);
+        }
 
         return result.ToString();
     }

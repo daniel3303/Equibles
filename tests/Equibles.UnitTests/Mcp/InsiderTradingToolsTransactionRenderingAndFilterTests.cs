@@ -247,7 +247,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
 
         output.Should().Contain("Real Trader");
         output.Should().NotContain("Ghost Filer");
-        output.Should().Contain("Showing 1 most recent transactions");
+        output.Should().Contain("Showing transactions 1-1 of 1");
     }
 
     [Fact]
@@ -382,7 +382,11 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
 
         var output = await Sut(db).GetInsiderTransactions("AAPL", maxResults: 2);
 
-        output.Should().Contain("Showing first 2 of 3 results - raise maxResults to see more.");
+        output
+            .Should()
+            .Contain(
+                "Showing results 1-2 of 3 - raise maxResults (max 500) or pass offset=2 to continue."
+            );
     }
 
     [Fact]

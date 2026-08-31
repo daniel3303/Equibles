@@ -4,8 +4,10 @@ using System.Text;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Extensions;
+using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
+using Equibles.GovernmentContracts.Data.Extensions;
 using Equibles.GovernmentContracts.Data.Models;
 using Equibles.GovernmentContracts.Repositories;
 using Equibles.Mcp;
@@ -68,7 +70,9 @@ public class GovernmentContractsTools
         [Description(
             "Optional case-insensitive substring filter on the awarding agency (e.g., 'Defense')"
         )]
-            string agency = null
+            string agency = null,
+        [Description("Number of matching awards to skip before returning rows (default: 0)")]
+            int offset = 0
     )
     {
         return _runner.Execute(
@@ -87,6 +91,7 @@ public class GovernmentContractsTools
                     return sortError;
 
                 maxResults = McpLimit.Clamp(maxResults);
+                offset = McpLimit.ClampOffset(offset);
 
                 var query = _contractRepository
                     .GetByCommonStock(stock)
@@ -94,19 +99,23 @@ public class GovernmentContractsTools
 
                 if (!string.IsNullOrWhiteSpace(agency))
                 {
-                    var agencyTerm = agency.Trim().ToLower();
+                    var pattern = LikePattern.Contains(agency.Trim());
                     query = query.Where(c =>
-                        c.AwardingAgency != null && c.AwardingAgency.ToLower().Contains(agencyTerm)
+                        c.AwardingAgency != null
+                        && EF.Functions.ILike(c.AwardingAgency, pattern, LikePattern.EscapeChar)
                     );
                 }
 
                 var totalCount = await query.CountAsync();
                 var totalValue = totalCount == 0 ? 0m : await query.SumAsync(c => c.Amount);
 
-                var ordered = sortByDate
-                    ? query.OrderByDescending(c => c.ActionDate).ThenByDescending(c => c.Amount)
-                    : query.OrderByDescending(c => c.Amount);
-                var awards = await ordered.Take(maxResults).ToListAsync();
+                var awards = await query
+                    .OrderForPublicSurface(sortByDate)
+                    .Skip(offset)
+                    .Take(maxResults)
+                    .ToListAsync();
+                if (awards.Count == 0 && offset > 0)
+                    return $"No results at offset {offset} - only {totalCount} federal contract awards match; lower offset.";
 
                 // USAspending reports outlays on only about a quarter of awards, so a permanent
                 // column would be mostly em-dashes; it renders when this answer actually carries
@@ -142,11 +151,12 @@ public class GovernmentContractsTools
                     totalCount,
                     end,
                     hasOutlays,
-                    hasRecipient: true
+                    hasRecipient: true,
+                    offset: offset
                 );
             },
             "GetGovernmentContracts",
-            $"ticker: {ticker}"
+            $"ticker: {ticker}, agency: {agency}, sortBy: {sortBy}, offset: {offset}"
         );
     }
 
@@ -241,14 +251,17 @@ public class GovernmentContractsTools
         int total,
         DateOnly rangeEnd,
         bool hasOutlays,
-        bool hasRecipient
+        bool hasRecipient,
+        int? offset = null
     )
     {
         var sb = new StringBuilder(table.TrimEnd('\n', '\r'));
         sb.AppendLine();
         sb.AppendLine();
 
-        var truncationNote = McpOutput.TruncationNote(shown, total);
+        var truncationNote = offset.HasValue
+            ? McpOutput.PagedTruncationNote(shown, total, offset.Value)
+            : McpOutput.TruncationNote(shown, total);
         if (truncationNote.Length > 0)
             sb.AppendLine(truncationNote);
 
