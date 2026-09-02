@@ -188,6 +188,31 @@ public class HoldingsScraperWorkerTests
         sut.InvokeWorkerName().Should().Be("Holdings scraper");
     }
 
+    [Theory]
+    [InlineData(-1, 0)]
+    [InlineData(250, 250)]
+    [InlineData(5_000, 1_000)]
+    public void BulkBatchPause_ClampsTheConfiguredMilliseconds(
+        int configuredMilliseconds,
+        int expectedMilliseconds
+    )
+    {
+        var sut = new TestableHoldingsScraperWorker(
+            Substitute.For<ILogger<HoldingsScraperWorker>>(),
+            Substitute.For<IServiceScopeFactory>(),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Options.Create(
+                new WorkerOptions { HoldingsBulkBatchPauseMilliseconds = configuredMilliseconds }
+            ),
+            new ConfigurationBuilder().Build()
+        );
+
+        sut.InvokeBulkBatchPause().Should().Be(TimeSpan.FromMilliseconds(expectedMilliseconds));
+    }
+
     private sealed class TestableHoldingsScraperWorker : HoldingsScraperWorker
     {
         public TestableHoldingsScraperWorker(
@@ -213,5 +238,7 @@ public class HoldingsScraperWorkerTests
         public ErrorSource InvokeErrorSource() => ErrorSource;
 
         public string InvokeWorkerName() => WorkerName;
+
+        public TimeSpan InvokeBulkBatchPause() => BulkBatchPause;
     }
 }

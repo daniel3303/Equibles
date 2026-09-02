@@ -55,9 +55,16 @@ public class HoldingsImportService
         _bus = bus;
     }
 
-    public async Task<ImportResult> ImportDataSet(
+    public virtual Task<ImportResult> ImportDataSet(
         ZipArchive archive,
         DateOnly minReportDate,
+        CancellationToken cancellationToken
+    ) => ImportDataSet(archive, minReportDate, TimeSpan.Zero, cancellationToken);
+
+    public virtual async Task<ImportResult> ImportDataSet(
+        ZipArchive archive,
+        DateOnly minReportDate,
+        TimeSpan batchPause,
         CancellationToken cancellationToken
     )
     {
@@ -66,6 +73,7 @@ public class HoldingsImportService
             TsvParser = new TsvParser(),
             Archive = archive,
             MinReportDate = minReportDate,
+            BatchPause = batchPause,
         };
 
         var parseResult = await ParseSubmissions(context, cancellationToken);
@@ -1681,10 +1689,14 @@ public class HoldingsImportService
             }
         }
 
-        var flushResult =
+        var flushResult = await HoldingsBatchPacer.Complete(
             holdingsMap.Count > 0
-                ? await FlushBatch(holdingsMap.Values.ToList(), cancellationToken)
-                : new HoldingsFlushResult(0, SkippedStaleParent: false);
+                ? FlushBatch(holdingsMap.Values.ToList(), cancellationToken)
+                : Task.FromResult(new HoldingsFlushResult(0, SkippedStaleParent: false)),
+            static result => result.Inserted > 0,
+            context.BatchPause,
+            cancellationToken
+        );
 
         return (flushResult.Inserted, duplicates, pending, flushResult.SkippedStaleParent);
     }
