@@ -28,6 +28,13 @@ public class HoldingsScraperWorker : BaseScraperWorker
     // production behaviour (the default is unchanged).
     protected virtual TimeSpan FailedDataSetCooldown => TimeSpan.FromMinutes(5);
 
+    // A bulk replay otherwise runs accession transactions back-to-back for hours. Clamp the
+    // operator value so a typo cannot turn the daily import into an unbounded sleep.
+    protected virtual TimeSpan BulkBatchPause =>
+        TimeSpan.FromMilliseconds(
+            Math.Clamp(_workerOptions.HoldingsBulkBatchPauseMilliseconds, 0, 1_000)
+        );
+
     private readonly WorkerOptions _workerOptions;
     private readonly IConfiguration _configuration;
     private readonly HoldingsRescanSignal _rescanSignal;
@@ -455,6 +462,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
                 var result = await importService.ImportDataSet(
                     archive,
                     minReportDate,
+                    BulkBatchPause,
                     cancellationToken
                 );
 

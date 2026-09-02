@@ -17,6 +17,7 @@ public class ImportContext
     public TsvParser TsvParser { get; init; }
     public ZipArchive Archive { get; init; }
     public DateOnly MinReportDate { get; init; }
+    public TimeSpan BatchPause { get; init; }
 
     // Populated by phases
     public Dictionary<string, SubmissionRow> Submissions { get; set; }
