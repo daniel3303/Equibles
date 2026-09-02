@@ -156,6 +156,70 @@ public static class SecDocumentEnvelopeParser
             || content.Contains("<ix:", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Enumerates the named files in a complete EDGAR SGML submission while preserving the
+    /// source-stated type, sequence, description, and document boundary. Unsafe or unnamed
+    /// filenames are refused because callers use the name to build an SEC artifact URL.
+    /// </summary>
+    public static IReadOnlyList<SecFilingArtifactDescriptor> EnumerateArtifacts(
+        string envelope,
+        string primaryDocumentFileName = null
+    )
+    {
+        var artifacts = new List<SecFilingArtifactDescriptor>();
+        foreach (var block in EnumerateDocumentBlocks(envelope))
+        {
+            if (!TryExtractSgmlTagValue(block, "FILENAME", out var fileName))
+                continue;
+            if (!IsSafeFilename(fileName))
+                continue;
+            if (!SecSgmlEnvelope.TryGetTagLine(block, "TYPE", out var type) || type.Length == 0)
+                continue;
+
+            TryExtractSgmlTagValue(block, "SEQUENCE", out var sequence);
+            var sequenceNumber = int.TryParse(sequence, out var parsedSequence)
+                ? parsedSequence
+                : (int?)null;
+            SecSgmlEnvelope.TryGetTagLine(block, "DESCRIPTION", out var description);
+            TryExtractTextBody(block, out var body);
+
+            artifacts.Add(
+                new SecFilingArtifactDescriptor(
+                    fileName,
+                    type,
+                    sequence,
+                    sequenceNumber,
+                    description,
+                    body,
+                    block,
+                    !string.IsNullOrEmpty(primaryDocumentFileName)
+                        && string.Equals(
+                            fileName,
+                            primaryDocumentFileName,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                )
+            );
+        }
+
+        if (artifacts.Count > 0 && !artifacts.Exists(artifact => artifact.IsPrimary))
+        {
+            var first = artifacts[0];
+            artifacts[0] = new SecFilingArtifactDescriptor(
+                first.FileName,
+                first.Type,
+                first.Sequence,
+                first.SequenceNumber,
+                first.Description,
+                first.Body,
+                first.RawBlock,
+                isPrimary: true
+            );
+        }
+
+        return artifacts;
+    }
+
     // Walks the SGML envelope yielding each <DOCUMENT>...</DOCUMENT> block verbatim. Stops at
     // the first unterminated block, matching EDGAR's well-formed-or-nothing guarantee.
     private static IEnumerable<string> EnumerateDocumentBlocks(string envelope)

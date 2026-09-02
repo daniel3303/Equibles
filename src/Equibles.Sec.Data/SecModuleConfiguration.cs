@@ -42,6 +42,15 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<SecFilingArtifact>(b =>
+        {
+            b.Property(e => e.CaptureStatus).HasConversion<string>().HasMaxLength(32);
+            b.HasOne(e => e.Document)
+                .WithMany(d => d.Artifacts)
+                .HasForeignKey(e => e.DocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         builder.Entity<BackfillState>();
         builder.Entity<CompanyFilingSyncState>();
         builder.Entity<FailToDeliver>();

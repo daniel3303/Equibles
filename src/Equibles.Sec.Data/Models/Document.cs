@@ -43,6 +43,12 @@ public class Document
     public virtual List<DocumentImage> Images { get; set; } = [];
 
     /// <summary>
+    /// Named files inside this filing's submission envelope. Unlike normalized filing content,
+    /// these rows preserve the boundary between the primary form and individual exhibits.
+    /// </summary>
+    public virtual List<SecFilingArtifact> Artifacts { get; set; } = [];
+
+    /// <summary>
     /// The file containing the document content.
     /// </summary>
     public Guid ContentId { get; set; }
