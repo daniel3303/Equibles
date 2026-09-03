@@ -87,8 +87,8 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
             .IndexOf("AAPL", StringComparison.Ordinal)
             .Should()
             .BeLessThan(output.IndexOf("MSFT", StringComparison.Ordinal));
-        output.Should().Contain("Δ Value is the change in stored quarter-end position value");
-        output.Should().Contain("includes the quarter's price move on held positions");
+        output.Should().Contain("Δ Value is the change in published position value");
+        output.Should().Contain("the change includes price movement");
         output.Should().Contain("read Δ Shares for the position change itself");
     }
 
@@ -139,6 +139,41 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
             .IndexOf("AAPL", StringComparison.Ordinal)
             .Should()
             .BeLessThan(output.IndexOf("MSFT", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetMarketWide13FActivity_OpenWindow_ExplainsPriorQuarterCarryForward()
+    {
+        var prior = new DateOnly(2099, 9, 30);
+        var current = new DateOnly(2099, 12, 31);
+        var stock = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Apple Inc.",
+            Cik = "C1",
+        };
+        var currentFiler = new InstitutionalHolder { Cik = "current", Name = "Current Filer" };
+        var carriedFiler = new InstitutionalHolder { Cik = "carried", Name = "Carried Filer" };
+        DbContext.AddRange(stock, currentFiler, carriedFiler);
+        DbContext.Add(MakeHolding(stock, currentFiler, prior, shares: 100, value: 10_000));
+        DbContext.Add(MakeHolding(stock, currentFiler, current, shares: 200, value: 20_000));
+        DbContext.Add(MakeHolding(stock, carriedFiler, prior, shares: 50, value: 5_000));
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await using var verify = Fixture.CreateDbContext();
+        var output = await NewSut(verify).GetMarketWide13FActivity(
+            bucket: "top-buys",
+            reportDate: "2099-12-31"
+        );
+
+        output.Should().Contain(
+            "combined view: funds that have not filed yet carry their 2099-09-30 positions"
+        );
+        output.Should().MatchRegex("\\| 1 \\| AAPL .*\\| \\+100 \\|");
+        output.Should().Contain("Δ Value is the change in published position value");
+        output.Should().NotContain("figures cover only the funds that have already filed");
+        output.Should().NotContain("change in stored quarter-end position value");
     }
 
     private InstitutionalHoldingsTools NewSut(Equibles.Data.EquiblesFinancialDbContext ctx) =>

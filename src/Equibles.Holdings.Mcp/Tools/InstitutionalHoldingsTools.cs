@@ -99,7 +99,7 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetTopHolders", Title = "Top Institutional Holders", ReadOnly = true)]
     [Description(
-        "Get the top institutional holders (fund managers) of a stock from SEC 13F-HR filings. Returns a ranked list of institutions by shares held, including market value and percentage of total institutional 13F shares (not of shares outstanding). Data is sourced from quarterly 13F filings that large investment managers are required to file with the SEC; while the newest quarter's filing window is open, funds that have not filed yet are carried at their prior-quarter positions (noted in the output). Use this to understand who the major institutional investors in a company are."
+        "Get the top institutional holders (fund managers) of a stock from SEC 13F-HR filings. Returns a ranked list by shares held, including published position value and percentage of total institutional 13F shares (not of shares outstanding). Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Data is sourced from quarterly 13F filings; while the newest quarter's filing window is open, funds that have not filed yet are carried at their prior-quarter positions (noted in the output). Use position type before treating put/call rows as ownership."
     )]
     public Task<string> GetTopHolders(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -368,7 +368,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the historical trend of institutional ownership for a stock across multiple quarters. Shows how total institutional shares, market value, and number of institutional holders have changed over time based on SEC 13F-HR filings. While the newest quarter's 13F filing window is open, that quarter is a provisional combined view (funds that have not filed yet carry their prior-quarter positions — flagged in the output). Use this to understand whether institutional interest in a company is growing or declining."
+        "Get the historical trend of institutional ownership for a stock across multiple quarters. Shows how total institutional shares, published position value, and holder count changed. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. While the newest quarter's 13F filing window is open, that quarter is a provisional combined view (funds that have not filed yet carry their prior-quarter positions — flagged in the output). Use this to understand whether institutional interest is growing or declining."
     )]
     public Task<string> GetInstitutionalOwnershipHistory(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -485,7 +485,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "View the stock portfolio of a specific institutional investor (fund manager) from their SEC 13F-HR filing. Shows the institution's largest tracked holdings by market value (default 20, max 500) with share counts, market values, and percent of the 13F-reported portfolio, plus the portfolio's total value and position count. Use this to understand what stocks a particular fund manager or institution is investing in; use SearchInstitutions first when the name is ambiguous."
+        "View the tracked stock positions of a specific institutional investor from an SEC 13F-HR filing. Shows the largest positions by published value (default 20, max 500), with share counts, value, percent of tracked 13F value, and position count. Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Coverage is limited to tracked U.S.-listed common stocks and related put/call positions; use position type before treating options as ownership. Use SearchInstitutions first when the name is ambiguous."
     )]
     public Task<string> GetInstitutionPortfolio(
         [Description(
@@ -748,7 +748,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Search the tracked 13F filer set by institution name or SEC CIK. Search first requires every punctuation-independent query word anywhere in the filed name, then broadens to any word only when no strict row matches. Verified brand aliases such as Fidelity, Vanguard, and BlackRock include their current flagship CIK. Results are largest within the recently-active filing bucket first and include latest report date, reported 13F AUM, and tracked position count so same-name filers can be compared before calling an institution tool. Scoped institution tools remain strict and never discard an unmatched word."
+        "Search the tracked 13F filer set by institution name or SEC CIK. Search first requires every punctuation-independent query word anywhere in the filed name, then broadens to any word only when no strict row matches. Verified brand aliases such as Fidelity, Vanguard, and BlackRock include their current flagship CIK. Results are largest within the recently-active filing bucket first and include latest report date, tracked 13F position value, and position count so same-name filers can be compared before calling an institution tool. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Scoped institution tools remain strict and never discard an unmatched word."
     )]
     public Task<string> SearchInstitutions(
         [Description("Search query — institution name, partial name, or CIK")] string query,
@@ -774,7 +774,7 @@ public class InstitutionalHoldingsTools
                     holders,
                     $"No match for '{query}' in the tracked 13F filer set. This result describes only tracked filers.",
                     $"Institutions matching '{query}' (largest recently-active 13F filers first):",
-                    "| Institution | CIK | Latest Report | Reported AUM | Positions | City | State/Country |",
+                    "| Institution | CIK | Latest Report | Tracked 13F Value | Positions | City | State/Country |",
                     "|------------|-----|---------------|--------------|-----------|------|--------------|",
                     h =>
                         $"| {MarkdownTable.EscapeCell(h.Holder.Name, "—")} | {MarkdownTable.EscapeCell(h.Holder.Cik, "—")} | {FormatOptionalDate(h.LatestReportDate)} | {FormatOptionalDollars(h.ReportedAum)} | {FormatOptionalCount(h.PositionCount)} | {MarkdownTable.EscapeCell(OrDash(h.Holder.City), "—")} | {MarkdownTable.EscapeCell(OrDash(EdgarStateCodes.Decode(h.Holder.StateOrCountry)), "—")} |"
@@ -1065,7 +1065,7 @@ public class InstitutionalHoldingsTools
 
         result.AppendLine();
         result.AppendLine(
-            "_Δ Position Value is the change in stored quarter-end position value and includes price movement — a seller can show a positive Δ when the stock rose during the quarter._"
+            "_Δ Position Value is the change in published position value. Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable; the change includes price movement, so a seller can show a positive Δ when the stock rose during the quarter._"
         );
 
         return result.ToString();
@@ -1105,7 +1105,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Δ Value is the change in stored quarter-end position value and includes the quarter's price move on held shares, so use Δ Shares to read the position change itself. The output publishes the first complete 13F report quarter and refuses comparisons that cross that corpus boundary. Use this to answer 'what's the consensus 13F move this quarter?'"
+        "Get the market-wide 13F leaderboards for a given quarter — which stocks were most bought, most sold, most initiated, or most exited across all 13F filers vs the prior quarter. The `bucket` argument selects one of: top-buys (Δ shares > 0 ranked by Δ value desc), top-sells (Δ shares < 0 ranked by Δ value asc), new-positions (stocks ranked by count of filers initiating a position), sold-out-positions (stocks ranked by count of filers exiting). Δ Value is the change in published position value: values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. It includes price movement on held shares, so use Δ Shares to read the position change itself. The output publishes the first complete 13F report quarter and refuses comparisons that cross that corpus boundary. Use this to answer 'what's the consensus 13F move this quarter?'"
     )]
     public Task<string> GetMarketWide13FActivity(
         [Description("Bucket: top-buys, top-sells, new-positions, or sold-out-positions")]
@@ -1154,7 +1154,7 @@ public class InstitutionalHoldingsTools
                 if (windowOpen)
                     result.AppendLine(
                         $"Note: the {FormatDate(targetDate)} filing window is still open — "
-                            + "figures cover only the funds that have already filed."
+                            + $"combined view: funds that have not filed yet carry their {FormatDate(comparisonDate)} positions."
                     );
                 result.AppendLine();
 
@@ -1471,12 +1471,13 @@ public class InstitutionalHoldingsTools
         return result.ToString();
     }
 
-    // Δ Value is the change in stored quarter-end position value, so it moves with the stock's own price on
-    // positions merely held through the quarter. Without this, the "most bought" stock reads as
-    // heavy accumulation when the share change was a rounding error and the price simply rose.
+    // Δ Value is the change in published position value, so it moves with the stock's own price on
+    // positions merely held through the quarter. The provenance note is load-bearing because a published
+    // value can instead use the filer's value or zero when report-date valuation is unavailable.
     private const string DeltaValueCaveat =
-        "_Δ Value is the change in stored quarter-end position value and includes the quarter's price move on "
-        + "held positions, not just net buying or selling — read Δ Shares for the position change itself._";
+        "_Δ Value is the change in published position value. Values normally use report-date closing prices, "
+        + "may fall back to filer values, and can be zero when unavailable; the change includes price movement, "
+        + "not just net buying or selling — read Δ Shares for the position change itself._";
 
     private async Task<string> RenderMarketActivityChurn(
         string normalizedBucket,
@@ -1521,7 +1522,7 @@ public class InstitutionalHoldingsTools
 
     [McpServerTool(Name = "GetMostHeldStocks", Title = "Most Widely Held Stocks", ReadOnly = true)]
     [Description(
-        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a given quarter. Returns the stocks ranked by number of 13F filers reporting them as a holding (default), by quarter-over-quarter change in filer count (warming names — 'filersDelta' — or cooling names — 'filersDeltaAsc'), or by total reported dollar value. Includes Δ filers vs the prior quarter, total value, Δ value, and the stock's share of the 13F universe. The output publishes the first complete 13F report quarter; earlier rankings are unavailable, and boundary-quarter deltas are withheld. Only currently-held stocks rank; fully-sold-out names live in GetMarketWide13FActivity's sold-out-positions bucket. While the newest quarter's filing window is open, funds that have not filed yet are carried at their prior-quarter positions (noted in the output). Use this to answer 'which stocks are most owned by institutions right now, and is breadth expanding or contracting?'"
+        "Get the cross-sectional ranking of stocks by institutional 13F breadth for a quarter. Rank by filer count (default), quarter-over-quarter filer-count change, or total published position value. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Includes Δ filers, total value, Δ value, and share of the 13F universe. The first complete report quarter is published; earlier rankings and boundary-quarter deltas are unavailable. Only currently-held stocks rank; sold-out names use GetMarketWide13FActivity. During the newest quarter's open filing window, non-filers carry prior-quarter positions (noted in output)."
     )]
     public Task<string> GetMostHeldStocks(
         [Description(
@@ -1529,7 +1530,7 @@ public class InstitutionalHoldingsTools
         )]
             string reportDate = null,
         [Description(
-            "Sort by: 'filers' (default, # of 13F filers desc), 'filersDelta' (QoQ filer-count delta desc — warming names), 'filersDeltaAsc' (QoQ filer-count delta asc — cooling names), or 'value' (current total reported $ value desc)"
+            "Sort by: 'filers' (default, # of 13F filers desc), 'filersDelta' (QoQ filer-count delta desc — warming names), 'filersDeltaAsc' (QoQ filer-count delta asc — cooling names), or 'value' (current total published position value desc)"
         )]
             string sort = "filers",
         [Description("Maximum number of stocks to return (default: 25, clamped to 1-500)")]
@@ -1687,7 +1688,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the portfolio summary header for an institutional 13F filer — 13F reported value (long U.S. positions only, not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
+        "Get the portfolio summary header for an institutional 13F filer — published tracked 13F value (not total firm AUM), position count, top-10 / top-25 concentration, QoQ turnover, and the latest / prior report dates with the count of quarters tracked in this database. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. Resolve exact CIKs with SearchInstitutions; ambiguous partial names return candidates rather than selecting a filer silently."
     )]
     public Task<string> GetInstitutionSummary(
         [Description(
@@ -1743,7 +1744,7 @@ public class InstitutionalHoldingsTools
         // The CIK is how a caller chains this fund into every other institution route, and
         // a name-resolved lookup has no other way to learn it.
         result.AppendLine($"| CIK | {holder.Cik} |");
-        result.AppendLine($"| Reported AUM | ${McpFormat.WholeNumber(summary.ReportedAum)} |");
+        result.AppendLine($"| Tracked 13F value | ${McpFormat.WholeNumber(summary.ReportedAum)} |");
         result.AppendLine($"| # Positions | {McpFormat.WholeNumber(summary.PositionCount)} |");
         result.AppendLine(
             $"| Top 10 concentration | {FormatPercent(summary.Top10ConcentrationPercent)}% |"
@@ -1755,13 +1756,13 @@ public class InstitutionalHoldingsTools
         result.AppendLine($"| Quarters tracked | {summary.QuartersReported} |");
         result.AppendLine();
         result.AppendLine(
-            "_Reported AUM = total value of 13F-reportable U.S. positions — it excludes cash, bonds, non-U.S. holdings, and short stock, and is NOT the firm's total assets under management. It DOES include the notional value of reported put and call positions, so a filer expressing its views in options can show an AUM far larger than the equity it actually holds._"
+            "_Tracked 13F value is the published value of positions this platform tracks — normally based on report-date closing prices, with filer-value fallback; an unavailable valuation can contribute zero. It excludes cash, bonds, non-U.S. holdings, short stock, and untracked securities, and is NOT the firm's total assets under management. It includes the notional value of reported put and call positions, so an option-heavy filer can show a value far larger than the equity it owns._"
         );
         result.AppendLine(
             "_Quarters tracked counts the 13F quarters in this database, not the filer's full filing history._"
         );
         result.AppendLine(
-            "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × AUM), where the per-share price proxy is the current quarter's Value / Shares._"
+            "_QoQ turnover = (Σ |Δ shares × current price proxy|) / (2 × tracked 13F value), where the per-share price proxy is the current quarter's Value / Shares._"
         );
 
         if (holder.ConfidentialTreatmentRequested)
@@ -2017,7 +2018,7 @@ public class InstitutionalHoldingsTools
         }
 
         result.AppendLine(
-            "_Δ Value is the change in stored quarter-end position value and includes price movement, not just trading — it also drives the per-bucket ordering._"
+            "_Δ Value is the change in published position value. Values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable; the change includes price movement, not just trading — it also drives the per-bucket ordering._"
         );
         return result.ToString();
     }
@@ -2425,7 +2426,7 @@ public class InstitutionalHoldingsTools
         string.Join(
             "; ",
             candidates.Select(c =>
-                $"{MarkdownTable.EscapeCell(c.Holder.Name, "—")} (CIK {c.Holder.Cik}, latest {FormatOptionalDate(c.LatestReportDate)}, reported AUM {FormatOptionalDollars(c.ReportedAum)}, positions {FormatOptionalCount(c.PositionCount)})"
+                $"{MarkdownTable.EscapeCell(c.Holder.Name, "—")} (CIK {c.Holder.Cik}, latest {FormatOptionalDate(c.LatestReportDate)}, tracked 13F value {FormatOptionalDollars(c.ReportedAum)}, positions {FormatOptionalCount(c.PositionCount)})"
             )
         );
 
