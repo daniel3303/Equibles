@@ -3,11 +3,8 @@ using Equibles.Sec.HostedService.Services;
 
 namespace Equibles.UnitTests.Sec;
 
-// BuildSeriesTickerMap turns SEC's fund-class ticker directory into the series → symbol map that
-// fills FundSeries.Ticker for every series-bearing row (an ETF like ProShares Ultra Semiconductors
-// "USD" was unresolvable by ticker because NPORT carries no symbol). The rule under test: a series
-// maps ONLY when all its share classes agree on one symbol — a multi-class mutual fund has no single
-// ticker, and guessing one class's symbol would misattribute the whole series.
+// BuildSeriesTickerMap turns SEC's fund-class ticker directory into the series → class-symbol map.
+// Every unambiguous class alias is retained; a symbol claimed by more than one series is excluded.
 public class FundSeriesRefreshServiceSeriesTickerMapTests
 {
     private static FundClassTicker Row(string seriesId, string symbol, string classId = "C1") =>
@@ -24,18 +21,18 @@ public class FundSeriesRefreshServiceSeriesTickerMapTests
     {
         var map = FundSeriesRefreshService.BuildSeriesTickerMap([Row("S000014258", "USD")]);
 
-        map.Should().ContainKey("S000014258").WhoseValue.Should().Be("USD");
+        map.Should().ContainKey("S000014258").WhoseValue.Should().Equal("USD");
     }
 
     [Fact]
-    public void BuildSeriesTickerMap_MultiClassSeriesWithDifferentSymbols_IsExcluded()
+    public void BuildSeriesTickerMap_MultiClassSeriesWithDifferentSymbols_RetainsEveryAlias()
     {
         var map = FundSeriesRefreshService.BuildSeriesTickerMap([
             Row("S000001", "VFIAX", "C1"),
             Row("S000001", "VFFSX", "C2"),
         ]);
 
-        map.Should().BeEmpty("a multi-class fund has no single ticker — guessing misattributes it");
+        map.Should().ContainKey("S000001").WhoseValue.Should().Equal("VFFSX", "VFIAX");
     }
 
     [Fact]
@@ -46,7 +43,7 @@ public class FundSeriesRefreshServiceSeriesTickerMapTests
             Row("S000002", "SPY", "C2"),
         ]);
 
-        map.Should().ContainKey("S000002");
+        map.Should().ContainKey("S000002").WhoseValue.Should().Equal("SPY");
     }
 
     [Fact]
@@ -58,7 +55,21 @@ public class FundSeriesRefreshServiceSeriesTickerMapTests
             Row("S000001", "VFFSX", "C2"),
         ]);
 
-        map.Should().HaveCount(1);
-        map["S000014258"].Should().Be("USD");
+        map.Should().HaveCount(2);
+        map["S000014258"].Should().Equal("USD");
+        map["S000001"].Should().Equal("VFFSX", "VFIAX");
+    }
+
+    [Fact]
+    public void BuildSeriesTickerMap_SymbolClaimedByTwoSeries_IsExcludedFromBoth()
+    {
+        var map = FundSeriesRefreshService.BuildSeriesTickerMap([
+            Row("S000001", "SHARED"),
+            Row("S000002", "shared"),
+            Row("S000003", "UNIQUE"),
+        ]);
+
+        map.Should().ContainSingle();
+        map.Should().ContainKey("S000003").WhoseValue.Should().Equal("UNIQUE");
     }
 }
