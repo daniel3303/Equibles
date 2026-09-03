@@ -162,14 +162,14 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
         DbContext.ChangeTracker.Clear();
 
         await using var verify = Fixture.CreateDbContext();
-        var output = await NewSut(verify).GetMarketWide13FActivity(
-            bucket: "top-buys",
-            reportDate: "2099-12-31"
-        );
+        var output = await NewSut(verify)
+            .GetMarketWide13FActivity(bucket: "top-buys", reportDate: "2099-12-31");
 
-        output.Should().Contain(
-            "combined view: funds that have not filed yet carry their 2099-09-30 positions"
-        );
+        output
+            .Should()
+            .Contain(
+                "combined view: funds that have not filed yet carry their 2099-09-30 positions"
+            );
         output.Should().MatchRegex("\\| 1 \\| AAPL .*\\| \\+100 \\|");
         output.Should().Contain("Δ Value is the change in published position value");
         output.Should().NotContain("figures cover only the funds that have already filed");
