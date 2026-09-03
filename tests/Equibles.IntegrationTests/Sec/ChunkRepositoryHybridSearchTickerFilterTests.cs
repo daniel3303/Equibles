@@ -60,7 +60,7 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task HybridSearchCompanyFallback_UsesTickerTypeAndParentDocumentDate()
+    public async Task HybridSearchScopedFallback_UsesTickerTypeAndParentDocumentDate()
     {
         var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
         var microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
@@ -93,13 +93,46 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
 
         var sut = new ChunkRepository(DbContext);
 
-        var results = await sut.HybridSearchCompanyFallback(
+        var results = await sut.HybridSearchScopedFallback(
             "orbital revenue acceleration",
             maxResults: 10,
             ticker: "aapl",
             documentTypes: [DocumentType.TenK],
             startDate: new DateOnly(2025, 1, 1),
             endDate: new DateOnly(2026, 12, 31)
+        );
+
+        results.Should().ContainSingle().Which.Id.Should().Be(expected.Id);
+    }
+
+    // The MCP SearchDocument tool passes a document id and no ticker, so the fallback has to bound
+    // itself on DocumentId alone. Two companies share the wording here: a scan that ignored the
+    // document scope would return both.
+    [Fact]
+    public async Task HybridSearchScopedFallback_DocumentScoped_NarrowsWithoutATicker()
+    {
+        var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        var microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
+
+        var target = SeedDocument(apple);
+        target.ReportingDate = new DateOnly(2026, 1, 15);
+        var expected = SeedChunk(target, "Full year 2026 guidance was reaffirmed.", "AAPL");
+
+        var sameCompanyOtherFiling = SeedDocument(apple);
+        sameCompanyOtherFiling.ReportingDate = new DateOnly(2026, 4, 15);
+        SeedChunk(sameCompanyOtherFiling, "Full year 2026 guidance was reaffirmed.", "AAPL");
+
+        var otherCompany = SeedDocument(microsoft);
+        otherCompany.ReportingDate = new DateOnly(2026, 1, 15);
+        SeedChunk(otherCompany, "Full year 2026 guidance was reaffirmed.", "MSFT");
+        await DbContext.SaveChangesAsync();
+
+        var sut = new ChunkRepository(DbContext);
+
+        var results = await sut.HybridSearchScopedFallback(
+            "2026 guidance",
+            maxResults: 10,
+            documentId: target.Id
         );
 
         results.Should().ContainSingle().Which.Id.Should().Be(expected.Id);

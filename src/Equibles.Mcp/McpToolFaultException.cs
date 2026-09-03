@@ -12,4 +12,9 @@ public class McpToolFaultException : Exception
 {
     public McpToolFaultException(string message)
         : base(message) { }
+
+    // A tool that raises the fault itself keeps the underlying failure attached, so the recorded
+    // Errors row still carries the real cause behind the caller-facing wording.
+    public McpToolFaultException(string message, Exception innerException)
+        : base(message, innerException) { }
 }

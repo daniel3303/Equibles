@@ -60,7 +60,7 @@ public class HybridChunkSearcherBm25TimeoutTests
     }
 
     [Fact]
-    public async Task ConjunctiveTimeout_TickerScoped_CompanyFallbackReturnsWithoutOtherPasses()
+    public async Task ConjunctiveTimeout_TickerScoped_ScopedFallbackReturnsWithoutOtherPasses()
     {
         var chunk = new Chunk
         {
@@ -70,7 +70,7 @@ public class HybridChunkSearcherBm25TimeoutTests
         };
         var chunkRepository = new TimeoutChunkRepository(
             conjunctiveTimesOut: true,
-            companyFallbackResults: [chunk],
+            scopedFallbackResults: [chunk],
             allChunks: [chunk]
         );
         var embeddingRepository = new StubEmbeddingRepository([]);
@@ -80,19 +80,82 @@ public class HybridChunkSearcherBm25TimeoutTests
 
         Assert.Equal(chunk.Id, Assert.Single(results).Id);
         Assert.Equal(3, Assert.Single(chunkRepository.ConjunctiveBudgets));
-        Assert.Equal(1, chunkRepository.CompanyFallbackCalls);
+        Assert.Equal(1, chunkRepository.ScopedFallbackCalls);
         Assert.Empty(chunkRepository.DisjunctiveBudgets);
         Assert.False(embeddingRepository.SearchSimilarChunksCalled);
     }
 
+    // The production shape behind the 2026-09-02 report: SearchDocument passes a documentId and
+    // NO ticker, the BM25 pass blew its budget, and the vector arm was down under the same load,
+    // so the tool answered with a failure over a filing holding a couple of dozen chunks. Document
+    // scope now degrades exactly like ticker scope, on a slice that is strictly smaller.
     [Fact]
-    public async Task CompanyFallback_CallerCancellationEscapes()
+    public async Task ConjunctiveTimeout_DocumentScoped_ScopedFallbackReturnsWithoutOtherPasses()
+    {
+        var documentId = Guid.NewGuid();
+        var chunk = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            DocumentId = documentId,
+            Content = "bounded in-document match",
+        };
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            scopedFallbackResults: [chunk],
+            allChunks: [chunk]
+        );
+        var embeddingRepository = new StubEmbeddingRepository([]);
+        var searcher = NewSearcher(chunkRepository, embeddingRepository);
+
+        var results = await searcher.Search(
+            "2026 guidance",
+            5,
+            documentId: documentId,
+            disjunctiveFallback: true
+        );
+
+        Assert.Equal(chunk.Id, Assert.Single(results).Id);
+        Assert.Equal(1, chunkRepository.ScopedFallbackCalls);
+        Assert.Equal(documentId, chunkRepository.ScopedFallbackDocumentId);
+        Assert.Null(chunkRepository.ScopedFallbackTicker);
+        // The shorter first-pass budget: a scoped search has this fallback under it, so it gives
+        // up sooner than a corpus-wide one, which has nothing to fall back to.
+        Assert.Equal(3, Assert.Single(chunkRepository.ConjunctiveBudgets));
+        Assert.Empty(chunkRepository.DisjunctiveBudgets);
+        Assert.False(embeddingRepository.SearchSimilarChunksCalled);
+    }
+
+    // The fallback builds tsvectors, so it is only ever safe over a bounded slice. An unscoped
+    // search must keep degrading through the disjunctive pass and the vector arm and must NEVER
+    // reach the full-text scan, which would repeat the unbounded work that just timed out.
+    [Fact]
+    public async Task ConjunctiveTimeout_Unscoped_NeverCallsTheScopedFallback()
+    {
+        var chunk = new Chunk { Id = Guid.NewGuid(), Content = "broadened match" };
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            disjunctiveResults: [chunk],
+            scopedFallbackResults: [chunk],
+            allChunks: [chunk]
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        var results = await searcher.Search("2026 guidance", 5, disjunctiveFallback: true);
+
+        Assert.Equal(chunk.Id, Assert.Single(results).Id);
+        Assert.Equal(0, chunkRepository.ScopedFallbackCalls);
+        // No scope means no fallback, so the first pass keeps the full corpus-wide budget.
+        Assert.Null(Assert.Single(chunkRepository.ConjunctiveBudgets));
+    }
+
+    [Fact]
+    public async Task ScopedFallback_CallerCancellationEscapes()
     {
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var chunkRepository = new TimeoutChunkRepository(
             conjunctiveTimesOut: true,
-            companyFallbackError: new OperationCanceledException(cancellation.Token)
+            scopedFallbackError: new OperationCanceledException(cancellation.Token)
         );
         var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
 

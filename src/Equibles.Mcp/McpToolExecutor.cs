@@ -75,8 +75,15 @@ public static class McpToolExecutor
             // the call count as a success (ErrorCount never moved) and left the calling model
             // unable to tell a failure from an answer. InvalidParamsTranslatingTool turns
             // this into an in-band isError tool result carrying the same message.
+            // A tool that raised the fault itself already chose the wording the caller should
+            // read, and that wording is the actionable half: "retry the same call" and "an error
+            // occurred" ask for very different next steps. Re-wrapping would replace it with the
+            // catch-all and leave the calling model unable to tell a retryable stall from a bug.
             throw new McpToolFaultException(
-                errorMessage ?? $"An error occurred while executing {toolName}. Please try again."
+                ex is McpToolFaultException fault
+                    ? fault.Message
+                    : errorMessage
+                        ?? $"An error occurred while executing {toolName}. Please try again."
             );
         }
     }

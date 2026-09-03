@@ -24,6 +24,14 @@ public class RagSearchTools
 {
     private const int MaxExcludedTickers = 25;
 
+    // A BM25 statement-budget timeout is the ONE search failure the caller can act on: the
+    // statement that ran out of budget warmed the index pages it died on, so the same call
+    // usually succeeds straight after. The executor's catch-all says "an error occurred", which
+    // a calling model reported back to us as an unactionable argument fault (production,
+    // 2026-09-02) — name the stall and ask for the retry instead.
+    private const string SearchTimedOutMessage =
+        "The search timed out before it could rank the excerpts. Retry the same call.";
+
     // Attribute descriptions are compile-time constants, so they cannot enumerate types
     // registered at host startup (DocumentType.Register). They name the built-in filing
     // values plus the most useful registered example, and the strict rejection below
@@ -126,27 +134,31 @@ public class RagSearchTools
                     if (stock == null)
                         return McpToolExecutor.StockNotFound(ticker);
 
-                    chunks = await _ragManager.SearchRelevantChunksByCompany(
-                        query,
-                        stock.Ticker,
-                        maxResults,
-                        parsedTypes,
-                        ToDateOnly(startDate),
-                        ToDateOnly(endDate),
-                        broadenSparseResults: true
+                    chunks = await SearchOrTimeoutFault(() =>
+                        _ragManager.SearchRelevantChunksByCompany(
+                            query,
+                            stock.Ticker,
+                            maxResults,
+                            parsedTypes,
+                            ToDateOnly(startDate),
+                            ToDateOnly(endDate),
+                            broadenSparseResults: true
+                        )
                     );
                 }
                 else
                 {
-                    chunks = await _ragManager.SearchRelevantChunks(
-                        query,
-                        maxResults,
-                        parsedTypes,
-                        ToDateOnly(startDate),
-                        ToDateOnly(endDate),
-                        parsedTickers,
-                        Math.Max(maxResultsPerCompany, 0),
-                        broadenSparseResults: true
+                    chunks = await SearchOrTimeoutFault(() =>
+                        _ragManager.SearchRelevantChunks(
+                            query,
+                            maxResults,
+                            parsedTypes,
+                            ToDateOnly(startDate),
+                            ToDateOnly(endDate),
+                            parsedTickers,
+                            Math.Max(maxResultsPerCompany, 0),
+                            broadenSparseResults: true
+                        )
                     );
                 }
 
@@ -203,11 +215,13 @@ public class RagSearchTools
                     );
                 if (mode != "semantic")
                     return $"Unknown searchMode \"{searchMode}\" — pass 'semantic' (default) or 'exact'.";
-                var chunks = await _ragManager.SearchRelevantChunksByDocument(
-                    query,
-                    documentId,
-                    maxResults,
-                    broadenSparseResults: true
+                var chunks = await SearchOrTimeoutFault(() =>
+                    _ragManager.SearchRelevantChunksByDocument(
+                        query,
+                        documentId,
+                        maxResults,
+                        broadenSparseResults: true
+                    )
                 );
 
                 if (chunks.Count == 0)
@@ -466,6 +480,21 @@ public class RagSearchTools
 
     // Signposts a result shortfall so the caller knows relaxing filters (not paging or
     // retrying) is the next move. Empty results keep the plain empty-state message.
+    // Turns a BM25 statement-budget timeout into a fault the caller can act on, keeping the
+    // original exception attached so the recorded Errors row still shows what actually failed.
+    // Every other failure keeps the executor's catch-all wording.
+    private static async Task<List<Chunk>> SearchOrTimeoutFault(Func<Task<List<Chunk>>> search)
+    {
+        try
+        {
+            return await search();
+        }
+        catch (ChunkSearchTimeoutException exception)
+        {
+            throw new McpToolFaultException(SearchTimedOutMessage, exception);
+        }
+    }
+
     private static string AppendShortfallNote(string context, int returned, int requested) =>
         returned > 0 && returned < requested
             ? context
