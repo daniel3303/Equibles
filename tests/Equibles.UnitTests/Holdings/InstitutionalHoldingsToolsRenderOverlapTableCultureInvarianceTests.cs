@@ -87,5 +87,9 @@ public class InstitutionalHoldingsToolsRenderOverlapTableCultureInvarianceTests
                 invariantOutput,
                 "MCP markdown output is consumed by LLMs trained on en-US conventions; the :N0 / :F1 / :N1 and provider-less .ToString(\"N0\")/.ToString(\"F1\") cells follow CurrentCulture (de-DE swaps the thousand/decimal separators), forking the response by host locale — same bug class as the RenderInstitutionPortfolio, RenderTopHoldersTable, RenderInstitutionSummary and RenderSectorAllocationTable culture-invariance siblings"
             );
+        invariantOutput
+            .Should()
+            .Contain("Published values normally use report-date closing prices")
+            .And.Contain("can be zero when unavailable");
     }
 }

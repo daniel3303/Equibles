@@ -32,6 +32,10 @@ public class InstitutionalHoldingsTools
 {
     private static readonly TimeSpan MarketActivityCacheDuration = TimeSpan.FromMinutes(30);
 
+    private const string PublishedValueCaveat =
+        "_Published values normally use report-date closing prices, may fall back to filer values, "
+        + "and can be zero when unavailable._";
+
     private static readonly string[] ValidActivityBuckets =
     [
         "top-buys",
@@ -161,6 +165,7 @@ public class InstitutionalHoldingsTools
                         ReportDate = h.ReportDate,
                         ListedTicker = h.ListedTicker,
                         OptionType = h.OptionType,
+                        ShareType = h.ShareType,
                     })
                     .ToListAsync();
                 if (holdings.Count == 0)
@@ -267,6 +272,7 @@ public class InstitutionalHoldingsTools
                 ReportDate = h.ReportDate,
                 ListedTicker = h.ListedTicker,
                 OptionType = h.OptionType,
+                ShareType = h.ShareType,
             })
             .ToList();
         return RenderAdjustedTopHoldersTable(
@@ -320,8 +326,8 @@ public class InstitutionalHoldingsTools
                 // qualifies the type in place so single-class stocks pay no extra column.
                 var positionType =
                     h.ListedTicker == null
-                        ? PositionType(h.OptionType)
-                        : $"{PositionType(h.OptionType)} ({h.ListedTicker})";
+                        ? PositionType(h.OptionType, h.ShareType)
+                        : $"{PositionType(h.OptionType, h.ShareType)} ({h.ListedTicker})";
                 return $"| {offset + rank} | {h.InstitutionName} | "
                     + $"{positionType} | "
                     + $"{McpFormat.WholeNumber(h.Shares)} | "
@@ -335,7 +341,7 @@ public class InstitutionalHoldingsTools
             "_% of Inst. Total = the position's share of all institutional 13F shares in the stock, not of shares outstanding._"
         );
         result.AppendLine(
-            "_Type: Common = shares held outright. Put/Call = an option position reported at the "
+            "_Type: Common = shares held outright; Principal = a principal-denominated security. Put/Call = an option position reported at the "
                 + "underlying's notional value. A PUT IS A BEARISH POSITION, so a large put line is a "
                 + "holder betting against this stock, not accumulating it._"
         );
@@ -360,6 +366,7 @@ public class InstitutionalHoldingsTools
         public DateOnly ReportDate { get; set; }
         public string ListedTicker { get; set; }
         public OptionType? OptionType { get; set; }
+        public ShareType ShareType { get; set; }
     }
 
     [McpServerTool(
@@ -368,7 +375,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get the historical trend of institutional ownership for a stock across multiple quarters. Shows how total institutional shares, published position value, and holder count changed. Values normally use report-date closing prices, may fall back to filer values, and can include zero for unavailable valuations. While the newest quarter's 13F filing window is open, that quarter is a provisional combined view (funds that have not filed yet carry their prior-quarter positions — flagged in the output). Use this to understand whether institutional interest is growing or declining."
+        "Get the historical trend of aggregate reported 13F exposure for a stock across multiple quarters. The legacy Total Shares field sums reported quantities across common-share rows, put/call notional-underlying rows, and any tracked principal-denominated rows, so it is not a pure share-ownership measure. Shows how total reported quantity, published position value, and filer count changed. Values normally use report-date closing prices, may fall back to filer values, and can include zero when unavailable. While the newest quarter's filing window is open, that quarter is a provisional combined view (funds that have not filed yet carry their prior-quarter positions — flagged in the output)."
     )]
     public Task<string> GetInstitutionalOwnershipHistory(
         [Description("Company ticker symbol (e.g., AAPL, MSFT)")] string ticker,
@@ -465,6 +472,10 @@ public class InstitutionalHoldingsTools
         result.AppendLine(
             "_Share Chg (QoQ) tracks the quarter-over-quarter change in total split-adjusted institutional shares._"
         );
+        result.AppendLine(
+            "_The legacy Total Shares column sums reported quantities across common-share rows, put/call notional-underlying rows, and any tracked principal-denominated rows; it is aggregate reported 13F exposure rather than pure share ownership._"
+        );
+        result.AppendLine(PublishedValueCaveat);
 
         return result.ToString();
     }
@@ -698,7 +709,7 @@ public class InstitutionalHoldingsTools
                 // Rank is the ABSOLUTE position in the value-ranked rows, so page two
                 // continues 21, 22, … instead of restarting at 1.
                 return $"| {offset + rank} | {listedTicker} | {h.CommonStock.Name} | "
-                    + $"{PositionType(h.OptionType)} | "
+                    + $"{PositionType(h.OptionType, h.ShareType)} | "
                     + $"{McpFormat.WholeNumber(shares)} | "
                     + $"{FormatMillions(h.Value)} | "
                     + $"{FormatPercent(pct)}% |";
@@ -711,7 +722,7 @@ public class InstitutionalHoldingsTools
         // Palantir, and every surface that omitted the distinction reported the opposite.
         result.AppendLine();
         result.AppendLine(
-            "_Type: Common = shares held outright. Put/Call = an option position, reported at the "
+            "_Type: Common = shares held outright; Principal = a principal-denominated security. Put/Call = an option position, reported at the "
                 + "notional value of the underlying shares, not the premium paid. A PUT IS A BEARISH "
                 + "POSITION — the filer profits if the stock falls. Option notional is included in the "
                 + "portfolio total and the percentages above, exactly as the filer reported it._"
@@ -734,12 +745,12 @@ public class InstitutionalHoldingsTools
     }
 
     // How a 13F line should be described to a reader: the security type, not the activity bucket.
-    private static string PositionType(OptionType? optionType) =>
+    private static string PositionType(OptionType? optionType, ShareType shareType) =>
         optionType switch
         {
             Equibles.Holdings.Data.Models.OptionType.Put => "Put",
             Equibles.Holdings.Data.Models.OptionType.Call => "Call",
-            _ => "Common",
+            _ => shareType == ShareType.Principal ? "Principal" : "Common",
         };
 
     [McpServerTool(
@@ -1809,6 +1820,7 @@ public class InstitutionalHoldingsTools
                 + $"${FormatMillions(slices.Sum(s => s.TotalValue))}M 13F value. "
                 + "_Percentages are of the 13F-reported (long U.S. equity) book only._"
         );
+        result.AppendLine(PublishedValueCaveat);
 
         if (holder.ConfidentialTreatmentRequested)
         {
@@ -1827,7 +1839,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Get an institution's 13F portfolio allocation for a given report quarter (defaults to the latest), grouped by fine-grained industry (default) or rolled up by sector via `groupBy`. Returns a markdown table sorted by % of portfolio descending, with stocks lacking a classification collapsed into a single 'Unclassified' row at the end. Use SearchInstitutions for an exact CIK; ambiguous partial names return candidates instead of selecting silently."
+        "Get an institution's 13F portfolio allocation for a given report quarter (defaults to the latest), grouped by fine-grained industry (default) or rolled up by sector via `groupBy`. Returns a markdown table sorted by % of portfolio descending, with stocks lacking a classification collapsed into a single 'Unclassified' row at the end. Published values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Use SearchInstitutions for an exact CIK; ambiguous partial names return candidates instead of selecting silently."
     )]
     public Task<string> GetInstitutionSectorAllocation(
         [Description(
@@ -2060,7 +2072,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Compare two institutions' 13F portfolios on their latest common report date. Returns Jaccard and dollar-weighted overlap, portfolio totals, and shared or unique positions. Resolve filer names with SearchInstitutions. For mutual-fund or ETF NPORT portfolios, use GetFundProfile."
+        "Compare two institutions' 13F portfolios on their latest common report date. Returns Jaccard and dollar-weighted overlap, portfolio totals, and shared or unique positions. Published values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Resolve filer names with SearchInstitutions. For mutual-fund or ETF NPORT portfolios, use GetFundProfile."
     )]
     public Task<string> CompareInstitutionPortfolios(
         [Description(
@@ -2217,6 +2229,7 @@ public class InstitutionalHoldingsTools
         result.AppendLine(
             "_$-weighted overlap = shared dollars (the smaller of the two funds' values per stock) as a share of union dollars (the larger per stock)._"
         );
+        result.AppendLine(PublishedValueCaveat);
         var truncation = McpOutput.TruncationNote(rendered.Count, overlap.Rows.Count);
         if (truncation.Length > 0)
             result.AppendLine(truncation);
@@ -2230,7 +2243,7 @@ public class InstitutionalHoldingsTools
         ReadOnly = true
     )]
     [Description(
-        "Combine 2-25 institutions' 13F portfolios on their latest common report date. Ranks stocks by holder count, then combined value. Set minInstitutions to 2 or more for positions shared by multiple filers."
+        "Combine 2-25 institutions' 13F portfolios on their latest common report date. Ranks stocks by holder count, then combined value. Published values normally use report-date closing prices, may fall back to filer values, and can be zero when unavailable. Set minInstitutions to 2 or more for positions shared by multiple filers."
     )]
     public Task<string> GetInstitutionConsensusHoldings(
         [Description(
@@ -2384,6 +2397,9 @@ public class InstitutionalHoldingsTools
             (rank, x) =>
                 $"| {rank} | {x.Row.Ticker} | {x.Row.Name} | {x.HeldBy}/{holders.Count} | {McpFormat.Invariant(x.Row.CombinedValue / 1_000_000m, "N1")} |"
         );
+
+        result.AppendLine();
+        result.AppendLine(PublishedValueCaveat);
 
         var truncation = McpOutput.TruncationNote(
             rowsWithConsensus.Count,
