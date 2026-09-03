@@ -24,6 +24,9 @@ namespace Equibles.Sec.BusinessLogic.Search;
 /// accepted deliberately: a somewhat weaker ranking beats an error, and the warning log is the
 /// trace. The pass after a timed-out pass runs on a tighter statement budget, so one search can
 /// never hold a connection for much more than a single full budget plus that reduced one.
+/// A search scoped to one ticker OR one document has a third leg the corpus-wide search cannot
+/// have: a bounded PostgreSQL full-text scan over that slice. When it answers, its proven matches
+/// are returned as they are — the arms that just failed under the same load are not re-tried.
 /// </summary>
 [Service(ServiceLifetime.Scoped)]
 public class HybridChunkSearcher
@@ -63,7 +66,11 @@ public class HybridChunkSearcher
     // still lets the degrade succeed while bounding what one search can pin a database
     // connection for — the pair can never burn more than one full budget plus this.
     private const int DegradedPassTimeoutSeconds = 3;
-    private const int TickerScopedPassTimeoutSeconds = 3;
+
+    // Statement budget for a SCOPED first pass (ticker or document). A scoped search has the
+    // bounded full-text fallback below it, so it can afford to give up sooner than a corpus-wide
+    // one, which has nothing to degrade to but the vector arm.
+    private const int ScopedPassTimeoutSeconds = 3;
 
     public async Task<List<Chunk>> Search(
         string query,
@@ -112,9 +119,16 @@ public class HybridChunkSearcher
         if (maxResultsPerCompany > 0)
             bm25Limit = Math.Max(bm25Limit, maxResults * PerCompanyOverFetchFactor);
 
+        // A ticker or a document id bounds the PostgreSQL full-text degrade below, so both scopes
+        // get the shorter first-pass budget and both get the fallback. A document-scoped search
+        // used to have NEITHER: its BM25 pass ran on the full corpus budget and, when the vector
+        // arm was also down, the timeout surfaced as a failed tool call over a filing whose chunks
+        // are a handful of rows (production, 2026-09-02).
+        var scopedFallbackAvailable = ticker != null || documentId.HasValue;
+
         List<Chunk> bm25;
         ChunkSearchTimeoutException bm25Timeout = null;
-        var companyFallbackAnswered = false;
+        var scopedFallbackAnswered = false;
         try
         {
             bm25 = await _chunkRepository.HybridSearch(
@@ -126,7 +140,7 @@ public class HybridChunkSearcher
                 documentTypes,
                 startDate,
                 endDate,
-                commandTimeoutSeconds: ticker != null ? TickerScopedPassTimeoutSeconds : null,
+                commandTimeoutSeconds: scopedFallbackAvailable ? ScopedPassTimeoutSeconds : null,
                 cancellationToken: cancellationToken
             );
         }
@@ -142,11 +156,11 @@ public class HybridChunkSearcher
             bm25 = [];
             bm25Timeout = exception;
 
-            if (ticker != null)
+            if (scopedFallbackAvailable)
             {
                 try
                 {
-                    bm25 = await _chunkRepository.HybridSearchCompanyFallback(
+                    bm25 = await _chunkRepository.HybridSearchScopedFallback(
                         query,
                         bm25Limit,
                         ticker,
@@ -158,7 +172,7 @@ public class HybridChunkSearcher
                     );
                     if (bm25.Count > 0)
                     {
-                        companyFallbackAnswered = true;
+                        scopedFallbackAnswered = true;
                         bm25Timeout = null;
                     }
                 }
@@ -171,7 +185,7 @@ public class HybridChunkSearcher
                 {
                     _logger.LogWarning(
                         fallbackException,
-                        "Company-local full-text fallback failed; continuing search degradation"
+                        "Scoped full-text fallback failed; continuing search degradation"
                     );
                 }
             }
@@ -188,7 +202,7 @@ public class HybridChunkSearcher
         // excludes every on-point chunk. When the conjunctive pass can't fill the request,
         // top up from a disjunctive (any-token) pass — conjunctive hits keep their rank and
         // the broader hits only append after them, so precise matches never lose position.
-        if (!companyFallbackAnswered && disjunctiveFallback && bm25.Count < maxResults)
+        if (!scopedFallbackAnswered && disjunctiveFallback && bm25.Count < maxResults)
         {
             try
             {
@@ -236,10 +250,10 @@ public class HybridChunkSearcher
             return results;
         }
 
-        // The company-local fallback already returned proven full-text matches from a bounded
-        // ticker slice. Return them immediately instead of spending another statement budget on
+        // The scoped fallback already returned proven full-text matches from a bounded ticker or
+        // document slice. Return them immediately instead of spending another statement budget on
         // the index or semantic arms that just failed under the same load.
-        if (companyFallbackAnswered)
+        if (scopedFallbackAnswered)
         {
             return ApplyPoolControls(bm25, excludeTickers, documentTypes, maxResultsPerCompany)
                 .Take(maxResults)

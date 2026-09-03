@@ -16,7 +16,7 @@ public class ChunkRepository : BaseRepository<Chunk>
     // happily runs the chunk search for minutes after the aggregator has
     // already returned Empty, pinning the Npgsql connection (issue #1026).
     private const int HybridSearchCommandTimeoutSeconds = 5;
-    private const int CompanyFallbackCommandTimeoutSeconds = 3;
+    private const int ScopedFallbackCommandTimeoutSeconds = 3;
 
     public ChunkRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
@@ -155,15 +155,18 @@ public class ChunkRepository : BaseRepository<Chunk>
         }
     }
 
-    // Bounded degrade for a ticker-scoped search whose ParadeDB pass timed out. The ticker btree
-    // narrows this PostgreSQL full-text scan to one company's chunks before Content is parsed, so
-    // a cold or contended BM25 index can still return proven matches instead of a 500. This is not
-    // used for corpus-wide search: generating tsvectors over the whole Chunk table would recreate
-    // the same unbounded work the fallback is meant to avoid.
-    public virtual async Task<List<Chunk>> HybridSearchCompanyFallback(
+    // Bounded degrade for a SCOPED search whose ParadeDB pass timed out. A ticker or a document id
+    // narrows this PostgreSQL full-text scan to one bounded slice before Content is parsed - the
+    // Chunk ticker btree, or the unique DocumentId+Index btree - so a cold or contended BM25 index
+    // can still return proven matches instead of a 500. Document scope earns the same degrade as
+    // ticker scope and is strictly cheaper: one filing's chunks are a far smaller slice than a
+    // large filer's whole corpus. It is never used for an UNSCOPED search, because generating
+    // tsvectors over the whole Chunk table would recreate the very unbounded work this degrade
+    // exists to avoid - hence the refusal in BuildScopedFallbackQuery rather than a silent scan.
+    public virtual async Task<List<Chunk>> HybridSearchScopedFallback(
         string searchText,
         int maxResults,
-        string ticker,
+        string ticker = null,
         Guid? documentId = null,
         IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
@@ -172,10 +175,10 @@ public class ChunkRepository : BaseRepository<Chunk>
     )
     {
         var originalTimeout = DbContext.Database.GetCommandTimeout();
-        DbContext.Database.SetCommandTimeout(CompanyFallbackCommandTimeoutSeconds);
+        DbContext.Database.SetCommandTimeout(ScopedFallbackCommandTimeoutSeconds);
         try
         {
-            return await BuildCompanyFallbackQuery(
+            return await BuildScopedFallbackQuery(
                     searchText,
                     maxResults,
                     ticker,
@@ -192,27 +195,44 @@ public class ChunkRepository : BaseRepository<Chunk>
         }
     }
 
-    internal IQueryable<Chunk> BuildCompanyFallbackQuery(
+    internal IQueryable<Chunk> BuildScopedFallbackQuery(
         string searchText,
         int maxResults,
-        string ticker,
+        string ticker = null,
         Guid? documentId = null,
         IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
         DateOnly? endDate = null
     )
     {
-        var normalizedTicker = ticker.ToUpperInvariant();
-        var query = DbContext
-            .Set<Chunk>()
-            .Where(c => c.Ticker == normalizedTicker)
-            .Where(c =>
-                EF.Functions.ToTsVector("english", c.Content)
-                    .Matches(EF.Functions.WebSearchToTsQuery("english", searchText))
+        // The scope is the whole safety argument for this query, so an unscoped call is refused
+        // rather than served: without a ticker or a document id PostgreSQL would build tsvectors
+        // over every chunk in the corpus, which is the unbounded work the BM25 budget already
+        // failed on. Pinned by a unit test - a comment cannot enforce it.
+        if (string.IsNullOrWhiteSpace(ticker) && !documentId.HasValue)
+            throw new ArgumentException(
+                "The full-text fallback requires a ticker or a document id; an unscoped scan would "
+                    + "build tsvectors over the whole Chunk table.",
+                nameof(ticker)
             );
+
+        IQueryable<Chunk> query = DbContext.Set<Chunk>();
+
+        // Narrow to the scope FIRST so the btree cuts the row set before Content is parsed. Both
+        // filters apply when both are supplied; either alone is enough to bound the scan.
+        if (!string.IsNullOrWhiteSpace(ticker))
+        {
+            var normalizedTicker = ticker.ToUpperInvariant();
+            query = query.Where(c => c.Ticker == normalizedTicker);
+        }
 
         if (documentId.HasValue)
             query = query.Where(c => c.DocumentId == documentId.Value);
+
+        query = query.Where(c =>
+            EF.Functions.ToTsVector("english", c.Content)
+                .Matches(EF.Functions.WebSearchToTsQuery("english", searchText))
+        );
 
         if (documentTypes is { Count: > 0 })
         {

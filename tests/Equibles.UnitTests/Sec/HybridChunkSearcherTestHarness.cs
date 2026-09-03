@@ -54,14 +54,20 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
     private readonly List<Chunk> _conjunctiveResults;
     private readonly List<Chunk> _disjunctiveResults;
     private readonly List<Chunk> _allChunks;
-    private readonly List<Chunk> _companyFallbackResults;
-    private readonly Exception _companyFallbackError;
+    private readonly List<Chunk> _scopedFallbackResults;
+    private readonly Exception _scopedFallbackError;
 
     public List<int?> ConjunctiveBudgets { get; } = [];
 
     public List<int?> DisjunctiveBudgets { get; } = [];
 
-    public int CompanyFallbackCalls { get; private set; }
+    public int ScopedFallbackCalls { get; private set; }
+
+    // The scope the searcher handed the fallback, so a test can prove a document-scoped search
+    // degrades on its own document rather than silently widening to the whole corpus.
+    public string ScopedFallbackTicker { get; private set; }
+
+    public Guid? ScopedFallbackDocumentId { get; private set; }
 
     public TimeoutChunkRepository(
         bool conjunctiveTimesOut = false,
@@ -69,8 +75,8 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         Exception conjunctiveError = null,
         List<Chunk> conjunctiveResults = null,
         List<Chunk> disjunctiveResults = null,
-        List<Chunk> companyFallbackResults = null,
-        Exception companyFallbackError = null,
+        List<Chunk> scopedFallbackResults = null,
+        Exception scopedFallbackError = null,
         List<Chunk> allChunks = null
     )
         : base(null)
@@ -80,8 +86,8 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         _conjunctiveError = conjunctiveError;
         _conjunctiveResults = conjunctiveResults ?? [];
         _disjunctiveResults = disjunctiveResults ?? [];
-        _companyFallbackResults = companyFallbackResults ?? [];
-        _companyFallbackError = companyFallbackError;
+        _scopedFallbackResults = scopedFallbackResults ?? [];
+        _scopedFallbackError = scopedFallbackError;
         _allChunks = allChunks ?? [];
     }
 
@@ -110,10 +116,10 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         return Task.FromResult(conjunctive ? _conjunctiveResults : _disjunctiveResults);
     }
 
-    public override Task<List<Chunk>> HybridSearchCompanyFallback(
+    public override Task<List<Chunk>> HybridSearchScopedFallback(
         string searchText,
         int maxResults,
-        string ticker,
+        string ticker = null,
         Guid? documentId = null,
         IReadOnlyCollection<DocumentType> documentTypes = null,
         DateOnly? startDate = null,
@@ -121,10 +127,12 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         CancellationToken cancellationToken = default
     )
     {
-        CompanyFallbackCalls++;
-        if (_companyFallbackError != null)
-            throw _companyFallbackError;
-        return Task.FromResult(_companyFallbackResults);
+        ScopedFallbackCalls++;
+        ScopedFallbackTicker = ticker;
+        ScopedFallbackDocumentId = documentId;
+        if (_scopedFallbackError != null)
+            throw _scopedFallbackError;
+        return Task.FromResult(_scopedFallbackResults);
     }
 
     public override IQueryable<Chunk> GetAll() => new TestAsyncEnumerable<Chunk>(_allChunks);
