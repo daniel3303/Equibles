@@ -118,29 +118,22 @@ public class FundSeriesRepository : BaseRepository<FundSeries>
         var exactTicker = GetAll().Where(f => f.ClassTickers.Contains(normalized));
         var uniqueExactTicker = exactTicker.Where(_ => exactTicker.Count() == 1);
         var empty = GetAll().Where(_ => false);
-        return SearchTerms.WithExclusiveResolutionTiers(
-            uniqueExactTicker,
-            empty,
-            empty,
-            empty
-        );
+        return SearchTerms.WithExclusiveResolutionTiers(uniqueExactTicker, empty, empty, empty);
     }
 }
 
 internal static class FundSeriesSearchAliases
 {
-    private static readonly IReadOnlyDictionary<string, string> ClassTickerSeriesIds = new Dictionary<
-        string,
-        string
-    >(StringComparer.OrdinalIgnoreCase)
-    {
-        // These share classes belong to the same SEC series. N-PORT identifies the
-        // series, not every class ticker, so the directory row itself has no ticker.
-        ["voo"] = "S000002839",
-        ["vfiax"] = "S000002839",
-        ["vti"] = "S000002848",
-        ["vtsax"] = "S000002848",
-    };
+    private static readonly IReadOnlyDictionary<string, string> ClassTickerSeriesIds =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // These share classes belong to the same SEC series. N-PORT identifies the
+            // series, not every class ticker, so the directory row itself has no ticker.
+            ["voo"] = "S000002839",
+            ["vfiax"] = "S000002839",
+            ["vti"] = "S000002848",
+            ["vtsax"] = "S000002848",
+        };
 
     private static readonly IReadOnlyDictionary<string, string> NameSeriesIds = new Dictionary<
         string,

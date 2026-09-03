@@ -550,17 +550,19 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         listedAlias.Should().ContainSingle().Which.Should().Be("VANGUARD 500 INDEX FUND");
         slugIsNotAListedTicker.Should().BeEmpty();
 
-        db.Add(new FundSeries
-        {
-            LatestNportFilingId = Guid.NewGuid(),
-            IdentityKey = "rc:9999999999:S000099999",
-            Slug = "conflicting-voo-series-s000099999",
-            RegistrantCik = "9999999999",
-            SeriesId = "S000099999",
-            SeriesName = "CONFLICTING SERIES",
-            RegistrantName = "CONFLICTING REGISTRANT",
-            ClassTickers = ["VOO"],
-        });
+        db.Add(
+            new FundSeries
+            {
+                LatestNportFilingId = Guid.NewGuid(),
+                IdentityKey = "rc:9999999999:S000099999",
+                Slug = "conflicting-voo-series-s000099999",
+                RegistrantCik = "9999999999",
+                SeriesId = "S000099999",
+                SeriesName = "CONFLICTING SERIES",
+                RegistrantName = "CONFLICTING REGISTRANT",
+                ClassTickers = ["VOO"],
+            }
+        );
         await db.SaveChangesAsync();
 
         var ambiguous = await repository.ResolveListedClassTicker("VOO").ToListAsync();
@@ -601,23 +603,24 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             totalAssets: 2_100m
         );
         seed.Add(filing);
-        seed.Add(new FundSeries
-        {
-            LatestNportFilingId = filing.Id,
-            IdentityKey = "rc:0000102909:S000002848",
-            Slug = "vanguard-total-stock-market-index-fund-s000002848",
-            RegistrantCik = "0000102909",
-            SeriesId = "S000002848",
-            Ticker = null,
-            ClassTickers = ["VTI", "VTSAX"],
-            LatestReportPeriodDate = filing.ReportPeriodDate,
-            LatestFilingDate = filing.FilingDate,
-        });
+        seed.Add(
+            new FundSeries
+            {
+                LatestNportFilingId = filing.Id,
+                IdentityKey = "rc:0000102909:S000002848",
+                Slug = "vanguard-total-stock-market-index-fund-s000002848",
+                RegistrantCik = "0000102909",
+                SeriesId = "S000002848",
+                Ticker = null,
+                ClassTickers = ["VTI", "VTSAX"],
+                LatestReportPeriodDate = filing.ReportPeriodDate,
+                LatestFilingDate = filing.FilingDate,
+            }
+        );
         await seed.SaveChangesAsync();
 
-        await BuildService(returnsEmptyDirectory ? [] : null).RebuildAllAsync(
-            CancellationToken.None
-        );
+        await BuildService(returnsEmptyDirectory ? [] : null)
+            .RebuildAllAsync(CancellationToken.None);
 
         await using var read = FreshContext();
         var row = await read.Set<FundSeries>().SingleAsync();

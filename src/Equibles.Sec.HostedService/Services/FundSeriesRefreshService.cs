@@ -96,8 +96,7 @@ public class FundSeriesRefreshService
         if (!tickerDirectory.Available && rows.Count > 0)
         {
             var identityKeys = rows.Select(row => row.IdentityKey).ToList();
-            var seriesIds = rows
-                .Where(row => !string.IsNullOrEmpty(row.SeriesId))
+            var seriesIds = rows.Where(row => !string.IsNullOrEmpty(row.SeriesId))
                 .Select(row => row.SeriesId)
                 .Distinct()
                 .ToList();
@@ -120,11 +119,16 @@ public class FundSeriesRefreshService
                 .Where(row => !string.IsNullOrEmpty(row.SeriesId))
                 .GroupBy(row => row.SeriesId, StringComparer.OrdinalIgnoreCase)
                 .Where(group =>
-                    group.Select(row => TickerMetadataKey(row.Ticker, row.ClassTickers))
+                    group
+                        .Select(row => TickerMetadataKey(row.Ticker, row.ClassTickers))
                         .Distinct(StringComparer.Ordinal)
                         .Count() == 1
                 )
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.First(),
+                    StringComparer.OrdinalIgnoreCase
+                );
             foreach (var row in rows)
             {
                 if (!string.IsNullOrEmpty(row.SeriesId))
@@ -299,19 +303,19 @@ public class FundSeriesRefreshService
         var unambiguous = normalized
             .GroupBy(t => t.Symbol, StringComparer.OrdinalIgnoreCase)
             .Where(group =>
-                group.Select(t => t.SeriesId)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Count() == 1
+                group.Select(t => t.SeriesId).Distinct(StringComparer.OrdinalIgnoreCase).Count()
+                == 1
             )
             .SelectMany(group => group);
         return unambiguous
             .GroupBy(t => t.SeriesId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(t => t.Symbol)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(ticker => ticker, StringComparer.Ordinal)
-                    .ToList(),
+                g =>
+                    g.Select(t => t.Symbol)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(ticker => ticker, StringComparer.Ordinal)
+                        .ToList(),
                 StringComparer.OrdinalIgnoreCase
             );
     }
