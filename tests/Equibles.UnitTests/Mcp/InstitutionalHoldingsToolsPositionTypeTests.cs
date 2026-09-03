@@ -6,14 +6,14 @@ namespace Equibles.UnitTests.Mcp;
 
 public class InstitutionalHoldingsToolsPositionTypeTests
 {
-    private static string Describe(OptionType? optionType)
+    private static string Describe(OptionType? optionType, ShareType shareType = ShareType.Shares)
     {
         var method = typeof(InstitutionalHoldingsTools).GetMethod(
             "PositionType",
             BindingFlags.NonPublic | BindingFlags.Static
         );
         method.Should().NotBeNull("the portfolio tables label each line through this helper");
-        return (string)method.Invoke(null, [optionType]);
+        return (string)method.Invoke(null, [optionType, shareType]);
     }
 
     [Fact]
@@ -40,5 +40,11 @@ public class InstitutionalHoldingsToolsPositionTypeTests
         // reads as missing data, and the whole point of the column is that every line states what
         // it is.
         Describe(null).Should().Be("Common");
+    }
+
+    [Fact]
+    public void PositionType_PrincipalRow_SaysPrincipal()
+    {
+        Describe(null, ShareType.Principal).Should().Be("Principal");
     }
 }

@@ -66,5 +66,9 @@ public class InstitutionalHoldingsToolsRenderConsensusHoldingsTableCultureInvari
                 invariantOutput,
                 "MCP markdown output is consumed by LLMs trained on en-US conventions; the Combined ($M) :N1 cell follows CurrentCulture (de-DE swaps the thousand/decimal separators), forking the response by host locale — same bug class as the RenderOverlapTable, RenderInstitutionSummary and RenderSectorAllocationTable culture-invariance siblings"
             );
+        invariantOutput
+            .Should()
+            .Contain("Published values normally use report-date closing prices")
+            .And.Contain("can be zero when unavailable");
     }
 }

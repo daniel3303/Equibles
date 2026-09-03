@@ -44,9 +44,24 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
             Cik = "0001067983",
             Name = "Berkshire Hathaway Inc.",
         };
+        var principalHolder = new InstitutionalHolder
+        {
+            Cik = "0000000002",
+            Name = "Principal Reporter",
+        };
         DbContext.Add(stock);
         DbContext.Add(holder);
+        DbContext.Add(principalHolder);
         DbContext.Add(MakeHolding(stock, holder, new DateOnly(2024, 12, 31), shares: 1_234_567));
+        DbContext.Add(
+            MakeHolding(
+                stock,
+                principalHolder,
+                new DateOnly(2024, 12, 31),
+                shares: 2_000,
+                shareType: ShareType.Principal
+            )
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -81,15 +96,20 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
         // Numeric cells must render with en-US separators on every host locale:
         // Total Shares (:N0) and Total Value $M (:N1). de-DE would produce
         // 1.234.567 and 123,5.
-        output.Should().Contain("| 1,234,567 |");
-        output.Should().Contain("| 123.5 |");
+        output.Should().Contain("| 1,236,567 |");
+        output.Should().Contain("| 123.7 |");
+        output.Should().Contain("put/call notional-underlying rows");
+        output.Should().Contain("principal-denominated rows");
+        output.Should().Contain("rather than pure share ownership");
+        output.Should().Contain("Published values normally use report-date closing prices");
     }
 
     private static InstitutionalHolding MakeHolding(
         CommonStock stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
-        long shares
+        long shares,
+        ShareType shareType = ShareType.Shares
     ) =>
         new()
         {
@@ -99,7 +119,7 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
             ReportDate = reportDate,
             Shares = shares,
             Value = shares * 100,
-            ShareType = ShareType.Shares,
+            ShareType = shareType,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
             AccessionNumber = $"acc-{reportDate:yyyyMMdd}",
         };

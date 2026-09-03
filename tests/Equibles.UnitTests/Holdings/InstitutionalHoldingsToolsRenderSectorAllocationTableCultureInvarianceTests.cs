@@ -62,5 +62,9 @@ public class InstitutionalHoldingsToolsRenderSectorAllocationTableCultureInvaria
                 invariantOutput,
                 "MCP markdown output is consumed by LLMs trained on en-US conventions; the :N0 / :N1 / :F1 row cells without an explicit IFormatProvider follow CurrentCulture (de-DE → 1.234 / 12.345,7 / 42,3), forking the response by host locale — same bug class as the RenderInstitutionPortfolio, RenderTopHoldersTable and RenderInstitutionSummary culture-invariance siblings"
             );
+        invariantOutput
+            .Should()
+            .Contain("Published values normally use report-date closing prices")
+            .And.Contain("can be zero when unavailable");
     }
 }
