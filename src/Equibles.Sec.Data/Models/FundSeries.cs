@@ -80,6 +80,16 @@ public class FundSeries
     [MaxLength(16)]
     public string Ticker { get; set; }
 
+    /// <summary>
+    /// Every exact SEC fund-class ticker assigned to this series, normalized to dash-listed form.
+    /// A multi-class series has no single <see cref="Ticker"/> but retains all class tickers here.
+    /// </summary>
+    public List<string> ClassTickers
+    {
+        get => field ?? [];
+        set;
+    } = [];
+
     public DateOnly LatestReportPeriodDate { get; set; }
 
     public DateOnly LatestFilingDate { get; set; }

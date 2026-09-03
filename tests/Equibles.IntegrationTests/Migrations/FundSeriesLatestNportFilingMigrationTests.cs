@@ -97,7 +97,9 @@ public class FundSeriesLatestNportFilingMigrationTests : ParadeDbMcpTestBase
             DbContext.ChangeTracker.Clear();
 
             var references = await DbContext
-                .Set<FundSeries>()
+                .Database.SqlQueryRaw<FundSeriesReference>(
+                    """SELECT "IdentityKey", "LatestNportFilingId" FROM "FundSeries";"""
+                )
                 .ToDictionaryAsync(series => series.IdentityKey, series => series.LatestNportFilingId);
             references["cross"].Should().Be(crossPopulationHigher.Id);
             references["tracked-idless"].Should().Be(trackedIdlessHigher.Id);
@@ -108,6 +110,13 @@ public class FundSeriesLatestNportFilingMigrationTests : ParadeDbMcpTestBase
         {
             await migrator.MigrateAsync();
         }
+    }
+
+    public class FundSeriesReference
+    {
+        public virtual string IdentityKey { get; set; }
+
+        public virtual Guid LatestNportFilingId { get; set; }
     }
 
     private static CommonStock Stock(string ticker) =>

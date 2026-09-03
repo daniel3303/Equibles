@@ -58,7 +58,12 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<FormAdvAdviser>();
         builder.Entity<FormDFiling>();
         builder.Entity<FormDRelatedPerson>();
-        builder.Entity<FundSeries>();
+        builder.Entity<FundSeries>(b =>
+        {
+            b.HasIndex(e => e.ClassTickers)
+                .HasDatabaseName("IX_FundSeries_ClassTickers_Gin")
+                .HasMethod("gin");
+        });
         builder.Entity<NCenFiling>();
         builder.Entity<NCenServiceProvider>();
         builder.Entity<NportFiling>();

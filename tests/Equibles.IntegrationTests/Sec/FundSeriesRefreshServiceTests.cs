@@ -239,6 +239,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             .Should()
             .Equal($"cs:{trust.Id}:S000002277", $"cs:{trust.Id}:S000004310");
         rows.Select(s => s.Ticker).Should().Equal("IWM", "IVV");
+        rows.SelectMany(s => s.ClassTickers).Should().Equal("IWM", "IVV");
         rows.Select(s => s.Ticker).Should().NotContain(trust.Ticker);
         rows.Select(s => s.Slug).Should().OnlyHaveUniqueItems();
     }
@@ -522,6 +523,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
                 SeriesId = "S000002839",
                 SeriesName = "VANGUARD 500 INDEX FUND",
                 RegistrantName = "VANGUARD INDEX FUNDS",
+                ClassTickers = ["VOO", "VFIAX"],
             }
         );
         await db.SaveChangesAsync();
@@ -535,9 +537,97 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             .ResolveIdentifier("VOO")
             .Select(f => f.SeriesName)
             .ToListAsync();
+        var listedAlias = await repository
+            .ResolveListedClassTicker("voo")
+            .Select(f => f.SeriesName)
+            .ToListAsync();
+        var slugIsNotAListedTicker = await repository
+            .ResolveListedClassTicker("vanguard-500-index-fund-s000002839")
+            .ToListAsync();
 
         exact.Should().ContainSingle().Which.Should().Be("ISHARES CORE S&P 500 ETF");
         alias.Should().ContainSingle().Which.Should().Be("VANGUARD 500 INDEX FUND");
+        listedAlias.Should().ContainSingle().Which.Should().Be("VANGUARD 500 INDEX FUND");
+        slugIsNotAListedTicker.Should().BeEmpty();
+
+        db.Add(
+            new FundSeries
+            {
+                LatestNportFilingId = Guid.NewGuid(),
+                IdentityKey = "rc:9999999999:S000099999",
+                Slug = "conflicting-voo-series-s000099999",
+                RegistrantCik = "9999999999",
+                SeriesId = "S000099999",
+                SeriesName = "CONFLICTING SERIES",
+                RegistrantName = "CONFLICTING REGISTRANT",
+                ClassTickers = ["VOO"],
+            }
+        );
+        await db.SaveChangesAsync();
+
+        var ambiguous = await repository.ResolveListedClassTicker("VOO").ToListAsync();
+        ambiguous.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BuildSeriesTickerMap_RefusesSymbolsClaimedByMultipleSeries()
+    {
+        var map = FundSeriesRefreshService.BuildSeriesTickerMap([
+            new FundClassTicker { SeriesId = "S000000001", Symbol = "DUP" },
+            new FundClassTicker { SeriesId = "S000000002", Symbol = "DUP" },
+            new FundClassTicker { SeriesId = "S000000002", Symbol = "UNIQUE" },
+        ]);
+
+        map.Should().NotContainKey("S000000001");
+        map.Should().ContainKey("S000000002").WhoseValue.Should().Equal("UNIQUE");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RebuildAll_UnavailableClassTickerDirectory_PreservesStoredTickerMetadata(
+        bool returnsEmptyDirectory
+    )
+    {
+        await using var seed = FreshContext();
+        var trust = await SeedStock(seed, "VTI", "0000102909");
+        var filing = MakeFiling(
+            trust.Id,
+            null,
+            "0000102909-26-000001",
+            "S000002848",
+            "VANGUARD TOTAL STOCK MARKET INDEX FUND",
+            "VANGUARD INDEX FUNDS",
+            new DateOnly(2026, 3, 31),
+            netAssets: 2_000m,
+            totalAssets: 2_100m
+        );
+        seed.Add(filing);
+        seed.Add(
+            new FundSeries
+            {
+                LatestNportFilingId = filing.Id,
+                IdentityKey = "rc:0000102909:S000002848",
+                Slug = "vanguard-total-stock-market-index-fund-s000002848",
+                RegistrantCik = "0000102909",
+                SeriesId = "S000002848",
+                Ticker = null,
+                ClassTickers = ["VTI", "VTSAX"],
+                LatestReportPeriodDate = filing.ReportPeriodDate,
+                LatestFilingDate = filing.FilingDate,
+            }
+        );
+        await seed.SaveChangesAsync();
+
+        await BuildService(returnsEmptyDirectory ? [] : null)
+            .RebuildAllAsync(CancellationToken.None);
+
+        await using var read = FreshContext();
+        var row = await read.Set<FundSeries>().SingleAsync();
+        row.IdentityKey.Should().Be($"cs:{trust.Id}:S000002848");
+        row.ClassTickers.Should().Equal("VTI", "VTSAX");
+        row.Ticker.Should().BeNull();
+        row.NetAssets.Should().Be(2_000m);
     }
 
     private static async Task<CommonStock> SeedStock(
