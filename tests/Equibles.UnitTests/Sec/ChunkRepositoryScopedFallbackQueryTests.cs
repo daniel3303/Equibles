@@ -58,7 +58,9 @@ public class ChunkRepositoryScopedFallbackQueryTests
         sql.Should().Contain("websearch_to_tsquery");
         sql.Should().Contain("@documentId");
         sql.Should().Contain("\"DocumentId\" = @documentId");
-        sql.Should().NotContain("\"Ticker\"");
+        // Ticker is still SELECTed as a column; what must be absent is a ticker PREDICATE.
+        sql.Should().NotContain("\"Ticker\" =");
+        sql.Should().NotContain("@normalizedTicker");
         sql.Should().Contain("LIMIT");
     }
 
