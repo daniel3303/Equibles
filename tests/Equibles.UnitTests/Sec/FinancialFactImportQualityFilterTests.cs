@@ -129,6 +129,86 @@ public class FinancialFactImportQualityFilterTests
         result.Accepted.Should().ContainSingle().Which.Should().BeSameAs(tenK);
     }
 
+    // The RealReal shape (MCP feedback 4cbb4cd8): a PRELIMINARY proxy, whose form name
+    // DocumentType does not map, so it is stored as Other and shares the proxy's lowest
+    // source rank. It restated FY2025 net income with the sign flipped and a thousand-fold
+    // scale, which the scale rule cannot catch (it requires the candidate and the quarter
+    // sum to share a sign), and the derived-Q4 synthesis then picked it as the latest-filed
+    // annual and published a $41.76B TTM net income for a company that lost $41.8M.
+    [Fact]
+    public void Apply_UnmappedLowerPriorityFormSharesActualPeriodWithPeriodicFact_RejectsIt()
+    {
+        var tenK = Fact(
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 12, 31),
+            -41_799_000m,
+            DocumentType.TenK,
+            new DateOnly(2026, 2, 26),
+            "0001573221-26-000010"
+        );
+        var preliminaryProxy = Fact(
+            tenK.PeriodStart,
+            tenK.PeriodEnd,
+            41_799_000_000m,
+            DocumentType.Other,
+            new DateOnly(2026, 4, 15),
+            "0001573221-26-000026"
+        );
+
+        var result = FinancialFactImportQualityFilter.Apply([tenK, preliminaryProxy], ConceptIds);
+
+        result.Rejected.Should().ContainSingle().Which.Should().BeSameAs(preliminaryProxy);
+        result.Accepted.Should().ContainSingle().Which.Should().BeSameAs(tenK);
+    }
+
+    // An 8-K ranks ABOVE the proxy tier and states genuine interim figures, so it survives
+    // beside a periodic report — the rule rejects the lowest rank only.
+    [Fact]
+    public void Apply_CurrentReportSharesActualPeriodWithPeriodicFact_KeepsBoth()
+    {
+        var tenK = Fact(
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 12, 31),
+            1_000_000m,
+            DocumentType.TenK,
+            new DateOnly(2026, 2, 26),
+            "ten-k"
+        );
+        var eightK = Fact(
+            tenK.PeriodStart,
+            tenK.PeriodEnd,
+            1_000_000m,
+            DocumentType.EightK,
+            new DateOnly(2026, 1, 20),
+            "eight-k"
+        );
+
+        var result = FinancialFactImportQualityFilter.Apply([tenK, eightK], ConceptIds);
+
+        result.Rejected.Should().BeEmpty();
+        result.Accepted.Should().Equal(tenK, eightK);
+    }
+
+    // Nothing better exists for that period, so the only row stays selectable whatever its
+    // form — rejecting it would delete the company's only figure.
+    [Fact]
+    public void Apply_UnmappedLowerPriorityFormOnlyPeriod_KeepsAvailableFact()
+    {
+        var proxyOnly = Fact(
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 12, 31),
+            41_799_000_000m,
+            DocumentType.Other,
+            new DateOnly(2026, 4, 15),
+            "proxy-only"
+        );
+
+        var result = FinancialFactImportQualityFilter.Apply([proxyOnly], ConceptIds);
+
+        result.Rejected.Should().BeEmpty();
+        result.Accepted.Should().ContainSingle().Which.Should().BeSameAs(proxyOnly);
+    }
+
     [Fact]
     public void Apply_ProxyOnlyPeriod_KeepsAvailableFact()
     {
