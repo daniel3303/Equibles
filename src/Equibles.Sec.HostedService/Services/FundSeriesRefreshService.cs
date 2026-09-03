@@ -1,4 +1,5 @@
 using System.Text;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Core.AutoWiring;
 using Equibles.Data;
 using Equibles.Integrations.Sec.Contracts;
@@ -84,13 +85,65 @@ public class FundSeriesRefreshService
             .ToListAsync(cancellationToken);
 
         var fundTypeByStock = await LoadFundTypesByStock(dbContext, cancellationToken);
-        var tickerBySeries = await LoadSeriesTickers(scope.ServiceProvider, cancellationToken);
+        var tickerDirectory = await LoadSeriesTickers(scope.ServiceProvider, cancellationToken);
 
         var computedAt = DateTime.UtcNow;
         var rows = aggregates
             .Where(a => a.CommonStockId != null || !string.IsNullOrEmpty(a.RegistrantCik))
-            .Select(a => BuildRow(a, fundTypeByStock, tickerBySeries, computedAt))
+            .Select(a => BuildRow(a, fundTypeByStock, tickerDirectory.TickersBySeries, computedAt))
             .ToList();
+
+        if (!tickerDirectory.Available && rows.Count > 0)
+        {
+            var identityKeys = rows.Select(row => row.IdentityKey).ToList();
+            var seriesIds = rows
+                .Where(row => !string.IsNullOrEmpty(row.SeriesId))
+                .Select(row => row.SeriesId)
+                .Distinct()
+                .ToList();
+            var existingTickerMetadata = await dbContext
+                .Set<FundSeries>()
+                .Where(row =>
+                    identityKeys.Contains(row.IdentityKey)
+                    || (!string.IsNullOrEmpty(row.SeriesId) && seriesIds.Contains(row.SeriesId))
+                )
+                .Select(row => new
+                {
+                    row.IdentityKey,
+                    row.SeriesId,
+                    row.Ticker,
+                    row.ClassTickers,
+                })
+                .ToListAsync(cancellationToken);
+            var metadataByIdentity = existingTickerMetadata.ToDictionary(row => row.IdentityKey);
+            var metadataBySeries = existingTickerMetadata
+                .Where(row => !string.IsNullOrEmpty(row.SeriesId))
+                .GroupBy(row => row.SeriesId, StringComparer.OrdinalIgnoreCase)
+                .Where(group =>
+                    group.Select(row => TickerMetadataKey(row.Ticker, row.ClassTickers))
+                        .Distinct(StringComparer.Ordinal)
+                        .Count() == 1
+                )
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows)
+            {
+                if (!string.IsNullOrEmpty(row.SeriesId))
+                {
+                    if (metadataBySeries.TryGetValue(row.SeriesId, out var existingSeries))
+                    {
+                        row.Ticker = existingSeries.Ticker;
+                        row.ClassTickers = existingSeries.ClassTickers;
+                    }
+                    continue;
+                }
+
+                if (metadataByIdentity.TryGetValue(row.IdentityKey, out var existingIdentity))
+                {
+                    row.Ticker = existingIdentity.Ticker;
+                    row.ClassTickers = existingIdentity.ClassTickers;
+                }
+            }
+        }
 
         _logger.LogInformation("Rebuilding fund-series directory: {Count} series", rows.Count);
 
@@ -133,6 +186,7 @@ public class FundSeriesRefreshService
                             SeriesName = incoming.SeriesName,
                             RegistrantName = incoming.RegistrantName,
                             Ticker = incoming.Ticker,
+                            ClassTickers = incoming.ClassTickers,
                             LatestNportFilingId = incoming.LatestNportFilingId,
                             LatestReportPeriodDate = incoming.LatestReportPeriodDate,
                             LatestFilingDate = incoming.LatestFilingDate,
@@ -186,12 +240,10 @@ public class FundSeriesRefreshService
             );
     }
 
-    // Series → trading symbol from SEC's fund-class ticker directory, kept only where the series
-    // is unambiguous (exactly one distinct symbol across its share classes). ETFs — the funds a
-    // user looks up by ticker — have a single class, so they resolve; a multi-class mutual fund
-    // has no single ticker and honestly stays null. Best-effort: the directory being unreachable
-    // must never fail the rebuild, so a fetch error degrades to no enrichment.
-    private async Task<Dictionary<string, string>> LoadSeriesTickers(
+    // Series → every exact share-class symbol from SEC's fund-class ticker directory. Ticker keeps
+    // its historical single-symbol meaning; ClassTickers preserves multi-class ETF/mutual series.
+    // Best-effort: a directory fetch error degrades to no enrichment rather than failing rebuild.
+    private async Task<SeriesTickerDirectory> LoadSeriesTickers(
         IServiceProvider services,
         CancellationToken cancellationToken
     )
@@ -201,9 +253,24 @@ public class FundSeriesRefreshService
             var edgarClient = services.GetRequiredService<ISecEdgarClient>();
             var classTickers = await edgarClient.GetFundClassTickers();
             cancellationToken.ThrowIfCancellationRequested();
-            return BuildSeriesTickerMap(classTickers);
+            if (classTickers.Count == 0)
+            {
+                _logger.LogWarning(
+                    "Fund-class ticker directory was empty; preserving stored ticker metadata"
+                );
+                return new SeriesTickerDirectory([], false);
+            }
+            var tickerMap = BuildSeriesTickerMap(classTickers);
+            if (tickerMap.Count == 0)
+            {
+                _logger.LogWarning(
+                    "Fund-class ticker directory contained no unambiguous tickers; preserving stored ticker metadata"
+                );
+                return new SeriesTickerDirectory([], false);
+            }
+            return new SeriesTickerDirectory(tickerMap, true);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
@@ -213,26 +280,61 @@ public class FundSeriesRefreshService
                 ex,
                 "Fund-class ticker directory unavailable; rebuilding without ticker enrichment"
             );
-            return [];
+            return new SeriesTickerDirectory([], false);
         }
     }
 
-    internal static Dictionary<string, string> BuildSeriesTickerMap(
+    internal static Dictionary<string, List<string>> BuildSeriesTickerMap(
         List<FundClassTicker> classTickers
     )
     {
-        return classTickers
-            .GroupBy(t => t.SeriesId, StringComparer.OrdinalIgnoreCase)
-            .Where(g =>
-                g.Select(t => t.Symbol).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1
+        var normalized = classTickers
+            .Select(t => new
+            {
+                t.SeriesId,
+                Symbol = TickerNormalizer.NormalizeDashListed(t.Symbol),
+            })
+            .Where(t => t.Symbol != null && !string.IsNullOrWhiteSpace(t.SeriesId))
+            .ToList();
+        var unambiguous = normalized
+            .GroupBy(t => t.Symbol, StringComparer.OrdinalIgnoreCase)
+            .Where(group =>
+                group.Select(t => t.SeriesId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count() == 1
             )
-            .ToDictionary(g => g.Key, g => g.First().Symbol, StringComparer.OrdinalIgnoreCase);
+            .SelectMany(group => group);
+        return unambiguous
+            .GroupBy(t => t.SeriesId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(t => t.Symbol)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(ticker => ticker, StringComparer.Ordinal)
+                    .ToList(),
+                StringComparer.OrdinalIgnoreCase
+            );
+    }
+
+    private sealed record SeriesTickerDirectory(
+        Dictionary<string, List<string>> TickersBySeries,
+        bool Available
+    );
+
+    private static string TickerMetadataKey(string ticker, IEnumerable<string> classTickers)
+    {
+        var normalizedClasses = (classTickers ?? [])
+            .Select(TickerNormalizer.NormalizeDashListed)
+            .Where(value => value != null)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.Ordinal);
+        return $"{TickerNormalizer.NormalizeDashListed(ticker)}\0{string.Join('\0', normalizedClasses)}";
     }
 
     private static FundSeries BuildRow(
         FundSeriesAggregate a,
         Dictionary<Guid, string> fundTypeByStock,
-        Dictionary<string, string> tickerBySeries,
+        Dictionary<string, List<string>> tickersBySeries,
         DateTime computedAt
     )
     {
@@ -261,13 +363,18 @@ public class FundSeriesRefreshService
         // A series-bearing filing can share its issuer-feed stock with hundreds of sibling series,
         // so that stock's ticker is not series authority. SEC's fund-class directory is.
         string ticker = null;
+        List<string> classTickers = [];
         if (!string.IsNullOrEmpty(seriesId))
         {
-            tickerBySeries.TryGetValue(seriesId, out ticker);
+            tickersBySeries.TryGetValue(seriesId, out classTickers);
+            classTickers ??= [];
+            ticker = classTickers.Count == 1 ? classTickers[0] : null;
         }
         else if (isTracked)
         {
             ticker = a.Ticker;
+            var normalized = TickerNormalizer.NormalizeDashListed(a.Ticker);
+            classTickers = normalized == null ? [] : [normalized];
         }
 
         return new FundSeries
@@ -280,6 +387,7 @@ public class FundSeriesRefreshService
             SeriesName = a.SeriesName,
             RegistrantName = a.RegistrantName,
             Ticker = ticker,
+            ClassTickers = classTickers,
             LatestNportFilingId = a.LatestNportFilingId,
             LatestReportPeriodDate = a.LatestReportPeriodDate,
             LatestFilingDate = a.LatestFilingDate,

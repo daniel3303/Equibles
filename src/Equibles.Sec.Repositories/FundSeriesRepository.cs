@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.Data;
 using Equibles.Sec.Data.Models;
 
@@ -102,11 +103,33 @@ public class FundSeriesRepository : BaseRepository<FundSeries>
             empty
         );
     }
+
+    /// <summary>
+    /// Resolves only an exact stored series ticker or a verified SEC share-class ticker. This is
+    /// the listing-to-series boundary for ETF surfaces; unlike ResolveIdentifier it never accepts
+    /// a profile slug, series id, or descriptive search alias.
+    /// </summary>
+    public IQueryable<FundSeries> ResolveListedClassTicker(string ticker)
+    {
+        var normalized = TickerNormalizer.NormalizeDashListed(ticker);
+        if (normalized == null)
+            return GetAll().Where(_ => false);
+
+        var exactTicker = GetAll().Where(f => f.ClassTickers.Contains(normalized));
+        var uniqueExactTicker = exactTicker.Where(_ => exactTicker.Count() == 1);
+        var empty = GetAll().Where(_ => false);
+        return SearchTerms.WithExclusiveResolutionTiers(
+            uniqueExactTicker,
+            empty,
+            empty,
+            empty
+        );
+    }
 }
 
 internal static class FundSeriesSearchAliases
 {
-    private static readonly IReadOnlyDictionary<string, string> SeriesIds = new Dictionary<
+    private static readonly IReadOnlyDictionary<string, string> ClassTickerSeriesIds = new Dictionary<
         string,
         string
     >(StringComparer.OrdinalIgnoreCase)
@@ -115,12 +138,23 @@ internal static class FundSeriesSearchAliases
         // series, not every class ticker, so the directory row itself has no ticker.
         ["voo"] = "S000002839",
         ["vfiax"] = "S000002839",
-        ["vanguard 500"] = "S000002839",
         ["vti"] = "S000002848",
         ["vtsax"] = "S000002848",
+    };
+
+    private static readonly IReadOnlyDictionary<string, string> NameSeriesIds = new Dictionary<
+        string,
+        string
+    >(StringComparer.OrdinalIgnoreCase)
+    {
+        ["vanguard 500"] = "S000002839",
         ["vanguard total stock market"] = "S000002848",
     };
 
     public static string ResolveSeriesId(string query) =>
-        SeriesIds.GetValueOrDefault(SearchTerms.Normalize(query));
+        ResolveClassTickerSeriesId(query)
+        ?? NameSeriesIds.GetValueOrDefault(SearchTerms.Normalize(query));
+
+    public static string ResolveClassTickerSeriesId(string ticker) =>
+        ClassTickerSeriesIds.GetValueOrDefault(SearchTerms.Normalize(ticker));
 }
