@@ -29,7 +29,7 @@ public class CloneBacktestToolsFormatCandidatesTests
 
         result.Should().Contain("Example Capital (CIK 1234567");
         result.Should().Contain("latest 2026-03-31");
-        result.Should().Contain("reported AUM $12,345,678,900");
+        result.Should().Contain("tracked 13F value $12,345,678,900");
         result.Should().Contain("positions 321");
     }
 }

@@ -87,13 +87,14 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
 
         output.Should().Contain("Portfolio summary — **Big Fund LP** as of 2024-12-31");
         output.Should().Contain("vs prior quarter 2024-09-30");
-        output.Should().Contain("Reported AUM");
+        output.Should().Contain("Tracked 13F value");
         output.Should().Contain("# Positions");
         output.Should().Contain("Top 10 concentration");
         output.Should().Contain("Top 25 concentration");
         output.Should().Contain("QoQ turnover");
         output.Should().Contain("Quarters tracked");
         output.Should().Contain("_QoQ turnover = (");
+        output.Should().Contain("2 × tracked 13F value");
     }
 
     [Fact]
@@ -167,6 +168,8 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
         output.Should().Contain("'Bridgewater' is ambiguous in the tracked 13F filer set");
         output.Should().Contain("Bridgewater Associates, LP (CIK 00080002");
         output.Should().Contain("Bridgewater Adv. (CIK 00080001");
+        output.Should().Contain("tracked 13F value");
+        output.Should().NotContain("reported AUM");
         output.Should().Contain("Pass the intended SEC CIK");
     }
 
@@ -219,7 +222,7 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
 
         var output = await sut.GetInstitutionSummary("Crossfiling Capital");
 
-        output.Should().Contain("| Reported AUM | $1,000,000 |");
+        output.Should().Contain("| Tracked 13F value | $1,000,000 |");
         output.Should().Contain("| # Positions | 1 |");
         output.Should().NotContain("10,000,000");
     }
