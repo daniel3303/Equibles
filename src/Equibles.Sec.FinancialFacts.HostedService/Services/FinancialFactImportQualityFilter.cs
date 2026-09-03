@@ -11,6 +11,16 @@ namespace Equibles.Sec.FinancialFacts.HostedService.Services;
 /// the same actual period. Rejected natural keys are also deleted during a versioned replay so a
 /// bad value already in the store cannot remain selectable.
 /// </summary>
+/// <remarks>
+/// The lower-priority rule is keyed on the source RANK, not on a named form. It began as a
+/// DEF 14A rule, and the form that broke it was a PRE 14A: Company Facts states the form name
+/// verbatim, an unmapped name becomes <see cref="DocumentType.Other" />, and both land at the
+/// same lowest rank while only one was being rejected. RealReal's preliminary proxy restated
+/// five fiscal years of NetIncomeLoss with the sign flipped and a thousand-fold scale
+/// (FY2025: +41,799,000,000 against the 10-K's -41,799,000), which the scale rule cannot catch
+/// because it requires the candidate and the quarter sum to share a sign. Anything a periodic
+/// report already states for the exact same period adds nothing, so rank decides.
+/// </remarks>
 internal static class FinancialFactImportQualityFilter
 {
     private const int MinAnnualDays = 350;
@@ -21,6 +31,11 @@ internal static class FinancialFactImportQualityFilter
     private const decimal ScaleMatchTolerance = 0.05m;
     private const decimal MinimumScaledQuarterRatio = 0.1m;
     private const decimal MaximumScaledQuarterRatio = 10m;
+
+    // FinancialFactSourcePriority: periodic reports rank 0, 8-K/6-K rank 1, everything else
+    // (proxies, registration statements, prospectuses, and any form name Company Facts states
+    // that DocumentType does not map) ranks last.
+    private const int LowestSourceRank = 2;
 
     private static readonly decimal[] SuspectScaleFactors = [1_000m, 1_000_000m];
 
@@ -69,8 +84,12 @@ internal static class FinancialFactImportQualityFilter
             if (!period.Any(f => FinancialFactSourcePriority.Rank(f.Form) == 0))
                 continue;
 
-            foreach (var proxy in period.Where(f => f.Form == DocumentType.Def14A))
-                rejected.Add(proxy);
+            foreach (
+                var restatement in period.Where(f =>
+                    FinancialFactSourcePriority.Rank(f.Form) == LowestSourceRank
+                )
+            )
+                rejected.Add(restatement);
         }
 
         return new FilterResult(
