@@ -162,7 +162,7 @@ public class CloneBacktestTools
         string.Join(
             "; ",
             candidates.Select(c =>
-                $"{MarkdownTable.EscapeCell(c.Holder.Name, "—")} (CIK {c.Holder.Cik}, latest {FormatOptionalDate(c.LatestReportDate)}, reported AUM {FormatOptionalDollars(c.ReportedAum)}, positions {FormatOptionalCount(c.PositionCount)})"
+                $"{MarkdownTable.EscapeCell(c.Holder.Name, "—")} (CIK {c.Holder.Cik}, latest {FormatOptionalDate(c.LatestReportDate)}, tracked 13F value {FormatOptionalDollars(c.ReportedAum)}, positions {FormatOptionalCount(c.PositionCount)})"
             )
         );
 
@@ -224,7 +224,7 @@ public class CloneBacktestTools
             output.AppendLine();
             output.AppendLine(
                 $"Coverage: the clone tracks {FormatShare(coverage.AverageLongPercent)} of "
-                    + $"{holder.Name}'s reported 13F value on average across {coverage.QuartersMeasured} "
+                    + $"{holder.Name}'s published tracked 13F value on average across {coverage.QuartersMeasured} "
                     + $"quarter(s), and as little as {FormatShare(coverage.MinimumLongPercent)} in its "
                     + "thinnest quarter. The remainder is option positions, which a long-only clone "
                     + "cannot replicate and excludes."

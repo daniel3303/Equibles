@@ -119,6 +119,9 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         sellersSection.Should().Contain("-1,000");
         sellersSection.Should().Contain("-200");
         sellersSection.Should().NotContain("Steady Hands LP");
+        output.Should().Contain("Δ Position Value is the change in published position value");
+        output.Should().Contain("may fall back to filer values");
+        output.Should().NotContain("change in stored quarter-end position value");
     }
 
     [Fact]

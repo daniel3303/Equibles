@@ -14,7 +14,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionSummaryCultureInvariance
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-    // RenderInstitutionSummary builds the metric cells (Reported AUM :N0,
+    // RenderInstitutionSummary builds the metric cells (tracked 13F value :N0,
     // concentration / turnover :F1) with culture-implicit format specifiers
     // that resolve through the thread CurrentCulture. Same bug class as the
     // already-fixed RenderInstitutionPortfolio (GH-2597) and RenderTopHoldersTable

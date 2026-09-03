@@ -82,7 +82,7 @@ public class InstitutionalHoldingsToolsSearchTests : ParadeDbMcpTestBase
         output
             .Should()
             .Contain(
-                "| Institution | CIK | Latest Report | Reported AUM | Positions | City | State/Country |"
+                "| Institution | CIK | Latest Report | Tracked 13F Value | Positions | City | State/Country |"
             );
         output.Should().Contain("0001067983");
         output.Should().Contain("2026-03-31");
