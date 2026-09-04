@@ -494,12 +494,12 @@ public class FtdImportService
     /// and these rows were never collected on that pass.
     /// </para>
     /// </summary>
-    public async Task BackfillListedTickerCusips(CancellationToken cancellationToken)
+    public async Task<bool> BackfillListedTickerCusips(CancellationToken cancellationToken)
     {
         var fileNames = await NextSweepFiles(ListedCusipSweepCursorName);
         if (fileNames.Count == 0)
         {
-            return;
+            return false;
         }
 
         var primaryMap = await BuildTickerMap(cancellationToken);
@@ -510,12 +510,13 @@ public class FtdImportService
             // advance: consuming the archive now would permanently skip these files' rows,
             // and the frontier has no reset path. Wedging is already prevented per-file by
             // the download catch below; this state clears itself once stocks exist.
-            return;
+            return false;
         }
 
         var strippedAliases = BuildStrippedSecondaryAliases(secondaryMap, primaryMap);
         // stockId → (listedTicker → cusips seen for it)
         var byStock = new Dictionary<Guid, Dictionary<string, HashSet<string>>>();
+        string lastCompletedFile = null;
 
         foreach (var fileName in fileNames)
         {
@@ -555,21 +556,33 @@ public class FtdImportService
                     }
                     cusips.Add(record.Cusip);
                 }
+                lastCompletedFile = fileName;
+            }
+            catch (HttpRequestException ex)
+                when (ex.StatusCode == System.Net.HttpStatusCode.NotFound
+                    && !IsRecentFtdFile(fileName)
+                )
+            {
+                _logger.LogWarning(
+                    "Listed-CUSIP sweep: archive file {File} is unavailable (404), advancing",
+                    fileName
+                );
+                lastCompletedFile = fileName;
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidDataException)
             {
-                // A missing archive file costs coverage for that fortnight only; the
-                // frontier still advances so the sweep cannot wedge on one bad file.
                 _logger.LogWarning(
                     ex,
-                    "Listed-CUSIP sweep: failed to download {File}, skipping",
+                    "Listed-CUSIP sweep: failed to process {File}; retrying from this file",
                     fileName
                 );
+                break;
             }
         }
 
         var recorded = await RecordListedCusips(byStock, cancellationToken);
-        await AdvanceSweepFrontier(ListedCusipSweepCursorName, fileNames[^1]);
+        if (lastCompletedFile != null)
+            await AdvanceSweepFrontier(ListedCusipSweepCursorName, lastCompletedFile);
 
         if (recorded > 0)
         {
@@ -579,6 +592,8 @@ public class FtdImportService
                 fileNames.Count
             );
         }
+
+        return SweepHasBacklog(fileNames, lastCompletedFile);
     }
 
     /// <summary>
@@ -586,15 +601,15 @@ public class FtdImportService
     /// primary tickers, so a schema backfill cannot recover secondary ETF rows that were skipped.
     /// A durable oldest-first frontier makes the repair bounded and restart-safe.
     /// </summary>
-    public async Task BackfillListedRecords(CancellationToken cancellationToken)
+    public async Task<bool> BackfillListedRecords(CancellationToken cancellationToken)
     {
         var fileNames = await NextSweepFiles(ListedRecordSweepCursorName);
         if (fileNames.Count == 0)
-            return;
+            return false;
 
         var tickerMap = await BuildListedTickerMap(cancellationToken);
         if (tickerMap.Count == 0)
-            return;
+            return false;
 
         string lastCompletedFile = null;
         foreach (var fileName in fileNames)
@@ -630,6 +645,8 @@ public class FtdImportService
 
         if (lastCompletedFile != null)
             await AdvanceSweepFrontier(ListedRecordSweepCursorName, lastCompletedFile);
+
+        return SweepHasBacklog(fileNames, lastCompletedFile);
     }
 
     private async Task<int> RecordListedCusips(
@@ -1210,18 +1227,22 @@ public class FtdImportService
         return $"cnsfails{frontier:yyyyMM}{half}.zip";
     }
 
+    internal static bool SweepHasBacklog(IReadOnlyList<string> requested, string lastCompleted) =>
+        !string.Equals(requested[^1], lastCompleted, StringComparison.Ordinal)
+        || requested.Count == AliasSweepFilesPerCycle;
+
     private const string AliasSweepCursorName = "Ftd.RetiredCusipSweep";
 
     private const string InactiveCusipSweepCursorName = "Ftd.InactiveCusipSweep";
 
-    // Separate cursor: the alias sweep's frontier has already consumed the archive on
-    // long-running deployments, and listed-CUSIP rows were never collected on that pass.
-    private const string ListedCusipSweepCursorName = "Ftd.ListedCusipSweep";
+    // V2 deliberately replays the archive once: V1 advanced before authoritative ETF
+    // secondary tickers existed, permanently skipping those listings' historical CUSIPs.
+    internal const string ListedCusipSweepCursorName = "Ftd.ListedCusipSweepV2";
     private const string ListedRecordSweepCursorName = "Ftd.ListedRecordSweepV1";
 
-    // Twelve fortnightly files ≈ six months of archive per daily cycle, so the whole
-    // 2017→today range is swept in about a fortnight of cycles without ever making the
-    // FTD worker's run long.
+    // Twelve fortnightly files ≈ six months per bounded cycle. The worker requests a
+    // short continuation while a full batch remains, yielding between bursts instead of
+    // monopolizing the shared SEC budget or sleeping a day with a repair outstanding.
     private const int AliasSweepFilesPerCycle = 12;
 
     private sealed record LiveIdentityEvidence(

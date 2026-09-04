@@ -11,6 +11,30 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class FtdImportServiceAliasSweepCursorTests
 {
+    [Fact]
+    public void ListedCusipSweepUsesPostEtfIdentityCursor()
+    {
+        // V1 reached the live frontier before FundSeries secondary tickers were authoritative.
+        // Reusing it would leave historical ETF CUSIPs permanently undiscovered in production.
+        FtdImportService.ListedCusipSweepCursorName.Should().Be("Ftd.ListedCusipSweepV2");
+    }
+
+    [Theory]
+    [InlineData(12, true, true)]
+    [InlineData(4, true, false)]
+    [InlineData(4, false, true)]
+    public void SweepContinuationReflectsBothBatchSizeAndPartialFailure(
+        int fileCount,
+        bool completedLast,
+        bool expected
+    )
+    {
+        var files = Enumerable.Range(0, fileCount).Select(i => $"file-{i}").ToList();
+        var lastCompleted = completedLast ? files[^1] : null;
+
+        FtdImportService.SweepHasBacklog(files, lastCompleted).Should().Be(expected);
+    }
+
     [Theory]
     [InlineData("cnsfails201706b.zip")]
     [InlineData("cnsfails202212a.zip")]
