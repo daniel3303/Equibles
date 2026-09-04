@@ -248,9 +248,11 @@ public class ShortVolumeImportService
             UpsertVolume(repo, existing, volume);
 
         var stale = existing
-            .Values.Where(volume => collisionOnlyListings.Contains(
-                new ListedSecurityKey(volume.CommonStockId, volume.ListedTicker)
-            ))
+            .Values.Where(volume =>
+                collisionOnlyListings.Contains(
+                    new ListedSecurityKey(volume.CommonStockId, volume.ListedTicker)
+                )
+            )
             .ToList();
         if (stale.Count > 0)
         {
@@ -366,7 +368,8 @@ public class ShortVolumeImportService
 
             if (!aggregated.TryGetValue(listing, out var volume))
             {
-                volume = new DailyShortVolume {
+                volume = new DailyShortVolume
+                {
                     CommonStockId = listing.CommonStockId,
                     ListedTicker = listing.ListedTicker,
                     Date = currentDate,

@@ -1,6 +1,6 @@
 using Equibles.CommonStocks.Data;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Data;
 using Equibles.IntegrationTests.Helpers;
@@ -253,9 +253,11 @@ public class TickerMapServiceTests : IDisposable
 
         var result = await _service.BuildListed(["VOO"], CancellationToken.None);
 
-        result.Should().ContainSingle().Which.Should().Be(
-            new KeyValuePair<string, ListedSecurityKey>("VOO", new(trust.Id, "VOO"))
-        );
+        result
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new KeyValuePair<string, ListedSecurityKey>("VOO", new(trust.Id, "VOO")));
     }
 
     [Fact]
@@ -279,12 +281,14 @@ public class TickerMapServiceTests : IDisposable
         var stock = CreateStock("BRK-B", "Berkshire Hathaway");
         stock.ReferenceTickers = ["BRK.B"];
         await SeedStocks(stock);
-        _stockRepo.AddDelistedListing(new CommonStockDelistedListing
-        {
-            CommonStockId = stock.Id,
-            ListedTicker = "BRK.B",
-            DelistedOn = new DateOnly(2026, 1, 1),
-        });
+        _stockRepo.AddDelistedListing(
+            new CommonStockDelistedListing
+            {
+                CommonStockId = stock.Id,
+                ListedTicker = "BRK.B",
+                DelistedOn = new DateOnly(2026, 1, 1),
+            }
+        );
         await _stockRepo.SaveChanges();
 
         var result = await _service.BuildListed(null, CancellationToken.None);
@@ -299,12 +303,14 @@ public class TickerMapServiceTests : IDisposable
         var trust = CreateStock("OLD", "Trust With Active Series");
         trust.ReferenceTickers = ["LIVEETF"];
         await SeedStocks(trust);
-        _stockRepo.AddDelistedListing(new CommonStockDelistedListing
-        {
-            CommonStockId = trust.Id,
-            ListedTicker = trust.Ticker,
-            DelistedOn = new DateOnly(2026, 1, 1),
-        });
+        _stockRepo.AddDelistedListing(
+            new CommonStockDelistedListing
+            {
+                CommonStockId = trust.Id,
+                ListedTicker = trust.Ticker,
+                DelistedOn = new DateOnly(2026, 1, 1),
+            }
+        );
         await _stockRepo.SaveChanges();
 
         var result = await _service.BuildListed(null, CancellationToken.None);

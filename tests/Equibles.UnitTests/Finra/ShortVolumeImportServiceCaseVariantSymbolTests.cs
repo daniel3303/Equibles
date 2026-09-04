@@ -30,7 +30,10 @@ public class ShortVolumeImportServiceCaseVariantSymbolTests
     {
         var stockId = Guid.NewGuid();
         var security = new ListedSecurityKey(stockId, "TPC");
-        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal) { ["TPC"] = security };
+        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        {
+            ["TPC"] = security,
+        };
         var records = new List<ShortVolumeRecord>
         {
             new()
@@ -65,7 +68,10 @@ public class ShortVolumeImportServiceCaseVariantSymbolTests
         // corrupt row must be deleted rather than left behind.
         var stockId = Guid.NewGuid();
         var security = new ListedSecurityKey(stockId, "TPC");
-        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal) { ["TPC"] = security };
+        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        {
+            ["TPC"] = security,
+        };
         var records = new List<ShortVolumeRecord>
         {
             new() { Symbol = "TpC", ShortVolume = 5_000 },
@@ -74,7 +80,9 @@ public class ShortVolumeImportServiceCaseVariantSymbolTests
             (Dictionary<ListedSecurityKey, DailyShortVolume>)
                 Aggregate.Invoke(null, [records, tickerMap, new DateOnly(2026, 8, 4)]);
 
-        var result = (HashSet<ListedSecurityKey>)CollisionOnly.Invoke(null, [records, tickerMap, aggregated]);
+        var result =
+            (HashSet<ListedSecurityKey>)
+                CollisionOnly.Invoke(null, [records, tickerMap, aggregated]);
 
         result.Should().ContainSingle().Which.Should().Be(security);
     }
@@ -85,8 +93,9 @@ public class ShortVolumeImportServiceCaseVariantSymbolTests
         // The common stock traded that day: the ordinal re-import overwrites the stored
         // row with the correct TPC-only figures, so nothing may be deleted.
         var stockId = Guid.NewGuid();
-        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal) {
-            ["TPC"] = new(stockId, "TPC")
+        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        {
+            ["TPC"] = new(stockId, "TPC"),
         };
         var records = new List<ShortVolumeRecord>
         {
@@ -97,7 +106,9 @@ public class ShortVolumeImportServiceCaseVariantSymbolTests
             (Dictionary<ListedSecurityKey, DailyShortVolume>)
                 Aggregate.Invoke(null, [records, tickerMap, new DateOnly(2026, 8, 4)]);
 
-        var result = (HashSet<ListedSecurityKey>)CollisionOnly.Invoke(null, [records, tickerMap, aggregated]);
+        var result =
+            (HashSet<ListedSecurityKey>)
+                CollisionOnly.Invoke(null, [records, tickerMap, aggregated]);
 
         result.Should().BeEmpty();
     }
@@ -110,8 +121,9 @@ public class ShortVolumeImportServiceCaseVariantSymbolTests
         // whose exact symbol is in the file but produced no aggregate must still be protected
         // from deletion — its absence is a filter decision, not a case-fold artifact.
         var stockId = Guid.NewGuid();
-        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal) {
-            ["TPC"] = new(stockId, "TPC")
+        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        {
+            ["TPC"] = new(stockId, "TPC"),
         };
         var records = new List<ShortVolumeRecord>
         {
@@ -121,7 +133,8 @@ public class ShortVolumeImportServiceCaseVariantSymbolTests
         var emptyAggregate = new Dictionary<ListedSecurityKey, DailyShortVolume>();
 
         var result =
-            (HashSet<ListedSecurityKey>)CollisionOnly.Invoke(null, [records, tickerMap, emptyAggregate]);
+            (HashSet<ListedSecurityKey>)
+                CollisionOnly.Invoke(null, [records, tickerMap, emptyAggregate]);
 
         result.Should().BeEmpty();
     }
@@ -134,8 +147,9 @@ public class ShortVolumeImportServiceCaseVariantSymbolTests
         // day — flagging it would delete its rows daily. Confine deletion to the
         // all-uppercase population the case-fold could actually have corrupted.
         var stockId = Guid.NewGuid();
-        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal) {
-            ["TpC"] = new(stockId, "TpC")
+        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        {
+            ["TpC"] = new(stockId, "TpC"),
         };
         var records = new List<ShortVolumeRecord>
         {
@@ -145,7 +159,9 @@ public class ShortVolumeImportServiceCaseVariantSymbolTests
             (Dictionary<ListedSecurityKey, DailyShortVolume>)
                 Aggregate.Invoke(null, [records, tickerMap, new DateOnly(2026, 8, 4)]);
 
-        var result = (HashSet<ListedSecurityKey>)CollisionOnly.Invoke(null, [records, tickerMap, aggregated]);
+        var result =
+            (HashSet<ListedSecurityKey>)
+                CollisionOnly.Invoke(null, [records, tickerMap, aggregated]);
 
         result.Should().BeEmpty();
     }
@@ -167,7 +183,9 @@ public class ShortVolumeImportServiceCaseVariantSymbolTests
             (Dictionary<ListedSecurityKey, DailyShortVolume>)
                 Aggregate.Invoke(null, [records, tickerMap, new DateOnly(2026, 8, 4)]);
 
-        var result = (HashSet<ListedSecurityKey>)CollisionOnly.Invoke(null, [records, tickerMap, aggregated]);
+        var result =
+            (HashSet<ListedSecurityKey>)
+                CollisionOnly.Invoke(null, [records, tickerMap, aggregated]);
 
         result.Should().BeEmpty();
     }

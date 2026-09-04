@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Finra.Data.Models;

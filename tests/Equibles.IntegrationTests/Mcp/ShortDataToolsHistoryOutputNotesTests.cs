@@ -239,23 +239,24 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
             previous: 500_000,
             change: 5_000_000
         );
-        DbContext.Set<StockSplit>().Add(new StockSplit
-        {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
-            PriceSeriesTicker = stock.Ticker,
-            EffectiveDate = new DateOnly(2026, 3, 1),
-            Numerator = 10m,
-            Denominator = 1m,
-            Source = StockSplitSource.Manual,
-        });
+        DbContext
+            .Set<StockSplit>()
+            .Add(
+                new StockSplit
+                {
+                    CommonStock = stock,
+                    CommonStockId = stock.Id,
+                    PriceSeriesTicker = stock.Ticker,
+                    EffectiveDate = new DateOnly(2026, 3, 1),
+                    Numerator = 10m,
+                    Denominator = 1m,
+                    Source = StockSplitSource.Manual,
+                }
+            );
         await DbContext.SaveChangesAsync();
 
-        var result = await Sut().GetShortInterest(
-            "GME",
-            startDate: "2026-03-13",
-            endDate: "2026-03-13"
-        );
+        var result = await Sut()
+            .GetShortInterest("GME", startDate: "2026-03-13", endDate: "2026-03-13");
 
         result.Should().Contain("+500,000");
         result.Should().NotContain("+5,000,000");

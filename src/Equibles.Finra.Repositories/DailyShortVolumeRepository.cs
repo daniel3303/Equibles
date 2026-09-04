@@ -12,11 +12,12 @@ public class DailyShortVolumeRepository : BaseRepository<DailyShortVolume>
 
     public IQueryable<DailyShortVolume> GetByStock(CommonStock stock, DateOnly date)
     {
-        return GetAll().Where(d =>
-            d.CommonStockId == stock.Id
-            && (d.ListedTicker == stock.Ticker || d.ListedTicker == "")
-            && d.Date == date
-        );
+        return GetAll()
+            .Where(d =>
+                d.CommonStockId == stock.Id
+                && (d.ListedTicker == stock.Ticker || d.ListedTicker == "")
+                && d.Date == date
+            );
     }
 
     public IQueryable<DailyShortVolume> GetByListing(
@@ -25,29 +26,40 @@ public class DailyShortVolumeRepository : BaseRepository<DailyShortVolume>
         DateOnly date
     )
     {
-        var isPrimary = string.Equals(listedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase);
-        return GetAll().Where(d =>
-            d.CommonStockId == stock.Id
-            && (d.ListedTicker == listedTicker || (isPrimary && d.ListedTicker == ""))
-            && d.Date == date
+        var isPrimary = string.Equals(
+            listedTicker,
+            stock.Ticker,
+            StringComparison.OrdinalIgnoreCase
         );
+        return GetAll()
+            .Where(d =>
+                d.CommonStockId == stock.Id
+                && (d.ListedTicker == listedTicker || (isPrimary && d.ListedTicker == ""))
+                && d.Date == date
+            );
     }
 
     public IQueryable<DailyShortVolume> GetHistoryByStock(CommonStock stock)
     {
-        return GetAll().Where(d =>
-            d.CommonStockId == stock.Id
-            && (d.ListedTicker == stock.Ticker || d.ListedTicker == "")
-        );
+        return GetAll()
+            .Where(d =>
+                d.CommonStockId == stock.Id
+                && (d.ListedTicker == stock.Ticker || d.ListedTicker == "")
+            );
     }
 
     public IQueryable<DailyShortVolume> GetHistoryByListing(CommonStock stock, string listedTicker)
     {
-        var isPrimary = string.Equals(listedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase);
-        return GetAll().Where(d =>
-            d.CommonStockId == stock.Id
-            && (d.ListedTicker == listedTicker || (isPrimary && d.ListedTicker == ""))
+        var isPrimary = string.Equals(
+            listedTicker,
+            stock.Ticker,
+            StringComparison.OrdinalIgnoreCase
         );
+        return GetAll()
+            .Where(d =>
+                d.CommonStockId == stock.Id
+                && (d.ListedTicker == listedTicker || (isPrimary && d.ListedTicker == ""))
+            );
     }
 
     public IQueryable<DateOnly> GetLatestDate()

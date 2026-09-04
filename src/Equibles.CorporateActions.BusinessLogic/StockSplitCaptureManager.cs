@@ -73,7 +73,8 @@ public class StockSplitCaptureManager
             );
             match ??= isPrimary
                 ? existing.FirstOrDefault(s =>
-                    s.EffectiveDate == split.EffectiveDate && s.PriceSeriesTicker == null)
+                    s.EffectiveDate == split.EffectiveDate && s.PriceSeriesTicker == null
+                )
                 : null;
             if (match == null)
             {

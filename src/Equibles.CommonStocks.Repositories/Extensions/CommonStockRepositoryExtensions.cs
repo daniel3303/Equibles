@@ -16,50 +16,64 @@ public static class CommonStockRepositoryExtensions
         CancellationToken cancellationToken = default
     )
     {
-        var stocks = await repository.GetAll()
-            .Select(stock => new { stock.Id, stock.Ticker, stock.ReferenceTickers })
+        var stocks = await repository
+            .GetAll()
+            .Select(stock => new
+            {
+                stock.Id,
+                stock.Ticker,
+                stock.ReferenceTickers,
+            })
             .ToListAsync(cancellationToken);
         var stockIds = stocks.Select(stock => stock.Id).ToList();
-        var delistedRows = await repository.GetDelistedListings()
+        var delistedRows = await repository
+            .GetDelistedListings()
             .Where(listing => stockIds.Contains(listing.CommonStockId))
-            .Select(listing => new ListedSecurityKey(
-                listing.CommonStockId,
-                listing.ListedTicker
-            ))
+            .Select(listing => new ListedSecurityKey(listing.CommonStockId, listing.ListedTicker))
             .ToListAsync(cancellationToken);
         var primaryByStock = stocks.ToDictionary(stock => stock.Id, stock => stock.Ticker);
-        var delisted = delistedRows.Select(listing =>
-        {
-            var primary = primaryByStock.GetValueOrDefault(listing.CommonStockId);
-            var listedTicker = primary != null
-                && string.Equals(
-                    TickerNormalizer.NormalizeDashListed(listing.ListedTicker),
-                    TickerNormalizer.NormalizeDashListed(primary),
-                    StringComparison.OrdinalIgnoreCase
-                )
-                    ? primary
-                    : listing.ListedTicker;
-            return new ListedSecurityKey(listing.CommonStockId, listedTicker);
-        }).ToHashSet();
+        var delisted = delistedRows
+            .Select(listing =>
+            {
+                var primary = primaryByStock.GetValueOrDefault(listing.CommonStockId);
+                var listedTicker =
+                    primary != null
+                    && string.Equals(
+                        TickerNormalizer.NormalizeDashListed(listing.ListedTicker),
+                        TickerNormalizer.NormalizeDashListed(primary),
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                        ? primary
+                        : listing.ListedTicker;
+                return new ListedSecurityKey(listing.CommonStockId, listedTicker);
+            })
+            .ToHashSet();
 
         return stocks
-            .SelectMany(stock => new[] { stock.Ticker }.Concat(stock.ReferenceTickers ?? [])
-                .Where(ticker => !string.IsNullOrWhiteSpace(ticker))
-                .Distinct(StringComparer.Ordinal)
-                .Select(ticker => new KeyValuePair<string, ListedSecurityKey>(
-                    ticker,
-                    new ListedSecurityKey(
-                        stock.Id,
-                        string.Equals(
-                            TickerNormalizer.NormalizeDashListed(ticker),
-                            TickerNormalizer.NormalizeDashListed(stock.Ticker),
-                            StringComparison.OrdinalIgnoreCase
-                        ) ? stock.Ticker : ticker
-                    )
-                )))
+            .SelectMany(stock =>
+                new[] { stock.Ticker }
+                    .Concat(stock.ReferenceTickers ?? [])
+                    .Where(ticker => !string.IsNullOrWhiteSpace(ticker))
+                    .Distinct(StringComparer.Ordinal)
+                    .Select(ticker => new KeyValuePair<string, ListedSecurityKey>(
+                        ticker,
+                        new ListedSecurityKey(
+                            stock.Id,
+                            string.Equals(
+                                TickerNormalizer.NormalizeDashListed(ticker),
+                                TickerNormalizer.NormalizeDashListed(stock.Ticker),
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                                ? stock.Ticker
+                                : ticker
+                        )
+                    ))
+            )
             .Where(claim => !delisted.Contains(claim.Value))
             .GroupBy(claim => claim.Key, StringComparer.Ordinal)
-            .Where(group => group.Select(claim => claim.Value.CommonStockId).Distinct().Count() == 1)
+            .Where(group =>
+                group.Select(claim => claim.Value.CommonStockId).Distinct().Count() == 1
+            )
             .SelectMany(group => group.Select(claim => claim.Value))
             .ToHashSet();
     }
@@ -79,12 +93,19 @@ public static class CommonStockRepositoryExtensions
             .ToList();
         var literal = candidates[0];
         var folded = candidates.Count > 1 ? candidates[1] : literal;
-        var authoritativeOwners = await repository.GetAll()
-            .Where(candidate => candidate.Ticker == literal
+        var authoritativeOwners = await repository
+            .GetAll()
+            .Where(candidate =>
+                candidate.Ticker == literal
                 || candidate.Ticker == folded
-                || (candidate.Active
-                    && (candidate.ReferenceTickers.Contains(literal)
-                        || candidate.ReferenceTickers.Contains(folded))))
+                || (
+                    candidate.Active
+                    && (
+                        candidate.ReferenceTickers.Contains(literal)
+                        || candidate.ReferenceTickers.Contains(folded)
+                    )
+                )
+            )
             .Take(2)
             .ToListAsync();
         if (authoritativeOwners.Select(candidate => candidate.Id).Distinct().Count() > 1)

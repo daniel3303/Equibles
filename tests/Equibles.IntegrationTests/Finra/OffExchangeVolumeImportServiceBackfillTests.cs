@@ -160,11 +160,10 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        _partitionRepo.GetPartition(
-            "off-exchange-weekly-v4",
-            ResolveListingUniverse(apple),
-            week
-        ).Should().BeEmpty();
+        _partitionRepo
+            .GetPartition("off-exchange-weekly-v4", ResolveListingUniverse(apple), week)
+            .Should()
+            .BeEmpty();
         _volumeRepo.GetByWeek(week).Should().BeEmpty();
 
         await _service.Import(CancellationToken.None);
@@ -172,11 +171,10 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
         var row = _volumeRepo.GetByWeek(week).Single(v => v.CommonStockId == apple.Id);
         row.AtsVolume.Should().Be(5_000);
         row.NonAtsOtcVolume.Should().Be(3_000);
-        _partitionRepo.GetPartition(
-            "off-exchange-weekly-v4",
-            ResolveListingUniverse(apple),
-            week
-        ).Should().ContainSingle();
+        _partitionRepo
+            .GetPartition("off-exchange-weekly-v4", ResolveListingUniverse(apple), week)
+            .Should()
+            .ContainSingle();
 
         _finraClient.ClearReceivedCalls();
         await _service.Import(CancellationToken.None);

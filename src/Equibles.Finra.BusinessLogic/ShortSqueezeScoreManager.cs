@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data;
@@ -263,8 +263,10 @@ public class ShortSqueezeScoreManager
         var splitsByStock = (
             await _stockSplitRepository
                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                .Where(s => stockIds.Contains(s.CommonStockId)
-                    && (s.PriceSeriesTicker == null || s.PriceSeriesTicker == s.CommonStock.Ticker))
+                .Where(s =>
+                    stockIds.Contains(s.CommonStockId)
+                    && (s.PriceSeriesTicker == null || s.PriceSeriesTicker == s.CommonStock.Ticker)
+                )
                 .ToListAsync(cancellationToken)
         )
             .GroupBy(s => s.CommonStockId)

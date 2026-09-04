@@ -2,8 +2,8 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.CorporateActions.Data;
@@ -154,24 +154,26 @@ public class InstitutionalHoldingsTools
                     stock.Ticker,
                     StringComparison.OrdinalIgnoreCase
                 );
-                var anchor = isPrimaryListing && !exactListingScope
-                    ? await _combinedQuarterService.Resolve(stock)
-                    : null;
+                var anchor =
+                    isPrimaryListing && !exactListingScope
+                        ? await _combinedQuarterService.Resolve(stock)
+                        : null;
                 var presentCombined =
                     anchor is { IsCombined: true } && targetDate == anchor.ReportDate;
-                var allHoldings = presentCombined
-                    ? _holdingRepository.GetCombinedQuarterByStockWithHolder(
-                        stock,
-                        anchor.ReportDate,
-                        RequirePreviousReportDate(anchor)
-                    )
+                var allHoldings =
+                    presentCombined
+                        ? _holdingRepository.GetCombinedQuarterByStockWithHolder(
+                            stock,
+                            anchor.ReportDate,
+                            RequirePreviousReportDate(anchor)
+                        )
                     : exactListingScope
                         ? _holdingRepository.Get13FByListingWithHolder(
                             stock,
                             listedTicker,
                             targetDate
                         )
-                        : _holdingRepository.Get13FByStockWithHolder(stock, targetDate);
+                    : _holdingRepository.Get13FByStockWithHolder(stock, targetDate);
                 // Materialise one compact projection. Exact-listing split factors can change
                 // both rank and denominator, so a separate raw aggregate/page query would scan
                 // the combined-quarter view twice and could rank a sibling class incorrectly.
@@ -427,7 +429,9 @@ public class InstitutionalHoldingsTools
 
                 var activity = exactListingScope
                     ? await _holdingRepository.GetListingActivityHistory(stock, listedTicker)
-                    : await _holdingRepository.GetStockActivitySnapshotsByStockSnapshotBacked(stock);
+                    : await _holdingRepository.GetStockActivitySnapshotsByStockSnapshotBacked(
+                        stock
+                    );
                 if (activity.All(row => row.CurrentFilerCount <= 0))
                     return $"No institutional holdings history available for {ticker}.";
 
@@ -436,9 +440,10 @@ public class InstitutionalHoldingsTools
                     stock.Ticker,
                     StringComparison.OrdinalIgnoreCase
                 );
-                var anchor = isPrimaryListing && !exactListingScope
-                    ? await _combinedQuarterService.Resolve(stock)
-                    : null;
+                var anchor =
+                    isPrimaryListing && !exactListingScope
+                        ? await _combinedQuarterService.Resolve(stock)
+                        : null;
                 if (anchor is { IsCombined: true })
                 {
                     var combined = await _holdingRepository.GetCombinedStockActivitySnapshotBacked(
@@ -920,7 +925,8 @@ public class InstitutionalHoldingsTools
                     return dateError;
 
                 var previousDate = GetPriorReportDate(reportDates, targetDate);
-                var activity = await (exactListingScope
+                var activity = await (
+                    exactListingScope
                         ? _holdingRepository.Get13FHolderActivityByListing(
                             stock,
                             listedTicker,
@@ -931,8 +937,8 @@ public class InstitutionalHoldingsTools
                             stock,
                             targetDate,
                             previousDate
-                        ))
-                    .ToListAsync();
+                        )
+                ).ToListAsync();
 
                 // A previous holder with no current row only PROVES an exit when it filed a
                 // 13F for the target quarter elsewhere. While the filing window is open the

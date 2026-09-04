@@ -1,7 +1,7 @@
 using System.ComponentModel;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
-using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Repositories;
@@ -104,11 +104,12 @@ public class OffExchangeVolumeTools
                     $"Weekly off-exchange (dark pool / OTC) volume for {listedTicker}{ListingName(stock, listedTicker)}:",
                     "| Week Start | ATS Volume | ATS Trades | Non-ATS OTC Volume | Non-ATS OTC Trades | Total Off-Exchange Volume |",
                     "|------------|-----------|-----------|-------------------|-------------------|--------------------------|",
-                    r => RenderOffExchangeRow(
-                        $"{r.WeekStartDate:yyyy-MM-dd}",
-                        r,
-                        SplitAdjustment.ShareCountFactor(r.WeekStartDate, splits)
-                    )
+                    r =>
+                        RenderOffExchangeRow(
+                            $"{r.WeekStartDate:yyyy-MM-dd}",
+                            r,
+                            SplitAdjustment.ShareCountFactor(r.WeekStartDate, splits)
+                        )
                 );
 
                 var notes = new[]

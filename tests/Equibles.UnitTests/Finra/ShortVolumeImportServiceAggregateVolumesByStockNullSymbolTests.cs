@@ -66,8 +66,9 @@ public class ShortVolumeImportServiceAggregateVolumesByStockNullSymbolTests
         );
 
         var trackedStockId = Guid.NewGuid();
-        var tickerMap = new Dictionary<string, ListedSecurityKey> {
-            ["AAPL"] = new(trackedStockId, "AAPL")
+        var tickerMap = new Dictionary<string, ListedSecurityKey>
+        {
+            ["AAPL"] = new(trackedStockId, "AAPL"),
         };
         var records = new List<ShortVolumeRecord>
         {

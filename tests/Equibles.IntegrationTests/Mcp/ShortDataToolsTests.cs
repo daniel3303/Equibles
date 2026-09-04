@@ -89,7 +89,8 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
         stock.SecondaryTickers = ["GME-A"];
         DbContext.AddRange(
             stock,
-            new DailyShortVolume {
+            new DailyShortVolume
+            {
                 CommonStock = stock,
                 CommonStockId = stock.Id,
                 Date = DateOnly.FromDateTime(DateTime.UtcNow),
@@ -233,7 +234,8 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
         stock.SecondaryTickers = ["GME-A"];
         DbContext.AddRange(
             stock,
-            new ShortInterest {
+            new ShortInterest
+            {
                 CommonStock = stock,
                 CommonStockId = stock.Id,
                 SettlementDate = DateOnly.FromDateTime(DateTime.UtcNow),

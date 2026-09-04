@@ -49,7 +49,9 @@ public static class FinraImportScope
             '\n',
             listings
                 .OrderBy(listing => listing.Key, StringComparer.Ordinal)
-                .Select(listing => $"{listing.Key}\0{listing.Value.CommonStockId:N}\0{listing.Value.ListedTicker}")
+                .Select(listing =>
+                    $"{listing.Key}\0{listing.Value.CommonStockId:N}\0{listing.Value.ListedTicker}"
+                )
         );
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
         return $"listings:{Convert.ToHexString(hash).ToLowerInvariant()}";
@@ -72,13 +74,16 @@ public static class FinraImportScope
         if (normalizedTickers.Count == 0)
             return ResolveListingUniverse(listings);
 
-        var payload = string.Join('\n', normalizedTickers)
+        var payload =
+            string.Join('\n', normalizedTickers)
             + "\n--resolved-listings--\n"
             + string.Join(
                 '\n',
                 listings
                     .OrderBy(listing => listing.Key, StringComparer.Ordinal)
-                    .Select(listing => $"{listing.Key}\0{listing.Value.CommonStockId:N}\0{listing.Value.ListedTicker}")
+                    .Select(listing =>
+                        $"{listing.Key}\0{listing.Value.CommonStockId:N}\0{listing.Value.ListedTicker}"
+                    )
             );
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
         return $"listing-filter:{Convert.ToHexString(hash).ToLowerInvariant()}";

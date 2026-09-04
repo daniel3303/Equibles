@@ -105,9 +105,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
                 )
             : DbContext
                 .Set<CommonStockListedCusip>()
-                .Where(c =>
-                    c.CommonStockId == stock.Id && c.ListedTicker == listedTicker
-                )
+                .Where(c => c.CommonStockId == stock.Id && c.ListedTicker == listedTicker)
                 .Select(c => c.Cusip);
     }
 

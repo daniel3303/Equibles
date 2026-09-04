@@ -1,6 +1,6 @@
 using System.ComponentModel;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Congress.Data;
@@ -188,9 +188,13 @@ public class CongressTools
                 if (typeFilter != null)
                     query = query.Where(t => t.TransactionType == typeFilter);
                 if (stock != null)
-                    query = query.Where(t => t.CommonStockId == stock.Id
-                        && (t.FiledTicker == listedTicker
-                            || (t.FiledTicker == "" && listedTicker == stock.Ticker)));
+                    query = query.Where(t =>
+                        t.CommonStockId == stock.Id
+                        && (
+                            t.FiledTicker == listedTicker
+                            || (t.FiledTicker == "" && listedTicker == stock.Ticker)
+                        )
+                    );
 
                 maxResults = McpLimit.Clamp(maxResults);
                 offset = McpLimit.ClampOffset(offset);

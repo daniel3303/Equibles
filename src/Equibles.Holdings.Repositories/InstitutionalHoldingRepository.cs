@@ -246,13 +246,19 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         string listedTicker
     )
     {
-        var isPrimary = string.Equals(listedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase);
+        var isPrimary = string.Equals(
+            listedTicker,
+            stock.Ticker,
+            StringComparison.OrdinalIgnoreCase
+        );
         return GetAll()
             .Where(Is13F)
             .Where(h => h.CommonStockId == stock.Id)
-            .Where(h => isPrimary
-                ? h.ListedTicker == null || h.ListedTicker == stock.Ticker
-                : h.ListedTicker == listedTicker);
+            .Where(h =>
+                isPrimary
+                    ? h.ListedTicker == null || h.ListedTicker == stock.Ticker
+                    : h.ListedTicker == listedTicker
+            );
     }
 
     public IQueryable<InstitutionalHolding> GetHistoryByHolder(InstitutionalHolder holder)
@@ -387,11 +393,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         CancellationToken cancellationToken = default
     )
     {
-        if (string.Equals(listedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase)
-            && !SecondaryTickerPolicy.IsExchangeTradedListing(stock, listedTicker))
+        if (
+            string.Equals(listedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase)
+            && !SecondaryTickerPolicy.IsExchangeTradedListing(stock, listedTicker)
+        )
             return await Get13FReportDatesByStockSnapshotBacked(stock, cancellationToken);
-        return await Get13FReportDatesByListing(stock, listedTicker)
-            .ToListAsync(cancellationToken);
+        return await Get13FReportDatesByListing(stock, listedTicker).ToListAsync(cancellationToken);
     }
 
     // Snapshot-backed twin for request paths. The live DISTINCT above scans every historical

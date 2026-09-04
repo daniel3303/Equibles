@@ -121,10 +121,12 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     {
         var trust = CreateStock("VB", "Vanguard Index Funds");
         var date = new DateOnly(2025, 1, 2);
-        _dbContext.Set<DailyShortVolume>().AddRange(
-            CreateVolume(trust, date, listedTicker: "VOO"),
-            CreateVolume(trust, date, listedTicker: "VTI")
-        );
+        _dbContext
+            .Set<DailyShortVolume>()
+            .AddRange(
+                CreateVolume(trust, date, listedTicker: "VOO"),
+                CreateVolume(trust, date, listedTicker: "VTI")
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetHistoryByListing(trust, "VOO").ToListAsync();
@@ -377,10 +379,12 @@ public class ShortInterestRepositoryTests : IDisposable
     {
         var trust = CreateStock("VB", "Vanguard Index Funds");
         var date = new DateOnly(2025, 1, 15);
-        _dbContext.Set<ShortInterest>().AddRange(
-            CreateInterest(trust, date, listedTicker: "VOO"),
-            CreateInterest(trust, date, listedTicker: "VTI")
-        );
+        _dbContext
+            .Set<ShortInterest>()
+            .AddRange(
+                CreateInterest(trust, date, listedTicker: "VOO"),
+                CreateInterest(trust, date, listedTicker: "VTI")
+            );
         await _dbContext.SaveChangesAsync();
 
         var result = await _repository.GetHistoryByListing(trust, "VTI").ToListAsync();

@@ -68,7 +68,8 @@ public class StockSplitCaptureManagerTests
         currentWrite.Should().Be(1);
         (await context.Set<StockSplit>().OrderBy(split => split.PriceSeriesTicker).ToListAsync())
             .Select(split => split.PriceSeriesTicker)
-            .Should().Equal("GOOG", "GOOGL");
+            .Should()
+            .Equal("GOOG", "GOOGL");
     }
 
     [Fact]
@@ -99,7 +100,10 @@ public class StockSplitCaptureManagerTests
 
         changes.Should().Be(1);
         context.ChangeTracker.Clear();
-        var stored = await context.Set<StockSplit>().OrderBy(split => split.PriceSeriesTicker).ToListAsync();
+        var stored = await context
+            .Set<StockSplit>()
+            .OrderBy(split => split.PriceSeriesTicker)
+            .ToListAsync();
         stored.Should().HaveCount(2);
         stored[0].PriceSeriesTicker.Should().Be("GOOG");
         stored[0].Numerator.Should().Be(20m);
@@ -137,12 +141,14 @@ public class StockSplitCaptureManagerTests
 
         secondaryObservation.Should().Be(1);
         context.ChangeTracker.Clear();
-        var stillUnattributed = await context.Set<StockSplit>()
+        var stillUnattributed = await context
+            .Set<StockSplit>()
             .SingleAsync(split => split.PriceSeriesTicker == null);
         stillUnattributed.PriceSeriesTicker.Should().BeNull();
         stillUnattributed.Numerator.Should().Be(2m);
         stillUnattributed.PriceAdjustmentAppliedTime.Should().NotBeNull();
-        var secondary = await context.Set<StockSplit>()
+        var secondary = await context
+            .Set<StockSplit>()
             .SingleAsync(split => split.PriceSeriesTicker == "GOOGL");
         secondary.Numerator.Should().Be(20m);
 
@@ -150,7 +156,8 @@ public class StockSplitCaptureManagerTests
 
         primaryObservation.Should().Be(1);
         context.ChangeTracker.Clear();
-        var attributed = await context.Set<StockSplit>()
+        var attributed = await context
+            .Set<StockSplit>()
             .SingleAsync(split => split.PriceSeriesTicker == "GOOG");
         attributed.PriceSeriesTicker.Should().Be("GOOG");
         attributed.Numerator.Should().Be(20m);

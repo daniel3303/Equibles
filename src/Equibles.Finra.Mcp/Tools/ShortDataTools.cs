@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
-using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.CorporateActions.Data;
@@ -192,10 +192,10 @@ public class ShortDataTools
                 if (rangeError != null)
                     return rangeError;
 
-                var history = _shortInterestRepository
-                    .GetHistoryByListing(stock, listedTicker);
-                var query = history
-                    .Where(s => s.SettlementDate >= start && s.SettlementDate <= end);
+                var history = _shortInterestRepository.GetHistoryByListing(stock, listedTicker);
+                var query = history.Where(s =>
+                    s.SettlementDate >= start && s.SettlementDate <= end
+                );
 
                 var total = await query.CountAsync();
 
@@ -332,9 +332,11 @@ public class ShortDataTools
                 }
 
                 var sortKey = string.IsNullOrWhiteSpace(sortBy) ? "daysToCover" : sortBy.Trim();
-                if (!sortKey.Equals("daysToCover", StringComparison.OrdinalIgnoreCase)
+                if (
+                    !sortKey.Equals("daysToCover", StringComparison.OrdinalIgnoreCase)
                     && !sortKey.Equals("shortPosition", StringComparison.OrdinalIgnoreCase)
-                    && !sortKey.Equals("change", StringComparison.OrdinalIgnoreCase))
+                    && !sortKey.Equals("change", StringComparison.OrdinalIgnoreCase)
+                )
                 {
                     return McpOutput.InvalidArgument(
                         "sortBy",
@@ -346,61 +348,78 @@ public class ShortDataTools
                 offset = McpLimit.ClampOffset(offset);
                 var rawRecords = await query.ToListAsync();
                 var validListings = await _commonStockRepository.GetUniqueActiveListingKeys();
-                rawRecords = rawRecords.Where(row => validListings.Contains(
-                    new ListedSecurityKey(
-                        row.CommonStockId,
-                        ListingTicker(row.CommonStock, row.ListedTicker)
+                rawRecords = rawRecords
+                    .Where(row =>
+                        validListings.Contains(
+                            new ListedSecurityKey(
+                                row.CommonStockId,
+                                ListingTicker(row.CommonStock, row.ListedTicker)
+                            )
+                        )
                     )
-                )).ToList();
+                    .ToList();
                 var stockIds = rawRecords.Select(row => row.CommonStockId).Distinct().ToList();
                 var splitRows = await _stockSplitRepository
                     .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                     .Where(split => stockIds.Contains(split.CommonStockId))
                     .ToListAsync();
-                var previousDate = await _shortInterestRepository.GetAllSettlementDates()
+                var previousDate = await _shortInterestRepository
+                    .GetAllSettlementDates()
                     .Where(day => day < latestDate)
                     .OrderByDescending(day => day)
                     .FirstOrDefaultAsync();
-                var adjusted = rawRecords.Select(row =>
-                {
-                    var listedTicker = ListingTicker(row.CommonStock, row.ListedTicker);
-                    var scoped = PriceSeriesSplitScope.ForListing(
-                        splitRows.Where(split => split.CommonStockId == row.CommonStockId),
-                        row.CommonStock.Ticker,
-                        listedTicker
-                    );
-                    var factor = SplitAdjustment.ShareCountFactor(latestDate, scoped);
-                    var previousFactor = SplitAdjustment.ShareCountFactor(previousDate, scoped);
-                    var position = SplitAdjustment.AdjustShareCount(row.CurrentShortPosition, factor);
-                    var previous = SplitAdjustment.AdjustShareCount(row.PreviousShortPosition, previousFactor);
-                    return new
+                var adjusted = rawRecords
+                    .Select(row =>
                     {
-                        Row = row,
-                        ListedTicker = listedTicker,
-                        Factor = factor,
-                        Position = position,
-                        Change = position - previous,
-                    };
-                }).Where(row => minAvgDailyVolume <= 0
-                    || SplitAdjustment.AdjustShareCount(
-                        row.Row.AverageDailyVolume.Value,
-                        row.Factor
-                    ) >= minAvgDailyVolume);
-                adjusted = sortKey.Equals("shortPosition", StringComparison.OrdinalIgnoreCase)
-                    ? adjusted.OrderByDescending(row => row.Position).ThenBy(row => row.ListedTicker)
+                        var listedTicker = ListingTicker(row.CommonStock, row.ListedTicker);
+                        var scoped = PriceSeriesSplitScope.ForListing(
+                            splitRows.Where(split => split.CommonStockId == row.CommonStockId),
+                            row.CommonStock.Ticker,
+                            listedTicker
+                        );
+                        var factor = SplitAdjustment.ShareCountFactor(latestDate, scoped);
+                        var previousFactor = SplitAdjustment.ShareCountFactor(previousDate, scoped);
+                        var position = SplitAdjustment.AdjustShareCount(
+                            row.CurrentShortPosition,
+                            factor
+                        );
+                        var previous = SplitAdjustment.AdjustShareCount(
+                            row.PreviousShortPosition,
+                            previousFactor
+                        );
+                        return new
+                        {
+                            Row = row,
+                            ListedTicker = listedTicker,
+                            Factor = factor,
+                            Position = position,
+                            Change = position - previous,
+                        };
+                    })
+                    .Where(row =>
+                        minAvgDailyVolume <= 0
+                        || SplitAdjustment.AdjustShareCount(
+                            row.Row.AverageDailyVolume.Value,
+                            row.Factor
+                        ) >= minAvgDailyVolume
+                    );
+                adjusted =
+                    sortKey.Equals("shortPosition", StringComparison.OrdinalIgnoreCase)
+                        ? adjusted
+                            .OrderByDescending(row => row.Position)
+                            .ThenBy(row => row.ListedTicker)
                     : sortKey.Equals("change", StringComparison.OrdinalIgnoreCase)
-                        ? adjusted.OrderByDescending(row => row.Change)
+                        ? adjusted
+                            .OrderByDescending(row => row.Change)
                             .ThenByDescending(row => row.Position)
                             .ThenBy(row => row.ListedTicker)
-                        : adjusted.OrderBy(row => row.Row.DaysToCover >= FinraDaysToCoverCap ? 1 : 0)
-                            .ThenByDescending(row => row.Row.DaysToCover)
-                            .ThenByDescending(row => row.Position)
-                            .ThenBy(row => row.ListedTicker);
+                    : adjusted
+                        .OrderBy(row => row.Row.DaysToCover >= FinraDaysToCoverCap ? 1 : 0)
+                        .ThenByDescending(row => row.Row.DaysToCover)
+                        .ThenByDescending(row => row.Position)
+                        .ThenBy(row => row.ListedTicker);
                 var total = adjusted.Count();
-                var records = adjusted
-                    .Skip(offset)
-                    .Take(McpLimit.Clamp(maxResults))
-                    .ToList();
+                var records = adjusted.Skip(offset).Take(McpLimit.Clamp(maxResults)).ToList();
                 if (records.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {total} rows match; lower offset.";
 
@@ -477,8 +496,10 @@ public class ShortDataTools
                     .Where(d => d.TotalVolume > 0);
 
                 var sortKey = string.IsNullOrWhiteSpace(sortBy) ? "shortVolume" : sortBy.Trim();
-                if (!sortKey.Equals("shortVolume", StringComparison.OrdinalIgnoreCase)
-                    && !sortKey.Equals("shortPercent", StringComparison.OrdinalIgnoreCase))
+                if (
+                    !sortKey.Equals("shortVolume", StringComparison.OrdinalIgnoreCase)
+                    && !sortKey.Equals("shortPercent", StringComparison.OrdinalIgnoreCase)
+                )
                 {
                     return McpOutput.InvalidArgument("sortBy", sortBy, "shortVolume, shortPercent");
                 }
@@ -486,46 +507,53 @@ public class ShortDataTools
                 offset = McpLimit.ClampOffset(offset);
                 var rawRecords = await query.ToListAsync();
                 var validListings = await _commonStockRepository.GetUniqueActiveListingKeys();
-                rawRecords = rawRecords.Where(row => validListings.Contains(
-                    new ListedSecurityKey(
-                        row.CommonStockId,
-                        ListingTicker(row.CommonStock, row.ListedTicker)
+                rawRecords = rawRecords
+                    .Where(row =>
+                        validListings.Contains(
+                            new ListedSecurityKey(
+                                row.CommonStockId,
+                                ListingTicker(row.CommonStock, row.ListedTicker)
+                            )
+                        )
                     )
-                )).ToList();
+                    .ToList();
                 var stockIds = rawRecords.Select(row => row.CommonStockId).Distinct().ToList();
                 var splitRows = await _stockSplitRepository
                     .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                     .Where(split => stockIds.Contains(split.CommonStockId))
                     .ToListAsync();
-                var adjusted = rawRecords.Select(row =>
-                {
-                    var listedTicker = ListingTicker(row.CommonStock, row.ListedTicker);
-                    var scoped = PriceSeriesSplitScope.ForListing(
-                        splitRows.Where(split => split.CommonStockId == row.CommonStockId),
-                        row.CommonStock.Ticker,
-                        listedTicker
-                    );
-                    var factor = SplitAdjustment.ShareCountFactor(row.Date, scoped);
-                    return new
+                var adjusted = rawRecords
+                    .Select(row =>
                     {
-                        Row = row,
-                        ListedTicker = listedTicker,
-                        Factor = factor,
-                        ShortVolume = SplitAdjustment.AdjustShareCount(row.ShortVolume, factor),
-                        TotalVolume = SplitAdjustment.AdjustShareCount(row.TotalVolume, factor),
-                    };
-                })
-                    .Where(row => row.ShortVolume >= minShortVolume && row.TotalVolume >= minTotalVolume);
+                        var listedTicker = ListingTicker(row.CommonStock, row.ListedTicker);
+                        var scoped = PriceSeriesSplitScope.ForListing(
+                            splitRows.Where(split => split.CommonStockId == row.CommonStockId),
+                            row.CommonStock.Ticker,
+                            listedTicker
+                        );
+                        var factor = SplitAdjustment.ShareCountFactor(row.Date, scoped);
+                        return new
+                        {
+                            Row = row,
+                            ListedTicker = listedTicker,
+                            Factor = factor,
+                            ShortVolume = SplitAdjustment.AdjustShareCount(row.ShortVolume, factor),
+                            TotalVolume = SplitAdjustment.AdjustShareCount(row.TotalVolume, factor),
+                        };
+                    })
+                    .Where(row =>
+                        row.ShortVolume >= minShortVolume && row.TotalVolume >= minTotalVolume
+                    );
                 adjusted = sortKey.Equals("shortPercent", StringComparison.OrdinalIgnoreCase)
-                    ? adjusted.OrderByDescending(row => row.Row.ShortVolume / row.Row.TotalVolume)
+                    ? adjusted
+                        .OrderByDescending(row => row.Row.ShortVolume / row.Row.TotalVolume)
                         .ThenByDescending(row => row.ShortVolume)
                         .ThenBy(row => row.ListedTicker)
-                    : adjusted.OrderByDescending(row => row.ShortVolume).ThenBy(row => row.ListedTicker);
+                    : adjusted
+                        .OrderByDescending(row => row.ShortVolume)
+                        .ThenBy(row => row.ListedTicker);
                 var total = adjusted.Count();
-                var records = adjusted
-                    .Skip(offset)
-                    .Take(McpLimit.Clamp(maxResults))
-                    .ToList();
+                var records = adjusted.Skip(offset).Take(McpLimit.Clamp(maxResults)).ToList();
                 if (records.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {total} rows match; lower offset.";
 
@@ -542,11 +570,12 @@ public class ShortDataTools
                     "|--------|---------|-------------|--------------|-------------|---------|",
                     // The lead "cell" carries both the ticker and company columns — the shared
                     // renderer splices it in front of the volume cells verbatim.
-                    r => RenderShortVolumeRow(
-                        $"{r.ListedTicker} | {ListingCompany(r.Row.CommonStock, r.ListedTicker)}",
-                        r.Row,
-                        r.Factor
-                    )
+                    r =>
+                        RenderShortVolumeRow(
+                            $"{r.ListedTicker} | {ListingCompany(r.Row.CommonStock, r.ListedTicker)}",
+                            r.Row,
+                            r.Factor
+                        )
                 );
 
                 return AppendNote(
@@ -581,10 +610,9 @@ public class ShortDataTools
         string.IsNullOrWhiteSpace(listedTicker) ? stock.Ticker : listedTicker;
 
     private static string ListingCompany(CommonStock stock, string listedTicker) =>
-        SecondaryTickerPolicy.RequiresExactListingScope(
-            stock,
-            ListingTicker(stock, listedTicker)
-        ) ? "-" : stock.Name;
+        SecondaryTickerPolicy.RequiresExactListingScope(stock, ListingTicker(stock, listedTicker))
+            ? "-"
+            : stock.Name;
 
     // Render with InvariantCulture so the MCP markdown does not fork the separators by host
     // locale (e.g. de-DE would render 1.234.567 / 12,3). `shareFactor` restates the share

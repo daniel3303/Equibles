@@ -608,7 +608,8 @@ public class FtdImportService
             }
             catch (HttpRequestException ex)
                 when (ex.StatusCode == System.Net.HttpStatusCode.NotFound
-                    && !IsRecentFtdFile(fileName))
+                    && !IsRecentFtdFile(fileName)
+                )
             {
                 _logger.LogWarning(
                     "Listed-record FTD sweep: archive file {File} is unavailable (404), advancing",
@@ -1723,7 +1724,8 @@ public class FtdImportService
     )
     {
         // Group by stock+date, keeping the latest record per day (FTD is cumulative)
-        var grouped = new Dictionary<(Guid StockId, string ListedTicker, DateOnly Date), FailToDeliver>();
+        var grouped =
+            new Dictionary<(Guid StockId, string ListedTicker, DateOnly Date), FailToDeliver>();
 
         var strippedAliases = BuildStrippedTickerAliases(tickerMap.Keys);
         foreach (var record in records)
@@ -1778,7 +1780,12 @@ public class FtdImportService
         await dbContext
             .Set<FailToDeliver>()
             .UpsertRange(safeItems)
-            .On(f => new { f.CommonStockId, f.ListedTicker, f.SettlementDate })
+            .On(f => new
+            {
+                f.CommonStockId,
+                f.ListedTicker,
+                f.SettlementDate,
+            })
             .WhenMatched(
                 (existing, incoming) =>
                     new FailToDeliver { Quantity = incoming.Quantity, Price = incoming.Price }

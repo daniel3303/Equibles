@@ -1,5 +1,5 @@
-using Equibles.Finra.HostedService.Services;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.Finra.HostedService.Services;
 using Equibles.Integrations.Finra.Models;
 
 namespace Equibles.UnitTests.Finra;
