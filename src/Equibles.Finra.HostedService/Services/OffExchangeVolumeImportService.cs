@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
@@ -25,7 +26,8 @@ public class OffExchangeVolumeImportService
     // v3: class-share symbol resolution (dot/compressed spellings onto stored dash tickers,
     // #4369) — the bump re-imports every week FINRA still publishes so dual-class weeks fill
     // in; weeks aged out of the ~1-year rolling window are unhealable and stay as stored.
-    private const string Dataset = "off-exchange-weekly-v3";
+    // v4 carries exact listing identity and replays FINRA's retained weekly window.
+    private const string Dataset = "off-exchange-weekly-v4";
     private const int CorrectionLookbackWeeks = 8;
     private static readonly TimeSpan RecentPartitionRefreshInterval = TimeSpan.FromHours(24);
     private static readonly HashSet<string> CompletePublicationTiers = new(
@@ -82,7 +84,23 @@ public class OffExchangeVolumeImportService
             return;
         }
 
-        var scopeKey = FinraImportScope.Resolve(_workerOptions.TickersToSync);
+        // Ordinal for the same reason as the daily lane: FINRA symbol casing is identity
+        // (lowercase suffix = a different security), so a case-insensitive map merges two
+        // securities' weekly volumes. The dataset-key bump above re-imports every week FINRA
+        // still publishes; only weeks that have aged out of the rolling window stay corrupt.
+        var tickerMap = await _tickerMapService.BuildListed(
+            _workerOptions.TickersToSync,
+            cancellationToken,
+            StringComparer.Ordinal
+        );
+        var compressedIndex = FinraClassShareSymbols.BuildCompressedIndex(
+            tickerMap,
+            StringComparer.Ordinal
+        );
+        var scopeKey = FinraImportScope.ResolveListingImportScope(
+            tickerMap,
+            _workerOptions.TickersToSync
+        );
         var completed = await _partitionTracker.GetCompleted(
             Dataset,
             scopeKey,
@@ -99,20 +117,6 @@ public class OffExchangeVolumeImportService
             endWeek,
             completed.Count,
             scopeKey
-        );
-
-        // Ordinal for the same reason as the daily lane: FINRA symbol casing is identity
-        // (lowercase suffix = a different security), so a case-insensitive map merges two
-        // securities' weekly volumes. The dataset-key bump above re-imports every week FINRA
-        // still publishes; only weeks that have aged out of the rolling window stay corrupt.
-        var tickerMap = await _tickerMapService.Build(
-            _workerOptions.TickersToSync,
-            cancellationToken,
-            StringComparer.Ordinal
-        );
-        var compressedIndex = FinraClassShareSymbols.BuildCompressedIndex(
-            tickerMap,
-            StringComparer.Ordinal
         );
         foreach (var week in weeks)
         {
@@ -153,8 +157,8 @@ public class OffExchangeVolumeImportService
 
     private async Task ImportWeek(
         DateOnly weekStartDate,
-        IReadOnlyDictionary<string, Guid> tickerMap,
-        IReadOnlyDictionary<string, Guid> compressedIndex,
+        IReadOnlyDictionary<string, ListedSecurityKey> tickerMap,
+        IReadOnlyDictionary<string, ListedSecurityKey> compressedIndex,
         string scopeKey,
         DateTime importedAt,
         CancellationToken cancellationToken
@@ -271,7 +275,10 @@ public class OffExchangeVolumeImportService
         LogDroppedRows(batch.Count - validBatch.Count, weekStartDate);
 
         var existing = await repo.GetByWeek(weekStartDate)
-            .ToDictionaryAsync(volume => volume.CommonStockId, cancellationToken);
+            .ToDictionaryAsync(
+                volume => new ListedSecurityKey(volume.CommonStockId, volume.ListedTicker),
+                cancellationToken
+            );
         foreach (var volume in validBatch)
             UpsertVolume(repo, existing, volume);
 
@@ -292,11 +299,12 @@ public class OffExchangeVolumeImportService
 
     private static void UpsertVolume(
         OffExchangeVolumeRepository repository,
-        IReadOnlyDictionary<Guid, OffExchangeVolume> existing,
+        IReadOnlyDictionary<ListedSecurityKey, OffExchangeVolume> existing,
         OffExchangeVolume volume
     )
     {
-        if (!existing.TryGetValue(volume.CommonStockId, out var current))
+        var key = new ListedSecurityKey(volume.CommonStockId, volume.ListedTicker);
+        if (!existing.TryGetValue(key, out var current))
         {
             repository.Add(volume);
             return;

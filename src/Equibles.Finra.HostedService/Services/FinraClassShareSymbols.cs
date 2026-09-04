@@ -26,12 +26,12 @@ public static class FinraClassShareSymbols
     /// tickers collide on, resolves to NOTHING — the identity is then ambiguous and absent
     /// beats wrong.
     /// </summary>
-    public static Dictionary<string, Guid> BuildCompressedIndex(
-        IReadOnlyDictionary<string, Guid> tickerMap,
+    public static Dictionary<string, T> BuildCompressedIndex<T>(
+        IReadOnlyDictionary<string, T> tickerMap,
         StringComparer comparer
     )
     {
-        var index = new Dictionary<string, Guid>(comparer);
+        var index = new Dictionary<string, T>(comparer);
         var ambiguous = new HashSet<string>(comparer);
         foreach (var (ticker, stockId) in tickerMap)
         {
@@ -52,22 +52,22 @@ public static class FinraClassShareSymbols
     /// Resolves a FINRA-spelled symbol to a stored stock: exact ticker first, then the dotted
     /// spelling mapped onto the dash convention, then the compressed index.
     /// </summary>
-    public static bool TryResolve(
-        IReadOnlyDictionary<string, Guid> tickerMap,
-        IReadOnlyDictionary<string, Guid> compressedIndex,
+    public static bool TryResolve<T>(
+        IReadOnlyDictionary<string, T> tickerMap,
+        IReadOnlyDictionary<string, T> compressedIndex,
         string symbol,
-        out Guid stockId
+        out T identity
     )
     {
-        stockId = default;
+        identity = default;
         if (string.IsNullOrEmpty(symbol))
             return false;
-        if (tickerMap.TryGetValue(symbol, out stockId))
+        if (tickerMap.TryGetValue(symbol, out identity))
             return true;
         var dashed = DotToDash(symbol);
-        if (!ReferenceEquals(dashed, symbol) && tickerMap.TryGetValue(dashed, out stockId))
+        if (!ReferenceEquals(dashed, symbol) && tickerMap.TryGetValue(dashed, out identity))
             return true;
-        return compressedIndex.TryGetValue(symbol, out stockId);
+        return compressedIndex.TryGetValue(symbol, out identity);
     }
 
     /// <summary>

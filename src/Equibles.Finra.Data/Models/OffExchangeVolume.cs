@@ -1,9 +1,11 @@
+using System.ComponentModel.DataAnnotations;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Data.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Finra.Data.Models;
 
-[Index(nameof(CommonStockId), nameof(WeekStartDate), IsUnique = true)]
+[Index(nameof(CommonStockId), nameof(ListedTicker), nameof(WeekStartDate), IsUnique = true)]
 [Index(nameof(WeekStartDate))]
 public class OffExchangeVolume
 {
@@ -11,6 +13,10 @@ public class OffExchangeVolume
 
     public Guid CommonStockId { get; set; }
     public virtual CommonStock CommonStock { get; set; }
+
+    [Required]
+    [MaxLength(TickerNormalizer.MaxListedLength)]
+    public string ListedTicker { get; set; } = "";
 
     public DateOnly WeekStartDate { get; set; }
 

@@ -208,6 +208,7 @@ public class InsiderTradingTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
+                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
 
                 var sb = new StringBuilder();
                 sb.AppendLine($"Recent insider transactions for {stock.Name} ({stock.Ticker}):");
@@ -352,6 +353,7 @@ public class InsiderTradingTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
+                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
                 var positions = latestTransactions
                     .GroupBy(t => t.InsiderOwnerId)
                     .Select(group => BuildOwnershipPosition([.. group], splits))
@@ -547,6 +549,7 @@ public class InsiderTradingTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
+                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
                 var result = MarkdownTable.Start(
                     $"Recent proposed sales (Form 144) for {stock.Name} ({stock.Ticker}):",
                     $"Showing notices {offset + 1}-{offset + filings.Count} of {totalCount}, newest first",

@@ -12,7 +12,6 @@ namespace Equibles.CorporateActions.Data.Models;
 /// back-adjustment pass. The marker is applied only when its UTC date is after the effective
 /// date; null or older legacy markers remain pending.
 /// </summary>
-[Index(nameof(CommonStockId), nameof(EffectiveDate), IsUnique = true)]
 [Index(nameof(PriceAdjustmentAppliedTime))]
 public class StockSplit
 {

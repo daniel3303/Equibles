@@ -26,7 +26,7 @@ public class DailyStockPriceRepository : BaseRepository<DailyStockPrice>
     /// Every exact price series, including authoritative secondary tickers. The entity maps
     /// only to the isolated exact-listing table, so legacy ambiguous rows are never exposed.
     /// </summary>
-    public IQueryable<DailyStockPrice> GetAllSeries()
+    public virtual IQueryable<DailyStockPrice> GetAllSeries()
     {
         return base.GetAll();
     }

@@ -1,4 +1,5 @@
 using Equibles.Finra.HostedService.Services;
+using Equibles.CommonStocks.Data.Models;
 
 namespace Equibles.UnitTests.Finra;
 
@@ -82,5 +83,57 @@ public class FinraImportScopeTests
             .ResolveStockUniverse(preferred)
             .Should()
             .NotBe(FinraImportScope.ResolveStockUniverse(common));
+    }
+
+    [Fact]
+    public void ResolveListingImportScope_UnfilteredUniverse_UsesCompletenessMarker()
+    {
+        var listings = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        {
+            ["AAPL"] = new(Guid.NewGuid(), "AAPL"),
+        };
+
+        FinraImportScope.ResolveListingImportScope(listings, []).Should().StartWith("listings:");
+        FinraImportScope
+            .ResolveListingImportScope(listings, ["", "  "])
+            .Should()
+            .StartWith("listings:");
+    }
+
+    [Fact]
+    public void ResolveListingImportScope_ConfiguredSubset_UsesSubsetMarker()
+    {
+        var listings = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        {
+            ["VOO"] = new(Guid.NewGuid(), "VOO"),
+        };
+
+        var scope = FinraImportScope.ResolveListingImportScope(listings, [" voo "]);
+
+        scope.Should().StartWith("listing-filter:");
+    }
+
+    [Fact]
+    public void ResolveListingImportScope_ConfiguredSubsetChangesWhenResolutionChanges()
+    {
+        var stockId = Guid.NewGuid();
+        var unresolved = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal);
+        var resolved = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        {
+            ["VOO"] = new(stockId, "VOO"),
+        };
+        var reassigned = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        {
+            ["VOO"] = new(Guid.NewGuid(), "VOO"),
+        };
+
+        var unresolvedScope = FinraImportScope.ResolveListingImportScope(unresolved, ["VOO"]);
+        var resolvedScope = FinraImportScope.ResolveListingImportScope(resolved, ["VOO"]);
+
+        resolvedScope.Should().NotBe(unresolvedScope);
+        FinraImportScope
+            .ResolveListingImportScope(reassigned, ["VOO"])
+            .Should()
+            .NotBe(resolvedScope);
     }
 }

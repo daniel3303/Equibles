@@ -46,12 +46,14 @@ public class DailyShortVolumeRepositoryTests : IDisposable
         long shortVolume = 1_000_000,
         long shortExemptVolume = 5_000,
         long totalVolume = 5_000_000,
-        string market = "TRF"
+        string market = "TRF",
+        string listedTicker = ""
     )
     {
         return new DailyShortVolume
         {
             CommonStockId = stock.Id,
+            ListedTicker = listedTicker,
             Date = date,
             ShortVolume = shortVolume,
             ShortExemptVolume = shortExemptVolume,
@@ -112,6 +114,22 @@ public class DailyShortVolumeRepositoryTests : IDisposable
         var result = await _repository.GetHistoryByStock(apple).ToListAsync();
 
         result.Should().ContainSingle().Which.CommonStockId.Should().Be(apple.Id);
+    }
+
+    [Fact]
+    public async Task GetHistoryByListing_SeparatesEtfsCarriedByOneFiler()
+    {
+        var trust = CreateStock("VB", "Vanguard Index Funds");
+        var date = new DateOnly(2025, 1, 2);
+        _dbContext.Set<DailyShortVolume>().AddRange(
+            CreateVolume(trust, date, listedTicker: "VOO"),
+            CreateVolume(trust, date, listedTicker: "VTI")
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.GetHistoryByListing(trust, "VOO").ToListAsync();
+
+        result.Should().ContainSingle().Which.ListedTicker.Should().Be("VOO");
     }
 
     // -- GetByStock (date filter) -----------------------------------------
@@ -283,12 +301,14 @@ public class ShortInterestRepositoryTests : IDisposable
         long previousShortPosition = 9_500_000,
         long changeInShortPosition = 500_000,
         long? averageDailyVolume = 3_000_000,
-        decimal? daysToCover = 3.3m
+        decimal? daysToCover = 3.3m,
+        string listedTicker = ""
     )
     {
         return new ShortInterest
         {
             CommonStockId = stock.Id,
+            ListedTicker = listedTicker,
             SettlementDate = settlementDate,
             CurrentShortPosition = currentShortPosition,
             PreviousShortPosition = previousShortPosition,
@@ -350,6 +370,22 @@ public class ShortInterestRepositoryTests : IDisposable
         var result = await _repository.GetHistoryByStock(apple).ToListAsync();
 
         result.Should().ContainSingle().Which.CommonStockId.Should().Be(apple.Id);
+    }
+
+    [Fact]
+    public async Task GetHistoryByListing_SeparatesEtfsCarriedByOneFiler()
+    {
+        var trust = CreateStock("VB", "Vanguard Index Funds");
+        var date = new DateOnly(2025, 1, 15);
+        _dbContext.Set<ShortInterest>().AddRange(
+            CreateInterest(trust, date, listedTicker: "VOO"),
+            CreateInterest(trust, date, listedTicker: "VTI")
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.GetHistoryByListing(trust, "VTI").ToListAsync();
+
+        result.Should().ContainSingle().Which.ListedTicker.Should().Be("VTI");
     }
 
     // -- GetByStock (settlement date filter) ------------------------------

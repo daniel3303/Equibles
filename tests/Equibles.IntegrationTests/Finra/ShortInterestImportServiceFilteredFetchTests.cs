@@ -55,6 +55,7 @@ public class ShortInterestImportServiceFilteredFetchTests : ParadeDbMcpTestBase
             new ShortInterest
             {
                 CommonStockId = have.Id,
+                ListedTicker = have.Ticker,
                 SettlementDate = settlementDate,
                 CurrentShortPosition = 1,
             }

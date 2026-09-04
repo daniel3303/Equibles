@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Finra.Data.Models;
 using Equibles.Integrations.Finra.Models;
 
@@ -8,14 +9,14 @@ internal static class OffExchangeVolumeMerger
     private const string AtsSummaryTypeCode = "ATS_W_SMBL";
     private const string NonAtsOtcSummaryTypeCode = "OTC_W_SMBL";
 
-    public static Dictionary<Guid, OffExchangeVolume> Merge(
+    public static Dictionary<ListedSecurityKey, OffExchangeVolume> Merge(
         IEnumerable<OffExchangeWeeklyRecord> records,
-        IReadOnlyDictionary<string, Guid> tickerMap,
-        IReadOnlyDictionary<string, Guid> compressedIndex,
+        IReadOnlyDictionary<string, ListedSecurityKey> tickerMap,
+        IReadOnlyDictionary<string, ListedSecurityKey> compressedIndex,
         DateOnly weekStartDate
     )
     {
-        var merged = new Dictionary<Guid, OffExchangeVolume>();
+        var merged = new Dictionary<ListedSecurityKey, OffExchangeVolume>();
         foreach (var record in records)
         {
             // The weekly feed spells class shares with a dot ("BRK.B"); resolution bridges
@@ -27,21 +28,22 @@ internal static class OffExchangeVolumeMerger
                     tickerMap,
                     compressedIndex,
                     record.Symbol,
-                    out var commonStockId
+                    out var listing
                 )
             )
             {
                 continue;
             }
 
-            if (!merged.TryGetValue(commonStockId, out var volume))
+            if (!merged.TryGetValue(listing, out var volume))
             {
                 volume = new OffExchangeVolume
                 {
-                    CommonStockId = commonStockId,
+                    CommonStockId = listing.CommonStockId,
+                    ListedTicker = listing.ListedTicker,
                     WeekStartDate = weekStartDate,
                 };
-                merged[commonStockId] = volume;
+                merged[listing] = volume;
             }
 
             AddRecord(volume, record);

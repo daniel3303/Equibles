@@ -12,6 +12,8 @@ public enum StockPositionChangeType
 public class StockPositionChange
 {
     public Guid CommonStockId { get; set; }
+    public string PrimaryTicker { get; set; }
+    public string ListedTicker { get; set; }
     public string Ticker { get; set; }
     public string Name { get; set; }
 

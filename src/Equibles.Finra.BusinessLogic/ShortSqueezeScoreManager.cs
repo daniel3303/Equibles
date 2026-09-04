@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data;
@@ -45,7 +46,7 @@ namespace Equibles.Finra.BusinessLogic;
 /// <see cref="IEarningsProximitySource"/>).</para>
 ///
 /// <para>Factors a stock has no data for drop out and their weight is redistributed over
-/// the rest. The universe is every stock reporting short interest at the latest
+/// the rest. The universe is every primary operating-company stock reporting short interest at the latest
 /// settlement date with a known shares-outstanding count and a physically credible
 /// short-interest ratio (see <see cref="MaxCredibleShortInterestRatio"/>).</para>
 /// </summary>
@@ -224,6 +225,7 @@ public class ShortSqueezeScoreManager
         // FINRA omits days-to-cover.
         var shortInterests = await _shortInterestRepository
             .GetBySettlementDate(settlementDate)
+            .Where(s => s.ListedTicker == s.CommonStock.Ticker || s.ListedTicker == "")
             .Select(s => new
             {
                 s.CommonStockId,
@@ -241,6 +243,7 @@ public class ShortSqueezeScoreManager
             .GetAll()
             .Where(s => stockIds.Contains(s.Id) && s.SharesOutStanding > 0)
             .Where(SqueezeCandidateListing)
+            .Where(SecondaryTickerPolicy.PrimaryOperatingCompany)
             .Select(s => new
             {
                 s.Id,
@@ -260,7 +263,8 @@ public class ShortSqueezeScoreManager
         var splitsByStock = (
             await _stockSplitRepository
                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                .Where(s => stockIds.Contains(s.CommonStockId))
+                .Where(s => stockIds.Contains(s.CommonStockId)
+                    && (s.PriceSeriesTicker == null || s.PriceSeriesTicker == s.CommonStock.Ticker))
                 .ToListAsync(cancellationToken)
         )
             .GroupBy(s => s.CommonStockId)
@@ -406,6 +410,7 @@ public class ShortSqueezeScoreManager
             .Where(v =>
                 v.Date > farCutoff && v.Date <= settlementDate && stockIds.Contains(v.CommonStockId)
             )
+            .Where(v => v.ListedTicker == v.CommonStock.Ticker || v.ListedTicker == "")
             .GroupBy(v => new { v.CommonStockId, Recent = v.Date > midCutoff })
             .Select(g => new
             {
@@ -462,6 +467,7 @@ public class ShortSqueezeScoreManager
                 f.SettlementDate > windowStart
                 && f.SettlementDate <= latestDate
                 && stockIds.Contains(f.CommonStockId)
+                && (f.ListedTicker == f.CommonStock.Ticker || f.ListedTicker == "")
             )
             .Select(f => new
             {

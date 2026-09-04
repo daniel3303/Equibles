@@ -1,6 +1,7 @@
 using System.Globalization;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.Mcp.Tools;
 using Equibles.Finra.Repositories;
@@ -16,6 +17,7 @@ public class OffExchangeVolumeToolsGetOffExchangeVolumeCultureInvarianceTests : 
         new(
             new OffExchangeVolumeRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<OffExchangeVolumeTools>()
         );

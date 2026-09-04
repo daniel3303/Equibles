@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Data;
@@ -40,10 +41,10 @@ public class NportTools
 
     [McpServerTool(Name = "GetFundsHoldingStock", Title = "Funds Holding a Stock", ReadOnly = true)]
     [Description(
-        "Get the registered investment companies (mutual funds and ETFs) holding a given stock, from SEC Form NPORT-P portfolio reports. The stock's CUSIP is matched against the holding rows on each fund series' most recent report (series that stopped filing more than 18 months ago are excluded), so an exited position never shows as current. Returns the fund's registrant and series, the reporting period, the position size, its U.S.-dollar value, its share of the fund's net assets and the payoff profile (Long/Short), largest positions first. Report dates differ per fund series (each files on its own fiscal quarter), so values are as of each row's report date and cross-row totals mix as-of dates. Use this to see which funds and ETFs own a stock and how concentrated each position is."
+        "Get the registered investment companies (mutual funds and ETFs) holding an exact stock or ETF listing, from SEC Form NPORT-P portfolio reports. The listed security's authoritative CUSIP is matched against the holding rows on each fund series' most recent report (series that stopped filing more than 18 months ago are excluded), so an exited position never shows as current. Returns the fund's registrant and series, the reporting period, the position size, its U.S.-dollar value, its share of the fund's net assets and the payoff profile (Long/Short), largest positions first. Report dates differ per fund series (each files on its own fiscal quarter), so values are as of each row's report date and cross-row totals mix as-of dates."
     )]
     public Task<string> GetFundsHoldingStock(
-        [Description("Stock ticker symbol (e.g., AAPL, MSFT)")] string ticker,
+        [Description("Listed security ticker (e.g., AAPL, VOO)")] string ticker,
         [Description(
             "Maximum number of fund positions to return, largest first (default: 20, clamped to 1-500)"
         )]
@@ -65,16 +66,17 @@ public class NportTools
                 if (stockError != null)
                     return MarkdownText(stockError);
 
-                var safeTicker = MarkdownText(ticker);
+                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
+                var safeTicker = MarkdownText(listedTicker);
 
-                if (string.IsNullOrEmpty(stock.Cusip))
+                if (!await _nportRepository.HasCusipIdentity(stock, listedTicker))
                     return $"No CUSIP is on record for {safeTicker}, so its fund ownership cannot be resolved from Form NPORT-P reports.";
 
                 var recencyFloor = DateOnly.FromDateTime(
                     DateTime.UtcNow - CurrentHolderRecencyFloor
                 );
                 var currentPositions = _nportRepository
-                    .GetHoldingsByStockCusip(stock)
+                    .GetHoldingsByListingCusip(stock, listedTicker)
                     .Join(
                         _nportRepository.GetLatestPerSeries(recencyFloor),
                         h => h.NportFilingId,
@@ -129,7 +131,7 @@ public class NportTools
                     ? ""
                     : $" matching '{MarkdownText(registrantOrSeries)}'";
                 var result = MarkdownTable.Start(
-                    $"Funds holding {MarkdownText(stock.Name)} ({safeTicker}) on each series' most recent Form NPORT-P — "
+                    $"Funds holding {safeTicker} on each series' most recent Form NPORT-P — "
                         + $"{totalCount} current fund positions{filterLabel}, showing rows "
                         + $"{offset + 1}-{offset + positions.Count} by value. "
                         + "Report dates differ per series (each fund's own fiscal quarter):",

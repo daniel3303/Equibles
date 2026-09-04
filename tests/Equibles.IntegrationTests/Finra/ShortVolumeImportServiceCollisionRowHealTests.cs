@@ -53,6 +53,7 @@ public class ShortVolumeImportServiceCollisionRowHealTests : ParadeDbMcpTestBase
             new DailyShortVolume
             {
                 CommonStockId = _stock.Id,
+                ListedTicker = _stock.Ticker,
                 Date = _corruptDate,
                 ShortVolume = 5_000,
                 TotalVolume = 9_000,

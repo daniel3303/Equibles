@@ -275,7 +275,7 @@ public class CommonStockRepository : BaseRepository<CommonStock>
         DbContext.Set<CommonStockListedCusip>().Remove(listedCusip);
     }
 
-    public IQueryable<CommonStockDelistedListing> GetDelistedListings()
+    public virtual IQueryable<CommonStockDelistedListing> GetDelistedListings()
     {
         return DbContext.Set<CommonStockDelistedListing>().AsQueryable();
     }

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.HostedService.Services;
 using Equibles.Integrations.Finra.Models;
@@ -26,7 +27,7 @@ public class ShortVolumeImportServiceAggregateVolumesByStockNullSymbolTests
     //
     // The risk this pin uniquely catches:
     //   • Drop the IsNullOrEmpty guard — `tickerMap.TryGetValue(null, ...)`
-    //     throws ArgumentNullException on Dictionary<string, Guid>. Real
+    //     throws ArgumentNullException on the listing dictionary. Real
     //     FINRA daily-short-volume CSVs occasionally emit blank Symbol
     //     cells in malformed rows (typically the summary trailer or a
     //     mid-file corruption); the IsNullOrEmpty branch absorbs them
@@ -65,7 +66,9 @@ public class ShortVolumeImportServiceAggregateVolumesByStockNullSymbolTests
         );
 
         var trackedStockId = Guid.NewGuid();
-        var tickerMap = new Dictionary<string, Guid> { ["AAPL"] = trackedStockId };
+        var tickerMap = new Dictionary<string, ListedSecurityKey> {
+            ["AAPL"] = new(trackedStockId, "AAPL")
+        };
         var records = new List<ShortVolumeRecord>
         {
             new()
@@ -78,7 +81,7 @@ public class ShortVolumeImportServiceAggregateVolumesByStockNullSymbolTests
         };
 
         var act = () =>
-            (Dictionary<Guid, DailyShortVolume>)
+            (Dictionary<ListedSecurityKey, DailyShortVolume>)
                 method!.Invoke(null, [records, tickerMap, new DateOnly(2024, 12, 31)]);
 
         var result = act.Should().NotThrow().Subject;

@@ -45,7 +45,7 @@ public class StockSplitCaptureManagerTests
         };
 
     [Fact]
-    public async Task Capture_StalePrimaryTargetAfterReorder_DoesNotWriteIssuerAction()
+    public async Task Capture_CurrentSecondaryTarget_WritesExactSeriesAction()
     {
         await using var context = NewDb();
         var stock = new CommonStock
@@ -57,22 +57,22 @@ public class StockSplitCaptureManagerTests
         context.Add(stock);
         await context.SaveChangesAsync();
 
-        // The crawl originally saw GOOGL as primary. By the write boundary it is secondary, so
-        // only the exact price series may be updated; the issuer-level action must be skipped.
-        var staleWrite = await NewManager(context).Capture(stock.Id, "GOOGL", [Split()]);
+        var secondaryWrite = await NewManager(context).Capture(stock.Id, "GOOGL", [Split()]);
 
-        staleWrite.Should().Be(0);
-        (await context.Set<StockSplit>().ToListAsync()).Should().BeEmpty();
+        secondaryWrite.Should().Be(1);
+        var secondary = await context.Set<StockSplit>().SingleAsync();
+        secondary.PriceSeriesTicker.Should().Be("GOOGL");
 
         var currentWrite = await NewManager(context).Capture(stock.Id, "GOOG", [Split()]);
 
         currentWrite.Should().Be(1);
-        var stored = await context.Set<StockSplit>().SingleAsync();
-        stored.PriceSeriesTicker.Should().Be("GOOG");
+        (await context.Set<StockSplit>().OrderBy(split => split.PriceSeriesTicker).ToListAsync())
+            .Select(split => split.PriceSeriesTicker)
+            .Should().Equal("GOOG", "GOOGL");
     }
 
     [Fact]
-    public async Task Capture_SameDateAlreadyAttributedToSibling_PreservesOriginalSeriesAndRatio()
+    public async Task Capture_SameDateAlreadyAttributedToSibling_AddsIndependentPrimaryAction()
     {
         await using var context = NewDb();
         var stock = new CommonStock
@@ -97,15 +97,18 @@ public class StockSplitCaptureManagerTests
 
         var changes = await NewManager(context).Capture(stock.Id, "GOOG", [Split(20m)]);
 
-        changes.Should().Be(0);
+        changes.Should().Be(1);
         context.ChangeTracker.Clear();
-        var stored = await context.Set<StockSplit>().SingleAsync();
-        stored.PriceSeriesTicker.Should().Be("GOOGL");
-        stored.Numerator.Should().Be(2m);
+        var stored = await context.Set<StockSplit>().OrderBy(split => split.PriceSeriesTicker).ToListAsync();
+        stored.Should().HaveCount(2);
+        stored[0].PriceSeriesTicker.Should().Be("GOOG");
+        stored[0].Numerator.Should().Be(20m);
+        stored[1].PriceSeriesTicker.Should().Be("GOOGL");
+        stored[1].Numerator.Should().Be(2m);
     }
 
     [Fact]
-    public async Task Capture_UnattributedLegacyRow_AttributesOnlyFromExactCurrentPrimaryObservation()
+    public async Task Capture_UnattributedLegacyRow_RemainsPrimaryOnly()
     {
         await using var context = NewDb();
         var stock = new CommonStock
@@ -132,21 +135,27 @@ public class StockSplitCaptureManagerTests
         var secondaryObservation = await NewManager(context)
             .Capture(stock.Id, "GOOGL", [Split(20m)]);
 
-        secondaryObservation.Should().Be(0);
+        secondaryObservation.Should().Be(1);
         context.ChangeTracker.Clear();
-        var stillUnattributed = await context.Set<StockSplit>().SingleAsync();
+        var stillUnattributed = await context.Set<StockSplit>()
+            .SingleAsync(split => split.PriceSeriesTicker == null);
         stillUnattributed.PriceSeriesTicker.Should().BeNull();
         stillUnattributed.Numerator.Should().Be(2m);
         stillUnattributed.PriceAdjustmentAppliedTime.Should().NotBeNull();
+        var secondary = await context.Set<StockSplit>()
+            .SingleAsync(split => split.PriceSeriesTicker == "GOOGL");
+        secondary.Numerator.Should().Be(20m);
 
         var primaryObservation = await NewManager(context).Capture(stock.Id, "GOOG", [Split(20m)]);
 
         primaryObservation.Should().Be(1);
         context.ChangeTracker.Clear();
-        var attributed = await context.Set<StockSplit>().SingleAsync();
+        var attributed = await context.Set<StockSplit>()
+            .SingleAsync(split => split.PriceSeriesTicker == "GOOG");
         attributed.PriceSeriesTicker.Should().Be("GOOG");
         attributed.Numerator.Should().Be(20m);
         attributed.PriceAdjustmentAppliedTime.Should().BeNull();
+        (await context.Set<StockSplit>().CountAsync()).Should().Be(2);
     }
 
     [Theory]

@@ -121,6 +121,9 @@ public class StockTabService
         return await _stockSplitRepository
             .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
             .AsNoTracking()
+            .Where(split =>
+                split.PriceSeriesTicker == null || split.PriceSeriesTicker == stock.Ticker
+            )
             .ToListAsync();
     }
 

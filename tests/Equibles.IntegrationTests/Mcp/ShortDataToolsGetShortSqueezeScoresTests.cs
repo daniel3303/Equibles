@@ -119,8 +119,9 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetShortSqueezeScores(ticker: "SOXX");
 
-        result.Should().Contain("No exact short-squeeze score series is available for SOXX");
-        result.Should().Contain("AAXJ's FINRA rows are not substituted");
+        result.Should().Contain("No short-squeeze score model is available for SOXX");
+        result.Should().Contain("raw FINRA series is listing-specific");
+        result.Should().Contain("issuer-level shares outstanding and primary-listing market factors");
         result.Should().NotContain("No short-squeeze scores available");
     }
 

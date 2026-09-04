@@ -9,8 +9,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.CorporateActions.BusinessLogic;
 
 // Upserts captured split events into StockSplit. The manager locks and revalidates
-// the exact current primary listing before writing, so a company-sync reorder cannot
-// attach one security's action to another. Idempotent by (stock, EffectiveDate): a
+// the exact current listing before writing, so a company-sync reorder cannot attach one
+// security's action to another. Idempotent by (stock, listed ticker, EffectiveDate): a
 // re-run with the same events writes nothing. A changed ratio for the same exact
 // source series clears PriceAdjustmentAppliedTime for another reconciliation.
 [Service]
@@ -44,10 +44,7 @@ public class StockSplitCaptureManager
         );
         var stock = await _stockRepository.GetForUpdate(commonStockId, cancellationToken);
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, listedTicker);
-        if (
-            resolvedTicker == null
-            || !string.Equals(resolvedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase)
-        )
+        if (resolvedTicker == null)
         {
             await transaction.RollbackAsync(cancellationToken);
             return 0;
@@ -61,35 +58,37 @@ public class StockSplitCaptureManager
             if (split.Numerator <= 0 || split.Denominator <= 0)
                 continue;
 
-            var match = existing.FirstOrDefault(s => s.EffectiveDate == split.EffectiveDate);
-            if (match == null)
-            {
-                _splitRepository.Add(
-                    new StockSplit
-                    {
-                        CommonStockId = stock.Id,
-                        PriceSeriesTicker = resolvedTicker,
-                        EffectiveDate = split.EffectiveDate,
-                        Numerator = split.Numerator,
-                        Denominator = split.Denominator,
-                        Source = split.Source,
-                    }
-                );
-                changes++;
-            }
-            else if (
-                match.PriceSeriesTicker != null
-                && !string.Equals(
-                    match.PriceSeriesTicker,
+            var isPrimary = string.Equals(
+                resolvedTicker,
+                stock.Ticker,
+                StringComparison.OrdinalIgnoreCase
+            );
+            var match = existing.FirstOrDefault(s =>
+                s.EffectiveDate == split.EffectiveDate
+                && string.Equals(
+                    s.PriceSeriesTicker,
                     resolvedTicker,
                     StringComparison.OrdinalIgnoreCase
                 )
-            )
+            );
+            match ??= isPrimary
+                ? existing.FirstOrDefault(s =>
+                    s.EffectiveDate == split.EffectiveDate && s.PriceSeriesTicker == null)
+                : null;
+            if (match == null)
             {
-                // The issuer-level table cannot represent two securities splitting on the same
-                // date. Preserve the already-attributed action; each price series is rebased
-                // independently by the Yahoo lane before capture reaches this manager.
-                continue;
+                match = new StockSplit
+                {
+                    CommonStockId = stock.Id,
+                    PriceSeriesTicker = resolvedTicker,
+                    EffectiveDate = split.EffectiveDate,
+                    Numerator = split.Numerator,
+                    Denominator = split.Denominator,
+                    Source = split.Source,
+                };
+                _splitRepository.Add(match);
+                existing.Add(match);
+                changes++;
             }
             else if (
                 match.PriceSeriesTicker == null

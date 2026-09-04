@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Data.Models.Taxonomies;
 using Equibles.CorporateActions.Data;
@@ -47,6 +48,22 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return GetByStock(stock, reportDate).Where(Is13F);
     }
 
+    /// <summary>
+    /// Exact listed security at a quarter end. Primary-listing rows historically store null;
+    /// secondary ETF and share-class rows carry ListedTicker from the filed CUSIP resolution.
+    /// </summary>
+    public IQueryable<InstitutionalHolding> Get13FByListing(
+        CommonStock stock,
+        string listedTicker,
+        DateOnly reportDate
+    ) => Get13FHistoryByListing(stock, listedTicker).Where(h => h.ReportDate == reportDate);
+
+    public IQueryable<InstitutionalHolding> Get13FByListingWithHolder(
+        CommonStock stock,
+        string listedTicker,
+        DateOnly reportDate
+    ) => Get13FByListing(stock, listedTicker, reportDate).Include(h => h.InstitutionalHolder);
+
     // Same stock/date 13F-only filter as Get13FByStock, with the InstitutionalHolder navigation
     // eagerly loaded for callers that render holder fields while aggregating rows.
     public IQueryable<InstitutionalHolding> Get13FByStockWithHolder(
@@ -78,6 +95,42 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             {
                 InstitutionalHolderId = g.Key.InstitutionalHolderId,
                 ListedTicker = g.Key.ListedTicker,
+                CurrentShares = g.Sum(h => h.ReportDate == currentReportDate ? h.Shares : 0L),
+                PreviousShares = g.Sum(h =>
+                    previousReportDate.HasValue && h.ReportDate == previousReportDate.Value
+                        ? h.Shares
+                        : 0L
+                ),
+                CurrentValue = g.Sum(h => h.ReportDate == currentReportDate ? h.Value : 0L),
+                PreviousValue = g.Sum(h =>
+                    previousReportDate.HasValue && h.ReportDate == previousReportDate.Value
+                        ? h.Value
+                        : 0L
+                ),
+                CurrentPositionCount = g.Count(h => h.ReportDate == currentReportDate),
+                PreviousPositionCount = g.Count(h =>
+                    previousReportDate.HasValue && h.ReportDate == previousReportDate.Value
+                ),
+            });
+    }
+
+    public IQueryable<HolderStockActivity> Get13FHolderActivityByListing(
+        CommonStock stock,
+        string listedTicker,
+        DateOnly currentReportDate,
+        DateOnly? previousReportDate
+    )
+    {
+        return Get13FHistoryByListing(stock, listedTicker)
+            .Where(h =>
+                h.ReportDate == currentReportDate
+                || (previousReportDate.HasValue && h.ReportDate == previousReportDate.Value)
+            )
+            .GroupBy(h => h.InstitutionalHolderId)
+            .Select(g => new HolderStockActivity
+            {
+                InstitutionalHolderId = g.Key,
+                ListedTicker = listedTicker,
                 CurrentShares = g.Sum(h => h.ReportDate == currentReportDate ? h.Shares : 0L),
                 PreviousShares = g.Sum(h =>
                     previousReportDate.HasValue && h.ReportDate == previousReportDate.Value
@@ -186,6 +239,20 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     public IQueryable<InstitutionalHolding> Get13FHistoryByStock(CommonStock stock)
     {
         return GetHistoryByStock(stock).Where(Is13F);
+    }
+
+    public IQueryable<InstitutionalHolding> Get13FHistoryByListing(
+        CommonStock stock,
+        string listedTicker
+    )
+    {
+        var isPrimary = string.Equals(listedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase);
+        return GetAll()
+            .Where(Is13F)
+            .Where(h => h.CommonStockId == stock.Id)
+            .Where(h => isPrimary
+                ? h.ListedTicker == null || h.ListedTicker == stock.Ticker
+                : h.ListedTicker == listedTicker);
     }
 
     public IQueryable<InstitutionalHolding> GetHistoryByHolder(InstitutionalHolder holder)
@@ -308,6 +375,24 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // comparison quarters off this list, so it must stay 13F-only (GH-4449).
     public IQueryable<DateOnly> Get13FReportDatesByStock(CommonStock stock) =>
         Get13FHistoryByStock(stock).DistinctReportDatesDescending();
+
+    public IQueryable<DateOnly> Get13FReportDatesByListing(
+        CommonStock stock,
+        string listedTicker
+    ) => Get13FHistoryByListing(stock, listedTicker).DistinctReportDatesDescending();
+
+    public async Task<List<DateOnly>> Get13FReportDatesByListingSnapshotBacked(
+        CommonStock stock,
+        string listedTicker,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.Equals(listedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase)
+            && !SecondaryTickerPolicy.IsExchangeTradedListing(stock, listedTicker))
+            return await Get13FReportDatesByStockSnapshotBacked(stock, cancellationToken);
+        return await Get13FReportDatesByListing(stock, listedTicker)
+            .ToListAsync(cancellationToken);
+    }
 
     // Snapshot-backed twin for request paths. The live DISTINCT above scans every historical
     // position for a heavily held stock; under ingest pressure that scan exhausted the 30-second
@@ -794,6 +879,63 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             snapshots.Add(await GetLiveStockActivityPoint(stock, latest, cancellationToken));
         }
         return snapshots;
+    }
+
+    public async Task<List<StockQuarterlyActivity>> GetListingActivityHistory(
+        CommonStock stock,
+        string listedTicker,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var aggregates = await Get13FHistoryByListing(stock, listedTicker)
+            .GroupBy(holding => holding.ReportDate)
+            .Select(group => new
+            {
+                ReportDate = group.Key,
+                Shares = group.Sum(holding => holding.Shares),
+                Value = group.Sum(holding => holding.Value),
+                FilerCount = group
+                    .Select(holding => holding.InstitutionalHolderId)
+                    .Distinct()
+                    .Count(),
+            })
+            .OrderBy(row => row.ReportDate)
+            .ToListAsync(cancellationToken);
+
+        var result = new List<StockQuarterlyActivity>(aggregates.Count);
+        for (var index = 0; index < aggregates.Count; index++)
+        {
+            var current = aggregates[index];
+            var previous = index > 0 ? aggregates[index - 1] : null;
+            result.Add(
+                new StockQuarterlyActivity
+                {
+                    CommonStockId = stock.Id,
+                    ReportDate = current.ReportDate,
+                    PreviousReportDate = previous?.ReportDate,
+                    CurrentShares = current.Shares,
+                    PreviousShares = previous?.Shares ?? 0,
+                    CurrentValue = current.Value,
+                    PreviousValue = previous?.Value ?? 0,
+                    CurrentFilerCount = current.FilerCount,
+                    PreviousFilerCount = previous?.FilerCount ?? 0,
+                    ListingShares =
+                    [
+                        new StockQuarterlyListingActivity
+                        {
+                            CommonStockId = stock.Id,
+                            ReportDate = current.ReportDate,
+                            IsCombined = false,
+                            PriceSeriesTicker = listedTicker,
+                            CurrentShares = current.Shares,
+                            PreviousShares = previous?.Shares ?? 0,
+                        },
+                    ],
+                }
+            );
+        }
+
+        return result;
     }
 
     // Snapshot-first open-window point for one stock. Ownership-history surfaces replace only
@@ -1728,6 +1870,22 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     {
         return GetAll()
             .Where(h => h.CommonStockId == stock.Id && h.FilingDate >= since)
+            .GroupBy(h => h.CommonStockId)
+            .Select(g => new FilingActivitySummary
+            {
+                FilingCount = g.Select(h => h.AccessionNumber).Distinct().Count(),
+                FilerCount = g.Select(h => h.InstitutionalHolderId).Distinct().Count(),
+            });
+    }
+
+    public IQueryable<FilingActivitySummary> GetFilingActivitySummary(
+        CommonStock stock,
+        string listedTicker,
+        DateOnly since
+    )
+    {
+        return Get13FHistoryByListing(stock, listedTicker)
+            .Where(h => h.FilingDate >= since)
             .GroupBy(h => h.CommonStockId)
             .Select(g => new FilingActivitySummary
             {

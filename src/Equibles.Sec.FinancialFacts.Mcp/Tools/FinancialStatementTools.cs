@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Extensions;
+using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
@@ -191,6 +192,7 @@ public class FinancialStatementTools
                         .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                         .ToListAsync()
                     : [];
+                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
 
                 return RenderStatementTable(
                     stock,

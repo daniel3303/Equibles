@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Sec.Data.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Sec.Repositories;
 
@@ -62,23 +63,59 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     /// </summary>
     public IQueryable<NportHolding> GetHoldingsByStockCusip(CommonStock stock)
     {
+        return GetHoldingsByListingCusip(stock, stock.Ticker);
+    }
+
+    /// <summary>
+    /// Holdings carrying the exact listed security's authoritative CUSIP identity. A primary
+    /// listing uses the stock's current and retired CUSIPs; a secondary listing uses only its
+    /// <see cref="CommonStockListedCusip"/> rows, so sibling fund series never bleed together.
+    /// </summary>
+    public IQueryable<NportHolding> GetHoldingsByListingCusip(
+        CommonStock stock,
+        string listedTicker
+    )
+    {
         // The explicit not-null filters on both legs let EF's nullability analysis emit the
         // membership test as a plain equality semi-join instead of null-compensating it into
         // "= OR both-null", which would defeat the CUSIP index the same way the OR did.
-        var cusips = DbContext
-            .Set<CommonStockCusipAlias>()
-            .Where(a => a.CommonStockId == stock.Id)
-            .Select(a => a.Cusip)
-            .Union(
-                DbContext
-                    .Set<CommonStock>()
-                    .Where(s => s.Id == stock.Id && s.Cusip != null)
-                    .Select(s => s.Cusip)
-            );
+        var cusips = GetCusipIdentity(stock, listedTicker);
         return DbContext
             .Set<NportHolding>()
             .Where(h => h.Cusip != null && cusips.Contains(h.Cusip));
     }
+
+    private IQueryable<string> GetCusipIdentity(CommonStock stock, string listedTicker)
+    {
+        var isPrimary = string.Equals(
+            listedTicker,
+            stock.Ticker,
+            StringComparison.OrdinalIgnoreCase
+        );
+        return isPrimary
+            ? DbContext
+                .Set<CommonStockCusipAlias>()
+                .Where(a => a.CommonStockId == stock.Id)
+                .Select(a => a.Cusip)
+                .Union(
+                    DbContext
+                        .Set<CommonStock>()
+                        .Where(s => s.Id == stock.Id && s.Cusip != null)
+                        .Select(s => s.Cusip)
+                )
+            : DbContext
+                .Set<CommonStockListedCusip>()
+                .Where(c =>
+                    c.CommonStockId == stock.Id && c.ListedTicker == listedTicker
+                )
+                .Select(c => c.Cusip);
+    }
+
+    public Task<bool> HasCusipIdentity(
+        CommonStock stock,
+        string listedTicker,
+        CancellationToken cancellationToken = default
+    ) => GetCusipIdentity(stock, listedTicker).AnyAsync(cancellationToken);
 
     /// <summary>
     /// Filings of a sweep-discovered series, identified by registrant CIK and series id (an id-less

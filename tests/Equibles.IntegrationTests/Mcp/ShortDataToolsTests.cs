@@ -87,13 +87,22 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     {
         var stock = GmeStock();
         stock.SecondaryTickers = ["GME-A"];
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.AddRange(
+            stock,
+            new DailyShortVolume {
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                Date = DateOnly.FromDateTime(DateTime.UtcNow),
+                ShortVolume = 100,
+                TotalVolume = 200,
+            }
+        );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetShortVolume("GME-A");
 
-        result.Should().Contain("No exact short-volume series is available for GME-A");
-        result.Should().Contain("GME's FINRA rows are not substituted");
+        result.Should().Contain("No short volume data found for GME-A");
+        result.Should().NotContain("100");
     }
 
     [Fact]
@@ -222,13 +231,21 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     {
         var stock = GmeStock();
         stock.SecondaryTickers = ["GME-A"];
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.AddRange(
+            stock,
+            new ShortInterest {
+                CommonStock = stock,
+                CommonStockId = stock.Id,
+                SettlementDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                CurrentShortPosition = 100,
+            }
+        );
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetShortInterest("GME-A");
 
-        result.Should().Contain("No exact short-interest series is available for GME-A");
-        result.Should().Contain("GME's FINRA rows are not substituted");
+        result.Should().Contain("No short interest data found for GME-A");
+        result.Should().NotContain("100");
     }
 
     [Fact]

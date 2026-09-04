@@ -110,6 +110,7 @@ public class ShortVolumeImportServiceTests : IDisposable
                 new DailyShortVolume
                 {
                     CommonStockId = stock.Id,
+                    ListedTicker = stock.Ticker,
                     Date = date,
                     ShortVolume = shortVolume,
                     ShortExemptVolume = 5_000,
@@ -129,7 +130,7 @@ public class ShortVolumeImportServiceTests : IDisposable
         _partitionRepo.Add(
             new FinraImportPartition
             {
-                Dataset = "daily-short-volume-files-v2",
+                Dataset = "daily-short-volume-files-v3",
                 PartitionDate = date,
                 ScopeKey = scopeKey,
                 ImportedAt = importedAt ?? Now.UtcDateTime,
@@ -139,10 +140,14 @@ public class ShortVolumeImportServiceTests : IDisposable
         _dbContext.ChangeTracker.Clear();
     }
 
-    private static string ResolveStockUniverse(params CommonStock[] stocks)
+    private static string ResolveListingUniverse(params CommonStock[] stocks)
     {
-        return FinraImportScope.ResolveStockUniverse(
-            stocks.ToDictionary(stock => stock.Ticker, stock => stock.Id, StringComparer.Ordinal)
+        return FinraImportScope.ResolveListingUniverse(
+            stocks.ToDictionary(
+                stock => stock.Ticker,
+                stock => new ListedSecurityKey(stock.Id, stock.Ticker),
+                StringComparer.Ordinal
+            )
         );
     }
 
@@ -276,7 +281,7 @@ public class ShortVolumeImportServiceTests : IDisposable
         var today = DateOnly.FromDateTime(Now.UtcDateTime);
         _workerOptions.MinSyncDate = today.ToDateTime(TimeOnly.MinValue);
         await SeedVolume(apple, today);
-        await SeedCompletedPartition(today, ResolveStockUniverse(apple));
+        await SeedCompletedPartition(today, ResolveListingUniverse(apple));
 
         await _service.Import(CancellationToken.None);
 
@@ -298,9 +303,41 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         await _finraClient.Received(1).GetDailyShortVolume(today);
         _partitionRepo
-            .GetPartition("daily-short-volume-files-v2", ResolveStockUniverse(apple), today)
+            .GetPartition("daily-short-volume-files-v3", ResolveListingUniverse(apple), today)
             .Should()
             .ContainSingle();
+    }
+
+    [Fact]
+    public async Task Import_ConfiguredSubset_WritesFilteredIdentityMarker()
+    {
+        var apple = CreateStock("AAPL", "Apple Inc.");
+        await SeedStocks(apple);
+
+        var today = DateOnly.FromDateTime(Now.UtcDateTime);
+        _workerOptions.MinSyncDate = today.ToDateTime(TimeOnly.MinValue);
+        _workerOptions.TickersToSync = ["AAPL"];
+        _finraClient.GetDailyShortVolume(today).Returns(new List<ShortVolumeRecord>());
+        var listings = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        {
+            ["AAPL"] = new(apple.Id, "AAPL"),
+        };
+        var filteredScope = FinraImportScope.ResolveListingImportScope(
+            listings,
+            _workerOptions.TickersToSync
+        );
+
+        await _service.Import(CancellationToken.None);
+
+        filteredScope.Should().StartWith("listing-filter:");
+        _partitionRepo
+            .GetPartition("daily-short-volume-files-v3", filteredScope, today)
+            .Should()
+            .ContainSingle();
+        _partitionRepo
+            .GetPartition("daily-short-volume-files-v3", ResolveListingUniverse(apple), today)
+            .Should()
+            .BeEmpty();
     }
 
     [Fact]
@@ -336,8 +373,8 @@ public class ShortVolumeImportServiceTests : IDisposable
         volumes.Should().Contain(v => v.CommonStockId == microsoft.Id && v.ShortVolume == 300_000);
         _partitionRepo
             .GetPartition(
-                "daily-short-volume-files-v2",
-                ResolveStockUniverse(apple, microsoft),
+                "daily-short-volume-files-v3",
+                ResolveListingUniverse(apple, microsoft),
                 existingDate
             )
             .Should()
@@ -780,6 +817,7 @@ public class ShortInterestImportServiceTests : IDisposable
                 new ShortInterest
                 {
                     CommonStockId = stock.Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = settlementDate,
                     CurrentShortPosition = currentShort,
                     PreviousShortPosition = 9_000_000,

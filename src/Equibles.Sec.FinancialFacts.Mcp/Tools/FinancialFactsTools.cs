@@ -6,6 +6,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.Extensions;
+using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
@@ -208,6 +209,7 @@ public class FinancialFactsTools
                         .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                         .ToListAsync()
                     : [];
+                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
 
                 return RenderFactHistoryTable(
                     concept,
@@ -350,7 +352,13 @@ public class FinancialFactsTools
                         : (
                             await _stockSplitRepository
                                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                                .Where(split => splitAdjustedStockIds.Contains(split.CommonStockId))
+                                .Where(split =>
+                                    splitAdjustedStockIds.Contains(split.CommonStockId)
+                                    && (
+                                        split.PriceSeriesTicker == null
+                                        || split.PriceSeriesTicker == split.CommonStock.Ticker
+                                    )
+                                )
                                 .ToListAsync()
                         )
                             .GroupBy(split => split.CommonStockId)

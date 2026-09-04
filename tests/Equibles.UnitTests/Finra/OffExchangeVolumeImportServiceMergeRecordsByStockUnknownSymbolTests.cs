@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Finra.HostedService.Services;
 using Equibles.Integrations.Finra.Models;
 
@@ -22,7 +23,8 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockUnknownSymbolTests
     public void MergeRecordsByStock_SymbolNotInTickerMap_IsSkippedNotPersisted()
     {
         var trackedStockId = Guid.NewGuid();
-        var tickerMap = new Dictionary<string, Guid> { ["AAPL"] = trackedStockId };
+        var security = new ListedSecurityKey(trackedStockId, "AAPL");
+        var tickerMap = new Dictionary<string, ListedSecurityKey> { ["AAPL"] = security };
         var records = new List<OffExchangeWeeklyRecord>
         {
             new()
@@ -44,11 +46,11 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockUnknownSymbolTests
         var result = OffExchangeVolumeMerger.Merge(
             records,
             tickerMap,
-            new Dictionary<string, Guid>(),
+            new Dictionary<string, ListedSecurityKey>(),
             new DateOnly(2024, 3, 4)
         );
 
         result.Should().ContainSingle();
-        result[trackedStockId].AtsVolume.Should().Be(1_000);
+        result[security].AtsVolume.Should().Be(1_000);
     }
 }

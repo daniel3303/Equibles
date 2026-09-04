@@ -90,6 +90,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
                 {
                     CommonStock = stock,
                     CommonStockId = stock.Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = settlementDate,
                     CurrentShortPosition = position,
                     PreviousShortPosition = previous,
@@ -218,6 +219,47 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
         // The straddle row's Change reconciles with the adjacent restated positions.
         result.Should().Contain("+500,000");
         result.Should().NotContain("+5,000,000");
+    }
+
+    [Fact]
+    public async Task GetShortInterest_OneSettlementRange_UsesPreRangeRowForSplitChange()
+    {
+        var stock = AddGme();
+        AddShortInterest(
+            stock,
+            new DateOnly(2026, 2, 27),
+            position: 500_000,
+            previous: 450_000,
+            change: 50_000
+        );
+        AddShortInterest(
+            stock,
+            new DateOnly(2026, 3, 13),
+            position: 5_500_000,
+            previous: 500_000,
+            change: 5_000_000
+        );
+        DbContext.Set<StockSplit>().Add(new StockSplit
+        {
+            CommonStock = stock,
+            CommonStockId = stock.Id,
+            PriceSeriesTicker = stock.Ticker,
+            EffectiveDate = new DateOnly(2026, 3, 1),
+            Numerator = 10m,
+            Denominator = 1m,
+            Source = StockSplitSource.Manual,
+        });
+        await DbContext.SaveChangesAsync();
+
+        var result = await Sut().GetShortInterest(
+            "GME",
+            startDate: "2026-03-13",
+            endDate: "2026-03-13"
+        );
+
+        result.Should().Contain("+500,000");
+        result.Should().NotContain("+5,000,000");
+        result.Should().NotContain("| 2026-02-27");
     }
 
     [Fact]

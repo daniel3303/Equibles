@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.CorporateActions.Data;
@@ -68,10 +69,10 @@ public class ShortDataTools
 
     [McpServerTool(Name = "GetShortVolume", Title = "Daily Short Sale Volume", ReadOnly = true)]
     [Description(
-        "Get daily short sale volume history for a stock from FINRA's short sale volume files. Shows short volume, short-exempt volume, total volume, and short volume percentage per trading day. Volumes cover trades reported to FINRA facilities (off-exchange/TRF) only — NOT consolidated tape volume — and a 40-50% Short % is the normal baseline from market-maker liquidity provision, so it must not be quoted as a share of the stock's total traded volume. This daily flow metric is distinct from bi-monthly short interest positions: use GetShortInterest for positions, GetLargestShortVolume for a market-wide single-day ranking, and GetShortSqueezeScores for squeeze candidates."
+        "Get daily short sale volume history for an exact stock or ETF listing from FINRA's short sale volume files. Shows short volume, short-exempt volume, total volume, and short volume percentage per trading day. Volumes cover trades reported to FINRA facilities (off-exchange/TRF) only — NOT consolidated tape volume — and a 40-50% Short % is the normal baseline from market-maker liquidity provision, so it must not be quoted as a share of the stock's total traded volume. This daily flow metric is distinct from bi-monthly short interest positions: use GetShortInterest for positions, GetLargestShortVolume for a market-wide single-day ranking, and GetShortSqueezeScores for squeeze candidates."
     )]
     public Task<string> GetShortVolume(
-        [Description("Stock ticker symbol (e.g., AAPL, GME, AMC)")] string ticker,
+        [Description("Listed security ticker (e.g., AAPL, VOO, GME)")] string ticker,
         [Description("Start date in YYYY-MM-DD format (defaults to 3 months ago)")]
             string startDate = null,
         [Description("End date in YYYY-MM-DD format (defaults to latest available)")]
@@ -88,13 +89,7 @@ public class ShortDataTools
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
-                var listingError = FinraTickerScope.SecondaryListingUnavailable(
-                    stock,
-                    ticker,
-                    "short-volume"
-                );
-                if (listingError != null)
-                    return listingError;
+                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
 
                 var (start, end, rangeError) = ParseStrictDateRange(
                     startDate,
@@ -105,7 +100,7 @@ public class ShortDataTools
                     return rangeError;
 
                 var query = _shortVolumeRepository
-                    .GetHistoryByStock(stock)
+                    .GetHistoryByListing(stock, listedTicker)
                     .Where(d => d.Date >= start && d.Date <= end);
 
                 maxResults = McpLimit.Clamp(maxResults);
@@ -123,13 +118,13 @@ public class ShortDataTools
                     // floor, so an older range would otherwise read as a false factual
                     // "this stock had no short volume" claim.
                     var earliest = await _shortVolumeRepository
-                        .GetHistoryByStock(stock)
+                        .GetHistoryByListing(stock, listedTicker)
                         .OrderBy(d => d.Date)
                         .Select(d => (DateOnly?)d.Date)
                         .FirstOrDefaultAsync();
                     if (earliest != null && end < earliest.Value)
-                        return $"No short volume data for {stock.Ticker} before {earliest:yyyy-MM-dd} — coverage starts on {earliest:yyyy-MM-dd}. Adjust the date range.";
-                    return $"No short volume data found for {stock.Ticker} in the specified date range.";
+                        return $"No short volume data for {listedTicker} before {earliest:yyyy-MM-dd} — coverage starts on {earliest:yyyy-MM-dd}. Adjust the date range.";
+                    return $"No short volume data found for {listedTicker} in the specified date range.";
                 }
 
                 // Restate each day's volumes onto today's split basis so the series is
@@ -139,11 +134,12 @@ public class ShortDataTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
+                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, listedTicker);
 
                 var table = MarkdownTable.Render(
                     records.OrderBy(r => r.Date).ToList(),
-                    $"No short volume data found for {stock.Ticker} in the specified date range.",
-                    $"Daily short volume for {stock.Ticker} ({stock.Name}):",
+                    $"No short volume data found for {listedTicker} in the specified date range.",
+                    $"Daily short volume for {listedTicker}{ListingName(stock, listedTicker)}:",
                     "_Volumes are trades reported to FINRA facilities (off-exchange/TRF) only — not consolidated tape volume; a 40-50% Short % is the normal baseline. Short Exempt = short sales exempt from Reg SHO price-test restrictions. Share counts are restated onto today's split basis._",
                     "| Date | Short Volume | Short Exempt | Total Volume | Short % |",
                     "|------|-------------|--------------|-------------|---------|",
@@ -164,10 +160,10 @@ public class ShortDataTools
 
     [McpServerTool(Name = "GetShortInterest", Title = "Short Interest History", ReadOnly = true)]
     [Description(
-        "Get bi-monthly short interest history for a stock from FINRA. Shows the reported short position, change from the previous settlement, average daily volume, and days to cover per settlement date. Share counts are restated onto today's split basis so the series stays continuous across stock splits; days to cover is as reported (FINRA caps it at 999.99). High days-to-cover (>5) suggests a potential short squeeze — for short interest as a % of shares outstanding and an actual squeeze-candidate ranking use GetShortSqueezeScores; for the market-wide latest settlement use GetShortInterestSnapshot. FINRA publishes each file weeks after it measures the position, so the answer may also carry an estimate of the settlement that has not been reported yet — it appears BELOW the table, labelled as an estimate, and is a model prediction rather than reported data; never present it as a FINRA figure."
+        "Get bi-monthly short interest history for an exact stock or ETF listing from FINRA. Shows the reported short position, change from the previous settlement, average daily volume, and days to cover per settlement date. Share counts are restated onto today's split basis so the series stays continuous across stock splits; days to cover is as reported (FINRA caps it at 999.99). High days-to-cover (>5) suggests a potential short squeeze — for short interest as a % of shares outstanding and an actual squeeze-candidate ranking use GetShortSqueezeScores; for the market-wide latest settlement use GetShortInterestSnapshot. For primary operating-company stocks only, the answer may also carry a model estimate of the settlement FINRA has not published yet; it appears BELOW the table and must never be presented as a FINRA figure."
     )]
     public Task<string> GetShortInterest(
-        [Description("Stock ticker symbol (e.g., AAPL, GME, TSLA)")] string ticker,
+        [Description("Listed security ticker (e.g., AAPL, VOO, GME)")] string ticker,
         [Description("Start date in YYYY-MM-DD format (defaults to 1 year ago)")]
             string startDate = null,
         [Description("End date in YYYY-MM-DD format (defaults to latest available)")]
@@ -186,13 +182,7 @@ public class ShortDataTools
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
-                var listingError = FinraTickerScope.SecondaryListingUnavailable(
-                    stock,
-                    ticker,
-                    "short-interest"
-                );
-                if (listingError != null)
-                    return listingError;
+                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
 
                 var (start, end, rangeError) = ParseStrictDateRange(
                     startDate,
@@ -202,20 +192,29 @@ public class ShortDataTools
                 if (rangeError != null)
                     return rangeError;
 
-                var query = _shortInterestRepository
-                    .GetHistoryByStock(stock)
+                var history = _shortInterestRepository
+                    .GetHistoryByListing(stock, listedTicker);
+                var query = history
                     .Where(s => s.SettlementDate >= start && s.SettlementDate <= end);
 
                 var total = await query.CountAsync();
 
-                // One extra settlement past the window so the oldest DISPLAYED row still has
-                // its predecessor available for the split-consistent Change computation below.
-                var fetched = await query
+                var display = await query
                     .OrderByDescending(s => s.SettlementDate)
-                    .Take(maxResults + 1)
+                    .Take(maxResults)
                     .ToListAsync();
-
-                var display = fetched.Take(maxResults).OrderBy(r => r.SettlementDate).ToList();
+                var calculationRows = display.ToList();
+                if (display.Count > 0)
+                {
+                    var oldestDisplayed = display.Min(record => record.SettlementDate);
+                    var predecessor = await history
+                        .Where(record => record.SettlementDate < oldestDisplayed)
+                        .OrderByDescending(record => record.SettlementDate)
+                        .FirstOrDefaultAsync();
+                    if (predecessor != null)
+                        calculationRows.Add(predecessor);
+                }
+                display = display.OrderBy(record => record.SettlementDate).ToList();
 
                 // Restate each settlement's share counts (short position, change, average
                 // daily volume) onto today's split basis so the series is continuous across a
@@ -225,6 +224,7 @@ public class ShortDataTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
+                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, listedTicker);
 
                 // FINRA's raw change is (current − previous) where the previous position is on
                 // the PREVIOUS settlement's split basis, so scaling it by the current factor
@@ -232,7 +232,7 @@ public class ShortDataTools
                 // the predecessor settlement is on file (and FINRA's change really references
                 // it), display the difference of the two restated positions instead, so the
                 // Change column reconciles row-to-row across a split boundary.
-                var ascAll = fetched.OrderBy(r => r.SettlementDate).ToList();
+                var ascAll = calculationRows.OrderBy(r => r.SettlementDate).ToList();
                 var changeById = new Dictionary<Guid, long>(ascAll.Count);
                 for (var i = 0; i < ascAll.Count; i++)
                 {
@@ -251,8 +251,8 @@ public class ShortDataTools
 
                 var table = MarkdownTable.Render(
                     display,
-                    $"No short interest data found for {stock.Ticker} in the specified date range.",
-                    $"Short interest for {stock.Ticker} ({stock.Name}):",
+                    $"No short interest data found for {listedTicker} in the specified date range.",
+                    $"Short interest for {listedTicker}{ListingName(stock, listedTicker)}:",
                     "_Share counts are restated onto today's split basis so the series is continuous across splits; Days to Cover is as reported by FINRA (capped at 999.99)._",
                     "| Settlement Date | Short Position | Change | Avg Daily Volume | Days to Cover |",
                     "|----------------|---------------|--------|-----------------|---------------|",
@@ -268,6 +268,8 @@ public class ShortDataTools
                 var answer = AppendNote(table, NewestKeptNote(display.Count, total, "settlements"));
                 if (!WindowReachesPresent(end))
                     return answer;
+                if (SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker))
+                    return answer;
 
                 var estimate =
                     _estimateSource == null ? null : await _estimateSource.Describe(stock);
@@ -278,13 +280,18 @@ public class ShortDataTools
         );
     }
 
+    private static string ListingName(CommonStock stock, string listedTicker) =>
+        !SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker)
+            ? $" ({stock.Name})"
+            : string.Empty;
+
     [McpServerTool(
         Name = "GetShortInterestSnapshot",
         Title = "Market-Wide Short Interest Snapshot",
         ReadOnly = true
     )]
     [Description(
-        "Market-wide snapshot of the latest FINRA bi-monthly short interest settlement — one row per stock, sorted by days to cover (descending) by default. FINRA caps days to cover at 999.99: capped rows are a sentinel (almost always illiquid names with a tiny average-daily-volume denominator) and are ranked after real readings; pass minAvgDailyVolume (e.g. 100000) to drop illiquid names entirely. This is the raw FINRA snapshot — for genuine short-squeeze candidate ranking use GetShortSqueezeScores; for one stock's history use GetShortInterest; for daily short-sale flow use GetShortVolume/GetLargestShortVolume."
+        "Market-wide snapshot of the latest FINRA bi-monthly short interest settlement — one row per exact listed security, sorted by days to cover (descending) by default. FINRA caps days to cover at 999.99: capped rows are a sentinel (almost always illiquid names with a tiny average-daily-volume denominator) and are ranked after real readings; pass minAvgDailyVolume (e.g. 100000) to drop illiquid names entirely. This is the raw FINRA snapshot — for genuine short-squeeze candidate ranking use GetShortSqueezeScores; for one stock or ETF's history use GetShortInterest; for daily short-sale flow use GetShortVolume/GetLargestShortVolume."
     )]
     public Task<string> GetShortInterestSnapshot(
         [Description("Minimum days to cover filter (default: 0)")] decimal minDaysToCover = 0,
@@ -324,41 +331,10 @@ public class ShortDataTools
                     query = query.Where(s => s.DaysToCover >= minDaysToCover);
                 }
 
-                if (minAvgDailyVolume > 0)
-                {
-                    query = query.Where(s => s.AverageDailyVolume >= minAvgDailyVolume);
-                }
-
-                // Every ordering ends on the ticker so the ranking is deterministic — the
-                // 999.99 cap tier alone holds ~180 tied rows, and an ORDER BY that ends on a
-                // tie lets Postgres return a different "top" set on every call.
                 var sortKey = string.IsNullOrWhiteSpace(sortBy) ? "daysToCover" : sortBy.Trim();
-                IOrderedQueryable<ShortInterest> ordered;
-                if (sortKey.Equals("daysToCover", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Rows at FINRA's cap are a sentinel tier, not real readings — rank them
-                    // after genuine values so the default view is not 100% illiquid capped
-                    // names (which would bury every actionable row).
-                    ordered = query
-                        .OrderBy(s => s.DaysToCover >= FinraDaysToCoverCap ? 1 : 0)
-                        .ThenByDescending(s => s.DaysToCover)
-                        .ThenByDescending(s => s.CurrentShortPosition)
-                        .ThenBy(s => s.CommonStock.Ticker);
-                }
-                else if (sortKey.Equals("shortPosition", StringComparison.OrdinalIgnoreCase))
-                {
-                    ordered = query
-                        .OrderByDescending(s => s.CurrentShortPosition)
-                        .ThenBy(s => s.CommonStock.Ticker);
-                }
-                else if (sortKey.Equals("change", StringComparison.OrdinalIgnoreCase))
-                {
-                    ordered = query
-                        .OrderByDescending(s => s.ChangeInShortPosition)
-                        .ThenByDescending(s => s.CurrentShortPosition)
-                        .ThenBy(s => s.CommonStock.Ticker);
-                }
-                else
+                if (!sortKey.Equals("daysToCover", StringComparison.OrdinalIgnoreCase)
+                    && !sortKey.Equals("shortPosition", StringComparison.OrdinalIgnoreCase)
+                    && !sortKey.Equals("change", StringComparison.OrdinalIgnoreCase))
                 {
                     return McpOutput.InvalidArgument(
                         "sortBy",
@@ -368,11 +344,63 @@ public class ShortDataTools
                 }
 
                 offset = McpLimit.ClampOffset(offset);
-                var total = await query.CountAsync();
-                var records = await ordered
+                var rawRecords = await query.ToListAsync();
+                var validListings = await _commonStockRepository.GetUniqueActiveListingKeys();
+                rawRecords = rawRecords.Where(row => validListings.Contains(
+                    new ListedSecurityKey(
+                        row.CommonStockId,
+                        ListingTicker(row.CommonStock, row.ListedTicker)
+                    )
+                )).ToList();
+                var stockIds = rawRecords.Select(row => row.CommonStockId).Distinct().ToList();
+                var splitRows = await _stockSplitRepository
+                    .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
+                    .Where(split => stockIds.Contains(split.CommonStockId))
+                    .ToListAsync();
+                var previousDate = await _shortInterestRepository.GetAllSettlementDates()
+                    .Where(day => day < latestDate)
+                    .OrderByDescending(day => day)
+                    .FirstOrDefaultAsync();
+                var adjusted = rawRecords.Select(row =>
+                {
+                    var listedTicker = ListingTicker(row.CommonStock, row.ListedTicker);
+                    var scoped = PriceSeriesSplitScope.ForListing(
+                        splitRows.Where(split => split.CommonStockId == row.CommonStockId),
+                        row.CommonStock.Ticker,
+                        listedTicker
+                    );
+                    var factor = SplitAdjustment.ShareCountFactor(latestDate, scoped);
+                    var previousFactor = SplitAdjustment.ShareCountFactor(previousDate, scoped);
+                    var position = SplitAdjustment.AdjustShareCount(row.CurrentShortPosition, factor);
+                    var previous = SplitAdjustment.AdjustShareCount(row.PreviousShortPosition, previousFactor);
+                    return new
+                    {
+                        Row = row,
+                        ListedTicker = listedTicker,
+                        Factor = factor,
+                        Position = position,
+                        Change = position - previous,
+                    };
+                }).Where(row => minAvgDailyVolume <= 0
+                    || SplitAdjustment.AdjustShareCount(
+                        row.Row.AverageDailyVolume.Value,
+                        row.Factor
+                    ) >= minAvgDailyVolume);
+                adjusted = sortKey.Equals("shortPosition", StringComparison.OrdinalIgnoreCase)
+                    ? adjusted.OrderByDescending(row => row.Position).ThenBy(row => row.ListedTicker)
+                    : sortKey.Equals("change", StringComparison.OrdinalIgnoreCase)
+                        ? adjusted.OrderByDescending(row => row.Change)
+                            .ThenByDescending(row => row.Position)
+                            .ThenBy(row => row.ListedTicker)
+                        : adjusted.OrderBy(row => row.Row.DaysToCover >= FinraDaysToCoverCap ? 1 : 0)
+                            .ThenByDescending(row => row.Row.DaysToCover)
+                            .ThenByDescending(row => row.Position)
+                            .ThenBy(row => row.ListedTicker);
+                var total = adjusted.Count();
+                var records = adjusted
                     .Skip(offset)
                     .Take(McpLimit.Clamp(maxResults))
-                    .ToListAsync();
+                    .ToList();
                 if (records.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {total} rows match; lower offset.";
 
@@ -387,7 +415,7 @@ public class ShortDataTools
                     "_FINRA caps Days to Cover at 999.99 — \">=999.99 (FINRA cap)\" rows are that sentinel (true value unknown, typically illiquid names) and rank after real readings in the default sort._",
                     "| Ticker | Short Position | Change | Avg Daily Volume | Days to Cover |",
                     "|--------|---------------|--------|-----------------|---------------|",
-                    r => RenderShortInterestRow(r.CommonStock.Ticker, r)
+                    r => RenderShortInterestRow(r.ListedTicker, r.Row, r.Factor, r.Change)
                 );
 
                 return AppendNote(
@@ -406,7 +434,7 @@ public class ShortDataTools
         ReadOnly = true
     )]
     [Description(
-        "Get the stocks with the largest daily short sale volume for a single trading day (defaults to the latest available), from FINRA's daily short sale volume files, sorted by short volume descending. Short % is the share of that day's FINRA-facility (off-exchange/TRF) volume sold short — 40-50% is a normal market-making baseline — NOT short interest (the open short position; use GetShortInterest/GetShortInterestSnapshot for positions and GetShortSqueezeScores for squeeze candidates; use GetShortVolume for one stock's daily history). Pass sortBy=shortPercent with a minTotalVolume floor to rank by short intensity instead of raw size."
+        "Get the exact listed securities, including ETFs, with the largest daily short sale volume for a single trading day (defaults to the latest available), from FINRA's daily short sale volume files, sorted by short volume descending. Short % is the share of that day's FINRA-facility (off-exchange/TRF) volume sold short — 40-50% is a normal market-making baseline — NOT short interest (the open short position; use GetShortInterest/GetShortInterestSnapshot for positions and GetShortSqueezeScores for operating-stock squeeze candidates; use GetShortVolume for one listed security's daily history). Pass sortBy=shortPercent with a minTotalVolume floor to rank by short intensity instead of raw size."
     )]
     public Task<string> GetLargestShortVolume(
         [Description("Trading day in YYYY-MM-DD format (defaults to the latest available day)")]
@@ -448,44 +476,56 @@ public class ShortDataTools
                     .Include(d => d.CommonStock)
                     .Where(d => d.TotalVolume > 0);
 
-                if (minShortVolume > 0)
-                {
-                    query = query.Where(d => d.ShortVolume >= minShortVolume);
-                }
-
-                if (minTotalVolume > 0)
-                {
-                    query = query.Where(d => d.TotalVolume >= minTotalVolume);
-                }
-
-                // Orderings end on the ticker so a re-call pages the same ranking even when
-                // rows tie on the sort key.
                 var sortKey = string.IsNullOrWhiteSpace(sortBy) ? "shortVolume" : sortBy.Trim();
-                IOrderedQueryable<DailyShortVolume> ordered;
-                if (sortKey.Equals("shortVolume", StringComparison.OrdinalIgnoreCase))
-                {
-                    ordered = query
-                        .OrderByDescending(d => d.ShortVolume)
-                        .ThenBy(d => d.CommonStock.Ticker);
-                }
-                else if (sortKey.Equals("shortPercent", StringComparison.OrdinalIgnoreCase))
-                {
-                    ordered = query
-                        .OrderByDescending(d => d.ShortVolume / d.TotalVolume)
-                        .ThenByDescending(d => d.ShortVolume)
-                        .ThenBy(d => d.CommonStock.Ticker);
-                }
-                else
+                if (!sortKey.Equals("shortVolume", StringComparison.OrdinalIgnoreCase)
+                    && !sortKey.Equals("shortPercent", StringComparison.OrdinalIgnoreCase))
                 {
                     return McpOutput.InvalidArgument("sortBy", sortBy, "shortVolume, shortPercent");
                 }
 
                 offset = McpLimit.ClampOffset(offset);
-                var total = await query.CountAsync();
-                var records = await ordered
+                var rawRecords = await query.ToListAsync();
+                var validListings = await _commonStockRepository.GetUniqueActiveListingKeys();
+                rawRecords = rawRecords.Where(row => validListings.Contains(
+                    new ListedSecurityKey(
+                        row.CommonStockId,
+                        ListingTicker(row.CommonStock, row.ListedTicker)
+                    )
+                )).ToList();
+                var stockIds = rawRecords.Select(row => row.CommonStockId).Distinct().ToList();
+                var splitRows = await _stockSplitRepository
+                    .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
+                    .Where(split => stockIds.Contains(split.CommonStockId))
+                    .ToListAsync();
+                var adjusted = rawRecords.Select(row =>
+                {
+                    var listedTicker = ListingTicker(row.CommonStock, row.ListedTicker);
+                    var scoped = PriceSeriesSplitScope.ForListing(
+                        splitRows.Where(split => split.CommonStockId == row.CommonStockId),
+                        row.CommonStock.Ticker,
+                        listedTicker
+                    );
+                    var factor = SplitAdjustment.ShareCountFactor(row.Date, scoped);
+                    return new
+                    {
+                        Row = row,
+                        ListedTicker = listedTicker,
+                        Factor = factor,
+                        ShortVolume = SplitAdjustment.AdjustShareCount(row.ShortVolume, factor),
+                        TotalVolume = SplitAdjustment.AdjustShareCount(row.TotalVolume, factor),
+                    };
+                })
+                    .Where(row => row.ShortVolume >= minShortVolume && row.TotalVolume >= minTotalVolume);
+                adjusted = sortKey.Equals("shortPercent", StringComparison.OrdinalIgnoreCase)
+                    ? adjusted.OrderByDescending(row => row.Row.ShortVolume / row.Row.TotalVolume)
+                        .ThenByDescending(row => row.ShortVolume)
+                        .ThenBy(row => row.ListedTicker)
+                    : adjusted.OrderByDescending(row => row.ShortVolume).ThenBy(row => row.ListedTicker);
+                var total = adjusted.Count();
+                var records = adjusted
                     .Skip(offset)
                     .Take(McpLimit.Clamp(maxResults))
-                    .ToListAsync();
+                    .ToList();
                 if (records.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {total} rows match; lower offset.";
 
@@ -502,7 +542,11 @@ public class ShortDataTools
                     "|--------|---------|-------------|--------------|-------------|---------|",
                     // The lead "cell" carries both the ticker and company columns — the shared
                     // renderer splices it in front of the volume cells verbatim.
-                    r => RenderShortVolumeRow($"{r.CommonStock.Ticker} | {r.CommonStock.Name}", r)
+                    r => RenderShortVolumeRow(
+                        $"{r.ListedTicker} | {ListingCompany(r.Row.CommonStock, r.ListedTicker)}",
+                        r.Row,
+                        r.Factor
+                    )
                 );
 
                 return AppendNote(
@@ -532,6 +576,15 @@ public class ShortDataTools
         var totalVolume = SplitAdjustment.AdjustShareCount(r.TotalVolume, shareFactor);
         return $"| {leadCell} | {McpFormat.WholeNumber(shortVolume)} | {McpFormat.WholeNumber(exemptVolume)} | {McpFormat.WholeNumber(totalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
     }
+
+    private static string ListingTicker(CommonStock stock, string listedTicker) =>
+        string.IsNullOrWhiteSpace(listedTicker) ? stock.Ticker : listedTicker;
+
+    private static string ListingCompany(CommonStock stock, string listedTicker) =>
+        SecondaryTickerPolicy.RequiresExactListingScope(
+            stock,
+            ListingTicker(stock, listedTicker)
+        ) ? "-" : stock.Name;
 
     // Render with InvariantCulture so the MCP markdown does not fork the separators by host
     // locale (e.g. de-DE would render 1.234.567 / 12,3). `shareFactor` restates the share
@@ -675,7 +728,7 @@ public class ShortDataTools
 
     [McpServerTool(Name = "GetShortSqueezeScores", Title = "Short Squeeze Scores", ReadOnly = true)]
     [Description(
-        "Rank stocks by a peer-relative 0-100 short-squeeze score using short interest, capped days to cover, price versus trailing VWAP, short-volume trend, short-interest change, fails-to-deliver pressure, and bounded price/volume/earnings catalyst boosts. Optional liquidity floors filter the board without changing scores. Pass ticker for one stock's factor breakdown and universe rank. Exchange-traded commodity and currency trusts are excluded; use GetShortInterest for the underlying FINRA series."
+        "Rank primary operating-company stocks by a peer-relative 0-100 short-squeeze score using short interest, capped days to cover, price versus trailing VWAP, short-volume trend, short-interest change, fails-to-deliver pressure, and bounded price/volume/earnings catalyst boosts. Optional liquidity floors filter the board without changing scores. Pass ticker for one stock's factor breakdown and universe rank. Exchange-traded products are excluded because issuer shares outstanding and earnings are not product-level facts; use GetShortInterest for an ETF's exact FINRA series."
     )]
     public Task<string> GetShortSqueezeScores(
         [Description(
@@ -709,7 +762,7 @@ public class ShortDataTools
                     var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                     if (stockError != null)
                         return stockError;
-                    var listingError = FinraTickerScope.SecondaryListingUnavailable(
+                    var listingError = FinraTickerScope.IssuerDerivedModelUnavailable(
                         stock,
                         ticker,
                         "short-squeeze score"

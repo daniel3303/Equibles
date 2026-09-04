@@ -1,4 +1,5 @@
 using Equibles.Finra.HostedService.Services;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Integrations.Finra.Models;
 
 namespace Equibles.UnitTests.Finra;
@@ -97,9 +98,10 @@ public class FinraClassShareSymbolsTests
     public void Merge_DottedClassShareSymbol_ResolvesToDashTicker()
     {
         var stockId = Guid.NewGuid();
-        var tickerMap = new Dictionary<string, Guid>(StringComparer.Ordinal)
+        var security = new ListedSecurityKey(stockId, "BRK-B");
+        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
         {
-            ["BRK-B"] = stockId,
+            ["BRK-B"] = security,
         };
         var index = FinraClassShareSymbols.BuildCompressedIndex(tickerMap, StringComparer.Ordinal);
         var records = new List<OffExchangeWeeklyRecord>
@@ -121,6 +123,6 @@ public class FinraClassShareSymbolsTests
         );
 
         result.Should().ContainSingle();
-        result[stockId].AtsVolume.Should().Be(5_000);
+        result[security].AtsVolume.Should().Be(5_000);
     }
 }
