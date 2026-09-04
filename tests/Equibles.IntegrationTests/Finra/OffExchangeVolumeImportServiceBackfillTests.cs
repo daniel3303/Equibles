@@ -103,6 +103,7 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
                 new OffExchangeVolume
                 {
                     CommonStockId = apple.Id,
+                    ListedTicker = apple.Ticker,
                     WeekStartDate = storedWeek,
                     AtsVolume = 1,
                     NonAtsOtcVolume = 1,
@@ -110,7 +111,7 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
             );
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();
-        await SeedCompletedPartition(storedWeek);
+        await SeedCompletedPartition(apple, storedWeek);
 
         _workerOptions.MinSyncDate = backfillWeek.ToDateTime(TimeOnly.MinValue);
 
@@ -159,7 +160,10 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        _partitionRepo.GetPartition("off-exchange-weekly-v3", "all", week).Should().BeEmpty();
+        _partitionRepo
+            .GetPartition("off-exchange-weekly-v4", ResolveListingUniverse(apple), week)
+            .Should()
+            .BeEmpty();
         _volumeRepo.GetByWeek(week).Should().BeEmpty();
 
         await _service.Import(CancellationToken.None);
@@ -167,7 +171,10 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
         var row = _volumeRepo.GetByWeek(week).Single(v => v.CommonStockId == apple.Id);
         row.AtsVolume.Should().Be(5_000);
         row.NonAtsOtcVolume.Should().Be(3_000);
-        _partitionRepo.GetPartition("off-exchange-weekly-v3", "all", week).Should().ContainSingle();
+        _partitionRepo
+            .GetPartition("off-exchange-weekly-v4", ResolveListingUniverse(apple), week)
+            .Should()
+            .ContainSingle();
 
         _finraClient.ClearReceivedCalls();
         await _service.Import(CancellationToken.None);
@@ -196,6 +203,7 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
                 new OffExchangeVolume
                 {
                     CommonStockId = apple.Id,
+                    ListedTicker = apple.Ticker,
                     WeekStartDate = week,
                     AtsVolume = 9_000,
                     AtsTradeCount = 90,
@@ -205,7 +213,7 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
             );
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();
-        await SeedCompletedPartition(week, previousImport);
+        await SeedCompletedPartition(apple, week, previousImport);
 
         _finraClient
             .GetWeeklyOffExchangeVolume(Arg.Any<DateOnly>())
@@ -222,26 +230,38 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
         row.NonAtsOtcVolume.Should().Be(4_000);
         row.NonAtsOtcTradeCount.Should().Be(40);
         _partitionRepo
-            .GetPartition("off-exchange-weekly-v3", "all", week)
+            .GetPartition("off-exchange-weekly-v4", ResolveListingUniverse(apple), week)
             .Single()
             .ImportedAt.Should()
             .Be(previousImport);
     }
 
-    private async Task SeedCompletedPartition(DateOnly week, DateTime? importedAt = null)
+    private async Task SeedCompletedPartition(
+        CommonStock stock,
+        DateOnly week,
+        DateTime? importedAt = null
+    )
     {
         _partitionRepo.Add(
             new FinraImportPartition
             {
-                Dataset = "off-exchange-weekly-v3",
+                Dataset = "off-exchange-weekly-v4",
                 PartitionDate = week,
-                ScopeKey = "all",
+                ScopeKey = ResolveListingUniverse(stock),
                 ImportedAt = importedAt ?? Now.UtcDateTime,
             }
         );
         await _partitionRepo.SaveChanges();
         _dbContext.ChangeTracker.Clear();
     }
+
+    private static string ResolveListingUniverse(CommonStock stock) =>
+        FinraImportScope.ResolveListingUniverse(
+            new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+            {
+                [stock.Ticker] = new(stock.Id, stock.Ticker),
+            }
+        );
 
     private static List<OffExchangeWeeklyRecord> MakeRecords(long ats, long otc) =>
         [

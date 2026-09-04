@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.Mcp.Tools;
 using Equibles.Finra.Repositories;
@@ -22,6 +23,7 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
         new(
             new OffExchangeVolumeRepository(DbContext),
             new CommonStockRepository(DbContext),
+            new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<OffExchangeVolumeTools>()
         );
@@ -69,16 +71,18 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     }
 
     [Fact]
-    public async Task GetOffExchangeVolume_SecondaryListing_DoesNotReturnPrimarySeries()
+    public async Task GetOffExchangeVolume_SecondaryListing_WithNoExactRows_DoesNotReturnPrimarySeries()
     {
         var stock = AddGme();
         stock.SecondaryTickers = ["GME-A"];
+        AddWeek(stock, new DateOnly(2026, 3, 16));
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetOffExchangeVolume("GME-A");
 
-        result.Should().Contain("No exact off-exchange-volume series is available for GME-A");
-        result.Should().Contain("GME's FINRA rows are not substituted");
+        result.Should().Contain("No off-exchange volume data found for GME-A");
+        result.Should().NotContain("2026-03-16");
+        result.Should().NotContain("5,000,000");
     }
 
     [Fact]

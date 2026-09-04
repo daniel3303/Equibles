@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Equibles.CommonStocks.Data.Models;
 
 namespace Equibles.CommonStocks.Data.Helpers;
@@ -15,13 +16,22 @@ namespace Equibles.CommonStocks.Data.Helpers;
 /// through to BRK-B.
 /// </para>
 /// <para>
-/// Surfaces reading FILER-level data (filings, 13F holdings, insider transactions) remain
-/// attached to the <see cref="CommonStock"/> row. Price surfaces use
-/// <see cref="ResolveListedTicker"/> so their identity is the traded symbol instead.
+/// Filer-level SEC documents remain attached to the <see cref="CommonStock"/> row. Market data,
+/// congressional trades, and 13F positions retain their exact listed symbol and must be read
+/// through <see cref="ResolveListedTicker"/> so sibling securities never bleed together.
 /// </para>
 /// </summary>
 public static class SecondaryTickerPolicy
 {
+    /// <summary>
+    /// Authoritative primary operating-company universe. A primary ticker explicitly present in
+    /// the exchange-traded reference feed belongs on the ETF surface and must not consume issuer
+    /// financials, shares outstanding, derived short models, or stock rankings.
+    /// </summary>
+    public static readonly Expression<Func<CommonStock, bool>> PrimaryOperatingCompany = stock =>
+        !stock.ReferenceTickers.Contains(stock.Ticker)
+        && !stock.ReferenceTickers.Contains(stock.Ticker.Replace(".", "-"));
+
     /// <summary>
     /// Resolves a caller's spelling to the exact canonical ticker carried by the filer.
     /// The dot class-share notation is mechanically folded to the stored dash form
@@ -66,6 +76,34 @@ public static class SecondaryTickerPolicy
         var resolved = ResolveListedTicker(stock, requestedTicker);
         return resolved != null && !string.Equals(resolved, stock.Ticker, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Whether the exact resolved listing is an authoritative exchange-traded product.
+    /// ReferenceTickers is populated from the provider's ETF/ETN/ETV/ETS reference feed;
+    /// never infer this classification from a ticker or issuer name.
+    /// </summary>
+    public static bool IsExchangeTradedListing(CommonStock stock, string requestedTicker)
+    {
+        var requested = TickerNormalizer.NormalizeDashListed(requestedTicker);
+        return stock != null
+            && requested != null
+            && (stock.ReferenceTickers ?? []).Any(reference =>
+                string.Equals(
+                    TickerNormalizer.NormalizeDashListed(reference),
+                    requested,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
+    }
+
+    /// <summary>
+    /// Whether a filer-wide stock read would merge the requested security with a sibling.
+    /// Primary operating-company stocks retain their established filer-wide read models;
+    /// ETFs and every secondary security require the exact listed ticker.
+    /// </summary>
+    public static bool RequiresExactListingScope(CommonStock stock, string requestedTicker) =>
+        IsSecondarySymbol(stock, requestedTicker)
+        || IsExchangeTradedListing(stock, requestedTicker);
 
     /// <summary>
     /// Legacy refusal text retained for binary-compatible callers. Secondary listings now have

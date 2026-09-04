@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
@@ -52,7 +53,7 @@ public class CongressTools
         "Get congressional securities transactions for a specific ticker (newest first, last year by default). Shows which members of Congress reported a purchase or sale, with transaction and filing dates; amounts are disclosed ranges, not exact values, and Asset identifies the filed instrument (such as stock, option, or bond). Use GetMemberTrades for one member's transactions across all tickers."
     )]
     public Task<string> GetCongressionalTrades(
-        [Description("Stock ticker symbol (e.g., AAPL, MSFT, NVDA)")] string ticker,
+        [Description("Listed security ticker (e.g., AAPL, VOO, MSFT)")] string ticker,
         [Description(
             "Filter by transaction type: Purchase or Sale; the synonyms Buy/Sell are accepted (defaults to all)"
         )]
@@ -81,7 +82,8 @@ public class CongressTools
                 if (typeError != null)
                     return typeError;
 
-                var query = _tradeRepository.GetByStock(stock, start, end);
+                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
+                var query = _tradeRepository.GetByListing(stock, listedTicker, start, end);
                 if (typeFilter != null)
                     query = query.Where(t => t.TransactionType == typeFilter);
 
@@ -100,8 +102,8 @@ public class CongressTools
 
                 var table = MarkdownTable.Render(
                     trades,
-                    $"No congressional trades found for {stock.Ticker} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
-                    $"Congressional trades for {stock.Ticker} ({stock.Name}), {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
+                    $"No congressional trades found for {listedTicker} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
+                    $"Congressional trades for {ListingLabel(stock, listedTicker)}, {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
                     "| Date | Filed | Member | Position | Type | Amount Range | Asset | Asset Type | Owner | Account |",
                     "|------|-------|--------|----------|------|-------------|-------|------------|-------|---------|",
                     t =>
@@ -168,6 +170,7 @@ public class CongressTools
                     return typeError;
 
                 CommonStock stock = null;
+                string listedTicker = null;
                 if (!string.IsNullOrWhiteSpace(ticker))
                 {
                     var (resolvedStock, stockError) = await _commonStockRepository.ResolveByTicker(
@@ -176,6 +179,7 @@ public class CongressTools
                     if (stockError != null)
                         return stockError;
                     stock = resolvedStock;
+                    listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
                 }
 
                 var query = _tradeRepository
@@ -184,7 +188,13 @@ public class CongressTools
                 if (typeFilter != null)
                     query = query.Where(t => t.TransactionType == typeFilter);
                 if (stock != null)
-                    query = query.Where(t => t.CommonStockId == stock.Id);
+                    query = query.Where(t =>
+                        t.CommonStockId == stock.Id
+                        && (
+                            t.FiledTicker == listedTicker
+                            || (t.FiledTicker == "" && listedTicker == stock.Ticker)
+                        )
+                    );
 
                 maxResults = McpLimit.Clamp(maxResults);
                 offset = McpLimit.ClampOffset(offset);
@@ -201,16 +211,18 @@ public class CongressTools
 
                 var table = MarkdownTable.Render(
                     trades,
-                    $"No trades found for {member.Name} ({DescribeMember(member)}){(stock == null ? "" : $" in {stock.Ticker}")} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
-                    $"Trades by {member.Name} ({DescribeMember(member)}){(stock == null ? "" : $" in {stock.Ticker}")}, {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
+                    $"No trades found for {member.Name} ({DescribeMember(member)}){(stock == null ? "" : $" in {listedTicker}")} between {start:yyyy-MM-dd} and {end:yyyy-MM-dd}.",
+                    $"Trades by {member.Name} ({DescribeMember(member)}){(stock == null ? "" : $" in {listedTicker}")}, {start:yyyy-MM-dd} to {end:yyyy-MM-dd}:",
                     "| Date | Filed | Ticker | Type | Amount Range | Asset | Asset Type | Owner | Account |",
                     "|------|-------|--------|------|-------------|-------|------------|-------|---------|",
                     t =>
                     {
                         var type = t.TransactionType.NameForHumans();
                         var amount = FormatAmountRange(t);
-                        var ticker = t.CommonStock?.Ticker ?? t.FiledTicker;
-                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {ticker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
+                        var filedTicker = string.IsNullOrWhiteSpace(t.FiledTicker)
+                            ? t.CommonStock?.Ticker
+                            : t.FiledTicker;
+                        return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {filedTicker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
                     }
                 );
                 var note = McpOutput.PagedTruncationNote(trades.Count, totalCount, offset);
@@ -220,6 +232,11 @@ public class CongressTools
             $"memberName: {memberName}, ticker: {ticker}, offset: {offset}"
         );
     }
+
+    private static string ListingLabel(CommonStock stock, string listedTicker) =>
+        SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker)
+            ? listedTicker
+            : $"{listedTicker} ({stock.Name})";
 
     [McpServerTool(
         Name = "GetMemberNetWorth",

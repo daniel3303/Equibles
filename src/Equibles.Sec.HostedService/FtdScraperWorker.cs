@@ -74,5 +74,9 @@ public class FtdScraperWorker : BaseScraperWorker
         // And the sibling-listing sweep: secondary tickers' CUSIPs (share classes, units)
         // recorded against the exact listed symbol so 13F lines filed under them resolve.
         await ftdService.BackfillListedTickerCusips(stoppingToken);
+
+        // The old data importer admitted primary symbols only. Replay a bounded, durable slice
+        // until historical secondary ETF/listing FTD rows have been restored.
+        await ftdService.BackfillListedRecords(stoppingToken);
     }
 }

@@ -12,7 +12,25 @@ public class FailToDeliverRepository : BaseRepository<FailToDeliver>
 
     public IQueryable<FailToDeliver> GetByStock(CommonStock stock)
     {
-        return GetAll().Where(f => f.CommonStockId == stock.Id);
+        return GetAll()
+            .Where(f =>
+                f.CommonStockId == stock.Id
+                && (f.ListedTicker == stock.Ticker || f.ListedTicker == "")
+            );
+    }
+
+    public IQueryable<FailToDeliver> GetByListing(CommonStock stock, string listedTicker)
+    {
+        var isPrimary = string.Equals(
+            listedTicker,
+            stock.Ticker,
+            StringComparison.OrdinalIgnoreCase
+        );
+        return GetAll()
+            .Where(f =>
+                f.CommonStockId == stock.Id
+                && (f.ListedTicker == listedTicker || (isPrimary && f.ListedTicker == ""))
+            );
     }
 
     public IQueryable<DateOnly> GetLatestDate()

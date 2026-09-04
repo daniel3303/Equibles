@@ -71,6 +71,9 @@ public class ShortVolumeController : BaseController
         var query = _shortVolumeRepository
             .GetByDate(selectedDate)
             .Include(d => d.CommonStock)
+            // The OSS portal has no ETF shell. Keep its stock board primary-only so exact
+            // exchange-traded rows are neither duplicated nor mislabeled as the registrant.
+            .Where(d => d.ListedTicker == d.CommonStock.Ticker || d.ListedTicker == "")
             .Where(d => d.TotalVolume > 0);
 
         var ordered = sort switch

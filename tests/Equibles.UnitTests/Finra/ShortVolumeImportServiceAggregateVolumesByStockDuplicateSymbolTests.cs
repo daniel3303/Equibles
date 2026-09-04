@@ -1,4 +1,5 @@
 using System.Reflection;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Finra.Data.Models;
 using Equibles.Finra.HostedService.Services;
 using Equibles.Integrations.Finra.Models;
@@ -42,7 +43,8 @@ public class ShortVolumeImportServiceAggregateVolumesByStockDuplicateSymbolTests
         );
 
         var stockId = Guid.NewGuid();
-        var tickerMap = new Dictionary<string, Guid> { ["AAPL"] = stockId };
+        var security = new ListedSecurityKey(stockId, "AAPL");
+        var tickerMap = new Dictionary<string, ListedSecurityKey> { ["AAPL"] = security };
         var records = new List<ShortVolumeRecord>
         {
             new()
@@ -62,11 +64,11 @@ public class ShortVolumeImportServiceAggregateVolumesByStockDuplicateSymbolTests
         };
 
         var result =
-            (Dictionary<Guid, DailyShortVolume>)
+            (Dictionary<ListedSecurityKey, DailyShortVolume>)
                 method.Invoke(null, [records, tickerMap, new DateOnly(2024, 12, 31)]);
 
         result.Should().HaveCount(1);
-        var aggregated = result[stockId];
+        var aggregated = result[security];
         aggregated.ShortVolume.Should().Be(3_000);
         aggregated.ShortExemptVolume.Should().Be(300);
         aggregated.TotalVolume.Should().Be(15_000);

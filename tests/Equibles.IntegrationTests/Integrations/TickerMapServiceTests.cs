@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Data;
@@ -228,6 +229,107 @@ public class TickerMapServiceTests : IDisposable
         var result = await _clientEvalService.Build(["BRK.B"], CancellationToken.None);
 
         result.Should().ContainSingle().Which.Value.Should().Be(brk.Id);
+    }
+
+    [Fact]
+    public async Task BuildListed_MapsAuthoritativeEtfTickerToExactListingIdentity()
+    {
+        var trust = CreateStock("VB", "Vanguard Index Funds");
+        trust.ReferenceTickers = ["VB", "VOO", "VTI"];
+        await SeedStocks(trust);
+
+        var result = await _service.BuildListed(null, CancellationToken.None);
+
+        result["VOO"].Should().Be(new ListedSecurityKey(trust.Id, "VOO"));
+        result["VTI"].Should().Be(new ListedSecurityKey(trust.Id, "VTI"));
+    }
+
+    [Fact]
+    public async Task BuildListed_FilterKeepsOnlyRequestedExactListing()
+    {
+        var trust = CreateStock("VB", "Vanguard Index Funds");
+        trust.ReferenceTickers = ["VB", "VOO", "VTI"];
+        await SeedStocks(trust);
+
+        var result = await _service.BuildListed(["VOO"], CancellationToken.None);
+
+        result
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new KeyValuePair<string, ListedSecurityKey>("VOO", new(trust.Id, "VOO")));
+    }
+
+    [Fact]
+    public async Task BuildListed_DuplicateTickerClaimsFailClosed()
+    {
+        var first = CreateStock("ONE", "First Trust");
+        first.ReferenceTickers = ["CLASH"];
+        var second = CreateStock("TWO", "Second Trust");
+        second.ReferenceTickers = ["CLASH"];
+        await SeedStocks(first, second);
+
+        var result = await _service.BuildListed(null, CancellationToken.None);
+
+        result.Should().NotContainKey("CLASH");
+        result.Should().ContainKeys("ONE", "TWO");
+    }
+
+    [Fact]
+    public async Task BuildListed_DotDashPrimaryAliasCannotEvadeDelisting()
+    {
+        var stock = CreateStock("BRK-B", "Berkshire Hathaway");
+        stock.ReferenceTickers = ["BRK.B"];
+        await SeedStocks(stock);
+        _stockRepo.AddDelistedListing(
+            new CommonStockDelistedListing
+            {
+                CommonStockId = stock.Id,
+                ListedTicker = "BRK.B",
+                DelistedOn = new DateOnly(2026, 1, 1),
+            }
+        );
+        await _stockRepo.SaveChanges();
+
+        var result = await _service.BuildListed(null, CancellationToken.None);
+
+        result.Should().NotContainKey("BRK-B");
+        result.Should().NotContainKey("BRK.B");
+    }
+
+    [Fact]
+    public async Task BuildListed_DelistedPrimaryDoesNotHideActiveSiblingListing()
+    {
+        var trust = CreateStock("OLD", "Trust With Active Series");
+        trust.ReferenceTickers = ["LIVEETF"];
+        await SeedStocks(trust);
+        _stockRepo.AddDelistedListing(
+            new CommonStockDelistedListing
+            {
+                CommonStockId = trust.Id,
+                ListedTicker = trust.Ticker,
+                DelistedOn = new DateOnly(2026, 1, 1),
+            }
+        );
+        await _stockRepo.SaveChanges();
+
+        var result = await _service.BuildListed(null, CancellationToken.None);
+
+        result.Should().NotContainKey("OLD");
+        result["LIVEETF"].Should().Be(new ListedSecurityKey(trust.Id, "LIVEETF"));
+    }
+
+    [Fact]
+    public async Task BuildListed_AcceptsTheFullListedTickerContractLength()
+    {
+        var ticker = new string('X', TickerNormalizer.MaxListedLength);
+        var trust = CreateStock("FUND", "Long Symbol Trust");
+        trust.ReferenceTickers = [ticker];
+        await SeedStocks(trust);
+
+        var result = await _service.BuildListed([ticker], CancellationToken.None);
+
+        result[ticker].Should().Be(new ListedSecurityKey(trust.Id, ticker));
     }
 
     // ── Build handles many stocks ─────────────────────────────────────

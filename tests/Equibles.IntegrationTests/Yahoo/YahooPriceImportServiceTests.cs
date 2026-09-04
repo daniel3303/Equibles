@@ -952,10 +952,12 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_SecondaryListingSplit_RebasesOnlyThatListedSeries()
+    public async Task Import_SecondaryEtfSplit_CapturesAndRebasesOnlyThatListedSeries()
     {
         var alphabet = CreateStock("GOOGL", "Alphabet Inc.");
         alphabet.SecondaryTickers = ["GOOG"];
+        alphabet.ReferenceTickers = ["GOOG"];
+        alphabet.PriceHistoryBackfilledTickers = ["GOOG"];
         await SeedStocks(alphabet);
 
         var existingDate = new DateOnly(2026, 3, 20);
@@ -995,7 +997,11 @@ public class YahooPriceImportServiceTests : IDisposable
         primary.Should().ContainSingle().Which.Close.Should().Be(190m);
         secondary.Select(p => p.Close).Should().Equal(87.5m, 88m);
         secondary.Should().AllSatisfy(p => p.ListedTicker.Should().Be("GOOG"));
-        _splitRepo.GetAll().Should().BeEmpty("a sibling class split is not issuer-wide");
+        var split = _splitRepo.GetAll().Should().ContainSingle().Which;
+        split.PriceSeriesTicker.Should().Be("GOOG");
+        split.EffectiveDate.Should().Be(nextDate);
+        split.Numerator.Should().Be(2m);
+        split.Denominator.Should().Be(1m);
         await _yahooClient.Received(1).GetChart("GOOG", floor, Arg.Any<DateOnly>());
     }
 

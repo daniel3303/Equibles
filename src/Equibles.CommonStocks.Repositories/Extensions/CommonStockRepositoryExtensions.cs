@@ -6,6 +6,78 @@ namespace Equibles.CommonStocks.Repositories.Extensions;
 
 public static class CommonStockRepositoryExtensions
 {
+    /// <summary>
+    /// The current exact listing identities whose authoritative ticker claim resolves to one
+    /// active filer. Market-wide readers use this after materializing source rows so a stale row
+    /// cannot publish a ticker that became delisted or ambiguously claimed after ingestion.
+    /// </summary>
+    public static async Task<HashSet<ListedSecurityKey>> GetUniqueActiveListingKeys(
+        this CommonStockRepository repository,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var stocks = await repository
+            .GetAll()
+            .Select(stock => new
+            {
+                stock.Id,
+                stock.Ticker,
+                stock.ReferenceTickers,
+            })
+            .ToListAsync(cancellationToken);
+        var stockIds = stocks.Select(stock => stock.Id).ToList();
+        var delistedRows = await repository
+            .GetDelistedListings()
+            .Where(listing => stockIds.Contains(listing.CommonStockId))
+            .Select(listing => new ListedSecurityKey(listing.CommonStockId, listing.ListedTicker))
+            .ToListAsync(cancellationToken);
+        var primaryByStock = stocks.ToDictionary(stock => stock.Id, stock => stock.Ticker);
+        var delisted = delistedRows
+            .Select(listing =>
+            {
+                var primary = primaryByStock.GetValueOrDefault(listing.CommonStockId);
+                var listedTicker =
+                    primary != null
+                    && string.Equals(
+                        TickerNormalizer.NormalizeDashListed(listing.ListedTicker),
+                        TickerNormalizer.NormalizeDashListed(primary),
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                        ? primary
+                        : listing.ListedTicker;
+                return new ListedSecurityKey(listing.CommonStockId, listedTicker);
+            })
+            .ToHashSet();
+
+        return stocks
+            .SelectMany(stock =>
+                new[] { stock.Ticker }
+                    .Concat(stock.ReferenceTickers ?? [])
+                    .Where(ticker => !string.IsNullOrWhiteSpace(ticker))
+                    .Distinct(StringComparer.Ordinal)
+                    .Select(ticker => new KeyValuePair<string, ListedSecurityKey>(
+                        ticker,
+                        new ListedSecurityKey(
+                            stock.Id,
+                            string.Equals(
+                                TickerNormalizer.NormalizeDashListed(ticker),
+                                TickerNormalizer.NormalizeDashListed(stock.Ticker),
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                                ? stock.Ticker
+                                : ticker
+                        )
+                    ))
+            )
+            .Where(claim => !delisted.Contains(claim.Value))
+            .GroupBy(claim => claim.Key, StringComparer.Ordinal)
+            .Where(group =>
+                group.Select(claim => claim.Value.CommonStockId).Distinct().Count() == 1
+            )
+            .SelectMany(group => group.Select(claim => claim.Value))
+            .ToHashSet();
+    }
+
     public static async Task<(CommonStock Stock, string Error)> ResolveByTicker(
         this CommonStockRepository repository,
         string ticker
@@ -15,7 +87,31 @@ public static class CommonStockRepositoryExtensions
         if (normalized == null)
             return (null, $"Stock '{ticker}' not found.");
 
-        var stock = await repository.GetByTicker(normalized);
+        var literal = normalized;
+        var folded = TickerNormalizer.NormalizeDashListed(normalized) ?? literal;
+
+        async Task<List<CommonStock>> FindOwners(string listedTicker) =>
+            await repository
+                .GetAll()
+                .Where(candidate =>
+                    candidate.Ticker == listedTicker
+                    || (candidate.Active && candidate.ReferenceTickers.Contains(listedTicker))
+                )
+                .Take(2)
+                .ToListAsync();
+
+        var authoritativeOwners = await FindOwners(literal);
+        if (authoritativeOwners.Select(candidate => candidate.Id).Distinct().Count() > 1)
+            return (null, $"Listed security '{ticker}' is ambiguous.");
+        var stock = authoritativeOwners.SingleOrDefault();
+        if (stock == null && !string.Equals(literal, folded, StringComparison.OrdinalIgnoreCase))
+        {
+            authoritativeOwners = await FindOwners(folded);
+            if (authoritativeOwners.Select(candidate => candidate.Id).Distinct().Count() > 1)
+                return (null, $"Listed security '{ticker}' is ambiguous.");
+            stock = authoritativeOwners.SingleOrDefault();
+        }
+        stock ??= await repository.GetByTicker(normalized);
         if (stock == null && normalized.Contains('.'))
             stock = await repository.GetByTicker(normalized.Replace('.', '-'));
         return stock == null ? (null, $"Stock '{ticker}' not found.") : (stock, null);

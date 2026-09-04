@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Errors.BusinessLogic;
@@ -39,10 +40,10 @@ public class FailToDeliverTools
 
     [McpServerTool(Name = "GetFailsToDeliver", Title = "Fails-to-Deliver Data", ReadOnly = true)]
     [Description(
-        "Get fails-to-deliver (FTD) data for a stock from the SEC's twice-monthly FTD files. Quantity is the aggregate net fail-to-deliver position OUTSTANDING on each settlement date — a balance, not that day's new fails, so never sum Quantity across dates. Price is the previous trading day's closing price (SEC file convention, not a settlement price) and Value = Quantity × Price. Within the covered window (the output names the earliest fully covered settlement date), dates absent from the table had no reported fails; earlier dates are only partially covered, so their absence is not evidence of no fails. The SEC publishes each half-month batch with roughly a two-week lag, so the newest rows trail today. High or persistent FTD balances may indicate naked short selling or settlement issues."
+        "Get fails-to-deliver (FTD) data for an exact listed stock or exchange-traded fund from the SEC's twice-monthly FTD files. Quantity is the aggregate net fail-to-deliver position OUTSTANDING on each settlement date — a balance, not that day's new fails, so never sum Quantity across dates. Price is the previous trading day's closing price (SEC file convention, not a settlement price) and Value = Quantity × Price. Within the covered window (the output names the earliest fully covered settlement date), dates absent from the table had no reported fails; earlier dates are only partially covered, so their absence is not evidence of no fails. The SEC publishes each half-month batch with roughly a two-week lag, so the newest rows trail today. High or persistent FTD balances may indicate naked short selling or settlement issues."
     )]
     public Task<string> GetFailsToDeliver(
-        [Description("Stock ticker symbol (e.g., AAPL, GME, AMC)")] string ticker,
+        [Description("Exact stock or ETF ticker symbol (e.g., AAPL, GME, SPY)")] string ticker,
         [Description("Start date in YYYY-MM-DD format (defaults to 3 months ago)")]
             string startDate = null,
         [Description("End date in YYYY-MM-DD format (defaults to latest available)")]
@@ -59,6 +60,9 @@ public class FailToDeliverTools
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
+                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
+                if (listedTicker == null)
+                    return $"Stock '{ticker}' not found.";
 
                 var (start, end, rangeError) = ParseStrictDateRange(
                     startDate,
@@ -71,7 +75,7 @@ public class FailToDeliverTools
                 maxResults = McpLimit.Clamp(maxResults);
 
                 var query = _ftdRepository
-                    .GetByStock(stock)
+                    .GetByListing(stock, listedTicker)
                     .Where(f => f.SettlementDate >= start && f.SettlementDate <= end);
 
                 var total = await query.CountAsync();
@@ -103,8 +107,8 @@ public class FailToDeliverTools
 
                 var table = MarkdownTable.Render(
                     records.OrderBy(f => f.SettlementDate).ToList(),
-                    $"No FTD data found for {stock.Ticker} in the specified date range.",
-                    $"Fails-to-deliver for {stock.Ticker} ({stock.Name}):",
+                    $"No FTD data found for {listedTicker} in the specified date range.",
+                    $"Fails-to-deliver for {listedTicker} ({(listedTicker == stock.Ticker ? stock.Name : listedTicker)}):",
                     footnote,
                     "| Settlement Date | Quantity | Prior Close | Value |",
                     "|----------------|---------|-------------|-------|",

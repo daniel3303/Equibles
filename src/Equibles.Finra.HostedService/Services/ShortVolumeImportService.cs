@@ -1,4 +1,5 @@
 using System.Net;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
@@ -25,7 +26,9 @@ public class ShortVolumeImportService
     // TPC) — the aggregates are corrupt wherever a case-variant sibling traded. The bump
     // orphans every v1 marker, so CandidateDates re-imports the full history newest-first
     // (bounded per cycle) and the upsert REPLACES the corrupted sums.
-    private const string Dataset = "daily-short-volume-files-v2";
+    // v3 carries exact listing identity, so ETF and other reference tickers no longer collapse
+    // into the filer's primary row. The new partition key replays the bounded history.
+    private const string Dataset = "daily-short-volume-files-v3";
     private const int CorrectionLookbackDays = 7;
     private static readonly DateOnly FirstConsolidatedFileDate = new(2018, 8, 1);
     private static readonly TimeSpan RecentPartitionRefreshInterval = TimeSpan.FromHours(24);
@@ -83,7 +86,7 @@ public class ShortVolumeImportService
         // The resolved universe is part of completeness identity. A date checked before a stock
         // was added is not complete for that stock, so a universe change gets a fresh bounded,
         // newest-first pass instead of inheriting the old global "all" markers.
-        var tickerMap = await _tickerMapService.Build(
+        var tickerMap = await _tickerMapService.BuildListed(
             _workerOptions.TickersToSync,
             cancellationToken,
             StringComparer.Ordinal
@@ -96,7 +99,10 @@ public class ShortVolumeImportService
             return;
         }
 
-        var scopeKey = FinraImportScope.ResolveStockUniverse(tickerMap);
+        var scopeKey = FinraImportScope.ResolveListingImportScope(
+            tickerMap,
+            _workerOptions.TickersToSync
+        );
         var completed = await _partitionTracker.GetCompleted(
             Dataset,
             scopeKey,
@@ -152,7 +158,7 @@ public class ShortVolumeImportService
 
     private async Task<bool> ImportSingleDay(
         DateOnly date,
-        IReadOnlyDictionary<string, Guid> tickerMap,
+        IReadOnlyDictionary<string, ListedSecurityKey> tickerMap,
         string scopeKey,
         DateTime importedAt,
         CancellationToken cancellationToken
@@ -216,7 +222,7 @@ public class ShortVolumeImportService
 
     private async Task<int> UpsertDay(
         IEnumerable<DailyShortVolume> volumes,
-        IReadOnlySet<Guid> collisionOnlyStocks,
+        IReadOnlySet<ListedSecurityKey> collisionOnlyListings,
         DateOnly date,
         CancellationToken cancellationToken
     )
@@ -234,12 +240,19 @@ public class ShortVolumeImportService
         LogDroppedRows(batch.Count - validBatch.Count, date);
 
         var existing = await repo.GetByDate(date)
-            .ToDictionaryAsync(volume => volume.CommonStockId, cancellationToken);
+            .ToDictionaryAsync(
+                volume => new ListedSecurityKey(volume.CommonStockId, volume.ListedTicker),
+                cancellationToken
+            );
         foreach (var volume in validBatch)
             UpsertVolume(repo, existing, volume);
 
         var stale = existing
-            .Values.Where(volume => collisionOnlyStocks.Contains(volume.CommonStockId))
+            .Values.Where(volume =>
+                collisionOnlyListings.Contains(
+                    new ListedSecurityKey(volume.CommonStockId, volume.ListedTicker)
+                )
+            )
             .ToList();
         if (stale.Count > 0)
         {
@@ -266,10 +279,10 @@ public class ShortVolumeImportService
     /// partition date (a renamed ticker whose OLD file happens to carry a case-variant of the
     /// NEW symbol would lose that day — measured exposure in production is near zero).
     /// </summary>
-    private static HashSet<Guid> CollisionOnlyStocks(
+    private static HashSet<ListedSecurityKey> CollisionOnlyStocks(
         List<ShortVolumeRecord> records,
-        IReadOnlyDictionary<string, Guid> tickerMap,
-        IReadOnlyDictionary<Guid, DailyShortVolume> aggregated
+        IReadOnlyDictionary<string, ListedSecurityKey> tickerMap,
+        IReadOnlyDictionary<ListedSecurityKey, DailyShortVolume> aggregated
     )
     {
         var fileSymbolsOrdinal = new HashSet<string>(StringComparer.Ordinal);
@@ -282,10 +295,10 @@ public class ShortVolumeImportService
             fileSymbolsCaseInsensitive.Add(record.Symbol);
         }
 
-        var collisionOnly = new HashSet<Guid>();
-        foreach (var (ticker, stockId) in tickerMap)
+        var collisionOnly = new HashSet<ListedSecurityKey>();
+        foreach (var (ticker, listing) in tickerMap)
         {
-            if (aggregated.ContainsKey(stockId))
+            if (aggregated.ContainsKey(listing))
                 continue;
             // Deletion is unrecoverable, so it is confined to the population the case-fold
             // could actually corrupt: all-uppercase tickers (every stored ticker today). A
@@ -299,7 +312,7 @@ public class ShortVolumeImportService
             // filter records (e.g. dropping zero-volume rows), a filtered-but-present exact
             // symbol must still protect the stock from deletion.
             if (fileSymbolsCaseInsensitive.Contains(ticker) && !fileSymbolsOrdinal.Contains(ticker))
-                collisionOnly.Add(stockId);
+                collisionOnly.Add(listing);
         }
 
         return collisionOnly;
@@ -319,11 +332,12 @@ public class ShortVolumeImportService
 
     private static void UpsertVolume(
         DailyShortVolumeRepository repository,
-        IReadOnlyDictionary<Guid, DailyShortVolume> existing,
+        IReadOnlyDictionary<ListedSecurityKey, DailyShortVolume> existing,
         DailyShortVolume volume
     )
     {
-        if (!existing.TryGetValue(volume.CommonStockId, out var current))
+        var key = new ListedSecurityKey(volume.CommonStockId, volume.ListedTicker);
+        if (!existing.TryGetValue(key, out var current))
         {
             repository.Add(volume);
             return;
@@ -335,27 +349,32 @@ public class ShortVolumeImportService
         current.Market = volume.Market;
     }
 
-    private static Dictionary<Guid, DailyShortVolume> AggregateVolumesByStock(
+    private static Dictionary<ListedSecurityKey, DailyShortVolume> AggregateVolumesByStock(
         List<ShortVolumeRecord> records,
-        IReadOnlyDictionary<string, Guid> tickerMap,
+        IReadOnlyDictionary<string, ListedSecurityKey> tickerMap,
         DateOnly currentDate
     )
     {
-        var aggregated = new Dictionary<Guid, DailyShortVolume>();
+        var aggregated = new Dictionary<ListedSecurityKey, DailyShortVolume>();
         foreach (var record in records)
         {
             if (
                 string.IsNullOrEmpty(record.Symbol)
-                || !tickerMap.TryGetValue(record.Symbol, out var commonStockId)
+                || !tickerMap.TryGetValue(record.Symbol, out var listing)
             )
             {
                 continue;
             }
 
-            if (!aggregated.TryGetValue(commonStockId, out var volume))
+            if (!aggregated.TryGetValue(listing, out var volume))
             {
-                volume = new DailyShortVolume { CommonStockId = commonStockId, Date = currentDate };
-                aggregated[commonStockId] = volume;
+                volume = new DailyShortVolume
+                {
+                    CommonStockId = listing.CommonStockId,
+                    ListedTicker = listing.ListedTicker,
+                    Date = currentDate,
+                };
+                aggregated[listing] = volume;
             }
 
             volume.ShortVolume += record.ShortVolume ?? 0;

@@ -1,9 +1,11 @@
+using System.ComponentModel.DataAnnotations;
+using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Finra.Data.Models;
 
-[Index(nameof(CommonStockId), nameof(SettlementDate), IsUnique = true)]
+[Index(nameof(CommonStockId), nameof(ListedTicker), nameof(SettlementDate), IsUnique = true)]
 [Index(nameof(SettlementDate))]
 public class ShortInterest
 {
@@ -11,6 +13,10 @@ public class ShortInterest
 
     public Guid CommonStockId { get; set; }
     public virtual CommonStock CommonStock { get; set; }
+
+    [Required]
+    [MaxLength(TickerNormalizer.MaxListedLength)]
+    public string ListedTicker { get; set; } = "";
 
     public DateOnly SettlementDate { get; set; }
 

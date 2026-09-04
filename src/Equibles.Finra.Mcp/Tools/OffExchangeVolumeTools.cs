@@ -1,6 +1,10 @@
 using System.ComponentModel;
+using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.CorporateActions.Data;
+using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.BusinessLogic.Extensions;
 using Equibles.Finra.BusinessLogic;
@@ -19,17 +23,20 @@ public class OffExchangeVolumeTools
 {
     private readonly OffExchangeVolumeRepository _offExchangeVolumeRepository;
     private readonly CommonStockRepository _commonStockRepository;
+    private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public OffExchangeVolumeTools(
         OffExchangeVolumeRepository offExchangeVolumeRepository,
         CommonStockRepository commonStockRepository,
+        StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<OffExchangeVolumeTools> logger
     )
     {
         _offExchangeVolumeRepository = offExchangeVolumeRepository;
         _commonStockRepository = commonStockRepository;
+        _stockSplitRepository = stockSplitRepository;
         _runner = new McpToolRunner(logger, errorManager.AsMcpErrorReporter());
     }
 
@@ -39,7 +46,7 @@ public class OffExchangeVolumeTools
         ReadOnly = true
     )]
     [Description(
-        "Get weekly off-exchange (dark pool / OTC) trading volume for a stock from the FINRA OTC/ATS Transparency data. "
+        "Get weekly off-exchange (dark pool / OTC) trading volume for an exact stock or ETF listing from the FINRA OTC/ATS Transparency data. "
             + "Each week shows ATS (alternative trading system / dark pool) volume and trade count, non-ATS OTC volume and trade count, "
             + "and the total off-exchange volume (ATS + non-ATS OTC). The FINRA file does not include consolidated tape volume, so the "
             + "off-exchange share of total market volume is not reported here; compute that share elsewhere against a consolidated-volume source. "
@@ -48,7 +55,7 @@ public class OffExchangeVolumeTools
             + "FINRA publishes each week on a delay (2 weeks for Tier 1 NMS stocks, longer for other tiers), so the latest week lags today."
     )]
     public Task<string> GetOffExchangeVolume(
-        [Description("Stock ticker symbol (e.g., AAPL, GME, TSLA)")] string ticker,
+        [Description("Listed security ticker (e.g., AAPL, VOO, GME)")] string ticker,
         [Description("Start date in YYYY-MM-DD format (defaults to 6 months ago)")]
             string startDate = null,
         [Description("End date in YYYY-MM-DD format (defaults to latest available)")]
@@ -65,13 +72,7 @@ public class OffExchangeVolumeTools
                 var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
                 if (stockError != null)
                     return stockError;
-                var listingError = FinraTickerScope.SecondaryListingUnavailable(
-                    stock,
-                    ticker,
-                    "off-exchange-volume"
-                );
-                if (listingError != null)
-                    return listingError;
+                var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
 
                 var (startWeek, endWeek, rangeError) = ParseStrictDateRange(
                     startDate,
@@ -84,7 +85,7 @@ public class OffExchangeVolumeTools
                 maxResults = McpLimit.Clamp(maxResults);
 
                 var query = _offExchangeVolumeRepository
-                    .GetHistoryByStock(stock)
+                    .GetHistoryByListing(stock, listedTicker)
                     .Where(d => d.WeekStartDate >= startWeek && d.WeekStartDate <= endWeek);
 
                 var total = await query.CountAsync();
@@ -92,14 +93,23 @@ public class OffExchangeVolumeTools
                     .OrderByDescending(d => d.WeekStartDate)
                     .Take(maxResults)
                     .ToListAsync();
+                var splits = await _stockSplitRepository
+                    .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
+                    .ToListAsync();
+                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, listedTicker);
 
                 var table = MarkdownTable.Render(
                     records.OrderBy(r => r.WeekStartDate).ToList(),
-                    $"No off-exchange volume data found for {stock.Ticker} in the specified date range.",
-                    $"Weekly off-exchange (dark pool / OTC) volume for {stock.Ticker} ({stock.Name}):",
+                    $"No off-exchange volume data found for {listedTicker} in the specified date range.",
+                    $"Weekly off-exchange (dark pool / OTC) volume for {listedTicker}{ListingName(stock, listedTicker)}:",
                     "| Week Start | ATS Volume | ATS Trades | Non-ATS OTC Volume | Non-ATS OTC Trades | Total Off-Exchange Volume |",
                     "|------------|-----------|-----------|-------------------|-------------------|--------------------------|",
-                    r => RenderOffExchangeRow($"{r.WeekStartDate:yyyy-MM-dd}", r)
+                    r =>
+                        RenderOffExchangeRow(
+                            $"{r.WeekStartDate:yyyy-MM-dd}",
+                            r,
+                            SplitAdjustment.ShareCountFactor(r.WeekStartDate, splits)
+                        )
                 );
 
                 var notes = new[]
@@ -113,6 +123,11 @@ public class OffExchangeVolumeTools
             $"ticker: {ticker}"
         );
     }
+
+    private static string ListingName(CommonStock stock, string listedTicker) =>
+        !SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker)
+            ? $" ({stock.Name})"
+            : string.Empty;
 
     // Strict replacement for McpToolExecutor.ParseDateRange: a supplied date must be ISO
     // yyyy-MM-dd (no silent fallback onto the default window) and the range must not be
@@ -186,9 +201,14 @@ public class OffExchangeVolumeTools
     // locale (e.g. de-DE would render 5.000.000 instead of 5,000,000). Total off-exchange
     // volume is the sum of ATS and non-ATS OTC volume; the share of consolidated tape volume
     // is intentionally omitted because the FINRA file carries no consolidated total.
-    private static string RenderOffExchangeRow(string leadCell, OffExchangeVolume r)
+    private static string RenderOffExchangeRow(
+        string leadCell,
+        OffExchangeVolume r,
+        decimal shareFactor = 1m
+    )
     {
-        var totalOffExchangeVolume = r.AtsVolume + r.NonAtsOtcVolume;
-        return $"| {leadCell} | {McpFormat.WholeNumber(r.AtsVolume)} | {McpFormat.WholeNumber(r.AtsTradeCount)} | {McpFormat.WholeNumber(r.NonAtsOtcVolume)} | {McpFormat.WholeNumber(r.NonAtsOtcTradeCount)} | {McpFormat.WholeNumber(totalOffExchangeVolume)} |";
+        var ats = SplitAdjustment.AdjustShareCount(r.AtsVolume, shareFactor);
+        var nonAts = SplitAdjustment.AdjustShareCount(r.NonAtsOtcVolume, shareFactor);
+        return $"| {leadCell} | {McpFormat.WholeNumber(ats)} | {McpFormat.WholeNumber(r.AtsTradeCount)} | {McpFormat.WholeNumber(nonAts)} | {McpFormat.WholeNumber(r.NonAtsOtcTradeCount)} | {McpFormat.WholeNumber(ats + nonAts)} |";
     }
 }

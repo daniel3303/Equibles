@@ -19,7 +19,7 @@ public class FailToDeliverUpsertWhenMatchedTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public async Task UpsertRange_OnCommonStockIdAndSettlementDate_WhenMatched_OverwritesExistingRowQuantityAndPrice()
+    public async Task UpsertRange_OnExactListingAndSettlementDate_WhenMatched_OverwritesExistingRowQuantityAndPrice()
     {
         var stock = new CommonStock
         {
@@ -32,6 +32,7 @@ public class FailToDeliverUpsertWhenMatchedTests : ParadeDbMcpTestBase
         var existing = new FailToDeliver
         {
             CommonStockId = stock.Id,
+            ListedTicker = stock.Ticker,
             SettlementDate = settlementDate,
             Quantity = 999,
             Price = 10.00m,
@@ -48,12 +49,18 @@ public class FailToDeliverUpsertWhenMatchedTests : ParadeDbMcpTestBase
                 new FailToDeliver
                 {
                     CommonStockId = stock.Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = settlementDate,
                     Quantity = 12345,
                     Price = 187.50m,
                 },
             ])
-            .On(f => new { f.CommonStockId, f.SettlementDate })
+            .On(f => new
+            {
+                f.CommonStockId,
+                f.ListedTicker,
+                f.SettlementDate,
+            })
             .WhenMatched(
                 (existing, incoming) =>
                     new FailToDeliver { Quantity = incoming.Quantity, Price = incoming.Price }

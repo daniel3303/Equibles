@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
@@ -48,7 +49,7 @@ public class ShortInterestImportService
         // Above this, bulk-fetch all symbols (cheaper than a huge domainFilters payload with unknown API limits)
         const int filteredFetchThreshold = 500;
 
-        var tickerMap = await _tickerMapService.Build(
+        var tickerMap = await _tickerMapService.BuildListed(
             _workerOptions.TickersToSync,
             cancellationToken,
             StringComparer.Ordinal
@@ -59,8 +60,13 @@ public class ShortInterestImportService
             return;
         }
 
-        var trackedStockIds = tickerMap.Values.ToHashSet();
-        var reverseMap = tickerMap.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+        var trackedListings = tickerMap.Values.ToHashSet();
+        var reverseMap = tickerMap
+            .GroupBy(kvp => kvp.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(kvp => kvp.Key).Distinct(StringComparer.Ordinal).ToList()
+            );
         // FINRA's consolidated short-interest API spells class shares compressed ("BRKB" for
         // BRK-B), so a raw ticker lookup dropped every class-share record — whole issuers had
         // zero rows across all history (#4369). The per-date missing-stock check below makes
@@ -156,7 +162,7 @@ public class ShortInterestImportService
                 tickerMap,
                 compressedIndex,
                 reverseMap,
-                trackedStockIds,
+                trackedListings,
                 filteredFetchThreshold,
                 cancellationToken
             );
@@ -177,34 +183,34 @@ public class ShortInterestImportService
     /// <returns>Number of records imported, or -1 if the date was already complete.</returns>
     private async Task<int> ImportDate(
         DateOnly date,
-        Dictionary<string, Guid> tickerMap,
-        Dictionary<string, Guid> compressedIndex,
-        Dictionary<Guid, string> reverseMap,
-        HashSet<Guid> trackedStockIds,
+        Dictionary<string, ListedSecurityKey> tickerMap,
+        Dictionary<string, ListedSecurityKey> compressedIndex,
+        Dictionary<ListedSecurityKey, List<string>> reverseMap,
+        HashSet<ListedSecurityKey> trackedListings,
         int filteredFetchThreshold,
         CancellationToken cancellationToken
     )
     {
         try
         {
-            HashSet<Guid> existingStockIds;
+            HashSet<ListedSecurityKey> existingListings;
             using (var scope = _scopeFactory.CreateScope())
             {
                 var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
-                var ids = await repo.GetStockIdsBySettlementDate(date)
+                var ids = await repo.GetListingKeysBySettlementDate(date)
                     .ToListAsync(cancellationToken);
-                existingStockIds = ids.ToHashSet();
+                existingListings = ids.ToHashSet();
             }
 
-            var missingStockIds = trackedStockIds.Except(existingStockIds).ToHashSet();
+            var missingListings = trackedListings.Except(existingListings).ToHashSet();
 
-            if (missingStockIds.Count == 0)
+            if (missingListings.Count == 0)
                 return -1;
 
             var records = await FetchMissingRecords(
                 date,
-                missingStockIds,
-                trackedStockIds,
+                missingListings,
+                trackedListings,
                 reverseMap,
                 filteredFetchThreshold
             );
@@ -219,20 +225,21 @@ public class ShortInterestImportService
                 .Select(r =>
                     (
                         Record: r,
-                        StockId: FinraClassShareSymbols.TryResolve(
+                        Listing: FinraClassShareSymbols.TryResolve(
                             tickerMap,
                             compressedIndex,
                             r.Symbol,
-                            out var stockId
+                            out var listing
                         )
-                            ? (Guid?)stockId
+                            ? (ListedSecurityKey?)listing
                             : null
                     )
                 )
-                .Where(x => x.StockId is { } id && missingStockIds.Contains(id))
+                .Where(x => x.Listing is { } listing && missingListings.Contains(listing))
                 .Select(x => new ShortInterest
                 {
-                    CommonStockId = x.StockId.Value,
+                    CommonStockId = x.Listing.Value.CommonStockId,
+                    ListedTicker = x.Listing.Value.ListedTicker,
                     SettlementDate = date,
                     CurrentShortPosition = x.Record.CurrentShortPosition ?? 0,
                     PreviousShortPosition = x.Record.PreviousShortPosition ?? 0,
@@ -251,7 +258,7 @@ public class ShortInterestImportService
                 "Imported {Count} short interest records for {Date} ({Missing} stocks were missing)",
                 inserted,
                 date,
-                missingStockIds.Count
+                missingListings.Count
             );
 
             return inserted;
@@ -278,15 +285,15 @@ public class ShortInterestImportService
     // stocks are missing, or a symbol-filtered request when only a few need backfilling.
     private Task<List<ShortInterestRecord>> FetchMissingRecords(
         DateOnly date,
-        HashSet<Guid> missingStockIds,
-        HashSet<Guid> trackedStockIds,
-        Dictionary<Guid, string> reverseMap,
+        HashSet<ListedSecurityKey> missingListings,
+        HashSet<ListedSecurityKey> trackedListings,
+        Dictionary<ListedSecurityKey, List<string>> reverseMap,
         int filteredFetchThreshold
     )
     {
         var useBulkFetch =
-            missingStockIds.Count == trackedStockIds.Count
-            || missingStockIds.Count > filteredFetchThreshold;
+            missingListings.Count == trackedListings.Count
+            || missingListings.Count > filteredFetchThreshold;
 
         if (useBulkFetch)
             return _finraClient.GetShortInterest(date);
@@ -295,9 +302,10 @@ public class ShortInterestImportService
         // API) — an unmatched filter returns nothing, and responses map back through the
         // compressed index, so over-asking is harmless while under-asking silently returns
         // zero rows for exactly the stocks being healed.
-        var missingSymbols = missingStockIds
-            .Where(id => reverseMap.ContainsKey(id))
-            .SelectMany(id => FinraClassShareSymbols.RequestSpellings(reverseMap[id]))
+        var missingSymbols = missingListings
+            .Where(listing => reverseMap.ContainsKey(listing))
+            .SelectMany(listing => reverseMap[listing])
+            .SelectMany(FinraClassShareSymbols.RequestSpellings)
             .Distinct()
             .ToList();
         return _finraClient.GetShortInterest(date, missingSymbols);

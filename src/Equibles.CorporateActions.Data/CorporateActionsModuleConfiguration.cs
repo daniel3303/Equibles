@@ -7,7 +7,21 @@ public class CorporateActionsModuleConfiguration : Equibles.Data.IFinancialModul
 {
     public void ConfigureEntities(ModelBuilder builder)
     {
-        builder.Entity<StockSplit>().Property(s => s.Source).HasConversion<string>();
+        var stockSplit = builder.Entity<StockSplit>();
+        stockSplit.Property(s => s.Source).HasConversion<string>();
+        stockSplit
+            .HasIndex(s => new
+            {
+                s.CommonStockId,
+                s.PriceSeriesTicker,
+                s.EffectiveDate,
+            })
+            .IsUnique()
+            .HasFilter("\"PriceSeriesTicker\" IS NOT NULL");
+        stockSplit
+            .HasIndex(s => new { s.CommonStockId, s.EffectiveDate })
+            .IsUnique()
+            .HasFilter("\"PriceSeriesTicker\" IS NULL");
         builder.Entity<CashDividend>().Property(d => d.Source).HasConversion<string>();
         builder
             .Entity<CorporateActionPriceReconciliationCursor>()

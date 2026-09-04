@@ -93,11 +93,12 @@ public class FtdImportService
             _logger.LogInformation("Seeded or updated {Count} CUSIPs from FTD data", cusipsSeeded);
         }
 
+        var listedTickerMap = await BuildListedTickerMap(cancellationToken);
         await ImportNewRecords(
             importFiles,
             importStartDate,
             replayRecords,
-            tickerMap,
+            listedTickerMap,
             cancellationToken
         );
     }
@@ -182,7 +183,7 @@ public class FtdImportService
         List<string> importFiles,
         DateOnly importStartDate,
         Dictionary<string, List<FtdRecord>> replayRecords,
-        Dictionary<string, Guid> tickerMap,
+        Dictionary<string, ListedSecurityKey> tickerMap,
         CancellationToken cancellationToken
     )
     {
@@ -578,6 +579,57 @@ public class FtdImportService
                 fileNames.Count
             );
         }
+    }
+
+    /// <summary>
+    /// Replays the SEC archive into the exact-listing FTD key. The former importer admitted only
+    /// primary tickers, so a schema backfill cannot recover secondary ETF rows that were skipped.
+    /// A durable oldest-first frontier makes the repair bounded and restart-safe.
+    /// </summary>
+    public async Task BackfillListedRecords(CancellationToken cancellationToken)
+    {
+        var fileNames = await NextSweepFiles(ListedRecordSweepCursorName);
+        if (fileNames.Count == 0)
+            return;
+
+        var tickerMap = await BuildListedTickerMap(cancellationToken);
+        if (tickerMap.Count == 0)
+            return;
+
+        string lastCompletedFile = null;
+        foreach (var fileName in fileNames)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var records = await DownloadAndParse(fileName, cancellationToken);
+                await ImportRecords(records, tickerMap, cancellationToken);
+                lastCompletedFile = fileName;
+            }
+            catch (HttpRequestException ex)
+                when (ex.StatusCode == System.Net.HttpStatusCode.NotFound
+                    && !IsRecentFtdFile(fileName)
+                )
+            {
+                _logger.LogWarning(
+                    "Listed-record FTD sweep: archive file {File} is unavailable (404), advancing",
+                    fileName
+                );
+                lastCompletedFile = fileName;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidDataException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Listed-record FTD sweep: failed to import {File}; retrying from this file",
+                    fileName
+                );
+                break;
+            }
+        }
+
+        if (lastCompletedFile != null)
+            await AdvanceSweepFrontier(ListedRecordSweepCursorName, lastCompletedFile);
     }
 
     private async Task<int> RecordListedCusips(
@@ -1165,6 +1217,7 @@ public class FtdImportService
     // Separate cursor: the alias sweep's frontier has already consumed the archive on
     // long-running deployments, and listed-CUSIP rows were never collected on that pass.
     private const string ListedCusipSweepCursorName = "Ftd.ListedCusipSweep";
+    private const string ListedRecordSweepCursorName = "Ftd.ListedRecordSweepV1";
 
     // Twelve fortnightly files ≈ six months of archive per daily cycle, so the whole
     // 2017→today range is swept in about a fortnight of cycles without ever making the
@@ -1648,9 +1701,9 @@ public class FtdImportService
         DateOnly SettlementDate
     );
 
-    private static bool TryResolveSymbol(
+    private static bool TryResolveSymbol<TValue>(
         string symbol,
-        Dictionary<string, Guid> tickerMap,
+        Dictionary<string, TValue> tickerMap,
         Dictionary<string, string> strippedAliases,
         out string ticker
     )
@@ -1666,29 +1719,31 @@ public class FtdImportService
 
     private async Task<int> ImportRecords(
         List<FtdRecord> records,
-        Dictionary<string, Guid> tickerMap,
+        Dictionary<string, ListedSecurityKey> tickerMap,
         CancellationToken cancellationToken
     )
     {
         // Group by stock+date, keeping the latest record per day (FTD is cumulative)
-        var grouped = new Dictionary<(Guid StockId, DateOnly Date), FailToDeliver>();
+        var grouped =
+            new Dictionary<(Guid StockId, string ListedTicker, DateOnly Date), FailToDeliver>();
 
-        var strippedAliases = BuildStrippedTickerAliases(tickerMap);
+        var strippedAliases = BuildStrippedTickerAliases(tickerMap.Keys);
         foreach (var record in records)
         {
             if (
                 string.IsNullOrEmpty(record.Symbol)
                 || !TryResolveSymbol(record.Symbol, tickerMap, strippedAliases, out var ticker)
-                || !tickerMap.TryGetValue(ticker, out var stockId)
+                || !tickerMap.TryGetValue(ticker, out var listing)
             )
             {
                 continue;
             }
 
-            var key = (stockId, record.SettlementDate);
+            var key = (listing.CommonStockId, listing.ListedTicker, record.SettlementDate);
             grouped[key] = new FailToDeliver
             {
-                CommonStockId = stockId,
+                CommonStockId = listing.CommonStockId,
+                ListedTicker = listing.ListedTicker,
                 SettlementDate = record.SettlementDate,
                 Quantity = record.Quantity,
                 Price = record.Price,
@@ -1725,7 +1780,12 @@ public class FtdImportService
         await dbContext
             .Set<FailToDeliver>()
             .UpsertRange(safeItems)
-            .On(f => new { f.CommonStockId, f.SettlementDate })
+            .On(f => new
+            {
+                f.CommonStockId,
+                f.ListedTicker,
+                f.SettlementDate,
+            })
             .WhenMatched(
                 (existing, incoming) =>
                     new FailToDeliver { Quantity = incoming.Quantity, Price = incoming.Price }
@@ -1738,6 +1798,15 @@ public class FtdImportService
         using var scope = _scopeFactory.CreateScope();
         var tickerMapService = scope.ServiceProvider.GetRequiredService<TickerMapService>();
         return await tickerMapService.Build(_workerOptions.TickersToSync, cancellationToken);
+    }
+
+    private async Task<Dictionary<string, ListedSecurityKey>> BuildListedTickerMap(
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var tickerMapService = scope.ServiceProvider.GetRequiredService<TickerMapService>();
+        return await tickerMapService.BuildListed(_workerOptions.TickersToSync, cancellationToken);
     }
 
     private async Task<List<FtdRecord>> DownloadAndParse(
