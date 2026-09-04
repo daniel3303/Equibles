@@ -957,6 +957,7 @@ public class YahooPriceImportServiceTests : IDisposable
         var alphabet = CreateStock("GOOGL", "Alphabet Inc.");
         alphabet.SecondaryTickers = ["GOOG"];
         alphabet.ReferenceTickers = ["GOOG"];
+        alphabet.PriceHistoryBackfilledTickers = ["GOOG"];
         await SeedStocks(alphabet);
 
         var existingDate = new DateOnly(2026, 3, 20);

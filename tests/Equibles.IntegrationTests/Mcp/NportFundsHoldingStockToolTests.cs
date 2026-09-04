@@ -139,7 +139,8 @@ public class NportFundsHoldingStockToolTests : IDisposable
 
         var result = await _tools.GetFundsHoldingStock("AAPL");
 
-        result.Should().Contain("APPLE # SYNTHETIC \\| INC");
+        result.Should().Contain("Funds holding AAPL");
+        result.Should().NotContain("SYNTHETIC");
         result.Should().Contain("VANGUARD # ROW \\| TRUST");
         result.Should().Contain("INDEX  FUND \\| EXTRA");
         result.Should().Contain("N\\|S EXTRA");

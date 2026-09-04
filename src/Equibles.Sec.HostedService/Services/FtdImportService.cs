@@ -81,7 +81,6 @@ public class FtdImportService
         );
 
         var tickerMap = await BuildTickerMap(cancellationToken);
-        var listedTickerMap = await BuildListedTickerMap(cancellationToken);
         var replayRecords = new Dictionary<string, List<FtdRecord>>(StringComparer.Ordinal);
         var cusipsSeeded = await ReplayLiveIdentity(
             replayFiles,
@@ -94,6 +93,7 @@ public class FtdImportService
             _logger.LogInformation("Seeded or updated {Count} CUSIPs from FTD data", cusipsSeeded);
         }
 
+        var listedTickerMap = await BuildListedTickerMap(cancellationToken);
         await ImportNewRecords(
             importFiles,
             importStartDate,

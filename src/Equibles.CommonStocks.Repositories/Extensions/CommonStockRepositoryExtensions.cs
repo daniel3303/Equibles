@@ -87,30 +87,30 @@ public static class CommonStockRepositoryExtensions
         if (normalized == null)
             return (null, $"Stock '{ticker}' not found.");
 
-        var candidates = new[] { normalized, TickerNormalizer.NormalizeDashListed(normalized) }
-            .Where(value => value != null)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var literal = candidates[0];
-        var folded = candidates.Count > 1 ? candidates[1] : literal;
-        var authoritativeOwners = await repository
-            .GetAll()
-            .Where(candidate =>
-                candidate.Ticker == literal
-                || candidate.Ticker == folded
-                || (
-                    candidate.Active
-                    && (
-                        candidate.ReferenceTickers.Contains(literal)
-                        || candidate.ReferenceTickers.Contains(folded)
-                    )
+        var literal = normalized;
+        var folded = TickerNormalizer.NormalizeDashListed(normalized) ?? literal;
+
+        async Task<List<CommonStock>> FindOwners(string listedTicker) =>
+            await repository
+                .GetAll()
+                .Where(candidate =>
+                    candidate.Ticker == listedTicker
+                    || (candidate.Active && candidate.ReferenceTickers.Contains(listedTicker))
                 )
-            )
-            .Take(2)
-            .ToListAsync();
+                .Take(2)
+                .ToListAsync();
+
+        var authoritativeOwners = await FindOwners(literal);
         if (authoritativeOwners.Select(candidate => candidate.Id).Distinct().Count() > 1)
             return (null, $"Listed security '{ticker}' is ambiguous.");
         var stock = authoritativeOwners.SingleOrDefault();
+        if (stock == null && !string.Equals(literal, folded, StringComparison.OrdinalIgnoreCase))
+        {
+            authoritativeOwners = await FindOwners(folded);
+            if (authoritativeOwners.Select(candidate => candidate.Id).Distinct().Count() > 1)
+                return (null, $"Listed security '{ticker}' is ambiguous.");
+            stock = authoritativeOwners.SingleOrDefault();
+        }
         stock ??= await repository.GetByTicker(normalized);
         if (stock == null && normalized.Contains('.'))
             stock = await repository.GetByTicker(normalized.Replace('.', '-'));
