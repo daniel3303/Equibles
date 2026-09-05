@@ -103,7 +103,19 @@ public class StandaloneXbrlParser
                 continue;
 
             var dimensions = ExtractDimensions(contextElement);
-            contexts[id] = new ParsedContext(isInstant, start, end, dimensions);
+            var identifier = contextElement
+                .Element(XName.Get("entity", XbrliNamespace))
+                ?.Element(XName.Get("identifier", XbrliNamespace));
+            var unqualified =
+                !contextElement.Descendants(XName.Get("segment", XbrliNamespace)).Any()
+                && !contextElement.Descendants(XName.Get("scenario", XbrliNamespace)).Any();
+            var cik =
+                unqualified && (string)identifier?.Attribute("scheme") == "http://www.sec.gov/CIK"
+                    ? identifier?.Value.Trim()
+                    : null;
+            if (contexts.ContainsKey(id))
+                cik = null;
+            contexts[id] = new ParsedContext(isInstant, start, end, dimensions, cik);
         }
 
         return contexts;
@@ -266,6 +278,7 @@ public class StandaloneXbrlParser
             PeriodStart = context.Start,
             PeriodEnd = context.End,
             Dimensions = context.Dimensions,
+            ConsolidatedCik = context.ConsolidatedCik,
             Decimals = XbrlValueParser.ParseDecimals((string)element.Attribute("decimals")),
         };
         return true;

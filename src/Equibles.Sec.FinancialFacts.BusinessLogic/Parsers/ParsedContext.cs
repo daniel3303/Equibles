@@ -9,5 +9,6 @@ internal record struct ParsedContext(
     bool IsInstant,
     DateOnly Start,
     DateOnly End,
-    List<ParsedXbrlDimension> Dimensions
+    List<ParsedXbrlDimension> Dimensions,
+    string ConsolidatedCik = null
 );

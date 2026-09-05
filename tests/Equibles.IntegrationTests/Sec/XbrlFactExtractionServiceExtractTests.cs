@@ -101,6 +101,46 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         );
     }
 
+    [Fact]
+    public async Task Extract_ForeignReport_FillsMissingConsolidatedFactWithoutOverwritingExistingRow()
+    {
+        var document = await SeedDocument(
+            InlineEnvelope().Replace("scheme=\"cik\"", "scheme=\"http://www.sec.gov/CIK\"")
+        );
+        document.DocumentType = DocumentType.SixK;
+        await DbContext.SaveChangesAsync();
+        var sut = BuildSut();
+
+        (await sut.Extract(document, CancellationToken.None)).Should().Be(2);
+        var consolidated = await DbContext
+            .Set<FinancialFact>()
+            .SingleAsync(f => f.DocumentId == document.Id && f.DimensionsKey == "");
+        consolidated.Form.Should().Be(DocumentType.SixK);
+        consolidated.PeriodStart.Should().Be(new DateOnly(2025, 1, 1));
+        consolidated.PeriodEnd.Should().Be(new DateOnly(2025, 3, 31));
+        var id = consolidated.Id;
+
+        // Model an authoritative API row occupying this exact natural key.
+        consolidated.Value = 999m;
+        consolidated.DocumentId = null;
+        consolidated.Frame = "CY2025Q1";
+        await DbContext.SaveChangesAsync();
+        await sut.Extract(document, CancellationToken.None);
+        await DbContext.Entry(consolidated).ReloadAsync();
+
+        consolidated.Id.Should().Be(id);
+        consolidated.Value.Should().Be(999m);
+        consolidated.DocumentId.Should().BeNull();
+        consolidated.Frame.Should().Be("CY2025Q1");
+        (
+            await DbContext
+                .Set<FinancialFact>()
+                .CountAsync(f => f.CommonStockId == document.CommonStockId)
+        )
+            .Should()
+            .Be(2);
+    }
+
     private async Task<Document> SeedDocument(string envelope)
     {
         var stock = new CommonStock

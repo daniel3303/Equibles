@@ -10,6 +10,9 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic.Models;
 /// </summary>
 public class ParsedXbrlFact
 {
+    /// <summary>Source entity identifier, present only for an unqualified SEC CIK context.</summary>
+    public string ConsolidatedCik { get; init; }
+
     /// <summary>
     /// QName prefix of the concept's element (e.g. <c>us-gaap</c>,
     /// <c>dei</c>, <c>srt</c>, <c>ifrs-full</c>, <c>aapl</c>). Preserved
