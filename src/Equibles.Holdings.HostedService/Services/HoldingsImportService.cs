@@ -1964,6 +1964,11 @@ public class HoldingsImportService
         if (safeHoldings.Count == 0)
             return new HoldingsFlushResult(0, SkippedStaleParent: skipped > 0);
 
+        // PostgreSQL takes a KEY SHARE lock on each CommonStock while checking the holding FK.
+        // Bulk and realtime imports can flush overlapping stocks concurrently; one shared parent
+        // order prevents the two multi-row upserts from forming a circular lock dependency.
+        safeHoldings = OrderForUpsert(safeHoldings);
+
         var entriesByKey = new Dictionary<string, List<HoldingManagerEntry>>();
         foreach (var h in safeHoldings)
         {
@@ -2047,6 +2052,16 @@ public class HoldingsImportService
 
         return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
     }
+
+    internal static List<InstitutionalHolding> OrderForUpsert(
+        IEnumerable<InstitutionalHolding> holdings
+    ) =>
+        holdings
+            .OrderBy(holding => holding.CommonStockId)
+            .ThenBy(holding => holding.InstitutionalHolderId)
+            .ThenBy(holding => holding.ReportDate)
+            .ThenBy(holding => holding.AccessionNumber, StringComparer.Ordinal)
+            .ToList();
 
     /// <summary>
     /// True when the stored attribution already says exactly what the re-parsed filing says.
