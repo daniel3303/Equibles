@@ -19,13 +19,10 @@ using Xunit;
 namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
-/// The listed-CUSIP sweep's issuer-prefix guard (#4247). The sweep resolves CNS symbols
-/// against the SECONDARY ticker space, and the only thing standing between a recycled
-/// secondary symbol and importing a delisted issuer's positions is
-/// <c>CusipIdentity.SameIssuer</c> against the stock's primary CUSIP. Sibling classes
-/// SHARE the first-six issuer prefix — for this table that is the admission ticket, not
-/// a trap. A stock with no primary CUSIP has no prefix to verify against and must
-/// record nothing.
+/// The listed-CUSIP sweep's identity guards. An exact authoritative reference ticker admits
+/// the SEC CNS symbol+CUSIP pair directly because separate fund series under one filer can have
+/// different six-digit prefixes. Other secondary symbols still require the stock's issuer prefix,
+/// which is the guard against adopting a recycled symbol's historical CUSIP.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
@@ -143,6 +140,69 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RecordListedCusips_ReferenceTickerWithDifferentIssuerPrefix_Records()
+    {
+        var ishares = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "AAXJ",
+            Name = "iShares MSCI All Country Asia ex Japan ETF",
+            Cik = "1100663",
+            Cusip = "464288182",
+            SecondaryTickers = ["IVV"],
+            ReferenceTickers = ["AAXJ", "IVV"],
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(ishares);
+            await seed.SaveChangesAsync();
+        }
+
+        var recorded = await InvokeRecordListedCusips(
+            BuildService(),
+            Candidates(ishares.Id, "IVV", "464287200")
+        );
+
+        recorded.Should().Be(1);
+        using var verify = FreshContext();
+        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
+        listing.CommonStockId.Should().Be(ishares.Id);
+        listing.ListedTicker.Should().Be("IVV");
+        listing.Cusip.Should().Be("464287200");
+    }
+
+    [Fact]
+    public async Task RecordListedCusips_ReferenceTickerWithoutPrimaryCusip_Records()
+    {
+        var fund = new CommonStock
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "FUND",
+            Name = "Series Trust",
+            Cik = "0000000003",
+            SecondaryTickers = ["ETF1"],
+            ReferenceTickers = ["ETF1"],
+        };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<CommonStock>().Add(fund);
+            await seed.SaveChangesAsync();
+        }
+
+        var recorded = await InvokeRecordListedCusips(
+            BuildService(),
+            Candidates(fund.Id, "ETF1", "33333R107")
+        );
+
+        recorded.Should().Be(1);
+        using var verify = FreshContext();
+        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
+        listing.CommonStockId.Should().Be(fund.Id);
+        listing.ListedTicker.Should().Be("ETF1");
+        listing.Cusip.Should().Be("33333R107");
+    }
+
+    [Fact]
     public async Task RecordListedCusips_ForeignIssuerPrefix_RecordsNothing()
     {
         // The recycled-symbol case: an old archive file pairs this secondary symbol with a
@@ -176,8 +236,8 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
     [Fact]
     public async Task RecordListedCusips_StockWithoutPrimaryCusip_RecordsNothing()
     {
-        // No primary CUSIP means no issuer prefix to anchor the guard — unverifiable
-        // identity is skipped, not admitted on faith.
+        // A non-reference secondary symbol still has no authority without a primary
+        // issuer prefix, so it is skipped rather than admitted on faith.
         var stock = new CommonStock
         {
             Id = Guid.NewGuid(),

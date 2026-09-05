@@ -14,9 +14,9 @@ public class FtdImportServiceAliasSweepCursorTests
     [Fact]
     public void ListedCusipSweepUsesPostEtfIdentityCursor()
     {
-        // V1 reached the live frontier before FundSeries secondary tickers were authoritative.
-        // Reusing it would leave historical ETF CUSIPs permanently undiscovered in production.
-        FtdImportService.ListedCusipSweepCursorName.Should().Be("Ftd.ListedCusipSweepV2");
+        // V2 rejected separate fund series whose CUSIP prefix differs from the filer's primary.
+        // Reusing it would leave those ETF CUSIPs permanently undiscovered in production.
+        FtdImportService.ListedCusipSweepCursorName.Should().Be("Ftd.ListedCusipSweepV3");
     }
 
     [Theory]

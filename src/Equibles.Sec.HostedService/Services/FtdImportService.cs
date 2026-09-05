@@ -485,8 +485,9 @@ public class FtdImportService
     /// Same authority and guards as the alias sweep: the SEC publishes SYMBOL and CUSIP on one
     /// row (no name matching); a symbol that is any stock's PRIMARY ticker is left to the alias
     /// sweep; a symbol two stocks' secondary lists collapse onto is dropped rather than guessed;
-    /// and the CUSIP must share the stock's issuer prefix, which blocks recycled symbols.
-    /// Sibling classes SHARE the issuer prefix — here that is the point, not a trap.
+    /// and an ordinary secondary symbol's CUSIP must share the stock's issuer prefix, which blocks
+    /// recycled symbols. An exact authoritative ReferenceTicker does not require that prefix:
+    /// separate ETF fund series under one filer can have unrelated six-digit CUSIP prefixes.
     /// </para>
     /// <para>
     /// Own frontier (<see cref="ListedCusipSweepCursorName"/>) starting at the archive origin:
@@ -668,14 +669,22 @@ public class FtdImportService
         var recorded = 0;
         foreach (var stock in stocks)
         {
-            // Without a current primary CUSIP there is no issuer prefix to anchor the
-            // recycled-symbol guard against — skip rather than record unverifiable identity.
-            if (stock.Cusip == null || !byStock.TryGetValue(stock.Id, out var byTicker))
+            if (!byStock.TryGetValue(stock.Id, out var byTicker))
                 continue;
 
+            var referenceTickers = stock.ReferenceTickers.ToHashSet(
+                StringComparer.OrdinalIgnoreCase
+            );
+            // A fund filer's product series can carry unrelated six-digit CUSIP prefixes
+            // (AAXJ 464288 vs IVV 464287). ReferenceTickers is the authoritative current
+            // security-type feed, so its exact ticker can trust the SEC CNS pair directly.
+            // Other secondary listings retain the issuer-prefix ticker-recycling guard.
             var candidates = byTicker
                 .SelectMany(kv =>
-                    kv.Value.Where(c => CusipIdentity.SameIssuer(c, stock.Cusip))
+                    kv.Value.Where(c =>
+                            referenceTickers.Contains(kv.Key)
+                            || (stock.Cusip != null && CusipIdentity.SameIssuer(c, stock.Cusip))
+                        )
                         .Select(c => (ListedTicker: kv.Key, Cusip: c))
                 )
                 .ToList();
@@ -1235,9 +1244,9 @@ public class FtdImportService
 
     private const string InactiveCusipSweepCursorName = "Ftd.InactiveCusipSweep";
 
-    // V2 deliberately replays the archive once: V1 advanced before authoritative ETF
-    // secondary tickers existed, permanently skipping those listings' historical CUSIPs.
-    internal const string ListedCusipSweepCursorName = "Ftd.ListedCusipSweepV2";
+    // V3 deliberately replays the archive once: V2 required every listing to share the
+    // filer's primary six-digit CUSIP prefix, which is false for separate ETF fund series.
+    internal const string ListedCusipSweepCursorName = "Ftd.ListedCusipSweepV3";
     private const string ListedRecordSweepCursorName = "Ftd.ListedRecordSweepV1";
 
     // Twelve fortnightly files ≈ six months per bounded cycle. The worker requests a
