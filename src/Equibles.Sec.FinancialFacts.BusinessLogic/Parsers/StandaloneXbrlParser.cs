@@ -111,7 +111,7 @@ public class StandaloneXbrlParser
                 && !contextElement.Descendants(XName.Get("scenario", XbrliNamespace)).Any();
             var cik =
                 unqualified && (string)identifier?.Attribute("scheme") == "http://www.sec.gov/CIK"
-                    ? identifier.Value.Trim()
+                    ? identifier?.Value.Trim()
                     : null;
             if (contexts.ContainsKey(id))
                 cik = null;

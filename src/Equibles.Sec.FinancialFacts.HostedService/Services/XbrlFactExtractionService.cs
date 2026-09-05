@@ -270,7 +270,9 @@ public class XbrlFactExtractionService
 
     private static bool CanFillConsolidated(ParsedXbrlFact fact, Document document)
     {
-        var form = document?.DocumentType;
+        if (document == null)
+            return false;
+        var form = document.DocumentType;
         if (
             form != DocumentType.SixK
             && form != DocumentType.SixKa
@@ -284,12 +286,7 @@ public class XbrlFactExtractionService
         // Prefix spelling alone is not authority to create a standard financial fact.
         if (
             !Uri.TryCreate(fact.Namespace, UriKind.Absolute, out var conceptNamespace)
-            || !(
-                string.Equals(fact.Taxonomy, "ifrs-full", StringComparison.OrdinalIgnoreCase)
-                    && conceptNamespace.Host == "xbrl.ifrs.org"
-                || string.Equals(fact.Taxonomy, "us-gaap", StringComparison.OrdinalIgnoreCase)
-                    && conceptNamespace.Host == "fasb.org"
-            )
+            || conceptNamespace.Host != FinancialTaxonomyHost(fact.Taxonomy)
         )
             return false;
 
@@ -302,6 +299,14 @@ public class XbrlFactExtractionService
             && sourceCik.TrimStart('0').Length > 0
             && sourceCik.TrimStart('0') == issuerCik.TrimStart('0');
     }
+
+    private static string FinancialTaxonomyHost(string taxonomy) =>
+        taxonomy?.ToLowerInvariant() switch
+        {
+            "ifrs-full" => "xbrl.ifrs.org",
+            "us-gaap" => "fasb.org",
+            _ => null,
+        };
 
     /// <summary>
     /// Resolves a parsed fact's concept identity: standard-taxonomy prefixes
