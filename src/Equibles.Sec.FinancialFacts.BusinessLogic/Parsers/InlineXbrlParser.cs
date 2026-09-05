@@ -232,7 +232,20 @@ public class InlineXbrlParser
                 continue;
 
             var dimensions = ExtractDimensions(contextElement);
-            contexts[id] = new ParsedContext(isInstant, start, end, dimensions);
+            var entity = FindFirstChildByLocalName(contextElement, "xbrli:entity");
+            var identifier =
+                entity == null ? null : FindFirstChildByLocalName(entity, "xbrli:identifier");
+            var unqualified =
+                !FindByLocalName(contextElement, "xbrli:segment").Any()
+                && !FindByLocalName(contextElement, "xbrli:scenario").Any();
+            var cik =
+                unqualified && identifier?.GetAttribute("scheme") == "http://www.sec.gov/CIK"
+                    ? identifier.TextContent?.Trim()
+                    : null;
+            // Repeated IDs across concatenated exhibits cannot prove one source context.
+            if (contexts.ContainsKey(id))
+                cik = null;
+            contexts[id] = new ParsedContext(isInstant, start, end, dimensions, cik);
         }
 
         return contexts;
@@ -401,6 +414,7 @@ public class InlineXbrlParser
             PeriodStart = context.Start,
             PeriodEnd = context.End,
             Dimensions = context.Dimensions,
+            ConsolidatedCik = context.ConsolidatedCik,
             Decimals = XbrlValueParser.ParseDecimals(element.GetAttribute("decimals")),
         };
         return true;

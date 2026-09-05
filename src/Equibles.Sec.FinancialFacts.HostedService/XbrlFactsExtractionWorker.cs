@@ -65,7 +65,26 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
             var batch = await documentRepository
                 .GetByXbrlStatus(XbrlCaptureStatus.Captured)
                 .Where(d =>
-                    d.XbrlFactsVersion < XbrlFactExtractionService.CurrentVersion
+                    (
+                        d.XbrlFactsVersion
+                            < Equibles
+                                .CommonStocks
+                                .Data
+                                .Models
+                                .CommonStockTickerEvidence
+                                .SourceXbrlFactsVersion
+                        || (
+                            d.XbrlFactsVersion < XbrlFactExtractionService.CurrentVersion
+                            && (
+                                d.DocumentType == DocumentType.TwentyF
+                                || d.DocumentType == DocumentType.TwentyFa
+                                || d.DocumentType == DocumentType.FortyF
+                                || d.DocumentType == DocumentType.FortyFa
+                                || d.DocumentType == DocumentType.SixK
+                                || d.DocumentType == DocumentType.SixKa
+                            )
+                        )
+                    )
                     && d.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts
                 )
                 .OrderByDescending(d => d.ReportingDate)

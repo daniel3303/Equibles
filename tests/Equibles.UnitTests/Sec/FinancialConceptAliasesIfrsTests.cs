@@ -9,6 +9,7 @@ public class FinancialConceptAliasesIfrsTests
         new()
         {
             { "revenue", "Revenue" },
+            { "revenue", "RevenueAndOperatingIncome" },
             { "gross-profit", "GrossProfit" },
             { "operating-income", "ProfitLossFromOperatingActivities" },
             { "pretax-income", "ProfitLossBeforeTax" },

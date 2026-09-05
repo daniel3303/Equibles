@@ -29,10 +29,9 @@ namespace Equibles.Sec.FinancialFacts.HostedService.Services;
 ///
 /// <para>
 /// The API stays authoritative for the consolidated (no-dimension) context of
-/// <em>standard-taxonomy</em> concepts: for those this extractor persists only
-/// facts carrying at least one explicit dimension, so its rows (non-empty
-/// <see cref="FinancialFact.DimensionsKey"/>) can never collide with
-/// API-sourced rows (empty key) on the natural-key unique index.
+/// <em>standard-taxonomy</em> concepts. Foreign annual and interim filings may
+/// fill missing consolidated facts only from an unqualified matching-CIK
+/// context; conflicts never update the existing API row.
 /// <em>Filer-extension</em> concepts (<see cref="FactTaxonomy.Custom"/> — the
 /// company's own KPI tags like subscriber counts or ARR) never appear in the
 /// API at all, so they are persisted at every dimensionality, consolidated
@@ -64,7 +63,8 @@ public class XbrlFactExtractionService
     // Version 4: cover-page 12(b) security listings extracted from inline
     // envelopes; the re-drain classifies every stock's ListedSecurityType.
     // Version 5: preserve every cover-page symbol observation as dated issuer evidence.
-    public const int CurrentVersion = CommonStockTickerEvidence.SourceXbrlFactsVersion;
+    // Version 6: fill absent standard consolidated facts in foreign financial reports.
+    public const int CurrentVersion = 6;
 
     private const int InsertBatchSize = 1000;
 
@@ -184,7 +184,7 @@ public class XbrlFactExtractionService
             await PersistCoverListings(document, result.CoverListings, cancellationToken);
         }
 
-        var persistable = CollapseToNaturalKey(SelectPersistable(parsed));
+        var persistable = CollapseToNaturalKey(SelectPersistable(parsed, document));
         if (persistable.Count == 0)
             return 0;
 
@@ -192,6 +192,7 @@ public class XbrlFactExtractionService
 
         var stock = document.CommonStock;
         var facts = new List<FinancialFact>();
+        var consolidatedFills = new List<FinancialFact>();
         var dimensionsByKey = new Dictionary<string, List<ParsedXbrlDimension>>(
             StringComparer.Ordinal
         );
@@ -199,31 +200,46 @@ public class XbrlFactExtractionService
         {
             if (!conceptIds.TryGetValue((candidate.Taxonomy, candidate.Tag), out var conceptId))
                 continue;
-            facts.Add(BuildFact(document, stock, candidate, conceptId));
+            var fact = BuildFact(document, stock, candidate, conceptId);
+            if (candidate.Taxonomy != FactTaxonomy.Custom && candidate.DimensionsKey == "")
+                consolidatedFills.Add(fact);
+            else
+                facts.Add(fact);
             dimensionsByKey.TryAdd(candidate.DimensionsKey, candidate.Fact.Dimensions);
         }
 
-        await BatchPersister.Persist(facts, InsertBatchSize, FlushFacts);
+        await BatchPersister.Persist(facts, InsertBatchSize, items => FlushFacts(items, false));
+        await BatchPersister.Persist(
+            consolidatedFills,
+            InsertBatchSize,
+            items => FlushFacts(items, true)
+        );
         await PersistDimensions(document, dimensionsByKey, cancellationToken);
 
-        return facts.Count;
+        return facts.Count + consolidatedFills.Count;
     }
 
     /// <summary>
     /// Keeps the facts this extractor is allowed to persist: a concept in a
-    /// standard taxonomy with at least one explicit dimension (the API owns
-    /// standard concepts' consolidated context) or a filer-extension concept at
-    /// any dimensionality (the API never carries those), and values that fit
-    /// their columns.
+    /// standard taxonomy with explicit dimensions, a filer-extension concept,
+    /// or a source-identified foreign consolidated context used only to fill
+    /// absent API facts. Values must fit their columns.
     /// </summary>
-    internal static List<PersistableXbrlFact> SelectPersistable(List<ParsedXbrlFact> parsed)
+    internal static List<PersistableXbrlFact> SelectPersistable(
+        List<ParsedXbrlFact> parsed,
+        Document document = null
+    )
     {
         var selected = new List<PersistableXbrlFact>();
         foreach (var fact in parsed)
         {
             if (!TryResolveConcept(fact, out var taxonomy, out var tag))
                 continue;
-            if (taxonomy != FactTaxonomy.Custom && fact.Dimensions.Count == 0)
+            if (
+                taxonomy != FactTaxonomy.Custom
+                && fact.Dimensions.Count == 0
+                && !CanFillConsolidated(fact, document)
+            )
                 continue;
             if (string.IsNullOrEmpty(fact.Unit) || fact.Unit.Length > UnitMaxLength)
                 continue;
@@ -250,6 +266,41 @@ public class XbrlFactExtractionService
             );
         }
         return selected;
+    }
+
+    private static bool CanFillConsolidated(ParsedXbrlFact fact, Document document)
+    {
+        var form = document?.DocumentType;
+        if (
+            form != DocumentType.SixK
+            && form != DocumentType.SixKa
+            && form != DocumentType.TwentyF
+            && form != DocumentType.TwentyFa
+            && form != DocumentType.FortyF
+            && form != DocumentType.FortyFa
+        )
+            return false;
+
+        // Prefix spelling alone is not authority to create a standard financial fact.
+        if (
+            !Uri.TryCreate(fact.Namespace, UriKind.Absolute, out var conceptNamespace)
+            || !(
+                string.Equals(fact.Taxonomy, "ifrs-full", StringComparison.OrdinalIgnoreCase)
+                    && conceptNamespace.Host == "xbrl.ifrs.org"
+                || string.Equals(fact.Taxonomy, "us-gaap", StringComparison.OrdinalIgnoreCase)
+                    && conceptNamespace.Host == "fasb.org"
+            )
+        )
+            return false;
+
+        var sourceCik = fact.ConsolidatedCik;
+        var issuerCik = document.CommonStock?.Cik;
+        return !string.IsNullOrEmpty(sourceCik)
+            && !string.IsNullOrEmpty(issuerCik)
+            && sourceCik.All(char.IsAsciiDigit)
+            && issuerCik.All(char.IsAsciiDigit)
+            && sourceCik.TrimStart('0').Length > 0
+            && sourceCik.TrimStart('0') == issuerCik.TrimStart('0');
     }
 
     /// <summary>
@@ -350,6 +401,13 @@ public class XbrlFactExtractionService
                     c.Fact.PeriodEnd,
                     c.DimensionsKey
                 )
+            )
+            // A conflict in a newly admitted consolidated context is not a
+            // recoverable missing value; never let document order choose it.
+            .Where(g =>
+                g.Key.Taxonomy == FactTaxonomy.Custom
+                || g.Key.DimensionsKey != ""
+                || g.Select(c => c.Fact.Value).Distinct().Take(2).Count() == 1
             )
             .Select(g => g.OrderByDescending(c => c.Fact.Decimals ?? int.MinValue).First())
             .ToList();
@@ -605,12 +663,12 @@ public class XbrlFactExtractionService
         return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
 
-    private async Task FlushFacts(List<FinancialFact> items)
+    private async Task FlushFacts(List<FinancialFact> items, bool fillOnly)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
-        await dbContext
+        var upsert = dbContext
             .Set<FinancialFact>()
             .UpsertRange(items)
             // Must name the unique index's full column list (including
@@ -624,7 +682,13 @@ public class XbrlFactExtractionService
                 f.PeriodEnd,
                 f.AccessionNumber,
                 f.DimensionsKey,
-            })
+            });
+        if (fillOnly)
+        {
+            await upsert.NoUpdate().RunAsync();
+            return;
+        }
+        await upsert
             .WhenMatched(
                 (existing, incoming) =>
                     new FinancialFact

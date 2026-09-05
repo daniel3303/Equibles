@@ -64,6 +64,9 @@ public static class FinancialConceptAliases
             // revenue series starts at the ASC 606 transition.
             G("RealEstateRevenueNet"),
             I("Revenue"),
+            // Aggregate top line including other operating income, not the
+            // contract-fee subset. IAS 1 common-practice taxonomy element.
+            I("RevenueAndOperatingIncome"),
             I("RevenueFromContractsWithCustomers"),
         ],
         // Financial-sector top lines: banks, broker-dealers and insurers never
