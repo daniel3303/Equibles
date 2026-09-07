@@ -44,25 +44,41 @@ public static class StatementLineFacts
     /// anchoring keeps a statement from mixing two reporting dates.
     /// </summary>
     /// <remarks>
-    /// A flow statement ends where its measured SPANS end. A point disclosure
-    /// (OPRA's 2023-01-12 dividend payment, filed as FY2022) can be dated after
-    /// the period it is filed under, so a plain maximum anchors the statement
-    /// outside the fiscal year and drops every real line. A point is any fact
-    /// with no span, which filers tag both as an instant and as a zero-day
-    /// duration; a point-only statement, which is every balance sheet, still
+    /// A flow statement ends where the spans that MEASURE ITS PERIOD end. A fact
+    /// filed under the stamp but measuring something else — a payment window
+    /// (OPRA's 2023-01-12 dividend, filed as FY2022), a point disclosure, a
+    /// cumulative or dimensional span — can be dated later and drag the anchor
+    /// off the period, dropping every real line. Falls back to any measured span,
+    /// then to every fact, so a point-only statement (every balance sheet) still
     /// anchors on its latest point.
     /// </remarks>
     public static List<FinancialFact> AnchorToLatestPeriodEnd(
-        IReadOnlyCollection<FinancialFact> facts
+        IReadOnlyCollection<FinancialFact> facts,
+        SecFiscalPeriod fiscalPeriod
     )
     {
         if (facts.Count == 0)
             return [];
 
+        var conforming = facts.Where(f => MeasuresGranularity(f, fiscalPeriod)).ToList();
         var spans = facts.Where(f => f.PeriodEnd > f.PeriodStart).ToList();
-        var anchoring = spans.Count > 0 ? spans : facts;
+        var anchoring =
+            conforming.Count > 0 ? conforming
+            : spans.Count > 0 ? spans
+            : facts;
         var statementPeriodEnd = anchoring.Max(f => f.PeriodEnd);
         return facts.Where(f => f.PeriodEnd == statementPeriodEnd).ToList();
+    }
+
+    // A span that measures exactly the requested granularity — the gate
+    // PickCurrentlyReported already applies to a line. Anchoring on anything else lands
+    // the statement on a date no line can serve, and it renders empty.
+    private static bool MeasuresGranularity(FinancialFact fact, SecFiscalPeriod fiscalPeriod)
+    {
+        var spanDays = fact.PeriodEnd.DayNumber - fact.PeriodStart.DayNumber;
+        return fiscalPeriod == SecFiscalPeriod.FullYear
+            ? spanDays >= MinAnnualSpanDays && spanDays <= MaxSupportedDurationDays
+            : spanDays >= 1 && spanDays <= MaxDiscreteQuarterDays;
     }
 
     /// <summary>
