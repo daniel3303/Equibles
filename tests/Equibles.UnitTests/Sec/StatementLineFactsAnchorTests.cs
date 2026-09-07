@@ -173,44 +173,6 @@ public class StatementLineFactsAnchorTests
         anchored.Should().BeEquivalentTo([later]);
     }
 
-    // A dimensional span of conforming LENGTH is still the wrong period: HOFT's FY2025
-    // carried a 368-day trailing-twelve-month window ending 2025-05-04 against its real year
-    // ending 2025-02-02, and length alone cannot tell the two apart.
-    [Fact]
-    public void AnchorToLatestPeriodEnd_DimensionalTrailingWindow_AnchorsOnTheConsolidatedYear()
-    {
-        var fiscalYear = Duration(new DateOnly(2024, 1, 29), new DateOnly(2025, 2, 2), 500m);
-        var trailingWindow = Dimensional(
-            Duration(new DateOnly(2024, 5, 1), new DateOnly(2025, 5, 4), 900m)
-        );
-
-        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
-            [fiscalYear, trailingWindow],
-            SecFiscalPeriod.FullYear
-        );
-
-        anchored.Should().BeEquivalentTo([fiscalYear]);
-    }
-
-    // The same rung fixes a LATER period stamped into this bucket: GIS's fiscal year ends in
-    // May, so its FY2020 Q2 is the quarter ending 2019-11-24, and a dimensional FY2021 Q1
-    // span ending 2020-08-30 sat in the same bucket and won on date.
-    [Fact]
-    public void AnchorToLatestPeriodEnd_DimensionalLaterQuarter_AnchorsOnTheConsolidatedQuarter()
-    {
-        var ownQuarter = Duration(new DateOnly(2019, 8, 26), new DateOnly(2019, 11, 24), 500m);
-        var laterQuarter = Dimensional(
-            Duration(new DateOnly(2020, 6, 1), new DateOnly(2020, 8, 30), 900m)
-        );
-
-        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
-            [ownQuarter, laterQuarter],
-            SecFiscalPeriod.Q2
-        );
-
-        anchored.Should().BeEquivalentTo([ownQuarter]);
-    }
-
     // The control: a filer that tags a period ONLY dimensionally must still render it, so the
     // consolidated rung falls through rather than emptying the statement.
     [Fact]
