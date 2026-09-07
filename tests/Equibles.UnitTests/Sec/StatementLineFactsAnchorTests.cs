@@ -71,6 +71,49 @@ public class StatementLineFactsAnchorTests
         anchored.Should().BeEquivalentTo([currentYear]);
     }
 
+    // The same poison arrives tagged as a zero-day DURATION, not an instant: DHC filed its
+    // 2026-01-09 dividend payment that way under FY2025, and gating on PeriodType alone let
+    // it anchor the statement past the 2025-12-31 year end.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_FlowStatementWithALaterZeroDayDuration_AnchorsOnTheMeasuredSpans()
+    {
+        var operatingCashFlow = Duration(
+            new DateOnly(2025, 1, 1),
+            new DateOnly(2025, 12, 31),
+            500m
+        );
+        var dividendPaymentDate = Duration(
+            new DateOnly(2026, 1, 9),
+            new DateOnly(2026, 1, 9),
+            80_000_000m
+        );
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd([
+            operatingCashFlow,
+            dividendPaymentDate,
+        ]);
+
+        anchored
+            .Should()
+            .BeEquivalentTo(
+                [operatingCashFlow],
+                "a zero-day duration is a point disclosure, whatever its PeriodType says"
+            );
+    }
+
+    // The control for the zero-day shape: a statement of nothing but points must still
+    // anchor on its latest point rather than return empty.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_ZeroDayDurationsOnly_AnchorsOnTheLatestPoint()
+    {
+        var earlier = Duration(new DateOnly(2025, 6, 30), new DateOnly(2025, 6, 30), 10m);
+        var latest = Duration(new DateOnly(2025, 12, 31), new DateOnly(2025, 12, 31), 20m);
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd([earlier, latest]);
+
+        anchored.Should().BeEquivalentTo([latest]);
+    }
+
     [Fact]
     public void AnchorToLatestPeriodEnd_NoFacts_ReturnsEmpty()
     {

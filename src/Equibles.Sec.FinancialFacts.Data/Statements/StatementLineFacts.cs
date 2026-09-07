@@ -44,12 +44,13 @@ public static class StatementLineFacts
     /// anchoring keeps a statement from mixing two reporting dates.
     /// </summary>
     /// <remarks>
-    /// A flow statement ends where its DURATIONS end. An instant is a point
-    /// disclosure whose date can fall after the period it is filed under — OPRA
-    /// tagged its 2023-01-12 dividend payment as FY2022 — and a plain maximum
-    /// over every fact then anchors the whole statement outside the fiscal year
-    /// and drops every real line with it. An all-instant statement, which is
-    /// every balance sheet, still anchors on its latest instant.
+    /// A flow statement ends where its measured SPANS end. A point disclosure
+    /// (OPRA's 2023-01-12 dividend payment, filed as FY2022) can be dated after
+    /// the period it is filed under, so a plain maximum anchors the statement
+    /// outside the fiscal year and drops every real line. A point is any fact
+    /// with no span, which filers tag both as an instant and as a zero-day
+    /// duration; a point-only statement, which is every balance sheet, still
+    /// anchors on its latest point.
     /// </remarks>
     public static List<FinancialFact> AnchorToLatestPeriodEnd(
         IReadOnlyCollection<FinancialFact> facts
@@ -58,8 +59,8 @@ public static class StatementLineFacts
         if (facts.Count == 0)
             return [];
 
-        var durations = facts.Where(f => f.PeriodType == FactPeriodType.Duration).ToList();
-        var anchoring = durations.Count > 0 ? durations : facts;
+        var spans = facts.Where(f => f.PeriodEnd > f.PeriodStart).ToList();
+        var anchoring = spans.Count > 0 ? spans : facts;
         var statementPeriodEnd = anchoring.Max(f => f.PeriodEnd);
         return facts.Where(f => f.PeriodEnd == statementPeriodEnd).ToList();
     }
@@ -109,13 +110,13 @@ public static class StatementLineFacts
             return null;
         candidates = preferred;
 
-        // A period a duration already measures is never read off an instant in the
-        // same bucket: the instant is a point disclosure whose date can fall after
-        // the period end, which would win the ordering below. Instant-only buckets
-        // — every balance-sheet concept — are untouched.
-        var durations = candidates.Where(f => f.PeriodType == FactPeriodType.Duration).ToList();
-        if (durations.Count > 0)
-            candidates = durations;
+        // A period a measured span already covers is never read off a point
+        // disclosure in the same bucket, whose date can fall after the period end
+        // and would win the ordering below. Point-only buckets — every
+        // balance-sheet concept — are untouched.
+        var spans = candidates.Where(f => f.PeriodEnd > f.PeriodStart).ToList();
+        if (spans.Count > 0)
+            candidates = spans;
 
         return candidates
             .OrderByDescending(f => f.PeriodEnd)
