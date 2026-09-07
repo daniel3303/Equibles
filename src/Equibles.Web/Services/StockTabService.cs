@@ -741,11 +741,7 @@ public class StockTabService
                 .ToList();
         }
         facts = facts.Where(f => f.FiscalPeriod == fiscalPeriod).ToList();
-        if (facts.Count > 0)
-        {
-            var statementPeriodEnd = facts.Max(f => f.PeriodEnd);
-            facts = facts.Where(f => f.PeriodEnd == statementPeriodEnd).ToList();
-        }
+        facts = StatementLineFacts.AnchorToLatestPeriodEnd(facts);
 
         // The currently-reported fact per concept: span-aware so a quarter never
         // shows the 10-Q's year-to-date figure, latest-ending so a comparative

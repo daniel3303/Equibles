@@ -39,6 +39,32 @@ public static class StatementLineFacts
     public const int MaxSupportedDurationDays = 380;
 
     /// <summary>
+    /// The statement's own reporting endpoint, and the facts that share it. A
+    /// filing re-reports comparative prior endpoints under one fiscal stamp, so
+    /// anchoring keeps a statement from mixing two reporting dates.
+    /// </summary>
+    /// <remarks>
+    /// A flow statement ends where its DURATIONS end. An instant is a point
+    /// disclosure whose date can fall after the period it is filed under — OPRA
+    /// tagged its 2023-01-12 dividend payment as FY2022 — and a plain maximum
+    /// over every fact then anchors the whole statement outside the fiscal year
+    /// and drops every real line with it. An all-instant statement, which is
+    /// every balance sheet, still anchors on its latest instant.
+    /// </remarks>
+    public static List<FinancialFact> AnchorToLatestPeriodEnd(
+        IReadOnlyCollection<FinancialFact> facts
+    )
+    {
+        if (facts.Count == 0)
+            return [];
+
+        var durations = facts.Where(f => f.PeriodType == FactPeriodType.Duration).ToList();
+        var anchoring = durations.Count > 0 ? durations : facts;
+        var statementPeriodEnd = anchoring.Max(f => f.PeriodEnd);
+        return facts.Where(f => f.PeriodEnd == statementPeriodEnd).ToList();
+    }
+
+    /// <summary>
     /// The currently-reported fact among a fiscal period's candidates. A 10-Q
     /// reports each flow line twice under that identity — the discrete quarter
     /// and the fiscal year-to-date — and a balance-sheet line carries the
@@ -82,6 +108,14 @@ public static class StatementLineFacts
         if (preferred.Count == 0)
             return null;
         candidates = preferred;
+
+        // A period a duration already measures is never read off an instant in the
+        // same bucket: the instant is a point disclosure whose date can fall after
+        // the period end, which would win the ordering below. Instant-only buckets
+        // — every balance-sheet concept — are untouched.
+        var durations = candidates.Where(f => f.PeriodType == FactPeriodType.Duration).ToList();
+        if (durations.Count > 0)
+            candidates = durations;
 
         return candidates
             .OrderByDescending(f => f.PeriodEnd)
