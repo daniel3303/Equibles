@@ -44,13 +44,14 @@ public static class StatementLineFacts
     /// anchoring keeps a statement from mixing two reporting dates.
     /// </summary>
     /// <remarks>
-    /// A flow statement ends where the spans that MEASURE ITS PERIOD end. A fact
-    /// filed under the stamp but measuring something else — a payment window
-    /// (OPRA's 2023-01-12 dividend, filed as FY2022), a point disclosure, a
-    /// cumulative or dimensional span — can be dated later and drag the anchor
-    /// off the period, dropping every real line. Falls back to any measured span,
-    /// then to every fact, so a point-only statement (every balance sheet) still
-    /// anchors on its latest point.
+    /// A statement ends where the CONSOLIDATED spans that measure its period end.
+    /// A fact filed under the stamp but measuring something else can be dated
+    /// later and drag the anchor off the period, dropping every real line: a
+    /// payment window (OPRA's 2023-01-12 dividend, filed as FY2022), a point
+    /// disclosure, or a dimensional span that is a trailing-twelve-month window
+    /// (HOFT) or a later quarter stamped into this bucket (GIS). Each rung falls
+    /// back to the next, so a filer who tags only dimensionally still renders and
+    /// a point-only statement (every balance sheet) still anchors on its point.
     /// </remarks>
     public static List<FinancialFact> AnchorToLatestPeriodEnd(
         IReadOnlyCollection<FinancialFact> facts,
@@ -61,19 +62,28 @@ public static class StatementLineFacts
             return [];
 
         var conforming = facts.Where(f => MeasuresGranularity(f, fiscalPeriod)).ToList();
-        var spans = facts.Where(f => f.PeriodEnd > f.PeriodStart).ToList();
+        var consolidated = conforming.Where(f => f.DimensionsKey == "").ToList();
+        var spans = facts
+            .Where(f =>
+                f.PeriodEnd > f.PeriodStart
+                && f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber <= MaxSupportedDurationDays
+            )
+            .ToList();
         var anchoring =
-            conforming.Count > 0 ? conforming
+            consolidated.Count > 0 ? consolidated
+            : conforming.Count > 0 ? conforming
             : spans.Count > 0 ? spans
             : facts;
         var statementPeriodEnd = anchoring.Max(f => f.PeriodEnd);
         return facts.Where(f => f.PeriodEnd == statementPeriodEnd).ToList();
     }
 
-    // A span that measures exactly the requested granularity — the gate
-    // PickCurrentlyReported already applies to a line. Anchoring on anything else lands
-    // the statement on a date no line can serve, and it renders empty.
-    private static bool MeasuresGranularity(FinancialFact fact, SecFiscalPeriod fiscalPeriod)
+    /// <summary>
+    /// Whether a span measures exactly the requested granularity. Public so the anchor,
+    /// this file's pick and the commercial pick share ONE gate; two copies drift, and a
+    /// line the pick rejects must never set the statement's endpoint.
+    /// </summary>
+    public static bool MeasuresGranularity(FinancialFact fact, SecFiscalPeriod fiscalPeriod)
     {
         var spanDays = fact.PeriodEnd.DayNumber - fact.PeriodStart.DayNumber;
         return fiscalPeriod == SecFiscalPeriod.FullYear
@@ -112,15 +122,10 @@ public static class StatementLineFacts
         if (candidates.Count == 0)
             return null;
 
+        // The anchor applies MeasuresGranularity too, so the two must stay ONE
+        // expression: a line the pick would reject must never set the endpoint.
         var preferred = candidates
-            .Where(f =>
-            {
-                var spanDays = f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber;
-                return fiscalPeriod == SecFiscalPeriod.FullYear
-                    ? spanDays == 0
-                        || spanDays >= MinAnnualSpanDays && spanDays <= MaxSupportedDurationDays
-                    : spanDays <= MaxDiscreteQuarterDays;
-            })
+            .Where(f => f.PeriodEnd == f.PeriodStart || MeasuresGranularity(f, fiscalPeriod))
             .ToList();
         if (preferred.Count == 0)
             return null;
