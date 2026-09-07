@@ -26,6 +26,21 @@ public class StatementLineFactsPickInstantTests
             .BeSameAs(fiscalYear, "a period a duration measures is not read off an instant");
     }
 
+    // The same poison tagged as a zero-day duration rather than an instant.
+    [Fact]
+    public void PickCurrentlyReported_BucketWithALaterZeroDayDuration_PicksTheMeasuredSpan()
+    {
+        var fiscalYear = Duration(new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31), 0m);
+        var paymentDate = Duration(new DateOnly(2026, 1, 9), new DateOnly(2026, 1, 9), 80_000_000m);
+
+        var picked = StatementLineFacts.PickCurrentlyReported(
+            [paymentDate, fiscalYear],
+            SecFiscalPeriod.FullYear
+        );
+
+        picked.Should().BeSameAs(fiscalYear);
+    }
+
     // The control: an instant-only bucket is every balance-sheet concept, and the rule above
     // must never make one of those lines absent.
     [Fact]
