@@ -44,14 +44,17 @@ public static class StatementLineFacts
     /// anchoring keeps a statement from mixing two reporting dates.
     /// </summary>
     /// <remarks>
-    /// A statement ends where the CONSOLIDATED spans that measure its period end.
-    /// A fact filed under the stamp but measuring something else can be dated
-    /// later and drag the anchor off the period, dropping every real line: a
-    /// payment window (OPRA's 2023-01-12 dividend, filed as FY2022), a point
-    /// disclosure, or a dimensional span that is a trailing-twelve-month window
-    /// (HOFT) or a later quarter stamped into this bucket (GIS). Each rung falls
-    /// back to the next, so a filer who tags only dimensionally still renders and
-    /// a point-only statement (every balance sheet) still anchors on its point.
+    /// A statement ends where the spans that MEASURE ITS PERIOD end. A fact filed
+    /// under the stamp but measuring something else — a payment window (OPRA's
+    /// 2023-01-12 dividend, filed as FY2022) or a point disclosure — can be dated
+    /// later and drag the anchor off the period, dropping every real line. Falls
+    /// back to any bounded span, then to every fact, so a point-only statement
+    /// (every balance sheet) still anchors on its latest point.
+    ///
+    /// A conforming span belonging to ANOTHER period is still not separable here
+    /// (a trailing-twelve-month window, or a later quarter stamped into this
+    /// bucket) — the only arbiter is the period's own consolidated endpoint, which
+    /// lives in a different statement's concepts and is not loaded. See #8277.
     /// </remarks>
     public static List<FinancialFact> AnchorToLatestPeriodEnd(
         IReadOnlyCollection<FinancialFact> facts,
@@ -62,7 +65,6 @@ public static class StatementLineFacts
             return [];
 
         var conforming = facts.Where(f => MeasuresGranularity(f, fiscalPeriod)).ToList();
-        var consolidated = conforming.Where(f => f.DimensionsKey == "").ToList();
         var spans = facts
             .Where(f =>
                 f.PeriodEnd > f.PeriodStart
@@ -70,8 +72,7 @@ public static class StatementLineFacts
             )
             .ToList();
         var anchoring =
-            consolidated.Count > 0 ? consolidated
-            : conforming.Count > 0 ? conforming
+            conforming.Count > 0 ? conforming
             : spans.Count > 0 ? spans
             : facts;
         var statementPeriodEnd = anchoring.Max(f => f.PeriodEnd);
