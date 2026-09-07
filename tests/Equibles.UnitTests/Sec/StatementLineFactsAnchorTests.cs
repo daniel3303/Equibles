@@ -24,12 +24,10 @@ public class StatementLineFactsAnchorTests
         var cashAtEndOfPeriod = Instant(new DateOnly(2022, 12, 31), 250m);
         var dividendPaymentDate = Instant(new DateOnly(2023, 1, 12), 12_400_000m);
 
-        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd([
-            revenue,
-            operatingCashFlow,
-            cashAtEndOfPeriod,
-            dividendPaymentDate,
-        ]);
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [revenue, operatingCashFlow, cashAtEndOfPeriod, dividendPaymentDate],
+            SecFiscalPeriod.FullYear
+        );
 
         anchored
             .Should()
@@ -50,11 +48,10 @@ public class StatementLineFactsAnchorTests
         var currentAssets = Instant(new DateOnly(2022, 12, 31), 1_000m);
         var currentLiabilities = Instant(new DateOnly(2022, 12, 31), 400m);
 
-        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd([
-            comparative,
-            currentAssets,
-            currentLiabilities,
-        ]);
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [comparative, currentAssets, currentLiabilities],
+            SecFiscalPeriod.FullYear
+        );
 
         anchored.Should().BeEquivalentTo([currentAssets, currentLiabilities]);
     }
@@ -66,7 +63,10 @@ public class StatementLineFactsAnchorTests
         var priorYear = Duration(new DateOnly(2021, 1, 1), new DateOnly(2021, 12, 31), 800m);
         var currentYear = Duration(new DateOnly(2022, 1, 1), new DateOnly(2022, 12, 31), 1_000m);
 
-        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd([priorYear, currentYear]);
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [priorYear, currentYear],
+            SecFiscalPeriod.FullYear
+        );
 
         anchored.Should().BeEquivalentTo([currentYear]);
     }
@@ -88,10 +88,10 @@ public class StatementLineFactsAnchorTests
             80_000_000m
         );
 
-        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd([
-            operatingCashFlow,
-            dividendPaymentDate,
-        ]);
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [operatingCashFlow, dividendPaymentDate],
+            SecFiscalPeriod.FullYear
+        );
 
         anchored
             .Should()
@@ -109,7 +109,10 @@ public class StatementLineFactsAnchorTests
         var earlier = Duration(new DateOnly(2025, 6, 30), new DateOnly(2025, 6, 30), 10m);
         var latest = Duration(new DateOnly(2025, 12, 31), new DateOnly(2025, 12, 31), 20m);
 
-        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd([earlier, latest]);
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [earlier, latest],
+            SecFiscalPeriod.FullYear
+        );
 
         anchored.Should().BeEquivalentTo([latest]);
     }
@@ -117,7 +120,57 @@ public class StatementLineFactsAnchorTests
     [Fact]
     public void AnchorToLatestPeriodEnd_NoFacts_ReturnsEmpty()
     {
-        StatementLineFacts.AnchorToLatestPeriodEnd([]).Should().BeEmpty();
+        StatementLineFacts.AnchorToLatestPeriodEnd([], SecFiscalPeriod.FullYear).Should().BeEmpty();
+    }
+
+    // A span that measures something OTHER than the period drags the anchor off it just as a
+    // point does: AZO's FY2021 Q1 carried a dimensional 167-day NetIncomeLoss ending
+    // 2021-02-13, which anchored the quarter on a date its own 83-day lines could not serve,
+    // and the statement rendered empty.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_QuarterWithALongerNonConformingSpan_AnchorsOnTheQuarter()
+    {
+        var quarter = Duration(new DateOnly(2020, 8, 30), new DateOnly(2020, 11, 21), 500m);
+        var twoQuarters = Duration(new DateOnly(2020, 8, 30), new DateOnly(2021, 2, 13), 900m);
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [quarter, twoQuarters],
+            SecFiscalPeriod.Q1
+        );
+
+        anchored.Should().BeEquivalentTo([quarter]);
+    }
+
+    // A payment filed as a short WINDOW rather than a single day: BHM tagged its dividend
+    // 2026-01-01 to 2026-01-15 under FY2025, which has a span and so passes a bare span rule.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_FullYearWithALaterShortWindow_AnchorsOnTheFiscalYear()
+    {
+        var fiscalYear = Duration(new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31), 500m);
+        var paymentWindow = Duration(new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 15), 80m);
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [fiscalYear, paymentWindow],
+            SecFiscalPeriod.FullYear
+        );
+
+        anchored.Should().BeEquivalentTo([fiscalYear]);
+    }
+
+    // The fallback: a statement whose facts measure no conforming span still anchors rather
+    // than emptying — here on the latest measured span.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_NoConformingSpan_FallsBackToTheLatestSpan()
+    {
+        var earlier = Duration(new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 2), 10m);
+        var later = Duration(new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 15), 20m);
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [earlier, later],
+            SecFiscalPeriod.FullYear
+        );
+
+        anchored.Should().BeEquivalentTo([later]);
     }
 
     private static FinancialFact Instant(DateOnly instant, decimal value)

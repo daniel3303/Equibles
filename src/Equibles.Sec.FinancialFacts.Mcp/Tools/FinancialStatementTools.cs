@@ -171,7 +171,7 @@ public class FinancialStatementTools
                 // concept can retain an earlier end under the same (year, period). Anchor the
                 // statement to one actual period end before selecting line values so it cannot
                 // silently combine different balance dates or flow endpoints.
-                facts = StatementLineFacts.AnchorToLatestPeriodEnd(facts);
+                facts = StatementLineFacts.AnchorToLatestPeriodEnd(facts, selectedPeriod);
 
                 // A 10-Q tags each line under one fiscal (year, period) for both the
                 // discrete quarter and the fiscal year-to-date span, and re-reports prior
