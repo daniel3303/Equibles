@@ -684,7 +684,16 @@ public class FinancialFactsTools
             .ToList();
         if (preferredSpan.Count > 0)
         {
-            candidates = preferredSpan;
+            // A period a duration fact already measures is never read off an instant in
+            // the same bucket: the instant is a declaration/record-date disclosure, and
+            // because it falls after the period end it wins the ordering below (a filer
+            // tagging a 2023-01-12 dividend payment as FY2022 published it as the FY2022
+            // dividend). Instant-only buckets — every balance-sheet concept — are
+            // untouched.
+            var durations = preferredSpan
+                .Where(f => f.PeriodType == FactPeriodType.Duration)
+                .ToList();
+            candidates = durations.Count > 0 ? durations : preferredSpan;
         }
         else if (fiscalPeriod == SecFiscalPeriod.FullYear)
         {
