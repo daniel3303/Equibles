@@ -4,6 +4,7 @@ using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -186,35 +187,51 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         return factor <= 0m ? fact.Shares : SplitAdjustment.AdjustShareCount(fact.Shares, factor);
     }
 
-    // True when the fact backing GetCurrentSharesOutstanding — the latest consolidated cover-page
-    // fact or the latest per-class filing, whichever wins the pick — is a foreign-private-issuer
-    // annual form (20-F/40-F, including amendments). Those cover-page counts are in the issuer's ordinary shares, which
-    // are a different unit from the US-listed ADR a price feed quotes; the Yahoo importer uses this
-    // to skip reconciling Yahoo's (correct, self-consistent) ADR market cap / shares onto that
-    // ordinary base, which would otherwise inflate market cap by the ADR ratio (e.g. Latam Airlines
-    // ~2000x), and the financial-facts importer uses it to leave the stored ADR share base alone.
-    // Keyed to the same pick so a multi-class 20-F filer (per-class facts only) is recognized, not
-    // just one with a consolidated fact. Authoritative — the SEC form, not a ticker/name heuristic.
+    // Foreign annual forms protect listed ADR counts from issuer ordinary-share counts.
+    // Preserve cover-page priority independently of whether a count's date is usable.
+    // Filing form remains identity evidence even when its numerical count has a bad date.
     public async Task<bool> IsForeignPrivateIssuer(
         CommonStock stock,
         CancellationToken cancellationToken = default
     )
     {
-        var fact = await ResolveCurrentSharesFact(stock, cancellationToken);
-        return fact != null
-            && (
-                fact.Form == DocumentType.TwentyF
-                || fact.Form == DocumentType.TwentyFa
-                || fact.Form == DocumentType.FortyF
-                || fact.Form == DocumentType.FortyFa
-            );
+        var conceptIds = await ResolveConceptIds(cancellationToken, FactTaxonomy.Dei);
+        var form = await GetLatestShareForm(stock, conceptIds, cancellationToken);
+        if (form == null)
+        {
+            conceptIds = await ResolveConceptIds(cancellationToken);
+            form = await GetLatestShareForm(stock, conceptIds, cancellationToken);
+        }
+        return form == DocumentType.TwentyF
+            || form == DocumentType.TwentyFa
+            || form == DocumentType.FortyF
+            || form == DocumentType.FortyFa;
     }
 
-    // The single source of truth for "the issuer's current share count and the filing that stated
-    // it", shared by GetCurrentSharesOutstanding and IsForeignPrivateIssuer so the two can never
-    // disagree about which fact is authoritative. Callers pair the two accessors on the same
-    // stock and the resolution costs several queries, so the result (including an abstention) is
-    // memoized per stock for this scoped instance's lifetime — one import scope, single consumer.
+    private async Task<DocumentType> GetLatestShareForm(
+        CommonStock stock,
+        IReadOnlyCollection<Guid> conceptIds,
+        CancellationToken cancellationToken
+    )
+    {
+        return await _financialFactRepository
+            .GetByStock(stock)
+            .Where(f => conceptIds.Contains(f.FinancialConceptId) && f.Unit == SharesUnit)
+            .Where(f =>
+                f.Dimensions.Count == 0
+                || (
+                    f.Dimensions.Count == 1
+                    && f.Dimensions.Any(d => ClassOfStockAxes.Contains(d.Axis))
+                )
+            )
+            .OrderByDescending(f => f.FiledDate)
+            .ThenBy(f => f.Dimensions.Count)
+            .ThenByDescending(f => f.PeriodEnd)
+            .Select(f => f.Form)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    // Memoize the selected numerical evidence for this scoped instance's lifetime.
     private readonly Dictionary<Guid, SharesFact> _currentFactByStock = [];
 
     private async Task<SharesFact> ResolveCurrentSharesFact(
@@ -427,14 +444,14 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
                 )
             )
             .Include(f => f.Dimensions)
+            .Include(f => f.Document)
             .ToListAsync(cancellationToken);
         if (perClassFacts.Count == 0)
             return null;
 
-        var latest = perClassFacts
-            .OrderByDescending(f => f.PeriodEnd)
-            .ThenBy(f => Array.IndexOf(ClassOfStockAxes, f.Dimensions[0].Axis))
-            .First();
+        var latest = LatestDatedClassFact(perClassFacts);
+        if (latest == null)
+            return null;
 
         var total = perClassFacts
             .Where(f =>
@@ -463,6 +480,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // statics, so reference equality holds after materialization.
         var match = await _financialFactRepository
             .GetConsolidatedByStock(stock)
+            .Where(CurrentShareEvidenceDates.Eligible)
             .Where(f => conceptIds.Contains(f.FinancialConceptId) && f.Unit == SharesUnit)
             .OrderByDescending(f => f.FiledDate)
             .ThenByDescending(f => f.PeriodEnd)
@@ -516,6 +534,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
                 && f.Dimensions.Any(d => ClassOfStockAxes.Contains(d.Axis))
             )
             .Include(f => f.Dimensions)
+            .Include(f => f.Document)
             .ToListAsync(cancellationToken);
         if (perClassFacts.Count == 0)
             return null;
@@ -524,13 +543,9 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // as-of date and axis (a filer double-tagging the same classes on two axes must not be
         // double-counted), and grouped by class member so a restated row never double-counts a
         // class.
-        var latest = perClassFacts
-            .OrderByDescending(f => f.FiledDate)
-            .ThenByDescending(f => f.PeriodEnd)
-            // Deterministic axis pick when a filer double-tags the same filing's classes on two
-            // class axes — without it the pinned axis depends on list order among equal keys.
-            .ThenBy(f => Array.IndexOf(ClassOfStockAxes, f.Dimensions[0].Axis))
-            .First();
+        var latest = LatestDatedClassFact(perClassFacts);
+        if (latest == null)
+            return null;
 
         var total = perClassFacts
             .Where(f =>
@@ -552,6 +567,34 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
                 latest.AccessionNumber
             )
             : null;
+    }
+
+    // Comparative classes may repeat, but a class stated only at another date cannot
+    // silently disappear from the purported entity total.
+    private static FinancialFact LatestDatedClassFact(IEnumerable<FinancialFact> facts)
+    {
+        foreach (
+            var filing in facts
+                .GroupBy(f => f.AccessionNumber)
+                .OrderByDescending(g => g.Max(f => f.FiledDate))
+        )
+        {
+            var latest = filing
+                .OrderByDescending(f => f.PeriodEnd)
+                .ThenBy(f => Array.IndexOf(ClassOfStockAxes, f.Dimensions[0].Axis))
+                .First();
+            if (!CurrentShareEvidenceDates.IsEligible(latest))
+                continue;
+            var axisFacts = filing.Where(f => f.Dimensions[0].Axis == latest.Dimensions[0].Axis);
+            var currentMembers = axisFacts
+                .Where(f => f.PeriodEnd == latest.PeriodEnd)
+                .Select(f => f.Dimensions[0].Member)
+                .ToHashSet(StringComparer.Ordinal);
+            if (axisFacts.Any(f => !currentMembers.Contains(f.Dimensions[0].Member)))
+                continue;
+            return latest;
+        }
+        return null;
     }
 
     // The financial-concept ids the "shares-outstanding" alias resolves to, or an empty list when

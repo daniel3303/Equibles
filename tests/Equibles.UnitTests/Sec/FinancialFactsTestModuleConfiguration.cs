@@ -7,10 +7,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Equibles.UnitTests.Sec;
 
 /// <summary>
-/// Registers the financial-fact entities for in-memory tests, ignoring the
-/// <see cref="FinancialFact.Document"/> navigation — it pulls in <c>Chunk</c> whose
-/// <c>Pgvector.Vector</c> property the in-memory EF Core provider can't bind (mirrors
-/// <see cref="DocumentOnlyModuleConfiguration"/>).
+/// Registers financial facts and their source documents without the vector-bearing chunks.
 /// </summary>
 internal sealed class FinancialFactsTestModuleConfiguration : IModuleConfiguration
 {
@@ -21,11 +18,12 @@ internal sealed class FinancialFactsTestModuleConfiguration : IModuleConfigurati
             v => DocumentType.FromValue(v) ?? new DocumentType(v)
         );
 
+        new Equibles.Media.Data.MediaModuleConfiguration().ConfigureEntities(builder);
+        new DocumentOnlyModuleConfiguration().ConfigureEntities(builder);
         builder.Entity<FinancialConcept>();
         builder.Entity<FinancialFact>(b =>
         {
             b.Property(e => e.Form).HasConversion(conv);
-            b.Ignore(e => e.Document);
         });
         builder.Entity<FinancialFactDimension>();
     }
