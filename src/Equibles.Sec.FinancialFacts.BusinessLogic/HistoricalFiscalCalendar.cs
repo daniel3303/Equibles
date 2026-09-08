@@ -20,7 +20,7 @@ public sealed class HistoricalFiscalCalendar(
 
     public bool HasEvidence(DateOnly start, DateOnly end) =>
         annualPeriods.Any(period => start >= period.Start && end <= period.End)
-        || reportedYearEnds.Any(observation => observation.PeriodEnd == end);
+        || reportedYearEnds.Any(observation => Applies(observation, start, end));
 
     public bool RefusesCalendar(DateOnly start, DateOnly end)
     {
@@ -32,7 +32,7 @@ public sealed class HistoricalFiscalCalendar(
         if (annualEnds.Length > 0)
             return annualEnds.Length > 1;
         var calendars = reportedYearEnds
-            .Where(p => p.PeriodEnd == end)
+            .Where(p => Applies(p, start, end))
             .Select(p => (p.Month, p.Day))
             .Distinct()
             .Count();
@@ -62,14 +62,15 @@ public sealed class HistoricalFiscalCalendar(
                             )
                             .Concat(
                                 reportedYearEnds
-                                    .Select(p => (p.PeriodEnd, p.Month, p.Day))
+                                    .Select(p => (p.PeriodStart, p.PeriodEnd, p.Month, p.Day))
                                     .Distinct()
                                     .OrderBy(p => p.PeriodEnd)
+                                    .ThenBy(p => p.PeriodStart)
                                     .ThenBy(p => p.Month)
                                     .ThenBy(p => p.Day)
                                     .Select(p =>
                                         FormattableString.Invariant(
-                                            $"F:{p.PeriodEnd:yyyy-MM-dd}:{p.Month}:{p.Day}"
+                                            $"F:{p.PeriodStart:yyyy-MM-dd}:{p.PeriodEnd:yyyy-MM-dd}:{p.Month}:{p.Day}"
                                         )
                                     )
                             )
@@ -97,7 +98,7 @@ public sealed class HistoricalFiscalCalendar(
             );
 
         var sourceCalendars = reportedYearEnds
-            .Where(observation => observation.PeriodEnd == end)
+            .Where(observation => Applies(observation, start, end))
             .Select(observation => (observation.Month, observation.Day))
             .Distinct()
             .ToArray();
@@ -117,4 +118,8 @@ public sealed class HistoricalFiscalCalendar(
             classifyInterimInstants: true
         );
     }
+
+    private static bool Applies(ParsedFiscalYearEnd observation, DateOnly start, DateOnly end) =>
+        observation.PeriodEnd == end
+        || (start >= observation.PeriodStart && end <= observation.PeriodEnd);
 }

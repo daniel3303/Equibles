@@ -218,12 +218,14 @@ public class XbrlFactExtractionService
         var dimensionsByKey = new Dictionary<string, List<ParsedXbrlDimension>>(
             StringComparer.Ordinal
         );
+        var deferredCalendarFacts = 0;
         foreach (var candidate in persistable)
         {
             if (calendar.RefusesCalendar(candidate.Fact.PeriodStart, candidate.Fact.PeriodEnd))
-                throw new InvalidDataException(
-                    "Fiscal calendar evidence is incomplete for a captured fact"
-                );
+            {
+                deferredCalendarFacts++;
+                continue;
+            }
             if (!conceptIds.TryGetValue((candidate.Taxonomy, candidate.Tag), out var conceptId))
                 continue;
             var fact = BuildFact(document, stock, candidate, conceptId, calendar);
@@ -249,7 +251,10 @@ public class XbrlFactExtractionService
         }
         await PersistDimensions(document, dimensionsByKey, cancellationToken);
 
-        return facts.Count + consolidatedFills.Count;
+        var persistedCount = facts.Count + consolidatedFills.Count;
+        if (deferredCalendarFacts > 0)
+            throw new FiscalCalendarEvidencePendingException(persistedCount, deferredCalendarFacts);
+        return persistedCount;
     }
 
     /// <summary>

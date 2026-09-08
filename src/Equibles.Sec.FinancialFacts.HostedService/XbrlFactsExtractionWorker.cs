@@ -104,6 +104,16 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
                     // the envelope simply carries none worth re-reading.
                     document.XbrlFactsVersion = XbrlFactExtractionService.CurrentVersion;
                 }
+                catch (FiscalCalendarEvidencePendingException ex)
+                {
+                    document.XbrlFactsAttempts++;
+                    extracted += ex.PersistedCount;
+                    Logger.LogWarning(
+                        "Historical calendar evidence is pending for {Count} facts in {DocumentId}; resolved facts were saved",
+                        ex.DeferredCount,
+                        document.Id
+                    );
+                }
                 // Shutdown mid-batch is not a document failure: let it surface
                 // so the base loop winds down quietly instead of burning one of
                 // the document's attempts and landing a phantom row in Errors.

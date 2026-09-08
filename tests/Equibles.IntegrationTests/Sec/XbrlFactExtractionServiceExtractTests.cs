@@ -92,8 +92,12 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             .Be(1);
     }
 
-    [Fact]
-    public async Task Extract_CalendarChange_RepairsLabelsUsingTheCapturedHistoricalCalendar()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Extract_CalendarChange_RepairsLabelsUsingTheCapturedHistoricalCalendar(
+        bool offPeriodFact
+    )
     {
         var envelope = InlineEnvelope()
             .Replace("<html ", "<html xmlns:dei=\"http://xbrl.sec.gov/dei/2025\" ")
@@ -102,13 +106,35 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
                 "</body>",
                 "<ix:nonNumeric name=\"dei:CurrentFiscalYearEndDate\" contextRef=\"Consolidated\">--12-31</ix:nonNumeric></body>"
             );
+        if (offPeriodFact)
+            envelope = envelope.Replace(
+                "</body>",
+                """
+                <xbrli:context id="Future"><xbrli:entity><xbrli:identifier scheme="http://www.sec.gov/CIK">0000320193</xbrli:identifier>
+                <xbrli:segment><xbrldi:explicitMember dimension="srt:ProductOrServiceAxis">aapl:IPhoneMember</xbrldi:explicitMember></xbrli:segment>
+                </xbrli:entity><xbrli:period><xbrli:instant>2025-04-01</xbrli:instant></xbrli:period></xbrli:context>
+                <ix:nonFraction name="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax" contextRef="Future" unitRef="usd">123</ix:nonFraction>
+                </body>
+                """
+            );
         var document = await SeedDocument(envelope);
         await BuildSut().Extract(document, CancellationToken.None);
         var fact = await DbContext
             .Set<FinancialFact>()
-            .SingleAsync(f => f.DocumentId == document.Id);
+            .SingleAsync(f =>
+                f.DocumentId == document.Id && f.PeriodEnd == document.ReportingForDate
+            );
         var originalId = fact.Id;
         var originalValue = fact.Value;
+        var originalUnresolvedPeriod = offPeriodFact
+            ? (
+                await DbContext
+                    .Set<FinancialFact>()
+                    .SingleAsync(f =>
+                        f.DocumentId == document.Id && f.PeriodEnd == new DateOnly(2025, 4, 1)
+                    )
+            ).FiscalPeriod
+            : default;
         fact.FiscalPeriod = SecFiscalPeriod.Q3;
         document.CommonStock.FiscalYearEndMonth = 6;
         document.CommonStock.FiscalYearEndDay = 30;
@@ -142,7 +168,37 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             }
         );
         await DbContext.SaveChangesAsync();
-        (await BuildSut(true).Extract(document, CancellationToken.None)).Should().Be(1);
+        if (offPeriodFact)
+        {
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                var pending = await Assert.ThrowsAsync<FiscalCalendarEvidencePendingException>(() =>
+                    BuildSut(true).Extract(document, CancellationToken.None)
+                );
+                pending.PersistedCount.Should().Be(1);
+                pending.DeferredCount.Should().Be(1);
+            }
+            (await DbContext.Set<FinancialFact>().CountAsync(f => f.DocumentId == document.Id))
+                .Should()
+                .Be(2);
+            (
+                await DbContext
+                    .Set<FinancialFactDimension>()
+                    .CountAsync(d => d.FinancialFact.DocumentId == document.Id)
+            )
+                .Should()
+                .Be(2);
+            var unresolved = await DbContext
+                .Set<FinancialFact>()
+                .AsNoTracking()
+                .SingleAsync(f =>
+                    f.DocumentId == document.Id && f.PeriodEnd == new DateOnly(2025, 4, 1)
+                );
+            unresolved.Value.Should().Be(123m);
+            unresolved.FiscalPeriod.Should().Be(originalUnresolvedPeriod);
+        }
+        else
+            (await BuildSut(true).Extract(document, CancellationToken.None)).Should().Be(1);
         await DbContext.Entry(fact).ReloadAsync();
         fact.Id.Should().Be(originalId);
         fact.Value.Should().Be(originalValue);

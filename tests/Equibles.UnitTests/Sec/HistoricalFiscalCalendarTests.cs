@@ -71,8 +71,8 @@ public class HistoricalFiscalCalendarTests
     public void FingerprintTracksCalendarEvidenceButIgnoresOrderingAndDuplicateContexts()
     {
         var end = new DateOnly(2026, 3, 31);
-        var first = new ParsedFiscalYearEnd("1274173", end, end, 12, 31);
-        var duplicateContext = first with { PeriodStart = new DateOnly(2026, 1, 1) };
+        var first = new ParsedFiscalYearEnd("1274173", new DateOnly(2026, 1, 1), end, 12, 31);
+        var duplicateContext = first with { Cik = "0001274173" };
         var annual = (new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31));
         var a = new HistoricalFiscalCalendar([annual], [first], 6, 30, true);
         var b = new HistoricalFiscalCalendar(
@@ -116,5 +116,24 @@ public class HistoricalFiscalCalendarTests
         );
         calendar.Resolve(start, end).Should().BeNull();
         calendar.RefusesCalendar(start, end).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ContextCalendarAppliesWithinItsStatedWindowAndRefusesLaterDates()
+    {
+        var end = new DateOnly(2026, 3, 31);
+        var calendar = new HistoricalFiscalCalendar(
+            [],
+            [new("1274173", new(2026, 1, 1), end, 12, 31)],
+            6,
+            30,
+            true
+        );
+        calendar
+            .Resolve(new(2026, 3, 24), new(2026, 3, 24))
+            .Should()
+            .Be((2026, SecFiscalPeriod.Q1));
+        calendar.RefusesCalendar(new(2026, 4, 1), new(2026, 4, 1)).Should().BeTrue();
+        calendar.RefusesCalendar(new(2025, 12, 31), new(2026, 3, 24)).Should().BeTrue();
     }
 }
