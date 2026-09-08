@@ -181,6 +181,10 @@ public class Document
     /// </summary>
     public int XbrlFactsVersion { get; set; }
 
+    /// <summary>Company calendar checkpoint observed when this extraction was attempted.</summary>
+    [MaxLength(64)]
+    public string XbrlCalendarEvidenceFingerprint { get; set; }
+
     /// <summary>
     /// How many times the dimensional-fact extraction has failed on this document. The
     /// sweep stops selecting a document at its retry ceiling so one unparseable envelope

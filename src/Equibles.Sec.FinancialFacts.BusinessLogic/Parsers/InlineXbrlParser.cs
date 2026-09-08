@@ -103,7 +103,73 @@ public class InlineXbrlParser
         {
             Facts = facts,
             CoverListings = ExtractCoverListings(document),
+            FiscalYearEnds = ExtractFiscalYearEnds(document, contexts, namespaces),
         };
+    }
+
+    private static List<ParsedFiscalYearEnd> ExtractFiscalYearEnds(
+        IDocument document,
+        Dictionary<string, ParsedContext> contexts,
+        Dictionary<string, string> namespaces
+    )
+    {
+        var observations = new List<ParsedFiscalYearEnd>();
+        foreach (var element in FindByLocalName(document, NonNumericLocalName))
+        {
+            if (
+                !string.IsNullOrWhiteSpace(element.GetAttribute("format"))
+                || (element.GetAttribute("xsi:nil") ?? element.GetAttribute("nil")) == "1"
+                || string.Equals(
+                    element.GetAttribute("xsi:nil") ?? element.GetAttribute("nil"),
+                    "true",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+                continue;
+            var name = element.GetAttribute("name") ?? "";
+            var parts = name.Split(':');
+            if (
+                parts.Length != 2
+                || parts[1] != "CurrentFiscalYearEndDate"
+                || !namespaces.TryGetValue(parts[0], out var namespaceValue)
+                || !Uri.TryCreate(namespaceValue, UriKind.Absolute, out var namespaceUri)
+                || namespaceUri.Host != "xbrl.sec.gov"
+                || !namespaceUri.AbsolutePath.StartsWith("/dei/", StringComparison.Ordinal)
+            )
+                continue;
+            var contextRef =
+                element.GetAttribute("contextRef") ?? element.GetAttribute("contextref");
+            if (
+                contextRef == null
+                || !contexts.TryGetValue(contextRef, out var context)
+                || string.IsNullOrWhiteSpace(context.ConsolidatedCik)
+            )
+                continue;
+            // XML gMonthDay is source metadata, not a date inferred from a financial amount.
+            var value = element.TextContent.Trim();
+            if (
+                value.Length != 7
+                || !value.StartsWith("--", StringComparison.Ordinal)
+                || !DateOnly.TryParseExact(
+                    "2000-" + value[2..],
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var date
+                )
+            )
+                continue;
+            observations.Add(
+                new ParsedFiscalYearEnd(
+                    context.ConsolidatedCik,
+                    context.Start,
+                    context.End,
+                    date.Month,
+                    date.Day
+                )
+            );
+        }
+        return observations.Distinct().ToList();
     }
 
     /// <summary>

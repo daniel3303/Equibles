@@ -7,6 +7,7 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic.Models;
 /// </summary>
 public class InlineXbrlParseResult
 {
+    public List<ParsedFiscalYearEnd> FiscalYearEnds { get; set; } = [];
     public List<ParsedXbrlFact> Facts { get; set; } = [];
     public List<ParsedSecurityListing> CoverListings { get; set; } = [];
 }

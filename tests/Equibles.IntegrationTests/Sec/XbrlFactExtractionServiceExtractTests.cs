@@ -92,7 +92,66 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             .Be(1);
     }
 
-    private XbrlFactExtractionService BuildSut()
+    [Fact]
+    public async Task Extract_CalendarChange_RepairsLabelsUsingTheCapturedHistoricalCalendar()
+    {
+        var envelope = InlineEnvelope()
+            .Replace("<html ", "<html xmlns:dei=\"http://xbrl.sec.gov/dei/2025\" ")
+            .Replace("scheme=\"cik\"", "scheme=\"http://www.sec.gov/CIK\"")
+            .Replace(
+                "</body>",
+                "<ix:nonNumeric name=\"dei:CurrentFiscalYearEndDate\" contextRef=\"Consolidated\">--12-31</ix:nonNumeric></body>"
+            );
+        var document = await SeedDocument(envelope);
+        await BuildSut().Extract(document, CancellationToken.None);
+        var fact = await DbContext
+            .Set<FinancialFact>()
+            .SingleAsync(f => f.DocumentId == document.Id);
+        var originalId = fact.Id;
+        var originalValue = fact.Value;
+        fact.FiscalPeriod = SecFiscalPeriod.Q3;
+        document.CommonStock.FiscalYearEndMonth = 6;
+        document.CommonStock.FiscalYearEndDay = 30;
+        var annual = new Document
+        {
+            CommonStock = document.CommonStock,
+            Content = document.Content,
+            DocumentType = DocumentType.TenK,
+            ReportingForDate = new(2024, 12, 31),
+            ReportingDate = new(2025, 2, 1),
+            AccessionNumber = "0000320193-25-000000",
+        };
+        DbContext.Add(annual);
+        DbContext.Add(
+            new FinancialFact
+            {
+                CommonStockId = document.CommonStockId,
+                FinancialConceptId = fact.FinancialConceptId,
+                Document = annual,
+                Unit = "USD",
+                PeriodType = FactPeriodType.Duration,
+                PeriodStart = new(2024, 1, 1),
+                PeriodEnd = new(2024, 12, 31),
+                FiscalYear = 2024,
+                FiscalPeriod = SecFiscalPeriod.FullYear,
+                Value = 100m,
+                Form = DocumentType.TenK,
+                FiledDate = annual.ReportingDate,
+                AccessionNumber = annual.AccessionNumber,
+                DimensionsKey = "",
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        (await BuildSut(true).Extract(document, CancellationToken.None)).Should().Be(1);
+        await DbContext.Entry(fact).ReloadAsync();
+        fact.Id.Should().Be(originalId);
+        fact.Value.Should().Be(originalValue);
+        fact.FiscalYear.Should().Be(2025);
+        fact.FiscalPeriod.Should().Be(SecFiscalPeriod.Q1);
+        document.CommonStock.FiscalYearEndMonth.Should().Be(6);
+    }
+
+    private XbrlFactExtractionService BuildSut(bool historicalCalendar = false)
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(EquiblesFinancialDbContext), DbContext),
@@ -105,7 +164,14 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             new InlineXbrlParser(),
             new StandaloneXbrlParser(),
             fileManager,
-            NullLogger<XbrlFactExtractionService>()
+            NullLogger<XbrlFactExtractionService>(),
+            historicalCalendar
+                ? new FiscalCalendarEvidenceReader(
+                    scopeFactory,
+                    fileManager,
+                    new InlineXbrlParser()
+                )
+                : null
         );
     }
 
