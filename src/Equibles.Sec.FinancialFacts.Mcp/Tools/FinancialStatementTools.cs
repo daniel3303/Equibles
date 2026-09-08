@@ -360,7 +360,8 @@ public class FinancialStatementTools
     }
 
     // availabilityConceptIds decides which periods may be selected; statementConceptIds is the
-    // requested statement's own set, which alone says whether that statement was ingested at all.
+    // requested statement's own set, which alone says whether that statement was ingested at all;
+    // when the two sets are equal the availability query has already proved it.
     private async Task<(
         int FiscalYear,
         SecFiscalPeriod FiscalPeriod,
@@ -393,7 +394,7 @@ public class FinancialStatementTools
         var statementIngested =
             availablePeriods.Count > 0
             && (
-                ReferenceEquals(availabilityConceptIds, statementConceptIds)
+                statementConceptIds.SetEquals(availabilityConceptIds)
                 || await _financialFactRepository
                     .GetConsolidatedByStock(stock)
                     .AnyAsync(f => statementConceptIds.Contains(f.FinancialConceptId))

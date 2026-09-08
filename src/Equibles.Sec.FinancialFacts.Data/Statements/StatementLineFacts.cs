@@ -145,7 +145,7 @@ public static class StatementLineFacts
     /// Where a period's own flows end: the latest end among the spans that carry at least
     /// half the bucket's fullest flow-concept count. Never a plain maximum: a single
     /// re-stamped span ends latest and would date the whole balance sheet by itself (LAKE's
-    /// FY2023 bucket holds a 1-concept 2023-05-01 to 2024-04-30 span beside its 100-concept
+    /// FY2023 bucket holds a 1-concept 2023-05-01 to 2024-04-30 span beside its 23-concept
     /// year ending 2023-01-31). Never the fullest either: a predecessor stub carries a whole
     /// statement, cash flow included, while the quarter's own cash flow is year-to-date and
     /// fails the span gate (BALY's Jan 1 to Feb 7 2025 column, 29 concepts, beside its 23-concept

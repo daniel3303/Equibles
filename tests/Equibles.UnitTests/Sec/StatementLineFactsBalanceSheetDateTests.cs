@@ -104,7 +104,7 @@ public class StatementLineFactsBalanceSheetDateTests
             .Be(new DateOnly(2022, 10, 28), "two days either side, the earlier date stands");
     }
 
-    // LAKE's FY2023 bucket holds its 100-concept year ending 2023-01-31 beside two one-concept
+    // LAKE's FY2023 bucket holds its 23-concept year ending 2023-01-31 beside two one-concept
     // spans re-stamped from the next fiscal year, one of them ending latest. A plain maximum
     // would end the period in April 2024 and date the balance sheet fifteen months off.
     [Fact]
@@ -113,7 +113,7 @@ public class StatementLineFactsBalanceSheetDateTests
         var picked = StatementLineFacts.PickFlowPeriodEnd([
             (new DateOnly(2024, 4, 30), 1),
             (new DateOnly(2023, 4, 30), 1),
-            (new DateOnly(2023, 1, 31), 100),
+            (new DateOnly(2023, 1, 31), 23),
         ]);
 
         picked.Should().Be(new DateOnly(2023, 1, 31));
@@ -135,7 +135,9 @@ public class StatementLineFactsBalanceSheetDateTests
     }
 
     // The bar is half the fullest count, inclusive: a later span at exactly half still counts as a
-    // measured period, one concept below it is a stray.
+    // measured period, one concept below it is a stray. Inclusive on purpose: NCO's (2026, Q2) own
+    // quarter carries 3 flow concepts beside a 6-concept comparative in the same 10-Q, and a strict
+    // majority would date that sheet a year early (26 buckets corpus-wide separate the two bars).
     [Theory]
     [InlineData(12, 2024)]
     [InlineData(11, 2023)]
