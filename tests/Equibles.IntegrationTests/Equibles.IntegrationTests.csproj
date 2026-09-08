@@ -10,6 +10,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="../Equibles.UnitTests/TestAssets/InsiderTrading/InvalidDates/oprx.xml" Link="TestAssets/oprx-invalid-dates.xml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Equibles.UnitTests/TestAssets/InsiderTrading/InvalidDates/snex.xml" Link="TestAssets/snex-invalid-dates.xml" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="TestAssets\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

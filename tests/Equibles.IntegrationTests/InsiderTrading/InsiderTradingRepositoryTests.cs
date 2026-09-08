@@ -229,7 +229,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
             CommonStock = stock,
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
-            FilingDate = filingDate ?? new DateOnly(2024, 6, 15),
+            FilingDate = filingDate ?? (transactionDate ?? new DateOnly(2024, 6, 14)).AddDays(1),
             TransactionDate = transactionDate ?? new DateOnly(2024, 6, 14),
             TransactionCode = code,
             Shares = shares,

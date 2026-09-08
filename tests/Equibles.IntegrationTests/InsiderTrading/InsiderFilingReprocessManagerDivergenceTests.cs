@@ -20,8 +20,8 @@ namespace Equibles.IntegrationTests.InsiderTrading;
 /// <summary>
 /// Pin for the row-count divergence path in <c>ReprocessFiling</c>. When the cached XML
 /// re-parses to fewer transactions than the stored filing has rows, each stored row is
-/// matched to a parsed row by <c>TransactionOrder</c>; a stored row with no match keeps
-/// its prior <c>SecurityKind</c>/<c>Notes</c> but must still be advanced to the current
+/// matched only through unambiguous unchanged evidence; ambiguous rows keep
+/// their prior <c>SecurityKind</c>/<c>Notes</c> but must still be advanced to the current
 /// parser version, otherwise it would be re-selected on every future run.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -58,8 +58,8 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
             IsDirector = true,
         };
 
-        // Two stale rows. The cached XML below has a single transaction (order 0), so
-        // order 0 re-parses and reclassifies while order 1 has no parsed counterpart.
+        // Two identical stored rows against one source row cannot establish which row
+        // survived a legacy compacting parse; neither may be reclassified by position.
         InsiderTransaction MakeStale(int order) =>
             new()
             {
@@ -152,8 +152,8 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
 
         result.Failed.Should().Be(0);
         result.Processed.Should().Be(1);
-        // Only the matched row flipped Derivative -> NonDerivative.
-        result.Reclassified.Should().Be(1);
+        // Document identity is grounded, but neither duplicate has a proven row match.
+        result.Reclassified.Should().Be(0);
         // Served from the cache, no EDGAR round-trip.
         await edgar.DidNotReceive().GetDocumentContent(Arg.Any<string>(), Arg.Any<string>());
 
@@ -161,7 +161,7 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
         var matchedAfter = await verify.Set<InsiderTransaction>().FindAsync(matched.Id);
         var unmatchedAfter = await verify.Set<InsiderTransaction>().FindAsync(unmatched.Id);
 
-        matchedAfter!.SecurityKind.Should().Be(InsiderSecurityKind.NonDerivative);
+        matchedAfter!.SecurityKind.Should().Be(InsiderSecurityKind.Derivative);
         matchedAfter.FilingForm.Should().Be(InsiderOwnershipForm.Form5);
         matchedAfter.IsAmendment.Should().Be(isAmendment);
         matchedAfter.OriginalFilingDate.Should().Be(isAmendment ? originalFilingDate : null);
