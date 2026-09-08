@@ -92,6 +92,7 @@ public class InsiderFilingReprocessManager
         // can briefly nudge past Total and self-corrects.
         var staleTransactionFilingCount = await _transactionRepository
             .GetAll()
+            .IgnoreQueryFilters()
             .Where(t =>
                 t.TransactionCode != TransactionCode.IngestMarker
                 && t.ParserVersion < InsiderTransaction.CurrentParserVersion
@@ -127,6 +128,7 @@ public class InsiderFilingReprocessManager
             {
                 var pending = _transactionRepository
                     .GetAll()
+                    .IgnoreQueryFilters()
                     .Where(t =>
                         t.TransactionCode != TransactionCode.IngestMarker
                         && t.ParserVersion < InsiderTransaction.CurrentParserVersion
@@ -273,7 +275,10 @@ public class InsiderFilingReprocessManager
                 f.FilingForm == InsiderOwnershipForm.Unknown
                 && f.CaptureStatus == InsiderFilingCaptureStatus.Captured
                 && f.ContentId != null
-                && !_transactionRepository.GetAll().Any(t => t.AccessionNumber == f.AccessionNumber)
+                && !_transactionRepository
+                    .GetAll()
+                    .IgnoreQueryFilters()
+                    .Any(t => t.AccessionNumber == f.AccessionNumber)
             );
     }
 
@@ -382,6 +387,7 @@ public class InsiderFilingReprocessManager
         // without a per-filing lazy-load query.
         var rows = await _transactionRepository
             .GetByAccessionNumber(accession)
+            .IgnoreQueryFilters()
             .Include(t => t.CommonStock)
             .OrderBy(t => t.TransactionOrder)
             .ToListAsync();
@@ -425,19 +431,17 @@ public class InsiderFilingReprocessManager
         if (storedFiling != null)
             storedFiling.FilingForm = filingForm;
 
-        // Re-parse in the same document order the ingest used; map back onto the
-        // stored rows by TransactionOrder so a kind lands on the right row even if
-        // the parsed and stored counts ever differ.
-        var parsed = InsiderFilingParser.ParseTransactions(
+        // Retain rejected source rows while reconstructing the filing's original positions.
+        var parsed = InsiderFilingParser.ParseTransactionsForReplay(
             root,
             new InsiderOwner { Id = first.InsiderOwnerId },
             first.CommonStockId,
             filing,
             isAmendment
         );
-        // TransactionOrder is unique within a parse by construction, so a direct
-        // dictionary is safe; a duplicate would be a parser bug worth surfacing.
-        var parsedByOrder = parsed.ToDictionary(t => t.TransactionOrder);
+        // A legacy parse may have compacted rejected rows; require immutable evidence
+        // before copying any row-level field from the source.
+        var matchedRows = InsiderFilingRowMatches.Match(rows, parsed);
 
         // Older ingest code manufactured an Other/"No Securities Owned" row for
         // every valid zero-row parse. When the cached XML confirms there are still
@@ -456,15 +460,14 @@ public class InsiderFilingReprocessManager
             return;
         }
 
-        // The re-parse should reproduce the stored rows exactly. If the counts
-        // diverge, some stored rows won't map to a parsed row — they keep their
-        // prior data but are still advanced to the current version. Rare, but log
-        // it so the assumption is observable across a full backlog reprocess.
-        if (rows.Count != parsed.Count)
+        // Unmatched rows keep their row-level data and advance once, avoiding a retry storm.
+        // Document identity above remains grounded even when row identity is ambiguous.
+        if (matchedRows.Count != rows.Count)
         {
             _logger.LogWarning(
-                "Insider reprocess: {AccessionNumber} has {StoredCount} stored rows but re-parsed {ParsedCount}; unmatched rows keep prior data",
+                "Insider reprocess: {AccessionNumber} matched {MatchedCount} of {StoredCount} rows against {ParsedCount} source rows; unmatched rows keep prior data",
                 accession,
+                matchedRows.Count,
                 rows.Count,
                 parsed.Count
             );
@@ -472,7 +475,7 @@ public class InsiderFilingReprocessManager
 
         foreach (var row in rows)
         {
-            if (parsedByOrder.TryGetValue(row.TransactionOrder, out var reparsed))
+            if (matchedRows.TryGetValue(row.Id, out var reparsed))
             {
                 if (row.TransactionDate != reparsed.TransactionDate)
                 {
@@ -508,7 +511,15 @@ public class InsiderFilingReprocessManager
 
         // Date corrections must land before close lookup so price validation uses the
         // repaired trading day rather than the impossible source typo.
-        var bars = await FetchBars(first.CommonStockId, rows);
+        var usableRows = rows.Where(row =>
+                matchedRows.ContainsKey(row.Id)
+                && InsiderFilingParser.IsPlausibleTransactionDate(
+                    row.TransactionDate,
+                    row.FilingDate
+                )
+            )
+            .ToList();
+        var bars = await FetchBars(first.CommonStockId, usableRows);
         var splits = await _stockSplitRepository
             .GetEffectiveByStock(first.CommonStockId, DateOnly.FromDateTime(DateTime.UtcNow))
             .ToListAsync();
@@ -520,6 +531,11 @@ public class InsiderFilingReprocessManager
 
         foreach (var row in rows)
         {
+            if (!usableRows.Contains(row))
+            {
+                row.ParserVersion = InsiderTransaction.CurrentParserVersion;
+                continue;
+            }
             bars.TryGetValue(row.TransactionDate, out var barRow);
             var bar = InsiderDailyBars.Build(
                 barRow?.Close,
@@ -675,6 +691,8 @@ public class InsiderFilingReprocessManager
         List<InsiderTransaction> rows
     )
     {
+        if (rows.Count == 0)
+            return [];
         var minDate = rows.Min(r => r.TransactionDate).AddDays(-CloseLookbackDays);
         var maxDate = rows.Max(r => r.TransactionDate);
 

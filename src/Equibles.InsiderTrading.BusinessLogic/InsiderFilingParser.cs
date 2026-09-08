@@ -22,8 +22,8 @@ public static class InsiderFilingParser
     // type (e.g., "Common Stock" vs "Stock Option (Right to Buy)"). For derivatives, Shares
     // and PricePerShare refer to the derivative instrument, not the underlying security.
     //
-    // TransactionOrder is the 0-based position of the row within its filing — assigned as
-    // we parse so the (AccessionNumber, TransactionOrder) unique index has a stable key.
+    // TransactionOrder is the source position, including rejected rows, so removing an
+    // invalid date never changes the identity of a later row.
     // The XML's document order is the only natural identity Form 4 transactions have, and
     // the same order lets the reprocess pipeline map a re-parsed row back onto its stored row.
     public static List<InsiderTransaction> ParseTransactions(
@@ -32,6 +32,24 @@ public static class InsiderFilingParser
         Guid companyId,
         FilingData filing,
         bool isAmendment
+    ) => ParseTransactionsCore(root, owner, companyId, filing, isAmendment, false);
+
+    // Replay must retain rejected dates in its source map; dropping one shifts later rows.
+    internal static List<InsiderTransaction> ParseTransactionsForReplay(
+        XElement root,
+        InsiderOwner owner,
+        Guid companyId,
+        FilingData filing,
+        bool isAmendment
+    ) => ParseTransactionsCore(root, owner, companyId, filing, isAmendment, true);
+
+    private static List<InsiderTransaction> ParseTransactionsCore(
+        XElement root,
+        InsiderOwner owner,
+        Guid companyId,
+        FilingData filing,
+        bool isAmendment,
+        bool includeInvalidDates
     )
     {
         var transactions = new List<InsiderTransaction>();
@@ -43,17 +61,22 @@ public static class InsiderFilingParser
         var rule10b5One = ParseRule10b5One(root);
         var originalFilingDate = isAmendment ? ParseDateOfOriginalSubmission(root) : null;
 
+        var sourceOrder = 0;
         void AddParsed(InsiderTransaction tx)
         {
+            var order = sourceOrder++;
             if (tx == null)
                 return;
             // A Form 3/4/5 discloses an event that has already occurred, so a transaction date after
             // the filing date — or an absurd year from a source typo (e.g. 2035 or 0022) — is
             // impossible. Newest-first trade lists would otherwise sort such a row to the very top,
             // so drop it rather than store the bad date verbatim.
-            if (tx.TransactionDate > tx.FilingDate || tx.TransactionDate.Year < 1900)
+            if (
+                !includeInvalidDates
+                && !IsPlausibleTransactionDate(tx.TransactionDate, tx.FilingDate)
+            )
                 return;
-            tx.TransactionOrder = transactions.Count;
+            tx.TransactionOrder = order;
             tx.IsRule10b5One = rule10b5One;
             tx.OriginalFilingDate = originalFilingDate;
             tx.FilingForm = ParseOwnershipForm(filing.Form);

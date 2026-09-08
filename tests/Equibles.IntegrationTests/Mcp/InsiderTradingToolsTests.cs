@@ -87,7 +87,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
             TransactionDate = transactionDate ?? new DateOnly(2024, 6, 14),
-            FilingDate = filingDate ?? new DateOnly(2024, 6, 15),
+            FilingDate = filingDate ?? (transactionDate ?? new DateOnly(2024, 6, 14)).AddDays(1),
             TransactionCode = code,
             Shares = shares,
             PricePerShare = pricePerShare,

@@ -71,6 +71,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         var candidates = accessionNumbers.ToList();
         var knownByOwnRows = await transactionRepository
             .GetAll()
+            .IgnoreQueryFilters()
             .Where(t =>
                 candidates.Contains(t.AccessionNumber)
                 && (
@@ -111,6 +112,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         var existingRows = await transactionRepository
             .GetByAccessionNumber(filing.AccessionNumber)
+            .IgnoreQueryFilters()
             .ToListAsync();
         var staleIngestMarkers = existingRows
             .Where(row =>
@@ -259,6 +261,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             // restates holdings alone.
             var newerAmendmentRows = await transactionRepository
                 .GetAmendmentsOfOriginal(owner, companyId, originalFilingDate.Value, ownershipForm)
+                .IgnoreQueryFilters()
                 .Where(t =>
                     t.FilingDate > filing.FilingDate
                     || (
@@ -415,6 +418,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         var claimingRows = await transactionRepository
             .GetAmendmentsClaiming(filing.AccessionNumber, ownershipForm)
+            .IgnoreQueryFilters()
             .ToListAsync();
         var windowStart = filing.FilingDate.AddDays(-OriginalDateShiftToleranceDays);
         var unresolvedRows = await transactionRepository
@@ -425,6 +429,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
                 filing.FilingDate,
                 ownershipForm
             )
+            .IgnoreQueryFilters()
             .ToListAsync();
         List<InsiderTransaction> newlyClaimedRows;
         if (claimingRows.Count > 0)
@@ -492,6 +497,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
     {
         var accessions = await transactionRepository
             .GetAll()
+            .IgnoreQueryFilters()
             .Where(t =>
                 t.SupersededAccessionNumber == supersededAccessionNumber
                 && t.FilingForm == InsiderOwnershipForm.Unknown
@@ -521,6 +527,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         var windowEnd = originalFilingDate.AddDays(OriginalDateShiftToleranceDays);
         var accessions = await transactionRepository
             .GetAll()
+            .IgnoreQueryFilters()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
                 && t.CommonStockId == companyId
@@ -558,6 +565,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         var windowStart = filingDate.AddDays(-OriginalDateShiftToleranceDays);
         var accessions = await transactionRepository
             .GetAll()
+            .IgnoreQueryFilters()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
                 && t.CommonStockId == companyId
@@ -593,6 +601,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
 
         var claimedRows = await transactionRepository
             .GetAll()
+            .IgnoreQueryFilters()
             .Where(t =>
                 amendmentAccessions.Contains(t.AccessionNumber)
                 && t.SupersededAccessionNumber != null
@@ -642,6 +651,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         {
             var unresolved = await transactionRepository
                 .GetByAccessionNumber(accessionNumber)
+                .IgnoreQueryFilters()
                 .Where(t => t.FilingForm == InsiderOwnershipForm.Unknown)
                 .ToListAsync();
             if (unresolved.Count == 0)
@@ -753,6 +763,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         var windowEnd = originalFilingDate.AddDays(OriginalDateShiftToleranceDays);
         var candidates = await transactionRepository
             .GetOriginalCandidates(owner, companyId, originalFilingDate, windowEnd, ownershipForm)
+            .IgnoreQueryFilters()
             .Select(t => new { t.AccessionNumber, t.FilingDate })
             .Distinct()
             .ToListAsync();
@@ -773,6 +784,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             resolvedAccession = pool[0];
             var originalRows = await transactionRepository
                 .GetByAccessionNumber(resolvedAccession)
+                .IgnoreQueryFilters()
                 .ToListAsync();
             var supersededCount = DeleteSupersededSections(
                 transactionRepository,
@@ -802,6 +814,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         // amendment must leave an older amendment's transaction rows intact.
         var olderAmendments = await transactionRepository
             .GetAmendmentsOfOriginal(owner, companyId, originalFilingDate, ownershipForm)
+            .IgnoreQueryFilters()
             .Where(t =>
                 t.AccessionNumber != filing.AccessionNumber
                 && (
