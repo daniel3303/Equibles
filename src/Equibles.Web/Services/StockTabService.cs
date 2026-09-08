@@ -747,7 +747,7 @@ public class StockTabService
         facts = StatementLineFacts.AnchorToLatestPeriodEnd(
             facts,
             fiscalPeriod,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         // The currently-reported fact per concept: span-aware so a quarter never
