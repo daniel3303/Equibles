@@ -27,7 +27,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [revenue, operatingCashFlow, cashAtEndOfPeriod, dividendPaymentDate],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         anchored
@@ -52,7 +52,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [comparative, currentAssets, currentLiabilities],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         anchored.Should().BeEquivalentTo([currentAssets, currentLiabilities]);
@@ -68,7 +68,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [priorYear, currentYear],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         anchored.Should().BeEquivalentTo([currentYear]);
@@ -94,7 +94,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [operatingCashFlow, dividendPaymentDate],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         anchored
@@ -116,7 +116,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [earlier, latest],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         anchored.Should().BeEquivalentTo([latest]);
@@ -126,7 +126,7 @@ public class StatementLineFactsAnchorTests
     public void AnchorToLatestPeriodEnd_NoFacts_ReturnsEmpty()
     {
         StatementLineFacts
-            .AnchorToLatestPeriodEnd([], SecFiscalPeriod.FullYear, reportedPeriodEnd: null)
+            .AnchorToLatestPeriodEnd([], SecFiscalPeriod.FullYear, reportedPeriodEnds: [])
             .Should()
             .BeEmpty();
     }
@@ -144,7 +144,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [quarter, twoQuarters],
             SecFiscalPeriod.Q1,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         anchored.Should().BeEquivalentTo([quarter]);
@@ -161,7 +161,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [fiscalYear, paymentWindow],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         anchored.Should().BeEquivalentTo([fiscalYear]);
@@ -178,7 +178,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [earlier, later],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         anchored.Should().BeEquivalentTo([later]);
@@ -199,7 +199,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [earlier, latest],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         anchored.Should().BeEquivalentTo([latest]);
@@ -216,7 +216,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [stub, inceptionToDate],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: null
+            reportedPeriodEnds: []
         );
 
         anchored.Should().BeEquivalentTo([stub]);
@@ -238,10 +238,53 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [quarter, alsoTheQuarter, segmentWindow],
             SecFiscalPeriod.Q1,
-            reportedPeriodEnd: new DateOnly(2025, 2, 28)
+            reportedPeriodEnds: [new DateOnly(2025, 2, 28)]
         );
 
         anchored.Should().BeEquivalentTo([quarter, alsoTheQuarter]);
+    }
+
+    // A bucket can carry several stated balance-sheet dates, and the LATEST is not always a
+    // balance sheet: HOFT's FY2025 bucket holds its real 25-tag year end at 2025-02-02 beside a
+    // one-tag stray at 2025-03-31. Taking only the maximum let the stray mask the year and the
+    // ladder published a dimensional trailing-twelve-month window instead.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_StrayLaterReportedEnd_StillAnchorsOnTheStatedYear()
+    {
+        var fiscalYear = Duration(new DateOnly(2024, 1, 29), new DateOnly(2025, 2, 2), 1_000m);
+        var alsoTheYear = Duration(new DateOnly(2024, 1, 29), new DateOnly(2025, 2, 2), 500m);
+        var trailingTwelveMonths = Dimensional(
+            Duration(new DateOnly(2024, 5, 1), new DateOnly(2025, 5, 4), 7m)
+        );
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [fiscalYear, alsoTheYear, trailingTwelveMonths],
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnds: [new DateOnly(2025, 3, 31), new DateOnly(2025, 2, 2)]
+        );
+
+        anchored.Should().BeEquivalentTo([fiscalYear, alsoTheYear]);
+    }
+
+    // Weighing every stated date does not weaken the floor: a bucket whose dates ALL sit below
+    // the entity's own measured span keeps that span, which is DELL's comparative-column shape.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_EveryReportedEndBelowTheMeasuredSpan_KeepsTheStatement()
+    {
+        var priorYearComparative = Duration(
+            new DateOnly(2024, 2, 3),
+            new DateOnly(2024, 5, 3),
+            10m
+        );
+        var quarter = Duration(new DateOnly(2025, 2, 1), new DateOnly(2025, 5, 2), 1_000m);
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [priorYearComparative, quarter],
+            SecFiscalPeriod.Q1,
+            reportedPeriodEnds: [new DateOnly(2024, 5, 3), new DateOnly(2024, 2, 3)]
+        );
+
+        anchored.Should().BeEquivalentTo([quarter]);
     }
 
     // The floor is a floor, not an equality: the confirmed date may sit ABOVE the latest
@@ -268,7 +311,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [consolidatedComparative, theQuarter, alsoTheQuarter, segmentWindow],
             SecFiscalPeriod.Q1,
-            reportedPeriodEnd: new DateOnly(2025, 2, 28)
+            reportedPeriodEnds: [new DateOnly(2025, 2, 28)]
         );
 
         anchored.Should().BeEquivalentTo([theQuarter, alsoTheQuarter]);
@@ -291,7 +334,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [priorYearComparative, quarter],
             SecFiscalPeriod.Q1,
-            reportedPeriodEnd: new DateOnly(2024, 5, 3)
+            reportedPeriodEnds: [new DateOnly(2024, 5, 3)]
         );
 
         anchored.Should().BeEquivalentTo([quarter]);
@@ -312,7 +355,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [trailingTwelveMonths],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: new DateOnly(2025, 3, 31)
+            reportedPeriodEnds: [new DateOnly(2025, 3, 31)]
         );
 
         anchored.Should().BeEquivalentTo([trailingTwelveMonths]);
@@ -341,14 +384,14 @@ public class StatementLineFactsAnchorTests
             .AnchorToLatestPeriodEnd(
                 facts,
                 SecFiscalPeriod.FullYear,
-                reportedPeriodEnd: new DateOnly(year, month, day)
+                reportedPeriodEnds: [new DateOnly(year, month, day)]
             )
             .Should()
             .BeEquivalentTo(
                 StatementLineFacts.AnchorToLatestPeriodEnd(
                     facts,
                     SecFiscalPeriod.FullYear,
-                    reportedPeriodEnd: null
+                    reportedPeriodEnds: []
                 )
             );
     }
@@ -364,7 +407,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [comparative, currentAssets],
             SecFiscalPeriod.FullYear,
-            reportedPeriodEnd: new DateOnly(2021, 12, 31)
+            reportedPeriodEnds: [new DateOnly(2021, 12, 31)]
         );
 
         anchored.Should().BeEquivalentTo([currentAssets]);
@@ -385,7 +428,7 @@ public class StatementLineFactsAnchorTests
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [segmentQuarter, laterSegmentWindow],
             SecFiscalPeriod.Q1,
-            reportedPeriodEnd: new DateOnly(2025, 2, 28)
+            reportedPeriodEnds: [new DateOnly(2025, 2, 28)]
         );
 
         anchored.Should().BeEquivalentTo([segmentQuarter]);
