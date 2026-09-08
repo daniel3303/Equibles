@@ -716,19 +716,46 @@ public class StockTabService
         var conceptIdByKey = concepts.ToDictionary(c => (c.Taxonomy, c.Tag), c => c.Id);
         var conceptIds = concepts.Select(c => c.Id).ToHashSet();
 
-        var facts = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
-            .Where(f =>
-                f.FiscalYear == fiscalYear
-                && conceptIds.Contains(f.FinancialConceptId)
-                && (
-                    f.PeriodType != FactPeriodType.Duration
-                    || f.PeriodEnd >= f.PeriodStart
-                        && f.PeriodEnd
-                            <= f.PeriodStart.AddDays(StatementLineFacts.MaxSupportedDurationDays)
+        // A balance sheet is dated where its period's own flows end and loaded at that
+        // date from whichever bucket holds it, the same rule as the MCP statement tool;
+        // its bucket's latest instant is a stray or the next year's sheet for a filer
+        // whose fiscal-year name is not the year it ends in. With no flow to date it by,
+        // the bucket-and-anchor path below still applies.
+        var balanceSheetDate =
+            statementType == FinancialStatementType.BalanceSheet
+                ? await BalanceSheetDateResolver.Resolve(
+                    _financialFactRepository,
+                    _financialConceptRepository,
+                    stock,
+                    fiscalYear,
+                    fiscalPeriod
                 )
-            )
-            .ToListAsync();
+                : null;
+
+        var facts = balanceSheetDate is { } statedAt
+            ? await _financialFactRepository
+                .GetConsolidatedByStock(stock)
+                .Where(f =>
+                    conceptIds.Contains(f.FinancialConceptId)
+                    && f.PeriodEnd == statedAt
+                    && f.PeriodStart == statedAt
+                )
+                .ToListAsync()
+            : await _financialFactRepository
+                .GetConsolidatedByStock(stock)
+                .Where(f =>
+                    f.FiscalYear == fiscalYear
+                    && conceptIds.Contains(f.FinancialConceptId)
+                    && (
+                        f.PeriodType != FactPeriodType.Duration
+                        || f.PeriodEnd >= f.PeriodStart
+                            && f.PeriodEnd
+                                <= f.PeriodStart.AddDays(
+                                    StatementLineFacts.MaxSupportedDurationDays
+                                )
+                    )
+                )
+                .ToListAsync();
 
         if (statementType != FinancialStatementType.BalanceSheet)
         {
@@ -740,10 +767,12 @@ public class StockTabService
                 .AppendDerived(facts, rejectNegativeConceptIds)
                 .ToList();
         }
-        facts = facts.Where(f => f.FiscalPeriod == fiscalPeriod).ToList();
+        if (balanceSheetDate == null)
+            facts = facts.Where(f => f.FiscalPeriod == fiscalPeriod).ToList();
         // Consolidated facts only (GetConsolidatedByStock above), so the latest conforming
         // span is already the entity's own measured endpoint and no balance-sheet date can
-        // move the anchor — proved in StatementLineFactsAnchorTests.
+        // move the anchor — proved in StatementLineFactsAnchorTests. A balance sheet loaded
+        // by its date already shares one; the anchor is a no-op there.
         facts = StatementLineFacts.AnchorToLatestPeriodEnd(
             facts,
             fiscalPeriod,

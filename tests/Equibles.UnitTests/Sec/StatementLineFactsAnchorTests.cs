@@ -40,8 +40,9 @@ public class StatementLineFactsAnchorTests
         anchored.Should().NotContain(dividendPaymentDate);
     }
 
-    // The control: a balance sheet is every-fact-an-instant, so it must keep anchoring on
-    // its latest instant. Preferring durations there would leave nothing to anchor on.
+    // The fallback: a balance sheet with no flow to date it by is every-fact-an-instant, so
+    // it must keep anchoring on its latest instant. Preferring durations there would leave
+    // nothing to anchor on. Dated balance sheets never reach this ladder (PickBalanceSheetDate).
     [Fact]
     public void AnchorToLatestPeriodEnd_AllInstantStatement_AnchorsOnTheLatestInstant()
     {
