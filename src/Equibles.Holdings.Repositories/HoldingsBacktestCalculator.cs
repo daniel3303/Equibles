@@ -62,7 +62,9 @@ public static class HoldingsBacktestCalculator
         DateOnly from,
         DateOnly to,
         Func<Guid, string, DateOnly, decimal?> priceOf,
-        Func<DateOnly, decimal?> benchmarkPriceOf
+        Func<DateOnly, decimal?> benchmarkPriceOf,
+        Func<Guid, string, DateOnly, DateOnly, bool> pricesComparable = null,
+        Func<DateOnly, DateOnly, bool> benchmarkPricesComparable = null
     )
     {
         var result = new BacktestResult { StartDate = from, EndDate = to };
@@ -135,6 +137,13 @@ public static class HoldingsBacktestCalculator
 
         for (var day = startDate; ; day = day.AddDays(1))
         {
+            var previousDay = day == startDate ? startDate : day.AddDays(-1);
+            if (
+                !Comparable(holdings, previousDay, day, pricesComparable)
+                || benchmarkPricesComparable?.Invoke(previousDay, day) == false
+            )
+                return UnavailableSplitWindow(result);
+
             // Advance through any rebalance dates that fall on/before `day`. Mark to market
             // with the prior holdings first so the rebalance uses an honest portfolio value.
             while (snapshotIdx + 1 < ordered.Count && ordered[snapshotIdx + 1].RebalanceDate <= day)
@@ -142,6 +151,8 @@ public static class HoldingsBacktestCalculator
                 snapshotIdx++;
                 portfolioValue = MarkToMarket(holdings, day, priceOf, portfolioValue);
                 Rebalance(holdings, ordered[snapshotIdx].Snapshot, day, portfolioValue, priceOf);
+                if (!Comparable(holdings, day, day, pricesComparable))
+                    return UnavailableSplitWindow(result);
             }
 
             portfolioValue = MarkToMarket(holdings, day, priceOf, portfolioValue);
@@ -174,6 +185,30 @@ public static class HoldingsBacktestCalculator
 
         return result;
     }
+
+    private static bool Comparable(
+        IReadOnlyDictionary<BacktestSecurityKey, decimal> holdings,
+        DateOnly earlier,
+        DateOnly later,
+        Func<Guid, string, DateOnly, DateOnly, bool> pricesComparable
+    ) =>
+        pricesComparable == null
+        || holdings.Keys.All(key =>
+            pricesComparable(key.CommonStockId, key.ListedTicker, earlier, later)
+        );
+
+    // Discard the partial path as well as its summaries: publishing a shortened alpha would
+    // replace the requested experiment with a different one.
+    private static BacktestResult UnavailableSplitWindow(BacktestResult result) =>
+        new()
+        {
+            StartDate = result.StartDate,
+            EndDate = result.EndDate,
+            TruncatedAt = result.TruncatedAt,
+            HasUncertifiedSplitPrices = true,
+            Reason =
+                "a held security or benchmark crosses a captured split without a certified price basis; returns are unavailable for this window",
+        };
 
     private static void Rebalance(
         Dictionary<BacktestSecurityKey, decimal> holdings,

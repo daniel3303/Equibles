@@ -13,14 +13,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Holdings.BusinessLogic;
 
 /// <summary>
-/// Loads raw-close price-return series and runs the look-ahead-safe holdings backtests. A
-/// captured split no longer truncates the window: closes before a listing's split are restated
-/// onto the current basis with the captured ratio (price factor = Denominator/Numerator, the
-/// inverse of the share factor), so returns span the boundary. Bounding every listing at its
-/// latest boundary — and flooring the WHOLE simulation at the latest boundary across the book —
-/// meant one recent split in any single holding collapsed a five-year request to weeks. Only a
-/// split with an unusable ratio still excludes that listing's pre-boundary closes (absent beats
-/// wrong), and then only that listing is affected.
+/// Loads exact-listing price returns. Stored closes have no certified split basis, so a
+/// captured split across an actual holding or benchmark comparison makes the result unavailable.
 /// </summary>
 [Service]
 public class BacktestPriceLoader
@@ -106,7 +100,7 @@ public class BacktestPriceLoader
             )
             .ToListAsync(cancellationToken);
 
-        var splitScopeByListing = new Dictionary<ListingKey, ListingSplitScope>();
+        var splitDatesByListing = new Dictionary<ListingKey, DateOnly[]>();
         foreach (var key in listingKeys)
         {
             var primaryTicker = primaryTickers.GetValueOrDefault(key.CommonStockId);
@@ -115,7 +109,11 @@ public class BacktestPriceLoader
                 primaryTicker,
                 key.ListedTicker
             );
-            splitScopeByListing[key] = ListingSplitScope.Of(scoped);
+            splitDatesByListing[key] = scoped
+                .Select(split => split.EffectiveDate)
+                .Distinct()
+                .Order()
+                .ToArray();
         }
 
         var requestedKeys = listingKeys.ToHashSet();
@@ -149,24 +147,14 @@ public class BacktestPriceLoader
                 row.Date,
                 row.Close,
             })
-            .Where(row =>
-                requestedKeys.Contains(row.Key)
-                && (
-                    splitScopeByListing[row.Key].UnusableBoundary is not { } unusable
-                    || row.Date >= unusable
-                )
-            )
+            .Where(row => requestedKeys.Contains(row.Key))
             .GroupBy(row => row.Key)
             .ToDictionary(
                 group => group.Key,
                 group =>
                     group
                         .OrderBy(row => row.Date)
-                        .Select(row => new PriceRow(
-                            row.Key.CommonStockId,
-                            row.Date,
-                            splitScopeByListing[row.Key].RestateClose(row.Close, row.Date)
-                        ))
+                        .Select(row => new PriceRow(row.Key.CommonStockId, row.Date, row.Close))
                         .ToArray()
             );
 
@@ -223,7 +211,21 @@ public class BacktestPriceLoader
                     ? ForwardFill(series, date)
                     : null;
             },
-            benchmarkPriceOf: date => ForwardFill(benchmarkSeries, date)
+            benchmarkPriceOf: date => ForwardFill(benchmarkSeries, date),
+            pricesComparable: (stockId, listedTicker, earlier, later) =>
+            {
+                if (!primaryTickers.TryGetValue(stockId, out var primaryTicker))
+                    return false;
+                var key = new ListingKey(stockId, NormalizeTicker(listedTicker ?? primaryTicker));
+                return AreComparable(
+                    pricesByListing[key],
+                    splitDatesByListing[key],
+                    earlier,
+                    later
+                );
+            },
+            benchmarkPricesComparable: (earlier, later) =>
+                AreComparable(benchmarkSeries, splitDatesByListing[benchmarkKey], earlier, later)
         );
     }
 
@@ -234,7 +236,21 @@ public class BacktestPriceLoader
     ) => pricesByStock.TryGetValue(stockId, out var series) ? ForwardFill(series, date) : null;
 
     // Largest close on or before `date` via binary search; null when the series starts later.
-    public static decimal? ForwardFill(PriceRow[] series, DateOnly date)
+    public static decimal? ForwardFill(PriceRow[] series, DateOnly date) =>
+        ForwardFillRow(series, date)?.Price;
+
+    private static bool AreComparable(
+        PriceRow[] series,
+        DateOnly[] splits,
+        DateOnly earlier,
+        DateOnly later
+    )
+    {
+        var first = ForwardFillRow(series, earlier);
+        return first is { } row && !splits.Any(split => split > row.Date && split <= later);
+    }
+
+    private static PriceRow? ForwardFillRow(PriceRow[] series, DateOnly date)
     {
         if (series.Length == 0)
             return null;
@@ -254,7 +270,7 @@ public class BacktestPriceLoader
                 hi = mid - 1;
             }
         }
-        return matchIdx < 0 ? null : series[matchIdx].Price;
+        return matchIdx < 0 ? null : series[matchIdx];
     }
 
     private static string NormalizeTicker(string ticker) => ticker?.Trim().ToUpperInvariant();
@@ -281,8 +297,7 @@ public class BacktestPriceLoader
         return Expression.Lambda<Func<DailyStockPrice, bool>>(body, price);
     }
 
-    // A listing's series can start late (new listing, or closes dropped behind an
-    // unusable-ratio split boundary), and a first usable close can land after a weekend or
+    // A listing's series can start late, and a first usable close can land after a weekend or
     // holiday. Advance until the benchmark and every security in the then-active snapshot can
     // be priced; repeat when that advance crosses a later rebalance.
     private static DateOnly? ResolveUsableStart(

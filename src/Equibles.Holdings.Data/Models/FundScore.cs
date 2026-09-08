@@ -19,7 +19,7 @@ namespace Equibles.Holdings.Data.Models;
 [Index(nameof(WindowYears), nameof(BenchmarkTicker), nameof(AlphaPercent))]
 public class FundScore
 {
-    public const int CurrentCalculationVersion = 2;
+    public const int CurrentCalculationVersion = 3;
 
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -34,7 +34,7 @@ public class FundScore
     public int WindowYears { get; set; }
 
     /// <summary>
-    /// Basis contract used to compute this row. Version 2 uses exact-listing raw closes,
+    /// Basis contract used to compute this row. Version 3 uses exact-listing raw closes,
     /// excludes dividends, and never compares across a captured split.
     /// </summary>
     public int CalculationVersion { get; set; } = CurrentCalculationVersion;

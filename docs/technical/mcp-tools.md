@@ -33,7 +33,7 @@ One section per module. Each tool name is exactly what the MCP client sees; the 
 - `CompareInstitutionPortfolios` — 13F portfolio overlap between two filers at their latest common `ReportDate`: Jaccard similarity, dollar-weighted overlap, and a side-by-side stock table with per-fund shares + percent of portfolio.
 - `GetInstitutionConsensusHoldings` — combined portfolio of 2-25 filers at their latest common `ReportDate`; stocks ranked by holder count then combined value, with optional `minInstitutions` floor.
 - `GetMostHeldStocks` — cross-sectional ranking of stocks by institutional 13F breadth for a quarter, ordered by filer count (default), quarter-over-quarter change in filer count (warming / cooling), or total reported value; includes Δ filers, total value, Δ value, and the stock's share of the 13F universe.
-- `GetInstitutionCloneBacktest` — backtest cloning a filer's reported 13F portfolio against a benchmark over a trailing window, rebalancing on the SEC filing lag; uses raw closing prices for each exact listing, excludes dividends, and returns price return, price CAGR, max drawdown, and price-return alpha. Usable captured split ratios restate closes onto one basis; an unusable ratio can exclude that listing's earlier closes.
+- `GetInstitutionCloneBacktest` — backtest cloning a filer's reported 13F portfolio against a benchmark over a trailing window, rebalancing on the SEC filing lag; uses raw closing prices for each exact listing, excludes dividends, and returns price return, price CAGR, max drawdown, and price-return alpha. Returns are unavailable when a held security or benchmark crosses a captured split without a certified price basis; the requested window is not shortened to hide it.
 
 ### `mcp.AddInsiderTrading()` — Forms 3 / 4 / 5
 
