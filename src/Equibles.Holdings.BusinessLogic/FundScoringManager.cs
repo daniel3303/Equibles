@@ -251,7 +251,9 @@ public class FundScoringManager
     // artifact must not linger on the leaderboard (#3407). A merely out-of-range / non-finite
     // result is treated as transient and keeps the previous score.
     private static bool ShouldDeleteStaleScore(BacktestResult result, bool has13FSnapshots) =>
-        !has13FSnapshots || IsTooShortToAnnualize(result);
+        !has13FSnapshots
+        || result?.HasUncertifiedSplitPrices == true
+        || IsTooShortToAnnualize(result);
 
     // The backtest ran (produced points) but the scored portfolio's own series was below
     // HoldingsBacktestCalculator.MinAnnualizationDays, so its CAGR could not be computed.

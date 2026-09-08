@@ -21,6 +21,14 @@ public class FundScoringManagerShouldDeleteStaleScoreTests
         (bool)Method.Invoke(null, [result, has13FSnapshots]);
 
     [Fact]
+    public void UncertifiedSplitPrices_DeletesPreviouslyPublishedScore()
+    {
+        ShouldDelete(new BacktestResult { HasUncertifiedSplitPrices = true }, true)
+            .Should()
+            .BeTrue();
+    }
+
+    [Fact]
     public void TooShortToAnnualize_WithSnapshots_DeletesStaleScore()
     {
         // Below the annualization floor: the backtest produced points but CAGR is null.

@@ -14,6 +14,8 @@ public class BacktestResult
 
     public string Reason { get; set; }
 
+    public bool HasUncertifiedSplitPrices { get; set; }
+
     /// <summary>
     /// How much of the filer's reported book the simulation actually tracked. Null when nothing was
     /// simulated. A surface that shows the return must show this too — see

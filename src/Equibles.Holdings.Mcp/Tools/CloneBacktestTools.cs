@@ -44,7 +44,7 @@ public class CloneBacktestTools
         ReadOnly = true
     )]
     [Description(
-        "Backtest how cloning an institutional filer's reported 13F portfolio would have performed against a market benchmark, either over a trailing window (windowYears) or an explicit fromDate/toDate range. Reconstructs the filer's portfolio at each quarterly 13F snapshot, rebalances on the SEC filing lag, and values each exact listed security on raw closing prices. Returns price return (dividends excluded), CAGR, and max drawdown for the clone and benchmark, plus price-return alpha. Usable captured split ratios restate closes onto one basis; an unusable ratio can exclude that listing's earlier closes."
+        "Backtest how cloning an institutional filer's reported 13F portfolio would have performed against a market benchmark, either over a trailing window (windowYears) or an explicit fromDate/toDate range. Reconstructs the filer's portfolio at each quarterly 13F snapshot, rebalances on the SEC filing lag, and values each exact listed security on raw closing prices. Returns price return (dividends excluded), CAGR, and max drawdown for the clone and benchmark, plus price-return alpha. Returns are unavailable when a held security or benchmark crosses a captured split without a certified price basis; the requested window is not shortened to hide it."
     )]
     public Task<string> GetInstitutionCloneBacktest(
         [Description(
@@ -210,8 +210,8 @@ public class CloneBacktestTools
                 + $"{result.Points.Count} daily points simulated."
         );
         output.AppendLine(
-            "Raw closing prices are used, so dividends are excluded. Usable captured split ratios "
-                + "restate closes onto one basis; an unusable ratio can exclude that listing's earlier closes."
+            "Raw closing prices are used, so dividends are excluded. Returns are unavailable when a held security "
+                + "or benchmark crosses a captured split without a certified price basis."
         );
 
         // A clone is long-only, so a filer who expresses its thesis in options is only partly
