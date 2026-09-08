@@ -121,6 +121,7 @@ public partial class Program
             branch =>
             {
                 branch.UseMiddleware<ApiKeyMiddleware>();
+                branch.UseMiddleware<OutputFormatMiddleware>();
             }
         );
 

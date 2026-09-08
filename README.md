@@ -230,17 +230,35 @@ The MCP server exposes financial data tools for AI assistants (Claude, ChatGPT, 
 
 ### Output Format (GCF, opt-in)
 
-By default the table tools return markdown tables. Setting `EQUIBLES_OUTPUT_FORMAT=gcf`
-uses [Graph Compact Format](https://gcformat.com) when it is smaller, otherwise it falls
-back to markdown. GCF carries the same cells the markdown table would show, with the column
-names factored into a single header and the per-cell `| ` padding and separator row dropped.
-On the tools' own table shapes this is roughly **13–16% fewer tokens** (o200k), losslessly.
+By default the table tools return markdown tables. [Graph Compact Format](https://gcformat.com)
+is used instead when it is smaller, otherwise it falls back to markdown. GCF carries the same
+cells the markdown table would show, with the column names factored into a single header and
+the per-cell `| ` padding and separator row dropped.
+
+Ask for it **per request**, which is what a shared server wants, with either the
+`X-Equibles-Output-Format: gcf` header or an `?output_format=gcf` query parameter (the query
+parameter is there for clients whose only configuration is a URL). `markdown` is accepted the
+same way, so a caller can opt out of a server that defaults to GCF. An unrecognized value is
+ignored rather than refused, and the server's own default applies.
+
+Set `EQUIBLES_OUTPUT_FORMAT=gcf` to make GCF the **process-wide** default instead. A request
+that names a format wins over it; one that names nothing gets it.
+
+Per-request selection relies on each tool call arriving as its own HTTP request, which is how
+the streamable HTTP transport works in both its stateless and session modes: the format is read
+off that request and applies to it alone. A transport that instead dispatched calls on a
+connection opened earlier would carry whatever the opening request asked for.
+
+How much it saves depends on the shape of the table. Wide tables of short values save most;
+tables of comma-grouped money and share counts save least, because the encoder quotes any
+value containing a comma. On our own financial tables the wire is **7–10% shorter**.
 
 It is deliberately conservative: **every cell value is preserved verbatim** (the compact-USD,
 comma-grouped, adaptive-decimal and em-dash formatting is untouched — GCF only changes the
 framing, not the numbers a model reads), and any row that does not match the header's column
-shape falls back to the markdown table, so a result is never dropped or garbled. Default
-output is unchanged unless the variable is set. GCF is MIT-licensed and its encoder is
+shape falls back to the markdown table, so a result is never dropped or garbled. Output is
+unchanged for a caller that asks for nothing on a server that sets nothing. GCF is
+MIT-licensed and its encoder is
 zero-dependency.
 
 ### Connecting to Claude Desktop

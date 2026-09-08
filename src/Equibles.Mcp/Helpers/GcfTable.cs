@@ -6,23 +6,35 @@ using BlackwellSystems.Gcf;
 namespace Equibles.Mcp.Helpers;
 
 // Optional GCF (Graph Compact Format, https://gcformat.com) rendering for the MCP
-// table tools. When EQUIBLES_OUTPUT_FORMAT=gcf, MarkdownTable.Render emits a GCF
-// generic wire instead of a markdown table: the column names are factored into a
-// single header and each row becomes one pipe-delimited line, dropping the per-cell
-// "| " framing and the separator row. The exact rendered cell strings are reused, so
-// every bit of the tools' number/price/date/em-dash formatting is preserved — GCF
-// only changes the framing, not the values a model reads. Fewer tokens, losslessly.
+// table tools. When GCF is asked for, MarkdownTable.Render emits a GCF generic wire
+// instead of a markdown table: the column names are factored into a single header and
+// each row becomes one pipe-delimited line, dropping the per-cell "| " framing and the
+// separator row. The exact rendered cell strings are reused, so every bit of the tools'
+// number/price/date/em-dash formatting is preserved — GCF only changes the framing, not
+// the values a model reads. Fewer tokens, losslessly.
+//
+// It is asked for in one of two places: per request through OutputFormatScope, which a
+// host enters for the caller that opted in, or process-wide through
+// EQUIBLES_OUTPUT_FORMAT for a server that wants it for everyone.
 public static class GcfTable
 {
-    // True when GCF output is requested. Read from the environment on each call so it
-    // can be toggled per process (or per test) without a restart; the string compare is
-    // negligible next to the data-access work behind every tool.
+    // True when GCF output is requested. The current request wins over the process
+    // default, in both directions: a caller can ask for GCF on a server that does not
+    // default to it, and can ask for markdown on a server that does. Both are read on
+    // every call so either can be changed without a restart; the compare is negligible
+    // next to the data-access work behind every tool.
     public static bool Enabled =>
-        string.Equals(
-            Environment.GetEnvironmentVariable("EQUIBLES_OUTPUT_FORMAT")?.Trim(),
-            "gcf",
-            StringComparison.OrdinalIgnoreCase
-        );
+        (OutputFormatScope.Current ?? FromEnvironment()) == McpOutputFormat.Gcf;
+
+    // The process-wide default, used only when the request asked for nothing. An
+    // unset or unrecognized value means markdown.
+    private static McpOutputFormat FromEnvironment() =>
+        OutputFormatScope.TryParse(
+            Environment.GetEnvironmentVariable("EQUIBLES_OUTPUT_FORMAT"),
+            out var format
+        )
+            ? format
+            : McpOutputFormat.Markdown;
 
     // Encodes the markdown header + already-rendered data rows as a GCF generic wire,
     // or returns null to fall back to markdown. Null is returned whenever a row does not
