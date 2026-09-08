@@ -142,6 +142,26 @@ public static class StatementLineFacts
                 && f.PeriodEnd <= f.PeriodStart.AddDays(MaxDiscreteQuarterDays);
 
     /// <summary>
+    /// Where a period's own flows end: the latest end among the spans that carry at least
+    /// half the bucket's fullest flow-concept count. Never a plain maximum: a single
+    /// re-stamped span ends latest and would date the whole balance sheet by itself (LAKE's
+    /// FY2023 bucket holds a 1-concept 2023-05-01 to 2024-04-30 span beside its 100-concept
+    /// year ending 2023-01-31). Never the fullest either: a predecessor stub carries a whole
+    /// statement, cash flow included, while the quarter's own cash flow is year-to-date and
+    /// fails the span gate (BALY's Jan 1 to Feb 7 2025 column, 29 concepts, beside its 23-concept
+    /// quarter ending 2025-06-30). Null when nothing measures the period.
+    /// </summary>
+    public static DateOnly? PickFlowPeriodEnd(
+        IReadOnlyCollection<(DateOnly Date, int ConceptCount)> measuredEnds
+    )
+    {
+        if (measuredEnds.Count == 0)
+            return null;
+        var fullest = measuredEnds.Max(e => e.ConceptCount);
+        return measuredEnds.Where(e => e.ConceptCount * 2 >= fullest).Max(e => (DateOnly?)e.Date);
+    }
+
+    /// <summary>
     /// The date a period's balance sheet is stated at: the stated instant date within
     /// <see cref="BalanceSheetDateToleranceDays"/> of where the period's own flows end that
     /// carries the most balance-sheet concepts, nearest then earliest on a tie. Null when no

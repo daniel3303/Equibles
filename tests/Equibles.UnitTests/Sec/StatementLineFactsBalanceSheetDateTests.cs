@@ -104,6 +104,72 @@ public class StatementLineFactsBalanceSheetDateTests
             .Be(new DateOnly(2022, 10, 28), "two days either side, the earlier date stands");
     }
 
+    // LAKE's FY2023 bucket holds its 100-concept year ending 2023-01-31 beside two one-concept
+    // spans re-stamped from the next fiscal year, one of them ending latest. A plain maximum
+    // would end the period in April 2024 and date the balance sheet fifteen months off.
+    [Fact]
+    public void PickFlowPeriodEnd_OneConceptSpanEndingLatest_LosesToTheFullestYear()
+    {
+        var picked = StatementLineFacts.PickFlowPeriodEnd([
+            (new DateOnly(2024, 4, 30), 1),
+            (new DateOnly(2023, 4, 30), 1),
+            (new DateOnly(2023, 1, 31), 100),
+        ]);
+
+        picked.Should().Be(new DateOnly(2023, 1, 31));
+    }
+
+    // BALY (2025, Q2): the Jan 1..Feb 7 2025 predecessor stub carries 29 flow concepts (a whole
+    // statement, cash flow included) beside the quarter's own 23, because a 10-Q's cash flow is
+    // year-to-date and fails the span gate. The fullest span is the stub; the quarter still wins.
+    [Fact]
+    public void PickFlowPeriodEnd_PredecessorStubWithMoreConcepts_LosesToTheLaterQuarter()
+    {
+        var picked = StatementLineFacts.PickFlowPeriodEnd([
+            (new DateOnly(2025, 2, 7), 29),
+            (new DateOnly(2025, 3, 31), 1),
+            (new DateOnly(2025, 6, 30), 23),
+        ]);
+
+        picked.Should().Be(new DateOnly(2025, 6, 30));
+    }
+
+    // The bar is half the fullest count, inclusive: a later span at exactly half still counts as a
+    // measured period, one concept below it is a stray.
+    [Theory]
+    [InlineData(12, 2024)]
+    [InlineData(11, 2023)]
+    public void PickFlowPeriodEnd_HalfTheFullestCount_IsTheBar(int laterCount, int expectedYear)
+    {
+        var picked = StatementLineFacts.PickFlowPeriodEnd([
+            (new DateOnly(2023, 1, 31), 24),
+            (new DateOnly(2024, 4, 30), laterCount),
+        ]);
+
+        picked
+            .Should()
+            .Be(expectedYear == 2024 ? new DateOnly(2024, 4, 30) : new DateOnly(2023, 1, 31));
+    }
+
+    // Two periods measured with the same concepts: the later one is the current column and
+    // the earlier one its comparative, so the tie goes to the latest end, as the old maximum did.
+    [Fact]
+    public void PickFlowPeriodEnd_EqualCounts_PreferTheLatestEnd()
+    {
+        var picked = StatementLineFacts.PickFlowPeriodEnd([
+            (new DateOnly(2019, 5, 5), 11),
+            (new DateOnly(2020, 5, 3), 11),
+        ]);
+
+        picked.Should().Be(new DateOnly(2020, 5, 3));
+    }
+
+    [Fact]
+    public void PickFlowPeriodEnd_NothingMeasured_IsNull()
+    {
+        StatementLineFacts.PickFlowPeriodEnd([]).Should().BeNull();
+    }
+
     [Fact]
     public void PickBalanceSheetDate_NoStatedDates_IsNull()
     {

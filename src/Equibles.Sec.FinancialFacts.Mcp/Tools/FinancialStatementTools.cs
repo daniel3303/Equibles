@@ -134,7 +134,8 @@ public class FinancialStatementTools
                     requestedPeriod,
                     statementType == FinancialStatementType.BalanceSheet
                         ? await StatementConceptIds()
-                        : conceptIds
+                        : conceptIds,
+                    conceptIds
                 );
                 if (periodError != null)
                     return periodError;
@@ -358,6 +359,8 @@ public class FinancialStatementTools
         ).ToHashSet();
     }
 
+    // availabilityConceptIds decides which periods may be selected; statementConceptIds is the
+    // requested statement's own set, which alone says whether that statement was ingested at all.
     private async Task<(
         int FiscalYear,
         SecFiscalPeriod FiscalPeriod,
@@ -367,6 +370,7 @@ public class FinancialStatementTools
         FinancialStatementType statementType,
         int? year,
         SecFiscalPeriod? requestedPeriod,
+        IReadOnlySet<Guid> availabilityConceptIds,
         IReadOnlySet<Guid> statementConceptIds
     )
     {
@@ -374,7 +378,7 @@ public class FinancialStatementTools
         var availablePeriods = await _financialFactRepository
             .GetConsolidatedByStock(stock)
             .Where(f =>
-                statementConceptIds.Contains(f.FinancialConceptId)
+                availabilityConceptIds.Contains(f.FinancialConceptId)
                 && (
                     f.PeriodType != FactPeriodType.Duration
                     || f.PeriodEnd >= f.PeriodStart
@@ -386,7 +390,15 @@ public class FinancialStatementTools
             .Distinct()
             .ToListAsync();
 
-        if (availablePeriods.Count == 0)
+        var statementIngested =
+            availablePeriods.Count > 0
+            && (
+                ReferenceEquals(availabilityConceptIds, statementConceptIds)
+                || await _financialFactRepository
+                    .GetConsolidatedByStock(stock)
+                    .AnyAsync(f => statementConceptIds.Contains(f.FinancialConceptId))
+            );
+        if (!statementIngested)
         {
             // Distinguish "nothing ingested at all" from "nothing for THIS
             // statement" so the caller isn't told a covered company is absent.

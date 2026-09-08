@@ -54,15 +54,21 @@ public static class BalanceSheetDateResolver
         if (balanceSheetConceptIds.Count == 0 || flowConceptIds.Count == 0)
             return null;
 
-        var flowPeriodEnd = await financialFactRepository
+        // Distinct (date, concept) pairs on both sides, counted here: each is a handful of
+        // dates, and a grouped count with DISTINCT is the kind of shape that stops translating
+        // on a provider upgrade. The flow end is weighed the same way the stated date is, or
+        // one re-stamped span ending latest dates the sheet by itself.
+        var measured = await financialFactRepository
             .GetMeasuredFlows(stock, fiscalYear, fiscalPeriod, flowConceptIds)
-            .MaxAsync(f => (DateOnly?)f.PeriodEnd, cancellationToken);
+            .Select(f => new { f.PeriodEnd, f.FinancialConceptId })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var flowPeriodEnd = StatementLineFacts.PickFlowPeriodEnd(
+            CountByDate(measured.Select(m => (m.PeriodEnd, m.FinancialConceptId)))
+        );
         if (flowPeriodEnd is not { } periodEnd)
             return null;
 
-        // Distinct (date, concept) pairs, counted here: the candidates are a handful of dates
-        // a week wide, and a grouped count with DISTINCT is the kind of shape that stops
-        // translating on a provider upgrade.
         var stated = await financialFactRepository
             .GetStatedNear(
                 stock,
@@ -73,12 +79,21 @@ public static class BalanceSheetDateResolver
             .Select(f => new { f.PeriodEnd, f.FinancialConceptId })
             .Distinct()
             .ToListAsync(cancellationToken);
-        var statedDates = stated
-            .GroupBy(s => s.PeriodEnd)
+
+        return StatementLineFacts.PickBalanceSheetDate(
+            periodEnd,
+            CountByDate(stated.Select(s => (s.PeriodEnd, s.FinancialConceptId)))
+        );
+    }
+
+    private static List<(DateOnly Date, int ConceptCount)> CountByDate(
+        IEnumerable<(DateOnly PeriodEnd, Guid FinancialConceptId)> pairs
+    )
+    {
+        return pairs
+            .GroupBy(p => p.PeriodEnd)
             .Select(g => (Date: g.Key, ConceptCount: g.Count()))
             .ToList();
-
-        return StatementLineFacts.PickBalanceSheetDate(periodEnd, statedDates);
     }
 
     private static List<Guid> ConceptIdsFor(

@@ -57,6 +57,12 @@ public class FinancialFactRepositoryQueryTranslationTests
             .Contain("\"DimensionsKey\" = ''", "only the consolidated flows date a sheet");
         where.Should().Contain("\"FiscalYear\" = @");
         where.Should().Contain("\"FiscalPeriod\" = @");
+        where
+            .Should()
+            .Contain(
+                "\"FinancialConceptId\" = ANY (@flowConceptIds)",
+                "only a flow-statement concept may end the period; without this any consolidated span would"
+            );
         // Both annual bounds ride against PeriodStart (a Postgres date plus an integer is that
         // many days later), so the span rule is the one the in-memory gate applies, 350..380
         // days, and never a plain PeriodEnd range.
