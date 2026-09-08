@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,10 @@ public class FinancialFactsSyncStatus
     /// A lower value forces a full-history replay even when no newer filing exists.
     /// </summary>
     public int ImporterVersion { get; set; }
+
+    /// <summary>Source calendar evidence used by the last successful full-history import.</summary>
+    [MaxLength(64)]
+    public string CalendarEvidenceFingerprint { get; set; }
 
     /// <summary>
     /// When the concept-metadata sweep (labels, descriptions, balance from the

@@ -65,7 +65,7 @@ public class XbrlFactExtractionService
     // Version 5: preserve every cover-page symbol observation as dated issuer evidence.
     // Version 6: fill absent standard consolidated facts in foreign financial reports.
     // Version 7 replays derived fiscal identities for interim instants and existing rows.
-    public const int CurrentVersion = 7;
+    public const int CurrentVersion = 8;
 
     private const int InsertBatchSize = 1000;
 
@@ -100,6 +100,7 @@ public class XbrlFactExtractionService
     private readonly InlineXbrlParser _inlineParser;
     private readonly StandaloneXbrlParser _standaloneParser;
     private readonly IFileManager _fileManager;
+    private readonly FiscalCalendarEvidenceReader _calendarReader;
     private readonly ILogger<XbrlFactExtractionService> _logger;
 
     public XbrlFactExtractionService(
@@ -107,13 +108,15 @@ public class XbrlFactExtractionService
         InlineXbrlParser inlineParser,
         StandaloneXbrlParser standaloneParser,
         IFileManager fileManager,
-        ILogger<XbrlFactExtractionService> logger
+        ILogger<XbrlFactExtractionService> logger,
+        FiscalCalendarEvidenceReader calendarReader = null
     )
     {
         _scopeFactory = scopeFactory;
         _inlineParser = inlineParser;
         _standaloneParser = standaloneParser;
         _fileManager = fileManager;
+        _calendarReader = calendarReader;
         _logger = logger;
     }
 
@@ -192,16 +195,40 @@ public class XbrlFactExtractionService
         var conceptIds = await ResolveConcepts(persistable, cancellationToken);
 
         var stock = document.CommonStock;
+        var incomingAnnualPeriods = parsed
+            .Where(f =>
+                !f.IsInstant
+                && f.Dimensions.Count == 0
+                && f.PeriodEnd.DayNumber - f.PeriodStart.DayNumber is >= 350 and <= 380
+            )
+            .Select(f => (Start: f.PeriodStart, End: f.PeriodEnd))
+            .Distinct()
+            .ToArray();
+        var calendar =
+            _calendarReader == null
+                ? new HistoricalFiscalCalendar(
+                    [],
+                    [],
+                    stock.FiscalYearEndMonth,
+                    stock.FiscalYearEndDay
+                )
+                : await _calendarReader.Read(stock, incomingAnnualPeriods, cancellationToken);
         var facts = new List<FinancialFact>();
         var consolidatedFills = new List<FinancialFact>();
         var dimensionsByKey = new Dictionary<string, List<ParsedXbrlDimension>>(
             StringComparer.Ordinal
         );
+        var deferredCalendarFacts = 0;
         foreach (var candidate in persistable)
         {
+            if (calendar.RefusesCalendar(candidate.Fact.PeriodStart, candidate.Fact.PeriodEnd))
+            {
+                deferredCalendarFacts++;
+                continue;
+            }
             if (!conceptIds.TryGetValue((candidate.Taxonomy, candidate.Tag), out var conceptId))
                 continue;
-            var fact = BuildFact(document, stock, candidate, conceptId);
+            var fact = BuildFact(document, stock, candidate, conceptId, calendar);
             if (candidate.Taxonomy != FactTaxonomy.Custom && candidate.DimensionsKey == "")
                 consolidatedFills.Add(fact);
             else
@@ -212,13 +239,7 @@ public class XbrlFactExtractionService
         await BatchPersister.Persist(facts, InsertBatchSize, items => FlushFacts(items, false));
         foreach (
             var group in consolidatedFills.GroupBy(fact =>
-                FiscalPeriodResolver.Resolve(
-                    fact.PeriodStart,
-                    fact.PeriodEnd,
-                    stock.FiscalYearEndMonth,
-                    stock.FiscalYearEndDay,
-                    classifyInterimInstants: true
-                ) != null
+                calendar.Resolve(fact.PeriodStart, fact.PeriodEnd) != null
             )
         )
         {
@@ -230,7 +251,10 @@ public class XbrlFactExtractionService
         }
         await PersistDimensions(document, dimensionsByKey, cancellationToken);
 
-        return facts.Count + consolidatedFills.Count;
+        var persistedCount = facts.Count + consolidatedFills.Count;
+        if (deferredCalendarFacts > 0)
+            throw new FiscalCalendarEvidencePendingException(persistedCount, deferredCalendarFacts);
+        return persistedCount;
     }
 
     /// <summary>
@@ -443,16 +467,20 @@ public class XbrlFactExtractionService
         DateOnly periodStart,
         DateOnly periodEnd,
         int? fiscalYearEndMonth,
-        int? fiscalYearEndDay
+        int? fiscalYearEndDay,
+        HistoricalFiscalCalendar calendar = null
     )
     {
-        var resolved = FiscalPeriodResolver.Resolve(
-            periodStart,
-            periodEnd,
-            fiscalYearEndMonth,
-            fiscalYearEndDay,
-            classifyInterimInstants: true
-        );
+        var resolved =
+            calendar != null
+                ? calendar.Resolve(periodStart, periodEnd)
+                : FiscalPeriodResolver.Resolve(
+                    periodStart,
+                    periodEnd,
+                    fiscalYearEndMonth,
+                    fiscalYearEndDay,
+                    classifyInterimInstants: true
+                );
         if (resolved != null)
             return resolved.Value;
 
@@ -475,7 +503,8 @@ public class XbrlFactExtractionService
         Document document,
         CommonStock stock,
         PersistableXbrlFact candidate,
-        Guid conceptId
+        Guid conceptId,
+        HistoricalFiscalCalendar calendar
     )
     {
         var fact = candidate.Fact;
@@ -483,7 +512,8 @@ public class XbrlFactExtractionService
             fact.PeriodStart,
             fact.PeriodEnd,
             stock.FiscalYearEndMonth,
-            stock.FiscalYearEndDay
+            stock.FiscalYearEndDay,
+            calendar
         );
 
         return new FinancialFact

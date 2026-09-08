@@ -76,6 +76,198 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Import_HistoricalCalendarChange_UsesCapturedQuarterMetadataAndKeepsCurrentYearEnd()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "JHG",
+            Name = "Janus Henderson Group",
+            Cik = "0001274173",
+            FiscalYearEndMonth = 6,
+            FiscalYearEndDay = 30,
+        };
+        var annualEnd = new DateOnly(2025, 12, 31);
+        var quarterEnd = new DateOnly(2026, 3, 31);
+        const string envelope = """
+            <html xmlns:dei="http://xbrl.sec.gov/dei/2026"><body>
+            <xbrli:context id="quarter"><xbrli:entity>
+            <xbrli:identifier scheme="http://www.sec.gov/CIK">0001274173</xbrli:identifier>
+            </xbrli:entity><xbrli:period><xbrli:startDate>2026-01-01</xbrli:startDate>
+            <xbrli:endDate>2026-03-31</xbrli:endDate></xbrli:period></xbrli:context>
+            <ix:nonNumeric name="dei:CurrentFiscalYearEndDate" contextRef="quarter">--12-31</ix:nonNumeric>
+            </body></html>
+            """;
+        var bytes = System.Text.Encoding.UTF8.GetBytes(envelope);
+        Equibles.Media.Data.Models.File File() =>
+            new()
+            {
+                Name = "filing",
+                Extension = "txt",
+                ContentType = "text/plain",
+            };
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Add(stock);
+            seed.Add(
+                new Document
+                {
+                    CommonStock = stock,
+                    Content = File(),
+                    DocumentType = DocumentType.TenK,
+                    ReportingForDate = annualEnd,
+                    ReportingDate = new DateOnly(2026, 2, 1),
+                    AccessionNumber = "0001437749-26-005628",
+                }
+            );
+            seed.Add(
+                new Document
+                {
+                    CommonStock = stock,
+                    Content = File(),
+                    DocumentType = DocumentType.TenQ,
+                    ReportingForDate = quarterEnd,
+                    ReportingDate = new DateOnly(2026, 5, 1),
+                    AccessionNumber = "0001437749-26-015926",
+                    XbrlContent = File(),
+                    XbrlStatus = XbrlCaptureStatus.Captured,
+                    XbrlType = XbrlType.InlineIxbrl,
+                    XbrlUncompressedSize = bytes.Length,
+                }
+            );
+            await seed.SaveChangesAsync(CancellationToken.None);
+        }
+        CompanyFactValue Value(DateOnly? start, DateOnly end, string form) =>
+            new()
+            {
+                Start = start,
+                End = end,
+                Val = 123m,
+                Form = form,
+                Fy = 2026,
+                Fp = "Q3",
+                Filed = new DateOnly(2026, 5, 1),
+                Accn = "0001437749-26-015926",
+            };
+        var response = new CompanyFactsResponse
+        {
+            Cik = 1274173,
+            EntityName = stock.Name,
+            Facts = new()
+            {
+                ["us-gaap"] = new()
+                {
+                    ["Revenues"] = new()
+                    {
+                        Label = "Revenue",
+                        Units = new()
+                        {
+                            ["USD"] =
+                            [
+                                Value(new(2025, 1, 1), annualEnd, "10-K"),
+                                Value(new(2025, 1, 1), new(2025, 3, 31), "10-Q"),
+                                Value(new(2026, 1, 1), quarterEnd, "10-Q"),
+                            ],
+                        },
+                    },
+                    ["Assets"] = new()
+                    {
+                        Label = "Assets",
+                        Units = new() { ["USD"] = [Value(null, quarterEnd, "10-Q")] },
+                    },
+                },
+            },
+        };
+        var client = Substitute.For<ISecEdgarClient>();
+        client.GetCompanyFacts(stock.Cik).Returns(response);
+        var files = Substitute.For<Equibles.Media.BusinessLogic.IFileManager>();
+        files
+            .GetContent(Arg.Any<Equibles.Media.Data.Models.File>())
+            .Returns(Equibles.Media.BusinessLogic.GzipCompressor.Compress(bytes));
+        var scopes = CreateScopeFactory();
+        var reader = new FiscalCalendarEvidenceReader(
+            scopes,
+            files,
+            new Equibles.Sec.FinancialFacts.BusinessLogic.Parsers.InlineXbrlParser()
+        );
+        var sut = new FinancialFactsImportService(
+            scopes,
+            client,
+            Substitute.For<ILogger<FinancialFactsImportService>>(),
+            Substitute.For<ErrorReporter>(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            reader
+        );
+        await sut.Import(stock, CancellationToken.None);
+        await using var verify = _fixture.CreateDbContext();
+        var facts = await verify
+            .Set<FinancialFact>()
+            .Where(f => f.CommonStockId == stock.Id)
+            .ToListAsync();
+        facts.Should().HaveCount(4);
+        facts
+            .Where(f => f.PeriodEnd == quarterEnd)
+            .Should()
+            .OnlyContain(f =>
+                f.FiscalYear == 2026 && f.FiscalPeriod == SecFiscalPeriod.Q1 && f.Value == 123m
+            );
+        facts
+            .Single(f => f.PeriodEnd == new DateOnly(2025, 3, 31))
+            .FiscalPeriod.Should()
+            .Be(SecFiscalPeriod.Q1);
+        var storedStock = await verify.Set<CommonStock>().SingleAsync(s => s.Id == stock.Id);
+        storedStock.FiscalYearEndMonth.Should().Be(6);
+        var checkpoint = await verify
+            .Set<FinancialFactsSyncStatus>()
+            .SingleAsync(s => s.CommonStockId == stock.Id);
+        checkpoint.CalendarEvidenceFingerprint.Should().HaveLength(64);
+
+        // A corrected source calendar must replay even when SEC's newest filed date is unchanged.
+        var originalFingerprint = checkpoint.CalendarEvidenceFingerprint;
+        var originalIds = facts.Select(f => f.Id).Order().ToArray();
+        files
+            .GetContent(Arg.Any<Equibles.Media.Data.Models.File>())
+            .Returns(
+                Equibles.Media.BusinessLogic.GzipCompressor.Compress(
+                    System.Text.Encoding.UTF8.GetBytes(envelope.Replace("--12-31", "--06-30"))
+                )
+            );
+        await sut.Import(stock, CancellationToken.None);
+        verify.ChangeTracker.Clear();
+        var replayed = await verify
+            .Set<FinancialFact>()
+            .Where(f => f.CommonStockId == stock.Id)
+            .ToListAsync();
+        replayed.Select(f => f.Id).Order().Should().Equal(originalIds);
+        replayed
+            .Where(f => f.PeriodEnd == quarterEnd)
+            .Should()
+            .OnlyContain(f =>
+                f.FiscalYear == 2026 && f.FiscalPeriod == SecFiscalPeriod.Q3 && f.Value == 123m
+            );
+        var replayCheckpoint = await verify
+            .Set<FinancialFactsSyncStatus>()
+            .SingleAsync(s => s.CommonStockId == stock.Id);
+        replayCheckpoint.CalendarEvidenceFingerprint.Should().NotBe(originalFingerprint);
+
+        // Unusable source evidence must leave the last successful checkpoint and facts intact.
+        files
+            .GetContent(Arg.Any<Equibles.Media.Data.Models.File>())
+            .Returns(
+                Equibles.Media.BusinessLogic.GzipCompressor.Compress(
+                    System.Text.Encoding.UTF8.GetBytes(envelope.Replace("0001274173", "0000000001"))
+                )
+            );
+        await sut.Import(stock, CancellationToken.None);
+        await verify.Entry(replayCheckpoint).ReloadAsync();
+        replayCheckpoint.CalendarEvidenceFingerprint.Should().NotBe(originalFingerprint);
+        (await verify.Set<FinancialFact>().CountAsync(f => f.CommonStockId == stock.Id))
+            .Should()
+            .Be(4);
+    }
+
+    [Fact]
     public async Task Import_TenKWithThreeComparableYears_DerivesFiscalYearFromPeriodEndPerCompanyFYE()
     {
         // Apple's FYE is Sept 28 (52/53-week filer, so actual end dates

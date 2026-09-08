@@ -1,6 +1,8 @@
+using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.HostedService.Configuration;
 using Equibles.Sec.FinancialFacts.HostedService.Services;
 using Equibles.Sec.Repositories;
@@ -62,30 +64,11 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
 
             // Newest filings first so fresh quarters get their dimensional
             // rows soonest while the historical drain catches up behind them.
-            var batch = await documentRepository
-                .GetByXbrlStatus(XbrlCaptureStatus.Captured)
-                .Where(d =>
-                    (
-                        d.XbrlFactsVersion
-                            < Equibles
-                                .CommonStocks
-                                .Data
-                                .Models
-                                .CommonStockTickerEvidence
-                                .SourceXbrlFactsVersion
-                        || (
-                            d.XbrlFactsVersion < XbrlFactExtractionService.CurrentVersion
-                            && (
-                                d.DocumentType == DocumentType.TwentyF
-                                || d.DocumentType == DocumentType.TwentyFa
-                                || d.DocumentType == DocumentType.FortyF
-                                || d.DocumentType == DocumentType.FortyFa
-                                || d.DocumentType == DocumentType.SixK
-                                || d.DocumentType == DocumentType.SixKa
-                            )
-                        )
-                    )
-                    && d.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts
+            var db = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            var checkpoints = db.Set<FinancialFactsSyncStatus>();
+            var batch = await SelectDueDocuments(
+                    documentRepository.GetByXbrlStatus(XbrlCaptureStatus.Captured),
+                    checkpoints
                 )
                 .OrderByDescending(d => d.ReportingDate)
                 .Take(batchSize)
@@ -94,16 +77,42 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
             if (batch.Count == 0)
                 return;
 
+            var stockIds = batch.Select(d => d.CommonStockId).Distinct().ToArray();
+            var fingerprints = await checkpoints
+                .Where(s => stockIds.Contains(s.CommonStockId))
+                .ToDictionaryAsync(
+                    s => s.CommonStockId,
+                    s => s.CalendarEvidenceFingerprint,
+                    stoppingToken
+                );
+
             var extracted = 0;
             foreach (var document in batch)
             {
                 stoppingToken.ThrowIfCancellationRequested();
+                fingerprints.TryGetValue(document.CommonStockId, out var fingerprint);
+                if (document.XbrlCalendarEvidenceFingerprint != fingerprint)
+                {
+                    document.XbrlFactsAttempts = 0;
+                    document.XbrlFactsVersion = 0;
+                }
+                document.XbrlCalendarEvidenceFingerprint = fingerprint;
                 try
                 {
                     extracted += await extractionService.Extract(document, stoppingToken);
                     // A clean parse with zero dimensional facts is terminal too —
                     // the envelope simply carries none worth re-reading.
                     document.XbrlFactsVersion = XbrlFactExtractionService.CurrentVersion;
+                }
+                catch (FiscalCalendarEvidencePendingException ex)
+                {
+                    document.XbrlFactsAttempts++;
+                    extracted += ex.PersistedCount;
+                    Logger.LogWarning(
+                        "Historical calendar evidence is pending for {Count} facts in {DocumentId}; resolved facts were saved",
+                        ex.DeferredCount,
+                        document.Id
+                    );
                 }
                 // Shutdown mid-batch is not a document failure: let it surface
                 // so the base loop winds down quietly instead of burning one of
@@ -150,4 +159,20 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
                 return;
         }
     }
+
+    internal static IQueryable<Document> SelectDueDocuments(
+        IQueryable<Document> documents,
+        IQueryable<FinancialFactsSyncStatus> checkpoints
+    ) =>
+        documents.Where(d =>
+            (
+                d.XbrlFactsVersion < XbrlFactExtractionService.CurrentVersion
+                && d.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts
+            )
+            || checkpoints.Any(s =>
+                s.CommonStockId == d.CommonStockId
+                && s.CalendarEvidenceFingerprint != null
+                && s.CalendarEvidenceFingerprint != d.XbrlCalendarEvidenceFingerprint
+            )
+        );
 }
