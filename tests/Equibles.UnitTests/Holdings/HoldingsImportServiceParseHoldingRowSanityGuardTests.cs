@@ -15,7 +15,10 @@ public class HoldingsImportServiceParseHoldingRowSanityGuardTests
     private static (InstitutionalHolding Holding, bool ValuePending) Parse(
         Guid commonStockId,
         decimal? closePrice,
-        string filedValueField
+        string filedValueField,
+        string shareType = "SH",
+        string quantity = "273201",
+        DateOnly? sourceFilingDate = null
     )
     {
         var method = typeof(HoldingsImportService).GetMethod(
@@ -25,14 +28,14 @@ public class HoldingsImportServiceParseHoldingRowSanityGuardTests
 
         var holderId = Guid.NewGuid();
         // Post-2023 filing date so VALUE is already in whole dollars.
-        var filingDate = new DateOnly(2024, 11, 15);
+        var filingDate = sourceFilingDate ?? new DateOnly(2024, 11, 15);
         var reportDate = new DateOnly(2024, 9, 30);
 
         var row = new Dictionary<string, string>
         {
-            ["SSHPRNAMTTYPE"] = "SH",
+            ["SSHPRNAMTTYPE"] = shareType,
             ["PUTCALL"] = "",
-            ["SSHPRNAMT"] = "273201",
+            ["SSHPRNAMT"] = quantity,
             ["VALUE"] = filedValueField,
             ["VOTING_AUTH_SOLE"] = "273201",
             ["VOTING_AUTH_SHARED"] = "0",
@@ -72,6 +75,53 @@ public class HoldingsImportServiceParseHoldingRowSanityGuardTests
         var holding = (InstitutionalHolding)result.GetType().GetField("Item1").GetValue(result);
         var valuePending = (bool)result.GetType().GetField("Item3").GetValue(result);
         return (holding, valuePending);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ParseHoldingRow_PrincipalUsesFiledValueWithoutSharePricing(bool hasSharePrice)
+    {
+        // ReadyState 0001214659-26-010383: PRN is a principal amount, not shares.
+        var (holding, pending) = Parse(
+            Guid.NewGuid(),
+            hasSharePrice ? 50.89m : null,
+            "45413596",
+            "PRN",
+            "899992000"
+        );
+
+        holding.Shares.Should().Be(899_992_000L);
+        holding.ShareType.Should().Be(ShareType.Principal);
+        holding.Value.Should().Be(45_413_596L);
+        holding.ValueSource.Should().Be(ValueSource.Filed);
+        holding.ValueUnavailable.Should().BeFalse();
+        pending.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ParseHoldingRow_OlderPrincipalFilingConvertsThousandsToDollars()
+    {
+        var (holding, pending) = Parse(
+            Guid.NewGuid(),
+            50m,
+            "45413",
+            "PRN",
+            "899992000",
+            new DateOnly(2022, 11, 15)
+        );
+        holding.Value.Should().Be(45_413_000L);
+        holding.Shares.Should().Be(899_992_000L);
+        pending.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ParseHoldingRow_PrincipalWithoutFiledValueIsUnavailable()
+    {
+        var (holding, pending) = Parse(Guid.NewGuid(), 50.89m, "0", "PRN", "899992000");
+        holding.Value.Should().Be(0L);
+        holding.ValueUnavailable.Should().BeTrue();
+        pending.Should().BeFalse();
     }
 
     [Fact]

@@ -1775,9 +1775,8 @@ public class HoldingsImportService
         long ParseLongField(string field) => ParseLong(GetValue(row, field));
 
         var shares = ParseLongField("SSHPRNAMT");
-        // The filed market value is not what gets published (Value is always derived from
-        // shares × closing price, the only basis 13D/G positions can share), but it is kept
-        // alongside it so the derivation can be audited against its source.
+        // Keep filed value for audit and fallback; principal-denominated positions use it
+        // directly because their quantity cannot be multiplied by an equity share price.
         var reportedValue = ParseLongField("VALUE");
         var votingAuthSole = ParseLongField("VOTING_AUTH_SOLE");
         var votingAuthShared = ParseLongField("VOTING_AUTH_SHARED");
@@ -1813,7 +1812,8 @@ public class HoldingsImportService
         // shares comes from filer-controlled SSHPRNAMT; an oversized count makes the decimal
         // product exceed Int64, so range-check before the cast (mirrors Filing13DGXmlParser)
         // instead of throwing OverflowException and aborting the whole filing's import.
-        var product = shares * shareCountFactor * closePrice;
+        var product =
+            shareType == ShareType.Principal ? 0m : shares * shareCountFactor * closePrice;
         var value =
             canValue && product >= long.MinValue && product <= long.MaxValue ? (long)product : 0L;
         var valuePending = !canValue;
@@ -1853,7 +1853,7 @@ public class HoldingsImportService
         var filedValue =
             filedDollars > 0 && filedDollars <= long.MaxValue ? (long?)filedDollars : null;
 
-        if (value > 0 && filedValue.HasValue)
+        if (shareType == ShareType.Shares && value > 0 && filedValue.HasValue)
         {
             context.ValueBasisAudit.Record(
                 cusip,
@@ -1875,6 +1875,16 @@ public class HoldingsImportService
         {
             value = filedValue.Value;
             valueSource = ValueSource.Filed;
+        }
+
+        // PRN states a principal amount, never a share quantity compatible with an equity price.
+        // Preserve the source quantity and publish only the filing's own monetary value.
+        if (shareType == ShareType.Principal)
+        {
+            value = filedValue ?? 0L;
+            valuePending = false;
+            valueUnavailable = !filedValue.HasValue;
+            valueSource = filedValue.HasValue ? ValueSource.Filed : ValueSource.Derived;
         }
 
         var (otherManagerNumber, sharedManagerNumbers) = ParseOtherManagerAttribution(

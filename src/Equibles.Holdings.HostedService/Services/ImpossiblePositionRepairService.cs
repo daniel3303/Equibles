@@ -58,7 +58,7 @@ public class ImpossiblePositionRepairService
         // than a false accusation, and no worse than this pass has ever done.
         var candidates = await dbContext
             .Set<InstitutionalHolding>()
-            .Where(h => !h.ValueUnavailable && h.Shares > 0)
+            .Where(h => h.ShareType == ShareType.Shares && !h.ValueUnavailable && h.Shares > 0)
             .Join(
                 dbContext.Set<CommonStock>(),
                 h => h.CommonStockId,

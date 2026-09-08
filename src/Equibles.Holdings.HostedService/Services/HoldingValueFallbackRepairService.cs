@@ -143,6 +143,11 @@ public class HoldingValueFallbackRepairService
 
     public async Task<int> Repair(CancellationToken cancellationToken)
     {
+        var principalValues = await RunPhase(
+            "principal-values",
+            RepairPrincipalValues,
+            cancellationToken
+        );
         var revisedFiled = await RunPhase("revise-filed", ReviseFiledPublishes, cancellationToken);
         var healedZeros = await RunPhase("stuck-zeros", HealStuckZeros, cancellationToken);
         var resetImplausible = await RunPhase(
@@ -171,7 +176,72 @@ public class HoldingValueFallbackRepairService
             );
         }
 
-        return revisedFiled + healedZeros + resetImplausible + markedUnavailable;
+        return principalValues + revisedFiled + healedZeros + resetImplausible + markedUnavailable;
+    }
+
+    internal static IQueryable<InstitutionalHolding> BuildPrincipalCandidateQuery(
+        EquiblesFinancialDbContext dbContext
+    ) =>
+        dbContext
+            .Set<InstitutionalHolding>()
+            .Include(h => h.ManagerEntries)
+            .Where(h =>
+                h.ShareType == ShareType.Principal
+                && (
+                    h.FiledValue > 0
+                        ? h.Value != h.FiledValue
+                            || h.ValueSource != ValueSource.Filed
+                            || h.ValuePending
+                            || h.ValueUnavailable
+                        : h.Value != 0 || h.ValuePending || !h.ValueUnavailable
+                )
+            )
+            .OrderBy(h => h.Id)
+            .Take(MaxRowsPerCycle);
+
+    private async Task<int> RepairPrincipalValues(CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        ExtendCommandTimeout(dbContext);
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        var rows = await BuildPrincipalCandidateQuery(dbContext).ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+            return 0;
+        foreach (var holding in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (holding.FiledValue is > 0)
+            {
+                HoldingsValueRecalculator.ApplyFiledValue(holding);
+                holding.ValueUnavailable = false;
+            }
+            else
+            {
+                holding.Value = 0;
+                holding.ValuePending = false;
+                holding.ValueUnavailable = true;
+                holding.ValueSource = ValueSource.Derived;
+                foreach (var entry in holding.ManagerEntries)
+                    entry.Value = 0;
+            }
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await HoldingsRollupRefresher.Refresh(
+            dbContext,
+            rows.Select(h => h.AccessionNumber).ToHashSet(),
+            rows.Select(h => h.ReportDate).ToHashSet(),
+            cancellationToken
+        );
+        if (transaction != null)
+            await transaction.CommitAsync(cancellationToken);
+        _logger.LogInformation(
+            "Repaired filed values for {Count} principal-denominated positions",
+            rows.Count
+        );
+        return rows.Count;
     }
 
     // One phase's failure must not starve the phases after it; only cancellation propagates.
@@ -212,6 +282,7 @@ public class HoldingValueFallbackRepairService
             .Include(h => h.ManagerEntries)
             .Where(h =>
                 !h.ValuePending
+                && h.ShareType == ShareType.Shares
                 && !h.ValueUnavailable
                 && h.ValueSource == ValueSource.Filed
                 && h.ValueLastRetryAt == null
@@ -463,6 +534,7 @@ public class HoldingValueFallbackRepairService
             .Include(h => h.ManagerEntries)
             .Where(h =>
                 !h.ValuePending
+                && h.ShareType == ShareType.Shares
                 && h.ValueSource != ValueSource.Filed
                 && h.Shares > 0
                 && (decimal)h.Value > HoldingValueSanityGuard.MaxPlausibleSharePrice * h.Shares

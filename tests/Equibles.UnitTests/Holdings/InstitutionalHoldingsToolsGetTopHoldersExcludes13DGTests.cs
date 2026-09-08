@@ -101,6 +101,18 @@ public class InstitutionalHoldingsToolsGetTopHoldersExcludes13DGTests
                 accession: "sc-13g"
             )
         );
+        var principal = MakeHolding(
+            vanguardCapital,
+            apple,
+            quarterEnd,
+            FilingType.Form13F,
+            InvestmentDiscretion.Sole,
+            shares: 9_000_000_000L,
+            value: 45_000_000L,
+            accession: "principal"
+        );
+        principal.ShareType = ShareType.Principal;
+        db.Add(principal);
         await db.SaveChangesAsync();
 
         var sut = new InstitutionalHoldingsTools(
@@ -122,6 +134,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersExcludes13DGTests
         output.Should().Contain("953,847,648");
         // The Schedule 13G sole-dispositive-power figure must never render as a holding row.
         output.Should().NotContain("1,099,168,953");
+        output.Should().NotContain("9,000,000,000");
         // The filer appears exactly once, not twice.
         CountOccurrences(output, "VANGUARD CAPITAL MANAGEMENT LLC").Should().Be(1);
     }
