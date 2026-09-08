@@ -178,6 +178,7 @@ public class InstitutionalHoldingsTools
                 // both rank and denominator, so a separate raw aggregate/page query would scan
                 // the combined-quarter view twice and could rank a sibling class incorrectly.
                 var holdings = await allHoldings
+                    .Where(h => h.ShareType == ShareType.Shares)
                     .AsNoTracking()
                     .Select(h => new TopHolderRow
                     {
@@ -747,15 +748,18 @@ public class InstitutionalHoldingsTools
                 // The exact listing held: a GOOG position must not render as GOOGL, and a
                 // sibling ETF split must not rescale this row.
                 var listedTicker = h.ListedTicker ?? h.CommonStock.Ticker;
-                var shares = SplitAdjustment.AdjustShareCount(
-                    h.Shares,
-                    targetDate,
-                    PriceSeriesSplitScope.ForListing(
-                        SplitsFor(splitsByStock, h.CommonStockId),
-                        h.CommonStock.Ticker,
-                        listedTicker
-                    )
-                );
+                var shares =
+                    h.ShareType == ShareType.Principal
+                        ? h.Shares
+                        : SplitAdjustment.AdjustShareCount(
+                            h.Shares,
+                            targetDate,
+                            PriceSeriesSplitScope.ForListing(
+                                SplitsFor(splitsByStock, h.CommonStockId),
+                                h.CommonStock.Ticker,
+                                listedTicker
+                            )
+                        );
                 var pct = Percentage.Of(h.Value, totalValue);
                 // Rank is the ABSOLUTE position in the value-ranked rows, so page two
                 // continues 21, 22, … instead of restarting at 1.

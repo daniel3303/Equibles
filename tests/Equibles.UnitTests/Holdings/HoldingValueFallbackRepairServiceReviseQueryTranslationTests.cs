@@ -16,8 +16,10 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class HoldingValueFallbackRepairServiceReviseQueryTranslationTests
 {
-    [Fact]
-    public void BuildReviseCandidateQuery_TranslatesToSql()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CandidateQuery_TranslatesToSql(bool principal)
     {
         var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()
             .UseNpgsql("Host=localhost;Database=translation-only")
@@ -33,10 +35,9 @@ public class HoldingValueFallbackRepairServiceReviseQueryTranslationTests
             }
         );
 
-        var query = HoldingValueFallbackRepairService.BuildReviseCandidateQuery(
-            ctx,
-            Guid.NewGuid()
-        );
+        var query = principal
+            ? HoldingValueFallbackRepairService.BuildPrincipalCandidateQuery(ctx)
+            : HoldingValueFallbackRepairService.BuildReviseCandidateQuery(ctx, Guid.NewGuid());
 
         // Throws InvalidOperationException ("could not be translated") when the shape stops
         // translating; the assertions pin that the frontier comparison and the row cap stay in

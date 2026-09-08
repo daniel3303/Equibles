@@ -23,6 +23,14 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             .IsUnique()
             .AreNullsDistinct(false);
 
+        // Principal-value repair must scan only principal rows, not the full holdings corpus.
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(h => new { h.ShareType, h.Id })
+            .HasDatabaseName("IX_InstitutionalHolding_Principal")
+            .HasFilter("\"ShareType\" = 1")
+            .IsCreatedConcurrently();
+
         // Covering index for the per-stock ownership-trend GROUP BY on the stock
         // Holdings page. Postgres-specific `INCLUDE` is not expressible via the
         // [Index] attribute, so it lives here. Holders / value / shares ride along

@@ -53,7 +53,7 @@ public class HoldingsValueRecalculator
 
         var pendingPairs = await lookupContext
             .Set<InstitutionalHolding>()
-            .Where(h => h.ValuePending)
+            .Where(h => h.ValuePending && h.ShareType == ShareType.Shares)
             .Select(h => new
             {
                 h.CommonStockId,
@@ -178,6 +178,7 @@ public class HoldingsValueRecalculator
                 .Include(h => h.ManagerEntries)
                 .Where(h =>
                     h.ValuePending
+                    && h.ShareType == ShareType.Shares
                     && h.CommonStockId == pair.CommonStockId
                     && h.ListedTicker == pair.ListedTicker
                     && h.ReportDate == pair.ReportDate
@@ -306,6 +307,7 @@ public class HoldingsValueRecalculator
                 .Include(h => h.ManagerEntries)
                 .Where(h =>
                     h.ValuePending
+                    && h.ShareType == ShareType.Shares
                     && h.CommonStockId == stockId
                     && h.ListedTicker == listedTicker
                     && h.ReportDate == reportDate
