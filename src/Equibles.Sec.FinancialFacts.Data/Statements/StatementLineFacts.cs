@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 
@@ -38,6 +39,11 @@ public static class StatementLineFacts
     // calendar drift. Longer durations are inception-to-date or multi-year.
     public const int MaxSupportedDurationDays = 380;
 
+    // How far a balance sheet's stated date may sit from the end of its period's own flows.
+    // Two datings within a week are one balance sheet (ON's 09-28 beside a one-line 09-30
+    // stray, DE's 10-30 beside 10-31), never two periods, which are a quarter apart.
+    public const int BalanceSheetDateToleranceDays = 7;
+
     /// <summary>
     /// The statement's own reporting endpoint, and the facts that share it. A
     /// filing re-reports comparative prior endpoints under one fiscal stamp, so
@@ -57,8 +63,10 @@ public static class StatementLineFacts
     /// under the stamp but measuring something else — a payment window (OPRA's
     /// 2023-01-12 dividend, filed as FY2022) or a point disclosure — can be dated
     /// later and drag the anchor off the period, dropping every real line. Falls
-    /// back to any bounded span, then to every fact, so a point-only statement
-    /// (every balance sheet) still anchors on its latest point.
+    /// back to any bounded span, then to every fact. A point-only statement, every
+    /// balance sheet, has no span to measure and lands on its latest point, which a
+    /// stray later instant hijacks; a balance sheet is dated by
+    /// <see cref="PickBalanceSheetDate"/> first and reaches this ladder only as a fallback.
     /// </remarks>
     public static List<FinancialFact> AnchorToLatestPeriodEnd(
         IReadOnlyCollection<FinancialFact> facts,
@@ -117,6 +125,71 @@ public static class StatementLineFacts
             ? spanDays >= MinAnnualSpanDays && spanDays <= MaxSupportedDurationDays
             : spanDays >= 1 && spanDays <= MaxDiscreteQuarterDays;
     }
+
+    /// <summary>
+    /// <see cref="MeasuresGranularity"/> as a query predicate, built from the same bounds
+    /// so a span the pick rejects can never set a date in SQL either.
+    /// </summary>
+    public static Expression<Func<FinancialFact, bool>> MeasuresGranularityInSql(
+        SecFiscalPeriod fiscalPeriod
+    ) =>
+        fiscalPeriod == SecFiscalPeriod.FullYear
+            ? f =>
+                f.PeriodEnd >= f.PeriodStart.AddDays(MinAnnualSpanDays)
+                && f.PeriodEnd <= f.PeriodStart.AddDays(MaxSupportedDurationDays)
+            : f =>
+                f.PeriodEnd >= f.PeriodStart.AddDays(1)
+                && f.PeriodEnd <= f.PeriodStart.AddDays(MaxDiscreteQuarterDays);
+
+    /// <summary>
+    /// Where a period's own flows end: the latest end among the spans that carry at least
+    /// half the bucket's fullest flow-concept count. Never a plain maximum: a single
+    /// re-stamped span ends latest and would date the whole balance sheet by itself (LAKE's
+    /// FY2023 bucket holds a 1-concept 2023-05-01 to 2024-04-30 span beside its 23-concept
+    /// year ending 2023-01-31). Never the fullest either: a predecessor stub carries a whole
+    /// statement, cash flow included, while the quarter's own cash flow is year-to-date and
+    /// fails the span gate (BALY's Jan 1 to Feb 7 2025 column, 29 concepts, beside its 23-concept
+    /// quarter ending 2025-06-30). Null when nothing measures the period.
+    /// </summary>
+    public static DateOnly? PickFlowPeriodEnd(
+        IReadOnlyCollection<(DateOnly Date, int ConceptCount)> measuredEnds
+    )
+    {
+        if (measuredEnds.Count == 0)
+            return null;
+        var fullest = measuredEnds.Max(e => e.ConceptCount);
+        return measuredEnds.Where(e => e.ConceptCount * 2 >= fullest).Max(e => (DateOnly?)e.Date);
+    }
+
+    /// <summary>
+    /// The date a period's balance sheet is stated at: the stated instant date within
+    /// <see cref="BalanceSheetDateToleranceDays"/> of where the period's own flows end that
+    /// carries the most balance-sheet concepts, nearest then earliest on a tie. Null when no
+    /// stated date lies within the tolerance.
+    /// </summary>
+    /// <remarks>
+    /// A balance sheet has no span the anchor could measure, so its bucket's latest instant
+    /// used to date it, and a subsequent-event stray (GE's 2020-01-01 after a 2019-12-31 year
+    /// end) or the next year's sheet filed under this year's label (HD dates a May 2020
+    /// quarter's flows and its May 2021 balance sheet with the same fiscal stamp) took the
+    /// whole statement. The flows say where the period ends; among the datings within a week
+    /// of that, the fullest is the sheet itself and the others are strays.
+    /// </remarks>
+    public static DateOnly? PickBalanceSheetDate(
+        DateOnly flowPeriodEnd,
+        IReadOnlyCollection<(DateOnly Date, int ConceptCount)> statedDates
+    )
+    {
+        return statedDates
+            .Where(d => DaysApart(d.Date, flowPeriodEnd) <= BalanceSheetDateToleranceDays)
+            .OrderByDescending(d => d.ConceptCount)
+            .ThenBy(d => DaysApart(d.Date, flowPeriodEnd))
+            .ThenBy(d => d.Date)
+            .Select(d => (DateOnly?)d.Date)
+            .FirstOrDefault();
+    }
+
+    private static int DaysApart(DateOnly a, DateOnly b) => Math.Abs(a.DayNumber - b.DayNumber);
 
     /// <summary>
     /// The currently-reported fact among a fiscal period's candidates. A 10-Q

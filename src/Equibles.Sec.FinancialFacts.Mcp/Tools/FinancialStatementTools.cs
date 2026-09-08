@@ -122,32 +122,64 @@ public class FinancialStatementTools
                 // Period availability is scoped to the requested statement's
                 // concepts: a (year, Q4) that only exists via balance-sheet
                 // instants must not validate an income-statement request and
-                // then render an empty table.
+                // then render an empty table. The balance sheet is the exception:
+                // it is dated by its period's flows and loaded by that date, and the
+                // newest period's instants can sit one bucket away (HD's May 2026
+                // sheet is stamped fiscal 2026 while its flows are stamped 2027), so
+                // a period with flows must be offered even when it holds no instant.
                 var (selectedYear, selectedPeriod, periodError) = await ResolveStatementPeriod(
                     stock,
                     statementType,
                     year,
                     requestedPeriod,
+                    statementType == FinancialStatementType.BalanceSheet
+                        ? await StatementConceptIds()
+                        : conceptIds,
                     conceptIds
                 );
                 if (periodError != null)
                     return periodError;
 
-                var facts = await _financialFactRepository
-                    .GetConsolidatedByStock(stock)
-                    .Where(f =>
-                        f.FiscalYear == selectedYear
-                        && conceptIds.Contains(f.FinancialConceptId)
-                        && (
-                            f.PeriodType != FactPeriodType.Duration
-                            || f.PeriodEnd >= f.PeriodStart
-                                && f.PeriodEnd
-                                    <= f.PeriodStart.AddDays(
-                                        StatementLineFacts.MaxSupportedDurationDays
-                                    )
+                // A balance sheet is dated where its period's own flows end and loaded at
+                // that date from whichever bucket holds it: the bucket's own latest instant
+                // is a subsequent-event stray for GE (2020-01-01 over 2019-12-31) and the
+                // NEXT year's sheet for every January-year-end retailer. With no flow to date
+                // it by, the bucket-and-anchor path below still applies.
+                var balanceSheetDate =
+                    statementType == FinancialStatementType.BalanceSheet
+                        ? await BalanceSheetDateResolver.Resolve(
+                            _financialFactRepository,
+                            _financialConceptRepository,
+                            stock,
+                            selectedYear,
+                            selectedPeriod
                         )
-                    )
-                    .ToListAsync();
+                        : null;
+
+                var facts = balanceSheetDate is { } statedAt
+                    ? await _financialFactRepository
+                        .GetConsolidatedByStock(stock)
+                        .Where(f =>
+                            conceptIds.Contains(f.FinancialConceptId)
+                            && f.PeriodEnd == statedAt
+                            && f.PeriodStart == statedAt
+                        )
+                        .ToListAsync()
+                    : await _financialFactRepository
+                        .GetConsolidatedByStock(stock)
+                        .Where(f =>
+                            f.FiscalYear == selectedYear
+                            && conceptIds.Contains(f.FinancialConceptId)
+                            && (
+                                f.PeriodType != FactPeriodType.Duration
+                                || f.PeriodEnd >= f.PeriodStart
+                                    && f.PeriodEnd
+                                        <= f.PeriodStart.AddDays(
+                                            StatementLineFacts.MaxSupportedDurationDays
+                                        )
+                            )
+                        )
+                        .ToListAsync();
 
                 if (statementType != FinancialStatementType.BalanceSheet)
                 {
@@ -160,7 +192,8 @@ public class FinancialStatementTools
                         .AppendDerived(facts, rejectNegativeConceptIds)
                         .ToList();
                 }
-                facts = facts.Where(f => f.FiscalPeriod == selectedPeriod).ToList();
+                if (balanceSheetDate == null)
+                    facts = facts.Where(f => f.FiscalPeriod == selectedPeriod).ToList();
 
                 if (facts.Count == 0)
                     return $"No {statementType.NameForHumans().ToLowerInvariant()} line items "
@@ -170,7 +203,8 @@ public class FinancialStatementTools
                 // A filing re-reports comparative spans under its own fiscal stamp, and a stale
                 // concept can retain an earlier end under the same (year, period). Anchor the
                 // statement to one actual period end before selecting line values so it cannot
-                // silently combine different balance dates or flow endpoints.
+                // silently combine different balance dates or flow endpoints. A balance sheet
+                // loaded by its date already shares one; the anchor is a no-op there.
                 // No balance-sheet dates are loaded, and none are needed: this tool reads
                 // GetConsolidatedByStock, so the latest conforming span IS the entity's own
                 // measured endpoint and the rule provably cannot move a consolidated-only
@@ -309,6 +343,25 @@ public class FinancialStatementTools
         return result.ToString();
     }
 
+    // The concept ids of every statement line, so a balance-sheet period is offered wherever
+    // its flows are stamped.
+    private async Task<HashSet<Guid>> StatementConceptIds()
+    {
+        var lines = Enum.GetValues<FinancialStatementType>()
+            .SelectMany(FinancialStatementConcepts.For)
+            .ToList();
+        var (taxonomies, tags) = StatementLineFacts.CollectConceptPairs(lines);
+        return (
+            await _financialConceptRepository
+                .GetMatching(taxonomies, tags)
+                .Select(c => c.Id)
+                .ToListAsync()
+        ).ToHashSet();
+    }
+
+    // availabilityConceptIds decides which periods may be selected; statementConceptIds is the
+    // requested statement's own set, which alone says whether that statement was ingested at all;
+    // when the two sets are equal the availability query has already proved it.
     private async Task<(
         int FiscalYear,
         SecFiscalPeriod FiscalPeriod,
@@ -318,6 +371,7 @@ public class FinancialStatementTools
         FinancialStatementType statementType,
         int? year,
         SecFiscalPeriod? requestedPeriod,
+        IReadOnlySet<Guid> availabilityConceptIds,
         IReadOnlySet<Guid> statementConceptIds
     )
     {
@@ -325,7 +379,7 @@ public class FinancialStatementTools
         var availablePeriods = await _financialFactRepository
             .GetConsolidatedByStock(stock)
             .Where(f =>
-                statementConceptIds.Contains(f.FinancialConceptId)
+                availabilityConceptIds.Contains(f.FinancialConceptId)
                 && (
                     f.PeriodType != FactPeriodType.Duration
                     || f.PeriodEnd >= f.PeriodStart
@@ -337,7 +391,15 @@ public class FinancialStatementTools
             .Distinct()
             .ToListAsync();
 
-        if (availablePeriods.Count == 0)
+        var statementIngested =
+            availablePeriods.Count > 0
+            && (
+                statementConceptIds.SetEquals(availabilityConceptIds)
+                || await _financialFactRepository
+                    .GetConsolidatedByStock(stock)
+                    .AnyAsync(f => statementConceptIds.Contains(f.FinancialConceptId))
+            );
+        if (!statementIngested)
         {
             // Distinguish "nothing ingested at all" from "nothing for THIS
             // statement" so the caller isn't told a covered company is absent.
