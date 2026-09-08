@@ -244,24 +244,54 @@ public class StatementLineFactsAnchorTests
         anchored.Should().BeEquivalentTo([quarter, alsoTheQuarter]);
     }
 
+    // The floor is a floor, not an equality: the confirmed date may sit ABOVE the latest
+    // consolidated span. A filer whose only consolidated span under the stamp is the
+    // comparative still gets its real quarter, and not the segment window past it.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_ReportedPeriodEndAboveTheMeasuredSpan_AnchorsThere()
+    {
+        var consolidatedComparative = Duration(
+            new DateOnly(2024, 9, 1),
+            new DateOnly(2024, 11, 29),
+            10m
+        );
+        var theQuarter = Dimensional(
+            Duration(new DateOnly(2024, 11, 30), new DateOnly(2025, 2, 28), 1_000m)
+        );
+        var alsoTheQuarter = Dimensional(
+            Duration(new DateOnly(2024, 11, 30), new DateOnly(2025, 2, 28), 500m)
+        );
+        var segmentWindow = Dimensional(
+            Duration(new DateOnly(2025, 3, 1), new DateOnly(2025, 3, 26), 7m)
+        );
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [consolidatedComparative, theQuarter, alsoTheQuarter, segmentWindow],
+            SecFiscalPeriod.Q1,
+            reportedPeriodEnd: new DateOnly(2025, 2, 28)
+        );
+
+        anchored.Should().BeEquivalentTo([theQuarter, alsoTheQuarter]);
+    }
+
     // The balance-sheet date is evidence, never an override. A filer can file its
-    // quarter-end balance sheet under the NEXT fiscal stamp, leaving only the prior
-    // year-end instant under this one (DELL); anchoring on it would replace a complete
+    // quarter-end balance sheet under the NEXT fiscal stamp, leaving only the prior year's
+    // same-quarter instant under this one (DELL); anchoring on it would replace a complete
     // quarter with the comparative column.
     [Fact]
     public void AnchorToLatestPeriodEnd_ReportedPeriodEndBelowAMeasuredSpan_KeepsTheStatement()
     {
         var priorYearComparative = Duration(
-            new DateOnly(2016, 11, 5),
-            new DateOnly(2017, 2, 3),
+            new DateOnly(2024, 2, 3),
+            new DateOnly(2024, 5, 3),
             10m
         );
-        var quarter = Duration(new DateOnly(2017, 2, 4), new DateOnly(2017, 5, 5), 1_000m);
+        var quarter = Duration(new DateOnly(2025, 2, 1), new DateOnly(2025, 5, 2), 1_000m);
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [priorYearComparative, quarter],
             SecFiscalPeriod.Q1,
-            reportedPeriodEnd: new DateOnly(2017, 2, 3)
+            reportedPeriodEnd: new DateOnly(2024, 5, 3)
         );
 
         anchored.Should().BeEquivalentTo([quarter]);
