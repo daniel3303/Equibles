@@ -171,7 +171,16 @@ public class FinancialStatementTools
                 // concept can retain an earlier end under the same (year, period). Anchor the
                 // statement to one actual period end before selecting line values so it cannot
                 // silently combine different balance dates or flow endpoints.
-                facts = StatementLineFacts.AnchorToLatestPeriodEnd(facts, selectedPeriod);
+                // No balance-sheet date is loaded, and none is needed: this tool reads
+                // GetConsolidatedByStock, so the latest conforming span IS the entity's own
+                // measured endpoint and the rule provably cannot move a consolidated-only
+                // fact set (StatementLineFactsAnchorTests). A surface that also loads
+                // DIMENSIONAL facts must pass one — see FinancialStatementsHelper.
+                facts = StatementLineFacts.AnchorToLatestPeriodEnd(
+                    facts,
+                    selectedPeriod,
+                    reportedPeriodEnd: null
+                );
 
                 // A 10-Q tags each line under one fiscal (year, period) for both the
                 // discrete quarter and the fiscal year-to-date span, and re-reports prior

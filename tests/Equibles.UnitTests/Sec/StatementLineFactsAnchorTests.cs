@@ -26,7 +26,8 @@ public class StatementLineFactsAnchorTests
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [revenue, operatingCashFlow, cashAtEndOfPeriod, dividendPaymentDate],
-            SecFiscalPeriod.FullYear
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: null
         );
 
         anchored
@@ -50,7 +51,8 @@ public class StatementLineFactsAnchorTests
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [comparative, currentAssets, currentLiabilities],
-            SecFiscalPeriod.FullYear
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: null
         );
 
         anchored.Should().BeEquivalentTo([currentAssets, currentLiabilities]);
@@ -65,7 +67,8 @@ public class StatementLineFactsAnchorTests
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [priorYear, currentYear],
-            SecFiscalPeriod.FullYear
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: null
         );
 
         anchored.Should().BeEquivalentTo([currentYear]);
@@ -90,7 +93,8 @@ public class StatementLineFactsAnchorTests
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [operatingCashFlow, dividendPaymentDate],
-            SecFiscalPeriod.FullYear
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: null
         );
 
         anchored
@@ -111,7 +115,8 @@ public class StatementLineFactsAnchorTests
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [earlier, latest],
-            SecFiscalPeriod.FullYear
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: null
         );
 
         anchored.Should().BeEquivalentTo([latest]);
@@ -120,7 +125,10 @@ public class StatementLineFactsAnchorTests
     [Fact]
     public void AnchorToLatestPeriodEnd_NoFacts_ReturnsEmpty()
     {
-        StatementLineFacts.AnchorToLatestPeriodEnd([], SecFiscalPeriod.FullYear).Should().BeEmpty();
+        StatementLineFacts
+            .AnchorToLatestPeriodEnd([], SecFiscalPeriod.FullYear, reportedPeriodEnd: null)
+            .Should()
+            .BeEmpty();
     }
 
     // A span that measures something OTHER than the period drags the anchor off it just as a
@@ -135,7 +143,8 @@ public class StatementLineFactsAnchorTests
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [quarter, twoQuarters],
-            SecFiscalPeriod.Q1
+            SecFiscalPeriod.Q1,
+            reportedPeriodEnd: null
         );
 
         anchored.Should().BeEquivalentTo([quarter]);
@@ -151,7 +160,8 @@ public class StatementLineFactsAnchorTests
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [fiscalYear, paymentWindow],
-            SecFiscalPeriod.FullYear
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: null
         );
 
         anchored.Should().BeEquivalentTo([fiscalYear]);
@@ -167,7 +177,8 @@ public class StatementLineFactsAnchorTests
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [earlier, later],
-            SecFiscalPeriod.FullYear
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: null
         );
 
         anchored.Should().BeEquivalentTo([later]);
@@ -187,7 +198,8 @@ public class StatementLineFactsAnchorTests
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [earlier, latest],
-            SecFiscalPeriod.FullYear
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: null
         );
 
         anchored.Should().BeEquivalentTo([latest]);
@@ -203,10 +215,150 @@ public class StatementLineFactsAnchorTests
 
         var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
             [stub, inceptionToDate],
-            SecFiscalPeriod.FullYear
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: null
         );
 
         anchored.Should().BeEquivalentTo([stub]);
+    }
+
+    // A span of the right LENGTH can measure another period entirely. Adobe tags a 25-day
+    // segment window into its FY2025 Q1 bucket; it conforms, ends latest, and so anchored the
+    // quarter on 2025-03-26, rendering ONE line instead of the eleven of the real quarter.
+    // The company's own balance sheet for that quarter states 2025-02-28.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_ReportedPeriodEndWithAConformingSpan_AnchorsThere()
+    {
+        var quarter = Duration(new DateOnly(2024, 11, 30), new DateOnly(2025, 2, 28), 1_000m);
+        var alsoTheQuarter = Duration(new DateOnly(2024, 11, 30), new DateOnly(2025, 2, 28), 500m);
+        var segmentWindow = Dimensional(
+            Duration(new DateOnly(2025, 3, 1), new DateOnly(2025, 3, 26), 7m)
+        );
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [quarter, alsoTheQuarter, segmentWindow],
+            SecFiscalPeriod.Q1,
+            reportedPeriodEnd: new DateOnly(2025, 2, 28)
+        );
+
+        anchored.Should().BeEquivalentTo([quarter, alsoTheQuarter]);
+    }
+
+    // The balance-sheet date is evidence, never an override. A filer can file its
+    // quarter-end balance sheet under the NEXT fiscal stamp, leaving only the prior
+    // year-end instant under this one (DELL); anchoring on it would replace a complete
+    // quarter with the comparative column.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_ReportedPeriodEndBelowAMeasuredSpan_KeepsTheStatement()
+    {
+        var priorYearComparative = Duration(
+            new DateOnly(2016, 11, 5),
+            new DateOnly(2017, 2, 3),
+            10m
+        );
+        var quarter = Duration(new DateOnly(2017, 2, 4), new DateOnly(2017, 5, 5), 1_000m);
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [priorYearComparative, quarter],
+            SecFiscalPeriod.Q1,
+            reportedPeriodEnd: new DateOnly(2017, 2, 3)
+        );
+
+        anchored.Should().BeEquivalentTo([quarter]);
+    }
+
+    // A wrong balance-sheet date must change nothing. HOFT's FY2025 bucket carries a stray
+    // 2025-03-31 instant while its year ended 2025-02-02; no span ends there, so the ladder
+    // decides exactly as before.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_ReportedPeriodEndWithNoConformingSpan_FallsBack()
+    {
+        var trailingTwelveMonths = Duration(
+            new DateOnly(2024, 5, 6),
+            new DateOnly(2025, 5, 4),
+            1_000m
+        );
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [trailingTwelveMonths],
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: new DateOnly(2025, 3, 31)
+        );
+
+        anchored.Should().BeEquivalentTo([trailingTwelveMonths]);
+    }
+
+    // The proof behind the two OSS call sites passing null: over CONSOLIDATED facts the
+    // latest conforming span already IS the entity's own measured endpoint, so no date can
+    // move the anchor — above it nothing conforms, at or below it the floor refuses.
+    [Theory]
+    [InlineData(2021, 12, 31)]
+    [InlineData(2022, 6, 30)]
+    [InlineData(2022, 12, 31)]
+    [InlineData(2023, 3, 31)]
+    public void AnchorToLatestPeriodEnd_ConsolidatedFacts_AreUnmovedByAnyReportedEnd(
+        int year,
+        int month,
+        int day
+    )
+    {
+        var comparative = Duration(new DateOnly(2021, 1, 1), new DateOnly(2021, 12, 31), 900m);
+        var year2022 = Duration(new DateOnly(2022, 1, 1), new DateOnly(2022, 12, 31), 1_000m);
+        var closingCash = Instant(new DateOnly(2022, 12, 31), 250m);
+        List<FinancialFact> facts = [comparative, year2022, closingCash];
+
+        StatementLineFacts
+            .AnchorToLatestPeriodEnd(
+                facts,
+                SecFiscalPeriod.FullYear,
+                reportedPeriodEnd: new DateOnly(year, month, day)
+            )
+            .Should()
+            .BeEquivalentTo(
+                StatementLineFacts.AnchorToLatestPeriodEnd(
+                    facts,
+                    SecFiscalPeriod.FullYear,
+                    reportedPeriodEnd: null
+                )
+            );
+    }
+
+    // A balance sheet is every-fact-an-instant, so it has no conforming span to confirm and
+    // the rule can never fire — 0 of 268,534 balance-sheet buckets move on prod.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_AllInstantStatement_IgnoresTheReportedPeriodEnd()
+    {
+        var comparative = Instant(new DateOnly(2021, 12, 31), 900m);
+        var currentAssets = Instant(new DateOnly(2022, 12, 31), 1_000m);
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [comparative, currentAssets],
+            SecFiscalPeriod.FullYear,
+            reportedPeriodEnd: new DateOnly(2021, 12, 31)
+        );
+
+        anchored.Should().BeEquivalentTo([currentAssets]);
+    }
+
+    // A period a filer tagged only per-segment has no measured consolidated span to floor
+    // against, so a confirmed date still anchors it.
+    [Fact]
+    public void AnchorToLatestPeriodEnd_DimensionalOnlyAtTheReportedEnd_StillAnchorsThere()
+    {
+        var segmentQuarter = Dimensional(
+            Duration(new DateOnly(2024, 11, 30), new DateOnly(2025, 2, 28), 40m)
+        );
+        var laterSegmentWindow = Dimensional(
+            Duration(new DateOnly(2025, 3, 1), new DateOnly(2025, 3, 26), 7m)
+        );
+
+        var anchored = StatementLineFacts.AnchorToLatestPeriodEnd(
+            [segmentQuarter, laterSegmentWindow],
+            SecFiscalPeriod.Q1,
+            reportedPeriodEnd: new DateOnly(2025, 2, 28)
+        );
+
+        anchored.Should().BeEquivalentTo([segmentQuarter]);
     }
 
     private static FinancialFact Dimensional(FinancialFact fact)
