@@ -741,7 +741,14 @@ public class StockTabService
                 .ToList();
         }
         facts = facts.Where(f => f.FiscalPeriod == fiscalPeriod).ToList();
-        facts = StatementLineFacts.AnchorToLatestPeriodEnd(facts, fiscalPeriod);
+        // Consolidated facts only (GetConsolidatedByStock above), so the latest conforming
+        // span is already the entity's own measured endpoint and no balance-sheet date can
+        // move the anchor — proved in StatementLineFactsAnchorTests.
+        facts = StatementLineFacts.AnchorToLatestPeriodEnd(
+            facts,
+            fiscalPeriod,
+            reportedPeriodEnd: null
+        );
 
         // The currently-reported fact per concept: span-aware so a quarter never
         // shows the 10-Q's year-to-date figure, latest-ending so a comparative

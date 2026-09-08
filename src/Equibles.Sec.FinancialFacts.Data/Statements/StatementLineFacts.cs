@@ -43,6 +43,12 @@ public static class StatementLineFacts
     /// filing re-reports comparative prior endpoints under one fiscal stamp, so
     /// anchoring keeps a statement from mixing two reporting dates.
     /// </summary>
+    /// <param name="reportedPeriodEnd">
+    /// The date the period's own consolidated balance sheet states, or null when the
+    /// caller has none. A span of the right LENGTH can still measure another period
+    /// (a trailing-twelve-month window, or a later quarter stamped into this bucket),
+    /// and this is the only independent evidence of where the period ends.
+    /// </param>
     /// <remarks>
     /// A statement ends where the spans that MEASURE ITS PERIOD end. A fact filed
     /// under the stamp but measuring something else — a payment window (OPRA's
@@ -50,21 +56,33 @@ public static class StatementLineFacts
     /// later and drag the anchor off the period, dropping every real line. Falls
     /// back to any bounded span, then to every fact, so a point-only statement
     /// (every balance sheet) still anchors on its latest point.
-    ///
-    /// A conforming span belonging to ANOTHER period is still not separable here
-    /// (a trailing-twelve-month window, or a later quarter stamped into this
-    /// bucket) — the only arbiter is the period's own consolidated endpoint, which
-    /// lives in a different statement's concepts and is not loaded. See #8277.
     /// </remarks>
     public static List<FinancialFact> AnchorToLatestPeriodEnd(
         IReadOnlyCollection<FinancialFact> facts,
-        SecFiscalPeriod fiscalPeriod
+        SecFiscalPeriod fiscalPeriod,
+        DateOnly? reportedPeriodEnd
     )
     {
         if (facts.Count == 0)
             return [];
 
         var conforming = facts.Where(f => MeasuresGranularity(f, fiscalPeriod)).ToList();
+
+        // The balance-sheet date settles which same-length span measures THIS period —
+        // but only at or above the latest span the entity itself measured. A filer can file
+        // its quarter-end balance sheet under the NEXT fiscal stamp (DELL), leaving only
+        // the prior year's same-quarter instant in this bucket; anchoring there would
+        // publish the comparative column in place of a complete statement. A period tagged
+        // only per-segment has no such span, so a confirmed date still anchors it.
+        if (reportedPeriodEnd is { } reported && conforming.Any(f => f.PeriodEnd == reported))
+        {
+            var measured = conforming
+                .Where(f => string.IsNullOrEmpty(f.DimensionsKey))
+                .Select(f => (DateOnly?)f.PeriodEnd)
+                .Max();
+            if (measured is null || reported >= measured)
+                return facts.Where(f => f.PeriodEnd == reported).ToList();
+        }
         var spans = facts
             .Where(f =>
                 f.PeriodEnd > f.PeriodStart
