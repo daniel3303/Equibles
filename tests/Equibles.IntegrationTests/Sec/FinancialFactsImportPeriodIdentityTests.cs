@@ -248,9 +248,20 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         fact.FiscalPeriod.Should().Be(SecFiscalPeriod.FullYear);
     }
 
-    [Fact]
-    public async Task Import_OlderImporterVersion_ReplaysAndCorrectsExistingJnjFiscalYear()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Import_OlderImporterVersion_ReplaysAndCorrectsExistingFiscalIdentity(
+        bool interimInstant
+    )
     {
+        var periodStart = interimInstant ? new DateOnly(2020, 5, 3) : new DateOnly(2024, 12, 30);
+        var periodEnd = interimInstant ? periodStart : new DateOnly(2025, 12, 28);
+        var oldYear = interimInstant ? 2020 : 2026;
+        var expectedYear = interimInstant ? 2021 : 2025;
+        var period = interimInstant ? SecFiscalPeriod.Q1 : SecFiscalPeriod.FullYear;
+        var form = interimInstant ? DocumentType.TenQ : DocumentType.TenK;
+        var factId = Guid.NewGuid();
         var stock = new CommonStock
         {
             Id = Guid.NewGuid(),
@@ -258,7 +269,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
             Name = "Johnson & Johnson",
             Cik = "0000200406",
             FiscalYearEndMonth = 1,
-            FiscalYearEndDay = 3,
+            FiscalYearEndDay = interimInstant ? 31 : 3,
         };
         var concept = new FinancialConcept
         {
@@ -287,9 +298,9 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                         Id = documentId,
                         CommonStock = stock,
                         Content = content,
-                        DocumentType = DocumentType.TenK,
+                        DocumentType = form,
                         ReportingDate = filed,
-                        ReportingForDate = new DateOnly(2025, 12, 28),
+                        ReportingForDate = periodEnd,
                         AccessionNumber = accession,
                     }
                 );
@@ -297,16 +308,19 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                 .Add(
                     new FinancialFact
                     {
+                        Id = factId,
                         CommonStockId = stock.Id,
                         FinancialConceptId = concept.Id,
                         Unit = "USD",
-                        PeriodType = FactPeriodType.Duration,
-                        PeriodStart = new DateOnly(2024, 12, 30),
-                        PeriodEnd = new DateOnly(2025, 12, 28),
+                        PeriodType = interimInstant
+                            ? FactPeriodType.Instant
+                            : FactPeriodType.Duration,
+                        PeriodStart = periodStart,
+                        PeriodEnd = periodEnd,
                         Value = 94_200_000_000m,
-                        FiscalYear = 2026,
-                        FiscalPeriod = SecFiscalPeriod.FullYear,
-                        Form = DocumentType.TenK,
+                        FiscalYear = oldYear,
+                        FiscalPeriod = period,
+                        Form = form,
                         FiledDate = filed,
                         AccessionNumber = accession,
                     }
@@ -341,13 +355,13 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                             [
                                 new CompanyFactValue
                                 {
-                                    Start = new DateOnly(2024, 12, 30),
-                                    End = new DateOnly(2025, 12, 28),
+                                    Start = interimInstant ? null : periodStart,
+                                    End = periodEnd,
                                     Val = 94_200_000_000m,
                                     Accn = accession,
-                                    Fy = 2026,
-                                    Fp = "FY",
-                                    Form = "10-K",
+                                    Fy = oldYear,
+                                    Fp = interimInstant ? "Q1" : "FY",
+                                    Form = interimInstant ? "10-Q" : "10-K",
                                     Filed = filed,
                                 },
                             ],
@@ -377,8 +391,9 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         var status = await verify
             .Set<FinancialFactsSyncStatus>()
             .SingleAsync(s => s.CommonStockId == stock.Id, CancellationToken.None);
-        fact.FiscalYear.Should().Be(2025);
-        fact.FiscalPeriod.Should().Be(SecFiscalPeriod.FullYear);
+        fact.Id.Should().Be(factId, "replay updates the existing natural-key row");
+        fact.FiscalYear.Should().Be(expectedYear);
+        fact.FiscalPeriod.Should().Be(period);
         fact.DocumentId.Should().Be(documentId);
         status.ImporterVersion.Should().Be(FinancialFactsImportService.CurrentImporterVersion);
     }

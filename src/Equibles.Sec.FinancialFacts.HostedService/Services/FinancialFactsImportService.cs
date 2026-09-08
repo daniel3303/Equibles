@@ -35,7 +35,7 @@ public class FinancialFactsImportService
     // Bump whenever parsing, fiscal identity, or quality filtering changes existing rows. The
     // per-company checkpoint forces a full Company Facts replay without racing the old worker
     // during an additive migration rollout.
-    internal const int CurrentImporterVersion = 4;
+    internal const int CurrentImporterVersion = 5;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ISecEdgarClient _secEdgarClient;
@@ -335,15 +335,15 @@ public class FinancialFactsImportService
         // measures — the filing's fy/fp identifies the filing, not each
         // comparable-year value inside it (#982). Resolver returns null when
         // FYE info is missing or the duration shape is unrecognised; the
-        // original SEC-supplied identity is the fallback. Interim-instant
-        // classification is opted into only on the fp-less path, so fp-carrying
-        // values keep the exact identities they have always had.
+        // original SEC-supplied identity is the fallback. Instants and durations
+        // must use the same date-derived year; SEC fy names the filing and can
+        // differ from the calendar year in which the measured fiscal year ends.
         var resolved = FiscalPeriodResolver.Resolve(
             periodStart,
             value.End,
             stock.FiscalYearEndMonth,
             stock.FiscalYearEndDay,
-            classifyInterimInstants: !hasMappedFp
+            classifyInterimInstants: true
         );
         // With neither a mappable fp nor a date-derived identity the period cannot be
         // placed — defaulting would route the fact into the annual bucket (the
