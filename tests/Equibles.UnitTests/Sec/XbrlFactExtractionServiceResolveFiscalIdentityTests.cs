@@ -13,6 +13,28 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class XbrlFactExtractionServiceResolveFiscalIdentityTests
 {
+    [Theory]
+    [InlineData(2025, 5, 4, 1, 31, 2026, SecFiscalPeriod.Q1)]
+    [InlineData(2025, 8, 3, 1, 31, 2026, SecFiscalPeriod.Q2)]
+    [InlineData(2025, 11, 2, 1, 31, 2026, SecFiscalPeriod.Q3)]
+    [InlineData(2024, 12, 31, 9, 30, 2025, SecFiscalPeriod.Q1)]
+    public void ResolveFiscalIdentity_InterimInstant_UsesReportedFiscalQuarter(
+        int year,
+        int month,
+        int day,
+        int fyeMonth,
+        int fyeDay,
+        int expectedYear,
+        SecFiscalPeriod expectedPeriod
+    )
+    {
+        var date = new DateOnly(year, month, day);
+        XbrlFactExtractionService
+            .ResolveFiscalIdentity(date, date, fyeMonth, fyeDay)
+            .Should()
+            .Be((expectedYear, expectedPeriod));
+    }
+
     [Fact]
     public void ResolveFiscalIdentity_KnownFye_UsesResolver()
     {

@@ -22,11 +22,9 @@ internal static class FiscalPeriodResolver
     /// <para>
     /// <paramref name="classifyInterimInstants"/> opts an instant that is NOT at the
     /// fiscal-year end into quarter classification (which fiscal quarter contains the
-    /// date). Off by default: callers with an SEC-supplied fp rely on the null
-    /// fallback there, and re-labelling their instants would rewrite fiscal
-    /// identities corpus-wide. Only fp-less values (6-K interim balance sheets,
-    /// which SEC serves with <c>fp = null</c>) opt in — for them the date is the
-    /// only identity available.
+    /// date). Company Facts and filing-level extraction opt in so instants and
+    /// durations share a date-derived identity; callers retaining source-supplied
+    /// labels may leave it disabled and handle the unresolved result themselves.
     /// </para>
     /// </summary>
     public static (int Year, SecFiscalPeriod Period)? Resolve(

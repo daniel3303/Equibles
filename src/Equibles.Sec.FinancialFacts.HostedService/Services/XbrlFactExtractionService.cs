@@ -64,7 +64,8 @@ public class XbrlFactExtractionService
     // envelopes; the re-drain classifies every stock's ListedSecurityType.
     // Version 5: preserve every cover-page symbol observation as dated issuer evidence.
     // Version 6: fill absent standard consolidated facts in foreign financial reports.
-    public const int CurrentVersion = 6;
+    // Version 7 replays derived fiscal identities for interim instants and existing rows.
+    public const int CurrentVersion = 7;
 
     private const int InsertBatchSize = 1000;
 
@@ -209,11 +210,24 @@ public class XbrlFactExtractionService
         }
 
         await BatchPersister.Persist(facts, InsertBatchSize, items => FlushFacts(items, false));
-        await BatchPersister.Persist(
-            consolidatedFills,
-            InsertBatchSize,
-            items => FlushFacts(items, true)
-        );
+        foreach (
+            var group in consolidatedFills.GroupBy(fact =>
+                FiscalPeriodResolver.Resolve(
+                    fact.PeriodStart,
+                    fact.PeriodEnd,
+                    stock.FiscalYearEndMonth,
+                    stock.FiscalYearEndDay,
+                    classifyInterimInstants: true
+                ) != null
+            )
+        )
+        {
+            await BatchPersister.Persist(
+                group.ToList(),
+                InsertBatchSize,
+                items => FlushFacts(items, true, refreshFiscalIdentity: group.Key)
+            );
+        }
         await PersistDimensions(document, dimensionsByKey, cancellationToken);
 
         return facts.Count + consolidatedFills.Count;
@@ -436,7 +450,8 @@ public class XbrlFactExtractionService
             periodStart,
             periodEnd,
             fiscalYearEndMonth,
-            fiscalYearEndDay
+            fiscalYearEndDay,
+            classifyInterimInstants: true
         );
         if (resolved != null)
             return resolved.Value;
@@ -668,7 +683,11 @@ public class XbrlFactExtractionService
         return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
 
-    private async Task FlushFacts(List<FinancialFact> items, bool fillOnly)
+    private async Task FlushFacts(
+        List<FinancialFact> items,
+        bool fillOnly,
+        bool refreshFiscalIdentity = true
+    )
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
@@ -688,9 +707,26 @@ public class XbrlFactExtractionService
                 f.AccessionNumber,
                 f.DimensionsKey,
             });
+        if (fillOnly && !refreshFiscalIdentity)
+        {
+            // Calendar fallback must not replace fiscal labels supplied by the SEC.
+            await upsert.NoUpdate().RunAsync();
+            return;
+        }
         if (fillOnly)
         {
-            await upsert.NoUpdate().RunAsync();
+            // Preserve authoritative values and provenance; fiscal labels are derived
+            // from the same natural-key dates and must follow the current resolver.
+            await upsert
+                .WhenMatched(
+                    (existing, incoming) =>
+                        new FinancialFact
+                        {
+                            FiscalYear = incoming.FiscalYear,
+                            FiscalPeriod = incoming.FiscalPeriod,
+                        }
+                )
+                .RunAsync();
             return;
         }
         await upsert
@@ -698,6 +734,8 @@ public class XbrlFactExtractionService
                 (existing, incoming) =>
                     new FinancialFact
                     {
+                        FiscalYear = incoming.FiscalYear,
+                        FiscalPeriod = incoming.FiscalPeriod,
                         Value = incoming.Value,
                         FiledDate = incoming.FiledDate,
                         DocumentId = incoming.DocumentId,
