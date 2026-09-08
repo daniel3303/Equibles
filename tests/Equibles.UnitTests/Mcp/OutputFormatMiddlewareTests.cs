@@ -6,9 +6,10 @@ using Microsoft.AspNetCore.Http;
 namespace Equibles.UnitTests.Mcp;
 
 // What a caller has to send to get GCF, and what must happen when it sends nothing or
-// something unrecognized. The format is observed from inside next, because that is where
-// a tool runs; asserting it after the middleware returns would only prove the scope was
-// disposed. Shares EQUIBLES_OUTPUT_FORMAT with the other GCF suites.
+// something unrecognized. The format is observed from inside next, because that is where a
+// tool runs, and because after the middleware returns the async machinery has already put
+// the caller's context back whatever the scope did. Shares EQUIBLES_OUTPUT_FORMAT with the
+// other GCF suites.
 [Collection("EquiblesOutputFormatEnv")]
 public class OutputFormatMiddlewareTests : IDisposable
 {
@@ -63,6 +64,20 @@ public class OutputFormatMiddlewareTests : IDisposable
         _observed.Should().Be(McpOutputFormat.Markdown);
     }
 
+    // The header only wins when it parses. A stray value there must not veto the URL, or a
+    // client with one bad header setting could never ask for a format at all.
+    [Fact]
+    public async Task InvokeAsync_HeaderIsUnrecognized_TheQueryParameterStillDecides()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Headers[OutputFormatMiddleware.HeaderName] = "json";
+        context.Request.QueryString = new QueryString($"?{OutputFormatMiddleware.QueryName}=gcf");
+
+        await Sut().InvokeAsync(context);
+
+        _observed.Should().Be(McpOutputFormat.Gcf);
+    }
+
     [Fact]
     public async Task InvokeAsync_NoFormatRequested_LeavesTheProcessDefaultInPlace()
     {
@@ -98,32 +113,9 @@ public class OutputFormatMiddlewareTests : IDisposable
         _observed.Should().BeNull();
     }
 
-    // One caller's preference must not survive into the next request handled by the same
-    // thread, which is the whole risk of an ambient value.
-    [Fact]
-    public async Task InvokeAsync_Returns_TheScopeIsGone()
-    {
-        var context = new DefaultHttpContext();
-        context.Request.Headers[OutputFormatMiddleware.HeaderName] = "gcf";
-
-        await Sut().InvokeAsync(context);
-
-        OutputFormatScope.Current.Should().BeNull();
-        GcfTable.Enabled.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task InvokeAsync_NextThrows_TheScopeIsStillRestored()
-    {
-        var context = new DefaultHttpContext();
-        context.Request.Headers[OutputFormatMiddleware.HeaderName] = "gcf";
-
-        var sut = new OutputFormatMiddleware(_ =>
-            throw new InvalidOperationException("tool blew up")
-        );
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.InvokeAsync(context));
-
-        OutputFormatScope.Current.Should().BeNull();
-    }
+    // There is deliberately no test here that awaits InvokeAsync and then asserts the scope
+    // is gone. The async state machine restores the caller's ExecutionContext on return, so
+    // such a test passes even against a Dispose that restores nothing, and would claim
+    // coverage it does not have. The restore is pinned where it can actually be observed,
+    // synchronously, by OutputFormatScopeTests.Nested_Scopes_Restore_The_Enclosing_Value.
 }

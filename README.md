@@ -235,6 +235,15 @@ is used instead when it is smaller, otherwise it falls back to markdown. GCF car
 cells the markdown table would show, with the column names factored into a single header and
 the per-cell `| ` padding and separator row dropped.
 
+It reaches the answers rendered through `MarkdownTable.Render`, which today is the short-volume
+and short-interest tools, off-exchange volume, fails-to-deliver, congressional trades and member
+disclosures, the FRED series and calendar tools, CFTC positioning, CBOE ratios, FDA advisory
+meetings, government contracts, and the institution and adviser search tools. Tools that assemble
+their answer with `MarkdownTable.Start` and append rows themselves are **not** encoded, because
+those answers continue past the table with truncation notes and footnotes; that includes the
+price, financial-statement, insider, dividend, 13F-portfolio, fund-filing and filing-search
+tools. Routing them through the shared renderer is tracked separately.
+
 Ask for it **per request**, which is what a shared server wants, with either the
 `X-Equibles-Output-Format: gcf` header or an `?output_format=gcf` query parameter (the query
 parameter is there for clients whose only configuration is a URL). `markdown` is accepted the
@@ -251,7 +260,9 @@ connection opened earlier would carry whatever the opening request asked for.
 
 How much it saves depends on the shape of the table. Wide tables of short values save most;
 tables of comma-grouped money and share counts save least, because the encoder quotes any
-value containing a comma. On our own financial tables the wire is **7–10% shorter**.
+value containing a comma. Measured on real answers from three of the covered tools — 30
+sessions of daily short volume, 25 congressional trades, and 24 monthly observations of a FRED
+series — the wire is **11–14% shorter**.
 
 It is deliberately conservative: **every cell value is preserved verbatim** (the compact-USD,
 comma-grouped, adaptive-decimal and em-dash formatting is untouched — GCF only changes the

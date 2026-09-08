@@ -39,7 +39,9 @@ public class OutputFormatMiddleware
         }
     }
 
-    // The header wins over the query parameter, matching how a request states its API key.
+    // A recognised header wins over the query parameter, matching how a request states its
+    // API key. An unrecognised header is not a veto: it falls through, so a stray value in a
+    // client's header config cannot mask the format the URL asks for.
     private static bool TryReadRequestedFormat(HttpRequest request, out McpOutputFormat format)
     {
         if (OutputFormatScope.TryParse(request.Headers[HeaderName].ToString(), out format))
