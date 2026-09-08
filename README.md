@@ -258,11 +258,15 @@ the streamable HTTP transport works in both its stateless and session modes: the
 off that request and applies to it alone. A transport that instead dispatched calls on a
 connection opened earlier would carry whatever the opening request asked for.
 
-How much it saves depends on the shape of the table. Wide tables of short values save most;
-tables of comma-grouped money and share counts save least, because the encoder quotes any
-value containing a comma. Measured on real answers from three of the covered tools — 30
-sessions of daily short volume, 25 congressional trades, and 24 monthly observations of a FRED
-series — the wire is **11–14% shorter**.
+How much it saves depends on the shape of the answer. The table compresses, the prose around
+it does not, so a small table inside a long preamble saves least and a wide table of many
+short values saves most. Measured end to end against a deployed server on real answers from
+three of the covered tools, 30 sessions of daily short volume, 25 congressional trades and 24
+monthly observations of a FRED series, the answer text is **7 to 13% shorter** in characters.
+
+That is the text your client hands the model, not the HTTP payload. JSON escapes every
+quotation mark the encoder adds, so the transport bytes can grow on the same answer whose text
+shrank.
 
 It is deliberately conservative: **every cell value is preserved verbatim** (the compact-USD,
 comma-grouped, adaptive-decimal and em-dash formatting is untouched — GCF only changes the
