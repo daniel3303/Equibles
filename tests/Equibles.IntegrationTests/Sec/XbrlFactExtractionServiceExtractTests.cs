@@ -65,9 +65,17 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         dimension.Axis.Should().Be("srt:ProductOrServiceAxis");
         dimension.Member.Should().Be("aapl:IPhoneMember");
 
-        // Idempotency: a second sweep over the same envelope changes nothing.
+        // A version replay repairs derived labels without duplicating facts or dimensions.
+        var factId = fact.Id;
+        fact.FiscalYear = 2024;
+        fact.FiscalPeriod = SecFiscalPeriod.Q4;
+        await DbContext.SaveChangesAsync();
         var secondRun = await sut.Extract(document, CancellationToken.None);
         secondRun.Should().Be(1);
+        await DbContext.Entry(fact).ReloadAsync();
+        fact.Id.Should().Be(factId);
+        fact.FiscalYear.Should().Be(2025);
+        fact.FiscalPeriod.Should().Be(SecFiscalPeriod.Q1);
         (
             await DbContext
                 .Set<FinancialFact>()
@@ -122,6 +130,8 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
 
         // Model an authoritative API row occupying this exact natural key.
         consolidated.Value = 999m;
+        consolidated.FiscalYear = 2024;
+        consolidated.FiscalPeriod = SecFiscalPeriod.Q4;
         consolidated.DocumentId = null;
         consolidated.Frame = "CY2025Q1";
         await DbContext.SaveChangesAsync();
@@ -130,6 +140,8 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
 
         consolidated.Id.Should().Be(id);
         consolidated.Value.Should().Be(999m);
+        consolidated.FiscalYear.Should().Be(2025);
+        consolidated.FiscalPeriod.Should().Be(SecFiscalPeriod.Q1);
         consolidated.DocumentId.Should().BeNull();
         consolidated.Frame.Should().Be("CY2025Q1");
         (
@@ -139,6 +151,42 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         )
             .Should()
             .Be(2);
+    }
+
+    [Fact]
+    public async Task Extract_ForeignInstantWithoutFye_PreservesExistingAnnualIdentity()
+    {
+        var envelope = InlineEnvelope()
+            .Replace("scheme=\"cik\"", "scheme=\"http://www.sec.gov/CIK\"")
+            .Replace(
+                "<xbrli:startDate>2025-01-01</xbrli:startDate><xbrli:endDate>2025-03-31</xbrli:endDate>",
+                "<xbrli:instant>2025-12-31</xbrli:instant>"
+            );
+        var document = await SeedDocument(envelope);
+        document.DocumentType = DocumentType.SixK;
+        document.ReportingDate = new DateOnly(2026, 2, 1);
+        document.ReportingForDate = new DateOnly(2025, 12, 31);
+        document.CommonStock.FiscalYearEndMonth = null;
+        document.CommonStock.FiscalYearEndDay = null;
+        await DbContext.SaveChangesAsync();
+        var sut = BuildSut();
+        await sut.Extract(document, CancellationToken.None);
+        var consolidated = await DbContext
+            .Set<FinancialFact>()
+            .SingleAsync(f => f.DocumentId == document.Id && f.DimensionsKey == "");
+        consolidated.FiscalYear = 2025;
+        consolidated.FiscalPeriod = SecFiscalPeriod.FullYear;
+        consolidated.Value = 999m;
+        consolidated.DocumentId = null;
+        await DbContext.SaveChangesAsync();
+
+        await sut.Extract(document, CancellationToken.None);
+        await DbContext.Entry(consolidated).ReloadAsync();
+
+        consolidated.FiscalYear.Should().Be(2025);
+        consolidated.FiscalPeriod.Should().Be(SecFiscalPeriod.FullYear);
+        consolidated.Value.Should().Be(999m);
+        consolidated.DocumentId.Should().BeNull();
     }
 
     private async Task<Document> SeedDocument(string envelope)
