@@ -67,7 +67,13 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<NCenFiling>();
         builder.Entity<NCenServiceProvider>();
         builder.Entity<NportFiling>();
-        builder.Entity<NportHolding>();
+        builder.Entity<NportHolding>(b =>
+        {
+            b.HasIndex(h => h.Cusip)
+                .HasDatabaseName("IX_NportHolding_CusipFiling")
+                .IncludeProperties(h => h.NportFilingId)
+                .IsCreatedConcurrently();
+        });
         builder.Entity<ProcessedNportFiling>();
         builder.Entity<TranscriptCheckStatus>();
     }
