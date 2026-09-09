@@ -13,6 +13,75 @@ namespace Equibles.UnitTests.CorporateActions;
 
 public class StockSplitCaptureManagerTests
 {
+    [Theory]
+    [InlineData(StockSplitSource.Yahoo, StockSplitSource.External, true)]
+    [InlineData(StockSplitSource.External, StockSplitSource.Yahoo, false)]
+    [InlineData(StockSplitSource.SecFiling, StockSplitSource.External, false)]
+    [InlineData(StockSplitSource.Manual, StockSplitSource.SecFiling, false)]
+    [InlineData(StockSplitSource.Yahoo, StockSplitSource.Manual, true)]
+    public async Task Capture_SourcePrecedence_PreservesAuthoritativeRatio(
+        StockSplitSource storedSource,
+        StockSplitSource incomingSource,
+        bool replaces
+    )
+    {
+        await using var context = NewDb();
+        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "SPLT" };
+        var applied = new DateTime(2026, 8, 6, 0, 0, 0, DateTimeKind.Utc);
+        var existing = new StockSplit
+        {
+            CommonStockId = stock.Id,
+            PriceSeriesTicker = stock.Ticker,
+            EffectiveDate = new DateOnly(2025, 1, 29),
+            Numerator = 1m,
+            Denominator = 2m,
+            Source = storedSource,
+            PriceAdjustmentAppliedTime = applied,
+        };
+        context.AddRange(stock, existing);
+        await context.SaveChangesAsync();
+        var incoming = new CapturedSplit
+        {
+            EffectiveDate = existing.EffectiveDate,
+            Numerator = 1m,
+            Denominator = 60000m,
+            Source = incomingSource,
+        };
+
+        var changed = await NewManager(context).Capture(stock.Id, stock.Ticker, [incoming]);
+
+        changed.Should().Be(replaces ? 1 : 0);
+        context.ChangeTracker.Clear();
+        var actual = await context.Set<StockSplit>().SingleAsync();
+        actual.Denominator.Should().Be(replaces ? 60000m : 2m);
+        actual.Source.Should().Be(replaces ? incomingSource : storedSource);
+        actual.PriceAdjustmentAppliedTime.Should().Be(replaces ? null : applied);
+    }
+
+    [Fact]
+    public async Task Capture_SourceUpgradeWithoutRatioChange_RevalidatesAppliedMarker()
+    {
+        await using var context = NewDb();
+        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "SPLT" };
+        context.Add(stock);
+        await context.SaveChangesAsync();
+        var manager = NewManager(context);
+        await manager.Capture(stock.Id, stock.Ticker, [Split()]);
+        var existing = await context.Set<StockSplit>().SingleAsync();
+        var applied = DateTime.UtcNow;
+        existing.PriceAdjustmentAppliedTime = applied;
+        await context.SaveChangesAsync();
+        var incoming = Split();
+        incoming.Source = StockSplitSource.External;
+
+        (await manager.Capture(stock.Id, stock.Ticker, [incoming])).Should().Be(1);
+        context.ChangeTracker.Clear();
+        existing = await context.Set<StockSplit>().SingleAsync();
+        existing.Source.Should().Be(StockSplitSource.External);
+        existing.PriceAdjustmentAppliedTime.Should().BeNull();
+        (await manager.Capture(stock.Id, stock.Ticker, [Split(20m)])).Should().Be(0);
+    }
+
     private static EquiblesFinancialDbContext NewDb()
     {
         var options = new DbContextOptionsBuilder<EquiblesFinancialDbContext>()

@@ -92,14 +92,19 @@ public class StockSplitCaptureManager
                 changes++;
             }
             else if (
-                match.PriceSeriesTicker == null
-                || match.Numerator != split.Numerator
-                || match.Denominator != split.Denominator
+                split.Source >= match.Source
+                && (
+                    match.PriceSeriesTicker == null
+                    || match.Numerator != split.Numerator
+                    || match.Denominator != split.Denominator
+                    || match.Source != split.Source
+                )
             )
             {
                 match.PriceSeriesTicker = resolvedTicker;
                 match.Numerator = split.Numerator;
                 match.Denominator = split.Denominator;
+                match.Source = split.Source;
                 // Prices were adjusted for the old ratio — force a re-reconcile.
                 match.PriceAdjustmentAppliedTime = null;
                 changes++;
