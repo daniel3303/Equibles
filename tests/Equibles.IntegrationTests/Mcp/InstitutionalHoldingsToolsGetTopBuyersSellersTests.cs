@@ -19,8 +19,7 @@ namespace Equibles.IntegrationTests.Mcp;
 /// (Δ &lt; 0) ascending — and handles four boundary cases that the implementation has to
 /// get right: a fresh new position (no prior row), a sold-out position (no current row),
 /// an unchanged position (Δ = 0 → must be excluded from both lists), and the
-/// no-prior-quarter case (every holder is a "new" buyer because the prior quarter is
-/// empty).
+/// no-prior-quarter case (movement is unavailable without a comparison).
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : ParadeDbMcpTestBase
@@ -72,6 +71,8 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         };
         DbContext.Add(otherStock);
         DbContext.Add(MakeHolding(otherStock, soldOut, latest, shares: 10));
+        // A prior 13F establishes that the newcomer's missing stock position was an absence.
+        DbContext.Add(MakeHolding(otherStock, newcomer, prior, shares: 10));
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -125,7 +126,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
     }
 
     [Fact]
-    public async Task GetTopInstitutionalBuyersSellers_NoPriorQuarter_TreatsAllHoldersAsBuyers()
+    public async Task GetTopInstitutionalBuyersSellers_NoPriorQuarter_ReportsUnavailableComparison()
     {
         var stock = new CommonStock
         {
@@ -160,20 +161,10 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
 
         var output = await sut.GetTopInstitutionalBuyersSellers("MSFT");
 
-        // No prior quarter → both holders surface as buyers with their full positions.
-        var buyersSection = output.Substring(
-            output.IndexOf("## Top Buyers"),
-            output.IndexOf("## Top Sellers") - output.IndexOf("## Top Buyers")
-        );
-        buyersSection
-            .IndexOf("Alpha Capital")
-            .Should()
-            .BeLessThan(buyersSection.IndexOf("Beta Capital"));
-        buyersSection.Should().Contain("+5,000");
-        buyersSection.Should().Contain("+3,000");
-
-        // No sellers when there is no prior quarter.
-        output.Should().Contain("_No sellers this quarter._");
+        output.Should().Contain("No prior quarter");
+        output.Should().NotContain("## Top Buyers");
+        output.Should().NotContain("+5,000");
+        output.Should().NotContain("+3,000");
     }
 
     [Fact]
@@ -268,7 +259,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         var output = await sut.GetTopInstitutionalBuyersSellers("NVDA");
 
         // No buyers and no sellers — early-return message, not the per-section tables.
-        output.Should().Contain("No quarter-over-quarter movement found");
+        output.Should().Contain("No comparable quarter-over-quarter movement found");
         output.Should().NotContain("## Top Buyers");
         output.Should().NotContain("## Top Sellers");
     }
@@ -399,7 +390,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
 
         var output = await sut.GetTopInstitutionalBuyersSellers("GOOGL");
 
-        output.Should().Contain("No quarter-over-quarter movement found");
+        output.Should().Contain("No comparable quarter-over-quarter movement found");
     }
 
     private static InstitutionalHolding MakeHolding(
