@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Xml;
 using System.Xml.Linq;
 using Equibles.Core.AutoWiring;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Models;
@@ -83,6 +84,63 @@ public class StandaloneXbrlParser
         }
 
         return facts;
+    }
+
+    public List<ParsedFiscalYearEnd> ParseFiscalYearEnds(string xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml))
+            return [];
+        // Stored SEC TEXT bodies retain this SGML wrapper around the XML instance.
+        xml = xml.Trim();
+        if (
+            xml.StartsWith("<XBRL>", StringComparison.Ordinal)
+            && xml.EndsWith("</XBRL>", StringComparison.Ordinal)
+        )
+            xml = xml[6..^7].Trim();
+        XDocument document;
+        try
+        {
+            using var reader = XmlReader.Create(
+                new StringReader(xml),
+                new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null }
+            );
+            document = XDocument.Load(reader);
+        }
+        catch (System.Xml.XmlException)
+        {
+            return [];
+        }
+        if (document.Root?.Name != XbrlRoot)
+            return [];
+        var contexts = BuildContextMap(document.Root);
+        var observations = new List<ParsedFiscalYearEnd>();
+        foreach (var element in document.Root.Elements())
+        {
+            if (
+                element.Name.LocalName != "CurrentFiscalYearEndDate"
+                || !Uri.TryCreate(element.Name.NamespaceName, UriKind.Absolute, out var ns)
+                || ns.Host != "xbrl.sec.gov"
+                || !ns.AbsolutePath.StartsWith("/dei/", StringComparison.Ordinal)
+                || (string)element.Attribute(XsiNil) is "true" or "1"
+                || !contexts.TryGetValue(
+                    (string)element.Attribute("contextRef") ?? "",
+                    out var context
+                )
+                || string.IsNullOrWhiteSpace(context.ConsolidatedCik)
+                || !FiscalYearEndValueParser.TryParse(element.Value, out var date)
+            )
+                continue;
+            observations.Add(
+                new ParsedFiscalYearEnd(
+                    context.ConsolidatedCik,
+                    context.Start,
+                    context.End,
+                    date.Month,
+                    date.Day
+                )
+            );
+        }
+        return observations;
     }
 
     private static Dictionary<string, ParsedContext> BuildContextMap(XElement root)

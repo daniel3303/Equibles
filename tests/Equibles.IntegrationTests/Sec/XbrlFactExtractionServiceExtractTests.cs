@@ -1,14 +1,21 @@
+using System.Reflection;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
+using Equibles.Errors.BusinessLogic;
+using Equibles.Errors.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Media.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
+using Equibles.Sec.FinancialFacts.HostedService;
+using Equibles.Sec.FinancialFacts.HostedService.Configuration;
 using Equibles.Sec.FinancialFacts.HostedService.Services;
 using Equibles.Sec.FinancialFacts.Repositories;
+using Equibles.Sec.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
 using File = Equibles.Media.Data.Models.File;
@@ -196,6 +203,37 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
                 );
             unresolved.Value.Should().Be(123m);
             unresolved.FiscalPeriod.Should().Be(originalUnresolvedPeriod);
+
+            var scopes = ServiceScopeSubstitute.Create(
+                (typeof(EquiblesFinancialDbContext), DbContext),
+                (typeof(DocumentRepository), new DocumentRepository(DbContext)),
+                (typeof(XbrlFactExtractionService), BuildSut(true))
+            );
+            var worker = new XbrlFactsExtractionWorker(
+                NullLogger<XbrlFactsExtractionWorker>(),
+                scopes,
+                new ErrorReporter(scopes, NullLogger<ErrorReporter>()),
+                Options.Create(new XbrlFactsExtractionOptions { BatchSize = 1 })
+            );
+            await (Task)
+                typeof(XbrlFactsExtractionWorker)
+                    .GetMethod("DoWork", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(worker, [CancellationToken.None])!;
+            document.XbrlFactsAttempts.Should().Be(Document.MaxXbrlFactsAttempts);
+            document.XbrlFactsVersion.Should().BeLessThan(XbrlFactExtractionService.CurrentVersion);
+            (await DbContext.Set<Error>().CountAsync()).Should().Be(0);
+            (
+                await XbrlFactsExtractionWorker
+                    .SelectDueDocuments(
+                        DbContext
+                            .Set<Document>()
+                            .Where(d => d.XbrlStatus == XbrlCaptureStatus.Captured),
+                        DbContext.Set<FinancialFactsSyncStatus>()
+                    )
+                    .CountAsync()
+            )
+                .Should()
+                .Be(0);
         }
         else
             (await BuildSut(true).Extract(document, CancellationToken.None)).Should().Be(1);

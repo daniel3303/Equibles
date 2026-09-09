@@ -49,9 +49,39 @@ public class InlineXbrlFiscalYearEndTests
     [InlineData("xsi:nil=\"true\"")]
     [InlineData("xsi:nil=\"1\"")]
     [InlineData("format=\"ixt:date-month-day\"")]
-    public void RefusesNilOrTransformedMetadata(string attribute)
+    public void RefusesNilOrUndeclaredTransform(string attribute)
     {
         var html = Envelope().Replace("<ix:nonNumeric ", $"<ix:nonNumeric {attribute} ");
         new InlineXbrlParser().ParseEnvelope(html).FiscalYearEnds.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("03/31", "date-month-day", 3, 31)]
+    [InlineData("March&#160;31", "date-monthname-day-en", 3, 31)]
+    public void ReadsRegisteredTransformWithSourceNamespace(
+        string value,
+        string format,
+        int month,
+        int day
+    )
+    {
+        var html = Envelope(value)
+            .Replace(
+                "<html ",
+                "<html xmlns:transform=\"http://www.xbrl.org/inlineXBRL/transformation/2020-02-12\" "
+            )
+            .Replace("<ix:nonNumeric ", $"<ix:nonNumeric format=\"transform:{format}\" ");
+        var actual = new InlineXbrlParser()
+            .ParseEnvelope(html)
+            .FiscalYearEnds.Should()
+            .ContainSingle()
+            .Which;
+        actual.Month.Should().Be(month);
+        actual.Day.Should().Be(day);
+        var shadowed = html.Replace(
+            "<ix:nonNumeric ",
+            "<ix:nonNumeric xmlns:transform=\"https://example.com/untrusted\" "
+        );
+        new InlineXbrlParser().ParseEnvelope(shadowed).FiscalYearEnds.Should().BeEmpty();
     }
 }
