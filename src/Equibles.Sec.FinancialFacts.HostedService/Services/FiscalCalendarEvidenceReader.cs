@@ -19,7 +19,8 @@ namespace Equibles.Sec.FinancialFacts.HostedService.Services;
 public class FiscalCalendarEvidenceReader(
     IServiceScopeFactory scopeFactory,
     IFileManager fileManager,
-    InlineXbrlParser inlineParser
+    InlineXbrlParser inlineParser,
+    StandaloneXbrlParser standaloneParser = null
 )
 {
     private const int CalendarDocumentBatchSize = 16;
@@ -113,7 +114,10 @@ public class FiscalCalendarEvidenceReader(
                     .Where(d =>
                         batch.Contains(d.Id)
                         && d.XbrlStatus == XbrlCaptureStatus.Captured
-                        && d.XbrlType == XbrlType.InlineIxbrl
+                        && (
+                            d.XbrlType == XbrlType.InlineIxbrl
+                            || d.XbrlType == XbrlType.StandaloneXbrl
+                        )
                         && d.XbrlContent != null
                         && d.XbrlUncompressedSize != null
                         && d.XbrlUncompressedSize <= MaxCalendarEnvelopeBytes
@@ -128,9 +132,15 @@ public class FiscalCalendarEvidenceReader(
                     );
                     if (bytes.LongLength > MaxCalendarEnvelopeBytes)
                         continue;
-                    var parsed = inlineParser.ParseEnvelope(Encoding.UTF8.GetString(bytes));
+                    var envelope = Encoding.UTF8.GetString(bytes);
+                    var evidence =
+                        document.XbrlType == XbrlType.StandaloneXbrl
+                            ? (standaloneParser ?? new StandaloneXbrlParser()).ParseFiscalYearEnds(
+                                envelope
+                            )
+                            : inlineParser.ParseEnvelope(envelope).FiscalYearEnds;
                     observations.AddRange(
-                        parsed.FiscalYearEnds.Where(o =>
+                        evidence.Where(o =>
                             o.PeriodEnd == document.ReportingForDate
                             && ciks.Any(cik => SameCik(o.Cik, cik))
                         )

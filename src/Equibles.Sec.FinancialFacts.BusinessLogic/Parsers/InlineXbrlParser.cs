@@ -117,8 +117,7 @@ public class InlineXbrlParser
         foreach (var element in FindByLocalName(document, NonNumericLocalName))
         {
             if (
-                !string.IsNullOrWhiteSpace(element.GetAttribute("format"))
-                || (element.GetAttribute("xsi:nil") ?? element.GetAttribute("nil")) == "1"
+                (element.GetAttribute("xsi:nil") ?? element.GetAttribute("nil")) == "1"
                 || string.Equals(
                     element.GetAttribute("xsi:nil") ?? element.GetAttribute("nil"),
                     "true",
@@ -145,17 +144,19 @@ public class InlineXbrlParser
                 || string.IsNullOrWhiteSpace(context.ConsolidatedCik)
             )
                 continue;
-            // XML gMonthDay is source metadata, not a date inferred from a financial amount.
-            var value = element.TextContent.Trim();
+            var format = element.GetAttribute("format");
+            var formatParts = format?.Split(':');
             if (
-                value.Length != 7
-                || !value.StartsWith("--", StringComparison.Ordinal)
-                || !DateOnly.TryParseExact(
-                    "2000-" + value[2..],
-                    "yyyy-MM-dd",
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out var date
+                !string.IsNullOrWhiteSpace(format)
+                && (formatParts?.Length != 2 || formatParts.Any(string.IsNullOrWhiteSpace))
+            )
+                continue;
+            if (
+                !FiscalYearEndValueParser.TryParse(
+                    element.TextContent,
+                    out var date,
+                    formatParts?.Last(),
+                    formatParts?.Length == 2 ? ResolveNamespace(element, formatParts[0]) : null
                 )
             )
                 continue;
@@ -248,6 +249,19 @@ public class InlineXbrlParser
         if (string.IsNullOrWhiteSpace(value))
             return null;
         return string.Join(' ', value.Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static string ResolveNamespace(IElement element, string prefix)
+    {
+        for (var current = element; current != null; current = current.ParentElement)
+        {
+            var attribute = current.Attributes.FirstOrDefault(a =>
+                a.Name.Equals("xmlns:" + prefix, StringComparison.OrdinalIgnoreCase)
+            );
+            if (attribute != null)
+                return attribute.Value;
+        }
+        return null;
     }
 
     /// <summary>

@@ -34,11 +34,13 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
     [InlineData(false, false, "wrong-period")]
     [InlineData(false, false, "conflicting-calendar")]
     [InlineData(false, false, null, 20)]
+    [InlineData(false, false, null, 0, true)]
     public async Task HistoricalGapRetainsItsCalendarAfterNewCalendarAnnualArrives(
         bool secondaryCik,
         bool unknownCurrent,
         string unavailable = null,
-        int extraGaps = 0
+        int extraGaps = 0,
+        bool standalone = false
     )
     {
         var stock = new CommonStock
@@ -80,6 +82,17 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
             <ix:nonNumeric name="dei:CurrentFiscalYearEndDate" contextRef="q">--12-31</ix:nonNumeric>
             </body></html>
             """;
+        if (standalone)
+            envelope = $$"""
+                <XBRL>
+                <?xml version="1.0"?>
+                <xbrl xmlns="http://www.xbrl.org/2003/instance" xmlns:dei="http://xbrl.sec.gov/dei/2026">
+                <context id="q"><entity><identifier scheme="http://www.sec.gov/CIK">{{cik}}</identifier></entity>
+                <period><startDate>2026-01-01</startDate><endDate>2026-03-31</endDate></period></context>
+                <dei:CurrentFiscalYearEndDate contextRef="q">--12-31</dei:CurrentFiscalYearEndDate>
+                </xbrl>
+                </XBRL>
+                """;
         var completeEnvelope = envelope;
         envelope = unavailable switch
         {
@@ -105,7 +118,10 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
                 unknownCurrent || unavailable == "uncaptured"
                     ? XbrlCaptureStatus.NotChecked
                     : XbrlCaptureStatus.Captured,
-            XbrlType = unavailable == "standalone" ? XbrlType.StandaloneXbrl : XbrlType.InlineIxbrl,
+            XbrlType =
+                unavailable == "standalone" || standalone
+                    ? XbrlType.StandaloneXbrl
+                    : XbrlType.InlineIxbrl,
             XbrlContent = unavailable == "missing-content" ? null : NewFile(),
             XbrlUncompressedSize =
                 unavailable == "unknown-size" ? null
