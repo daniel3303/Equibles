@@ -24,9 +24,21 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]
+    [InlineData(false, false, "uncaptured")]
+    [InlineData(false, false, "standalone")]
+    [InlineData(false, false, "missing-content")]
+    [InlineData(false, false, "unknown-size")]
+    [InlineData(false, false, "oversized")]
+    [InlineData(false, false, "missing-calendar")]
+    [InlineData(false, false, "wrong-issuer")]
+    [InlineData(false, false, "wrong-period")]
+    [InlineData(false, false, "conflicting-calendar")]
+    [InlineData(false, false, null, 20)]
     public async Task HistoricalGapRetainsItsCalendarAfterNewCalendarAnnualArrives(
         bool secondaryCik,
-        bool unknownCurrent
+        bool unknownCurrent,
+        string unavailable = null,
+        int extraGaps = 0
     )
     {
         var stock = new CommonStock
@@ -68,24 +80,41 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
             <ix:nonNumeric name="dei:CurrentFiscalYearEndDate" contextRef="q">--12-31</ix:nonNumeric>
             </body></html>
             """;
+        var completeEnvelope = envelope;
+        envelope = unavailable switch
+        {
+            "missing-calendar" => envelope.Replace("dei:CurrentFiscalYearEndDate", "dei:Other"),
+            "wrong-issuer" => envelope.Replace(cik, "9999999999"),
+            "wrong-period" => envelope.Replace("2026-03-31", "2026-03-30"),
+            "conflicting-calendar" => envelope.Replace(
+                "</body>",
+                "<ix:nonNumeric name=\"dei:CurrentFiscalYearEndDate\" contextRef=\"q\">--06-30</ix:nonNumeric></body>"
+            ),
+            _ => envelope,
+        };
         var bytes = Encoding.UTF8.GetBytes(envelope);
-        DbContext.Add(
-            new Document
-            {
-                CommonStock = stock,
-                Content = NewFile(),
-                DocumentType = DocumentType.TenQ,
-                ReportingForDate = quarterEnd,
-                ReportingDate = quarterEnd.AddDays(30),
-                AccessionNumber = "quarter",
-                XbrlStatus = unknownCurrent
+        var quarter = new Document
+        {
+            CommonStock = stock,
+            Content = NewFile(),
+            DocumentType = DocumentType.TenQ,
+            ReportingForDate = quarterEnd,
+            ReportingDate = quarterEnd.AddDays(30),
+            AccessionNumber = "quarter",
+            XbrlStatus =
+                unknownCurrent || unavailable == "uncaptured"
                     ? XbrlCaptureStatus.NotChecked
                     : XbrlCaptureStatus.Captured,
-                XbrlType = XbrlType.InlineIxbrl,
-                XbrlContent = NewFile(),
-                XbrlUncompressedSize = bytes.Length,
-            }
-        );
+            XbrlType = unavailable == "standalone" ? XbrlType.StandaloneXbrl : XbrlType.InlineIxbrl,
+            XbrlContent = unavailable == "missing-content" ? null : NewFile(),
+            XbrlUncompressedSize =
+                unavailable == "unknown-size" ? null
+                : unavailable == "oversized" ? 51 * 1024 * 1024
+                : bytes.Length,
+        };
+        DbContext.Add(quarter);
+        for (var index = 0; index < extraGaps; index++)
+            DbContext.Add(Annual(new DateOnly(2000, 12, 31).AddYears(index)));
         await DbContext.SaveChangesAsync();
         var files = Substitute.For<IFileManager>();
         files.GetContent(Arg.Any<File>()).Returns(GzipCompressor.Compress(bytes));
@@ -101,6 +130,33 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
             calendar.RequiresHistoricalEvidence.Should().BeFalse();
             calendar.RefusesCalendar(new(2026, 1, 1), quarterEnd).Should().BeFalse();
             await files.DidNotReceive().GetContent(Arg.Any<File>());
+        }
+        else if (unavailable != null)
+        {
+            calendar.RequiresHistoricalEvidence.Should().BeTrue();
+            calendar.RefusesCalendar(new(2026, 1, 1), quarterEnd).Should().BeTrue();
+            calendar.Resolve(new(2026, 1, 1), quarterEnd).Should().BeNull();
+            calendar.Resolve(new(2025, 1, 1), oldEnd).Should().Be((2025, SecFiscalPeriod.FullYear));
+            calendar.RefusesCalendar(new(2025, 1, 1), oldEnd).Should().BeFalse();
+
+            quarter.XbrlStatus = XbrlCaptureStatus.Captured;
+            quarter.XbrlType = XbrlType.InlineIxbrl;
+            if (quarter.XbrlContent == null)
+            {
+                quarter.XbrlContent = NewFile();
+                DbContext.Add(quarter.XbrlContent);
+            }
+            var completeBytes = Encoding.UTF8.GetBytes(completeEnvelope);
+            quarter.XbrlUncompressedSize = completeBytes.Length;
+            await DbContext.SaveChangesAsync();
+            files.GetContent(Arg.Any<File>()).Returns(GzipCompressor.Compress(completeBytes));
+            var recovered = await sut.Read(
+                stock,
+                [(new(2025, 1, 1), oldEnd), (new(2026, 7, 1), newEnd)],
+                CancellationToken.None
+            );
+            recovered.Fingerprint.Should().NotBe(calendar.Fingerprint);
+            recovered.Resolve(new(2026, 1, 1), quarterEnd).Should().Be((2026, SecFiscalPeriod.Q1));
         }
         else
         {

@@ -22,7 +22,7 @@ public class FiscalCalendarEvidenceReader(
     InlineXbrlParser inlineParser
 )
 {
-    private const int MaxOpenYearDocuments = 16;
+    private const int CalendarDocumentBatchSize = 16;
     private const long MaxCalendarEnvelopeBytes = 50 * 1024 * 1024;
 
     public async Task<HistoricalFiscalCalendar> Read(
@@ -101,58 +101,45 @@ public class FiscalCalendarEvidenceReader(
                 )
                 .OrderBy(d => d.ReportingForDate)
                 .ThenBy(d => d.Id)
-                .Take(MaxOpenYearDocuments + 1)
                 .Select(d => d.Id)
                 .ToArray();
-            if (evidenceIds.Length > MaxOpenYearDocuments)
-                throw new InvalidDataException(
-                    "Fiscal calendar evidence exceeds the bounded document budget"
-                );
-            var documents = await db.Set<Document>()
-                .Where(d => evidenceIds.Contains(d.Id))
-                .Include(d => d.XbrlContent)
-                .ToListAsync(cancellationToken);
             var ciks = stock.SecondaryCiks.Append(stock.Cik).ToArray();
-            foreach (var document in documents)
+            // A missing historical envelope only withholds evidence for its own periods.
+            // Read every gap in bounded batches so long histories cannot starve newer filings.
+            foreach (var batch in evidenceIds.Chunk(CalendarDocumentBatchSize))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (
-                    document.XbrlStatus != XbrlCaptureStatus.Captured
-                    || document.XbrlType != XbrlType.InlineIxbrl
-                    || document.XbrlContent == null
-                    || document.XbrlUncompressedSize is null
-                    || document.XbrlUncompressedSize > MaxCalendarEnvelopeBytes
-                )
-                    throw new InvalidDataException(
-                        "Fiscal calendar evidence has no bounded captured envelope"
-                    );
-                var bytes = GzipCompressor.Decompress(
-                    await fileManager.GetContent(document.XbrlContent)
-                );
-                if (bytes.LongLength > MaxCalendarEnvelopeBytes)
-                    throw new InvalidDataException(
-                        "Fiscal calendar evidence exceeds the envelope budget"
-                    );
-                var parsed = inlineParser.ParseEnvelope(Encoding.UTF8.GetString(bytes));
-                var evidence = parsed
-                    .FiscalYearEnds.Where(o =>
-                        o.PeriodEnd == document.ReportingForDate
-                        && ciks.Any(cik => SameCik(o.Cik, cik))
+                var documents = await db.Set<Document>()
+                    .AsNoTracking()
+                    .Where(d =>
+                        batch.Contains(d.Id)
+                        && d.XbrlStatus == XbrlCaptureStatus.Captured
+                        && d.XbrlType == XbrlType.InlineIxbrl
+                        && d.XbrlContent != null
+                        && d.XbrlUncompressedSize != null
+                        && d.XbrlUncompressedSize <= MaxCalendarEnvelopeBytes
                     )
-                    .ToArray();
-                if (evidence.Length == 0)
-                    throw new InvalidDataException(
-                        "Captured filing has no consolidated fiscal calendar for its issuer and period"
+                    .Include(d => d.XbrlContent)
+                    .ToListAsync(cancellationToken);
+                foreach (var document in documents)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var bytes = GzipCompressor.Decompress(
+                        await fileManager.GetContent(document.XbrlContent)
                     );
-                observations.AddRange(evidence);
+                    if (bytes.LongLength > MaxCalendarEnvelopeBytes)
+                        continue;
+                    var parsed = inlineParser.ParseEnvelope(Encoding.UTF8.GetString(bytes));
+                    observations.AddRange(
+                        parsed.FiscalYearEnds.Where(o =>
+                            o.PeriodEnd == document.ReportingForDate
+                            && ciks.Any(cik => SameCik(o.Cik, cik))
+                        )
+                    );
+                }
             }
         }
-        if (
-            observations
-                .GroupBy(o => o.PeriodEnd)
-                .Any(g => g.Select(o => (o.Month, o.Day)).Distinct().Count() > 1)
-        )
-            throw new InvalidDataException("Conflicting fiscal calendars for one reported period");
+        // HistoricalFiscalCalendar refuses missing or conflicting evidence per fact;
+        // neither condition invalidates independent, source-backed annual spans.
         return new HistoricalFiscalCalendar(
             annualPeriods,
             observations,

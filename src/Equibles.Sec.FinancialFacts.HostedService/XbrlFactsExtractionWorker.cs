@@ -106,7 +106,9 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
                 }
                 catch (FiscalCalendarEvidencePendingException ex)
                 {
-                    document.XbrlFactsAttempts++;
+                    // Retrying unchanged evidence cannot resolve a calendar. The checkpoint
+                    // fingerprint re-arms this document when the importer finds new evidence.
+                    document.XbrlFactsAttempts = Document.MaxXbrlFactsAttempts;
                     extracted += ex.PersistedCount;
                     Logger.LogWarning(
                         "Historical calendar evidence is pending for {Count} facts in {DocumentId}; resolved facts were saved",
