@@ -181,9 +181,25 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     /// sync cannot change ticker ownership between validation and the write. An unchanged tracked
     /// snapshot is refreshed after the lock; pending changes are rejected rather than discarded.
     /// </summary>
-    public async Task<CommonStock> GetForUpdate(
+    public Task<CommonStock> GetForUpdate(
         Guid commonStockId,
         CancellationToken cancellationToken = default
+    ) => GetWithWriteLock(commonStockId, keyUpdate: true, cancellationToken);
+
+    /// <summary>
+    /// Locks and refreshes a stock for metadata changes without blocking foreign-key inserts.
+    /// Callers must not delete the stock or change foreign-key-eligible unique keys; those
+    /// operations require GetForUpdate. Competing stock writers remain serialized.
+    /// </summary>
+    public Task<CommonStock> GetForNoKeyUpdate(
+        Guid commonStockId,
+        CancellationToken cancellationToken = default
+    ) => GetWithWriteLock(commonStockId, keyUpdate: false, cancellationToken);
+
+    private async Task<CommonStock> GetWithWriteLock(
+        Guid commonStockId,
+        bool keyUpdate,
+        CancellationToken cancellationToken
     )
     {
         if (!DbContext.Database.IsRelational())
@@ -192,28 +208,33 @@ public class CommonStockRepository : BaseRepository<CommonStock>
                 .FirstOrDefaultAsync(stock => stock.Id == commonStockId, cancellationToken);
         }
 
+        var operation = keyUpdate ? nameof(GetForUpdate) : nameof(GetForNoKeyUpdate);
         if (DbContext.Database.CurrentTransaction == null)
-            throw new InvalidOperationException("GetForUpdate requires an active transaction.");
+            throw new InvalidOperationException($"{operation} requires an active transaction.");
 
         // A tracking raw-SQL query acquires the database lock but EF identity resolution returns
         // an already-tracked instance without refreshing its values. Callers commonly preload a
         // ticker snapshot before a provider fetch, so remember that state and reload only after
-        // FOR UPDATE has serialized us with a concurrent designation writer.
+        // the write lock has serialized us with a concurrent designation writer.
         var trackedEntry = DbContext
             .ChangeTracker.Entries<CommonStock>()
             .FirstOrDefault(entry => entry.Entity.Id == commonStockId);
         if (trackedEntry != null && trackedEntry.State != EntityState.Unchanged)
         {
             throw new InvalidOperationException(
-                $"GetForUpdate cannot refresh CommonStock {commonStockId} while its tracked state "
+                $"{operation} cannot refresh CommonStock {commonStockId} while its tracked state "
                     + $"is {trackedEntry.State}; save, discard, or detach pending changes first."
             );
         }
 
+        FormattableString query;
+        if (keyUpdate)
+            query = $"""SELECT * FROM "CommonStock" WHERE "Id" = {commonStockId} FOR UPDATE""";
+        else
+            query =
+                $"""SELECT * FROM "CommonStock" WHERE "Id" = {commonStockId} FOR NO KEY UPDATE""";
         var stock = await GetDbSet()
-            .FromSqlInterpolated(
-                $"""SELECT * FROM "CommonStock" WHERE "Id" = {commonStockId} FOR UPDATE"""
-            )
+            .FromSqlInterpolated(query)
             .FirstOrDefaultAsync(cancellationToken);
         if (stock != null && trackedEntry != null)
             await DbContext.Entry(stock).ReloadAsync(cancellationToken);
