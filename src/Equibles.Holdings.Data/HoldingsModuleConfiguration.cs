@@ -40,15 +40,22 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         // quarters and the heap fetch dominated cold load time. EF merges this
         // with the entity's `[Index(CommonStockId, ReportDate)]` attribute, so
         // there's a single btree on those columns with the INCLUDE list attached.
+        // Listing, filing-type and option filters must also be covered; otherwise the
+        // position totals and concentration history still fetch the entire stock's heap slice.
         builder
             .Entity<InstitutionalHolding>()
             .HasIndex(h => new { h.CommonStockId, h.ReportDate })
+            .HasDatabaseName("IX_InstitutionalHolding_StockQuarterExposure")
             .IncludeProperties(h => new
             {
                 h.InstitutionalHolderId,
                 h.Value,
                 h.Shares,
-            });
+                h.ListedTicker,
+                h.FilingType,
+                h.OptionType,
+            })
+            .IsCreatedConcurrently();
 
         // Partial covering index for the holder-rank aggregate on the single-holder /
         // single-stock page. That query needs only common-share 13F rows for one
