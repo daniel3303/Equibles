@@ -4,6 +4,8 @@ namespace Equibles.CorporateActions.Data.Models;
 
 public enum StockSplitSource
 {
+    // Persisted values also define capture precedence: Manual > SecFiling > External > Yahoo.
+    // A lower-priority refresh must never undo a corrected action definition.
     [Display(Name = "Yahoo")]
     Yahoo,
 

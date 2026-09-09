@@ -29,6 +29,57 @@ namespace Equibles.IntegrationTests.Yahoo;
 
 public class YahooPriceImportServiceTests : IDisposable
 {
+    [Fact]
+    public async Task Import_CorrectedReferenceSplit_RestatesHistoryDespiteStaleYahooRatio()
+    {
+        var stock = CreateStock("CORR", "Corrected Split");
+        await SeedStocks(stock);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var after = UsMarketCalendar.PreviousTradingDay(today);
+        var before = UsMarketCalendar.PreviousTradingDay(after);
+        await SeedPrices(CreatePrice(stock, before, 0.01m), CreatePrice(stock, after, 625m));
+        _splitRepo.Add(
+            new StockSplit
+            {
+                CommonStockId = stock.Id,
+                PriceSeriesTicker = stock.Ticker,
+                EffectiveDate = after,
+                Numerator = 1m,
+                Denominator = 60000m,
+                Source = StockSplitSource.External,
+            }
+        );
+        await _splitRepo.SaveChanges();
+        var chart = CreateChartData((before, 0.01m), (after, 625m));
+        chart.Prices[0].Open = 0.01m;
+        chart.Prices[0].High = 0.015m;
+        chart.Prices[0].Low = 0.01m;
+        chart.Splits.Add(
+            new StockSplitEvent
+            {
+                Date = after,
+                Numerator = 1m,
+                Denominator = 2m,
+            }
+        );
+        _yahooClient
+            .GetChart(stock.Ticker, Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .Returns(chart);
+
+        await _service.Import(includeEnrichment: false, CancellationToken.None);
+
+        _priceRepo
+            .GetAll()
+            .OrderBy(price => price.Date)
+            .Select(price => price.Close)
+            .Should()
+            .Equal(600m, 625m);
+        var split = _splitRepo.GetAll().Single();
+        split.Denominator.Should().Be(60000m);
+        split.Source.Should().Be(StockSplitSource.External);
+        split.PriceAdjustmentAppliedTime.Should().NotBeNull();
+    }
+
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DailyStockPriceRepository _priceRepo;
     private readonly CommonStockRepository _stockRepo;

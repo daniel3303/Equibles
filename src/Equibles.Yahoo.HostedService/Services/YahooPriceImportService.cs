@@ -58,7 +58,8 @@ internal readonly record struct AppliedSplitBoundary(
 internal readonly record struct SplitBasisDefinition(
     DateOnly EffectiveDate,
     decimal Numerator,
-    decimal Denominator
+    decimal Denominator,
+    StockSplitSource Source = StockSplitSource.Yahoo
 );
 
 [Service]
@@ -1261,7 +1262,8 @@ public class YahooPriceImportService
                 .Select(split => new SplitBasisDefinition(
                     split.EffectiveDate,
                     split.Numerator,
-                    split.Denominator
+                    split.Denominator,
+                    split.Source
                 ))
                 .ToListAsync(cancellationToken);
             if (
@@ -1329,7 +1331,19 @@ public class YahooPriceImportService
         out IReadOnlyList<SplitBasisDefinition> resolved
     )
     {
-        var candidates = capturedBoundaries.Concat(responseBoundaries).ToList();
+        // A higher-priority captured source can correct Yahoo's event metadata. Its locked
+        // ratio still has to pass the fetched-price boundary check before anything is stored.
+        var correctedDates = capturedBoundaries
+            .Where(boundary => boundary.Source > StockSplitSource.Yahoo)
+            .Select(boundary => boundary.EffectiveDate)
+            .ToHashSet();
+        var candidates = capturedBoundaries
+            .Concat(
+                responseBoundaries.Where(boundary =>
+                    !correctedDates.Contains(boundary.EffectiveDate)
+                )
+            )
+            .ToList();
         var conflict = candidates
             .GroupBy(boundary => boundary.EffectiveDate)
             .Select(group => new
