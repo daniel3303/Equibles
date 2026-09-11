@@ -135,7 +135,7 @@ public class SharesOutstandingProviderComparativePeriodTests
     {
         var fact = new FinancialFact
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Unit = "shares",
             PeriodType = FactPeriodType.Instant,

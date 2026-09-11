@@ -48,7 +48,7 @@ public class FiscalCalendarEvidenceReader(
             .ToListAsync(cancellationToken);
         var stored = await db.Set<FinancialFact>()
             .Where(f =>
-                f.CommonStockId == stock.Id
+                f.EquityIssuerId == stock.Id
                 && f.DimensionsKey == ""
                 && f.PeriodType == FactPeriodType.Duration
                 && (

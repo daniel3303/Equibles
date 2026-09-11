@@ -91,7 +91,7 @@ public class StocksControllerFinancialsTabTests : IDisposable
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenueConcept.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -107,7 +107,7 @@ public class StocksControllerFinancialsTabTests : IDisposable
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenueConcept.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -214,7 +214,7 @@ public class StocksControllerFinancialsTabTests : IDisposable
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 FinancialConceptId = concept.Id,
                 Unit = "USD",
                 PeriodType = FactPeriodType.Duration,
@@ -306,7 +306,7 @@ public class StocksControllerFinancialsTabTests : IDisposable
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 FinancialConceptId = revenueConcept.Id,
                 Unit = "USD",
                 PeriodType = FactPeriodType.Duration,
@@ -405,7 +405,7 @@ public class StocksControllerFinancialsTabTests : IDisposable
         ) =>
             new()
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 FinancialConceptId = revenue.Id,
                 Unit = "USD",
                 PeriodType = FactPeriodType.Duration,

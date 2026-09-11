@@ -103,7 +103,7 @@ public class FinancialFactsToolsPickBestFactInstantTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = conceptId,
             Value = value,
             Unit = "USD",

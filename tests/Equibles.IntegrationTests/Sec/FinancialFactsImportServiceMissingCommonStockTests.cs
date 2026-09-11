@@ -167,7 +167,7 @@ public class FinancialFactsImportServiceMissingCommonStockTests : IAsyncLifetime
 
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == apple.Id)
+            .Where(f => f.EquityIssuerId == apple.Id)
             .ToListAsync(CancellationToken.None);
         facts.Should().BeEmpty("no FinancialFact row should be written for a deleted parent");
 

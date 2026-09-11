@@ -115,7 +115,7 @@ public class ConceptMetadataService
         using var scope = _scopeFactory.CreateScope();
         var factRepository = scope.ServiceProvider.GetRequiredService<FinancialFactRepository>();
         return await factRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .GroupBy(f => f.AccessionNumber)
             .Select(g => new { Accession = g.Key, Filed = g.Max(f => f.FiledDate) })
             .OrderByDescending(a => a.Filed)

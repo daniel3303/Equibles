@@ -119,7 +119,7 @@ public class FinancialFactsImportServiceSecEdgarHttpFailureTests : IAsyncLifetim
         conceptCount.Should().Be(0, "no concept upsert may run when the HTTP call failed");
         var factCount = await verify
             .Set<FinancialFact>()
-            .CountAsync(f => f.CommonStockId == apple.Id, CancellationToken.None);
+            .CountAsync(f => f.EquityIssuerId == apple.Id, CancellationToken.None);
         factCount.Should().Be(0, "no fact rows may be written when the HTTP call failed");
         var sync = await verify
             .Set<FinancialFactsSyncStatus>()

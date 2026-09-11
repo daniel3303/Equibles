@@ -116,7 +116,7 @@ public class ReportedStatementsParseService
     ) =>
         new()
         {
-            CommonStockId = document.CommonStockId,
+            EquityIssuerId = document.CommonStockId,
             DocumentId = document.Id,
             AccessionNumber = document.AccessionNumber,
             Kind = ReportedStatementKindClassifier.Classify(report.ShortName, report.LongName),

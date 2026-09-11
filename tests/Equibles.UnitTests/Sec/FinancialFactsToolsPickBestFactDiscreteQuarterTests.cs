@@ -168,7 +168,7 @@ public class FinancialFactsToolsPickBestFactDiscreteQuarterTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = conceptId,
             Value = value,
             Unit = "USD",

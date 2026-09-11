@@ -54,7 +54,7 @@ public class StocksFinancialsSeededTests
             db.Add(
                 new FinancialFact
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     FinancialConceptId = conceptId,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,

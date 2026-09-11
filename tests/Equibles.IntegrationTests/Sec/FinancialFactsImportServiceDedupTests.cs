@@ -154,7 +154,7 @@ public class FinancialFactsImportServiceDedupTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == apple.Id)
+            .Where(f => f.EquityIssuerId == apple.Id)
             .ToListAsync(CancellationToken.None);
 
         facts.Should().HaveCount(1, "duplicate tuples must collapse to one row");

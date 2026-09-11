@@ -518,7 +518,7 @@ public class XbrlFactExtractionService
 
         return new FinancialFact
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = conceptId,
             DocumentId = document.Id,
             Unit = fact.Unit,
@@ -729,7 +729,7 @@ public class XbrlFactExtractionService
             // DimensionsKey) or Postgres can't infer the ON CONFLICT target.
             .On(f => new
             {
-                f.CommonStockId,
+                f.EquityIssuerId,
                 f.FinancialConceptId,
                 f.Unit,
                 f.PeriodStart,

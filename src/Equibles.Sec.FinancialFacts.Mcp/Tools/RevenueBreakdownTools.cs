@@ -122,7 +122,7 @@ public class RevenueBreakdownTools
                 // so we keep one candidate total per (period, unit, concept) — latest-filed
                 // wins — and the members need only reconcile to any one of them.
                 var consolidated = await _financialFactRepository
-                    .GetConsolidatedByStock(stock)
+                    .GetConsolidatedByIssuerId(stock.Id)
                     .Where(f =>
                         conceptIds.Contains(f.FinancialConceptId)
                         && f.PeriodType == FactPeriodType.Duration
@@ -262,7 +262,7 @@ public class RevenueBreakdownTools
     )
     {
         return await _financialFactRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration
@@ -299,7 +299,7 @@ public class RevenueBreakdownTools
     )
     {
         var facts = await _financialFactRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration
@@ -375,7 +375,7 @@ public class RevenueBreakdownTools
             return false;
 
         var consolidated = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration

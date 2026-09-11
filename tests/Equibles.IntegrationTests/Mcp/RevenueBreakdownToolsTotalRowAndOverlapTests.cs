@@ -74,7 +74,7 @@ public class RevenueBreakdownToolsTotalRowAndOverlapTests : ParadeDbMcpTestBase
         var fact = new FinancialFact
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Unit = "USD",
             PeriodType = FactPeriodType.Duration,

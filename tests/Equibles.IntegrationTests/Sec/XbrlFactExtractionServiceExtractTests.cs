@@ -158,7 +158,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         DbContext.Add(
             new FinancialFact
             {
-                CommonStockId = document.CommonStockId,
+                EquityIssuerId = document.CommonStockId,
                 FinancialConceptId = fact.FinancialConceptId,
                 Document = annual,
                 Unit = "USD",
@@ -307,7 +307,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         (
             await DbContext
                 .Set<FinancialFact>()
-                .CountAsync(f => f.CommonStockId == document.CommonStockId)
+                .CountAsync(f => f.EquityIssuerId == document.CommonStockId)
         )
             .Should()
             .Be(2);

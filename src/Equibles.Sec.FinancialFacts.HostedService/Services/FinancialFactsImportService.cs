@@ -569,7 +569,7 @@ public class FinancialFactsImportService
 
         return new FinancialFact
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = conceptId,
             DocumentId = document?.Id,
             Unit = p.Unit,
@@ -665,7 +665,7 @@ public class FinancialFactsImportService
             // DimensionsKey) or Postgres can't infer the ON CONFLICT target.
             .On(f => new
             {
-                f.CommonStockId,
+                f.EquityIssuerId,
                 f.FinancialConceptId,
                 f.Unit,
                 f.PeriodStart,
@@ -752,7 +752,7 @@ public class FinancialFactsImportService
         var candidates = await dbContext
             .Set<FinancialFact>()
             .Where(f =>
-                f.CommonStockId == stock.Id
+                f.EquityIssuerId == stock.Id
                 && f.DimensionsKey == ""
                 && accessions.Contains(f.AccessionNumber)
                 && conceptIds.Contains(f.FinancialConceptId)
@@ -768,7 +768,7 @@ public class FinancialFactsImportService
 
     private static FactNaturalKey NaturalKey(FinancialFact fact) =>
         new(
-            fact.CommonStockId,
+            fact.EquityIssuerId,
             fact.FinancialConceptId,
             fact.Unit,
             fact.PeriodStart,
@@ -837,7 +837,7 @@ public class FinancialFactsImportService
             .LatestPerGroup(
                 f =>
                     (
-                        f.CommonStockId,
+                        f.EquityIssuerId,
                         f.FinancialConceptId,
                         f.Unit,
                         f.PeriodStart,

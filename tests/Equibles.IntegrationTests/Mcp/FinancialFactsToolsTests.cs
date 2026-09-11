@@ -67,7 +67,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = concept.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -142,7 +142,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
             .AddRange(
                 new FinancialFact
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = dilutedEps.Id,
                     Unit = "USD/shares",
                     PeriodType = FactPeriodType.Duration,
@@ -157,7 +157,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
                 },
                 new FinancialFact
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = dilutedEps.Id,
                     Unit = "USD/shares",
                     PeriodType = FactPeriodType.Duration,

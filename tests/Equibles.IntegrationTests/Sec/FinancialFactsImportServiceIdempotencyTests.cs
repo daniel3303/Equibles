@@ -146,7 +146,7 @@ public class FinancialFactsImportServiceIdempotencyTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == apple.Id)
+            .Where(f => f.EquityIssuerId == apple.Id)
             .ToListAsync(CancellationToken.None);
 
         facts.Should().ContainSingle("re-running a company with nothing new filed must be a no-op");

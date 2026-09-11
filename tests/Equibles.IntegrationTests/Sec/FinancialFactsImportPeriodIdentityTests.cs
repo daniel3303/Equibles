@@ -203,7 +203,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == stock.Id)
+            .Where(f => f.EquityIssuerId == stock.Id)
             .ToListAsync();
         facts.Should().HaveCount(4);
         facts
@@ -237,7 +237,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         verify.ChangeTracker.Clear();
         var replayed = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == stock.Id)
+            .Where(f => f.EquityIssuerId == stock.Id)
             .ToListAsync();
         replayed.Select(f => f.Id).Order().Should().Equal(originalIds);
         replayed
@@ -262,7 +262,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await sut.Import(stock, CancellationToken.None);
         await verify.Entry(replayCheckpoint).ReloadAsync();
         replayCheckpoint.CalendarEvidenceFingerprint.Should().NotBe(originalFingerprint);
-        (await verify.Set<FinancialFact>().CountAsync(f => f.CommonStockId == stock.Id))
+        (await verify.Set<FinancialFact>().CountAsync(f => f.EquityIssuerId == stock.Id))
             .Should()
             .Be(4);
     }
@@ -346,7 +346,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == apple.Id)
+            .Where(f => f.EquityIssuerId == apple.Id)
             .OrderByDescending(f => f.PeriodEnd)
             .ToListAsync(CancellationToken.None);
 
@@ -434,7 +434,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var fact = await verify
             .Set<FinancialFact>()
-            .SingleAsync(f => f.CommonStockId == stock.Id, CancellationToken.None);
+            .SingleAsync(f => f.EquityIssuerId == stock.Id, CancellationToken.None);
 
         fact.FiscalYear.Should().Be(2023);
         fact.FiscalPeriod.Should().Be(SecFiscalPeriod.FullYear);
@@ -501,7 +501,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                     new FinancialFact
                     {
                         Id = factId,
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         FinancialConceptId = concept.Id,
                         Unit = "USD",
                         PeriodType = interimInstant
@@ -579,7 +579,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var fact = await verify
             .Set<FinancialFact>()
-            .SingleAsync(f => f.CommonStockId == stock.Id, CancellationToken.None);
+            .SingleAsync(f => f.EquityIssuerId == stock.Id, CancellationToken.None);
         var status = await verify
             .Set<FinancialFactsSyncStatus>()
             .SingleAsync(s => s.EquityIssuerId == stock.Id, CancellationToken.None);
@@ -678,7 +678,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var fact = await verify
             .Set<FinancialFact>()
-            .SingleAsync(f => f.CommonStockId == stock.Id, CancellationToken.None);
+            .SingleAsync(f => f.EquityIssuerId == stock.Id, CancellationToken.None);
         fact.FiscalYear.Should().Be(2025);
         fact.FiscalPeriod.Should().Be(SecFiscalPeriod.FullYear);
         fact.DocumentId.Should().Be(documentId);
@@ -713,7 +713,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                 .Add(
                     new FinancialFact
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         FinancialConceptId = concept.Id,
                         Unit = "USD",
                         PeriodType = FactPeriodType.Duration,
@@ -847,7 +847,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == stock.Id)
+            .Where(f => f.EquityIssuerId == stock.Id)
             .ToListAsync(CancellationToken.None);
         facts.Should().Contain(f => f.Value == -107_322_000m);
         facts.Should().NotContain(f => f.Value == -107_322_000_000m);

@@ -25,6 +25,8 @@ public class CurrentShareEvidenceTests(ParadeDbFixture fixture) : ParadeDbMcpTes
             Name = "Date evidence",
             Cik = "0000001234",
         };
+        DbContext.Add(stock);
+        await DbContext.SaveChangesAsync();
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -40,7 +42,7 @@ public class CurrentShareEvidenceTests(ParadeDbFixture fixture) : ParadeDbMcpTes
         ) =>
             new()
             {
-                CommonStock = stock,
+                EquityIssuerId = stock.Id,
                 FinancialConcept = concept,
                 Document = new Document
                 {

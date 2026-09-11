@@ -72,7 +72,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = RevenueConcept().Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -186,7 +186,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
             .Add(
                 new FinancialFact
                 {
-                    CommonStockId = alphabet.Id,
+                    EquityIssuerId = alphabet.Id,
                     FinancialConceptId = dilutedEps.Id,
                     Unit = "USD/shares",
                     PeriodType = FactPeriodType.Duration,

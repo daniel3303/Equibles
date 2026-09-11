@@ -54,7 +54,7 @@ public class FinancialsTabViewRenderingTests
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     FinancialConceptId = conceptId,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,

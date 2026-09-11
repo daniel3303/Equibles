@@ -87,7 +87,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenue.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -103,7 +103,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenue.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -149,7 +149,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = concept.Id,
                     Unit = unit,
                     PeriodType = FactPeriodType.Duration,
@@ -358,7 +358,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         ) =>
             new()
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 FinancialConceptId = concept.Id,
                 Unit = "USD",
                 PeriodType = FactPeriodType.Duration,
@@ -452,7 +452,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             .Add(
                 new FinancialFact
                 {
-                    CommonStockId = proxy.CommonStockId,
+                    EquityIssuerId = proxy.EquityIssuerId,
                     FinancialConceptId = proxy.FinancialConceptId,
                     Unit = proxy.Unit,
                     PeriodType = proxy.PeriodType,
@@ -503,7 +503,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             .Add(
                 new FinancialFact
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenue.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -554,7 +554,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         ) =>
             new()
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 FinancialConceptId = concept.Id,
                 Unit = "USD",
                 PeriodType = FactPeriodType.Duration,

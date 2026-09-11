@@ -31,7 +31,7 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
     private static FinancialFact Fact() =>
         new()
         {
-            CommonStockId = AlphabetId,
+            EquityIssuerId = AlphabetId,
             Value = 307_394_000_000m,
             Unit = "USD",
             PeriodType = FactPeriodType.Duration,

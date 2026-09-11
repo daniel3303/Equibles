@@ -215,7 +215,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     )
     {
         return await _financialFactRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .Where(f => conceptIds.Contains(f.FinancialConceptId) && f.Unit == SharesUnit)
             .Where(f =>
                 f.Dimensions.Count == 0
@@ -337,7 +337,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         var historyWindowStart = latest.Filed.AddDays(-CollapseHistoryWindowDays);
 
         var priorCoverPageMax = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(f =>
                 coverPageConceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit
@@ -411,7 +411,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
             return null;
 
         var consolidated = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(f =>
                 balanceSheetConceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit
@@ -432,7 +432,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // filers put the consolidated roll-up, treasury shares, and the ADS listing on the same
         // axis, and summing any of those with the real classes double-counts or mixes units.
         var perClassFacts = await _financialFactRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .Where(f =>
                 balanceSheetConceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit
@@ -479,7 +479,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // is a whole share count. FromValue round-trips Form back to the cached DocumentType
         // statics, so reference equality holds after materialization.
         var match = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(CurrentShareEvidenceDates.Eligible)
             .Where(f => conceptIds.Contains(f.FinancialConceptId) && f.Unit == SharesUnit)
             .OrderByDescending(f => f.FiledDate)
@@ -526,7 +526,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // axis. A fact dimensioned otherwise (segment/geography), on several axes, or with none is
         // excluded so only genuine per-class counts are summed.
         var perClassFacts = await _financialFactRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit

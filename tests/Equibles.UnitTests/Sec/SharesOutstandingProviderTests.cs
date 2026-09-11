@@ -742,7 +742,7 @@ public class SharesOutstandingProviderTests
     {
         var fact = new FinancialFact
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Unit = "shares",
             PeriodType = FactPeriodType.Instant,
@@ -771,7 +771,7 @@ public class SharesOutstandingProviderTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Unit = "shares",
             PeriodType = FactPeriodType.Instant,

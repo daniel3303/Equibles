@@ -326,7 +326,7 @@ public class SharesOutstandingProviderDateEvidenceTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Document = new Document
             {

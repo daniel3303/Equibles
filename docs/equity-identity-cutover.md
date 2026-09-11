@@ -57,3 +57,16 @@
 - The current physical `CommonStockId` column names remain during mixed-version rollout; C# uses `EquityIssuerId`, and the final contract migration must rename those columns after older binaries retire.
 - Native issuer deletion is restricted while checkpoints reference it; retiring a listing or legacy stock cannot erase these watermarks.
 - `scripts/verify-native-issuer-checkpoints.sql` checks complete issuer ownership and validated restrictive foreign keys.
+
+## Financial facts and reported statements
+
+- Financial facts and reconstructed statements belong to `EquityIssuer`; repository reads accept issuer IDs without requiring a legacy stock or a listing.
+- Retargeting keeps every row in place, including source filing links, dimensional keys, restatement accessions, original numeric values, periods, currencies, scales, JSON payloads, and timestamps.
+- Physical issuer columns retain their deployed names until the final contract migration; native issuer foreign keys restrict deletion.
+- `scripts/verify-native-issuer-financials.sql` checks complete issuer ownership and validated restrictive foreign keys.
+
+## Remaining route integration
+
+- The native buyback ranking currently carries only a ticker into rendering; native-only issuers and cross-exchange ticker collisions require listing-aware route resolution before rollout.
+- Preserve native listing identity through the ranking view model and MVC links, and verify native-only and colliding-ticker rendering during the route cutover.
+- A passing storage migration does not make a new listing publicly routable; do not deploy the intermediate consumer cutover before that dependency is complete.

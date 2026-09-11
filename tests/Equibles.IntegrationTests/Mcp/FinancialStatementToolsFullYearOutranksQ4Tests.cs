@@ -64,7 +64,7 @@ public class FinancialStatementToolsFullYearOutranksQ4Tests : ParadeDbMcpTestBas
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenue.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -80,7 +80,7 @@ public class FinancialStatementToolsFullYearOutranksQ4Tests : ParadeDbMcpTestBas
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenue.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,

@@ -72,7 +72,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Unit = "shares",
             PeriodType = FactPeriodType.Instant,

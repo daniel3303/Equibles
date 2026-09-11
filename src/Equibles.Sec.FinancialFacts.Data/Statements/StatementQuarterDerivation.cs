@@ -34,7 +34,12 @@ public static class StatementQuarterDerivation
 
         foreach (
             var concept in spans.GroupBy(s =>
-                (s.Fact.CommonStockId, s.Fact.FinancialConceptId, s.Fact.Unit, s.Fact.DimensionsKey)
+                (
+                    s.Fact.EquityIssuerId,
+                    s.Fact.FinancialConceptId,
+                    s.Fact.Unit,
+                    s.Fact.DimensionsKey
+                )
             )
         )
         {
@@ -85,7 +90,7 @@ public static class StatementQuarterDerivation
             )
             .GroupBy(f =>
                 (
-                    f.CommonStockId,
+                    f.EquityIssuerId,
                     f.PeriodStart,
                     f.PeriodEnd,
                     f.FinancialConceptId,
@@ -156,7 +161,7 @@ public static class StatementQuarterDerivation
     private static FinancialFact Derive(SpanFact prior, SpanFact current) =>
         new()
         {
-            CommonStockId = current.Fact.CommonStockId,
+            EquityIssuerId = current.Fact.EquityIssuerId,
             FinancialConceptId = current.Fact.FinancialConceptId,
             Unit = current.Fact.Unit,
             PeriodType = FactPeriodType.Duration,

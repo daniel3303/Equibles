@@ -80,7 +80,7 @@ public class FinancialStatementToolsQ4AndScopingTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = concept.Id,
                     Unit = "USD",
                     PeriodType = periodType,

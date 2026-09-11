@@ -27,7 +27,7 @@ public class FinancialFactsToolsPickBestFactAsOriginallyReportedTests
         var conceptId = Guid.NewGuid();
         var original = new FinancialFact
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = conceptId,
             Value = 1_000m,
             FiledDate = new DateOnly(2024, 5, 1),
@@ -42,7 +42,7 @@ public class FinancialFactsToolsPickBestFactAsOriginallyReportedTests
         };
         var restated = new FinancialFact
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = conceptId,
             Value = 1_200m,
             FiledDate = new DateOnly(2024, 9, 15),

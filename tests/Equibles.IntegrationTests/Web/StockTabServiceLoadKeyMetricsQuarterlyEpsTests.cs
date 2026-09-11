@@ -119,7 +119,7 @@ public class StockTabServiceLoadKeyMetricsQuarterlyEpsTests : IDisposable
             .Add(
                 new FinancialFact
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = epsConcept.Id,
                     Unit = "USD/shares",
                     PeriodType = FactPeriodType.Duration,

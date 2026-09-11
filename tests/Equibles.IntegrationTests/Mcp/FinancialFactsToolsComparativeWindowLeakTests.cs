@@ -61,7 +61,7 @@ public class FinancialFactsToolsComparativeWindowLeakTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = concept.Id,
                     Unit = "USD/shares",
                     PeriodType = FactPeriodType.Duration,
@@ -184,7 +184,7 @@ public class FinancialFactsToolsComparativeWindowLeakTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenue.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -200,7 +200,7 @@ public class FinancialFactsToolsComparativeWindowLeakTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenue.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,

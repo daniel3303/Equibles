@@ -158,7 +158,7 @@ public class FinancialStatementTools
 
                 var facts = balanceSheetDate is { } statedAt
                     ? await _financialFactRepository
-                        .GetConsolidatedByStock(stock)
+                        .GetConsolidatedByIssuerId(stock.Id)
                         .Where(f =>
                             conceptIds.Contains(f.FinancialConceptId)
                             && f.PeriodEnd == statedAt
@@ -166,7 +166,7 @@ public class FinancialStatementTools
                         )
                         .ToListAsync()
                     : await _financialFactRepository
-                        .GetConsolidatedByStock(stock)
+                        .GetConsolidatedByIssuerId(stock.Id)
                         .Where(f =>
                             f.FiscalYear == selectedYear
                             && conceptIds.Contains(f.FinancialConceptId)
@@ -377,7 +377,7 @@ public class FinancialStatementTools
     {
         var statementName = statementType.NameForHumans().ToLowerInvariant();
         var availablePeriods = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(f =>
                 availabilityConceptIds.Contains(f.FinancialConceptId)
                 && (
@@ -396,7 +396,7 @@ public class FinancialStatementTools
             && (
                 statementConceptIds.SetEquals(availabilityConceptIds)
                 || await _financialFactRepository
-                    .GetConsolidatedByStock(stock)
+                    .GetConsolidatedByIssuerId(stock.Id)
                     .AnyAsync(f => statementConceptIds.Contains(f.FinancialConceptId))
             );
         if (!statementIngested)
@@ -404,7 +404,7 @@ public class FinancialStatementTools
             // Distinguish "nothing ingested at all" from "nothing for THIS
             // statement" so the caller isn't told a covered company is absent.
             var hasAnyFacts = await _financialFactRepository
-                .GetConsolidatedByStock(stock)
+                .GetConsolidatedByIssuerId(stock.Id)
                 .AnyAsync();
             return (
                 default,

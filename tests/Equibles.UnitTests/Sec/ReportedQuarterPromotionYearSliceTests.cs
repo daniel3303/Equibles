@@ -147,7 +147,7 @@ public class ReportedQuarterPromotionYearSliceTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = Guid.NewGuid(),
             Unit = "USD",
             PeriodType = FactPeriodType.Duration,

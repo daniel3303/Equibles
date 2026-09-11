@@ -664,7 +664,7 @@ public class StockTabService
         // covered by the [CommonStockId, FiscalYear, FiscalPeriod] index, and
         // keeping them separate avoids loading every fact just to list periods.
         var periodKeys = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(f =>
                 statementConceptIds.Contains(f.FinancialConceptId)
                 && (
@@ -734,7 +734,7 @@ public class StockTabService
 
         var facts = balanceSheetDate is { } statedAt
             ? await _financialFactRepository
-                .GetConsolidatedByStock(stock)
+                .GetConsolidatedByIssuerId(stock.Id)
                 .Where(f =>
                     conceptIds.Contains(f.FinancialConceptId)
                     && f.PeriodEnd == statedAt
@@ -742,7 +742,7 @@ public class StockTabService
                 )
                 .ToListAsync()
             : await _financialFactRepository
-                .GetConsolidatedByStock(stock)
+                .GetConsolidatedByIssuerId(stock.Id)
                 .Where(f =>
                     f.FiscalYear == fiscalYear
                     && conceptIds.Contains(f.FinancialConceptId)
@@ -793,7 +793,7 @@ public class StockTabService
         // while a line reported in other periods keeps its dash for this one.
         var everReportedConceptIds = (
             await _financialFactRepository
-                .GetConsolidatedByStock(stock)
+                .GetConsolidatedByIssuerId(stock.Id)
                 .Where(f =>
                     conceptIds.Contains(f.FinancialConceptId)
                     && (
@@ -882,7 +882,7 @@ public class StockTabService
         if (epsConcept != Guid.Empty)
         {
             var epsFact = await _financialFactRepository
-                .GetConsolidatedByStock(stock)
+                .GetConsolidatedByIssuerId(stock.Id)
                 .Where(f =>
                     f.FinancialConceptId == epsConcept && f.FiscalPeriod == SecFiscalPeriod.FullYear
                 )

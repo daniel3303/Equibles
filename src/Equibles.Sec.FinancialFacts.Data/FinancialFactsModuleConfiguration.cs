@@ -20,6 +20,10 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
 
         builder.Entity<FinancialFact>(b =>
         {
+            b.HasOne(row => row.Issuer)
+                .WithMany()
+                .HasForeignKey(row => row.EquityIssuerId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.Property(e => e.Form).HasConversion(docTypeConversion);
         });
 
@@ -27,6 +31,10 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
 
         builder.Entity<ReportedFinancialStatement>(b =>
         {
+            b.HasOne(row => row.Issuer)
+                .WithMany()
+                .HasForeignKey(row => row.EquityIssuerId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.Property(e => e.Form).HasConversion(docTypeConversion);
         });
 

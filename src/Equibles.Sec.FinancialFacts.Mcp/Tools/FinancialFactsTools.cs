@@ -143,11 +143,11 @@ public class FinancialFactsTools
                     return $"No '{concept}' data has been ingested for {stock.Ticker}.";
 
                 var facts = await _financialFactRepository
-                    .GetConsolidatedByStock(stock)
+                    .GetConsolidatedByIssuerId(stock.Id)
                     .Where(f => conceptPriority.Keys.Contains(f.FinancialConceptId))
                     .ToListAsync();
                 var companyLatestPeriodEnd = await _financialFactRepository
-                    .GetConsolidatedByStock(stock)
+                    .GetConsolidatedByIssuerId(stock.Id)
                     .MaxAsync(f => (DateOnly?)f.PeriodEnd);
                 var aliasLatestPeriodEnd =
                     facts.Count == 0 ? (DateOnly?)null : facts.Max(f => f.PeriodEnd);
@@ -299,7 +299,7 @@ public class FinancialFactsTools
                 // under the FullYear stamp (see ReportedQuarterPromotion).
                 var includeFullYearForQ4 = period == SecFiscalPeriod.Q4;
                 var facts = await _financialFactRepository
-                    .GetConsolidatedByStocks(stockIds)
+                    .GetConsolidatedByIssuerIds(stockIds)
                     .Where(f =>
                         f.FiscalYear == fiscalYear
                         && (
@@ -321,7 +321,7 @@ public class FinancialFactsTools
                         .Where(f => f.FiscalPeriod == SecFiscalPeriod.Q4)
                         .Concat(
                             facts
-                                .GroupBy(f => f.CommonStockId)
+                                .GroupBy(f => f.EquityIssuerId)
                                 .SelectMany(
                                     ReportedQuarterPromotion.PromotedFourthQuartersForYearSlice
                                 )
@@ -334,7 +334,7 @@ public class FinancialFactsTools
                 // accession provide stable amendment ordering (Postgres has no
                 // implicit row order).
                 var bestByStock = facts
-                    .GroupBy(f => f.CommonStockId)
+                    .GroupBy(f => f.EquityIssuerId)
                     .Select(g => (StockId: g.Key, Fact: PickBestFact(g, conceptPriority)))
                     .Where(item => item.Fact != null)
                     .ToDictionary(item => item.StockId, item => item.Fact);
@@ -343,7 +343,7 @@ public class FinancialFactsTools
                 var splitAdjustedStockIds = rows.Where(row =>
                         FinancialFactSplitAdjustment.IsPerShare(row.Fact)
                     )
-                    .Select(row => row.Fact.CommonStockId)
+                    .Select(row => row.Fact.EquityIssuerId)
                     .Distinct()
                     .ToList();
                 var splitsByStock =
@@ -602,7 +602,7 @@ public class FinancialFactsTools
             rows,
             r =>
             {
-                var splits = splitsByStock.GetValueOrDefault(r.Fact.CommonStockId) ?? [];
+                var splits = splitsByStock.GetValueOrDefault(r.Fact.EquityIssuerId) ?? [];
                 var value = FinancialFactSplitAdjustment.Restate(r.Fact, splits, out var adjusted);
                 splitAdjusted |= adjusted;
                 return $"| {FactMarkdown.Cell(r.Ticker)} | {FactMarkdown.Cell(r.Name)} | "
