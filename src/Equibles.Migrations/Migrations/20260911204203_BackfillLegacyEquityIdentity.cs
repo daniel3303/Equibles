@@ -138,7 +138,7 @@ namespace Equibles.Migrations.Migrations
 
         private const string LegacyIdentitySql = """
 -- Frozen migration: retain the original issuer/series keys as provenance.
-CREATE OR REPLACE FUNCTION public.eq_ensure_legacy_listing(owner_id uuid, symbol text)
+CREATE OR REPLACE FUNCTION public.eq_ensure_legacy_listing(owner_id uuid, symbol text, protect_concurrent_writers boolean DEFAULT true)
 RETURNS uuid LANGUAGE plpgsql AS $fn$
 DECLARE listing_id uuid; issuer_id uuid; security_id uuid; owner_row "CommonStock"%ROWTYPE;
 BEGIN
@@ -146,7 +146,9 @@ BEGIN
     SELECT "EquityListingId" INTO listing_id FROM "LegacyEquityListing"
       WHERE "CommonStockId" = owner_id AND "ListedTicker" = symbol;
     IF FOUND THEN RETURN listing_id; END IF;
-    PERFORM pg_advisory_xact_lock(hashtextextended(owner_id::text || ':' || symbol, 71023));
+    IF protect_concurrent_writers THEN
+        PERFORM pg_advisory_xact_lock(hashtextextended(owner_id::text || ':' || symbol, 71023));
+    END IF;
     SELECT "EquityListingId" INTO listing_id FROM "LegacyEquityListing"
       WHERE "CommonStockId" = owner_id AND "ListedTicker" = symbol;
     IF FOUND THEN RETURN listing_id; END IF;
@@ -179,13 +181,17 @@ BEGIN
       ON CONFLICT ("CommonStockId") DO UPDATE SET "Name" = EXCLUDED."Name"
       WHERE "EquityIssuer"."IdentitySourceUrl" IS NULL;
     FOR symbol IN SELECT DISTINCT value FROM unnest(ARRAY[NEW."Ticker"] || NEW."SecondaryTickers"
-        || NEW."ReferenceTickers") AS value WHERE value IS NOT NULL AND value <> '' ORDER BY value
+        || NEW."ReferenceTickers" || NEW."PriceHistoryBackfilledTickers") AS value WHERE value IS NOT NULL AND value <> '' ORDER BY value
     LOOP
         PERFORM public.eq_ensure_legacy_listing(NEW."Id", symbol);
     END LOOP;
     UPDATE "EquityListing" listing SET "Active" = NEW."Active" AND COALESCE(
         (listing."Ticker" = NEW."Ticker" OR listing."Ticker" = ANY(NEW."SecondaryTickers")
+          OR listing."Ticker" = ANY(NEW."ReferenceTickers")), false),
+      "DelistedOn" = CASE WHEN NEW."Active" AND COALESCE(
+        (listing."Ticker" = NEW."Ticker" OR listing."Ticker" = ANY(NEW."SecondaryTickers")
           OR listing."Ticker" = ANY(NEW."ReferenceTickers")), false)
+        THEN NULL ELSE listing."DelistedOn" END
       FROM "LegacyEquityListing" legacy
       WHERE legacy."CommonStockId" = NEW."Id" AND legacy."EquityListingId" = listing."Id"
         AND listing."IdentityState" = 0;
@@ -193,7 +199,7 @@ BEGIN
 END $fn$;
 
 CREATE TRIGGER equity_identity_issuer_write
-AFTER INSERT OR UPDATE OF "Ticker", "Name", "Active", "SecondaryTickers", "ReferenceTickers"
+AFTER INSERT OR UPDATE OF "Ticker", "Name", "Active", "SecondaryTickers", "ReferenceTickers", "PriceHistoryBackfilledTickers"
 ON "CommonStock" FOR EACH ROW EXECUTE FUNCTION public.eq_sync_legacy_issuer();
 
 -- One generic guard covers SQL, bulk/upsert and retiring binaries as well as EF writers.
@@ -209,10 +215,12 @@ INSERT INTO "EquityIssuer" ("Id", "CommonStockId", "Name", "IdentitySourceUrl")
 SELECT "Id", "Id", "Name", NULL FROM "CommonStock"
 ON CONFLICT ("CommonStockId") DO NOTHING;
 
-SELECT public.eq_ensure_legacy_listing(stock."Id", symbol)
+-- These new tables and guards are not visible outside this migration transaction.
+-- Avoid exhausting PostgreSQL advisory-lock slots across the historical universe.
+SELECT public.eq_ensure_legacy_listing(stock."Id", symbol, false)
 FROM "CommonStock" stock
 CROSS JOIN LATERAL (SELECT DISTINCT value AS symbol FROM unnest(ARRAY[stock."Ticker"]
-  || stock."SecondaryTickers" || stock."ReferenceTickers") value WHERE value IS NOT NULL AND value <> '') symbols;
+  || stock."SecondaryTickers" || stock."ReferenceTickers" || stock."PriceHistoryBackfilledTickers") value WHERE value IS NOT NULL AND value <> '') symbols;
 
 -- Module tables are optional in self-hosted installations. Each has its own frozen source column.
 DO $body$
@@ -237,7 +245,7 @@ BEGIN
           AND table_name = source_table AND column_name = symbol_column) THEN
         EXECUTE format('CREATE TRIGGER equity_identity_series_write AFTER INSERT OR UPDATE OF "CommonStockId", %I ON %I FOR EACH ROW EXECUTE FUNCTION public.eq_sync_legacy_series(%L)',
           symbol_column, source_table, symbol_column);
-        EXECUTE format('SELECT public.eq_ensure_legacy_listing(series."CommonStockId", series.symbol)
+        EXECUTE format('SELECT public.eq_ensure_legacy_listing(series."CommonStockId", series.symbol, false)
           FROM (SELECT DISTINCT "CommonStockId", %I AS symbol FROM %I WHERE nullif(%I, '''') IS NOT NULL) series
           JOIN "CommonStock" stock ON stock."Id" = series."CommonStockId"',
           symbol_column, source_table, symbol_column);

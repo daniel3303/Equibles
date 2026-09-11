@@ -10,7 +10,7 @@ BEGIN
   IF missing > 0 THEN RAISE EXCEPTION '% unmapped legacy issuers', missing; END IF;
 
   SELECT count(*) INTO missing FROM "CommonStock" stock
-    CROSS JOIN LATERAL unnest(ARRAY[stock."Ticker"] || stock."SecondaryTickers" || stock."ReferenceTickers") symbol
+    CROSS JOIN LATERAL unnest(ARRAY[stock."Ticker"] || stock."SecondaryTickers" || stock."ReferenceTickers" || stock."PriceHistoryBackfilledTickers") symbol
     LEFT JOIN "LegacyEquityListing" legacy ON legacy."CommonStockId" = stock."Id" AND legacy."ListedTicker" = symbol
     WHERE symbol IS NOT NULL AND symbol <> '' AND legacy."EquityListingId" IS NULL;
   IF missing > 0 THEN RAISE EXCEPTION '% unmapped directory symbols', missing; END IF;

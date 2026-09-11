@@ -1,86 +1,34 @@
-using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
-using Equibles.Media.Data.Models;
-using Equibles.Sec.Data.Models;
-using Equibles.Sec.Data.Models.Chunks;
+using Equibles.Migrations.Migrations;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
-using File = Equibles.Media.Data.Models.File;
 
 namespace Equibles.IntegrationTests.Migrations;
 
 [Collection(ParadeDbCollection.Name)]
 public class RepairChunkReportingDatesMigrationTests : ParadeDbMcpTestBase
 {
-    private const string PreviousMigration = "20260810162249_AddNportReportedHoldingCounts";
-    private const string RepairMigration = "20260810212201_RepairChunkReportingDates";
-
-    public RepairChunkReportingDatesMigrationTests(ParadeDbFixture fixture)
-        : base(fixture) { }
+    public RepairChunkReportingDatesMigrationTests(ParadeDbFixture fixture) : base(fixture) { }
 
     [Fact]
     public async Task Up_ReplacesAStaleChunkCacheWithItsDocumentReportingDate()
     {
-        var migrator = DbContext.Database.GetService<IMigrator>();
-
-        try
-        {
-            var stock = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            };
-            var file = new File
-            {
-                Name = "transcript",
-                Extension = "txt",
-                ContentType = "text/plain",
-                Size = 1,
-                FileContent = new FileContent { Bytes = [0x01] },
-            };
-            var document = new Document
-            {
-                CommonStock = stock,
-                Content = file,
-                DocumentType = DocumentType.TenK,
-                ReportingDate = new DateOnly(2023, 9, 30),
-                ReportingForDate = new DateOnly(2023, 9, 30),
-                LineCount = 1,
-            };
-            var chunk = new Chunk
-            {
-                Document = document,
-                Index = 0,
-                StartPosition = 0,
-                EndPosition = 10,
-                StartLineNumber = 1,
-                Content = "transcript",
-                DocumentType = document.DocumentType,
-                Ticker = stock.Ticker,
-                ReportingDate = new DateTime(2023, 12, 31, 0, 0, 0, DateTimeKind.Utc),
-            };
-            DbContext.Add(chunk);
-            await DbContext.SaveChangesAsync();
-            DbContext.ChangeTracker.Clear();
-
-            // Seed through the current EF model first, then recreate the historical schema.
-            // Future additive columns must not make this migration-transition test write through
-            // a model that is newer than the database it deliberately downgraded.
-            await migrator.MigrateAsync(PreviousMigration);
-
-            await migrator.MigrateAsync(RepairMigration);
-            DbContext.ChangeTracker.Clear();
-
-            var repaired = await DbContext.Set<Chunk>().FindAsync(chunk.Id);
-            repaired.ReportingDate.Should().Be(
-                new DateTime(2023, 9, 30, 0, 0, 0, DateTimeKind.Utc)
-            );
-        }
-        finally
-        {
-            await migrator.MigrateAsync();
-        }
+        await using var transaction = await DbContext.Database.BeginTransactionAsync();
+        // Frozen historical table shapes keep this test independent of later irreversible migrations.
+        await DbContext.Database.ExecuteSqlRawAsync("""
+            CREATE TEMP TABLE "Document" ("Id" uuid PRIMARY KEY, "ReportingDate" date) ON COMMIT DROP;
+            CREATE TEMP TABLE "Chunk" ("Id" uuid PRIMARY KEY, "DocumentId" uuid, "ReportingDate" timestamptz) ON COMMIT DROP;
+            INSERT INTO "Document" VALUES ('00000000-0000-0000-0000-000000000001', '2023-09-30');
+            INSERT INTO "Chunk" VALUES ('00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', '2023-12-31T00:00:00Z');
+            """);
+        var commands = DbContext.GetService<IMigrationsSqlGenerator>()
+            .Generate(new RepairChunkReportingDates().UpOperations);
+        foreach (var command in commands)
+            await DbContext.Database.ExecuteSqlRawAsync(command.CommandText);
+        var repaired = await DbContext.Database.SqlQueryRaw<DateTime>("""SELECT "ReportingDate" AS "Value" FROM "Chunk" """)
+            .SingleAsync();
+        repaired.Should().Be(new DateTime(2023, 9, 30, 0, 0, 0, DateTimeKind.Utc));
     }
 }

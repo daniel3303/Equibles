@@ -31,18 +31,25 @@ public class DailyStockPriceRepository : BaseRepository<DailyStockPrice>
         return base.GetAll();
     }
 
-    /// <summary>Read migrated histories by stable listing ID without copying or rekeying bars.</summary>
+    /// <summary>Read native histories by stable listing ID; the result preserves the existing price contract.</summary>
     public IQueryable<DailyStockPrice> GetByListing(Guid listingId) =>
-        GetAllSeries()
-            .Where(price =>
-                DbContext
-                    .Set<LegacyEquityListing>()
-                    .Any(legacy =>
-                        legacy.EquityListingId == listingId
-                        && legacy.CommonStockId == price.CommonStockId
-                        && legacy.ListedTicker == price.ListedTicker
-                    )
-            );
+        DbContext
+            .Set<EquityDailyStockPrice>()
+            .Where(price => price.EquityListingId == listingId)
+            .Select(price => new DailyStockPrice
+            {
+                Id = price.Id,
+                CommonStockId = price.Listing.Security.EquityIssuerId,
+                ListedTicker = price.SourceTicker ?? price.Listing.Ticker,
+                Date = price.Date,
+                Open = price.Open,
+                High = price.High,
+                Low = price.Low,
+                Close = price.Close,
+                AdjustedClose = price.AdjustedClose,
+                Volume = price.Volume,
+                CreationTime = price.CreationTime,
+            });
 
     public IQueryable<DailyStockPrice> GetByStock(CommonStock stock)
     {

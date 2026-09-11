@@ -12,7 +12,7 @@
 - Historical symbols and reused tickers keep separate source keys and listing IDs; one symbol never merges different issuers.
 - Database writer guards synchronize issuer changes and register newly observed exact historical series from EF, bulk imports and retiring binaries.
 - Writer guards are recurring reconciliation and stay installed after the finite backfill completes.
-- `EquityIssuerRepository.GetLegacyFacts` exposes retained issuer data; `DailyStockPriceRepository.GetByListing` reads retained bars through stable listing IDs.
+- `EquityIssuerRepository.GetByCik` reads native issuer facts; `DailyStockPriceRepository.GetByListing` reads native `EquityDailyStockPrice` rows by stable listing ID.
 - `CommonStockRepository.GetByTicker` reads the registry first and preserves the legacy lookup as a compatibility fallback.
 - Legacy customer references remain valid source keys; no customer rows or portfolio economics are rewritten.
 - Existing URL aliases and canonicals retain their current MVC behavior; international routes remain a separate exchange-qualified MVC surface.
@@ -27,3 +27,12 @@
 - Retain a tested database backup and point-in-time recovery through rollout; schema migration creates triggers and can wait for concurrent writers, so schedule a maintenance window sized from the restored-copy rehearsal.
 - Deploy the schema and backfill before registry readers; verify completion and existing URL behavior before enabling the new binaries.
 - The old storage remains the compatibility representation of the same data; removing it requires a separate, proven migration of every dependent reader and writer.
+
+## Native storage and retirement
+
+- Company facts live on `EquityIssuer`; registration facts and share quantities live on `EquitySecurity`; import checkpoints live on `EquityListing`.
+- `EquityIssuerPresentation` selects a default listing for issuer-only requests and refuses listings belonging to another issuer.
+- `EquityDailyStockPrice` stores exact listed bars; `UnattributedDailyStockPrice` preserves observations whose original listing is unknown, including IDs shared with a later exact-listed observation.
+- Transitional price triggers preserve inserts, resettlements, and deletes atomically while older writers remain deployed.
+- `scripts/verify-native-equity-prices.sql` compares every original price field in both directions before enabling native-only writers.
+- This is an intermediate implementation: complete financial/customer consumer migration and verified retirement of old tables are required before the task is finished.

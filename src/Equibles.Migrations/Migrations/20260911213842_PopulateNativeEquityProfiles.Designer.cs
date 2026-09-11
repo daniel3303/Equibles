@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace Equibles.Migrations.Migrations
 {
     [DbContext(typeof(EquiblesFinancialDbContext))]
-    partial class EquiblesDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260911213842_PopulateNativeEquityProfiles")]
+    partial class PopulateNativeEquityProfiles
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -4251,58 +4254,6 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("ListedDailyStockPrice", (string)null);
                 });
 
-            modelBuilder.Entity("Equibles.Yahoo.Data.Models.EquityDailyStockPrice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AdjustedClose")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("Close")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime>("CreationTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("Date")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("EquityListingId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("High")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("Low")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("Open")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<string>("SourceTicker")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<long>("Volume")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Date");
-
-                    b.HasIndex("EquityListingId", "Date")
-                        .IsUnique();
-
-                    b.ToTable("EquityDailyStockPrice");
-                });
-
             modelBuilder.Entity("Equibles.Yahoo.Data.Models.LegacyDailyStockPrice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4352,54 +4303,6 @@ namespace Equibles.Migrations.Migrations
                         .HasDatabaseName("IX_DailyStockPrice_CommonStockId_Date");
 
                     b.ToTable("DailyStockPrice", (string)null);
-                });
-
-            modelBuilder.Entity("Equibles.Yahoo.Data.Models.UnattributedDailyStockPrice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AdjustedClose")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("Close")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime>("CreationTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("Date")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("EquityIssuerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("High")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("Low")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("Open")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<long>("Volume")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Date");
-
-                    b.HasIndex("EquityIssuerId", "Date")
-                        .IsUnique();
-
-                    b.ToTable("UnattributedDailyStockPrice");
                 });
 
             modelBuilder.Entity("Equibles.Media.Data.Models.Image", b =>
@@ -5133,17 +5036,6 @@ namespace Equibles.Migrations.Migrations
                     b.Navigation("CommonStock");
                 });
 
-            modelBuilder.Entity("Equibles.Yahoo.Data.Models.EquityDailyStockPrice", b =>
-                {
-                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityListing", "Listing")
-                        .WithMany()
-                        .HasForeignKey("EquityListingId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Listing");
-                });
-
             modelBuilder.Entity("Equibles.Yahoo.Data.Models.LegacyDailyStockPrice", b =>
                 {
                     b.HasOne("Equibles.CommonStocks.Data.Models.CommonStock", "CommonStock")
@@ -5154,17 +5046,6 @@ namespace Equibles.Migrations.Migrations
                         .HasConstraintName("FK_DailyStockPrice_CommonStock_CommonStockId");
 
                     b.Navigation("CommonStock");
-                });
-
-            modelBuilder.Entity("Equibles.Yahoo.Data.Models.UnattributedDailyStockPrice", b =>
-                {
-                    b.HasOne("Equibles.CommonStocks.Data.Models.EquityIssuer", "Issuer")
-                        .WithMany()
-                        .HasForeignKey("EquityIssuerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Issuer");
                 });
 
             modelBuilder.Entity("Equibles.Cftc.Data.Models.CftcContract", b =>

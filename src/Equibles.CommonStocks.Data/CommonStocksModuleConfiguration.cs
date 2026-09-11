@@ -36,9 +36,23 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
         builder
             .Entity<EquitySecurity>()
             .HasOne(row => row.Issuer)
-            .WithMany()
+            .WithMany(row => row.Securities)
             .HasForeignKey(row => row.EquityIssuerId)
             .OnDelete(DeleteBehavior.Restrict);
+        builder.Entity<EquityIssuer>().HasIndex(row => row.Cik).IsUnique();
+        builder.Entity<EquityIssuerPresentation>(presentation =>
+        {
+            presentation
+                .HasOne(row => row.Issuer)
+                .WithOne(row => row.Presentation)
+                .HasForeignKey<EquityIssuerPresentation>(row => row.EquityIssuerId)
+                .OnDelete(DeleteBehavior.Cascade);
+            presentation
+                .HasOne(row => row.Listing)
+                .WithMany()
+                .HasForeignKey(row => row.EquityListingId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
         builder
             .Entity<LegacyEquityListing>()
             .HasOne(row => row.Listing)
@@ -49,7 +63,7 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
         {
             listing
                 .HasOne(row => row.Security)
-                .WithMany()
+                .WithMany(row => row.Listings)
                 .HasForeignKey(row => row.EquitySecurityId)
                 .OnDelete(DeleteBehavior.Restrict);
             listing

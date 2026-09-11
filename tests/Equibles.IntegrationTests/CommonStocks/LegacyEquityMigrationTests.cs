@@ -21,6 +21,53 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
+    public async Task MarketSizedBackfill_DoesNotExhaustTransactionLockSlots()
+    {
+        var database = "identity_bulk_" + Guid.NewGuid().ToString("N");
+        await using var admin = new NpgsqlConnection(Fixture.ConnectionString);
+        await admin.OpenAsync();
+        await using (var create = new NpgsqlCommand($"CREATE DATABASE \"{database}\"", admin))
+            await create.ExecuteNonQueryAsync();
+        try
+        {
+            var connection = new NpgsqlConnectionStringBuilder(Fixture.ConnectionString)
+            {
+                Database = database,
+            }.ConnectionString;
+            await using var context = Fixture.CreateDbContext(options =>
+                options.UseNpgsql(connection)
+            );
+            context.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
+            await context
+                .GetService<IMigrator>()
+                .MigrateAsync("20260911164403_AddEquityIdentityFoundation");
+            // More identities than PostgreSQL's default shared advisory-lock capacity.
+            await context.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO "CommonStock" (
+                    "Id", "Ticker", "Active", "MarketCapitalization", "SharesOutStanding",
+                    "ListedSecurityType", "HistoricalCusipBackfillAmbiguous")
+                SELECT gen_random_uuid(), 'BULK-' || n, true, 0, 0, 0, false
+                FROM generate_series(1, 12000) AS n;
+                """
+            );
+            await context.Database.MigrateAsync();
+            (await context.Set<EquityIssuer>().CountAsync()).Should().Be(12000);
+            (await context.Set<EquityListing>().CountAsync()).Should().Be(12000);
+            (await context.Set<LegacyEquityListing>().CountAsync()).Should().Be(12000);
+            await context.Database.ExecuteSqlRawAsync(AuditSql());
+        }
+        finally
+        {
+            await using var drop = new NpgsqlCommand(
+                $"DROP DATABASE \"{database}\" WITH (FORCE)",
+                admin
+            );
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
     public async Task PopulatedDatabaseMigration_PreservesEveryLegacyValue_AndMapsHistoricalSeries()
     {
         var database = "identity_" + Guid.NewGuid().ToString("N");
@@ -59,6 +106,21 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
                 Price(stock, "OLD", 3),
                 Price(inactive, "DEAD", 4)
             );
+            context.Add(
+                new LegacyDailyStockPrice
+                {
+                    Id = Guid.NewGuid(),
+                    CommonStock = stock,
+                    Date = new DateOnly(2001, 1, 2),
+                    Open = 1.2345m,
+                    High = 3.4567m,
+                    Low = 0.9876m,
+                    Close = 2.3456m,
+                    AdjustedClose = 1.8765m,
+                    Volume = 1234567890,
+                    CreationTime = new DateTime(2002, 3, 4, 5, 6, 7, DateTimeKind.Utc),
+                }
+            );
             context.Add(Activity(stock, "ACTIVITY-OLD"));
             context.Add(ShortVolume(stock, "SHORT-OLD", 1));
             context.Add(ShortVolume(stock, "", 2));
@@ -66,6 +128,10 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
             var before = await LegacySnapshot(context);
             await context.Database.MigrateAsync();
             (await LegacySnapshot(context)).Should().Be(before);
+            await context.Database.ExecuteSqlRawAsync(AuditSql("verify-native-equity-prices.sql"));
+            (await context.Set<UnattributedDailyStockPrice>().SingleAsync())
+                .Close.Should()
+                .Be(2.3456m);
             await context.Database.ExecuteSqlRawAsync(AuditSql());
             (await context.Set<EquityIssuer>().CountAsync()).Should().Be(2);
             (await context.Set<LegacyEquityListing>().CountAsync()).Should().Be(6);
@@ -259,7 +325,7 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
             TotalVolume = 234.567890m,
         };
 
-    private static string AuditSql()
+    private static string AuditSql(string fileName = "verify-equity-identity.sql")
     {
         for (
             var root = new DirectoryInfo(AppContext.BaseDirectory);
@@ -267,7 +333,7 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
             root = root.Parent
         )
         {
-            var file = Path.Combine(root.FullName, "scripts", "verify-equity-identity.sql");
+            var file = Path.Combine(root.FullName, "scripts", fileName);
             if (File.Exists(file))
                 return File.ReadAllText(file);
         }
@@ -296,6 +362,7 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
         command.CommandText = """
             SELECT (SELECT jsonb_agg(to_jsonb(s) ORDER BY "Id")::text FROM "CommonStock" s)
               || (SELECT jsonb_agg(to_jsonb(p) ORDER BY "Id")::text FROM "ListedDailyStockPrice" p)
+              || (SELECT jsonb_agg(to_jsonb(p) ORDER BY "Id")::text FROM "DailyStockPrice" p)
               || (SELECT jsonb_agg(to_jsonb(a) ORDER BY "PriceSeriesTicker")::text FROM "StockQuarterlyListingActivity" a)
               || (SELECT jsonb_agg(to_jsonb(v) ORDER BY "Id")::text FROM "DailyShortVolume" v)
             """;

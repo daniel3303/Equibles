@@ -14,6 +14,9 @@ public class EquityListingRepository : BaseRepository<EquityListing>
             .Where(row => row.CommonStockId == stockId && row.ListedTicker == ticker)
             .Select(row => row.Listing);
 
+    public IQueryable<LegacyEquityListing> GetLegacyMappings(IEnumerable<Guid> issuerIds) =>
+        DbContext.Set<LegacyEquityListing>().Where(row => issuerIds.Contains(row.CommonStockId));
+
     public IQueryable<EquityListing> GetVerifiedByMarket(string mic, string ticker) =>
         GetAll()
             .Where(row =>

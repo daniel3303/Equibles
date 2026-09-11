@@ -8,6 +8,18 @@ public class YahooModuleConfiguration : IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {
+        builder
+            .Entity<EquityDailyStockPrice>()
+            .HasOne(price => price.Listing)
+            .WithMany()
+            .HasForeignKey(price => price.EquityListingId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<UnattributedDailyStockPrice>()
+            .HasOne(price => price.Issuer)
+            .WithMany()
+            .HasForeignKey(price => price.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<LegacyDailyStockPrice>(prices =>
         {
             prices.ToTable("DailyStockPrice");

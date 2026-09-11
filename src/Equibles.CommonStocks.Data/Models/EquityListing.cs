@@ -30,6 +30,17 @@ public class EquityListing : IActivable
     public DateOnly? ListedOn { get; set; }
     public DateOnly? DelistedOn { get; set; }
 
+    public bool IsDirectoryListed { get; set; }
+    public bool IsReferenceListed { get; set; }
+    public bool PriceHistoryBackfilled { get; set; }
+    public DateTime? YahooEnrichmentAttemptedAt { get; set; }
+    public DateTime? HistoricalPriceBackfillAttemptedAt { get; set; }
+    public DateTime? HistoricalCusipBackfillRequestedAt { get; set; }
+    public List<string> HistoricalCusipBackfillCandidates { get; set; } = [];
+    public DateOnly? HistoricalCusipBackfillCandidateOn { get; set; }
+    public bool HistoricalCusipBackfillAmbiguous { get; set; }
+    public DateTime? HistoricalCusipBackfillSweepStartedAt { get; set; }
+
     [MaxLength(2000)]
     public string IdentitySourceUrl { get; set; }
 }
