@@ -39,6 +39,12 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
             .WithMany()
             .HasForeignKey(row => row.EquityIssuerId)
             .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<LegacyEquityListing>()
+            .HasOne(row => row.Listing)
+            .WithOne()
+            .HasForeignKey<LegacyEquityListing>(row => row.EquityListingId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<EquityListing>(listing =>
         {
             listing
@@ -55,6 +61,10 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
                 table =>
                 {
                     table.HasCheckConstraint(
+                        "CK_EquityListing_Verified",
+                        "\"IdentityState\" IN (0, 1) AND (\"IdentityState\" = 0 OR (\"MarketIdentifierCode\" IS NOT NULL AND \"TradingCurrency\" IS NOT NULL AND \"QuoteUnitMultiplier\" IS NOT NULL AND nullif(btrim(\"IdentitySourceUrl\"), '') IS NOT NULL))"
+                    );
+                    table.HasCheckConstraint(
                         "CK_EquityListing_Mic",
                         "\"MarketIdentifierCode\" ~ '^[A-Z0-9]{4}$'"
                     );
@@ -64,7 +74,7 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
                     );
                     table.HasCheckConstraint(
                         "CK_EquityListing_Ticker",
-                        "length(btrim(\"Ticker\")) > 0 AND \"Ticker\" = btrim(\"Ticker\") AND \"Ticker\" = upper(\"Ticker\")"
+                        "\"IdentityState\" = 0 OR (length(btrim(\"Ticker\")) > 0 AND \"Ticker\" = btrim(\"Ticker\"))"
                     );
                     table.HasCheckConstraint(
                         "CK_EquityListing_QuoteUnitMultiplier",

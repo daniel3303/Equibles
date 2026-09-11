@@ -1,13 +1,29 @@
-# Equity identity foundation
+# Equity identity migration
 
-- `EquityIssuer` represents a company independently of SEC registration; its optional unique `CommonStockId` bridges an existing record without changing legacy reads.
-- `EquitySecurity` represents one ordinary share class, preferred share or receipt; its optional ISIN identifies the security rather than the venue.
-- `EquityListing` represents one security on a MIC, with an exact ticker, currency, explicit quote multiplier and lifecycle dates.
-- Active ticker uniqueness is per MIC; retained inactive listings keep their own IDs when a symbol is reused.
-- An identity-source URL is provenance, not a verification verdict; future writers must verify issuer, security and listing relationships from authoritative data.
-- Do not infer share classes, receipt ratios, exchanges or currencies from legacy ticker arrays or names.
-- The migration creates three empty tables; it does not backfill, rename, copy, delete or update existing stock/price data.
-- Legacy stock deletion clears only the optional issuer bridge; new identity survives and issuer/security deletion cannot cascade through retained listings.
-- Application rollback retains these additive tables; the migration refuses destructive rollback.
-- Existing U.S. controllers, URLs, ticker resolution and price histories remain unchanged.
-- No import worker or public reader uses the new tables yet; provider mappings, symbol history, ratio evidence and listing-aware ingestion are subsequent changes.
+- `EquityIssuer` represents issuer identity independently of SEC registration; `CommonStockId` bridges all existing issuer facts without moving or rekeying them.
+- `EquitySecurity` represents one share class or receipt; `EquityListing` represents one venue listing.
+- `LegacyEquityListing` preserves the exact original `(CommonStockId, ListedTicker)` key and maps it to a stable listing ID.
+- The backfill covers every legacy issuer, current/reference/secondary symbol, retained ticker alias, and attributable exact series in price, ownership, corporate-action and short-data tables.
+- Existing row IDs, financial values, source documents, historical tables, foreign keys and public routes remain unchanged.
+- A legacy source key proves only its existing identity; migrated securities remain `Unknown` and listings remain `Legacy` with unknown MIC, currency and quote scale.
+- Null and empty-string ticker sentinels remain unattributed and are excluded from listing registration and audit expectations; their original rows and values are retained.
+- Unattributed issuer-level rows stay issuer-level; never assign an old ambiguous price, split or holding to today's primary ticker.
+- A verified listing requires source evidence, MIC, currency and positive quote scale; legacy migration does not grant verification or international publication.
+- Historical symbols and reused tickers keep separate source keys and listing IDs; one symbol never merges different issuers.
+- Database writer guards synchronize issuer changes and register newly observed exact historical series from EF, bulk imports and retiring binaries.
+- Writer guards are recurring reconciliation and stay installed after the finite backfill completes.
+- `EquityIssuerRepository.GetLegacyFacts` exposes retained issuer data; `DailyStockPriceRepository.GetByListing` reads retained bars through stable listing IDs.
+- `CommonStockRepository.GetByTicker` reads the registry first and preserves the legacy lookup as a compatibility fallback.
+- Legacy customer references remain valid source keys; no customer rows or portfolio economics are rewritten.
+- Existing URL aliases and canonicals retain their current MVC behavior; international routes remain a separate exchange-qualified MVC surface.
+- Deleting a legacy stock clears only the issuer bridge; registry lineage remains and new identity deletion cannot cascade through retained mappings.
+- Both migrations refuse destructive rollback; roll application binaries back with tables and writer guards intact.
+
+## Verification and rollout
+
+- Run `scripts/verify-equity-identity.sql` with `psql -v ON_ERROR_STOP=1` in the financial database; zero missing issuers/attributable series and enabled guards are required.
+- This is a finite backfill of existing identities plus recurring write-time synchronization; retire only the backfill procedure after the completion audit passes and old writers are retired, never the guards needed by continuing legacy writers.
+- Apply against a restored production backup first and compare every legacy table's row count and content before authorizing production execution.
+- Retain a tested database backup and point-in-time recovery through rollout; schema migration creates triggers and can wait for concurrent writers, so schedule a maintenance window sized from the restored-copy rehearsal.
+- Deploy the schema and backfill before registry readers; verify completion and existing URL behavior before enabling the new binaries.
+- The old storage remains the compatibility representation of the same data; removing it requires a separate, proven migration of every dependent reader and writer.

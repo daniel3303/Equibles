@@ -9,11 +9,11 @@ public class EquityIssuer
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    [Required, MaxLength(256)]
+    [MaxLength(256)]
     public string Name { get; set; }
     public Guid? CommonStockId { get; set; }
     public virtual CommonStock CommonStock { get; set; }
 
-    [Required, MaxLength(2000)]
+    [MaxLength(2000)]
     public string IdentitySourceUrl { get; set; }
 }

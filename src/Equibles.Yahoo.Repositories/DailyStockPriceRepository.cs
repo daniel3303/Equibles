@@ -31,6 +31,19 @@ public class DailyStockPriceRepository : BaseRepository<DailyStockPrice>
         return base.GetAll();
     }
 
+    /// <summary>Read migrated histories by stable listing ID without copying or rekeying bars.</summary>
+    public IQueryable<DailyStockPrice> GetByListing(Guid listingId) =>
+        GetAllSeries()
+            .Where(price =>
+                DbContext
+                    .Set<LegacyEquityListing>()
+                    .Any(legacy =>
+                        legacy.EquityListingId == listingId
+                        && legacy.CommonStockId == price.CommonStockId
+                        && legacy.ListedTicker == price.ListedTicker
+                    )
+            );
+
     public IQueryable<DailyStockPrice> GetByStock(CommonStock stock)
     {
         return GetAll().Where(p => p.CommonStockId == stock.Id);

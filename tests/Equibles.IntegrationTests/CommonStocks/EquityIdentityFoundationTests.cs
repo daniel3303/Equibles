@@ -42,8 +42,9 @@ public class EquityIdentityFoundationTests : ParadeDbMcpTestBase
     public async Task CrossListing_SharesIssuerAndSecurity_WithoutChangingLegacyLookup()
     {
         var stock = new CommonStock { Ticker = "SAME", Name = "Existing issuer" };
-        var issuer = Issuer();
-        issuer.CommonStock = stock;
+        DbContext.Add(stock);
+        await DbContext.SaveChangesAsync();
+        var issuer = await DbContext.Set<EquityIssuer>().SingleAsync();
         var ordinary = Security(issuer);
         var receipt = Security(issuer);
         receipt.SecurityType = EquitySecurityKind.DepositaryReceipt;
@@ -55,8 +56,8 @@ public class EquityIdentityFoundationTests : ParadeDbMcpTestBase
         DbContext.ChangeTracker.Clear();
 
         (await new CommonStockRepository(DbContext).GetByTicker("SAME")).Id.Should().Be(stock.Id);
-        (await DbContext.Set<EquityListing>().CountAsync()).Should().Be(3);
-        (await DbContext.Set<EquitySecurity>().CountAsync()).Should().Be(2);
+        (await DbContext.Set<EquityListing>().CountAsync()).Should().Be(4);
+        (await DbContext.Set<EquitySecurity>().CountAsync()).Should().Be(3);
         (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(1);
     }
 
@@ -97,9 +98,7 @@ public class EquityIdentityFoundationTests : ParadeDbMcpTestBase
     public async Task LegacyDeletion_PreservesNewIdentityAndListings()
     {
         var stock = new CommonStock { Ticker = "SAME", Name = "Existing issuer" };
-        var issuer = Issuer();
-        issuer.CommonStock = stock;
-        DbContext.Add(Listing(Security(issuer)));
+        DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
         await DbContext.Set<CommonStock>().Where(row => row.Id == stock.Id).ExecuteDeleteAsync();
@@ -132,6 +131,7 @@ public class EquityIdentityFoundationTests : ParadeDbMcpTestBase
         new()
         {
             Security = security,
+            IdentityState = EquityIdentityState.Verified,
             MarketIdentifierCode = mic,
             Ticker = "SAME",
             TradingCurrency = "EUR",

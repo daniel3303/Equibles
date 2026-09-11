@@ -145,6 +145,24 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     /// </summary>
     public async Task<CommonStock> GetByTicker(string ticker)
     {
+        var migrated =
+            DbContext == null
+                ? null
+                : await DbContext
+                    .Set<LegacyEquityListing>()
+                    .Where(row => row.ListedTicker == ticker)
+                    .Select(row => row.Listing.Security.Issuer.CommonStock)
+                    .Where(stock =>
+                        stock != null
+                        && stock.Active
+                        && (stock.Ticker == ticker || stock.SecondaryTickers.Contains(ticker))
+                    )
+                    .OrderBy(stock => stock.Ticker == ticker ? 0 : 1)
+                    .FirstOrDefaultAsync();
+        if (migrated != null)
+            return migrated;
+
+        // Keep existing callers available during a staged backfill and in self-hosted stores.
         return await GetAll()
             .Where(cs => cs.Ticker == ticker || cs.SecondaryTickers.Contains(ticker))
             .OrderBy(cs => cs.Ticker == ticker ? 0 : 1)
@@ -161,6 +179,15 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     {
         return await GetAll().FirstOrDefaultAsync(cs => cs.Ticker == ticker);
     }
+
+    public virtual Task<Guid?> GetEquityListingId(Guid stockId, string ticker) =>
+        DbContext == null
+            ? Task.FromResult<Guid?>(null)
+            : DbContext
+                .Set<LegacyEquityListing>()
+                .Where(row => row.CommonStockId == stockId && row.ListedTicker == ticker)
+                .Select(row => (Guid?)row.EquityListingId)
+                .SingleOrDefaultAsync();
 
     public IQueryable<CommonStock> GetByTickers(IEnumerable<string> tickers)
     {

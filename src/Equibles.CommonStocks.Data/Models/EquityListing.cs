@@ -11,23 +11,25 @@ public class EquityListing : IActivable
     public Guid EquitySecurityId { get; set; }
     public virtual EquitySecurity Security { get; set; }
 
-    [Required, MaxLength(4)]
+    [MaxLength(4)]
     public string MarketIdentifierCode { get; set; }
 
     [Required, MaxLength(32)]
     public string Ticker { get; set; }
 
-    [Required, MaxLength(3)]
+    [MaxLength(3)]
     public string TradingCurrency { get; set; }
 
     // Multiply the source quote by this value to obtain major currency units.
     // Required evidence: do not default an unknown quotation scale to one.
     [Precision(18, 8)]
-    public decimal QuoteUnitMultiplier { get; set; }
+    public decimal? QuoteUnitMultiplier { get; set; }
+    public EquityIdentityState IdentityState { get; set; }
+
     public bool Active { get; set; } = true;
     public DateOnly? ListedOn { get; set; }
     public DateOnly? DelistedOn { get; set; }
 
-    [Required, MaxLength(2000)]
+    [MaxLength(2000)]
     public string IdentitySourceUrl { get; set; }
 }

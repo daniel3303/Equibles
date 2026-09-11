@@ -15,6 +15,6 @@ public class EquitySecurity
     public string Isin { get; set; }
     public EquitySecurityKind SecurityType { get; set; }
 
-    [Required, MaxLength(2000)]
+    [MaxLength(2000)]
     public string IdentitySourceUrl { get; set; }
 }
