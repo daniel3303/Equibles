@@ -190,9 +190,11 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
             Name = "Replay",
             Cik = "0000000011",
         };
+        DbContext.Add(stock);
+        await DbContext.SaveChangesAsync();
         var checkpoint = new FinancialFactsSyncStatus
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             CalendarEvidenceFingerprint = new string('a', 64),
             LastCheckedAt = DateTime.UtcNow,
         };

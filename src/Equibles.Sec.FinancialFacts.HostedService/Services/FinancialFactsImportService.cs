@@ -697,7 +697,7 @@ public class FinancialFactsImportService
     {
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<FinancialFactsSyncStatusRepository>();
-        return await repo.GetByStock(stock).FirstOrDefaultAsync(cancellationToken);
+        return await repo.GetByIssuerId(stock.Id).FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task UpsertSyncStatus(
@@ -712,7 +712,7 @@ public class FinancialFactsImportService
 
         var status = new FinancialFactsSyncStatus
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             LastCheckedAt = DateTime.UtcNow,
             LastFiledDateSeen = lastFiledSeen,
             ImporterVersion = CurrentImporterVersion,
@@ -722,7 +722,7 @@ public class FinancialFactsImportService
         await dbContext
             .Set<FinancialFactsSyncStatus>()
             .UpsertRange(status)
-            .On(s => s.CommonStockId)
+            .On(s => s.EquityIssuerId)
             .WhenMatched(
                 (existing, incoming) =>
                     new FinancialFactsSyncStatus

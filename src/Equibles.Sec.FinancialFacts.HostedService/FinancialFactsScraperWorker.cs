@@ -71,17 +71,17 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
                 .AsNoTracking()
                 .Select(s => new
                 {
-                    s.CommonStockId,
+                    s.EquityIssuerId,
                     s.LastCheckedAt,
                     s.ImporterVersion,
                 })
                 .ToListAsync(stoppingToken);
             lastCheckedByStock = syncStatuses.ToDictionary(
-                s => s.CommonStockId,
+                s => s.EquityIssuerId,
                 s => s.LastCheckedAt
             );
             importerVersionByStock = syncStatuses.ToDictionary(
-                s => s.CommonStockId,
+                s => s.EquityIssuerId,
                 s => s.ImporterVersion
             );
         }

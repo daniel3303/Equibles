@@ -173,7 +173,7 @@ public class FinancialFactsImportServiceMissingCommonStockTests : IAsyncLifetime
 
         var syncStatus = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleOrDefaultAsync(s => s.CommonStockId == apple.Id, CancellationToken.None);
+            .SingleOrDefaultAsync(s => s.EquityIssuerId == apple.Id, CancellationToken.None);
         syncStatus
             .Should()
             .BeNull("no FinancialFactsSyncStatus row should be written for a deleted parent");

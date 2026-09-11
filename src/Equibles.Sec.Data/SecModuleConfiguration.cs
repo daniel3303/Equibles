@@ -52,7 +52,12 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         });
 
         builder.Entity<BackfillState>();
-        builder.Entity<CompanyFilingSyncState>();
+        builder
+            .Entity<CompanyFilingSyncState>()
+            .HasOne(state => state.Issuer)
+            .WithMany()
+            .HasForeignKey(state => state.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<FailToDeliver>();
         builder.Entity<FailedFilingIngest>();
         builder.Entity<FormAdvAdviser>();
@@ -75,6 +80,11 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
                 .IsCreatedConcurrently();
         });
         builder.Entity<ProcessedNportFiling>();
-        builder.Entity<TranscriptCheckStatus>();
+        builder
+            .Entity<TranscriptCheckStatus>()
+            .HasOne(state => state.Issuer)
+            .WithMany()
+            .HasForeignKey(state => state.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

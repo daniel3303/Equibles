@@ -115,7 +115,7 @@ public class FinancialFactsImportServiceEmptyFactsTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var status = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleOrDefaultAsync(s => s.CommonStockId == stock.Id, CancellationToken.None);
+            .SingleOrDefaultAsync(s => s.EquityIssuerId == stock.Id, CancellationToken.None);
         status.Should().NotBeNull("an empty-facts company must still be checkpointed");
         status!
             .LastFiledDateSeen.Should()

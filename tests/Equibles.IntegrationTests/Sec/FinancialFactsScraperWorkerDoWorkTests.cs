@@ -165,7 +165,7 @@ public class FinancialFactsScraperWorkerDoWorkTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var statusStockIds = await verify
             .Set<FinancialFactsSyncStatus>()
-            .Select(s => s.CommonStockId)
+            .Select(s => s.EquityIssuerId)
             .ToListAsync(CancellationToken.None);
         statusStockIds
             .Should()

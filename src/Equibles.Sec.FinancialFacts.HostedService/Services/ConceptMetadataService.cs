@@ -276,14 +276,14 @@ public class ConceptMetadataService
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         var status = new FinancialFactsSyncStatus
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             LastCheckedAt = DateTime.UtcNow,
             ConceptMetadataCheckedAt = DateTime.UtcNow,
         };
         await dbContext
             .Set<FinancialFactsSyncStatus>()
             .UpsertRange(status)
-            .On(s => s.CommonStockId)
+            .On(s => s.EquityIssuerId)
             .WhenMatched(
                 (existing, incoming) =>
                     new FinancialFactsSyncStatus

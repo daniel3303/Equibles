@@ -199,7 +199,7 @@ public class DocumentScraper : IDocumentScraper
         var lastSyncedByCompany = await syncStateRepository
             .GetAll()
             .AsNoTracking()
-            .ToDictionaryAsync(s => s.CommonStockId, s => s.LastSyncedAt, cancellationToken);
+            .ToDictionaryAsync(s => s.EquityIssuerId, s => s.LastSyncedAt, cancellationToken);
 
         return SelectDueCompanies(
             companies,
@@ -249,16 +249,14 @@ public class DocumentScraper : IDocumentScraper
             var syncStateRepository =
                 scope.ServiceProvider.GetRequiredService<CompanyFilingSyncStateRepository>();
 
-            var state = await syncStateRepository
-                .GetByCommonStockId(company.Id)
-                .FirstOrDefaultAsync();
+            var state = await syncStateRepository.GetByIssuerId(company.Id).FirstOrDefaultAsync();
 
             if (state == null)
             {
                 syncStateRepository.Add(
                     new CompanyFilingSyncState
                     {
-                        CommonStockId = company.Id,
+                        EquityIssuerId = company.Id,
                         LastSyncedAt = DateTime.UtcNow,
                     }
                 );

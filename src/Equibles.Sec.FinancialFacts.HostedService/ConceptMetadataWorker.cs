@@ -64,7 +64,7 @@ public class ConceptMetadataWorker : BaseScraperWorker
                 .GetAll()
                 .Select(s => new
                 {
-                    s.CommonStockId,
+                    s.EquityIssuerId,
                     s.LastFiledDateSeen,
                     s.ConceptMetadataCheckedAt,
                 })
@@ -87,7 +87,7 @@ public class ConceptMetadataWorker : BaseScraperWorker
                 )
                 // Never-swept companies first, then stalest sweeps.
                 .OrderBy(s => s.ConceptMetadataCheckedAt ?? DateTime.MinValue)
-                .Select(s => s.CommonStockId)
+                .Select(s => s.EquityIssuerId)
                 .ToList();
         }
 

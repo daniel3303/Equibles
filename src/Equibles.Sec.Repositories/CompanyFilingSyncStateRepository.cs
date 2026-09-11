@@ -8,6 +8,6 @@ public class CompanyFilingSyncStateRepository : BaseRepository<CompanyFilingSync
     public CompanyFilingSyncStateRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<CompanyFilingSyncState> GetByCommonStockId(Guid commonStockId) =>
-        GetAll().Where(s => s.CommonStockId == commonStockId);
+    public IQueryable<CompanyFilingSyncState> GetByIssuerId(Guid issuerId) =>
+        GetAll().Where(s => s.EquityIssuerId == issuerId);
 }

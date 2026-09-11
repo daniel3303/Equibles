@@ -50,3 +50,10 @@
 - Native issuer/profile and price integration tests cover an existing populated schema, a 12,000-company backfill, independent venue prices, issuer ownership constraints, and transactional write mirroring.
 - Native daily prices preserve exact listing attribution; original issuer-only prices migrate separately and cannot enter an exact price query.
 - Full financial and customer backup/restore verification is separate from application migration and must finish before rollout.
+
+## Issuer checkpoint cutover
+
+- Filing-enumeration, financial-facts, and transcript checkpoints reference `EquityIssuer` directly and retain every existing ID and watermark.
+- The current physical `CommonStockId` column names remain during mixed-version rollout; C# uses `EquityIssuerId`, and the final contract migration must rename those columns after older binaries retire.
+- Native issuer deletion is restricted while checkpoints reference it; retiring a listing or legacy stock cannot erase these watermarks.
+- `scripts/verify-native-issuer-checkpoints.sql` checks complete issuer ownership and validated restrictive foreign keys.

@@ -30,7 +30,12 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
             b.Property(e => e.Form).HasConversion(docTypeConversion);
         });
 
-        builder.Entity<FinancialFactsSyncStatus>();
+        builder
+            .Entity<FinancialFactsSyncStatus>()
+            .HasOne(state => state.Issuer)
+            .WithMany()
+            .HasForeignKey(state => state.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.Entity<ListedSecurity>();
     }

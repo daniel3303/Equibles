@@ -220,7 +220,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         storedStock.FiscalYearEndMonth.Should().Be(6);
         var checkpoint = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleAsync(s => s.CommonStockId == stock.Id);
+            .SingleAsync(s => s.EquityIssuerId == stock.Id);
         checkpoint.CalendarEvidenceFingerprint.Should().HaveLength(64);
 
         // A corrected source calendar must replay even when SEC's newest filed date is unchanged.
@@ -248,7 +248,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
             );
         var replayCheckpoint = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleAsync(s => s.CommonStockId == stock.Id);
+            .SingleAsync(s => s.EquityIssuerId == stock.Id);
         replayCheckpoint.CalendarEvidenceFingerprint.Should().NotBe(originalFingerprint);
 
         // Unusable source evidence must leave the last successful checkpoint and facts intact.
@@ -521,7 +521,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                 .Add(
                     new FinancialFactsSyncStatus
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         LastCheckedAt = DateTime.UtcNow,
                         LastFiledDateSeen = filed,
                         ImporterVersion = FinancialFactsImportService.CurrentImporterVersion - 1,
@@ -582,7 +582,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
             .SingleAsync(f => f.CommonStockId == stock.Id, CancellationToken.None);
         var status = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleAsync(s => s.CommonStockId == stock.Id, CancellationToken.None);
+            .SingleAsync(s => s.EquityIssuerId == stock.Id, CancellationToken.None);
         fact.Id.Should().Be(factId, "replay updates the existing natural-key row");
         fact.FiscalYear.Should().Be(expectedYear);
         fact.FiscalPeriod.Should().Be(period);
@@ -731,7 +731,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                 .Add(
                     new FinancialFactsSyncStatus
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         LastCheckedAt = DateTime.UtcNow,
                         LastFiledDateSeen = amendmentFiled,
                         ImporterVersion = FinancialFactsImportService.CurrentImporterVersion - 1,

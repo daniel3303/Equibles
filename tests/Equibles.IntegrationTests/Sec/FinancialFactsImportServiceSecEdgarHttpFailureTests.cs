@@ -123,7 +123,7 @@ public class FinancialFactsImportServiceSecEdgarHttpFailureTests : IAsyncLifetim
         factCount.Should().Be(0, "no fact rows may be written when the HTTP call failed");
         var sync = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleOrDefaultAsync(s => s.CommonStockId == apple.Id, CancellationToken.None);
+            .SingleOrDefaultAsync(s => s.EquityIssuerId == apple.Id, CancellationToken.None);
         sync.Should().BeNull("no sync-status checkpoint may be written when the HTTP call failed");
         await errorReporter
             .DidNotReceive()
