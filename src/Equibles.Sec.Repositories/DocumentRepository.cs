@@ -1,5 +1,6 @@
 using Equibles.Data;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.Repositories.Extensions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Sec.Repositories;
@@ -57,22 +58,7 @@ public class DocumentRepository : BaseRepository<Document>
         return GetAll().Where(d => d.EquityIssuerId == issuerId);
     }
 
-    public IQueryable<Document> GetByTicker(string ticker)
-    {
-        return GetAll()
-            .Where(d =>
-                (
-                    d.Issuer.Presentation != null
-                    && d.Issuer.Presentation.Listing.Ticker.ToLower() == ticker.ToLower()
-                )
-                || d.Issuer.Securities.Any(security =>
-                    security.Listings.Any(listing =>
-                        (listing.IsDirectoryListed || listing.IsReferenceListed)
-                        && listing.Ticker == ticker.ToUpper()
-                    )
-                )
-            );
-    }
+    public IQueryable<Document> GetByTicker(string ticker) => GetAll().ForUsTicker(ticker);
 
     public IQueryable<Document> GetByDocumentType(DocumentType documentType)
     {

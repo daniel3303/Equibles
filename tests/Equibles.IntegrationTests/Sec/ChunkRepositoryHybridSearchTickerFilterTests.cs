@@ -180,8 +180,8 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
         sql.Should().Contain("jsonb", "the boolean query is passed as a ::jsonb predicate");
         sql.Should()
             .NotContain(
-                "\"Ticker\" =",
-                "the ticker filter must live inside the BM25 query, not a SQL heap-filter predicate that re-introduces #2157"
+                "c.\"Ticker\" =",
+                "the chunk ticker filter must remain inside BM25; native listing comparisons only verify issuer ownership"
             );
     }
 

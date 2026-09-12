@@ -231,3 +231,9 @@
 - Unattributed splits keep both primary and secondary holding values pending while retaining filed quantities.
 - Form 144 current-basis percentages remain absent across unresolved split attribution; filed shares and market values remain unchanged.
 - Off-exchange volume output accepts absent explanatory notes without failing valid history requests.
+
+## Unqualified filing search
+
+- Unqualified filing-list, BM25, vector and PostgreSQL fallback searches require matching U.S. issuer claims; equal foreign tickers cannot enter their result sets.
+- Recorded U.S. co-registrants still contribute their filings, and direct issuer/document-ID reads retain foreign records.
+- Existing ticker index predicates remain in each search arm; market ownership is an additional native identity check.
