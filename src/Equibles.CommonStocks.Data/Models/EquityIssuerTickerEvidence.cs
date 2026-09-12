@@ -11,7 +11,6 @@ namespace Equibles.CommonStocks.Data.Models;
 /// </summary>
 [Index(nameof(Ticker), nameof(FiledDate))]
 [Index(nameof(EquityIssuerId), nameof(Ticker), nameof(SourceDocumentId), IsUnique = true)]
-[Table("CommonStockTickerEvidence")]
 public class EquityIssuerTickerEvidence
 {
     // The XBRL extractor version that first preserves this evidence. Congress replay must not

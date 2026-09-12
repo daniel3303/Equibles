@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,7 +17,6 @@ namespace Equibles.Sec.FinancialFacts.Data.Models;
 /// <see cref="CommonStock.ListedSecurityType"/>.
 /// </summary>
 [Index(nameof(EquityIssuerId), nameof(TradingSymbol), IsUnique = true)]
-[Table("ListedSecurity")]
 public class IssuerSecurityRegistration
 {
     public Guid Id { get; set; } = Guid.NewGuid();

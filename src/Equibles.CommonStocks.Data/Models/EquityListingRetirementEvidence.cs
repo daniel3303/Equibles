@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models;
@@ -11,7 +10,6 @@ namespace Equibles.CommonStocks.Data.Models;
 /// </summary>
 [Index(nameof(EquityIssuerId), nameof(ListedTicker), IsUnique = true)]
 [Index(nameof(ListedTicker), nameof(DelistedOn))]
-[Table("CommonStockDelistedListing")]
 public class EquityListingRetirementEvidence
 {
     public Guid Id { get; set; } = Guid.NewGuid();

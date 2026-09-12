@@ -514,7 +514,7 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
 
         var listing = await listings
             .FromSqlInterpolated(
-                $"""SELECT * FROM "CommonStockDelistedListing" WHERE "Id" = {delistedListingId} FOR UPDATE"""
+                $"""SELECT * FROM "EquityListingRetirementEvidence" WHERE "Id" = {delistedListingId} FOR UPDATE"""
             )
             .FirstOrDefaultAsync(cancellationToken);
         if (listing != null && trackedEntry != null)

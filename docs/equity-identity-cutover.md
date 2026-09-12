@@ -267,3 +267,12 @@
 - Run the matching `verify-canonical-equity-owners*.sql` script for exact owner equivalence, valid indexes, validated constraints and every completion checkpoint. Full original-row exports remain a separate conservation gate.
 - Apply through the migration runner or an exact non-idempotent migration range; a generic idempotent SQL wrapper cannot enclose the backfill's batch commits. The operations themselves resume an interrupted run.
 - Retire both owner generations' mirrors and checkpoints only after those queries pass, all consumers use canonical names, and full restored-data plus production verification passes.
+
+## Native evidence table storage
+
+- The six issuer alias, ticker evidence, listing CUSIP, retirement evidence and security registration models use their native physical table names.
+- Empty native tables, foreign keys and indexes are created and committed before copying, releasing the issuer-table schema lock.
+- Each source table is copied in its own transaction with exact column-shape, redundant-owner and bidirectional full-row comparisons; an unexpected source column or conflicting target row stops the migration.
+- The transaction briefly blocks writes to that evidence table while copying and installing two-way row mirrors; reads remain available. The largest current cohort is approximately 603,000 ticker-evidence rows, 155 MB including indexes; measure this copy on the restored production database before rollout.
+- Existing and native writers retain real tables and unique indexes for their upserts. Unchanged mirrored rows do not recurse; IDs, source payloads, nulls, arrays and repair state remain intact.
+- Run `scripts/verify-native-equity-evidence.sql` during the compatibility window. Retire the old six tables and their temporary mirror functions after all writers use native storage and final reconciliation passes.

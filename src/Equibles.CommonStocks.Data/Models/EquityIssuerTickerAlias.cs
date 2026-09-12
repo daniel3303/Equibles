@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models;
@@ -25,7 +24,6 @@ namespace Equibles.CommonStocks.Data.Models;
 /// </summary>
 [Index(nameof(Ticker), IsUnique = true)]
 [Index(nameof(EquityIssuerId))]
-[Table("CommonStockTickerAlias")]
 public class EquityIssuerTickerAlias
 {
     public Guid Id { get; set; } = Guid.NewGuid();
