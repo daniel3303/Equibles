@@ -38,8 +38,7 @@ public class InsiderTradingToolsGetForm144ProposedSalesCultureInvarianceTests : 
             .Add(
                 new Form144Filing
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     AccessionNumber = "0000320193-26-000001",
                     FilingDate = new DateOnly(2026, 4, 20),
                     SellerName = "Jane Insider",

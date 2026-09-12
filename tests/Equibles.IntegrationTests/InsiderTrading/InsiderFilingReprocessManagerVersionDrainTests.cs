@@ -68,7 +68,7 @@ public class InsiderFilingReprocessManagerVersionDrainTests : ParadeDbMcpTestBas
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InsiderOwnerId = owner.Id,
                 AccessionNumber = accession,
                 TransactionOrder = 0,
@@ -175,7 +175,7 @@ public class InsiderFilingReprocessManagerVersionDrainTests : ParadeDbMcpTestBas
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InsiderOwnerId = owner.Id,
                 AccessionNumber = accession,
                 TransactionOrder = 0,

@@ -201,7 +201,7 @@ public class InsiderFilingRejectedDateReplayTests(ParadeDbFixture fixture)
             DbContext.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     AccessionNumber = original,
                     TransactionOrder = i,

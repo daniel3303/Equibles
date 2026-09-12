@@ -50,8 +50,7 @@ public class InsiderTradingToolsGetRoleOfficerBlankTitleTests : ParadeDbMcpTestB
             .Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     InsiderOwner = owner,
                     TransactionDate = new DateOnly(2024, 6, 14),

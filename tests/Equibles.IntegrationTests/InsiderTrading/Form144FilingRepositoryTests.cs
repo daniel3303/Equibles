@@ -49,7 +49,7 @@ public class Form144FilingRepositoryTests : IDisposable
         return new Form144Filing
         {
             Id = Guid.NewGuid(),
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             AccessionNumber = accessionNumber,
             FilingDate = filingDate ?? new DateOnly(2026, 5, 27),
             SellerName = sellerName,
@@ -77,10 +77,10 @@ public class Form144FilingRepositoryTests : IDisposable
         _repository.Add(CreateFiling(microsoft.Id, "0001950047-26-004044"));
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(apple).ToListAsync();
+        var result = await _repository.GetByIssuerId((apple).Id).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Should().OnlyContain(f => f.CommonStockId == apple.Id);
+        result.Should().OnlyContain(f => f.EquityIssuerId == apple.Id);
     }
 
     [Fact]

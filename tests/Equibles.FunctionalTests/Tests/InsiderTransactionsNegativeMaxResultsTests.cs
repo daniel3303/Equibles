@@ -87,7 +87,7 @@ public class InsiderTransactionsNegativeMaxResultsTests
                 .Add(
                     new InsiderTransaction
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         InsiderOwnerId = ownerId,
                         FilingDate = new DateOnly(2026, 4, 3),
                         TransactionDate = new DateOnly(2026, 4, 1),

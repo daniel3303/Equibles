@@ -7,19 +7,20 @@ namespace Equibles.GovernmentContracts.Data.Models;
 
 /// <summary>
 /// A federal procurement contract award (from USAspending.gov) that has been
-/// resolved to a public company in our <see cref="CommonStock"/> universe.
+/// resolved to a public company in our <see cref="Issuer"/> universe.
 /// Awards that do not resolve to a public filer are not persisted.
 /// </summary>
 [Index(nameof(AwardUniqueKey), IsUnique = true)]
-[Index(nameof(CommonStockId), nameof(ActionDate))]
+[Index(nameof(EquityIssuerId), nameof(ActionDate))]
 [Index(nameof(ActionDate))]
 public class GovernmentContract
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     /// <summary>
     /// USAspending's globally-unique award identifier (the award-detail slug,

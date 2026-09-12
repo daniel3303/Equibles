@@ -71,7 +71,7 @@ public class StocksInsiderTradingSeededTests
                 db.Add(
                     new InsiderTransaction
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         InsiderOwnerId = owners[i % ownerCount].Id,
                         TransactionDate = endDate.AddDays(-i),
                         FilingDate = endDate.AddDays(-i).AddDays(2),

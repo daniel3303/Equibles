@@ -64,7 +64,7 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InsiderOwnerId = owner.Id,
                 AccessionNumber = accession,
                 TransactionOrder = order,
@@ -256,7 +256,7 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
         var marker = new InsiderTransaction
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             AccessionNumber = accession,
             TransactionOrder = 0,
@@ -344,7 +344,7 @@ public class InsiderFilingReprocessManagerDivergenceTests : ParadeDbMcpTestBase
         var sentinel = new InsiderTransaction
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             AccessionNumber = accession,
             TransactionOrder = 0,

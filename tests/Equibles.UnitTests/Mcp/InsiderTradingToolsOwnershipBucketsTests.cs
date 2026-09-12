@@ -75,8 +75,7 @@ public class InsiderTradingToolsOwnershipBucketsTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
             TransactionDate = transactionDate ?? new DateOnly(2026, 2, 10),

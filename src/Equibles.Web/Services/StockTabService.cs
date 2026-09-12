@@ -423,7 +423,7 @@ public class StockTabService
     public async Task<InsiderTradingTabViewModel> LoadInsiderTradingTab(CommonStock stock)
     {
         var transactionQuery = _insiderTransactionRepository
-            .GetByStockWithOwner(stock)
+            .GetByIssuerIdWithOwner((stock).Id)
             .ExcludeHoldings();
         if (_minSyncDate is { } minDate)
         {
@@ -440,7 +440,7 @@ public class StockTabService
     public async Task<ProposedSalesTabViewModel> LoadProposedSalesTab(CommonStock stock)
     {
         var filings = await TakeMostRecent(
-            _form144FilingRepository.GetByStock(stock),
+            _form144FilingRepository.GetByIssuerId((stock).Id),
             f => f.FilingDate
         );
         return new ProposedSalesTabViewModel { Filings = filings, Ticker = stock.Ticker };

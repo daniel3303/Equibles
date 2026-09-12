@@ -58,7 +58,7 @@ public class GovernmentContractsImportServiceParentFallbackTests
 
         using var ctx = NewContext(options);
         var contract = ctx.Set<GovernmentContract>().AsNoTracking().Single();
-        contract.CommonStockId.Should().Be(stockId, "the award resolves through its parent");
+        contract.EquityIssuerId.Should().Be(stockId, "the award resolves through its parent");
         contract.RecipientName.Should().Be(SubsidiaryName);
 
         var cached = ctx.Set<GovernmentContractRecipientParent>().AsNoTracking().Single();
@@ -97,7 +97,7 @@ public class GovernmentContractsImportServiceParentFallbackTests
             .DidNotReceive()
             .GetRecipientProfile(Arg.Any<string>(), Arg.Any<CancellationToken>());
         using var ctx = NewContext(options);
-        ctx.Set<GovernmentContract>().AsNoTracking().Single().CommonStockId.Should().Be(stockId);
+        ctx.Set<GovernmentContract>().AsNoTracking().Single().EquityIssuerId.Should().Be(stockId);
     }
 
     [Fact]

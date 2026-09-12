@@ -94,7 +94,7 @@ public class GovernmentContractsTools
                 offset = McpLimit.ClampOffset(offset);
 
                 var query = _contractRepository
-                    .GetByCommonStock(stock)
+                    .GetByIssuerId((stock).Id)
                     .Where(c => c.ActionDate >= start && c.ActionDate <= end);
 
                 if (!string.IsNullOrWhiteSpace(agency))
@@ -196,16 +196,18 @@ public class GovernmentContractsTools
                     .Where(c => c.ActionDate >= start && c.ActionDate <= end);
 
                 var totalCompanies = await window
-                    .Select(c => c.CommonStockId)
+                    .Select(c => c.EquityIssuerId)
                     .Distinct()
                     .CountAsync();
 
                 var ranked = await window
                     .GroupBy(c => new
                     {
-                        c.CommonStockId,
-                        c.CommonStock.Ticker,
-                        c.CommonStock.Name,
+                        c.EquityIssuerId,
+                        Ticker = c.Issuer.Presentation == null
+                            ? null
+                            : c.Issuer.Presentation.Listing.Ticker,
+                        c.Issuer.Name,
                     })
                     .Select(g => new
                     {

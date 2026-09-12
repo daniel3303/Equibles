@@ -105,8 +105,7 @@ public class InsiderTransactionRepositoryGetRecentByTypeTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
             FilingDate = transactionDate.AddDays(1),

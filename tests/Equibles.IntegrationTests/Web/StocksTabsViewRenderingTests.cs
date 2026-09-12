@@ -108,7 +108,7 @@ public class StocksTabsViewRenderingTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2026, 1, 5),
                     TransactionDate = new DateOnly(2026, 1, 2),
@@ -144,7 +144,7 @@ public class StocksTabsViewRenderingTests
             db.Add(
                 new Form144Filing
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     AccessionNumber = "0001921094-26-000555",
                     FilingDate = new DateOnly(2026, 5, 27),
                     SellerName = "Levinson Arthur D",

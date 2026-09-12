@@ -247,7 +247,7 @@ public class DataCountServiceTests : IDisposable
             .AddRange(
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 3, 1),
                     TransactionDate = new DateOnly(2025, 2, 28),
@@ -259,7 +259,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 3, 15),
                     TransactionDate = new DateOnly(2025, 3, 14),
@@ -271,7 +271,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 4, 1),
                     TransactionDate = new DateOnly(2025, 3, 31),

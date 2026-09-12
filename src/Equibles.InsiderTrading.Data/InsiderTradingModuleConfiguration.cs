@@ -7,6 +7,18 @@ public class InsiderTradingModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {
+        builder
+            .Entity<Form144Filing>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<InsiderTransaction>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<InsiderOwner>();
         builder.Entity<Form144Filing>();
         builder.Entity<Form144PriorSale>();
@@ -74,7 +86,7 @@ public class InsiderTradingModuleConfiguration : Equibles.Data.IFinancialModule
                 t.IsPriceValid,
                 t.SecurityKind,
                 t.SecurityTitle,
-                t.CommonStockId,
+                t.EquityIssuerId,
                 t.InsiderOwnerId,
                 t.TransactionCode,
                 t.IsRule10b5One,

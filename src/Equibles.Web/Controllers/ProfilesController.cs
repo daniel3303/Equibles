@@ -354,7 +354,10 @@ public class ProfilesController : BaseController
             .TakeMostRecent(transaction => transaction.TransactionDate, RecentRowLimit)
             .Select(transaction => new InsiderTradeRowViewModel
             {
-                Ticker = transaction.CommonStock.Ticker,
+                Ticker =
+                    transaction.Issuer.Presentation == null
+                        ? null
+                        : transaction.Issuer.Presentation.Listing.Ticker,
                 TransactionDate = transaction.TransactionDate,
                 SecurityTitle = transaction.SecurityTitle,
                 Shares = transaction.Shares,

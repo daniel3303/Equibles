@@ -101,8 +101,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new InsiderTransaction
             {
-                CommonStockId = stock.Id,
-                CommonStock = stock,
+                EquityIssuerId = stock.Id,
                 InsiderOwnerId = owner.Id,
                 InsiderOwner = owner,
                 TransactionDate = new DateOnly(2024, 6, 1),
@@ -167,8 +166,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new InsiderTransaction
             {
-                CommonStockId = stock.Id,
-                CommonStock = stock,
+                EquityIssuerId = stock.Id,
                 InsiderOwnerId = owner.Id,
                 InsiderOwner = owner,
                 TransactionDate = new DateOnly(2024, 6, 1),
@@ -218,8 +216,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new Form144Filing
             {
-                CommonStockId = stock.Id,
-                CommonStock = stock,
+                EquityIssuerId = stock.Id,
                 FilingDate = new DateOnly(2024, 6, 1),
                 SellerName = "Jensen Huang",
                 RelationshipToIssuer = "Officer",

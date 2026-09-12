@@ -122,10 +122,10 @@ public class InsiderTransactionPriceBackfillManager
 
             foreach (var transaction in batch)
             {
-                var key = (transaction.CommonStockId, transaction.TransactionDate);
+                var key = (transaction.EquityIssuerId, transaction.TransactionDate);
                 bars.TryGetValue(key, out var barRow);
-                splitsByStock.TryGetValue(transaction.CommonStockId, out var splits);
-                identityByStock.TryGetValue(transaction.CommonStockId, out var identity);
+                splitsByStock.TryGetValue(transaction.EquityIssuerId, out var splits);
+                identityByStock.TryGetValue(transaction.EquityIssuerId, out var identity);
 
                 var bar = InsiderDailyBars.Build(
                     barRow?.Close,
@@ -206,7 +206,7 @@ public class InsiderTransactionPriceBackfillManager
         List<InsiderTransaction> batch
     )
     {
-        var stockIds = batch.Select(t => t.CommonStockId).Distinct().ToList();
+        var stockIds = batch.Select(t => t.EquityIssuerId).Distinct().ToList();
         var maxDate = batch.Max(t => t.TransactionDate);
         var minDate = batch.Min(t => t.TransactionDate).AddDays(-CloseLookbackDays);
 
@@ -235,10 +235,10 @@ public class InsiderTransactionPriceBackfillManager
         var result = new Dictionary<(Guid, DateOnly), BarRow>();
         foreach (var transaction in batch)
         {
-            var key = (transaction.CommonStockId, transaction.TransactionDate);
+            var key = (transaction.EquityIssuerId, transaction.TransactionDate);
             if (result.ContainsKey(key))
                 continue;
-            if (!byStock.TryGetValue(transaction.CommonStockId, out var stockPrices))
+            if (!byStock.TryGetValue(transaction.EquityIssuerId, out var stockPrices))
                 continue;
             var match = stockPrices.FirstOrDefault(p => p.Date <= transaction.TransactionDate);
             if (match != null)
@@ -257,7 +257,7 @@ public class InsiderTransactionPriceBackfillManager
         Dictionary<Guid, StockIdentity> IdentityByStock
     )> FetchSplitContext(List<InsiderTransaction> batch)
     {
-        var stockIds = batch.Select(t => t.CommonStockId).Distinct().ToList();
+        var stockIds = batch.Select(t => t.EquityIssuerId).Distinct().ToList();
 
         var splitsByStock = (
             await _stockSplitRepository

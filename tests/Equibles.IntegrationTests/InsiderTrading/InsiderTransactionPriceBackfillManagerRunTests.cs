@@ -193,7 +193,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             FilingDate = date,
             TransactionDate = date,

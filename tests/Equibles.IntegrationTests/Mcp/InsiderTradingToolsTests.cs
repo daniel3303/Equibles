@@ -82,8 +82,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         return new InsiderTransaction
         {
             SecurityKind = securityKind,
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
             TransactionDate = transactionDate ?? new DateOnly(2024, 6, 14),

@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.FdaCatalysts.Data.Models;
@@ -14,7 +16,7 @@ namespace Equibles.FdaCatalysts.Data.Models;
 [Index(nameof(SourceReference), IsUnique = true)]
 [Index(nameof(CatalystType), nameof(MeetingDate))]
 [Index(nameof(MeetingDate))]
-[Index(nameof(CommonStockId))]
+[Index(nameof(EquityIssuerId))]
 public class FdaCatalyst
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -50,11 +52,13 @@ public class FdaCatalyst
 
     public string SourceUrl { get; set; }
 
-    // Resolved to a CommonStock only when the meeting names a sponsor that maps
+    // Resolved to an issuer only when the meeting names a sponsor that maps
     // authoritatively (CIK / ticker), and left null otherwise — many meetings concern
     // private, pre-IPO, or foreign sponsors that fall outside the tracked equity
-    // universe, so a soft reference avoids dropping catalysts we cannot tie to a ticker.
-    public Guid? CommonStockId { get; set; }
+    // universe, so nullable attribution retains catalysts whose issuer remains unresolved.
+    [Column("CommonStockId")]
+    public Guid? EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     public DateTime CreationTime { get; set; } = DateTime.UtcNow;
 }

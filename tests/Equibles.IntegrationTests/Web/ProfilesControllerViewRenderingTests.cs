@@ -77,7 +77,7 @@ public class ProfilesControllerViewRenderingTests
                 new InsiderTransaction
                 {
                     InsiderOwner = owner,
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     TransactionDate = new DateOnly(2024, 6, 3),
                     FilingDate = new DateOnly(2024, 6, 5),
                     Shares = 500,

@@ -123,7 +123,7 @@ public class InsiderTradingTools
                 offset = McpLimit.ClampOffset(offset);
 
                 var query = _transactionRepository
-                    .GetByStockWithOwner(stock)
+                    .GetByIssuerIdWithOwner((stock).Id)
                     .ExcludeHoldings()
                     // Degenerate rows (zero shares AND zero resulting balance — e.g. a Form 3
                     // filed by an insider owning nothing) carry no information and would burn
@@ -312,7 +312,7 @@ public class InsiderTradingTools
                 // and the pre-v6 "no securities owned" sentinels (SecurityKind Unknown) are
                 // zero positions by construction.
                 var byStock = _transactionRepository
-                    .GetByStock(stock)
+                    .GetByIssuerId((stock).Id)
                     .Where(t => t.SecurityKind == InsiderSecurityKind.NonDerivative);
 
                 // Every row of each insider's NEWEST filing — not just its last line. A
@@ -328,7 +328,7 @@ public class InsiderTradingTools
                 // so a joint filing cannot leak another owner's rows in.
                 var currentByStock = byStock.OrderCurrentPositionFirst();
                 var latestTransactions = await _transactionRepository
-                    .GetByStockWithOwner(stock)
+                    .GetByIssuerIdWithOwner((stock).Id)
                     .Where(t => t.SecurityKind == InsiderSecurityKind.NonDerivative)
                     .Where(t =>
                         t.Id
@@ -494,7 +494,7 @@ public class InsiderTradingTools
                 if (stockError != null)
                     return stockError;
 
-                var query = _form144Repository.GetByStock(stock);
+                var query = _form144Repository.GetByIssuerId((stock).Id);
 
                 DateOnly? fromDay = null;
                 DateOnly? toDay = null;
@@ -655,7 +655,7 @@ public class InsiderTradingTools
                                 .Select(t2 => t2.Id)
                                 .First()
                         )
-                        .Include(t => t.CommonStock)
+                        .Include(t => t.Issuer)
                         .ToListAsync()
                 ).ToDictionary(t => t.InsiderOwnerId);
 
@@ -671,8 +671,8 @@ public class InsiderTradingTools
                         var role = GetRole(insider);
                         var company =
                             latestByOwner.TryGetValue(insider.Id, out var transaction)
-                            && transaction.CommonStock != null
-                                ? $"{transaction.CommonStock.Name} ({transaction.CommonStock.Ticker})"
+                            && transaction.Issuer != null
+                                ? $"{transaction.Issuer.Name} ({transaction.Issuer.Presentation?.Listing?.Ticker})"
                                 : "-";
                         var location = string.Join(
                             ", ",

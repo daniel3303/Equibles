@@ -55,7 +55,7 @@ public class InsiderProfileSeededTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InsiderOwnerId = owner.Id,
                     TransactionDate = new DateOnly(2025, 3, 15),
                     FilingDate = new DateOnly(2025, 3, 17),

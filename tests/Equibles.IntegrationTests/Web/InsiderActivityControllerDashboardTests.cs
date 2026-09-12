@@ -48,7 +48,7 @@ public class InsiderActivityControllerDashboardTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InsiderOwnerId = ownerId,
                     TransactionDate = today.AddDays(-5),
                     FilingDate = today.AddDays(-3),
@@ -64,7 +64,7 @@ public class InsiderActivityControllerDashboardTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InsiderOwnerId = ownerId,
                     TransactionDate = today.AddDays(-10),
                     FilingDate = today.AddDays(-8),
@@ -147,7 +147,7 @@ public class InsiderActivityControllerDashboardTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = shareStockId,
+                    EquityIssuerId = shareStockId,
                     InsiderOwnerId = ownerId,
                     TransactionDate = today.AddDays(-5),
                     FilingDate = today.AddDays(-3),
@@ -165,7 +165,7 @@ public class InsiderActivityControllerDashboardTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = derivKindStockId,
+                    EquityIssuerId = derivKindStockId,
                     InsiderOwnerId = ownerId,
                     TransactionDate = today.AddDays(-5),
                     FilingDate = today.AddDays(-3),
@@ -183,7 +183,7 @@ public class InsiderActivityControllerDashboardTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = derivTitleStockId,
+                    EquityIssuerId = derivTitleStockId,
                     InsiderOwnerId = ownerId,
                     TransactionDate = today.AddDays(-5),
                     FilingDate = today.AddDays(-3),
@@ -246,7 +246,7 @@ public class InsiderActivityControllerDashboardTests
                 db.Add(
                     new InsiderTransaction
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         InsiderOwnerId = ownerId,
                         TransactionDate = today.AddDays(-7),
                         FilingDate = today.AddDays(-5),

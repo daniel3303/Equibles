@@ -86,3 +86,10 @@
 - Preserve the historical `cs:` identity-key prefix with the same issuer GUID; renaming an internal model must not create a second fund or replace a URL.
 - Native-only issuer materialization is covered through PostgreSQL upsert and two rebuilds; migration coverage compares every stored field and rejects owner deletion.
 - `scripts/verify-native-issuer-fund-series.sql` is the read-only completion query; unresolved owners must be zero and the restrictive FK validated before legacy storage retirement.
+
+## Issuer disclosures
+
+- Insider transactions, Form 144 notices, government awards and attributed FDA events reference native issuers with restrictive foreign keys.
+- Source-stated security titles, transaction economics, amendment identity, source notes, prior sales, provider keys and retry state remain unchanged; an issuer association does not assert a security or venue.
+- Unresolved FDA events retain null issuer attribution; the migration adds no inferred identity.
+- The migration changes ownership constraints only; `scripts/verify-native-issuer-disclosures.sql` requires zero missing owners and four validated restrictive constraints before legacy storage retirement.

@@ -417,7 +417,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     {
         return new Form144Filing
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             AccessionNumber = accession,
             FilingDate = filingDate,
             SellerName = seller,

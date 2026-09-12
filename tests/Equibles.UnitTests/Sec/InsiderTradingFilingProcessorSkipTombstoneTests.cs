@@ -209,7 +209,7 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
                 new InsiderTransaction
                 {
                     InsiderOwnerId = owner.Id,
-                    CommonStockId = issuer.Id,
+                    EquityIssuerId = issuer.Id,
                     FilingDate = new DateOnly(2023, 7, 1),
                     TransactionDate = new DateOnly(2023, 5, 30),
                     TransactionCode = TransactionCode.Other,

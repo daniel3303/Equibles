@@ -77,7 +77,7 @@ public class InsiderDashboardSeededTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockAaplId,
+                    EquityIssuerId = stockAaplId,
                     InsiderOwnerId = buyer.Id,
                     TransactionDate = today.AddDays(-5),
                     FilingDate = today.AddDays(-3),
@@ -97,7 +97,7 @@ public class InsiderDashboardSeededTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockMsftId,
+                    EquityIssuerId = stockMsftId,
                     InsiderOwnerId = buyer.Id,
                     TransactionDate = today.AddDays(-10),
                     FilingDate = today.AddDays(-8),
@@ -117,7 +117,7 @@ public class InsiderDashboardSeededTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockAaplId,
+                    EquityIssuerId = stockAaplId,
                     InsiderOwnerId = seller.Id,
                     TransactionDate = today.AddDays(-2),
                     FilingDate = today.AddDays(-1),
@@ -137,7 +137,7 @@ public class InsiderDashboardSeededTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockMsftId,
+                    EquityIssuerId = stockMsftId,
                     InsiderOwnerId = seller.Id,
                     TransactionDate = today.AddDays(-15),
                     FilingDate = today.AddDays(-13),

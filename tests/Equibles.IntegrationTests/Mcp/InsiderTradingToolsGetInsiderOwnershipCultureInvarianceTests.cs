@@ -52,7 +52,7 @@ public class InsiderTradingToolsGetInsiderOwnershipCultureInvarianceTests : Para
         };
         var transaction = new InsiderTransaction
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InsiderOwner = owner,
             TransactionDate = new DateOnly(2024, 6, 14),
             FilingDate = new DateOnly(2024, 6, 15),

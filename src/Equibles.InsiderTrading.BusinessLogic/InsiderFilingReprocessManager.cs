@@ -388,7 +388,7 @@ public class InsiderFilingReprocessManager
         var rows = await _transactionRepository
             .GetByAccessionNumber(accession)
             .IgnoreQueryFilters()
-            .Include(t => t.CommonStock)
+            .Include(t => t.Issuer)
             .OrderBy(t => t.TransactionOrder)
             .ToListAsync();
         if (rows.Count == 0)
@@ -435,7 +435,7 @@ public class InsiderFilingReprocessManager
         var parsed = InsiderFilingParser.ParseTransactionsForReplay(
             root,
             new InsiderOwner { Id = first.InsiderOwnerId },
-            first.CommonStockId,
+            first.EquityIssuerId,
             filing,
             isAmendment
         );
@@ -519,13 +519,13 @@ public class InsiderFilingReprocessManager
                 )
             )
             .ToList();
-        var bars = await FetchBars(first.CommonStockId, usableRows);
+        var bars = await FetchBars(first.EquityIssuerId, usableRows);
         var splits = await _stockSplitRepository
-            .GetEffectiveByStock(first.CommonStockId, DateOnly.FromDateTime(DateTime.UtcNow))
+            .GetEffectiveByStock(first.EquityIssuerId, DateOnly.FromDateTime(DateTime.UtcNow))
             .ToListAsync();
         var identity = await _dbContext
             .Set<CommonStock>()
-            .Where(cs => cs.Id == first.CommonStockId)
+            .Where(cs => cs.Id == first.EquityIssuerId)
             .Select(cs => new { cs.Ticker, cs.SecondaryTickers })
             .FirstOrDefaultAsync();
 
@@ -599,7 +599,7 @@ public class InsiderFilingReprocessManager
             // than returning null forever (which would re-select this filing every run).
         }
 
-        var issuerCik = rows[0].CommonStock?.Cik;
+        var issuerCik = rows[0].Issuer?.Cik;
         if (!string.IsNullOrEmpty(issuerCik))
         {
             var fetched = await _secEdgarClient.GetDocumentContent(accession, issuerCik);

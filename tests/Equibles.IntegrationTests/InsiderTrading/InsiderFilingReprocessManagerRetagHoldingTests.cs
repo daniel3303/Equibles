@@ -61,7 +61,7 @@ public class InsiderFilingReprocessManagerRetagHoldingTests : ParadeDbMcpTestBas
         var stale = new InsiderTransaction
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             AccessionNumber = accession,
             TransactionOrder = 0,

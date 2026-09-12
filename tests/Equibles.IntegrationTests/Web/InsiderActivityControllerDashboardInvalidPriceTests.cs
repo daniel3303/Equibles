@@ -73,7 +73,7 @@ public class InsiderActivityControllerDashboardInvalidPriceTests
                 new()
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = s.Id,
+                    EquityIssuerId = s.Id,
                     InsiderOwnerId = o.Id,
                     FilingDate = today,
                     TransactionDate = today.AddDays(-2),

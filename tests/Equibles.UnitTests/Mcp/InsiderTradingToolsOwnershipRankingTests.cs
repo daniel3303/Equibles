@@ -79,8 +79,7 @@ public class InsiderTradingToolsOwnershipRankingTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
             TransactionDate = transactionDate,

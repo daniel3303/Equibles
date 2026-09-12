@@ -534,7 +534,7 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 3, 1),
                     TransactionDate = new DateOnly(2025, 2, 28),
@@ -546,7 +546,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 3, 15),
                     TransactionDate = new DateOnly(2025, 3, 14),
@@ -589,7 +589,7 @@ public class StockTabServiceTests : IDisposable
             .Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 3, 1),
                     TransactionDate = new DateOnly(2025, 2, 28),

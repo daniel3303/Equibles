@@ -52,7 +52,7 @@ public class InsiderFilingReprocessManagerCancellationTests : ParadeDbMcpTestBas
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InsiderOwnerId = owner.Id,
                 AccessionNumber = accession,
                 TransactionOrder = 0,

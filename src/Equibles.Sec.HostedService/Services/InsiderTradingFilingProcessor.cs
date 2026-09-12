@@ -530,7 +530,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             .IgnoreQueryFilters()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
-                && t.CommonStockId == companyId
+                && t.EquityIssuerId == companyId
                 && (
                     (
                         !t.IsAmendment
@@ -568,7 +568,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             .IgnoreQueryFilters()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
-                && t.CommonStockId == companyId
+                && t.EquityIssuerId == companyId
                 && t.IsAmendment
                 && t.OriginalFilingDate != null
                 && t.OriginalFilingDate >= windowStart
@@ -1204,7 +1204,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             marker = new InsiderTransaction
             {
                 InsiderOwnerId = owner.Id,
-                CommonStockId = companyId,
+                EquityIssuerId = companyId,
                 AccessionNumber = filing.AccessionNumber,
                 TransactionOrder = 0,
             };

@@ -141,7 +141,7 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
                 .Add(
                     new InsiderTransaction
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         InsiderOwnerId = owner.Id,
                         TransactionDate = new DateOnly(2024, 3, 15),
                         FilingDate = new DateOnly(2024, 3, 17),

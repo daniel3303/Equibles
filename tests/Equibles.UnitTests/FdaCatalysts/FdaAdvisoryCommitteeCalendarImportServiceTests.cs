@@ -200,7 +200,7 @@ public class FdaAdvisoryCommitteeCalendarImportServiceTests
                     new FdaCatalyst
                     {
                         Id = seededId,
-                        CommonStockId = resolvedStockId,
+                        EquityIssuerId = resolvedStockId,
                         CreationTime = createdAt,
                         CatalystType = FdaCatalystType.AdvisoryCommittee,
                         MeetingDate = new DateOnly(2000, 1, 1),
@@ -221,7 +221,7 @@ public class FdaAdvisoryCommitteeCalendarImportServiceTests
         refreshed.Title.Should().Be(parsed.Title);
         // ...yet the identity, resolved-stock link, and creation timestamp survived intact.
         refreshed.Id.Should().Be(seededId);
-        refreshed.CommonStockId.Should().Be(resolvedStockId);
+        refreshed.EquityIssuerId.Should().Be(resolvedStockId);
         refreshed.CreationTime.Should().Be(createdAt);
     }
 }

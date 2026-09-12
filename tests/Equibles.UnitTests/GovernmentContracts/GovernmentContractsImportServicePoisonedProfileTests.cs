@@ -69,7 +69,7 @@ public class GovernmentContractsImportServicePoisonedProfileTests
         ctx.Set<GovernmentContract>()
             .AsNoTracking()
             .Single()
-            .CommonStockId.Should()
+            .EquityIssuerId.Should()
             .Be(stockId, "the healthy recipient still resolves in the same window");
 
         var rows = ctx.Set<GovernmentContractRecipientParent>().AsNoTracking().ToList();

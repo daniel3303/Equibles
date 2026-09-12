@@ -225,8 +225,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         return new InsiderTransaction
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
             FilingDate = filingDate ?? (transactionDate ?? new DateOnly(2024, 6, 14)).AddDays(1),
@@ -269,7 +268,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _repository.AddRange([tx1, tx2]);
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(stock).ToListAsync();
+        var result = await _repository.GetByIssuerId((stock).Id).ToListAsync();
 
         result.Should().HaveCount(2);
         result.Select(t => t.Id).Should().Contain(tx1.Id).And.Contain(tx2.Id);
@@ -282,7 +281,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
-        var result = await _repository.GetByStock(stock).ToListAsync();
+        var result = await _repository.GetByIssuerId((stock).Id).ToListAsync();
 
         result.Should().BeEmpty();
     }
@@ -302,7 +301,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _repository.AddRange([appleTx, msftTx]);
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(apple).ToListAsync();
+        var result = await _repository.GetByIssuerId((apple).Id).ToListAsync();
 
         result.Should().ContainSingle().Which.Id.Should().Be(appleTx.Id);
     }
@@ -314,7 +313,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
-        var result = _repository.GetByStock(stock);
+        var result = _repository.GetByIssuerId((stock).Id);
 
         result.Should().BeAssignableTo<IQueryable<InsiderTransaction>>();
     }
@@ -357,7 +356,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
 
         var from = new DateOnly(2024, 3, 1);
         var to = new DateOnly(2024, 6, 30);
-        var result = await _repository.GetByStock(stock, from, to).ToListAsync();
+        var result = await _repository.GetByIssuerId((stock).Id, from, to).ToListAsync();
 
         result.Should().HaveCount(2);
         result.Select(t => t.Id).Should().Contain(txInRange1.Id).And.Contain(txInRange2.Id);
@@ -387,7 +386,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _repository.AddRange([txOnFrom, txOnTo]);
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(stock, fromDate, toDate).ToListAsync();
+        var result = await _repository.GetByIssuerId((stock).Id, fromDate, toDate).ToListAsync();
 
         result.Should().HaveCount(2);
     }
@@ -405,7 +404,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
 
         var from = new DateOnly(2024, 6, 1);
         var to = new DateOnly(2024, 12, 31);
-        var result = await _repository.GetByStock(stock, from, to).ToListAsync();
+        var result = await _repository.GetByIssuerId((stock).Id, from, to).ToListAsync();
 
         result.Should().BeEmpty();
     }
@@ -437,7 +436,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         await _repository.SaveChanges();
 
         var result = await _repository
-            .GetByStock(apple, new DateOnly(2024, 1, 1), new DateOnly(2024, 12, 31))
+            .GetByIssuerId((apple).Id, new DateOnly(2024, 1, 1), new DateOnly(2024, 12, 31))
             .ToListAsync();
 
         result.Should().ContainSingle().Which.Id.Should().Be(appleTx.Id);
@@ -535,7 +534,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _repository.AddRange([tx1, tx2]);
         await _repository.SaveChanges();
 
-        var result = await _repository.GetHistoryByStock(stock).ToListAsync();
+        var result = await _repository.GetHistoryByIssuerId((stock).Id).ToListAsync();
 
         result.Should().HaveCount(2);
     }
@@ -555,7 +554,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _repository.AddRange([appleTx, msftTx]);
         await _repository.SaveChanges();
 
-        var result = await _repository.GetHistoryByStock(apple).ToListAsync();
+        var result = await _repository.GetHistoryByIssuerId((apple).Id).ToListAsync();
 
         result.Should().ContainSingle().Which.Id.Should().Be(appleTx.Id);
     }

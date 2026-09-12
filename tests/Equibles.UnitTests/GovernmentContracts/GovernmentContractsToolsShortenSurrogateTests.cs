@@ -84,7 +84,7 @@ public class GovernmentContractsToolsShortenSurrogateTests
         context.Add(
             new GovernmentContract
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 AwardUniqueKey = "award-1",
                 AwardId = "W58RGZ26C0001",
                 RecipientName =
@@ -101,7 +101,7 @@ public class GovernmentContractsToolsShortenSurrogateTests
         context.Add(
             new GovernmentContract
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 AwardUniqueKey = "award-2",
                 AwardId = "NNH26C0002",
                 RecipientName = "Older Recipient LLC",

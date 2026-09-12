@@ -208,7 +208,7 @@ public class InsiderFilingReprocessManagerClaimCleanupTests : ParadeDbMcpTestBas
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             AccessionNumber = accessionNumber,
             TransactionOrder = 0,
