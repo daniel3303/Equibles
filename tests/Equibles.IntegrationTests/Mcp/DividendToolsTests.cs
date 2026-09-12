@@ -51,8 +51,7 @@ public class DividendToolsTests : ParadeDbMcpTestBase
         DbContext.Add(
             new CashDividend
             {
-                CommonStockId = stock.Id,
-                CommonStock = stock,
+                EquityIssuerId = stock.Id,
                 ExDate = exDate,
                 AmountPerShare = amount,
                 Source = source,

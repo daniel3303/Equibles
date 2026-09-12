@@ -41,7 +41,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = stock.Ticker,
                 EffectiveDate = after,
                 Numerator = 1m,
@@ -351,7 +351,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = stock.Ticker,
                 EffectiveDate = splitDate,
                 Numerator = 2m,
@@ -361,7 +361,7 @@ public class YahooPriceImportServiceTests : IDisposable
         );
         var dividend = new CashDividend
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ExDate = delistedOn,
             AmountPerShare = 0.25m,
             Source = CashDividendSource.Yahoo,
@@ -466,7 +466,7 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedPrices(CreatePrice(stock, floor, 99m));
         var split = new StockSplit
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             PriceSeriesTicker = stock.Ticker,
             EffectiveDate = delistedOn.AddDays(-1),
             Numerator = 2m,
@@ -994,7 +994,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // persisted as an unreconciled StockSplit (Yahoo-sourced).
         _priceRepo.GetAll().Should().ContainSingle();
         var split = _splitRepo.GetAll().Should().ContainSingle().Which;
-        split.CommonStockId.Should().Be(apple.Id);
+        split.EquityIssuerId.Should().Be(apple.Id);
         split.EffectiveDate.Should().Be(new DateOnly(2026, 3, 24));
         split.Numerator.Should().Be(4m);
         split.Denominator.Should().Be(1m);
@@ -1066,7 +1066,7 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedPrices(CreatePrice(apple, beforeExDate, 100m), CreatePrice(apple, exDate, 105m));
         var dividend = new CashDividend
         {
-            CommonStockId = apple.Id,
+            EquityIssuerId = apple.Id,
             ExDate = exDate,
             AmountPerShare = 0.27m,
             Source = CashDividendSource.Yahoo,
@@ -1358,7 +1358,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = apple.Id,
+                EquityIssuerId = apple.Id,
                 EffectiveDate = new DateOnly(2026, 3, 24),
                 Numerator = 4m,
                 Denominator = 1m,
@@ -1403,7 +1403,7 @@ public class YahooPriceImportServiceTests : IDisposable
         );
         var split = new StockSplit
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             PriceSeriesTicker = stock.Ticker,
             EffectiveDate = effectiveDate,
             Numerator = 1m,
@@ -1680,7 +1680,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = legacyNullAttribution ? null : stock.Ticker,
                 EffectiveDate = olderEffectiveDate,
                 Numerator = 1m,
@@ -1747,7 +1747,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = stock.Ticker,
                 EffectiveDate = malformedEffectiveDate,
                 Numerator = 0m,
@@ -1814,7 +1814,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = null,
                 EffectiveDate = malformedEffectiveDate,
                 Numerator = 0m,
@@ -1895,7 +1895,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = stock.Ticker,
                 EffectiveDate = selectedEffectiveDate,
                 Numerator = 2m,
@@ -1960,7 +1960,7 @@ public class YahooPriceImportServiceTests : IDisposable
         );
         var split = new StockSplit
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             PriceSeriesTicker = stock.Ticker,
             EffectiveDate = effectiveDate,
             Numerator = 2m,
@@ -2005,7 +2005,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = stock.Ticker,
                 EffectiveDate = effectiveDate,
                 Numerator = 0m,
@@ -2043,7 +2043,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = stock.Ticker,
                 EffectiveDate = selectedDate,
                 Numerator = 2m,

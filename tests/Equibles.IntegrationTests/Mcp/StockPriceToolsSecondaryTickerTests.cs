@@ -115,7 +115,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = null,
                     EffectiveDate = new DateOnly(2026, 1, 2),
                     Numerator = 2m,
@@ -156,7 +156,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = null,
                     EffectiveDate = new DateOnly(2026, 1, 2),
                     Numerator = 2m,
@@ -198,7 +198,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = "BRK-A",
                     EffectiveDate = new DateOnly(2026, 1, 2),
                     Numerator = 2m,

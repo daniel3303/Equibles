@@ -71,7 +71,7 @@ public class CashDividendCaptureManager
                 _dividendRepository.Add(
                     new CashDividend
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         ExDate = dividend.ExDate,
                         AmountPerShare = dividend.AmountPerShare,
                         Source = dividend.Source,

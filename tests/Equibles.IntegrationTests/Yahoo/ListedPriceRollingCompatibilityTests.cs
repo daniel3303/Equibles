@@ -241,7 +241,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
                 new StockSplit
                 {
                     Id = splitId,
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     PriceSeriesTicker = "GOOGL",
                     EffectiveDate = effectiveDate,
                     Numerator = 2m,

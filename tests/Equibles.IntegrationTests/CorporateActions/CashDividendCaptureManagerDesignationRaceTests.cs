@@ -77,6 +77,6 @@ public class CashDividendCaptureManagerDesignationRaceTests : IAsyncLifetime
         currentWrite.Should().Be(1);
         await using var verify = _fixture.CreateDbContext();
         var stored = await verify.Set<CashDividend>().SingleAsync();
-        stored.CommonStockId.Should().Be(stockId);
+        stored.EquityIssuerId.Should().Be(stockId);
     }
 }

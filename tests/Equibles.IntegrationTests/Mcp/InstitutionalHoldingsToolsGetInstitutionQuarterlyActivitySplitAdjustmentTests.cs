@@ -56,7 +56,7 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
         DbContext.Add(
             new StockSplit
             {
-                CommonStockId = apple.Id,
+                EquityIssuerId = apple.Id,
                 EffectiveDate = new DateOnly(2024, 11, 15),
                 Numerator = 2,
                 Denominator = 1,

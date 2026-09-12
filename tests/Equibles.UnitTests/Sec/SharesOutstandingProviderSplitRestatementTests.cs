@@ -112,7 +112,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             EffectiveDate = effective,
             Numerator = numerator,
             Denominator = denominator,

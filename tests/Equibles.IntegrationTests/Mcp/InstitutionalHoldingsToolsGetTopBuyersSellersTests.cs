@@ -364,7 +364,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
             MakeHolding(stock, holder, latest, shares: 1_000),
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 EffectiveDate = new DateOnly(2024, 10, 1),
                 Numerator = 20,
                 Denominator = 1,

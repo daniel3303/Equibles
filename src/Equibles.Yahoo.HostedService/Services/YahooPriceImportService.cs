@@ -958,7 +958,7 @@ public class YahooPriceImportService
                 priceRepository
                     .GetAllSeries()
                     .Where(price =>
-                        price.CommonStockId == split.CommonStockId
+                        price.CommonStockId == split.EquityIssuerId
                         && price.ListedTicker == split.PriceSeriesTicker
                         && price.Date < split.EffectiveDate
                     )
@@ -968,7 +968,7 @@ public class YahooPriceImportService
                 priceRepository
                     .GetAllSeries()
                     .Where(price =>
-                        price.CommonStockId == split.CommonStockId
+                        price.CommonStockId == split.EquityIssuerId
                         && price.ListedTicker == split.PriceSeriesTicker
                         && price.Date >= split.EffectiveDate
                     )

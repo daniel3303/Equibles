@@ -202,7 +202,7 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
                 new StockSplit
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     EffectiveDate = reportDate.AddDays(10),
                     Numerator = 10,
                     Denominator = 1,
@@ -245,7 +245,7 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
                 new StockSplit
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     EffectiveDate = reportDate.AddDays(10),
                     Numerator = 100,
                     Denominator = 1,

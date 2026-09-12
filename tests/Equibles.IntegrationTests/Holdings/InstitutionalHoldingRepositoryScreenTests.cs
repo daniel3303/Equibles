@@ -267,7 +267,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         [
             new StockSplit
             {
-                CommonStockId = kept.Id,
+                EquityIssuerId = kept.Id,
                 EffectiveDate = Current.AddDays(20),
                 Numerator = 1m,
                 Denominator = 30m,
@@ -275,7 +275,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
             },
             new StockSplit
             {
-                CommonStockId = dropped.Id,
+                EquityIssuerId = dropped.Id,
                 EffectiveDate = Current.AddDays(20),
                 Numerator = 1m,
                 Denominator = 30m,
@@ -320,7 +320,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         [
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 EffectiveDate = Current.AddDays(20),
                 Numerator = 1m,
                 Denominator = 30m,

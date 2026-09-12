@@ -28,7 +28,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
             [
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = stock.Ticker,
                     EffectiveDate = new DateOnly(2025, 1, 15),
                     Numerator = 10,

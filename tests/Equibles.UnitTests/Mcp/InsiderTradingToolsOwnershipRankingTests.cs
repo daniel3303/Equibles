@@ -125,7 +125,7 @@ public class InsiderTradingToolsOwnershipRankingTests
         db.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 EffectiveDate = new DateOnly(2024, 6, 10),
                 Numerator = 40,
                 Denominator = 1,

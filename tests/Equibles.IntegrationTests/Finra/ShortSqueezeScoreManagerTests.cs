@@ -445,7 +445,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = legacyNullAttribution ? null : stock.Ticker,
                     EffectiveDate = splitDate,
                     Numerator = 10m,
@@ -494,7 +494,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = stock.Ticker,
                     EffectiveDate = today.AddDays(1),
                     Numerator = 10m,

@@ -320,7 +320,7 @@ public class CashDividendCaptureManagerTests
             .Capture(stock.Id, "GOOG", [Dividend(new DateOnly(2024, 2, 9), 0.24m)]);
 
         currentWrite.Should().Be(1);
-        (await db.Set<CashDividend>().SingleAsync()).CommonStockId.Should().Be(stock.Id);
+        (await db.Set<CashDividend>().SingleAsync()).EquityIssuerId.Should().Be(stock.Id);
     }
 
     [Fact]

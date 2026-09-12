@@ -353,15 +353,16 @@ public class FinancialFactsTools
                             await _stockSplitRepository
                                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                                 .Where(split =>
-                                    splitAdjustedStockIds.Contains(split.CommonStockId)
+                                    splitAdjustedStockIds.Contains(split.EquityIssuerId)
                                     && (
                                         split.PriceSeriesTicker == null
-                                        || split.PriceSeriesTicker == split.CommonStock.Ticker
+                                        || split.PriceSeriesTicker
+                                            == split.Issuer.Presentation.Listing.Ticker
                                     )
                                 )
                                 .ToListAsync()
                         )
-                            .GroupBy(split => split.CommonStockId)
+                            .GroupBy(split => split.EquityIssuerId)
                             .ToDictionary(group => group.Key, group => group.ToList());
 
                 return RenderComparisonTable(

@@ -2551,9 +2551,9 @@ public class InstitutionalHoldingsTools
 
         var splits = await _stockSplitRepository
             .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-            .Where(s => ids.Contains(s.CommonStockId))
+            .Where(s => ids.Contains(s.EquityIssuerId))
             .ToListAsync();
-        return splits.GroupBy(s => s.CommonStockId).ToDictionary(g => g.Key, g => g.ToList());
+        return splits.GroupBy(s => s.EquityIssuerId).ToDictionary(g => g.Key, g => g.ToList());
     }
 
     // A stock with no splits restates by factor 1 (no-op), so an absent key returns an empty set.

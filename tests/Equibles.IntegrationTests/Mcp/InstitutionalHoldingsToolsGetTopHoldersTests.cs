@@ -98,8 +98,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
             .AddRange(
                 new StockSplit
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     EffectiveDate = new DateOnly(2025, 1, 15),
                     Numerator = 2m,
                     Denominator = 1m,
@@ -107,8 +106,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
                 },
                 new StockSplit
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = "ACME.B",
                     EffectiveDate = new DateOnly(2025, 2, 15),
                     Numerator = 10m,
@@ -170,7 +168,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
         DbContext.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = "CARR.B",
                 EffectiveDate = current.AddDays(-30),
                 Numerator = 10m,

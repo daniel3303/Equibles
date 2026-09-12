@@ -324,10 +324,10 @@ public class HoldingValueFallbackRepairService
         var splitsByStock = (
             await dbContext
                 .Set<StockSplit>()
-                .Where(s => stockIds.Contains(s.CommonStockId))
+                .Where(s => stockIds.Contains(s.EquityIssuerId))
                 .ToListAsync(cancellationToken)
         )
-            .GroupBy(s => s.CommonStockId)
+            .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());
         var tickerIdentities = await dbContext
             .Set<CommonStock>()

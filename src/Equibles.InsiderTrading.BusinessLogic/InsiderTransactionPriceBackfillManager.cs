@@ -262,10 +262,10 @@ public class InsiderTransactionPriceBackfillManager
         var splitsByStock = (
             await _stockSplitRepository
                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                .Where(sp => stockIds.Contains(sp.CommonStockId))
+                .Where(sp => stockIds.Contains(sp.EquityIssuerId))
                 .ToListAsync()
         )
-            .GroupBy(sp => sp.CommonStockId)
+            .GroupBy(sp => sp.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var identityByStock = (

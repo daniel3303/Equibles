@@ -152,7 +152,7 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
         DbContext.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 EffectiveDate = new DateOnly(2026, 5, 15),
                 Numerator = 2,
                 Denominator = 1,

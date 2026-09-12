@@ -91,7 +91,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 EffectiveDate = new DateOnly(2024, 6, 10),
                 Numerator = 10,
                 Denominator = 1,
@@ -156,7 +156,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(7),
                 Numerator = 10,
                 Denominator = 1,
@@ -206,7 +206,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 EffectiveDate = new DateOnly(2024, 6, 10),
                 Numerator = 10,
                 Denominator = 1,

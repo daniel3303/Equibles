@@ -66,7 +66,7 @@ public class CorporateActionPriceReconciliationManagerSelectionTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             PriceSeriesTicker = listedTicker,
             EffectiveDate = effectiveDate,
             Numerator = 2m,
@@ -81,7 +81,7 @@ public class CorporateActionPriceReconciliationManagerSelectionTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             ExDate = exDate,
             AmountPerShare = amount,
             Source = CashDividendSource.Yahoo,

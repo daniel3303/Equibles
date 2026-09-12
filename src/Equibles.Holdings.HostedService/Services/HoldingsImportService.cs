@@ -678,11 +678,11 @@ public class HoldingsImportService
 
         var splits = await dbContext
             .Set<StockSplit>()
-            .Where(s => stockIds.Contains(s.CommonStockId))
+            .Where(s => stockIds.Contains(s.EquityIssuerId))
             .ToListAsync(cancellationToken);
 
         context.StockSplits = splits
-            .GroupBy(s => s.CommonStockId)
+            .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         _logger.LogInformation(

@@ -275,8 +275,7 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = priceSeriesTicker,
                     EffectiveDate = splitDate,
                     Numerator = 1m,
@@ -316,8 +315,7 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = priceSeriesTicker,
                     EffectiveDate = splitDate,
                     Numerator = 1m,

@@ -1439,10 +1439,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             await DbContext
                 .Set<StockSplit>()
                 .AsNoTracking()
-                .Where(split => commonStockIds.Contains(split.CommonStockId))
+                .Where(split => commonStockIds.Contains(split.EquityIssuerId))
                 .ToListAsync(cancellationToken)
         )
-            .GroupBy(split => split.CommonStockId)
+            .GroupBy(split => split.EquityIssuerId)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<StockSplit>)group.ToList());
         var currentLookup = currentRows
             .GroupBy(row => new
@@ -1814,7 +1814,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     {
         var splitsByStock = (splitsSinceCurrent ?? [])
             .Where(s => s.Numerator > 0 && s.Denominator > 0)
-            .GroupBy(s => s.CommonStockId)
+            .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<StockSplit>)g.ToList());
 
         var query = Screen(criteria, current, previous, splitsByStock.Keys.ToList())

@@ -30,7 +30,7 @@ public class StockSplitCaptureManagerTests
         var applied = new DateTime(2026, 8, 6, 0, 0, 0, DateTimeKind.Utc);
         var existing = new StockSplit
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             PriceSeriesTicker = stock.Ticker,
             EffectiveDate = new DateOnly(2025, 1, 29),
             Numerator = 1m,
@@ -155,7 +155,7 @@ public class StockSplitCaptureManagerTests
         context.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = "GOOGL",
                 EffectiveDate = new DateOnly(2024, 2, 1),
                 Numerator = 2m,
@@ -194,7 +194,7 @@ public class StockSplitCaptureManagerTests
         context.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = null,
                 EffectiveDate = new DateOnly(2024, 2, 1),
                 Numerator = 2m,

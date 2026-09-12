@@ -131,7 +131,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     EffectiveDate = new DateOnly(2022, 7, 18),
                     Numerator = 20m,
                     Denominator = 1m,

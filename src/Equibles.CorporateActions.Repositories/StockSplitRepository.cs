@@ -12,7 +12,7 @@ public class StockSplitRepository : BaseRepository<StockSplit>
 
     public IQueryable<StockSplit> GetByStock(Guid commonStockId)
     {
-        return GetAll().Where(s => s.CommonStockId == commonStockId);
+        return GetAll().Where(s => s.EquityIssuerId == commonStockId);
     }
 
     /// <summary>

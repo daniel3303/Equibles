@@ -31,10 +31,11 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Add(new CommonStock { Id = stockId, Ticker = "GRTUF" });
+            await seed.SaveChangesAsync();
             seed.Add(
                 new CashDividend
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     ExDate = exDate,
                     AmountPerShare = 0.21222556m,
                     Source = CashDividendSource.External,

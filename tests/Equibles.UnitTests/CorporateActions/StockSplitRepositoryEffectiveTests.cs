@@ -41,7 +41,7 @@ public class StockSplitRepositoryEffectiveTests
     private static StockSplit Split(Guid stockId, DateOnly effectiveDate) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             EffectiveDate = effectiveDate,
             Numerator = 10,
             Denominator = 1,
@@ -87,11 +87,11 @@ public class StockSplitRepositoryEffectiveTests
 
         var effective = await new StockSplitRepository(db)
             .GetEffective(asOf)
-            .Select(s => new { s.CommonStockId, s.EffectiveDate })
+            .Select(s => new { s.EquityIssuerId, s.EffectiveDate })
             .ToListAsync();
 
         effective.Should().HaveCount(1);
-        effective[0].CommonStockId.Should().Be(first.Id);
+        effective[0].EquityIssuerId.Should().Be(first.Id);
         effective[0].EffectiveDate.Should().Be(asOf.AddMonths(-2));
     }
 }

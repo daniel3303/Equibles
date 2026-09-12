@@ -204,8 +204,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     EffectiveDate = new DateOnly(2026, 3, 1),
                     Numerator = 10m,
                     Denominator = 1m,
@@ -247,8 +246,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = stock.Ticker,
                     EffectiveDate = new DateOnly(2026, 3, 1),
                     Numerator = 10m,

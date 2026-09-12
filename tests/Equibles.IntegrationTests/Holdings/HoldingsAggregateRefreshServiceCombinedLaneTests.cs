@@ -144,7 +144,7 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
             MakeHolding(stock, reporter, OpenCur, 120_000, "acc-reporter-cur"),
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 EffectiveDate = OpenPrev.AddDays(30),
                 Numerator = 2,
                 Denominator = 1,

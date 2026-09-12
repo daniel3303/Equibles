@@ -66,7 +66,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             PriceSeriesTicker = listedTicker,
             EffectiveDate = effectiveDate,
             Numerator = 2m,
@@ -81,7 +81,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             ExDate = exDate,
             AmountPerShare = amount,
             Source = CashDividendSource.Yahoo,
@@ -162,10 +162,10 @@ public class CorporateActionPriceReconciliationManagerStampingTests
 
         stamped.Should().Be(2);
         var split = await db.Set<StockSplit>()
-            .SingleAsync(row => row.CommonStockId == stockId && row.PriceSeriesTicker == "AAPL");
+            .SingleAsync(row => row.EquityIssuerId == stockId && row.PriceSeriesTicker == "AAPL");
         split.PriceAdjustmentAppliedTime.Should().Be(appliedTime);
         var dividend = await db.Set<CashDividend>()
-            .SingleAsync(row => row.CommonStockId == stockId);
+            .SingleAsync(row => row.EquityIssuerId == stockId);
         dividend.PriceAdjustmentAppliedTime.Should().Be(appliedTime);
         dividend.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.25m);
         (await manager.SelectPendingSeries(50, SettledBefore)).TotalPending.Should().Be(2);

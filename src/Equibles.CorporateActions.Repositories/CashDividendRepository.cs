@@ -12,7 +12,7 @@ public class CashDividendRepository : BaseRepository<CashDividend>
 
     public IQueryable<CashDividend> GetByStock(Guid commonStockId)
     {
-        return GetAll().Where(d => d.CommonStockId == commonStockId);
+        return GetAll().Where(d => d.EquityIssuerId == commonStockId);
     }
 
     public IQueryable<CashDividend> GetHistory(

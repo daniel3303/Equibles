@@ -364,7 +364,7 @@ public class ShortDataTools
                     .ToList();
                 var splitRows = await _stockSplitRepository
                     .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                    .Where(split => stockIds.Contains(split.CommonStockId))
+                    .Where(split => stockIds.Contains(split.EquityIssuerId))
                     .ToListAsync();
                 var previousDate = await _shortInterestRepository
                     .GetAllSettlementDates()
@@ -377,7 +377,7 @@ public class ShortDataTools
                         var listedTicker = row.ListedTicker;
                         var scoped = PriceSeriesSplitScope.ForListing(
                             splitRows.Where(split =>
-                                split.CommonStockId == row.Listing.Security.EquityIssuerId
+                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
                             ),
                             row.Listing.Security.Issuer.Presentation.Listing.Ticker,
                             listedTicker
@@ -528,7 +528,7 @@ public class ShortDataTools
                     .ToList();
                 var splitRows = await _stockSplitRepository
                     .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                    .Where(split => stockIds.Contains(split.CommonStockId))
+                    .Where(split => stockIds.Contains(split.EquityIssuerId))
                     .ToListAsync();
                 var adjusted = rawRecords
                     .Select(row =>
@@ -536,7 +536,7 @@ public class ShortDataTools
                         var listedTicker = row.ListedTicker;
                         var scoped = PriceSeriesSplitScope.ForListing(
                             splitRows.Where(split =>
-                                split.CommonStockId == row.Listing.Security.EquityIssuerId
+                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
                             ),
                             row.Listing.Security.Issuer.Presentation.Listing.Ticker,
                             listedTicker

@@ -95,7 +95,7 @@ public class InstitutionalHoldingsToolsSplitAdjustmentTests
         db.Add(
             new StockSplit
             {
-                CommonStockId = apple.Id,
+                EquityIssuerId = apple.Id,
                 EffectiveDate = SplitDate,
                 Numerator = 2,
                 Denominator = 1,

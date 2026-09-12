@@ -163,7 +163,7 @@ public class FundScoringManagerTests : IDisposable
             .Add(
                 new Equibles.CorporateActions.Data.Models.StockSplit
                 {
-                    CommonStockId = held.Id,
+                    EquityIssuerId = held.Id,
                     PriceSeriesTicker = held.Ticker,
                     EffectiveDate = splitDate,
                     Numerator = 2m,

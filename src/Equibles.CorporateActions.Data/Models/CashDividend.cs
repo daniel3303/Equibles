@@ -1,23 +1,25 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CorporateActions.Data.Models;
 
 /// <summary>
-/// An as-reported cash dividend for a <see cref="CommonStock"/>.
+/// An as-reported cash dividend for a <see cref="Issuer"/>.
 /// <see cref="ExDate"/> is the ex-dividend date (the first trading day the
 /// stock trades without the dividend) and <see cref="AmountPerShare"/> is the
 /// declared cash amount per share. The (stock, ex-date) pair is unique — it is
 /// the idempotency guard for the capture upsert.
 /// </summary>
-[Index(nameof(CommonStockId), nameof(ExDate), IsUnique = true)]
+[Index(nameof(EquityIssuerId), nameof(ExDate), IsUnique = true)]
 [Index(nameof(PriceAdjustmentAppliedTime))]
 public class CashDividend
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     public DateOnly ExDate { get; set; }
 

@@ -41,7 +41,7 @@ public class SharesOutstandingProviderDateEvidenceTests
             invalid,
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = stock.Ticker,
                 EffectiveDate = new(2025, 10, 13),
                 Numerator = 1,

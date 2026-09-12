@@ -114,3 +114,11 @@
 - Run `scripts/verify-native-finra-listings.sql`; missing identities, mismatches, and duplicate native listing/date groups must be zero, with all three native foreign keys validated and restrictive.
 - The unmapped `CommonStockId` columns, old unique indexes, `equity_finra_listing_bridge` triggers and `eq_bridge_finra_listing` function exist only through the retiring-binary window; remove them together in the final contract migration after old consumers stop.
 - Completion requires full row reconciliation and the retirement of these bridges; this stage does not complete the database cutover.
+
+## Native corporate-action issuer ownership
+
+- Split and dividend issuer references now target `EquityIssuer` with restrictive foreign keys; original GUIDs and every action field remain unchanged.
+- This owner migration does not invent security attribution: exact split source tickers stay exact, unknown split source tickers stay null, and old issuer-level dividends are not assigned to a current share class.
+- Preserve source precedence, ratio precision, creation times, applied timestamps, and the dividend amount last incorporated into price history.
+- Native-issuer preservation tests compare every stored column across the migration and removal of the old owner, including primary, secondary, and unattributed splits on the same date.
+- Exact action attribution and native price writers remain required before final legacy table retirement; this intermediate migration does not complete that cutover.

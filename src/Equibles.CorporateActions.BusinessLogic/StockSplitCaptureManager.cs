@@ -80,7 +80,7 @@ public class StockSplitCaptureManager
             {
                 match = new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = resolvedTicker,
                     EffectiveDate = split.EffectiveDate,
                     Numerator = split.Numerator,

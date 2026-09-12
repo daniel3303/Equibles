@@ -309,7 +309,7 @@ public class Form144ProposedSalesToolTests : IDisposable
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     EffectiveDate = new DateOnly(2026, 3, 1),
                     Numerator = 10,
                     Denominator = 1,

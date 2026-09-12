@@ -255,7 +255,7 @@ public class StockPriceTools
                     batchSplits = await _stockSplitRepository
                         .GetAll()
                         .Where(split =>
-                            stockIds.Contains(split.CommonStockId)
+                            stockIds.Contains(split.EquityIssuerId)
                             && split.EffectiveDate > earliestCutoff
                             && split.EffectiveDate <= latestEnd
                         )
@@ -281,7 +281,7 @@ public class StockPriceTools
                     // inside the requested year moves the comparison start to that split date.
                     var cutoff = price.Date.AddDays(-365);
                     var applicableSplits = PriceSeriesSplitScope.ForListing(
-                        batchSplits.Where(split => split.CommonStockId == stock.Id),
+                        batchSplits.Where(split => split.EquityIssuerId == stock.Id),
                         stock.Ticker,
                         priceTicker
                     );

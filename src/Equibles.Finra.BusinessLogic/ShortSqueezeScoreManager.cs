@@ -264,12 +264,15 @@ public class ShortSqueezeScoreManager
             await _stockSplitRepository
                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                 .Where(s =>
-                    stockIds.Contains(s.CommonStockId)
-                    && (s.PriceSeriesTicker == null || s.PriceSeriesTicker == s.CommonStock.Ticker)
+                    stockIds.Contains(s.EquityIssuerId)
+                    && (
+                        s.PriceSeriesTicker == null
+                        || s.PriceSeriesTicker == s.Issuer.Presentation.Listing.Ticker
+                    )
                 )
                 .ToListAsync(cancellationToken)
         )
-            .GroupBy(s => s.CommonStockId)
+            .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<StockSplit>)g.ToList());
 
         // The previous settlement date anchors the split basis of PreviousShortPosition.

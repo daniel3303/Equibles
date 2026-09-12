@@ -48,10 +48,10 @@ public class MarketActivityShareRestater
             await _stockSplitRepository
                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                 .AsNoTracking()
-                .Where(split => stockIds.Contains(split.CommonStockId))
+                .Where(split => stockIds.Contains(split.EquityIssuerId))
                 .ToListAsync(cancellationToken)
         )
-            .GroupBy(split => split.CommonStockId)
+            .GroupBy(split => split.EquityIssuerId)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<StockSplit>)group.ToList());
 
         foreach (var row in activity)

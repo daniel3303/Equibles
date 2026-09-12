@@ -216,7 +216,7 @@ public class BacktestPriceLoaderSplitComparabilityTests : IDisposable
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     EffectiveDate = effectiveDate,
                     Numerator = numerator,
                     Denominator = denominator,

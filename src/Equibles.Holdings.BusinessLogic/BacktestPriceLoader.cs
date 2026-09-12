@@ -94,7 +94,7 @@ public class BacktestPriceLoader
         var splits = await _splitRepository
             .GetAll()
             .Where(split =>
-                stockIds.Contains(split.CommonStockId)
+                stockIds.Contains(split.EquityIssuerId)
                 && split.EffectiveDate > priceWindowFrom
                 && split.EffectiveDate <= to
             )
@@ -105,7 +105,7 @@ public class BacktestPriceLoader
         {
             var primaryTicker = primaryTickers.GetValueOrDefault(key.CommonStockId);
             var scoped = PriceSeriesSplitScope.ForListing(
-                splits.Where(split => split.CommonStockId == key.CommonStockId),
+                splits.Where(split => split.EquityIssuerId == key.CommonStockId),
                 primaryTicker,
                 key.ListedTicker
             );

@@ -433,7 +433,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
         DbContext.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = "GOOG",
                 EffectiveDate = new DateOnly(2025, 1, 15),
                 Numerator = 10,

@@ -236,7 +236,7 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
                 .Add(
                     new StockSplit
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         EffectiveDate = new DateOnly(2026, 4, 20),
                         Numerator = 20m,
                         Denominator = 1m,

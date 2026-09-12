@@ -358,7 +358,7 @@ public class CorporateActionPriceReconciliationManager
             .Select(split => new
             {
                 split.Id,
-                split.CommonStockId,
+                split.EquityIssuerId,
                 split.PriceSeriesTicker,
                 split.EffectiveDate,
                 split.Numerator,
@@ -368,7 +368,7 @@ public class CorporateActionPriceReconciliationManager
             .ToListAsync(cancellationToken);
 
         return rows.GroupBy(row => new PriceReconciliationKey(
-                row.CommonStockId,
+                row.EquityIssuerId,
                 row.PriceSeriesTicker
             ))
             .ToDictionary(
@@ -399,7 +399,7 @@ public class CorporateActionPriceReconciliationManager
             .Select(dividend => new
             {
                 dividend.Id,
-                dividend.CommonStockId,
+                dividend.EquityIssuerId,
                 dividend.ExDate,
                 dividend.AmountPerShare,
                 dividend.Source,
@@ -408,16 +408,16 @@ public class CorporateActionPriceReconciliationManager
         if (rows.Count == 0)
             return [];
 
-        var stockIds = rows.Select(row => row.CommonStockId).Distinct().ToList();
+        var stockIds = rows.Select(row => row.EquityIssuerId).Distinct().ToList();
         var primaryTickers = await _stockRepository
             .GetByIds(stockIds)
             .Select(stock => new { stock.Id, stock.Ticker })
             .ToDictionaryAsync(stock => stock.Id, stock => stock.Ticker, cancellationToken);
 
-        return rows.Where(row => primaryTickers.ContainsKey(row.CommonStockId))
+        return rows.Where(row => primaryTickers.ContainsKey(row.EquityIssuerId))
             .GroupBy(row => new PriceReconciliationKey(
-                row.CommonStockId,
-                primaryTickers[row.CommonStockId]
+                row.EquityIssuerId,
+                primaryTickers[row.EquityIssuerId]
             ))
             .ToDictionary(
                 group => group.Key,
@@ -446,7 +446,7 @@ public class CorporateActionPriceReconciliationManager
 
         return locked
             .Where(split =>
-                split.CommonStockId == selectedSeries.CommonStockId
+                split.EquityIssuerId == selectedSeries.CommonStockId
                 && split.PriceSeriesTicker == selectedSeries.ListedTicker
                 // Keep the selection and stamping predicates identical so a legacy premature
                 // marker can be replaced with a post-effective marker after the provider fetch.
@@ -479,7 +479,7 @@ public class CorporateActionPriceReconciliationManager
 
         return locked
             .Where(dividend =>
-                dividend.CommonStockId == selectedSeries.CommonStockId
+                dividend.EquityIssuerId == selectedSeries.CommonStockId
                 && (
                     dividend.PriceAdjustmentAppliedTime == null
                     || dividend.PriceAdjustmentAppliedAmountPerShare != dividend.AmountPerShare
