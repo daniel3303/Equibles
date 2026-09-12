@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Equibles.Core.Identity;
 using Equibles.Integrations.Euronext.Models;
 using HtmlAgilityPack;
 
@@ -95,7 +96,7 @@ public static class EuronextDirectoryParser
             if (
                 string.IsNullOrWhiteSpace(name)
                 || name.Length > 500
-                || !ValidIsin(isin)
+                || !InternationalSecurityIdentifiers.IsValidIsin(isin)
                 || string.IsNullOrWhiteSpace(symbol)
                 || symbol.Length > 32
                 || !LisbonMarkets.Contains(mic)
@@ -148,7 +149,7 @@ public static class EuronextDirectoryParser
     {
         if (
             listing == null
-            || !ValidIsin(listing.Isin)
+            || !InternationalSecurityIdentifiers.IsValidIsin(listing.Isin)
             || !LisbonMarkets.Contains(listing.MarketIdentifierCode)
             || string.IsNullOrWhiteSpace(listing.Symbol)
             || listing.Symbol.Length > 32
@@ -256,37 +257,4 @@ public static class EuronextDirectoryParser
     private static string PlainCell(string value) => Text(Html(value).DocumentNode);
 
     private static string Text(HtmlNode node) => HtmlEntity.DeEntitize(node.InnerText).Trim();
-
-    // ISO 6166 identifier syntax/check digit, not instrument classification.
-    private static bool ValidIsin(string value)
-    {
-        if (
-            value?.Length != 12
-            || value[0] is < 'A' or > 'Z'
-            || value[1] is < 'A' or > 'Z'
-            || value[^1] is < '0' or > '9'
-        )
-            return false;
-        var digits = new List<int>();
-        foreach (var character in value)
-        {
-            if (character is >= '0' and <= '9')
-                digits.Add(character - '0');
-            else if (character is >= 'A' and <= 'Z')
-            {
-                var number = character - 'A' + 10;
-                digits.Add(number / 10);
-                digits.Add(number % 10);
-            }
-            else
-                return false;
-        }
-        var sum = 0;
-        for (var index = digits.Count - 1; index >= 0; index--)
-        {
-            var digit = digits[index] * ((digits.Count - 1 - index) % 2 == 0 ? 1 : 2);
-            sum += digit / 10 + digit % 10;
-        }
-        return sum % 10 == 0;
-    }
 }

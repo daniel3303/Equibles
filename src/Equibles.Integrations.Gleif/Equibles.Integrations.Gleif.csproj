@@ -1,8 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <PackageReference Include="HtmlAgilityPack" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="../Equibles.Core/Equibles.Core.csproj" />
   </ItemGroup>
 </Project>

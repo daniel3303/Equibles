@@ -11,7 +11,7 @@ public class EquityIssuer
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    [MaxLength(256)]
+    [MaxLength(500)]
     public string Name { get; set; }
 
     [MaxLength(2000)]

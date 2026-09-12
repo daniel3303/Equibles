@@ -49,3 +49,15 @@
 - Preserve source metadata as immutable directory evidence; serialize capture with directory writes and refuse conflicting currency or scale.
 - Currency evidence does not verify a MIC or classify the security; current metadata never establishes retired-symbol denomination.
 - Capture rides existing chart requests; a finite source-metadata backfill remains a rollout prerequisite for consumers requiring explicit units.
+
+## Source issuer identifiers and Lisbon import
+
+- `EquityIssuerSourceIdentifier` binds an exact provider issuer code to a native issuer and immutable capture evidence; it contains no route records.
+- Match existing issuers by exact source identifier, LEI, ISIN, or a current U.S. security CUSIP explicitly connected through GLEIF's complete ISIN-to-LEI relationship set; never match names or old CUSIP aliases.
+- Conflicting owners, legal identifiers, venue symbols, or quotation units reject the identity write atomically; a failed import discards its tracked graph.
+- Securities remain distinct by ISIN; a shared issuer never merges an ADR with its underlying share, and the source's broad `STOCK` type remains unclassified.
+- Preserve existing issuer profiles and presentation listings; new venues retain their own prices and symbols, and native rename history remains intact.
+- GLEIF capture requires exact issuer identity, complete unique related ISINs, stable publication/total metadata, and source-provided same-origin pagination without added filters.
+- Validate ISIN check digits and LEI MOD 97-10 at both source and native-import boundaries; malformed related identifiers cannot establish ownership through an embedded CUSIP.
+- `EquityMarkets:LisbonEnabled` (`EQUITY_MARKETS_LISBON_ENABLED` in Compose) enables daily source reconciliation; unresolved records retry after fifteen minutes without deleting retained identities.
+- Enable the worker only after native migrations and exchange-qualified MVC surfaces have passed verification; source acquisition and import alone do not complete the whole-database cutover.

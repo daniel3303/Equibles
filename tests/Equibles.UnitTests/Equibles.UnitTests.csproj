@@ -106,6 +106,7 @@
     <ProjectReference Include="..\..\src\Equibles.FdaCatalysts.Repositories\Equibles.FdaCatalysts.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.FdaCatalysts.HostedService\Equibles.FdaCatalysts.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Euronext\Equibles.Integrations.Euronext.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.Gleif\Equibles.Integrations.Gleif.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Shared/NativeListingSeed.cs" Link="Helpers/NativeListingSeed.cs" />

@@ -50,35 +50,13 @@ public class EquityListingRepository : BaseRepository<EquityListing>
             || listing.QuoteUnitMultiplier is not (null or 1m)
         )
             return false;
-        var id = Guid.NewGuid();
-        var key = listing.Id.ToString();
-        await DbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-            INSERT INTO "EquityDirectorySourceRecord"
-                ("Id", "Source", "SourceRecordKey", "PayloadHash", "PayloadJson", "CapturedAt")
-            SELECT {id}, {source}, {key},
-                encode(sha256(convert_to({payloadJson}::jsonb::text, 'UTF8')), 'hex'),
-                {payloadJson}::jsonb, now()
-            ON CONFLICT ("Source", "SourceRecordKey", "PayloadHash") DO NOTHING
-            """,
+        await EquityDirectorySourceRecordRepository.Append(
+            DbContext,
+            source,
+            listing.Id.ToString(),
+            payloadJson,
             cancellationToken
         );
-        var exactEvidence = await DbContext
-            .Database.SqlQuery<bool>(
-                $"""
-                SELECT EXISTS (
-                    SELECT 1 FROM "EquityDirectorySourceRecord"
-                    WHERE "Source" = {source} AND "SourceRecordKey" = {key}
-                        AND "PayloadHash" = encode(sha256(convert_to({payloadJson}::jsonb::text, 'UTF8')), 'hex')
-                        AND "PayloadJson" = {payloadJson}::jsonb
-                ) AS "Value"
-                """
-            )
-            .SingleAsync(cancellationToken);
-        if (!exactEvidence)
-            throw new InvalidDataException(
-                "Quotation evidence hash conflicts with its stored payload."
-            );
         var updated = await GetUsByTicker(ticker)
             .Where(row =>
                 row.Id == listing.Id

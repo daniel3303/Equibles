@@ -104,7 +104,9 @@ public class OriginalDirectoryEvidenceTests(ParadeDbFixture fixture) : ParadeDbM
         var before = (await DbContext.Set<EquityDirectorySourceRecord>().SingleAsync()).PayloadJson;
         await transaction.CreateSavepointAsync("before_truncate");
         Func<Task> truncate = () =>
-            DbContext.Database.ExecuteSqlRawAsync("""TRUNCATE "EquityDirectorySourceRecord";""");
+            DbContext.Database.ExecuteSqlRawAsync(
+                """TRUNCATE "EquityDirectorySourceRecord" CASCADE;"""
+            );
         (await truncate.Should().ThrowAsync<PostgresException>())
             .Which.SqlState.Should()
             .Be(PostgresErrorCodes.RaiseException);
