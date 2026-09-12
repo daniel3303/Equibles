@@ -70,8 +70,6 @@ public class CorporateActionPriceReconciliationManager
         {
             var last = selected[^1];
             cursor.LastEquityListingId = last.EquityListingId;
-            cursor.LastCommonStockId = last.EquityIssuerId;
-            cursor.LastListedTicker = last.ListedTicker;
             cursor.UpdatedAt = DateTime.UtcNow;
             await _cursorRepository.SaveChanges();
         }

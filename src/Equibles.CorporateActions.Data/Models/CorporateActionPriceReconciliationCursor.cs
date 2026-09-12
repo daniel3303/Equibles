@@ -17,10 +17,5 @@ public class CorporateActionPriceReconciliationCursor
 
     public Guid? LastEquityListingId { get; set; }
 
-    public Guid? LastCommonStockId { get; set; }
-
-    [MaxLength(32)]
-    public string LastListedTicker { get; set; }
-
     public DateTime? UpdatedAt { get; set; }
 }

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models;
 
-// Immutable source evidence, independent of the current normalized issuer/security/listing facts.
+// Immutable directory and identity-migration source evidence, independent of current normalized facts.
 [Index(nameof(Source), nameof(SourceRecordKey), nameof(PayloadHash), IsUnique = true)]
 public class EquityDirectorySourceRecord
 {

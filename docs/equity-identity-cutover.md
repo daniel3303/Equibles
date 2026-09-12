@@ -325,3 +325,11 @@
 - Corporate-action ownership and split-revision invalidation read `EquityIssuerId`; they continue after retiring the original owner columns.
 - Split invalidation watches every update because an older writer can change the original owner column and an earlier mirror trigger then assigns the native owner. PostgreSQL `UPDATE OF` does not observe assignments made by another trigger.
 - Replacing these functions changes no stored observations or applied-adjustment markers. Listing attribution alone preserves the original applied marker; a changed owner, source symbol, ratio, date or source invalidates it.
+
+### Retiring identity source evidence
+
+- The application cursor uses only `LastEquityListingId`; original issuer/symbol cursor columns remain physical during replacement of older workers.
+- `PreserveRetiringEquityIdentitySources` archives complete `LegacyEquityListing` and cursor rows in immutable `EquityDirectorySourceRecord` evidence, using explicit source kinds, original keys and SHA-256 hashes.
+- Atomic, idempotent setup locks both small source tables with a five-second lock timeout, captures existing rows, and records old/new versions on subsequent inserts, updates and deletes. A retry never replaces evidence or duplicates an unchanged version.
+- The finite completion query is `scripts/verify-retiring-equity-identity-sources.sql`; both missing-source counts and invalid-hash/key counts must be zero.
+- At final retirement, lock both sources, run only `scripts/audit-retiring-equity-identity-sources.sql` inside the owning transaction, and retain the returned counts. Remove the two `equity_retiring_*_source` triggers and three `eq_*_retiring_*` capture functions together with compatibility storage after older writers are gone. Keep all immutable evidence and its permanent guards.
