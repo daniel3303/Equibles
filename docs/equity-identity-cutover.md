@@ -97,7 +97,7 @@
 ### Fails-to-deliver observations
 
 - `FailToDeliver` now owns a stable `EquityListingId` and retains `ListedTicker` as source evidence; the native unique key is listing/settlement date.
-- The paired migration uses exact legacy mappings and refuses unresolved rows before committing. Observation GUIDs, source tickers, quantities, prices, settlement dates and creation timestamps stay unchanged.
+- The paired migration uses exact legacy mappings and refuses an unresolved batch before committing its rows or checkpoint. Observation GUIDs, source tickers, quantities, prices, settlement dates and creation timestamps stay unchanged.
 - The old physical owner column and unique index remain only for retiring binaries. Native-only listings have no old owner value, which prevents same-symbol venues from colliding in that temporary index.
 - Final cutover removes `equity_ftd_listing_bridge`, `eq_bridge_ftd_listing`, the unmapped `CommonStockId` column and its old unique index together, after all stock-facing readers and writers move to native identities.
 - The importer resolves native listing IDs before upsert; native rows survive removal of a legacy stock. Never delete a native listing that retains observations.
@@ -107,7 +107,7 @@
 ## Native FINRA observations
 
 - `DailyShortVolume`, `ShortInterest`, and `OffExchangeVolume` now reference exact native listings with restrictive deletion and listing/date uniqueness.
-- Backfill resolves each original issuer/ticker pair; unresolved history aborts the transaction without changing observations.
+- Backfill resolves each original issuer/ticker pair in committed 10,000-row batches; unresolved history rolls back its incomplete batch without changing original observation fields.
 - Preserve original IDs, source ticker spelling, all quantities/precision, market attribution, timestamps, and every `FinraImportPartition` marker.
 - Source-universe hashes keep their existing payload; consumers filter the resolved native listing IDs, and issuer-model inputs require the issuer's primary listing to be a scope member.
 - Case-fold repair also requires an exact match with the observation's source ticker, protecting history from a former symbol after a rename.
@@ -188,7 +188,7 @@
 - Failed directory saves restore both database state and the tracked identity graph before another save can occur.
 - Explicit GUID generation is application-owned for issuer, security, and listing entities; `PreserveAssignedEquityIdentityKeys` changes EF metadata without changing stored rows.
 - U.S. source-symbol readers use native listings directly; ambiguous same-owner/same-symbol U.S. matches cannot merge histories.
-- Retained historical migration fixtures continue to seed the historical schema. An unattributed FINRA row still triggers an atomic migration refusal; its unknown identity must be resolved or preserved explicitly before final cutover.
+- Retained historical migration fixtures continue to seed the historical schema. An unattributed FINRA row still refuses its incomplete batch while completed batches remain committed; its unknown identity must be resolved or preserved explicitly before final cutover.
 
 ## Split capture and historical basis
 
@@ -283,3 +283,13 @@
 - Validation allows ordinary issuer and observation reads/writes; an interrupted validation reuses the same checked constraint definition and preserves every original row.
 - The retiring directory can no longer cascade-delete observations after metadata commit; native issuer ownership already protects those rows before the validation scan finishes.
 - Applied production migration history is unchanged; this transaction-boundary correction belongs only to the new international-identity migration sequence.
+
+## Resumable listing observation rollout
+
+- FINRA and fails-to-deliver expansion commits metadata and old-writer bridges before copying history; no full observation scan runs under the schema-change locks.
+- Each 10,000-ID batch commits attribution and its `NativeListingObservationMigrationProgress` checkpoint together; interrupted batches resume from the last committed ID.
+- Retiring writers receive exact listing IDs immediately, including inserts whose IDs precede the saved cursor.
+- Concurrent unique-index builds reuse completed valid indexes and recover interrupted invalid builds; constraint validation follows a separate metadata commit.
+- Run the FINRA/FTD identity audits plus `scripts/verify-native-listing-observation-rollout.sql`; all four checkpoints, required columns, valid indexes and validated restrictive foreign keys must pass.
+- Compare every original observation and import-partition field separately; completion counters alone cannot prove conservation.
+- Remove the temporary progress table with the bridges and old ownership columns after complete reconciliation and retirement of every old writer.

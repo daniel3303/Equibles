@@ -1,3 +1,4 @@
+using Equibles.Migrations.Infrastructure;
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -10,25 +11,7 @@ namespace Equibles.Migrations.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql("""
-                ALTER TABLE "FailToDeliver" ADD COLUMN "EquityListingId" uuid;
-                UPDATE "FailToDeliver" observation
-                SET "EquityListingId" = mapping."EquityListingId"
-                FROM "LegacyEquityListing" mapping
-                WHERE mapping."CommonStockId" = observation."CommonStockId"
-                    AND mapping."ListedTicker" = observation."ListedTicker";
-                DO $body$
-                BEGIN
-                    IF EXISTS (SELECT 1 FROM "FailToDeliver" WHERE "EquityListingId" IS NULL) THEN
-                        RAISE EXCEPTION 'Fails-to-deliver history has unresolved listing identities; no observations were changed.';
-                    END IF;
-                END $body$;
-                ALTER TABLE "FailToDeliver" ALTER COLUMN "EquityListingId" SET NOT NULL;
-                ALTER TABLE "FailToDeliver" ALTER COLUMN "CommonStockId" DROP NOT NULL;
-
-                -- Retain the old physical column/index only through the retiring-binary window.
-                -- The native model and writer use ListingId; final cutover removes this guard.
-                DROP TRIGGER IF EXISTS equity_identity_series_write ON "FailToDeliver";
-                CREATE FUNCTION public.eq_bridge_ftd_listing()
+                CREATE OR REPLACE FUNCTION public.eq_bridge_ftd_listing()
                 RETURNS trigger LANGUAGE plpgsql AS $fn$
                 DECLARE issuer_id uuid;
                 BEGIN
@@ -53,18 +36,8 @@ namespace Equibles.Migrations.Migrations
                     FROM "LegacyEquityListing" mapping WHERE mapping."EquityListingId" = NEW."EquityListingId";
                     RETURN NEW;
                 END $fn$;
-                CREATE TRIGGER equity_ftd_listing_bridge BEFORE INSERT OR UPDATE ON "FailToDeliver"
-                    FOR EACH ROW EXECUTE FUNCTION public.eq_bridge_ftd_listing();
                 """);
-            migrationBuilder.DropForeignKey(
-                name: "FK_FailToDeliver_CommonStock_CommonStockId", table: "FailToDeliver");
-            migrationBuilder.CreateIndex(
-                name: "IX_FailToDeliver_EquityListingId_SettlementDate", table: "FailToDeliver",
-                columns: new[] { "EquityListingId", "SettlementDate" }, unique: true);
-            migrationBuilder.AddForeignKey(
-                name: "FK_FailToDeliver_EquityListing_EquityListingId", table: "FailToDeliver",
-                column: "EquityListingId", principalTable: "EquityListing", principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            NativeListingObservationExpansion20260912.Apply(migrationBuilder, "FailToDeliver", "SettlementDate", "ftd");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder) =>
