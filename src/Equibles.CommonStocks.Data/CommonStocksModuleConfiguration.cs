@@ -87,6 +87,12 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
             .WithOne()
             .HasForeignKey<LegacyEquityListing>(row => row.EquityListingId)
             .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<EquityListingTickerAlias>()
+            .HasOne(alias => alias.Listing)
+            .WithMany(listing => listing.TickerAliases)
+            .HasForeignKey(alias => alias.EquityListingId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<EquityListing>(listing =>
         {
             listing.HasIndex(row => new { row.MarketCountryCode, row.Ticker });

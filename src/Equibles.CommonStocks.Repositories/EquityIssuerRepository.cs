@@ -239,7 +239,17 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
             .Set<EquityListing>()
             .Where(listing => listing.MarketCountryCode == "US" && listing.PriceHistoryBackfilled);
 
-    public virtual async Task<Guid?> GetEquityListingId(Guid issuerId, string ticker)
+    public virtual Task<Guid?> GetEquityListingId(Guid issuerId, string ticker) =>
+        ResolveListingIdentity(issuerId, ticker, includeRecordedSymbols: false);
+
+    public virtual Task<Guid?> GetRecordedEquityListingId(Guid issuerId, string ticker) =>
+        ResolveListingIdentity(issuerId, ticker, includeRecordedSymbols: true);
+
+    private async Task<Guid?> ResolveListingIdentity(
+        Guid issuerId,
+        string ticker,
+        bool includeRecordedSymbols
+    )
     {
         if (DbContext == null)
             return null;
@@ -248,7 +258,11 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
             .Where(listing =>
                 listing.Security.EquityIssuerId == issuerId
                 && listing.MarketCountryCode == "US"
-                && listing.Ticker == ticker
+                && (
+                    listing.Ticker == ticker
+                    || includeRecordedSymbols
+                        && listing.TickerAliases.Any(alias => alias.Ticker == ticker)
+                )
             )
             .Select(listing => listing.Id)
             .Take(2)
