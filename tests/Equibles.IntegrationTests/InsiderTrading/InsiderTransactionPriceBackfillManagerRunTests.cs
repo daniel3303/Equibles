@@ -53,9 +53,9 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         DbContext.Add(stock);
         DbContext.Add(owner);
         DbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = stock.Id,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, stock, null),
                 Date = date,
                 Close = 50m,
                 Volume = 1_000,
@@ -69,7 +69,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         await using var runCtx = Fixture.CreateDbContext();
         var manager = new InsiderTransactionPriceBackfillManager(
             new InsiderTransactionRepository(runCtx),
-            new DailyStockPriceRepository(runCtx),
+            new EquityDailyStockPriceRepository(runCtx),
             new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             runCtx,
@@ -138,9 +138,9 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         DbContext.Add(unpriced);
         DbContext.Add(owner);
         DbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = priced.Id,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, priced, null),
                 Date = date,
                 Close = 50m,
                 Volume = 1_000,
@@ -154,7 +154,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         await using var runCtx = Fixture.CreateDbContext();
         var manager = new InsiderTransactionPriceBackfillManager(
             new InsiderTransactionRepository(runCtx),
-            new DailyStockPriceRepository(runCtx),
+            new EquityDailyStockPriceRepository(runCtx),
             new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             runCtx,

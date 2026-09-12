@@ -122,11 +122,13 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
                 }
             );
             context.Add(Activity(stock, "ACTIVITY-OLD"));
-            context.Add(ShortVolume(stock, "SHORT-OLD", 1));
-            context.Add(ShortVolume(stock, "", 2));
             await context.SaveChangesAsync();
+            await SeedLegacyShortVolume(context, stock, "SHORT-OLD", 1);
+            await SeedLegacyShortVolume(context, stock, "", 2);
             var before = await LegacySnapshot(context);
-            await context.Database.MigrateAsync();
+            await context
+                .GetService<IMigrator>()
+                .MigrateAsync("20260911215220_PopulateNativeEquityPrices");
             (await LegacySnapshot(context)).Should().Be(before);
             await context.Database.ExecuteSqlRawAsync(AuditSql("verify-native-equity-prices.sql"));
             (await context.Set<UnattributedDailyStockPrice>().SingleAsync())
@@ -164,7 +166,7 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
             var old = await new EquityListingRepository(context)
                 .GetByLegacyKey(stock.Id, "OLD")
                 .SingleAsync();
-            (await new DailyStockPriceRepository(context).GetByListing(old.Id).SingleAsync())
+            (await new EquityDailyStockPriceRepository(context).GetByListing(old.Id).SingleAsync())
                 .Close.Should()
                 .Be(123.4567m);
             (await new CommonStockRepository(context).GetByTicker("CLASS-B"))
@@ -207,7 +209,7 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
             .SingleAsync();
         retained.Id.Should().Be(old.Id);
         retained.Active.Should().BeFalse();
-        (await new DailyStockPriceRepository(DbContext).GetByListing(old.Id).CountAsync())
+        (await new EquityDailyStockPriceRepository(DbContext).GetByListing(old.Id).CountAsync())
             .Should()
             .Be(1);
         (await DbContext.Set<EquitySecurity>().ToListAsync())
@@ -240,7 +242,7 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
         var listing = await new EquityListingRepository(DbContext)
             .GetByLegacyKey(stock.Id, "HISTORICAL")
             .SingleAsync();
-        (await new DailyStockPriceRepository(DbContext).GetByListing(listing.Id).CountAsync())
+        (await new EquityDailyStockPriceRepository(DbContext).GetByListing(listing.Id).CountAsync())
             .Should()
             .Be(2);
         (await DbContext.Set<EquitySecurity>().CountAsync()).Should().Be(2);
@@ -278,19 +280,27 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task ActivityAndShortDataWriters_MapExactSeries_AndRetainUnattributedRows()
+    public async Task CurrentWriters_MapExactSeries_AndRefuseMissingAttribution()
     {
         var stock = new CommonStock { Ticker = "CURRENT" };
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
         DbContext.Add(Activity(stock, "ACTIVITY-OLD"));
-        DbContext.Add(ShortVolume(stock, "", 1));
-        DbContext.Add(ShortVolume(stock, "SHORT-OLD", 2));
         await DbContext.SaveChangesAsync();
+        await SeedLegacyShortVolume(DbContext, stock, "SHORT-OLD", 2);
+        Func<Task> missingAttribution = () => SeedLegacyShortVolume(DbContext, stock, "", 1);
+        await missingAttribution
+            .Should()
+            .ThrowAsync<PostgresException>()
+            .WithMessage("*requires an exact listing identity*");
         (await DbContext.Set<LegacyEquityListing>().Select(row => row.ListedTicker).ToListAsync())
             .Should()
             .BeEquivalentTo("CURRENT", "ACTIVITY-OLD", "SHORT-OLD");
-        (await DbContext.Set<DailyShortVolume>().SingleAsync(row => row.ListedTicker == ""))
+        (
+            await DbContext
+                .Set<DailyShortVolume>()
+                .SingleAsync(row => row.ListedTicker == "SHORT-OLD")
+        )
             .ShortVolume.Should()
             .Be(123.456789m);
         await DbContext.Database.ExecuteSqlRawAsync(AuditSql());
@@ -315,17 +325,20 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
             PreviousShares = 654321,
         };
 
-    private DailyShortVolume ShortVolume(CommonStock stock, string ticker, int day) =>
-        new()
-        {
-            EquityListingId = Equibles
-                .TestSupport.NativeListingSeed.ForStock(DbContext, stock, ticker)
-                .Id,
-            ListedTicker = ticker,
-            Date = new DateOnly(2025, 1, day),
-            ShortVolume = 123.456789m,
-            TotalVolume = 234.567890m,
-        };
+    private static Task SeedLegacyShortVolume(
+        EquiblesFinancialDbContext context,
+        CommonStock stock,
+        string ticker,
+        int day
+    ) =>
+        context.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO "DailyShortVolume" ("Id", "CommonStockId", "ListedTicker", "Date",
+                "ShortVolume", "ShortExemptVolume", "TotalVolume", "CreationTime")
+            VALUES ({Guid.NewGuid()}, {stock.Id}, {ticker}, {new DateOnly(2025, 1, day)},
+                123.456789, 0, 234.567890, CURRENT_TIMESTAMP)
+            """
+        );
 
     private static string AuditSql(string fileName = "verify-equity-identity.sql")
     {

@@ -72,10 +72,10 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
         await setup.ExecuteNonQueryAsync();
         await using var insert = new NpgsqlCommand(
             """
-            INSERT INTO "OffExchangeVolume"
-                ("Id", "CommonStockId", "ListedTicker", "WeekStartDate", "AtsVolume",
-                 "AtsTradeCount", "NonAtsOtcVolume", "NonAtsOtcTradeCount", "CreationTime")
-            VALUES (@id, @stock, 'AAPL', '2026-09-07', 1, 1, 0, 0, CURRENT_TIMESTAMP)
+            INSERT INTO "ListedDailyStockPrice"
+                ("Id", "CommonStockId", "ListedTicker", "Date", "Open", "High", "Low", "Close",
+                 "AdjustedClose", "Volume", "CreationTime")
+            VALUES (@id, @stock, 'AAPL', '2026-09-07', 1, 1, 1, 1, 1, 100, CURRENT_TIMESTAMP)
             """,
             writer
         );

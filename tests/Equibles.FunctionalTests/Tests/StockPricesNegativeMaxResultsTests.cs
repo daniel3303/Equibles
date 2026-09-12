@@ -62,7 +62,7 @@ public class StockPricesNegativeMaxResultsTests : IClassFixture<McpServerAppFixt
             db.Set<CommonStock>().Add(stock);
             await db.SaveChangesAsync();
 
-            db.Set<DailyStockPrice>()
+            db.Set<EquityDailyStockPrice>()
                 .Add(
                     BuildPrice(stock, new DateOnly(2026, 4, 1), close: 175.50m, volume: 50_000_000)
                 );
@@ -89,7 +89,7 @@ public class StockPricesNegativeMaxResultsTests : IClassFixture<McpServerAppFixt
         text.Should().NotContain("An error occurred while executing");
     }
 
-    private static DailyStockPrice BuildPrice(
+    private static EquityDailyStockPrice BuildPrice(
         CommonStock stock,
         DateOnly date,
         decimal close,
@@ -97,9 +97,11 @@ public class StockPricesNegativeMaxResultsTests : IClassFixture<McpServerAppFixt
     ) =>
         new()
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
-            ListedTicker = stock.Ticker,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(null, stock, stock.Ticker),
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStock(null, stock, stock.Ticker)
+                .Id,
+            SourceTicker = stock.Ticker,
             Date = date,
             Open = close - 1m,
             High = close + 1m,

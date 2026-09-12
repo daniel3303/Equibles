@@ -20,7 +20,7 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
 {
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
             new CommonStockRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
@@ -38,7 +38,7 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
             Cik = "0000320193",
         };
 
-    private static DailyStockPrice PriceFor(
+    private EquityDailyStockPrice PriceFor(
         CommonStock stock,
         DateOnly date,
         decimal close = 150.00m,
@@ -46,8 +46,10 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
     ) =>
         new()
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, stock, null),
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock, null)
+                .Id,
             Date = date,
             Open = close - 1m,
             High = close + 1m,
@@ -62,7 +64,9 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
         var stock = Stock();
         DbContext.Set<CommonStock>().Add(stock);
         for (var i = 0; i < closes.Length; i++)
-            DbContext.Set<DailyStockPrice>().Add(PriceFor(stock, firstDate.AddDays(i), closes[i]));
+            DbContext
+                .Set<EquityDailyStockPrice>()
+                .Add(PriceFor(stock, firstDate.AddDays(i), closes[i]));
         await DbContext.SaveChangesAsync();
         return stock;
     }
@@ -274,7 +278,7 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
         var brk = Stock(ticker: "BRK-B", name: "Berkshire Hathaway Inc");
         DbContext.Set<CommonStock>().Add(brk);
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(PriceFor(brk, new DateOnly(2026, 4, 5), close: 412.34m));
         await DbContext.SaveChangesAsync();
 
@@ -290,7 +294,7 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
         var brk = Stock(ticker: "BRK-B", name: "Berkshire Hathaway Inc");
         DbContext.Set<CommonStock>().Add(brk);
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(PriceFor(brk, new DateOnly(2026, 4, 5), close: 412.34m));
         await DbContext.SaveChangesAsync();
 

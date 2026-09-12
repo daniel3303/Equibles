@@ -44,7 +44,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             new CommonStockRepository(_dbContext),
             new StockSplitRepository(_dbContext),
             new FailToDeliverRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             _earningsProximitySources
         );
     }
@@ -380,12 +380,16 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         {
             var close = i == 64 ? 130m : 100m;
             _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
-                        ListedTicker = stock.Ticker,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Ticker
+                        ),
+                        SourceTicker = stock.Ticker,
                         Date = today.AddDays(i - 64),
                         Open = close,
                         High = close,
@@ -421,12 +425,16 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             var date = today.AddDays(i - 64);
             var close = date < splitDate ? 100m : 10m;
             _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
-                        ListedTicker = stock.Ticker,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Ticker
+                        ),
+                        SourceTicker = stock.Ticker,
                         Date = date,
                         Open = close,
                         High = close,
@@ -472,12 +480,16 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         {
             var close = i == 64 ? 130m : 100m;
             _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
-                        ListedTicker = stock.Ticker,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Ticker
+                        ),
+                        SourceTicker = stock.Ticker,
                         Date = today.AddDays(i - 64),
                         Open = close,
                         High = close,
@@ -520,12 +532,16 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         {
             var close = i == 64 ? 130m : 100m;
             _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
-                        ListedTicker = "SECONDARY",
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            "SECONDARY"
+                        ),
+                        SourceTicker = "SECONDARY",
                         Date = today.AddDays(i - 64),
                         Open = close,
                         High = close,

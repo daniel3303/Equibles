@@ -14,7 +14,7 @@ public class StockPriceToolsGetBollingerBandsCultureInvarianceTests : ParadeDbMc
 {
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
             new CommonStockRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
@@ -51,11 +51,15 @@ public class StockPriceToolsGetBollingerBandsCultureInvarianceTests : ParadeDbMc
         for (var i = 0; i < 20; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m,
                         High = 100m,

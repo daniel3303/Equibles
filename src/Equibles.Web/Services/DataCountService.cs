@@ -23,7 +23,7 @@ public class DataCountService
     private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
     private readonly FailToDeliverRepository _failToDeliverRepository;
     private readonly FredObservationRepository _fredObservationRepository;
-    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
     private readonly CftcPositionReportRepository _cftcPositionReportRepository;
     private readonly CboePutCallRatioRepository _cboePutCallRatioRepository;
     private readonly CboeVixDailyRepository _cboeVixDailyRepository;
@@ -36,7 +36,7 @@ public class DataCountService
         InstitutionalHoldingRepository institutionalHoldingRepository,
         FailToDeliverRepository failToDeliverRepository,
         FredObservationRepository fredObservationRepository,
-        DailyStockPriceRepository dailyStockPriceRepository,
+        EquityDailyStockPriceRepository dailyStockPriceRepository,
         CftcPositionReportRepository cftcPositionReportRepository,
         CboePutCallRatioRepository cboePutCallRatioRepository,
         CboeVixDailyRepository cboeVixDailyRepository

@@ -120,7 +120,7 @@ public class InsiderFilingReprocessManagerCancellationTests : ParadeDbMcpTestBas
         var manager = new InsiderFilingReprocessManager(
             new InsiderTransactionRepository(runCtx),
             new InsiderFilingRepository(runCtx),
-            new DailyStockPriceRepository(runCtx),
+            new EquityDailyStockPriceRepository(runCtx),
             new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             edgar,

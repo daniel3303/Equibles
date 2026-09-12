@@ -97,7 +97,7 @@ public class InsiderFilingRejectedDateReplayTests(ParadeDbFixture fixture)
         var manager = new InsiderFilingReprocessManager(
             new InsiderTransactionRepository(DbContext),
             new InsiderFilingRepository(DbContext),
-            new DailyStockPriceRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
             new StockSplitRepository(DbContext),
             new InsiderTransactionPriceValidator(),
             edgar,
@@ -278,7 +278,10 @@ public class InsiderFilingRejectedDateReplayTests(ParadeDbFixture fixture)
             (typeof(InsiderFilingRepository), new InsiderFilingRepository(DbContext)),
             (typeof(FailedFilingIngestRepository), new FailedFilingIngestRepository(DbContext)),
             (typeof(IFileManager), files),
-            (typeof(DailyStockPriceRepository), new DailyStockPriceRepository(DbContext)),
+            (
+                typeof(EquityDailyStockPriceRepository),
+                new EquityDailyStockPriceRepository(DbContext)
+            ),
             (typeof(StockSplitRepository), new StockSplitRepository(DbContext)),
             (typeof(InsiderTransactionPriceValidator), new InsiderTransactionPriceValidator())
         );

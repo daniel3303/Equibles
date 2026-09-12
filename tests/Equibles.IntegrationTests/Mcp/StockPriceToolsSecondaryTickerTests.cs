@@ -27,7 +27,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
 
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
             new CommonStockRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
@@ -47,12 +47,16 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
         await DbContext.SaveChangesAsync();
 
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-B",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        "BRK-B"
+                    ),
+                    SourceTicker = "BRK-B",
                     Date = new DateOnly(2026, 7, 31),
                     Open = 510m,
                     High = 512m,
@@ -61,10 +65,14 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
                     AdjustedClose = 511.54m,
                     Volume = 3_934_400,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-A",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        "BRK-A"
+                    ),
+                    SourceTicker = "BRK-A",
                     Date = new DateOnly(2026, 7, 31),
                     Open = 748_500m,
                     High = 750_000m,
@@ -95,12 +103,16 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     {
         var stock = await SeedBerkshire();
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-A",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        "BRK-A"
+                    ),
+                    SourceTicker = "BRK-A",
                     Date = new DateOnly(2025, 8, 1),
                     Open = 900_000m,
                     High = 900_000m,
@@ -136,12 +148,16 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     {
         var stock = await SeedBerkshire();
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-B",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        "BRK-B"
+                    ),
+                    SourceTicker = "BRK-B",
                     Date = new DateOnly(2025, 8, 1),
                     Open = 600m,
                     High = 600m,
@@ -178,12 +194,16 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     {
         var stock = await SeedBerkshire();
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-A",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        "BRK-A"
+                    ),
+                    SourceTicker = "BRK-A",
                     Date = new DateOnly(2025, 8, 1),
                     Open = 900_000m,
                     High = 900_000m,

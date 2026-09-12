@@ -389,7 +389,9 @@ public class InsiderTradingFilingProcessorTests
         var filingRepo = new InsiderFilingRepository(dbContext);
         var errorRepo = new ErrorRepository(dbContext);
         var errorManager = new ErrorManager(errorRepo);
-        var dailyStockPriceRepo = new DailyStockPriceRepository(dbContext);
+        EquityDailyStockPriceRepository dailyStockPriceRepo = new EquityDailyStockPriceRepository(
+            dbContext
+        );
         var priceValidator = new InsiderTransactionPriceValidator();
         var secClient = Substitute.For<ISecEdgarClient>();
         var fileManager = Substitute.For<IFileManager>();
@@ -402,7 +404,7 @@ public class InsiderTradingFilingProcessorTests
             (typeof(FailedFilingIngestRepository), new FailedFilingIngestRepository(dbContext)),
             (typeof(IFileManager), fileManager),
             (typeof(ErrorManager), errorManager),
-            (typeof(DailyStockPriceRepository), dailyStockPriceRepo),
+            (typeof(EquityDailyStockPriceRepository), dailyStockPriceRepo),
             (typeof(InsiderTransactionPriceValidator), priceValidator),
             (typeof(StockSplitRepository), new StockSplitRepository(dbContext))
         );

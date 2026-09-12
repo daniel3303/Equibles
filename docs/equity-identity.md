@@ -12,7 +12,7 @@
 - Historical symbols and reused tickers keep separate source keys and listing IDs; one symbol never merges different issuers.
 - Database writer guards synchronize issuer changes and register newly observed exact historical series from EF, bulk imports and retiring binaries.
 - Writer guards are recurring reconciliation and stay installed after the finite backfill completes.
-- `EquityIssuerRepository.GetByCik` reads native issuer facts; `DailyStockPriceRepository.GetByListing` reads native `EquityDailyStockPrice` rows by stable listing ID.
+- `EquityIssuerRepository.GetByCik` reads native issuer facts; `EquityDailyStockPriceRepository.GetByListing` reads native `EquityDailyStockPrice` rows by stable listing ID.
 - `CommonStockRepository.GetByTicker` reads the registry first and preserves the legacy lookup as a compatibility fallback.
 - Legacy customer references remain valid source keys; no customer rows or portfolio economics are rewritten.
 - Existing URL aliases and canonicals retain their current MVC behavior; international routes remain a separate exchange-qualified MVC surface.

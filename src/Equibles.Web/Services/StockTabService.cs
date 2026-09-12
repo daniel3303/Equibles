@@ -46,7 +46,7 @@ public class StockTabService
     private readonly NCenFilingRepository _nCenFilingRepository;
     private readonly NportFilingRepository _nportFilingRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
-    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
     private readonly CommonStockRepository _commonStockRepository;
@@ -79,7 +79,7 @@ public class StockTabService
         NCenFilingRepository nCenFilingRepository,
         NportFilingRepository nportFilingRepository,
         CongressionalTradeRepository congressionalTradeRepository,
-        DailyStockPriceRepository dailyStockPriceRepository,
+        EquityDailyStockPriceRepository dailyStockPriceRepository,
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
         CommonStockRepository commonStockRepository,
@@ -580,7 +580,7 @@ public class StockTabService
     // benchmark, or the benchmark has no prices in the lookback window.
     private async Task<PriceReturns> LoadBenchmarkReturns(
         CommonStock stock,
-        List<DailyStockPrice> stockPrices
+        List<EquityDailyStockPrice> stockPrices
     )
     {
         if (stockPrices.Count == 0)

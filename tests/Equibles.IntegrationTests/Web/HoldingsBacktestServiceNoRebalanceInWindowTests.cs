@@ -76,8 +76,8 @@ public class HoldingsBacktestServiceNoRebalanceInWindowTests
             );
             // Seed a couple of benchmark prices so the BenchmarkNotFound arm
             // doesn't fire — the relevance branch must be the one that hits.
-            db.Add(MakePrice(spyId, new DateOnly(2024, 6, 1), 400m));
-            db.Add(MakePrice(spyId, new DateOnly(2024, 12, 1), 410m));
+            db.Add(MakePrice(db, spyId, new DateOnly(2024, 6, 1), 400m));
+            db.Add(MakePrice(db, spyId, new DateOnly(2024, 12, 1), 410m));
             await Task.CompletedTask;
         });
 
@@ -93,10 +93,15 @@ public class HoldingsBacktestServiceNoRebalanceInWindowTests
         html.Should().NotContain("data-testid=\"backtest-portfolio-summary\"");
     }
 
-    private static DailyStockPrice MakePrice(Guid stockId, DateOnly date, decimal close) =>
+    private static EquityDailyStockPrice MakePrice(
+        Equibles.Data.EquiblesFinancialDbContext db,
+        Guid stockId,
+        DateOnly date,
+        decimal close
+    ) =>
         new()
         {
-            CommonStockId = stockId,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId),
             Date = date,
             Open = close,
             High = close,

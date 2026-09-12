@@ -94,11 +94,15 @@ public class StockTabServicePriceTabMinSyncDateTests : IDisposable
         for (var i = -5; i < 5; i++)
         {
             _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            null
+                        ),
                         Date = pivot.AddDays(i),
                         Open = 100m,
                         High = 102m,
@@ -127,7 +131,7 @@ public class StockTabServicePriceTabMinSyncDateTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
             new CommonStockRepository(_dbContext),

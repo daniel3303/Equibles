@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.Contracts;
 using Equibles.Data;
 using Equibles.Data.Extensions;
@@ -53,12 +54,17 @@ public class YahooStockPriceProvider : IStockPriceProvider
             // the exact secondary series requested. The precise (stock, listing) pairing is
             // re-applied in memory — the small overfetch beats a per-pair query.
             var prices = await _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Where(p =>
-                    stockIds.Contains(p.CommonStockId)
+                    _dbContext
+                        .Set<LegacyEquityListing>()
+                        .Any(mapping => mapping.EquityListingId == p.EquityListingId)
+                )
+                .Where(p =>
+                    stockIds.Contains(p.Listing.Security.EquityIssuerId)
                     && (
-                        p.ListedTicker == p.CommonStock.Ticker
-                        || secondaryTickers.Contains(p.ListedTicker)
+                        p.EquityListingId == p.Listing.Security.Issuer.Presentation.EquityListingId
+                        || secondaryTickers.Contains(p.SourceTicker)
                     )
                     && p.Date >= minDate
                     && p.Date <= date
@@ -66,9 +72,9 @@ public class YahooStockPriceProvider : IStockPriceProvider
                 )
                 .Select(p => new
                 {
-                    p.CommonStockId,
-                    p.ListedTicker,
-                    PrimaryTicker = p.CommonStock.Ticker,
+                    CommonStockId = p.Listing.Security.EquityIssuerId,
+                    ListedTicker = p.SourceTicker,
+                    PrimaryTicker = p.Listing.Security.Issuer.Presentation.Listing.Ticker,
                     p.Date,
                     p.Close,
                 })

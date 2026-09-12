@@ -90,7 +90,7 @@ public class StatusControllerDeleteAllTests : ParadeDbMcpTestBase
             new InstitutionalHoldingRepository(DbContext),
             new FailToDeliverRepository(DbContext),
             new FredObservationRepository(DbContext),
-            new DailyStockPriceRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
             new CftcPositionReportRepository(DbContext),
             new CboePutCallRatioRepository(DbContext),
             new CboeVixDailyRepository(DbContext)

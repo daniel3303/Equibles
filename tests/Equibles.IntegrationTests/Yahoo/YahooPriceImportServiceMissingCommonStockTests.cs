@@ -34,7 +34,7 @@ namespace Equibles.IntegrationTests.Yahoo;
 public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly DailyStockPriceRepository _priceRepo;
+    private readonly EquityDailyStockPriceRepository _priceRepo;
     private readonly CommonStockRepository _stockRepo;
     private readonly IYahooFinanceClient _yahooClient;
     private readonly ISharesOutstandingProvider _sharesProvider;
@@ -46,7 +46,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
-        _priceRepo = new DailyStockPriceRepository(_dbContext);
+        _priceRepo = new EquityDailyStockPriceRepository(_dbContext);
         _stockRepo = new CommonStockRepository(_dbContext);
 
         _yahooClient = Substitute.For<IYahooFinanceClient>();
@@ -60,7 +60,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
         var splitRepo = new StockSplitRepository(_dbContext);
         var dividendRepo = new CashDividendRepository(_dbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(DailyStockPriceRepository), _priceRepo),
+            (typeof(EquityDailyStockPriceRepository), _priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
             (typeof(StockSplitRepository), splitRepo),
             (typeof(IndustryRepository), new IndustryRepository(_dbContext)),
@@ -138,7 +138,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
 
         await _sut.Import(CancellationToken.None);
 
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().BeEmpty();
         await _sharesProvider
             .DidNotReceiveWithAnyArgs()

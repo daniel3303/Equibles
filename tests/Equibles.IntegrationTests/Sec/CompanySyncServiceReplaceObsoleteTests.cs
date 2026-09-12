@@ -49,13 +49,16 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
             HistoricalPriceBackfillAttemptedAt = DateTime.UtcNow,
         };
         var exactPriceId = Guid.NewGuid();
-        DbContext.AddRange(
-            obsolete,
-            new DailyStockPrice
+        DbContext.Add(
+            new EquityDailyStockPrice
             {
                 Id = exactPriceId,
-                CommonStockId = obsolete.Id,
-                ListedTicker = "REUSED",
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                    DbContext,
+                    obsolete,
+                    "REUSED"
+                ),
+                SourceTicker = "REUSED",
                 Date = new DateOnly(2026, 8, 3),
                 Open = 10m,
                 High = 11m,
@@ -121,7 +124,7 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
         retired.PriceHistoryBackfilledTickers.Should().BeEmpty();
         retired.HistoricalPriceBackfillAttemptedAt.Should().BeNull();
         stocks.Should().OnlyContain(stock => stock.Ticker == "REUSED");
-        (await verify.Set<DailyStockPrice>().AsNoTracking().ToListAsync())
+        (await verify.Set<EquityDailyStockPrice>().AsNoTracking().ToListAsync())
             .Should()
             .ContainSingle("retiring a listing must preserve its exact historical prices");
     }
@@ -137,13 +140,16 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
             ReferenceTickers = ["REUSED"],
         };
         var exactPriceId = Guid.NewGuid();
-        DbContext.AddRange(
-            referenceOwner,
-            new DailyStockPrice
+        DbContext.Add(
+            new EquityDailyStockPrice
             {
                 Id = exactPriceId,
-                CommonStockId = referenceOwner.Id,
-                ListedTicker = "REUSED",
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                    DbContext,
+                    referenceOwner,
+                    "REUSED"
+                ),
+                SourceTicker = "REUSED",
                 Date = new DateOnly(2026, 8, 3),
                 Open = 10m,
                 High = 11m,
@@ -196,7 +202,7 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
         stock.Id.Should().Be(referenceOwner.Id);
         stock.Cik.Should().Be("0000000999");
         stock.ReferenceTickers.Should().Equal("REUSED");
-        (await verify.Set<DailyStockPrice>().AsNoTracking().SingleAsync())
+        (await verify.Set<EquityDailyStockPrice>().AsNoTracking().SingleAsync())
             .Id.Should()
             .Be(exactPriceId);
     }

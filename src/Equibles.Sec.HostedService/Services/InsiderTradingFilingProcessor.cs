@@ -104,8 +104,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
         var filingRepository = scope.ServiceProvider.GetRequiredService<InsiderFilingRepository>();
         var fileManager = scope.ServiceProvider.GetRequiredService<IFileManager>();
-        var dailyStockPriceRepository =
-            scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        EquityDailyStockPriceRepository dailyStockPriceRepository =
+            scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
         var priceValidator =
             scope.ServiceProvider.GetRequiredService<InsiderTransactionPriceValidator>();
         var stockSplitRepository = scope.ServiceProvider.GetRequiredService<StockSplitRepository>();
@@ -1267,7 +1267,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         Guid companyId,
         string primaryTicker,
         IReadOnlyCollection<string> secondaryTickers,
-        DailyStockPriceRepository dailyStockPriceRepository,
+        EquityDailyStockPriceRepository dailyStockPriceRepository,
         StockSplitRepository stockSplitRepository,
         InsiderTransactionPriceValidator priceValidator
     )
@@ -1279,9 +1279,9 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         var maxDate = transactions.Max(t => t.TransactionDate);
 
         var prices = await dailyStockPriceRepository
-            .GetAll()
+            .GetPrimarySeries()
             .Where(p =>
-                p.CommonStockId == companyId
+                p.Listing.Security.EquityIssuerId == companyId
                 && p.Date >= minDate
                 && p.Date <= maxDate
                 && p.Volume > 0

@@ -35,7 +35,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
                 new CommonStockRepository(DbContext),
                 new StockSplitRepository(DbContext),
                 new FailToDeliverRepository(DbContext),
-                new DailyStockPriceRepository(DbContext),
+                new EquityDailyStockPriceRepository(DbContext),
                 []
             ),
             new StockSplitRepository(DbContext),

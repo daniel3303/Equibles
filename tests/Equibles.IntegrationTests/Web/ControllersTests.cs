@@ -316,7 +316,7 @@ public class StocksControllerTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
             new CommonStockRepository(_dbContext)
@@ -910,7 +910,7 @@ public class StatusControllerTests : IDisposable
             new InstitutionalHoldingRepository(_dbContext),
             new FailToDeliverRepository(_dbContext),
             new FredObservationRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new CftcPositionReportRepository(_dbContext),
             new CboePutCallRatioRepository(_dbContext),
             new CboeVixDailyRepository(_dbContext)

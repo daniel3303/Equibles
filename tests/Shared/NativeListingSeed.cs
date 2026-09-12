@@ -36,16 +36,19 @@ internal static class NativeListingSeed
             var cached = Detached.GetOrCreateValue(stock);
             if (cached.TryGetValue(ticker, out var existing))
                 return existing;
-            var detachedIssuer = new EquityIssuer
-            {
-                Id = stock.Id,
-                Name = stock.Name,
-                Cik = stock.Cik,
-                IndustryId = stock.IndustryId,
-                Industry = stock.Industry,
-            };
-            var detachedPrimary = Create(stock, detachedIssuer, stock.Ticker);
-            detachedIssuer.Presentation = new EquityIssuerPresentation
+            var detachedIssuer =
+                cached.Values.FirstOrDefault()?.Security.Issuer
+                ?? new EquityIssuer
+                {
+                    Id = stock.Id,
+                    Name = stock.Name,
+                    Cik = stock.Cik,
+                    IndustryId = stock.IndustryId,
+                    Industry = stock.Industry,
+                };
+            var detachedPrimary =
+                detachedIssuer.Presentation?.Listing ?? Create(stock, detachedIssuer, stock.Ticker);
+            detachedIssuer.Presentation ??= new EquityIssuerPresentation
             {
                 Issuer = detachedIssuer,
                 Listing = detachedPrimary,

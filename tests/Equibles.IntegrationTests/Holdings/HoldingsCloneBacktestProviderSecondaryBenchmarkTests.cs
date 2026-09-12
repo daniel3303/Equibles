@@ -71,7 +71,7 @@ public class HoldingsCloneBacktestProviderSecondaryBenchmarkTests : IDisposable
             new InstitutionalHoldingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
             new BacktestPriceLoader(
-                new DailyStockPriceRepository(_dbContext),
+                new EquityDailyStockPriceRepository(_dbContext),
                 new CommonStockRepository(_dbContext),
                 new StockSplitRepository(_dbContext)
             )
@@ -85,10 +85,14 @@ public class HoldingsCloneBacktestProviderSecondaryBenchmarkTests : IDisposable
 
     private void AddPrice(CommonStock stock, string listedTicker, DateOnly date, decimal close) =>
         _dbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = stock.Id,
-                ListedTicker = listedTicker,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                    _dbContext,
+                    stock,
+                    listedTicker
+                ),
+                SourceTicker = listedTicker,
                 Date = date,
                 Open = close,
                 High = close,

@@ -49,7 +49,7 @@ public class InsiderFilingReprocessManager
 
     private readonly InsiderTransactionRepository _transactionRepository;
     private readonly InsiderFilingRepository _filingRepository;
-    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly InsiderTransactionPriceValidator _validator;
     private readonly ISecEdgarClient _secEdgarClient;
@@ -60,7 +60,7 @@ public class InsiderFilingReprocessManager
     public InsiderFilingReprocessManager(
         InsiderTransactionRepository transactionRepository,
         InsiderFilingRepository filingRepository,
-        DailyStockPriceRepository dailyStockPriceRepository,
+        EquityDailyStockPriceRepository dailyStockPriceRepository,
         StockSplitRepository stockSplitRepository,
         InsiderTransactionPriceValidator validator,
         ISecEdgarClient secEdgarClient,
@@ -697,9 +697,12 @@ public class InsiderFilingReprocessManager
         var maxDate = rows.Max(r => r.TransactionDate);
 
         var prices = await _dailyStockPriceRepository
-            .GetAll()
+            .GetPrimarySeries()
             .Where(p =>
-                p.CommonStockId == stockId && p.Date >= minDate && p.Date <= maxDate && p.Volume > 0
+                p.Listing.Security.EquityIssuerId == stockId
+                && p.Date >= minDate
+                && p.Date <= maxDate
+                && p.Volume > 0
             )
             .Select(p => new
             {

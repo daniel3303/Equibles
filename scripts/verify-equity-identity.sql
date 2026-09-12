@@ -50,7 +50,7 @@ BEGIN
         LEFT JOIN "LegacyEquityListing" legacy ON legacy."CommonStockId" = source."CommonStockId" AND legacy."ListedTicker" = source.symbol
         WHERE legacy."EquityListingId" IS NULL', symbol_column, source_table, symbol_column) INTO missing;
       IF missing > 0 THEN RAISE EXCEPTION '% has % unmapped series', source_table, missing; END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'equity_identity_series_write'
+      IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname IN ('equity_identity_series_write', 'equity_finra_listing_bridge', 'equity_ftd_listing_bridge')
           AND tgrelid = format('%I', source_table)::regclass AND tgenabled = 'O') THEN
         RAISE EXCEPTION '% writer guard is not enabled', source_table;
       END IF;

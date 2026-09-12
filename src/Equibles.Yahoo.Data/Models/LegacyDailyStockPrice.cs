@@ -5,7 +5,7 @@ namespace Equibles.Yahoo.Data.Models;
 
 /// <summary>
 /// Schema-only compatibility mapping for the pre-listing price table. Current price paths must
-/// use <see cref="DailyStockPrice"/>; retaining this model prevents future migrations from
+/// use <see cref="EquityDailyStockPrice"/>; retaining this model prevents future migrations from
 /// treating the untouched legacy table as orphaned storage.
 /// </summary>
 public class LegacyDailyStockPrice

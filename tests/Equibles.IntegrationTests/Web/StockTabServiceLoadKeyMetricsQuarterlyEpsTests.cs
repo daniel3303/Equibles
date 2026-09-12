@@ -63,7 +63,7 @@ public class StockTabServiceLoadKeyMetricsQuarterlyEpsTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
             new CommonStockRepository(_dbContext)
@@ -89,11 +89,15 @@ public class StockTabServiceLoadKeyMetricsQuarterlyEpsTests : IDisposable
         _dbContext.Set<CommonStock>().Add(stock);
 
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2026, 5, 23),
                     Open = 224m,
                     High = 228m,

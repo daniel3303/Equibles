@@ -62,7 +62,7 @@ public class DataCountServiceTests : IDisposable
             new InstitutionalHoldingRepository(_dbContext),
             new FailToDeliverRepository(_dbContext),
             new FredObservationRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new CftcPositionReportRepository(_dbContext),
             new CboePutCallRatioRepository(_dbContext),
             new CboeVixDailyRepository(_dbContext)
@@ -508,11 +508,15 @@ public class DataCountServiceTests : IDisposable
         var stock = CreateStock();
 
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2025, 3, 24),
                     Open = 170.00m,
                     High = 172.50m,
@@ -521,9 +525,13 @@ public class DataCountServiceTests : IDisposable
                     AdjustedClose = 171.25m,
                     Volume = 45_000_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2025, 3, 25),
                     Open = 171.25m,
                     High = 173.00m,

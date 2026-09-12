@@ -21,7 +21,7 @@ public class StockPriceToolsStochasticTests : ParadeDbMcpTestBase
 
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
             new CommonStockRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
@@ -69,11 +69,15 @@ public class StockPriceToolsStochasticTests : ParadeDbMcpTestBase
         for (var i = 0; i < 20; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m + i,
                         High = 100.5m + i,
@@ -110,11 +114,15 @@ public class StockPriceToolsStochasticTests : ParadeDbMcpTestBase
         for (var i = 0; i < 30; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m,
                         High = 101m,
@@ -165,11 +173,15 @@ public class StockPriceToolsStochasticTests : ParadeDbMcpTestBase
         for (var i = 0; i < 5; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m,
                         High = 101m,

@@ -29,13 +29,13 @@ public class StockPriceTools
     // holidays and weekends, but a window starting weeks late is a young listing.
     private const int BaselineSlackDays = 14;
 
-    private readonly DailyStockPriceRepository _priceRepository;
+    private readonly EquityDailyStockPriceRepository _priceRepository;
     private readonly CommonStockRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public StockPriceTools(
-        DailyStockPriceRepository priceRepository,
+        EquityDailyStockPriceRepository priceRepository,
         CommonStockRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
@@ -272,8 +272,8 @@ public class StockPriceTools
 
                     var stock = selection.Stock;
                     var priceTicker = selection.PriceTicker;
-                    var price = selection.Price;
-                    var previous = selection.Previous;
+                    EquityDailyStockPrice price = selection.Price;
+                    EquityDailyStockPrice previous = selection.Previous;
 
                     // Trailing 52-week close range, anchored on the row's own session so a
                     // stock that stopped trading doesn't fabricate a fresh range. A completed
@@ -820,7 +820,7 @@ public class StockPriceTools
     private async Task<(
         CommonStock Stock,
         string PriceTicker,
-        List<DailyStockPrice> Records,
+        List<EquityDailyStockPrice> Records,
         int RenderFrom,
         string Error
     )> LoadAscendingPriceWindow(string ticker, string startDate, string endDate, int warmupBars)
@@ -956,8 +956,8 @@ public class StockPriceTools
     // immediately before the latest one qualifies. Otherwise there is no day change to state,
     // and an absent percentage is honest where a wrong one is not.
     private static decimal? DayChangeBasis(
-        DailyStockPrice latest,
-        DailyStockPrice previous,
+        EquityDailyStockPrice latest,
+        EquityDailyStockPrice previous,
         DateOnly? splitBoundaryDate
     ) =>
         IsPriorSession(latest, previous)
@@ -976,7 +976,10 @@ public class StockPriceTools
     // calendar — foreign ordinaries quoted here keep trading through Juneteenth, Good Friday and
     // Memorial Day, and 121-297 of them carry a bar on each. Demanding an exact match blanked a
     // correct one-session move for every one of them on the day after an NYSE holiday.
-    private static bool IsPriorSession(DailyStockPrice latest, DailyStockPrice previous) =>
+    private static bool IsPriorSession(
+        EquityDailyStockPrice latest,
+        EquityDailyStockPrice previous
+    ) =>
         previous != null
         && previous.Date < latest.Date
         && previous.Date >= UsMarketCalendar.PreviousTradingDay(latest.Date);
@@ -1027,8 +1030,8 @@ public class StockPriceTools
     private sealed record LatestPriceSelection(
         CommonStock Stock,
         string PriceTicker,
-        DailyStockPrice Price,
-        DailyStockPrice Previous
+        EquityDailyStockPrice Price,
+        EquityDailyStockPrice Previous
     );
 
     // Placeholder row for a ticker with no price to show (unknown symbol or no data),
@@ -1038,14 +1041,14 @@ public class StockPriceTools
 
     // Leading "Date | Close" cells shared by every technical-indicator table row;
     // keeps the date format and close precision in sync across the four tables.
-    private static string DateAndCloseCells(DailyStockPrice record) =>
+    private static string DateAndCloseCells(EquityDailyStockPrice record) =>
         $"{record.Date:yyyy-MM-dd} | {McpFormat.Price(record.Close)}";
 
     private static (
         List<decimal> Highs,
         List<decimal> Lows,
         List<decimal> Closes
-    ) ExtractHighLowClose(List<DailyStockPrice> records) =>
+    ) ExtractHighLowClose(List<EquityDailyStockPrice> records) =>
         (
             records.Select(p => p.High).ToList(),
             records.Select(p => p.Low).ToList(),

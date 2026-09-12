@@ -24,7 +24,7 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
 
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
             new CommonStockRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
@@ -90,11 +90,15 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
         for (var i = 0; i < 10; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m,
                         High = 101m,

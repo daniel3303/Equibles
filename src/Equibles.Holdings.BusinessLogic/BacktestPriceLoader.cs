@@ -27,12 +27,12 @@ public class BacktestPriceLoader
     // thousands of exact listing keys; one left-deep OR tree risks translator/plan recursion.
     internal const int ListingQueryBatchSize = 64;
 
-    private readonly DailyStockPriceRepository _priceRepository;
+    private readonly EquityDailyStockPriceRepository _priceRepository;
     private readonly CommonStockRepository _stockRepository;
     private readonly StockSplitRepository _splitRepository;
 
     public BacktestPriceLoader(
-        DailyStockPriceRepository priceRepository,
+        EquityDailyStockPriceRepository priceRepository,
         CommonStockRepository stockRepository,
         StockSplitRepository splitRepository
     )
@@ -117,8 +117,26 @@ public class BacktestPriceLoader
         }
 
         var requestedKeys = listingKeys.ToHashSet();
+        var mappings = await _priceRepository
+            .GetLegacyIdentities(listingKeys.Select(key => key.CommonStockId).Distinct())
+            .Select(mapping => new
+            {
+                mapping.CommonStockId,
+                mapping.ListedTicker,
+                mapping.EquityListingId,
+            })
+            .ToListAsync(cancellationToken);
+        var listingIds = mappings
+            .Where(mapping =>
+                requestedKeys.Contains(
+                    new ListingKey(mapping.CommonStockId, NormalizeTicker(mapping.ListedTicker))
+                )
+            )
+            .Select(mapping => mapping.EquityListingId)
+            .Distinct()
+            .ToArray();
         var rows = new List<LoadedPriceRow>();
-        foreach (var listingBatch in listingKeys.Chunk(ListingQueryBatchSize))
+        foreach (var listingBatch in listingIds.Chunk(ListingQueryBatchSize))
         {
             rows.AddRange(
                 await _priceRepository
@@ -132,8 +150,8 @@ public class BacktestPriceLoader
                     )
                     .Select(price => new LoadedPriceRow
                     {
-                        CommonStockId = price.CommonStockId,
-                        ListedTicker = price.ListedTicker,
+                        CommonStockId = price.Listing.Security.EquityIssuerId,
+                        ListedTicker = price.SourceTicker,
                         Date = price.Date,
                         Close = price.Close,
                     })
@@ -275,27 +293,9 @@ public class BacktestPriceLoader
 
     private static string NormalizeTicker(string ticker) => ticker?.Trim().ToUpperInvariant();
 
-    // Build one SQL-translatable exact-pair predicate. Filtering stock IDs and tickers in two
-    // independent IN clauses produces their Cartesian product and can transfer years of unused
-    // sibling-listing bars for large portfolios.
-    internal static Expression<Func<DailyStockPrice, bool>> ListingPredicate(
-        IReadOnlyCollection<ListingKey> listingKeys
-    )
-    {
-        var price = Expression.Parameter(typeof(DailyStockPrice), "price");
-        var stockId = Expression.Property(price, nameof(DailyStockPrice.CommonStockId));
-        var listedTicker = Expression.Property(price, nameof(DailyStockPrice.ListedTicker));
-        Expression body = Expression.Constant(false);
-        foreach (var key in listingKeys)
-        {
-            var exactPair = Expression.AndAlso(
-                Expression.Equal(stockId, Expression.Constant(key.CommonStockId)),
-                Expression.Equal(listedTicker, Expression.Constant(key.ListedTicker))
-            );
-            body = Expression.OrElse(body, exactPair);
-        }
-        return Expression.Lambda<Func<DailyStockPrice, bool>>(body, price);
-    }
+    internal static Expression<Func<EquityDailyStockPrice, bool>> ListingPredicate(
+        IReadOnlyCollection<Guid> listingIds
+    ) => price => listingIds.Contains(price.EquityListingId);
 
     // A listing's series can start late, and a first usable close can land after a weekend or
     // holiday. Advance until the benchmark and every security in the then-active snapshot can

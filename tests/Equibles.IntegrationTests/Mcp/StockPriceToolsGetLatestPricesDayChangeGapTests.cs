@@ -28,7 +28,7 @@ public class StockPriceToolsGetLatestClosingPricesDayChangeGapTests : ParadeDbMc
 
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
             new CommonStockRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
@@ -49,11 +49,15 @@ public class StockPriceToolsGetLatestClosingPricesDayChangeGapTests : ParadeDbMc
         foreach (var (date, close) in bars)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = date,
                         Open = close,
                         High = close,

@@ -152,12 +152,14 @@ public class YahooPriceImportServiceEnrichmentCheckpointTests : IAsyncLifetime
     {
         var context = _fixture.CreateDbContext();
         var stockRepository = new CommonStockRepository(context);
-        var priceRepository = new DailyStockPriceRepository(context);
+        EquityDailyStockPriceRepository priceRepository = new EquityDailyStockPriceRepository(
+            context
+        );
         var splitRepository = new StockSplitRepository(context);
         var dividendRepository = new CashDividendRepository(context);
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), stockRepository),
-            (typeof(DailyStockPriceRepository), priceRepository),
+            (typeof(EquityDailyStockPriceRepository), priceRepository),
             (typeof(StockSplitRepository), splitRepository),
             (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>()),
             (

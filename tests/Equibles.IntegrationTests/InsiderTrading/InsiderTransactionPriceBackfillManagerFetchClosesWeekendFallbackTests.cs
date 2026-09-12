@@ -32,7 +32,7 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
         );
         _manager = new InsiderTransactionPriceBackfillManager(
             new InsiderTransactionRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new StockSplitRepository(_dbContext),
             new InsiderTransactionPriceValidator(),
             _dbContext,
@@ -58,20 +58,28 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
         _dbContext.Set<CommonStock>().Add(new CommonStock { Id = stockId, Ticker = "WKND" });
 
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stockId,
-                    ListedTicker = "WKND",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                        _dbContext,
+                        stockId,
+                        "WKND"
+                    ),
+                    SourceTicker = "WKND",
                     Date = thursday,
                     Close = 48m,
                     Volume = 1_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stockId,
-                    ListedTicker = "WKND",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                        _dbContext,
+                        stockId,
+                        "WKND"
+                    ),
+                    SourceTicker = "WKND",
                     Date = friday,
                     Close = 50m,
                     Volume = 1_000,

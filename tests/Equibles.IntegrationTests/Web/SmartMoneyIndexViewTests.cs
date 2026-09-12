@@ -116,14 +116,19 @@ public class SmartMoneyIndexViewTests
         // The early close must land inside the backtest's price window (rebalance − 14 days) and
         // on or before the rebalance date so day-zero forward-fills to it. The basket reflects the
         // 2024-12-31 quarter, so rebalance is 2025-02-14.
-        db.Add(MakePrice(stockId, new DateOnly(2025, 2, 10), early));
-        db.Add(MakePrice(stockId, new DateOnly(2026, 5, 1), late));
+        db.Add(MakePrice(db, stockId, new DateOnly(2025, 2, 10), early));
+        db.Add(MakePrice(db, stockId, new DateOnly(2026, 5, 1), late));
     }
 
-    private static DailyStockPrice MakePrice(Guid stockId, DateOnly date, decimal close) =>
+    private static EquityDailyStockPrice MakePrice(
+        Equibles.Data.EquiblesFinancialDbContext db,
+        Guid stockId,
+        DateOnly date,
+        decimal close
+    ) =>
         new()
         {
-            CommonStockId = stockId,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId),
             Date = date,
             Open = close,
             High = close,

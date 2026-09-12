@@ -77,9 +77,9 @@ public class InsiderFilingReprocessManagerFetchedTests : ParadeDbMcpTestBase
         DbContext.Add(stock);
         DbContext.Add(owner);
         DbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = stock.Id,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, stock, null),
                 Date = date,
                 Close = 55m,
             }
@@ -125,7 +125,7 @@ public class InsiderFilingReprocessManagerFetchedTests : ParadeDbMcpTestBase
         var manager = new InsiderFilingReprocessManager(
             new InsiderTransactionRepository(runCtx),
             new InsiderFilingRepository(runCtx),
-            new DailyStockPriceRepository(runCtx),
+            new EquityDailyStockPriceRepository(runCtx),
             new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             edgar,

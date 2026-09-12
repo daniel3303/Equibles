@@ -12,7 +12,7 @@ namespace Equibles.IntegrationTests.Yahoo;
 public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly DailyStockPriceRepository _repository;
+    private readonly EquityDailyStockPriceRepository _repository;
 
     public DailyStockPriceRepositoryGetByStocksTests()
     {
@@ -20,7 +20,7 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
-        _repository = new DailyStockPriceRepository(_dbContext);
+        _repository = new EquityDailyStockPriceRepository(_dbContext);
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -44,7 +44,7 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
             );
 
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
                 Price(inSet, "IN", start.AddDays(-1)), // before window — excluded
                 Price(inSet, "IN", start), // lower boundary — included
@@ -59,7 +59,7 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
             .ToListAsync(CancellationToken.None);
 
         result.Should().HaveCount(2);
-        result.Should().OnlyContain(p => p.CommonStockId == inSet);
+        result.Should().OnlyContain(p => p.Listing.Security.EquityIssuerId == inSet);
         result.Select(p => p.Date).Should().BeEquivalentTo([start, end]);
     }
 
@@ -71,7 +71,7 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
         var end = new DateOnly(2026, 8, 11);
         _dbContext.Set<CommonStock>().Add(new CommonStock { Id = stockId, Ticker = "THIN" });
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
                 Price(stockId, "THIN", start, 10),
                 Price(stockId, "THIN", start.AddDays(1), 0),
@@ -86,7 +86,7 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
         result.Should().ContainSingle().Which.Date.Should().Be(start);
     }
 
-    private static DailyStockPrice Price(
+    private EquityDailyStockPrice Price(
         Guid stockId,
         string listedTicker,
         DateOnly date,
@@ -94,8 +94,12 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
     ) =>
         new()
         {
-            CommonStockId = stockId,
-            ListedTicker = listedTicker,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                _dbContext,
+                stockId,
+                listedTicker
+            ),
+            SourceTicker = listedTicker,
             Date = date,
             Close = 100m,
             Volume = volume,

@@ -79,7 +79,7 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
         services.AddScoped<InsiderTransactionRepository>();
         services.AddScoped<InsiderFilingRepository>();
         services.AddScoped<FailedFilingIngestRepository>();
-        services.AddScoped<DailyStockPriceRepository>();
+        services.AddScoped<EquityDailyStockPriceRepository>();
         services.AddScoped<StockSplitRepository>();
         services.AddScoped<InsiderTransactionPriceValidator>();
         var scopeFactory = services

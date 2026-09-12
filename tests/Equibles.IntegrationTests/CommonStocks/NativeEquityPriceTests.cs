@@ -50,10 +50,12 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         (await DbContext.Set<DailyStockPrice>().CountAsync()).Should().Be(0);
         (await DbContext.Set<LegacyDailyStockPrice>().CountAsync()).Should().Be(0);
         (await DbContext.Set<LegacyEquityListing>().CountAsync()).Should().Be(0);
-        var prices = new DailyStockPriceRepository(DbContext);
+        var prices = new EquityDailyStockPriceRepository(DbContext);
         (await prices.GetByListing(lisbon.Id).SingleAsync()).Close.Should().Be(12.3456m);
         (await prices.GetByListing(london.Id).SingleAsync()).Close.Should().Be(987.6543m);
-        (await prices.GetByListing(lisbon.Id).SingleAsync()).CommonStockId.Should().Be(issuer.Id);
+        (await prices.GetByListing(lisbon.Id).SingleAsync())
+            .Listing.Security.EquityIssuerId.Should()
+            .Be(issuer.Id);
     }
 
     [Fact]
@@ -132,5 +134,124 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         await DbContext.Set<DailyStockPrice>().Where(row => row.Id == rowId).ExecuteDeleteAsync();
         (await DbContext.Set<EquityDailyStockPrice>().CountAsync()).Should().Be(0);
         (await DbContext.Set<UnattributedDailyStockPrice>().CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task NativeWriter_MirrorsEveryFieldForRetiringReaders_AndRollsBackBothStores()
+    {
+        var stock = new CommonStock { Ticker = "BOTH", SecondaryTickers = ["BOTH-B"] };
+        DbContext.Add(stock);
+        await DbContext.SaveChangesAsync();
+        var listingId = (
+            await new CommonStockRepository(DbContext).GetEquityListingId(stock.Id, "BOTH-B")
+        ).Value;
+        var price = new EquityDailyStockPrice
+        {
+            EquityListingId = listingId,
+            SourceTicker = "BOTH-B",
+            Date = new DateOnly(2026, 9, 10),
+            Open = 10.1234m,
+            High = 12.5678m,
+            Low = 9.8765m,
+            Close = 11.2345m,
+            AdjustedClose = 8.7654m,
+            Volume = 1234567890,
+            CreationTime = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+        };
+        DbContext.Add(price);
+        await DbContext.SaveChangesAsync();
+        var retiring = await DbContext.Set<DailyStockPrice>().AsNoTracking().SingleAsync();
+        price
+            .Should()
+            .BeEquivalentTo(
+                retiring,
+                options =>
+                    options
+                        .Excluding(row => row.CommonStock)
+                        .Excluding(row => row.CommonStockId)
+                        .Excluding(row => row.ListedTicker)
+            );
+        retiring.CommonStockId.Should().Be(stock.Id);
+        retiring.ListedTicker.Should().Be("BOTH-B");
+        (await DbContext.Set<LegacyDailyStockPrice>().CountAsync()).Should().Be(0);
+
+        await using (var transaction = await DbContext.Database.BeginTransactionAsync())
+        {
+            price.Close = 11.8765m;
+            await DbContext.SaveChangesAsync();
+            (await DbContext.Set<DailyStockPrice>().AsNoTracking().SingleAsync())
+                .Close.Should()
+                .Be(11.8765m);
+            await transaction.RollbackAsync();
+        }
+        DbContext.ChangeTracker.Clear();
+        (await DbContext.Set<EquityDailyStockPrice>().AsNoTracking().SingleAsync())
+            .Close.Should()
+            .Be(11.2345m);
+        retiring = await DbContext.Set<DailyStockPrice>().SingleAsync();
+        retiring.Volume = 9876543210;
+        await DbContext.SaveChangesAsync();
+        (await DbContext.Set<EquityDailyStockPrice>().AsNoTracking().SingleAsync())
+            .Volume.Should()
+            .Be(9876543210);
+        await DbContext
+            .Set<EquityDailyStockPrice>()
+            .Where(row => row.Id == price.Id)
+            .ExecuteDeleteAsync();
+        (await DbContext.Set<DailyStockPrice>().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task UsTickerBoundary_ExcludesForeignListingWithSameIssuerAndSymbol()
+    {
+        var stock = new CommonStock { Ticker = "SAME" };
+        var domestic = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, stock);
+        var abroad = new EquityListing
+        {
+            EquitySecurityId = domestic.EquitySecurityId,
+            Ticker = "SAME",
+            MarketIdentifierCode = "XLIS",
+        };
+        var date = new DateOnly(2026, 9, 10);
+        DbContext.AddRange(
+            new EquityDailyStockPrice
+            {
+                Listing = domestic,
+                SourceTicker = "SAME",
+                Date = date,
+                Close = 10m,
+                Volume = 100,
+            },
+            new EquityDailyStockPrice
+            {
+                Listing = abroad,
+                SourceTicker = "SAME",
+                Date = date,
+                Close = 90m,
+                Volume = 100,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        var repository = new EquityDailyStockPriceRepository(DbContext);
+        (await repository.GetByStock(stock, "SAME").SingleAsync()).Close.Should().Be(10m);
+        (await repository.GetByListing(abroad.Id).SingleAsync()).Close.Should().Be(90m);
+        (await DbContext.Set<DailyStockPrice>().CountAsync()).Should().Be(1);
+        var provider = new Equibles.Yahoo.HostedService.Services.YahooStockPriceProvider(DbContext);
+        var prices = await provider.GetClosingPrices([(stock.Id, null, date)]);
+        prices[(stock.Id, null, date)].Should().Be(10m);
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (
+            directory != null
+            && !File.Exists(
+                Path.Combine(directory.FullName, "scripts", "verify-native-equity-prices.sql")
+            )
+        )
+            directory = directory.Parent;
+        directory.Should().NotBeNull();
+        await DbContext.Database.ExecuteSqlRawAsync(
+            File.ReadAllText(
+                Path.Combine(directory.FullName, "scripts", "verify-native-equity-prices.sql")
+            )
+        );
     }
 }

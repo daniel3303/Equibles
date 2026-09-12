@@ -116,9 +116,9 @@ public class InsiderFilingReprocessManagerRule10b5StampTests : ParadeDbMcpTestBa
         DbContext.Add(stock);
         DbContext.Add(owner);
         DbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = stock.Id,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, stock, null),
                 Date = reportDate,
                 Close = 55m,
             }
@@ -135,7 +135,7 @@ public class InsiderFilingReprocessManagerRule10b5StampTests : ParadeDbMcpTestBa
         var manager = new InsiderFilingReprocessManager(
             new InsiderTransactionRepository(runCtx),
             new InsiderFilingRepository(runCtx),
-            new DailyStockPriceRepository(runCtx),
+            new EquityDailyStockPriceRepository(runCtx),
             new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             edgar,

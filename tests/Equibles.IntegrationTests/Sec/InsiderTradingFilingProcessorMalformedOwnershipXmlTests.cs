@@ -57,7 +57,10 @@ public class InsiderTradingFilingProcessorMalformedOwnershipXmlTests
             (typeof(FailedFilingIngestRepository), new FailedFilingIngestRepository(dbContext)),
             (typeof(IFileManager), Substitute.For<IFileManager>()),
             (typeof(ErrorManager), new ErrorManager(new ErrorRepository(dbContext))),
-            (typeof(DailyStockPriceRepository), new DailyStockPriceRepository(dbContext)),
+            (
+                typeof(EquityDailyStockPriceRepository),
+                new EquityDailyStockPriceRepository(dbContext)
+            ),
             (typeof(InsiderTransactionPriceValidator), new InsiderTransactionPriceValidator()),
             (typeof(StockSplitRepository), new StockSplitRepository(dbContext))
         );

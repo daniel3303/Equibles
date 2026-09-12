@@ -44,7 +44,7 @@ public class InsiderTransactionPriceBackfillManager
     private const int CloseLookbackDays = 10;
 
     private readonly InsiderTransactionRepository _transactionRepository;
-    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly InsiderTransactionPriceValidator _validator;
     private readonly EquiblesFinancialDbContext _dbContext;
@@ -52,7 +52,7 @@ public class InsiderTransactionPriceBackfillManager
 
     public InsiderTransactionPriceBackfillManager(
         InsiderTransactionRepository transactionRepository,
-        DailyStockPriceRepository dailyStockPriceRepository,
+        EquityDailyStockPriceRepository dailyStockPriceRepository,
         StockSplitRepository stockSplitRepository,
         InsiderTransactionPriceValidator validator,
         EquiblesFinancialDbContext dbContext,
@@ -196,7 +196,7 @@ public class InsiderTransactionPriceBackfillManager
 
     /// <summary>
     /// Fetch one bar per distinct (CommonStockId, TransactionDate) — the most
-    /// recent <see cref="DailyStockPrice"/> on or before that date. The stored
+    /// recent <see cref="EquityDailyStockPrice"/> on or before that date. The stored
     /// Close/Low/High are on TODAY'S split-adjusted basis (the split
     /// reconciliation rewrites the whole listed series), which is exactly why
     /// the evaluation carries the split factor rather than treating the close
@@ -211,16 +211,16 @@ public class InsiderTransactionPriceBackfillManager
         var minDate = batch.Min(t => t.TransactionDate).AddDays(-CloseLookbackDays);
 
         var rawPrices = await _dailyStockPriceRepository
-            .GetAll()
+            .GetPrimarySeries()
             .Where(p =>
-                stockIds.Contains(p.CommonStockId)
+                stockIds.Contains(p.Listing.Security.EquityIssuerId)
                 && p.Date >= minDate
                 && p.Date <= maxDate
                 && p.Volume > 0
             )
             .Select(p => new
             {
-                p.CommonStockId,
+                CommonStockId = p.Listing.Security.EquityIssuerId,
                 p.Date,
                 p.Close,
                 p.Low,

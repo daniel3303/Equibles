@@ -533,7 +533,7 @@ public class ModuleConfigurationTests : IDisposable
             new YahooModuleConfiguration()
         );
 
-        context.Set<DailyStockPrice>().Should().NotBeNull();
+        context.Set<EquityDailyStockPrice>().Should().NotBeNull();
     }
 
     [Fact]

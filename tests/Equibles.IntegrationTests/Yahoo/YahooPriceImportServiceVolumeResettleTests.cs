@@ -45,7 +45,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     private const long SettledVolume = 1_573_891;
 
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly DailyStockPriceRepository _priceRepo;
+    private readonly EquityDailyStockPriceRepository _priceRepo;
     private readonly CommonStockRepository _stockRepo;
     private readonly IYahooFinanceClient _yahooClient;
     private readonly YahooPriceImportService _service;
@@ -61,7 +61,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
-        _priceRepo = new DailyStockPriceRepository(_dbContext);
+        _priceRepo = new EquityDailyStockPriceRepository(_dbContext);
         _stockRepo = new CommonStockRepository(_dbContext);
         var splitRepo = new StockSplitRepository(_dbContext);
         var dividendRepo = new CashDividendRepository(_dbContext);
@@ -73,7 +73,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(DailyStockPriceRepository), _priceRepo),
+            (typeof(EquityDailyStockPriceRepository), _priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
             (typeof(StockSplitRepository), splitRepo),
             (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>()),
@@ -130,9 +130,17 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         // begin after it, and the feed would never be asked to re-serve it.
         requestedStart.Should().BeOnOrBefore(previous);
 
-        _priceRepo.GetAll().Single(p => p.Date == previous).Volume.Should().Be(SettledVolume);
+        _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous)
+            .Volume.Should()
+            .Be(SettledVolume);
         // The new session still lands: the correction must not displace the insert path.
-        _priceRepo.GetAll().Single(p => p.Date == newest).Volume.Should().Be(SettledVolume);
+        _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == newest)
+            .Volume.Should()
+            .Be(SettledVolume);
     }
 
     [Fact]
@@ -150,7 +158,11 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        _priceRepo.GetAll().Single(p => p.Date == previous).Volume.Should().Be(SettledVolume);
+        _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous)
+            .Volume.Should()
+            .Be(SettledVolume);
     }
 
     [Fact]
@@ -158,7 +170,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     {
         var stock = SeedStock("CBOE");
         var (newest, previous) = TwoMostRecentSettledSessions();
-        var stored = SeedPrice(stock, previous, UnsettledVolume, 310.23m);
+        EquityDailyStockPrice stored = SeedPrice(stock, previous, UnsettledVolume, 310.23m);
         stored.Open = 287.54m;
         stored.High = 310.88m;
         stored.Low = 287.76m;
@@ -176,7 +188,9 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        var corrected = _priceRepo.GetAll().Single(p => p.Date == previous);
+        EquityDailyStockPrice corrected = _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous);
         corrected.Open.Should().Be(287.54m);
         corrected.High.Should().Be(311.06m);
         corrected.Low.Should().Be(287.54m);
@@ -190,7 +204,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     {
         var stock = SeedStock("CBOE");
         var date = new DateOnly(2026, 7, 31);
-        var stored = SeedPrice(stock, date, UnsettledVolume, 310.23m);
+        EquityDailyStockPrice stored = SeedPrice(stock, date, UnsettledVolume, 310.23m);
         stored.Open = 287.54m;
         stored.High = 310.88m;
         stored.Low = 287.76m;
@@ -204,7 +218,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         var complete = await _service.RepairInvalidOhlc(CancellationToken.None);
 
         complete.Should().BeTrue();
-        var repaired = _priceRepo.GetAll().Single();
+        EquityDailyStockPrice repaired = _priceRepo.GetPrimarySeries().Single();
         repaired.Open.Should().Be(287.54m);
         repaired.High.Should().Be(311.06m);
         repaired.Low.Should().Be(287.54m);
@@ -218,7 +232,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     {
         var stock = SeedStock("CBOE");
         var date = new DateOnly(2026, 7, 31);
-        var stored = SeedPrice(stock, date, UnsettledVolume, 310.23m);
+        EquityDailyStockPrice stored = SeedPrice(stock, date, UnsettledVolume, 310.23m);
         stored.Low = 311m;
         await _priceRepo.SaveChanges();
 
@@ -227,7 +241,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         var complete = await _service.RepairInvalidOhlc(CancellationToken.None);
 
         complete.Should().BeTrue();
-        _priceRepo.GetAll().Should().BeEmpty();
+        _priceRepo.GetPrimarySeries().Should().BeEmpty();
     }
 
     [Fact]
@@ -254,8 +268,16 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        _priceRepo.GetAll().Single(p => p.Date == beyondWindow).Volume.Should().Be(UnsettledVolume);
-        _priceRepo.GetAll().Single(p => p.Date == previous).Volume.Should().Be(SettledVolume);
+        _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == beyondWindow)
+            .Volume.Should()
+            .Be(UnsettledVolume);
+        _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous)
+            .Volume.Should()
+            .Be(SettledVolume);
     }
 
     [Fact]
@@ -278,7 +300,9 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        var stored = _priceRepo.GetAll().Single(p => p.Date == previous);
+        EquityDailyStockPrice stored = _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous);
         stored.Volume.Should().Be(adjustedVolume);
         stored.Close.Should().Be(adjustedClose);
     }
@@ -304,7 +328,9 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        var storedRow = _priceRepo.GetAll().Single(p => p.Date == previous);
+        EquityDailyStockPrice storedRow = _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous);
         storedRow.Volume.Should().Be(asTradedVolume);
         storedRow.Close.Should().Be(asTradedClose);
     }
@@ -377,16 +403,16 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         return stock;
     }
 
-    private DailyStockPrice SeedPrice(
+    private EquityDailyStockPrice SeedPrice(
         CommonStock stock,
         DateOnly date,
         long volume,
         decimal close = 39.41m
     )
     {
-        var price = new DailyStockPrice
+        EquityDailyStockPrice price = new EquityDailyStockPrice
         {
-            CommonStockId = stock.Id,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock, null),
             Date = date,
             Open = close,
             High = close,

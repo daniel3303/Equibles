@@ -105,9 +105,13 @@ public class PutCallAndStockViewRenderingTests
             {
                 var close = 100m + i;
                 db.Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stockId,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                            db,
+                            stockId,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = close,
                         High = close,

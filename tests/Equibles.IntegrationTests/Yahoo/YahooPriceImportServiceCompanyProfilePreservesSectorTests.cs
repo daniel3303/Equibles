@@ -40,7 +40,7 @@ public class YahooPriceImportServiceCompanyProfilePreservesSectorTests : IDispos
         _stockRepo = new CommonStockRepository(_dbContext);
         _industryRepo = new IndustryRepository(_dbContext);
         _sectorRepo = new SectorRepository(_dbContext);
-        var priceRepo = new DailyStockPriceRepository(_dbContext);
+        EquityDailyStockPriceRepository priceRepo = new EquityDailyStockPriceRepository(_dbContext);
 
         _yahooClient = Substitute.For<IYahooFinanceClient>();
         var errorReporter = Substitute.For<ErrorReporter>(
@@ -52,7 +52,7 @@ public class YahooPriceImportServiceCompanyProfilePreservesSectorTests : IDispos
         var splitRepo = new StockSplitRepository(_dbContext);
         var dividendRepo = new CashDividendRepository(_dbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(DailyStockPriceRepository), priceRepo),
+            (typeof(EquityDailyStockPriceRepository), priceRepo),
             (typeof(CommonStockRepository), _stockRepo),
             (typeof(StockSplitRepository), splitRepo),
             (typeof(IndustryRepository), _industryRepo),

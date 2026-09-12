@@ -97,6 +97,7 @@ public class FtdImportServiceTests
                 new FailToDeliver
                 {
                     EquityListingId = Guid.NewGuid(),
+                    ListedTicker = "FUTURE",
                     SettlementDate = futureSettlementDate,
                     Quantity = 0,
                     Price = 0m,

@@ -152,7 +152,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
 
         await using var current = _fixture.CreateDbContext();
         var stock = await current.Set<CommonStock>().SingleAsync(s => s.Id == stockId);
-        var repository = new DailyStockPriceRepository(current);
+        EquityDailyStockPriceRepository repository = new EquityDailyStockPriceRepository(current);
         (await repository.GetByStock(stock).ToListAsync()).Should().BeEmpty();
         (await repository.GetByStock(stock, "GOOGL").ToListAsync()).Should().BeEmpty();
         (await repository.GetByStock(stock, "GOOG").ToListAsync()).Should().BeEmpty();
@@ -168,18 +168,21 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
             await seed.SaveChangesAsync();
         }
 
+        await using var identityContext = _fixture.CreateDbContext();
+        var listingId = (
+            await new CommonStockRepository(identityContext).GetEquityListingId(stockId, "AAPL")
+        ).Value;
         var firstDate = new DateOnly(2024, 1, 1);
         var freshRows = Enumerable
             .Range(0, 501)
-            .Select(offset =>
-                Price(
-                    Guid.NewGuid(),
-                    stockId,
-                    firstDate.AddDays(offset),
-                    close: 100m + offset,
-                    listedTicker: "AAPL"
-                )
-            )
+            .Select(offset => new EquityDailyStockPrice
+            {
+                EquityListingId = listingId,
+                SourceTicker = "AAPL",
+                Date = firstDate.AddDays(offset),
+                Close = 100m + offset,
+                Volume = 100,
+            })
             .ToList();
         var saveGate = new FirstPriceBatchSaveGate();
         await using var writer = _fixture.CreateDbContext(options =>
@@ -190,7 +193,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
                 ReplacePriceRowsMethod.Invoke(
                     null,
                     [
-                        new DailyStockPriceRepository(writer),
+                        new EquityDailyStockPriceRepository(writer),
                         new CommonStockRepository(writer),
                         new PriceSeriesTarget("AAPL", stockId, IsPrimary: true),
                         firstDate,
@@ -204,8 +207,8 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
         await using (var concurrentReader = _fixture.CreateDbContext())
         {
             var visible = await concurrentReader
-                .Set<DailyStockPrice>()
-                .CountAsync(price => price.CommonStockId == stockId);
+                .Set<EquityDailyStockPrice>()
+                .CountAsync(price => price.EquityListingId == listingId);
             visible
                 .Should()
                 .Be(0, "the first batch remains hidden inside the uncommitted transaction");
@@ -216,8 +219,8 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
 
         await using var verification = _fixture.CreateDbContext();
         var committed = await verification
-            .Set<DailyStockPrice>()
-            .CountAsync(price => price.CommonStockId == stockId);
+            .Set<EquityDailyStockPrice>()
+            .CountAsync(price => price.EquityListingId == listingId);
         committed.Should().Be(501);
     }
 

@@ -32,7 +32,7 @@ public class BacktestPriceLoaderSplitComparabilityTests : IDisposable
             new YahooModuleConfiguration()
         );
         _loader = new BacktestPriceLoader(
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new CommonStockRepository(_dbContext),
             new StockSplitRepository(_dbContext)
         );
@@ -235,12 +235,16 @@ public class BacktestPriceLoaderSplitComparabilityTests : IDisposable
         foreach (var (date, close) in bars)
         {
             _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
-                        ListedTicker = listedTicker,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            listedTicker
+                        ),
+                        SourceTicker = listedTicker,
                         Date = date,
                         Open = close,
                         High = close,

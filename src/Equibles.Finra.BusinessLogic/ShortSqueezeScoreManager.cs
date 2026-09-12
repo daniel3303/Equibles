@@ -182,7 +182,7 @@ public class ShortSqueezeScoreManager
     private readonly CommonStockRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly FailToDeliverRepository _failToDeliverRepository;
-    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
     private readonly IEnumerable<IEarningsProximitySource> _earningsProximitySources;
 
     public ShortSqueezeScoreManager(
@@ -191,7 +191,7 @@ public class ShortSqueezeScoreManager
         CommonStockRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         FailToDeliverRepository failToDeliverRepository,
-        DailyStockPriceRepository dailyStockPriceRepository,
+        EquityDailyStockPriceRepository dailyStockPriceRepository,
         IEnumerable<IEarningsProximitySource> earningsProximitySources
     )
     {
@@ -541,8 +541,8 @@ public class ShortSqueezeScoreManager
             .GetTradedByStocks(stockIds, cutoff, today)
             .Select(p => new
             {
-                p.CommonStockId,
-                p.ListedTicker,
+                CommonStockId = p.Listing.Security.EquityIssuerId,
+                ListedTicker = p.SourceTicker,
                 p.Date,
                 p.Close,
                 p.Volume,

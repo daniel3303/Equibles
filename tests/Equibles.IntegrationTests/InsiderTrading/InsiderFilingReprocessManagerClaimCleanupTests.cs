@@ -83,7 +83,7 @@ public class InsiderFilingReprocessManagerClaimCleanupTests : ParadeDbMcpTestBas
         var manager = new InsiderFilingReprocessManager(
             new InsiderTransactionRepository(runContext),
             new InsiderFilingRepository(runContext),
-            new DailyStockPriceRepository(runContext),
+            new EquityDailyStockPriceRepository(runContext),
             new StockSplitRepository(runContext),
             new InsiderTransactionPriceValidator(),
             Substitute.For<ISecEdgarClient>(),
@@ -165,7 +165,7 @@ public class InsiderFilingReprocessManagerClaimCleanupTests : ParadeDbMcpTestBas
         var manager = new InsiderFilingReprocessManager(
             new InsiderTransactionRepository(runContext),
             new InsiderFilingRepository(runContext),
-            new DailyStockPriceRepository(runContext),
+            new EquityDailyStockPriceRepository(runContext),
             new StockSplitRepository(runContext),
             new InsiderTransactionPriceValidator(),
             Substitute.For<ISecEdgarClient>(),

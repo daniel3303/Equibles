@@ -84,7 +84,7 @@ public class StatusControllerDataTests : IDisposable
             new InstitutionalHoldingRepository(_dbContext),
             new FailToDeliverRepository(_dbContext),
             new FredObservationRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new CftcPositionReportRepository(_dbContext),
             new CboePutCallRatioRepository(_dbContext),
             new CboeVixDailyRepository(_dbContext)

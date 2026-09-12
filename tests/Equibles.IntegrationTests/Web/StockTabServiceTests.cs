@@ -67,7 +67,7 @@ public class StockTabServiceTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
             new CommonStockRepository(_dbContext)
@@ -743,11 +743,15 @@ public class StockTabServiceTests : IDisposable
         for (var i = 0; i < 30; i++)
         {
             _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            null
+                        ),
                         Date = new DateOnly(2025, 1, 1).AddDays(i),
                         Open = 100m + i,
                         High = 102m + i,
@@ -798,12 +802,16 @@ public class StockTabServiceTests : IDisposable
             Tag = "EarningsPerShareDiluted",
         };
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-B",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        "BRK-B"
+                    ),
+                    SourceTicker = "BRK-B",
                     Date = date,
                     Open = 299m,
                     High = 301m,
@@ -812,10 +820,14 @@ public class StockTabServiceTests : IDisposable
                     AdjustedClose = 300m,
                     Volume = 1_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-A",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        "BRK-A"
+                    ),
+                    SourceTicker = "BRK-A",
                     Date = date,
                     Open = 599_000m,
                     High = 601_000m,
@@ -852,7 +864,7 @@ public class StockTabServiceTests : IDisposable
 
         result.Ticker.Should().Be("BRK-A");
         result.Prices.Should().ContainSingle().Which.Close.Should().Be(600_000m);
-        result.Prices.Should().OnlyContain(price => price.ListedTicker == "BRK-A");
+        result.Prices.Should().OnlyContain(price => price.SourceTicker == "BRK-A");
         metrics.LatestClose.Should().Be(600_000m);
         metrics.EpsDiluted.Should().BeNull();
         metrics.PeRatio.Should().BeNull();
@@ -883,11 +895,15 @@ public class StockTabServiceTests : IDisposable
         var stock = CreateStock();
         // Insert out of order
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2025, 3, 3),
                     Open = 103m,
                     High = 105m,
@@ -896,9 +912,13 @@ public class StockTabServiceTests : IDisposable
                     AdjustedClose = 104m,
                     Volume = 10_000_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2025, 3, 1),
                     Open = 100m,
                     High = 102m,
@@ -907,9 +927,13 @@ public class StockTabServiceTests : IDisposable
                     AdjustedClose = 101m,
                     Volume = 12_000_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2025, 3, 2),
                     Open = 101m,
                     High = 103m,
@@ -933,11 +957,15 @@ public class StockTabServiceTests : IDisposable
         for (var i = 0; i < closes.Length; i++)
         {
             _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            null
+                        ),
                         Date = startDate.AddDays(i),
                         Open = closes[i],
                         High = closes[i],

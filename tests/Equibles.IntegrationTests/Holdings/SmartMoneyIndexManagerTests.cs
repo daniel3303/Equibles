@@ -37,7 +37,7 @@ public class SmartMoneyIndexManagerTests : IDisposable
             new InstitutionalHoldingRepository(_dbContext),
             new CommonStockRepository(_dbContext),
             new BacktestPriceLoader(
-                new DailyStockPriceRepository(_dbContext),
+                new EquityDailyStockPriceRepository(_dbContext),
                 new CommonStockRepository(_dbContext),
                 new StockSplitRepository(_dbContext)
             )
@@ -255,12 +255,16 @@ public class SmartMoneyIndexManagerTests : IDisposable
     private void AddPrice(CommonStock stock, DateOnly date, decimal close)
     {
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = stock.Ticker,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        stock.Ticker
+                    ),
+                    SourceTicker = stock.Ticker,
                     Date = date,
                     Open = close,
                     High = close,

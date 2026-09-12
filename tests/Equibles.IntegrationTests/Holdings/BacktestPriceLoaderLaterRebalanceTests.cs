@@ -57,7 +57,7 @@ public class BacktestPriceLoaderLaterRebalanceTests : IDisposable
             Snapshot(secondReportDate, issuer.Id, listedTicker: "PAIR-A"),
         };
         var loader = new BacktestPriceLoader(
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new CommonStockRepository(_dbContext),
             new StockSplitRepository(_dbContext)
         );
@@ -90,10 +90,14 @@ public class BacktestPriceLoaderLaterRebalanceTests : IDisposable
 
     private void AddPrice(CommonStock stock, string listedTicker, DateOnly date, decimal close) =>
         _dbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = stock.Id,
-                ListedTicker = listedTicker,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                    _dbContext,
+                    stock,
+                    listedTicker
+                ),
+                SourceTicker = listedTicker,
                 Date = date,
                 Open = close,
                 High = close,

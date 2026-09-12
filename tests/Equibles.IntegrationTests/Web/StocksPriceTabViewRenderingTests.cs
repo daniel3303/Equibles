@@ -30,9 +30,9 @@ public class StocksPriceTabViewRenderingTests
         for (var i = 0; i < closes.Length; i++)
         {
             db.Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stockId,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId, null),
                     Date = startDate.AddDays(i),
                     Open = closes[i],
                     High = closes[i],
@@ -148,10 +148,14 @@ public class StocksPriceTabViewRenderingTests
             );
             var date = new DateOnly(2026, 8, 3);
             db.AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stockId,
-                    ListedTicker = "BRK-B",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                        db,
+                        stockId,
+                        "BRK-B"
+                    ),
+                    SourceTicker = "BRK-B",
                     Date = date,
                     Open = 299m,
                     High = 301m,
@@ -160,10 +164,14 @@ public class StocksPriceTabViewRenderingTests
                     AdjustedClose = 300m,
                     Volume = 1_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stockId,
-                    ListedTicker = "BRK-A",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                        db,
+                        stockId,
+                        "BRK-A"
+                    ),
+                    SourceTicker = "BRK-A",
                     Date = date,
                     Open = 599_000m,
                     High = 601_000m,

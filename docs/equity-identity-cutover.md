@@ -148,3 +148,12 @@
 - PostgreSQL preservation tests compare every column in holdings, manager legs, and all summary stores across migration and legacy-owner retirement.
 - `scripts/verify-native-issuer-holdings.sql` requires zero missing issuers and four validated restrictive ownership constraints; exact attribution and final directory retirement remain separate completion requirements.
 - Exact security/listing attribution and remaining legacy directory consumers still require migration before final storage retirement.
+
+## Native daily-price readers and writers
+
+- Current price consumers read `EquityDailyStockPrice` by stable listing ID; issuer-level consumers explicitly select the presentation listing.
+- Yahoo resolves each registered source listing under the ownership lock, preserving resettlement, split-basis, complete-history, and concurrent-writer checks.
+- `EnableNativePriceWriters` mirrors registered legacy series into `ListedDailyStockPrice` for retiring readers; every field, ID, update, deletion, and rollback shares the original transaction.
+- Native-only foreign series remain isolated even when they share an issuer and ticker with a U.S. series.
+- The finite retirement cohort is every exact legacy price and every unattributed legacy price; `scripts/verify-native-equity-prices.sql` compares complete rows in both directions before retirement.
+- Remove both old price tables, old model mappings, translation methods, and temporary synchronization functions after all old binaries are gone and reconciliation passes; recurring provider repair and reconciliation remain active.

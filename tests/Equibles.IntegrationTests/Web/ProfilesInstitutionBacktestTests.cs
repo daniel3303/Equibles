@@ -93,8 +93,8 @@ public class ProfilesInstitutionBacktestTests
             // Forward-fill on the rebalance dates resolves to these closes.
             for (var d = rebalanceQ1.AddDays(-7); d <= rebalanceQ2.AddDays(7); d = d.AddDays(1))
             {
-                db.Add(MakePrice(aaplId, d, 100m));
-                db.Add(MakePrice(spyId, d, 400m));
+                db.Add(MakePrice(db, aaplId, d, 100m));
+                db.Add(MakePrice(db, spyId, d, 400m));
             }
             await Task.CompletedTask;
         });
@@ -141,10 +141,15 @@ public class ProfilesInstitutionBacktestTests
             AccessionNumber = $"acc-{stockId:N}".Substring(0, 12) + $"-{reportDate:yyyyMMdd}",
         };
 
-    private static DailyStockPrice MakePrice(Guid stockId, DateOnly date, decimal close) =>
+    private static EquityDailyStockPrice MakePrice(
+        Equibles.Data.EquiblesFinancialDbContext db,
+        Guid stockId,
+        DateOnly date,
+        decimal close
+    ) =>
         new()
         {
-            CommonStockId = stockId,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId),
             Date = date,
             Open = close,
             High = close,
