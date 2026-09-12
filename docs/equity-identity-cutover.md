@@ -319,3 +319,9 @@
 - Historical migration fixtures retain the original shapes under `tests/Shared/LegacyEquity`; current native fixtures use the actual issuer/security/listing graph.
 - Fixture-only legacy mappings cannot satisfy the production migration snapshot: fixture startup migrates using the native model, and a separate guard checks for pending native model changes.
 - `DetachRetiredEquityStorageModel` changes the model snapshot without dropping physical storage during rolling application replacement; final verified storage retirement remains required.
+
+### Permanent native ownership guards
+
+- Corporate-action ownership and split-revision invalidation read `EquityIssuerId`; they continue after retiring the original owner columns.
+- Split invalidation watches every update because an older writer can change the original owner column and an earlier mirror trigger then assigns the native owner. PostgreSQL `UPDATE OF` does not observe assignments made by another trigger.
+- Replacing these functions changes no stored observations or applied-adjustment markers. Listing attribution alone preserves the original applied marker; a changed owner, source symbol, ratio, date or source invalidates it.
