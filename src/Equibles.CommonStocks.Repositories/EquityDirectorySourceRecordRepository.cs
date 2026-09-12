@@ -7,6 +7,11 @@ namespace Equibles.CommonStocks.Repositories;
 public class EquityDirectorySourceRecordRepository(EquiblesFinancialDbContext dbContext)
     : BaseRepository<EquityDirectorySourceRecord>(dbContext)
 {
+    public IQueryable<EquityDirectorySnapshotState> GetSnapshotStates() =>
+        DbContext.Set<EquityDirectorySnapshotState>();
+
+    public void AddSnapshotState(EquityDirectorySnapshotState state) => DbContext.Add(state);
+
     // JSONB canonicalization gives every source the same hash/equality contract.
     public Task<Guid> Append(
         string source,

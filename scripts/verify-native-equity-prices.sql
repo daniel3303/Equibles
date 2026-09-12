@@ -1,15 +1,35 @@
--- Read-only full-row conservation of the migrated cohort. Native-only listings have no legacy counterpart.
+-- Compare every field while the original owner exists. Retained histories without that owner
+-- are reported separately and require comparison against the immutable pre-cutover export.
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 DO $audit$
 BEGIN
-    IF EXISTS ((SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."CommonStockId" FROM "DailyStockPrice" p) EXCEPT ALL (SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."EquityIssuerId" FROM "UnattributedDailyStockPrice" p))
-       OR EXISTS ((SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."EquityIssuerId" FROM "UnattributedDailyStockPrice" p) EXCEPT ALL (SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."CommonStockId" FROM "DailyStockPrice" p)) THEN
+    IF EXISTS (
+        SELECT 1 FROM "EquityDailyStockPrice" p
+        JOIN "LegacyEquityListing" mapping ON mapping."EquityListingId" = p."EquityListingId"
+        JOIN "EquityListing" listing ON listing."Id" = p."EquityListingId"
+        WHERE p."SourceTicker" IS DISTINCT FROM mapping."ListedTicker"
+          AND p."SourceTicker" IS DISTINCT FROM listing."Ticker"
+          AND NOT EXISTS (SELECT 1 FROM "EquityListingTickerAlias" alias
+              WHERE alias."EquityListingId" = p."EquityListingId" AND alias."Ticker" = p."SourceTicker")
+    ) THEN
+        RAISE EXCEPTION 'Native price source symbol has no retained listing identity';
+    END IF;
+    IF EXISTS ((SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."CommonStockId" FROM "DailyStockPrice" p) EXCEPT ALL (SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."EquityIssuerId" FROM "UnattributedDailyStockPrice" p JOIN "CommonStock" owner ON owner."Id" = p."EquityIssuerId"))
+       OR EXISTS ((SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."EquityIssuerId" FROM "UnattributedDailyStockPrice" p JOIN "CommonStock" owner ON owner."Id" = p."EquityIssuerId") EXCEPT ALL (SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."CommonStockId" FROM "DailyStockPrice" p)) THEN
         RAISE EXCEPTION 'DailyStockPrice and UnattributedDailyStockPrice differ; native price conservation failed';
     END IF;
-    IF EXISTS ((SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."CommonStockId", p."ListedTicker" FROM "ListedDailyStockPrice" p) EXCEPT ALL (SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", m."CommonStockId", p."SourceTicker" FROM "EquityDailyStockPrice" p JOIN "LegacyEquityListing" m ON m."EquityListingId" = p."EquityListingId"))
-       OR EXISTS ((SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", m."CommonStockId", p."SourceTicker" FROM "EquityDailyStockPrice" p JOIN "LegacyEquityListing" m ON m."EquityListingId" = p."EquityListingId") EXCEPT ALL (SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."CommonStockId", p."ListedTicker" FROM "ListedDailyStockPrice" p)) THEN
+    IF EXISTS ((SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."CommonStockId", p."ListedTicker" FROM "ListedDailyStockPrice" p) EXCEPT ALL (SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", m."CommonStockId", m."ListedTicker" FROM "EquityDailyStockPrice" p JOIN "LegacyEquityListing" m ON m."EquityListingId" = p."EquityListingId" JOIN "CommonStock" owner ON owner."Id" = m."CommonStockId"))
+       OR EXISTS ((SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", m."CommonStockId", m."ListedTicker" FROM "EquityDailyStockPrice" p JOIN "LegacyEquityListing" m ON m."EquityListingId" = p."EquityListingId" JOIN "CommonStock" owner ON owner."Id" = m."CommonStockId") EXCEPT ALL (SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."CommonStockId", p."ListedTicker" FROM "ListedDailyStockPrice" p)) THEN
         RAISE EXCEPTION 'ListedDailyStockPrice and EquityDailyStockPrice differ; native price conservation failed';
     END IF;
 END;
 $audit$;
+SELECT 'retained_exact_without_legacy_owner' AS cohort, count(*) AS rows
+FROM "EquityDailyStockPrice" p
+JOIN "LegacyEquityListing" mapping ON mapping."EquityListingId" = p."EquityListingId"
+WHERE NOT EXISTS (SELECT 1 FROM "CommonStock" owner WHERE owner."Id" = mapping."CommonStockId")
+UNION ALL
+SELECT 'retained_unattributed_without_legacy_owner', count(*)
+FROM "UnattributedDailyStockPrice" p
+WHERE NOT EXISTS (SELECT 1 FROM "CommonStock" owner WHERE owner."Id" = p."EquityIssuerId");
 COMMIT;

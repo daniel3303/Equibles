@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Equibles.CommonStocks.BusinessLogic.Directory;
-using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Euronext;
 using Equibles.Integrations.Euronext.Models;
@@ -14,7 +13,7 @@ public class EuronextEquityDirectoryImporter(
     EuronextDirectoryClient directoryClient,
     GleifIdentityClient gleifClient,
     EquityDirectoryIdentityImporter identityImporter,
-    IServiceScopeFactory scopeFactory,
+    EquityDirectorySnapshotManager snapshotManager,
     ILogger<EuronextEquityDirectoryImporter> logger
 )
 {
@@ -22,7 +21,7 @@ public class EuronextEquityDirectoryImporter(
     {
         var token = cancellationToken;
         var snapshot = await directoryClient.GetLisbonEquities(token);
-        await ArchiveDirectory(snapshot, token);
+        var snapshotId = await ReconcileDirectory(snapshot, token);
         var imported = 0;
         var failed = 0;
         foreach (var listing in snapshot.Listings)
@@ -34,6 +33,7 @@ public class EuronextEquityDirectoryImporter(
                 var product = await directoryClient.GetInstrumentIdentity(listing, attempt.Token);
                 var issuer = await gleifClient.GetIssuerForIsin(listing.Isin, attempt.Token);
                 var input = CreateInput(listing, product, issuer);
+                input.DirectorySnapshotId = snapshotId;
                 await identityImporter.ImportListing(input, attempt.Token);
                 imported++;
             }
@@ -122,23 +122,28 @@ public class EuronextEquityDirectoryImporter(
         };
     }
 
-    private async Task ArchiveDirectory(EuronextDirectorySnapshot snapshot, CancellationToken token)
-    {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var issuers = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
-        var evidence =
-            scope.ServiceProvider.GetRequiredService<EquityDirectorySourceRecordRepository>();
-        await using var transaction = await issuers.BeginDirectoryIdentityWrite(token);
-        if (transaction == null)
-            throw new InvalidOperationException(
-                "Directory capture requires a relational transaction."
-            );
-        await evidence.Append(
-            "euronext-lisbon-directory-v1",
-            snapshot.SourceUrl.AbsoluteUri,
-            JsonSerializer.Serialize(snapshot),
+    private Task<Guid> ReconcileDirectory(
+        EuronextDirectorySnapshot snapshot,
+        CancellationToken token
+    ) =>
+        snapshotManager.Reconcile(
+            new EquityDirectorySnapshotInput
+            {
+                Source = "euronext",
+                EvidenceSource = "euronext-lisbon-directory-v1",
+                SourceRecordKey = snapshot.SourceUrl.AbsoluteUri,
+                PayloadJson = JsonSerializer.Serialize(snapshot),
+                ObservedAt = snapshot.CapturedAt,
+                MarketCountryCode = "PT",
+                MarketIdentifierCodes = ["XLIS", "ENXL", "ALXL"],
+                Listings = snapshot
+                    .Listings.Select(row => new EquityDirectoryListingKey(
+                        row.Isin,
+                        row.MarketIdentifierCode,
+                        row.Symbol
+                    ))
+                    .ToList(),
+            },
             token
         );
-        await transaction.CommitAsync(token);
-    }
 }

@@ -27,6 +27,25 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
             throw new InvalidOperationException(
                 "Directory imports require an independent relational transaction."
             );
+        if (
+            await evidence
+                .GetSnapshotStates()
+                .AnyAsync(row => row.Source == input.Source, cancellationToken)
+            && (
+                !input.DirectorySnapshotId.HasValue
+                || !await evidence
+                    .GetSnapshotStates()
+                    .AnyAsync(
+                        row =>
+                            row.Source == input.Source
+                            && row.SourceRecordId == input.DirectorySnapshotId.Value,
+                        cancellationToken
+                    )
+            )
+        )
+            throw new InvalidDataException(
+                "The listing input belongs to a superseded directory snapshot."
+            );
         var sourceIdentifier = await issuers
             .GetSourceIdentifiers()
             .SingleOrDefaultAsync(
@@ -72,12 +91,13 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
         }
         var existing = security
             .Listings.Where(row =>
-                row.Active && row.MarketIdentifierCode == input.MarketIdentifierCode
+                row.MarketIdentifierCode == input.MarketIdentifierCode
+                && (row.Active || input.DirectorySnapshotId.HasValue && row.DelistedOn == null)
             )
             .ToList();
         if (existing.Count > 1)
             throw new InvalidDataException(
-                "Directory security has multiple active listings on this venue."
+                "Directory security has multiple eligible listing identities on this venue."
             );
         var listing = existing.SingleOrDefault();
         var existingListingId = listing?.Id ?? Guid.Empty;
@@ -123,6 +143,7 @@ public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
         listing.Ticker = input.Ticker;
         listing.TradingCurrency ??= input.TradingCurrency;
         listing.QuoteUnitMultiplier ??= input.QuoteUnitMultiplier;
+        listing.Active = true;
         listing.IsDirectoryListed = true;
         listing.IdentitySourceUrl = input.SourceUrl;
         if (listing.TradingCurrency != null && listing.QuoteUnitMultiplier != null)

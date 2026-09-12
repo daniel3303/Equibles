@@ -4,6 +4,7 @@ namespace Equibles.CommonStocks.BusinessLogic.Directory;
 public class EquityDirectoryListingInput
 {
     public string Source { get; set; }
+    public Guid? DirectorySnapshotId { get; set; }
     public string SourceIssuerIdentifier { get; set; }
     public string IssuerName { get; set; }
     public string LegalEntityIdentifier { get; set; }

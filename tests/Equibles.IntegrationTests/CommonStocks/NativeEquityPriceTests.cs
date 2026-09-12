@@ -248,6 +248,129 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         var provider = new Equibles.Yahoo.HostedService.Services.YahooStockPriceProvider(DbContext);
         var prices = await provider.GetClosingPrices([(stock.Id, null, date)]);
         prices[(stock.Id, null, date)].Should().Be(10m);
+        await VerifyConservation();
+    }
+
+    [Theory]
+    [InlineData("NEW")]
+    [InlineData("OLD")]
+    public async Task NativeRenameKeepsCapturedSourceSymbolAndRetiringSeriesKey(string sourceTicker)
+    {
+        var stock = new CommonStock { Ticker = "OLD" };
+        DbContext.Add(stock);
+        await DbContext.SaveChangesAsync();
+        var listing = await new EquityListingRepository(DbContext)
+            .GetByLegacyKey(stock.Id, "OLD")
+            .SingleAsync();
+        listing.Ticker = "NEW";
+        await DbContext.SaveChangesAsync();
+        var price = new EquityDailyStockPrice
+        {
+            Listing = listing,
+            SourceTicker = sourceTicker,
+            Date = new DateOnly(2026, 9, 10),
+            Open = 12m,
+            High = 13m,
+            Low = 11m,
+            Close = 12.3456m,
+            AdjustedClose = 10.1234m,
+            Volume = 987654321,
+            CreationTime = new DateTime(2026, 9, 10, 21, 0, 0, DateTimeKind.Utc),
+        };
+        DbContext.Add(price);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        var native = await DbContext.Set<EquityDailyStockPrice>().SingleAsync();
+        var legacy = await DbContext.Set<DailyStockPrice>().SingleAsync();
+        native.Id.Should().Be(price.Id);
+        native.SourceTicker.Should().Be(sourceTicker);
+        legacy.ListedTicker.Should().Be("OLD");
+        legacy.Id.Should().Be(price.Id);
+        legacy.Close.Should().Be(price.Close);
+        legacy.AdjustedClose.Should().Be(price.AdjustedClose);
+        legacy.CreationTime.Should().Be(price.CreationTime);
+        await VerifyConservation();
+    }
+
+    [Fact]
+    public async Task RetiringDirectoryDeletionCannotCascadeIntoNativePriceHistory()
+    {
+        var stock = new CommonStock { Ticker = "RETAIN" };
+        DbContext.Add(stock);
+        await DbContext.SaveChangesAsync();
+        var listing = await new EquityListingRepository(DbContext)
+            .GetByLegacyKey(stock.Id, "RETAIN")
+            .SingleAsync();
+        var native = new EquityDailyStockPrice
+        {
+            Listing = listing,
+            SourceTicker = "RETAIN",
+            Date = new DateOnly(2026, 9, 10),
+            Open = 12m,
+            High = 13m,
+            Low = 11m,
+            Close = 12.3456m,
+            AdjustedClose = 10.1234m,
+            Volume = 987654321,
+        };
+        var unknown = new LegacyDailyStockPrice
+        {
+            CommonStockId = stock.Id,
+            Date = new DateOnly(2020, 1, 2),
+            Open = 1m,
+            High = 3m,
+            Low = 1m,
+            Close = 2.3456m,
+            AdjustedClose = 1.2345m,
+            Volume = 123456789,
+        };
+        DbContext.AddRange(native, unknown);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+        await DbContext.Set<CommonStock>().Where(row => row.Id == stock.Id).ExecuteDeleteAsync();
+        (await DbContext.Set<DailyStockPrice>().CountAsync()).Should().Be(0);
+        (await DbContext.Set<LegacyDailyStockPrice>().CountAsync()).Should().Be(0);
+        var retained = await DbContext.Set<EquityDailyStockPrice>().SingleAsync();
+        retained.Should().BeEquivalentTo(native, options => options.Excluding(row => row.Listing));
+        var unattributed = await DbContext.Set<UnattributedDailyStockPrice>().SingleAsync();
+        unattributed
+            .Should()
+            .BeEquivalentTo(
+                unknown,
+                options =>
+                    options.Excluding(row => row.CommonStock).Excluding(row => row.CommonStockId)
+            );
+        unattributed.EquityIssuerId.Should().Be(stock.Id);
+        await VerifyConservation();
+    }
+
+    [Fact]
+    public async Task UnknownSourceSymbolStillRefusesTheNativeAndRetiringWrite()
+    {
+        var stock = new CommonStock { Ticker = "KNOWN" };
+        DbContext.Add(stock);
+        await DbContext.SaveChangesAsync();
+        var listing = await new EquityListingRepository(DbContext)
+            .GetByLegacyKey(stock.Id, "KNOWN")
+            .SingleAsync();
+        DbContext.Add(
+            new EquityDailyStockPrice
+            {
+                Listing = listing,
+                SourceTicker = "UNRELATED",
+                Date = new DateOnly(2026, 9, 10),
+                Close = 10m,
+            }
+        );
+        var save = () => DbContext.SaveChangesAsync();
+        await save.Should().ThrowAsync<DbUpdateException>();
+        DbContext.ChangeTracker.Clear();
+        (await DbContext.Set<EquityDailyStockPrice>().CountAsync()).Should().Be(0);
+        (await DbContext.Set<DailyStockPrice>().CountAsync()).Should().Be(0);
+    }
+
+    private async Task VerifyConservation()
+    {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (
             directory != null

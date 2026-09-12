@@ -243,3 +243,16 @@
 - History, statements and peer comparisons select split ratios by the presentation listing ID; a foreign listing with the same ticker cannot restate its values.
 - Source symbols remain evidence after a rename; stable listing identity decides attribution.
 - Unattributed, conflicting or invalid post-filing splits preserve the filed value with an explicit unresolved-basis label; no original financial fact is rewritten.
+
+## Current directory snapshots
+
+- A complete Lisbon directory snapshot atomically withdraws capture eligibility for absent ISIN/MIC/ticker identities before product imports begin; it does not infer an effective delisting date.
+- The current snapshot record fences every subsequent product import, so superseded work cannot reactivate an old symbol.
+- A returning exact security/venue reuses its sole undated inactive listing; explicit retirement dates and ambiguous episodes never collapse.
+- Source snapshots, original listing IDs and attached prices survive disappearance and symbol reuse.
+
+## Price history during directory retirement
+
+- Native bars accept the current exact ticker or a retained alias while the temporary mirror preserves the original legacy series key.
+- A legacy directory deletion cannot cascade into either native price archive; direct price replacements still synchronize while the owner exists.
+- Full-row reconciliation reports retained histories without a legacy owner separately; compare that cohort against the immutable pre-cutover export rather than treating its absent counterpart as proof.

@@ -53,6 +53,13 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
     private static void ConfigureEquityIdentity(ModelBuilder builder)
     {
         builder.Entity<EquityDirectorySourceRecord>();
+        builder
+            .Entity<EquityDirectorySnapshotState>()
+            .HasOne(row => row.SourceRecord)
+            .WithMany()
+            .HasForeignKey(row => row.SourceRecordId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.Entity<EquityIssuerSourceIdentifier>(identifier =>
         {
             identifier
