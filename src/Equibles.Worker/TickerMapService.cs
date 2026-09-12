@@ -38,7 +38,7 @@ public class TickerMapService
         var delistedListings = stockRepo.GetDelistedListings();
         query = query.Where(stock =>
             !delistedListings.Any(listing =>
-                listing.CommonStockId == stock.Id && listing.ListedTicker == stock.Ticker
+                listing.EquityIssuerId == stock.Id && listing.ListedTicker == stock.Ticker
             )
         );
 
@@ -74,7 +74,7 @@ public class TickerMapService
             .ToListAsync(cancellationToken);
         var rawDelisted = await stockRepo
             .GetDelistedListings()
-            .Select(listing => new ListedSecurityKey(listing.CommonStockId, listing.ListedTicker))
+            .Select(listing => new ListedSecurityKey(listing.EquityIssuerId, listing.ListedTicker))
             .ToListAsync(cancellationToken);
         var primaryByStock = stocks.ToDictionary(stock => stock.Id, stock => stock.Ticker);
         var delistedSet = rawDelisted

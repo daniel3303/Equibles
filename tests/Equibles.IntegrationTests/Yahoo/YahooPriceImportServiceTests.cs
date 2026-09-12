@@ -183,9 +183,9 @@ public class YahooPriceImportServiceTests : IDisposable
         foreach (var stock in stocks.Where(stock => !stock.Active && stock.DelistedOn != null))
         {
             _stockRepo.AddDelistedListing(
-                new CommonStockDelistedListing
+                new EquityListingRetirementEvidence
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ListedTicker = stock.Ticker,
                     DelistedOn = stock.DelistedOn.Value,
                     HistoricalPriceBackfillAttemptedAt = stock.HistoricalPriceBackfillAttemptedAt,
@@ -195,8 +195,8 @@ public class YahooPriceImportServiceTests : IDisposable
         await _stockRepo.SaveChanges();
     }
 
-    private CommonStockDelistedListing GetDelistedListing(CommonStock stock) =>
-        _stockRepo.GetDelistedListings().Single(listing => listing.CommonStockId == stock.Id);
+    private EquityListingRetirementEvidence GetDelistedListing(CommonStock stock) =>
+        _stockRepo.GetDelistedListings().Single(listing => listing.EquityIssuerId == stock.Id);
 
     [Fact]
     public async Task Import_InactiveListing_BackfillsOnlyThroughAuthoritativeDelistingDate()
@@ -254,9 +254,9 @@ public class YahooPriceImportServiceTests : IDisposable
         await SeedStocks(stock);
         Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock, "OLD");
         _stockRepo.AddDelistedListing(
-            new CommonStockDelistedListing
+            new EquityListingRetirementEvidence
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ListedTicker = "OLD",
                 DelistedOn = delistedOn,
             }
@@ -550,7 +550,7 @@ public class YahooPriceImportServiceTests : IDisposable
             {
                 stock.Active = true;
                 stock.DelistedOn = null;
-                _dbContext.Set<CommonStockDelistedListing>().Remove(GetDelistedListing(stock));
+                _dbContext.Set<EquityListingRetirementEvidence>().Remove(GetDelistedListing(stock));
                 _dbContext.SaveChanges();
                 return new YahooChartData { FirstTradeDate = floor, Prices = prices };
             });

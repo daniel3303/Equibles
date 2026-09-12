@@ -105,8 +105,8 @@ public class NportFundsHoldingStockToolTests : IDisposable
         // as having exited.
         var stock = SeedStock("BBUC", cusip: "113006100");
         _dbContext
-            .Set<CommonStockCusipAlias>()
-            .Add(new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "11259V106" });
+            .Set<EquityIssuerCusipAlias>()
+            .Add(new EquityIssuerCusipAlias { EquityIssuerId = stock.Id, Cusip = "11259V106" });
         _dbContext.SaveChanges();
 
         var fund = SeedStock("VOO", cusip: null, cik: "0000036405");

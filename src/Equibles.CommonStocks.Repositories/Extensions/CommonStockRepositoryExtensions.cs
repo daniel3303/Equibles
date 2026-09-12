@@ -28,8 +28,8 @@ public static class CommonStockRepositoryExtensions
         var stockIds = stocks.Select(stock => stock.Id).ToList();
         var delistedRows = await repository
             .GetDelistedListings()
-            .Where(listing => stockIds.Contains(listing.CommonStockId))
-            .Select(listing => new ListedSecurityKey(listing.CommonStockId, listing.ListedTicker))
+            .Where(listing => stockIds.Contains(listing.EquityIssuerId))
+            .Select(listing => new ListedSecurityKey(listing.EquityIssuerId, listing.ListedTicker))
             .ToListAsync(cancellationToken);
         var primaryByStock = stocks.ToDictionary(stock => stock.Id, stock => stock.Ticker);
         var delisted = delistedRows

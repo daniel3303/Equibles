@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models;
@@ -8,15 +9,17 @@ namespace Equibles.CommonStocks.Data.Models;
 /// several exact listed securities, so each symbol keeps its own final trading date and historical
 /// backfill state rather than inheriting an arbitrary filer-level cutoff.
 /// </summary>
-[Index(nameof(CommonStockId), nameof(ListedTicker), IsUnique = true)]
+[Index(nameof(EquityIssuerId), nameof(ListedTicker), IsUnique = true)]
 [Index(nameof(ListedTicker), nameof(DelistedOn))]
-public class CommonStockDelistedListing
+[Table("CommonStockDelistedListing")]
+public class EquityListingRetirementEvidence
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
 
-    public virtual CommonStock CommonStock { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     [Required]
     [MaxLength(32)]

@@ -111,9 +111,9 @@ public class TickerMapServiceTests : IDisposable
         var stock = CreateStock("OLD", "Still Listed Under Another Symbol");
         await SeedStocks(stock);
         _stockRepo.AddDelistedListing(
-            new CommonStockDelistedListing
+            new EquityListingRetirementEvidence
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ListedTicker = stock.Ticker,
                 DelistedOn = new DateOnly(2023, 1, 10),
             }
@@ -282,9 +282,9 @@ public class TickerMapServiceTests : IDisposable
         stock.ReferenceTickers = ["BRK.B"];
         await SeedStocks(stock);
         _stockRepo.AddDelistedListing(
-            new CommonStockDelistedListing
+            new EquityListingRetirementEvidence
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ListedTicker = "BRK.B",
                 DelistedOn = new DateOnly(2026, 1, 1),
             }
@@ -304,9 +304,9 @@ public class TickerMapServiceTests : IDisposable
         trust.ReferenceTickers = ["LIVEETF"];
         await SeedStocks(trust);
         _stockRepo.AddDelistedListing(
-            new CommonStockDelistedListing
+            new EquityListingRetirementEvidence
             {
-                CommonStockId = trust.Id,
+                EquityIssuerId = trust.Id,
                 ListedTicker = trust.Ticker,
                 DelistedOn = new DateOnly(2026, 1, 1),
             }

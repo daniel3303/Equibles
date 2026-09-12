@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models;
@@ -13,14 +14,16 @@ namespace Equibles.CommonStocks.Data.Models;
 /// <c>CommonStockManager.SetCusip</c> whenever a non-null CUSIP changes.
 /// </summary>
 [Index(nameof(Cusip), IsUnique = true)]
-[Index(nameof(CommonStockId))]
-public class CommonStockCusipAlias
+[Index(nameof(EquityIssuerId))]
+[Table("CommonStockCusipAlias")]
+public class EquityIssuerCusipAlias
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
 
-    public virtual CommonStock CommonStock { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     [Required]
     [MaxLength(9)]

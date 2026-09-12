@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models;
@@ -15,7 +16,7 @@ namespace Equibles.CommonStocks.Data.Models;
 /// keys the resulting rows by the listed ticker recorded here.
 /// </para>
 /// <para>
-/// Deliberately separate from <see cref="CommonStockCusipAlias"/>: an alias is a
+/// Deliberately separate from <see cref="EquityIssuerCusipAlias"/>: an alias is a
 /// retired identity of the PRIMARY security and maps to the primary series, while a
 /// row here is the current identity of a DIFFERENT security. Folding these together
 /// would re-create the class collapse the table exists to prevent.
@@ -27,14 +28,16 @@ namespace Equibles.CommonStocks.Data.Models;
 /// </para>
 /// </summary>
 [Index(nameof(Cusip), IsUnique = true)]
-[Index(nameof(CommonStockId))]
-public class CommonStockListedCusip
+[Index(nameof(EquityIssuerId))]
+[Table("CommonStockListedCusip")]
+public class EquityListingCusipEvidence
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
 
-    public virtual CommonStock CommonStock { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     /// <summary>The exact canonical listed symbol, as spelled in SecondaryTickers (dash form).</summary>
     [Required]

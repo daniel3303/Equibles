@@ -24,7 +24,7 @@ namespace Equibles.IntegrationTests.Holdings;
 /// Sibling share classes import as their own rows (#4247). Alphabet is the reference
 /// shape: GOOGL's CUSIP (02079K305) lives on the stock, Class C's (02079K107) matched
 /// nothing, and every GOOG 13F line — ~5,300 positions a quarter — was dropped at
-/// BuildCusipMapping. A <see cref="CommonStockListedCusip"/> row resolves the sibling
+/// BuildCusipMapping. A <see cref="EquityListingCusipEvidence"/> row resolves the sibling
 /// CUSIP to the same filer WITHOUT collapsing the two securities: the holding row is
 /// keyed by ListedTicker and valued from the class's own price series. Merging them
 /// instead would overwrite one class's position with the other's (the upsert key had
@@ -162,11 +162,11 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         };
         using var seed = FreshContext();
         seed.Set<CommonStock>().Add(stock);
-        seed.Set<CommonStockListedCusip>()
+        seed.Set<EquityListingCusipEvidence>()
             .Add(
-                new CommonStockListedCusip
+                new EquityListingCusipEvidence
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ListedTicker = "GOOG",
                     Cusip = "02079K107",
                 }
@@ -313,11 +313,11 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         using (var seed = FreshContext())
         {
             seed.Set<CommonStock>().AddRange(owner, claimant);
-            seed.Set<CommonStockListedCusip>()
+            seed.Set<EquityListingCusipEvidence>()
                 .Add(
-                    new CommonStockListedCusip
+                    new EquityListingCusipEvidence
                     {
-                        CommonStockId = claimant.Id,
+                        EquityIssuerId = claimant.Id,
                         ListedTicker = "BBB-A",
                         Cusip = "999999999",
                     }

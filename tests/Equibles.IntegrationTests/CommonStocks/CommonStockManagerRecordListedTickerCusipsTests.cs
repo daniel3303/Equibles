@@ -12,7 +12,7 @@ namespace Equibles.IntegrationTests.CommonStocks;
 
 /// <summary>
 /// Contract for recording a secondary listing's CUSIP (#4247). A row lands in
-/// <see cref="CommonStockListedCusip"/> — NEVER in <see cref="CommonStockCusipAlias"/>,
+/// <see cref="EquityListingCusipEvidence"/> — NEVER in <see cref="EquityIssuerCusipAlias"/>,
 /// which maps to the primary series and would collapse two securities into one row.
 /// Admission: the ticker must be one of the stock's CURRENT secondary tickers, the CUSIP
 /// must not be the stock's own primary, and a CUSIP already owned anywhere (a primary,
@@ -70,7 +70,7 @@ public class CommonStockManagerRecordListedTickerCusipsTests
 
         recorded.Should().Be(1);
         var listing = await _repository.GetListedCusips().SingleAsync();
-        listing.CommonStockId.Should().Be(stock.Id);
+        listing.EquityIssuerId.Should().Be(stock.Id);
         listing.ListedTicker.Should().Be("GOOG");
         listing.Cusip.Should().Be("02079K107");
 

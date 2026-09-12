@@ -59,7 +59,7 @@ public class CommonStockManagerRecordTickerAliasTests
         staged.Should().NotBeNull();
         var alias = await _repository.GetTickerAliases().SingleAsync();
         alias.Ticker.Should().Be("LC");
-        alias.CommonStockId.Should().Be(stock.Id);
+        alias.EquityIssuerId.Should().Be(stock.Id);
     }
 
     // THE PRODUCTION ORDERING — the sync calls this MID-RENAME: the stock's row in the
@@ -80,7 +80,7 @@ public class CommonStockManagerRecordTickerAliasTests
         staged.Should().NotBeNull();
         var alias = await _repository.GetTickerAliases().SingleAsync();
         alias.Ticker.Should().Be("LC");
-        alias.CommonStockId.Should().Be(stock.Id);
+        alias.EquityIssuerId.Should().Be(stock.Id);
     }
 
     // Re-adoption cleanup (the deletion half of last-writer-wins): renaming BACK to a symbol
@@ -170,7 +170,7 @@ public class CommonStockManagerRecordTickerAliasTests
         await _repository.SaveChanges();
 
         var alias = await _repository.GetTickerAliases().SingleAsync(a => a.Ticker == "XYZ");
-        alias.CommonStockId.Should().Be(laterHolder.Id);
+        alias.EquityIssuerId.Should().Be(laterHolder.Id);
     }
 
     // Re-retiring a symbol the stock already has an alias for is a no-op, not a duplicate.

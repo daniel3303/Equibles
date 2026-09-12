@@ -159,6 +159,8 @@ internal static class NativeListingSeed
         {
             Ticker = ticker,
             Active = stock.Active,
+            DelistedOn = stock.DelistedOn,
+            PriceHistoryBackfilled = stock.PriceHistoryBackfilledTickers.Contains(ticker),
             IsDirectoryListed = true,
             IsReferenceListed = stock.ReferenceTickers.Any(reference =>
                 string.Equals(

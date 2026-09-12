@@ -6,7 +6,7 @@ namespace Equibles.CommonStocks.Data.Models;
 
 /// <summary>
 /// One authoritative observation that an SEC filer stated a trading symbol in a filing's
-/// cover-page 12(b) table. Unlike <see cref="CommonStockTickerAlias"/>, evidence is never
+/// cover-page 12(b) table. Unlike <see cref="EquityIssuerTickerAlias"/>, evidence is never
 /// reassigned or collapsed when an exchange later reuses the symbol for another issuer.
 /// </summary>
 [Index(nameof(Ticker), nameof(FiledDate))]

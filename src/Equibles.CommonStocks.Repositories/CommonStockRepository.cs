@@ -180,6 +180,11 @@ public class CommonStockRepository : BaseRepository<CommonStock>
         return await GetAll().FirstOrDefaultAsync(cs => cs.Ticker == ticker);
     }
 
+    public IQueryable<LegacyEquityListing> GetCompletedPriceSeries() =>
+        DbContext
+            .Set<LegacyEquityListing>()
+            .Where(mapping => mapping.Listing.PriceHistoryBackfilled);
+
     public virtual Task<Guid?> GetEquityListingId(Guid stockId, string ticker) =>
         DbContext == null
             ? Task.FromResult<Guid?>(null)
@@ -286,20 +291,20 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     /// CommonStock aggregate (no independent lifecycle), so access lives here
     /// rather than in a dedicated repository.
     /// </summary>
-    public IQueryable<CommonStockCusipAlias> GetCusipAliases()
+    public IQueryable<EquityIssuerCusipAlias> GetCusipAliases()
     {
-        return DbContext.Set<CommonStockCusipAlias>().AsQueryable();
+        return DbContext.Set<EquityIssuerCusipAlias>().AsQueryable();
     }
 
-    public CommonStockCusipAlias AddCusipAlias(CommonStockCusipAlias alias)
+    public EquityIssuerCusipAlias AddCusipAlias(EquityIssuerCusipAlias alias)
     {
-        DbContext.Set<CommonStockCusipAlias>().Add(alias);
+        DbContext.Set<EquityIssuerCusipAlias>().Add(alias);
         return alias;
     }
 
-    public void DeleteCusipAlias(CommonStockCusipAlias alias)
+    public void DeleteCusipAlias(EquityIssuerCusipAlias alias)
     {
-        DbContext.Set<CommonStockCusipAlias>().Remove(alias);
+        DbContext.Set<EquityIssuerCusipAlias>().Remove(alias);
     }
 
     /// <summary>
@@ -307,44 +312,46 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     /// keyed to the exact secondary ticker they identify. Same aggregate reasoning
     /// as the CUSIP aliases: no independent lifecycle, so access lives here.
     /// </summary>
-    public IQueryable<CommonStockListedCusip> GetListedCusips()
+    public IQueryable<EquityListingCusipEvidence> GetListedCusips()
     {
-        return DbContext.Set<CommonStockListedCusip>().AsQueryable();
+        return DbContext.Set<EquityListingCusipEvidence>().AsQueryable();
     }
 
-    public CommonStockListedCusip AddListedCusip(CommonStockListedCusip listedCusip)
+    public EquityListingCusipEvidence AddListedCusip(EquityListingCusipEvidence listedCusip)
     {
-        DbContext.Set<CommonStockListedCusip>().Add(listedCusip);
+        DbContext.Set<EquityListingCusipEvidence>().Add(listedCusip);
         return listedCusip;
     }
 
-    public void DeleteListedCusip(CommonStockListedCusip listedCusip)
+    public void DeleteListedCusip(EquityListingCusipEvidence listedCusip)
     {
-        DbContext.Set<CommonStockListedCusip>().Remove(listedCusip);
+        DbContext.Set<EquityListingCusipEvidence>().Remove(listedCusip);
     }
 
-    public virtual IQueryable<CommonStockDelistedListing> GetDelistedListings()
+    public virtual IQueryable<EquityListingRetirementEvidence> GetDelistedListings()
     {
-        return DbContext.Set<CommonStockDelistedListing>().AsQueryable();
+        return DbContext.Set<EquityListingRetirementEvidence>().AsQueryable();
     }
 
-    public CommonStockDelistedListing AddDelistedListing(CommonStockDelistedListing delistedListing)
+    public EquityListingRetirementEvidence AddDelistedListing(
+        EquityListingRetirementEvidence delistedListing
+    )
     {
-        DbContext.Set<CommonStockDelistedListing>().Add(delistedListing);
+        DbContext.Set<EquityListingRetirementEvidence>().Add(delistedListing);
         return delistedListing;
     }
 
-    public void DeleteDelistedListing(CommonStockDelistedListing delistedListing)
+    public void DeleteDelistedListing(EquityListingRetirementEvidence delistedListing)
     {
-        DbContext.Set<CommonStockDelistedListing>().Remove(delistedListing);
+        DbContext.Set<EquityListingRetirementEvidence>().Remove(delistedListing);
     }
 
-    public async Task<CommonStockDelistedListing> GetDelistedListingForUpdate(
+    public async Task<EquityListingRetirementEvidence> GetDelistedListingForUpdate(
         Guid delistedListingId,
         CancellationToken cancellationToken = default
     )
     {
-        var listings = DbContext.Set<CommonStockDelistedListing>();
+        var listings = DbContext.Set<EquityListingRetirementEvidence>();
         if (!DbContext.Database.IsRelational())
         {
             return await listings.FirstOrDefaultAsync(
@@ -359,7 +366,7 @@ public class CommonStockRepository : BaseRepository<CommonStock>
             );
 
         var trackedEntry = DbContext
-            .ChangeTracker.Entries<CommonStockDelistedListing>()
+            .ChangeTracker.Entries<EquityListingRetirementEvidence>()
             .FirstOrDefault(entry => entry.Entity.Id == delistedListingId);
         if (trackedEntry != null && trackedEntry.State != EntityState.Unchanged)
         {
@@ -386,19 +393,19 @@ public class CommonStockRepository : BaseRepository<CommonStock>
     /// access lives here rather than in a dedicated repository. Consulted only on
     /// the miss path — a live ticker always resolves before any alias is looked at.
     /// </summary>
-    public IQueryable<CommonStockTickerAlias> GetTickerAliases()
+    public IQueryable<EquityIssuerTickerAlias> GetTickerAliases()
     {
-        return DbContext.Set<CommonStockTickerAlias>().AsQueryable();
+        return DbContext.Set<EquityIssuerTickerAlias>().AsQueryable();
     }
 
-    public CommonStockTickerAlias AddTickerAlias(CommonStockTickerAlias alias)
+    public EquityIssuerTickerAlias AddTickerAlias(EquityIssuerTickerAlias alias)
     {
-        DbContext.Set<CommonStockTickerAlias>().Add(alias);
+        DbContext.Set<EquityIssuerTickerAlias>().Add(alias);
         return alias;
     }
 
-    public void DeleteTickerAlias(CommonStockTickerAlias alias)
+    public void DeleteTickerAlias(EquityIssuerTickerAlias alias)
     {
-        DbContext.Set<CommonStockTickerAlias>().Remove(alias);
+        DbContext.Set<EquityIssuerTickerAlias>().Remove(alias);
     }
 }

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models;
@@ -23,14 +24,16 @@ namespace Equibles.CommonStocks.Data.Models;
 /// symbol as a live ticker again.
 /// </summary>
 [Index(nameof(Ticker), IsUnique = true)]
-[Index(nameof(CommonStockId))]
-public class CommonStockTickerAlias
+[Index(nameof(EquityIssuerId))]
+[Table("CommonStockTickerAlias")]
+public class EquityIssuerTickerAlias
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
 
-    public virtual CommonStock CommonStock { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     [Required]
     [MaxLength(16)]

@@ -493,9 +493,9 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         var stockId = Guid.NewGuid();
         var delistedOn = new DateOnly(2026, 7, 31);
         var stock = Stock(stockId, "LIVE");
-        var listing = new CommonStockDelistedListing
+        var listing = new EquityListingRetirementEvidence
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             ListedTicker = "OLD",
             DelistedOn = delistedOn,
         };

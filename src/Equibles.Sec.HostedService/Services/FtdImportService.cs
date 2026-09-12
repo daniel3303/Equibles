@@ -279,7 +279,7 @@ public class FtdImportService
 
     /// <summary>
     /// Walks the FTD archive backwards in time recording the CUSIPs each tracked symbol
-    /// USED to trade under, as <see cref="CommonStockCusipAlias"/> rows.
+    /// USED to trade under, as <see cref="EquityIssuerCusipAlias"/> rows.
     /// <para>
     /// <see cref="SeedCusips"/> only captures a retirement it witnesses live, so every
     /// CUSIP change that predates this pipeline left no alias — and the 13F lines filed
@@ -473,7 +473,7 @@ public class FtdImportService
 
     /// <summary>
     /// Walks the FTD archive recording the CUSIPs of tracked stocks' SECONDARY listings —
-    /// sibling share classes, units, fund series — as <see cref="CommonStockListedCusip"/> rows.
+    /// sibling share classes, units, fund series — as <see cref="EquityListingCusipEvidence"/> rows.
     /// <para>
     /// The retired-CUSIP sweep above deliberately admits only PRIMARY symbols, so a sibling
     /// class's CUSIP (Alphabet Class C, 02079K107 under symbol GOOG) was never captured and
@@ -721,11 +721,11 @@ public class FtdImportService
         var stockIds = stocks.Select(stock => stock.Id).ToList();
         var delistedRows = await stockRepo
             .GetDelistedListings()
-            .Where(listing => stockIds.Contains(listing.CommonStockId))
-            .Select(listing => new { listing.CommonStockId, listing.ListedTicker })
+            .Where(listing => stockIds.Contains(listing.EquityIssuerId))
+            .Select(listing => new { listing.EquityIssuerId, listing.ListedTicker })
             .ToListAsync(cancellationToken);
         var delistedByStock = delistedRows
-            .GroupBy(listing => listing.CommonStockId)
+            .GroupBy(listing => listing.EquityIssuerId)
             .ToDictionary(
                 group => group.Key,
                 group =>
@@ -1000,7 +1000,7 @@ public class FtdImportService
     }
 
     internal static void RejectContestedHistoricalCusips(
-        IEnumerable<CommonStockDelistedListing> listings
+        IEnumerable<EquityListingRetirementEvidence> listings
     )
     {
         var contestedListingIds = listings
@@ -1022,7 +1022,7 @@ public class FtdImportService
     }
 
     internal static void ApplyHistoricalCusipEvidence(
-        CommonStockDelistedListing listing,
+        EquityListingRetirementEvidence listing,
         IEnumerable<HistoricalCusipCandidate> candidates
     )
     {
@@ -1499,18 +1499,18 @@ public class FtdImportService
         var aliasOwners = await stockRepo
             .GetCusipAliases()
             .Where(alias => resolvedCusips.Contains(alias.Cusip))
-            .Select(alias => new { alias.CommonStockId, alias.Cusip })
+            .Select(alias => new { alias.EquityIssuerId, alias.Cusip })
             .ToListAsync(cancellationToken);
         foreach (var owner in aliasOwners)
         {
-            AddOwner(owner.Cusip, owner.CommonStockId);
+            AddOwner(owner.Cusip, owner.EquityIssuerId);
         }
         var listedClaimRows = await stockRepo
             .GetListedCusips()
             .Where(listing => resolvedCusips.Contains(listing.Cusip))
             .Select(listing => new
             {
-                listing.CommonStockId,
+                listing.EquityIssuerId,
                 listing.ListedTicker,
                 listing.Cusip,
             })
@@ -1527,7 +1527,7 @@ public class FtdImportService
                 string.Equals(listing.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase)
             );
             var promotesExactListing =
-                listedClaim?.CommonStockId == stock.Id
+                listedClaim?.EquityIssuerId == stock.Id
                 && string.Equals(
                     listedClaim.ListedTicker,
                     stock.Ticker,

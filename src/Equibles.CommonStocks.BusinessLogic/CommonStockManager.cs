@@ -55,7 +55,7 @@ public class CommonStockManager
             .GetDelistedListings()
             .AsNoTracking()
             .Where(listing => listing.Id == listingId)
-            .Select(listing => (Guid?)listing.CommonStockId)
+            .Select(listing => (Guid?)listing.EquityIssuerId)
             .SingleOrDefaultAsync(cancellationToken);
         if (stockId == null)
         {
@@ -74,7 +74,7 @@ public class CommonStockManager
         );
         if (
             listing == null
-            || listing.CommonStockId != stock.Id
+            || listing.EquityIssuerId != stock.Id
             || listing.Cusip != null
             || settlementDate > listing.DelistedOn
             || !SamePostgresTimestamp(listing.HistoricalCusipBackfillSweepStartedAt, sweepStartedAt)
@@ -105,17 +105,17 @@ public class CommonStockManager
         var aliasClaims = await _commonStockRepository
             .GetCusipAliases()
             .Where(alias => alias.Cusip.ToUpper() == normalizedCusip)
-            .Select(alias => alias.CommonStockId)
+            .Select(alias => alias.EquityIssuerId)
             .ToListAsync(cancellationToken);
         var listedClaims = await _commonStockRepository
             .GetListedCusips()
             .Where(candidate => candidate.Cusip.ToUpper() == normalizedCusip)
-            .Select(candidate => new { candidate.CommonStockId, candidate.ListedTicker })
+            .Select(candidate => new { candidate.EquityIssuerId, candidate.ListedTicker })
             .ToListAsync(cancellationToken);
         if (
             primaryClaims.Any(ownerId => ownerId != stock.Id)
             || aliasClaims.Any(ownerId => ownerId != stock.Id)
-            || listedClaims.Any(candidate => candidate.CommonStockId != stock.Id)
+            || listedClaims.Any(candidate => candidate.EquityIssuerId != stock.Id)
         )
         {
             return DelistedListingCusipSeedResult.ClaimedByAnotherStock;
@@ -127,7 +127,7 @@ public class CommonStockManager
             StringComparison.OrdinalIgnoreCase
         );
         var exactListedClaim = listedClaims.FirstOrDefault(candidate =>
-            candidate.CommonStockId == stock.Id
+            candidate.EquityIssuerId == stock.Id
             && string.Equals(
                 candidate.ListedTicker,
                 listing.ListedTicker,
@@ -164,9 +164,9 @@ public class CommonStockManager
         else if (!isPrimary && exactListedClaim == null)
         {
             _commonStockRepository.AddListedCusip(
-                new CommonStockListedCusip
+                new EquityListingCusipEvidence
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ListedTicker = listing.ListedTicker,
                     Cusip = normalizedCusip,
                 }
@@ -266,7 +266,7 @@ public class CommonStockManager
         foreach (var cusip in candidates.Where(c => !taken.Contains(c)))
         {
             _commonStockRepository.AddCusipAlias(
-                new CommonStockCusipAlias { CommonStockId = commonStock.Id, Cusip = cusip }
+                new EquityIssuerCusipAlias { EquityIssuerId = commonStock.Id, Cusip = cusip }
             );
             recorded++;
         }
@@ -295,7 +295,7 @@ public class CommonStockManager
     /// <summary>
     /// Records the CUSIPs of a stock's OTHER listed securities — the sibling share
     /// classes, units, and fund series named in <see cref="CommonStock.SecondaryTickers"/> —
-    /// as <see cref="CommonStockListedCusip"/> rows keyed to the exact listed ticker.
+    /// as <see cref="EquityListingCusipEvidence"/> rows keyed to the exact listed ticker.
     /// <para>
     /// Distinct from <see cref="RecordRetiredCusipAliases"/> on purpose: an alias is a
     /// retired identity of the PRIMARY security, while these are the current identities
@@ -391,9 +391,9 @@ public class CommonStockManager
         foreach (var candidate in cleaned.Where(c => !taken.Contains(c.Cusip)))
         {
             _commonStockRepository.AddListedCusip(
-                new CommonStockListedCusip
+                new EquityListingCusipEvidence
                 {
-                    CommonStockId = commonStock.Id,
+                    EquityIssuerId = commonStock.Id,
                     ListedTicker = candidate.Ticker,
                     Cusip = candidate.Cusip,
                 }
@@ -429,7 +429,7 @@ public class CommonStockManager
     /// was still unresolvable. A no-op change publishes nothing.
     /// <para>
     /// Replacing a non-null CUSIP (an issuer-level CUSIP change) also records the
-    /// retired value as a <see cref="CommonStockCusipAlias"/>. Filings keep
+    /// retired value as a <see cref="EquityIssuerCusipAlias"/>. Filings keep
     /// referencing the old CUSIP — laggard 13F filers for a quarter or two, and
     /// historical data sets forever — so import-time resolution must keep mapping
     /// it to this stock. Without the alias, the backfill triggered by the change
@@ -497,11 +497,11 @@ public class CommonStockManager
 
         var promotesOwnAlias =
             claims.Aliases.Count > 0
-            && claims.Aliases.All(alias => alias.CommonStockId == commonStock.Id);
+            && claims.Aliases.All(alias => alias.EquityIssuerId == commonStock.Id);
         var promotesExactListing =
             claims.Listings.Count > 0
             && claims.Listings.All(listing =>
-                listing.CommonStockId == commonStock.Id
+                listing.EquityIssuerId == commonStock.Id
                 && string.Equals(
                     listing.ListedTicker,
                     commonStock.Ticker,
@@ -559,8 +559,8 @@ public class CommonStockManager
 
     private async Task<(
         List<Guid> PrimaryOwnerIds,
-        List<CommonStockCusipAlias> Aliases,
-        List<CommonStockListedCusip> Listings
+        List<EquityIssuerCusipAlias> Aliases,
+        List<EquityListingCusipEvidence> Listings
     )> GetCusipClaims(string normalizedCusip)
     {
         var primaryOwnerIds = await _commonStockRepository
@@ -583,8 +583,8 @@ public class CommonStockManager
         CommonStock commonStock,
         string previousCusip,
         string displacedListedTicker,
-        IReadOnlyCollection<CommonStockCusipAlias> promotedAliases,
-        IReadOnlyCollection<CommonStockListedCusip> promotedListings
+        IReadOnlyCollection<EquityIssuerCusipAlias> promotedAliases,
+        IReadOnlyCollection<EquityListingCusipEvidence> promotedListings
     )
     {
         var displacedTicker = displacedListedTicker?.Trim().ToUpperInvariant();
@@ -611,9 +611,9 @@ public class CommonStockManager
         if (claims.Listings.Count == 0)
         {
             _commonStockRepository.AddListedCusip(
-                new CommonStockListedCusip
+                new EquityListingCusipEvidence
                 {
-                    CommonStockId = commonStock.Id,
+                    EquityIssuerId = commonStock.Id,
                     ListedTicker = displacedTicker,
                     Cusip = previousCusip.ToUpperInvariant(),
                 }
@@ -624,8 +624,8 @@ public class CommonStockManager
 
     private async Task<(
         bool PrimaryClaimedElsewhere,
-        List<CommonStockCusipAlias> Aliases,
-        List<CommonStockListedCusip> Listings
+        List<EquityIssuerCusipAlias> Aliases,
+        List<EquityListingCusipEvidence> Listings
     )> GetDisplacedCusipClaims(CommonStock commonStock, string previousCusip)
     {
         var normalized = previousCusip.ToUpperInvariant();
@@ -652,14 +652,14 @@ public class CommonStockManager
         string displacedTicker,
         (
             bool PrimaryClaimedElsewhere,
-            List<CommonStockCusipAlias> Aliases,
-            List<CommonStockListedCusip> Listings
+            List<EquityIssuerCusipAlias> Aliases,
+            List<EquityListingCusipEvidence> Listings
         ) claims
     ) =>
         !claims.PrimaryClaimedElsewhere
-        && claims.Aliases.All(alias => alias.CommonStockId == commonStock.Id)
+        && claims.Aliases.All(alias => alias.EquityIssuerId == commonStock.Id)
         && claims.Listings.All(listing =>
-            listing.CommonStockId == commonStock.Id
+            listing.EquityIssuerId == commonStock.Id
             && string.Equals(
                 listing.ListedTicker,
                 displacedTicker,
@@ -683,7 +683,7 @@ public class CommonStockManager
         if (!alreadyClaimed)
         {
             _commonStockRepository.AddCusipAlias(
-                new CommonStockCusipAlias { CommonStockId = commonStock.Id, Cusip = normalized }
+                new EquityIssuerCusipAlias { EquityIssuerId = commonStock.Id, Cusip = normalized }
             );
         }
     }
@@ -780,7 +780,7 @@ public class CommonStockManager
     }
 
     /// <summary>
-    /// Stages a <see cref="CommonStockTickerAlias"/> for a primary ticker the stock is
+    /// Stages a <see cref="EquityIssuerTickerAlias"/> for a primary ticker the stock is
     /// abandoning, so URLs published under the old symbol can 301 to the current one.
     /// Stages only — no SaveChanges: the caller is the SEC sync mid-rename, and the alias
     /// must commit (or roll back) atomically with the rename itself.
@@ -796,7 +796,7 @@ public class CommonStockManager
     /// Returns the staged entity, or null when nothing was staged, so the caller can
     /// detach it if the surrounding update is rolled back.
     /// </summary>
-    public async Task<CommonStockTickerAlias> RecordTickerAlias(
+    public async Task<EquityIssuerTickerAlias> RecordTickerAlias(
         CommonStock commonStock,
         string retiredTicker
     )
@@ -872,7 +872,7 @@ public class CommonStockManager
             .FirstOrDefaultAsync(a => a.Ticker == normalized);
         if (existing != null)
         {
-            if (existing.CommonStockId == commonStock.Id)
+            if (existing.EquityIssuerId == commonStock.Id)
             {
                 return null;
             }
@@ -880,7 +880,7 @@ public class CommonStockManager
         }
 
         return _commonStockRepository.AddTickerAlias(
-            new CommonStockTickerAlias { CommonStockId = commonStock.Id, Ticker = normalized }
+            new EquityIssuerTickerAlias { EquityIssuerId = commonStock.Id, Ticker = normalized }
         );
     }
 

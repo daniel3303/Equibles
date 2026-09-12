@@ -305,7 +305,7 @@ public class CorporateActionPriceReconciliationManager
             );
             if (
                 listing == null
-                || listing.CommonStockId != stock.Id
+                || listing.EquityIssuerId != stock.Id
                 || listing.ListedTicker != selectedSeries.ListedTicker
                 || listing.DelistedOn != expectedDelistedOn
             )

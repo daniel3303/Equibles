@@ -46,7 +46,7 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
     public IQueryable<LegacyEquityListing> GetLegacyIdentity(Guid listingId) =>
         DbContext.Set<LegacyEquityListing>().Where(mapping => mapping.EquityListingId == listingId);
 
-    public IQueryable<EquityDailyStockPrice> GetLegacySeries() =>
+    public virtual IQueryable<EquityDailyStockPrice> GetLegacySeries() =>
         GetAllSeries()
             .Where(price =>
                 DbContext

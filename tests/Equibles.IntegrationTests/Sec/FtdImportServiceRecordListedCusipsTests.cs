@@ -133,8 +133,8 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
 
         recorded.Should().Be(1);
         using var verify = FreshContext();
-        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
-        listing.CommonStockId.Should().Be(alphabet.Id);
+        var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        listing.EquityIssuerId.Should().Be(alphabet.Id);
         listing.ListedTicker.Should().Be("GOOG");
         listing.Cusip.Should().Be("02079K107");
     }
@@ -165,8 +165,8 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
 
         recorded.Should().Be(1);
         using var verify = FreshContext();
-        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
-        listing.CommonStockId.Should().Be(ishares.Id);
+        var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        listing.EquityIssuerId.Should().Be(ishares.Id);
         listing.ListedTicker.Should().Be("IVV");
         listing.Cusip.Should().Be("464287200");
     }
@@ -196,8 +196,8 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
 
         recorded.Should().Be(1);
         using var verify = FreshContext();
-        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
-        listing.CommonStockId.Should().Be(fund.Id);
+        var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        listing.EquityIssuerId.Should().Be(fund.Id);
         listing.ListedTicker.Should().Be("ETF1");
         listing.Cusip.Should().Be("33333R107");
     }
@@ -230,7 +230,7 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
 
         recorded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStockListedCusip>().AnyAsync()).Should().BeFalse();
+        (await verify.Set<EquityListingCusipEvidence>().AnyAsync()).Should().BeFalse();
     }
 
     [Fact]
@@ -259,6 +259,6 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
 
         recorded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStockListedCusip>().AnyAsync()).Should().BeFalse();
+        (await verify.Set<EquityListingCusipEvidence>().AnyAsync()).Should().BeFalse();
     }
 }

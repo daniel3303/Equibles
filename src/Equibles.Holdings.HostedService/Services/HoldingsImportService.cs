@@ -491,9 +491,9 @@ public class HoldingsImportService
         var cusipAliases = await stockRepo
             .GetCusipAliases()
             .Where(a =>
-                uniqueCusipsList.Contains(a.Cusip) && stockIdsQuery.Contains(a.CommonStockId)
+                uniqueCusipsList.Contains(a.Cusip) && stockIdsQuery.Contains(a.EquityIssuerId)
             )
-            .Select(a => new { a.CommonStockId, a.Cusip })
+            .Select(a => new { a.EquityIssuerId, a.Cusip })
             .ToListAsync(cancellationToken);
 
         // The filer's OTHER listed securities (sibling share classes, units) carry their own
@@ -502,11 +502,11 @@ public class HoldingsImportService
         var listedCusips = await stockRepo
             .GetListedCusips()
             .Where(l =>
-                uniqueCusipsList.Contains(l.Cusip) && stockIdsQuery.Contains(l.CommonStockId)
+                uniqueCusipsList.Contains(l.Cusip) && stockIdsQuery.Contains(l.EquityIssuerId)
             )
             .Select(l => new
             {
-                l.CommonStockId,
+                l.EquityIssuerId,
                 l.ListedTicker,
                 l.Cusip,
             })
@@ -524,7 +524,7 @@ public class HoldingsImportService
             var listedTicker = string.IsNullOrWhiteSpace(listed.ListedTicker)
                 ? null
                 : listed.ListedTicker;
-            cusipMapping[listed.Cusip] = new CusipTarget(listed.CommonStockId, listedTicker);
+            cusipMapping[listed.Cusip] = new CusipTarget(listed.EquityIssuerId, listedTicker);
         }
         var listedClaims = new HashSet<string>(
             listedCusips.Select(l => l.Cusip),
@@ -539,7 +539,7 @@ public class HoldingsImportService
                 cusipMapping.Remove(alias.Cusip);
                 continue;
             }
-            cusipMapping[alias.Cusip] = new CusipTarget(alias.CommonStockId, null);
+            cusipMapping[alias.Cusip] = new CusipTarget(alias.EquityIssuerId, null);
         }
         if (contested.Count > 0)
         {

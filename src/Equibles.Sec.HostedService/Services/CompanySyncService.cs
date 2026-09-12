@@ -332,7 +332,7 @@ public class CompanySyncService : ICompanySyncService
             // so only this rename's pending entries can be in these states.
             foreach (
                 var aliasEntry in state
-                    .DbContext.ChangeTracker.Entries<CommonStockTickerAlias>()
+                    .DbContext.ChangeTracker.Entries<EquityIssuerTickerAlias>()
                     .Where(e => e.State is EntityState.Added or EntityState.Deleted)
                     .ToList()
             )

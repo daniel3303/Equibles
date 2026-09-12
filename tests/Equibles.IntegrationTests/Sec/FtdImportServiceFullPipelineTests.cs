@@ -220,7 +220,7 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
 
         await using var verify = _fixture.CreateDbContext();
         (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R209");
-        (await verify.Set<CommonStockCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
+        (await verify.Set<EquityIssuerCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
         var storedFtd = await verify.Set<FailToDeliver>().SingleAsync();
         storedFtd.SettlementDate.Should().Be(latestSettledDate);
         storedFtd.Quantity.Should().Be(777);
@@ -322,7 +322,7 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
 
         await using var verify = _fixture.CreateDbContext();
         (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R209");
-        (await verify.Set<CommonStockCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
+        (await verify.Set<EquityIssuerCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
         var storedFtd = await verify.Set<FailToDeliver>().SingleAsync();
         storedFtd.SettlementDate.Should().Be(latestSettledDate);
         storedFtd.Quantity.Should().Be(777);

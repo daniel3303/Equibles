@@ -15,10 +15,30 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
             .IsRequired()
             .HasDefaultValueSql("'{}'::text[]");
         commonStock.HasIndex(stock => stock.Ticker).IsUnique().HasFilter("\"Active\"");
-        builder.Entity<CommonStockCusipAlias>();
-        builder.Entity<CommonStockDelistedListing>();
-        builder.Entity<CommonStockListedCusip>();
-        builder.Entity<CommonStockTickerAlias>();
+        builder
+            .Entity<EquityIssuerCusipAlias>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<EquityListingRetirementEvidence>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<EquityListingCusipEvidence>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<EquityIssuerTickerAlias>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder
             .Entity<EquityIssuerTickerEvidence>()
             .HasOne(row => row.Issuer)

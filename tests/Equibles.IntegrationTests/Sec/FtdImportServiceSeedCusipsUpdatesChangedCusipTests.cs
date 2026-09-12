@@ -27,7 +27,7 @@ namespace Equibles.IntegrationTests.Sec;
 /// CUSIP nothing mapped, and the stock's holder count silently collapsed to the
 /// laggard filers still using the old CUSIP. Pin the change-detection contract:
 /// (1) a changed FTD CUSIP updates the stored stock, (2) the retired CUSIP is
-/// recorded as a <see cref="CommonStockCusipAlias"/> so old filings keep
+/// recorded as a <see cref="EquityIssuerCusipAlias"/> so old filings keep
 /// resolving, (3) StockCusipChanged is published so Holdings backfills, and
 /// (4) the per-symbol CUSIP is resolved by LATEST SETTLEMENT DATE — a
 /// transition file carries both CUSIPs, and neither first-row-wins nor
@@ -155,9 +155,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         var persisted = await verify.Set<CommonStock>().FirstAsync(s => s.Id == stock.Id);
         persisted.Cusip.Should().Be("113006100");
 
-        var alias = await verify.Set<CommonStockCusipAlias>().SingleAsync();
+        var alias = await verify.Set<EquityIssuerCusipAlias>().SingleAsync();
         alias.Cusip.Should().Be("11259V106");
-        alias.CommonStockId.Should().Be(stock.Id);
+        alias.EquityIssuerId.Should().Be(stock.Id);
     }
 
     [Fact]
@@ -174,8 +174,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockCusipAlias>()
-                .Add(new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "60871R209" });
+            seed.Set<EquityIssuerCusipAlias>()
+                .Add(new EquityIssuerCusipAlias { EquityIssuerId = stock.Id, Cusip = "60871R209" });
             await seed.SaveChangesAsync();
         }
 
@@ -189,7 +189,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         seeded.Should().Be(1);
         using var verify = FreshContext();
         (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R209");
-        (await verify.Set<CommonStockCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
+        (await verify.Set<EquityIssuerCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
         await bus.Received(1)
             .Publish(
                 Arg.Is<StockCusipChanged>(change =>
@@ -233,7 +233,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         seeded.Should().Be(0);
         using var verify = FreshContext();
         (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R100");
-        (await verify.Set<CommonStockCusipAlias>().AnyAsync()).Should().BeFalse();
+        (await verify.Set<EquityIssuerCusipAlias>().AnyAsync()).Should().BeFalse();
         await bus.DidNotReceive()
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
     }
@@ -252,11 +252,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockListedCusip>()
+            seed.Set<EquityListingCusipEvidence>()
                 .Add(
-                    new CommonStockListedCusip
+                    new EquityListingCusipEvidence
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         ListedTicker = "BF-B",
                         Cusip = "115637209",
                     }
@@ -277,10 +277,10 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         seeded.Should().Be(1);
         using var verify = FreshContext();
         (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("115637209");
-        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
+        var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
         listing.ListedTicker.Should().Be("BF-A");
         listing.Cusip.Should().Be("115637100");
-        (await verify.Set<CommonStockCusipAlias>().AnyAsync()).Should().BeFalse();
+        (await verify.Set<EquityIssuerCusipAlias>().AnyAsync()).Should().BeFalse();
     }
 
     [Fact]
@@ -297,11 +297,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockListedCusip>()
+            seed.Set<EquityListingCusipEvidence>()
                 .Add(
-                    new CommonStockListedCusip
+                    new EquityListingCusipEvidence
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         ListedTicker = "BF-B",
                         Cusip = "115637209",
                     }
@@ -318,7 +318,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         seeded.Should().Be(0);
         using var verify = FreshContext();
         (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("115637100");
-        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
+        var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
         listing.ListedTicker.Should().Be("BF-B");
         listing.Cusip.Should().Be("115637209");
     }
@@ -337,11 +337,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockListedCusip>()
+            seed.Set<EquityListingCusipEvidence>()
                 .Add(
-                    new CommonStockListedCusip
+                    new EquityListingCusipEvidence
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         ListedTicker = "BF-B",
                         Cusip = "115637209",
                     }
@@ -362,7 +362,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         seeded.Should().Be(0);
         using var verify = FreshContext();
         (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("115637100");
-        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
+        var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
         listing.ListedTicker.Should().Be("BF-B");
         listing.Cusip.Should().Be("115637209");
     }
@@ -388,17 +388,17 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.AddRange(stock, foreign);
-            seed.Set<CommonStockListedCusip>()
+            seed.Set<EquityListingCusipEvidence>()
                 .AddRange(
-                    new CommonStockListedCusip
+                    new EquityListingCusipEvidence
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         ListedTicker = "BF-B",
                         Cusip = "11563R209",
                     },
-                    new CommonStockListedCusip
+                    new EquityListingCusipEvidence
                     {
-                        CommonStockId = foreign.Id,
+                        EquityIssuerId = foreign.Id,
                         ListedTicker = "OTHER-A",
                         Cusip = "11563r209",
                     }
@@ -420,7 +420,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
             .Cusip.Should()
             .Be("11563R100");
-        (await verify.Set<CommonStockListedCusip>().CountAsync()).Should().Be(2);
+        (await verify.Set<EquityListingCusipEvidence>().CountAsync()).Should().Be(2);
     }
 
     [Fact]
@@ -436,9 +436,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             DelistedOn = new DateOnly(2020, 6, 30),
             HistoricalCusipBackfillRequestedAt = DateTime.UtcNow,
         };
-        var listing = new CommonStockDelistedListing
+        var listing = new EquityListingRetirementEvidence
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ListedTicker = stock.Ticker,
             DelistedOn = stock.DelistedOn.Value,
             HistoricalCusipBackfillRequestedAt = stock.HistoricalCusipBackfillRequestedAt,
@@ -449,7 +449,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockDelistedListing>().Add(listing);
+            seed.Set<EquityListingRetirementEvidence>().Add(listing);
             await seed.SaveChangesAsync();
         }
 
@@ -495,7 +495,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         using var verify = FreshContext();
         var persisted = await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id);
         persisted.Cusip.Should().Be("123456789");
-        (await verify.Set<CommonStockDelistedListing>().SingleAsync(row => row.Id == listing.Id))
+        (
+            await verify
+                .Set<EquityListingRetirementEvidence>()
+                .SingleAsync(row => row.Id == listing.Id)
+        )
             .Cusip.Should()
             .Be("123456789");
         await bus.Received(1)
@@ -520,9 +524,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             DelistedOn = new DateOnly(2020, 6, 30),
             HistoricalCusipBackfillRequestedAt = requestedAt,
         };
-        var listing = new CommonStockDelistedListing
+        var listing = new EquityListingRetirementEvidence
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ListedTicker = stock.Ticker,
             DelistedOn = stock.DelistedOn.Value,
             HistoricalCusipBackfillRequestedAt = requestedAt,
@@ -532,7 +536,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockDelistedListing>().Add(listing);
+            seed.Set<EquityListingRetirementEvidence>().Add(listing);
             await seed.SaveChangesAsync();
         }
 
@@ -572,9 +576,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             DelistedOn = new DateOnly(2020, 6, 30),
             HistoricalCusipBackfillRequestedAt = requestedAt,
         };
-        var listing = new CommonStockDelistedListing
+        var listing = new EquityListingRetirementEvidence
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ListedTicker = stock.Ticker,
             DelistedOn = stock.DelistedOn.Value,
             HistoricalCusipBackfillRequestedAt = requestedAt,
@@ -584,7 +588,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockDelistedListing>().Add(listing);
+            seed.Set<EquityListingRetirementEvidence>().Add(listing);
             await seed.SaveChangesAsync();
         }
 
@@ -607,7 +611,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
             .Cusip.Should()
             .BeNull();
-        (await verify.Set<CommonStockDelistedListing>().SingleAsync(row => row.Id == listing.Id))
+        (
+            await verify
+                .Set<EquityListingRetirementEvidence>()
+                .SingleAsync(row => row.Id == listing.Id)
+        )
             .Cusip.Should()
             .BeNull();
         await bus.DidNotReceive()
@@ -625,9 +633,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             Cik = "0000000042",
             Cusip = "111111111",
         };
-        var listing = new CommonStockDelistedListing
+        var listing = new EquityListingRetirementEvidence
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ListedTicker = "OLD",
             DelistedOn = new DateOnly(2020, 6, 30),
             HistoricalCusipBackfillRequestedAt = requestedAt,
@@ -637,7 +645,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockDelistedListing>().Add(listing);
+            seed.Set<EquityListingRetirementEvidence>().Add(listing);
             await seed.SaveChangesAsync();
         }
 
@@ -657,11 +665,15 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(1);
         using var verify = FreshContext();
-        var exact = await verify.Set<CommonStockListedCusip>().SingleAsync();
-        exact.CommonStockId.Should().Be(stock.Id);
+        var exact = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        exact.EquityIssuerId.Should().Be(stock.Id);
         exact.ListedTicker.Should().Be("OLD");
         exact.Cusip.Should().Be("222222222");
-        (await verify.Set<CommonStockDelistedListing>().SingleAsync(row => row.Id == listing.Id))
+        (
+            await verify
+                .Set<EquityListingRetirementEvidence>()
+                .SingleAsync(row => row.Id == listing.Id)
+        )
             .Cusip.Should()
             .Be("222222222");
     }
@@ -678,9 +690,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             Active = false,
             DelistedOn = new DateOnly(2020, 6, 30),
         };
-        var listing = new CommonStockDelistedListing
+        var listing = new EquityListingRetirementEvidence
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ListedTicker = stock.Ticker,
             DelistedOn = stock.DelistedOn.Value,
             HistoricalCusipBackfillRequestedAt = requestedAt,
@@ -690,12 +702,12 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockDelistedListing>().Add(listing);
-            seed.Set<CommonStockListedCusip>()
+            seed.Set<EquityListingRetirementEvidence>().Add(listing);
+            seed.Set<EquityListingCusipEvidence>()
                 .Add(
-                    new CommonStockListedCusip
+                    new EquityListingCusipEvidence
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         ListedTicker = "SIBLING",
                         Cusip = "222222222",
                     }
@@ -721,7 +733,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
             .Cusip.Should()
             .BeNull();
-        (await verify.Set<CommonStockDelistedListing>().SingleAsync(row => row.Id == listing.Id))
+        (
+            await verify
+                .Set<EquityListingRetirementEvidence>()
+                .SingleAsync(row => row.Id == listing.Id)
+        )
             .HistoricalCusipBackfillAmbiguous.Should()
             .BeTrue();
     }
@@ -737,9 +753,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             Cik = "0000000042",
             Cusip = "222222222",
         };
-        var listing = new CommonStockDelistedListing
+        var listing = new EquityListingRetirementEvidence
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ListedTicker = "OLD",
             DelistedOn = new DateOnly(2020, 6, 30),
             HistoricalCusipBackfillRequestedAt = requestedAt,
@@ -749,7 +765,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockDelistedListing>().Add(listing);
+            seed.Set<EquityListingRetirementEvidence>().Add(listing);
             await seed.SaveChangesAsync();
         }
 
@@ -768,9 +784,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStockListedCusip>().AnyAsync()).Should().BeFalse();
+        (await verify.Set<EquityListingCusipEvidence>().AnyAsync()).Should().BeFalse();
         var persisted = await verify
-            .Set<CommonStockDelistedListing>()
+            .Set<EquityListingRetirementEvidence>()
             .SingleAsync(row => row.Id == listing.Id);
         persisted.Cusip.Should().BeNull();
         persisted.HistoricalCusipBackfillAmbiguous.Should().BeTrue();
@@ -796,9 +812,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             Active = false,
             DelistedOn = settlementDate,
         };
-        var listing = new CommonStockDelistedListing
+        var listing = new EquityListingRetirementEvidence
         {
-            CommonStockId = historical.Id,
+            EquityIssuerId = historical.Id,
             ListedTicker = historical.Ticker,
             DelistedOn = settlementDate,
         };
@@ -839,7 +855,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         (await verify.Set<CommonStock>().SingleAsync(stock => stock.Id == owner.Id))
             .Cusip.Should()
             .Be(contestedCusip);
-        (await verify.Set<CommonStockDelistedListing>().SingleAsync(row => row.Id == listing.Id))
+        (
+            await verify
+                .Set<EquityListingRetirementEvidence>()
+                .SingleAsync(row => row.Id == listing.Id)
+        )
             .Cusip.Should()
             .BeNull();
     }
@@ -858,8 +878,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Add(stock);
-            seed.Set<CommonStockCusipAlias>()
-                .Add(new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "60871R209" });
+            seed.Set<EquityIssuerCusipAlias>()
+                .Add(new EquityIssuerCusipAlias { EquityIssuerId = stock.Id, Cusip = "60871R209" });
             await seed.SaveChangesAsync();
         }
 
@@ -888,7 +908,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
             .Cusip.Should()
             .Be("60871R217");
-        (await verify.Set<CommonStockCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R209");
+        (await verify.Set<EquityIssuerCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R209");
         await bus.DidNotReceive()
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
     }
@@ -913,10 +933,10 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.AddRange(stock, foreign);
-            seed.Set<CommonStockCusipAlias>()
+            seed.Set<EquityIssuerCusipAlias>()
                 .AddRange(
-                    new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "60871r209" },
-                    new CommonStockCusipAlias { CommonStockId = foreign.Id, Cusip = "60871R209" }
+                    new EquityIssuerCusipAlias { EquityIssuerId = stock.Id, Cusip = "60871r209" },
+                    new EquityIssuerCusipAlias { EquityIssuerId = foreign.Id, Cusip = "60871R209" }
                 );
             await seed.SaveChangesAsync();
         }
@@ -932,7 +952,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
             .Cusip.Should()
             .Be("60871R100");
-        (await verify.Set<CommonStockCusipAlias>().CountAsync()).Should().Be(2);
+        (await verify.Set<EquityIssuerCusipAlias>().CountAsync()).Should().Be(2);
         await bus.DidNotReceive()
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
     }
@@ -1056,11 +1076,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             seed.Set<CommonStock>().AddRange(target, owner);
             if (listingClaim)
             {
-                seed.Set<CommonStockListedCusip>()
+                seed.Set<EquityListingCusipEvidence>()
                     .Add(
-                        new CommonStockListedCusip
+                        new EquityListingCusipEvidence
                         {
-                            CommonStockId = owner.Id,
+                            EquityIssuerId = owner.Id,
                             ListedTicker = "OWNER-A",
                             Cusip = "222222222",
                         }
@@ -1068,9 +1088,13 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             }
             else
             {
-                seed.Set<CommonStockCusipAlias>()
+                seed.Set<EquityIssuerCusipAlias>()
                     .Add(
-                        new CommonStockCusipAlias { CommonStockId = owner.Id, Cusip = "222222222" }
+                        new EquityIssuerCusipAlias
+                        {
+                            EquityIssuerId = owner.Id,
+                            Cusip = "222222222",
+                        }
                     );
             }
             await seed.SaveChangesAsync();
@@ -1183,7 +1207,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
 
         using var verify = FreshContext();
-        (await verify.Set<CommonStockCusipAlias>().AnyAsync()).Should().BeFalse();
+        (await verify.Set<EquityIssuerCusipAlias>().AnyAsync()).Should().BeFalse();
     }
 
     private FtdImportService CreateSut(IBus bus)
@@ -1250,7 +1274,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     }
 
     private static void StageHistoricalCusip(
-        CommonStockDelistedListing listing,
+        EquityListingRetirementEvidence listing,
         string cusip,
         DateOnly settlementDate,
         DateTime sweepStartedAt

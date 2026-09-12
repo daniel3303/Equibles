@@ -157,3 +157,12 @@
 - Native-only foreign series remain isolated even when they share an issuer and ticker with a U.S. series.
 - The finite retirement cohort is every exact legacy price and every unattributed legacy price; `scripts/verify-native-equity-prices.sql` compares complete rows in both directions before retirement.
 - Remove both old price tables, old model mappings, translation methods, and temporary synchronization functions after all old binaries are gone and reconciliation passes; recurring provider repair and reconciliation remain active.
+
+## Native directory identity evidence
+
+- Retired issuer CUSIPs, source-stated secondary CUSIPs, retired ticker aliases, and delisting observations reference native issuers through restrictive foreign keys.
+- The migration changes only ownership constraints; all source row IDs, symbols, CUSIPs, dates, ambiguous candidate arrays, and importer checkpoints remain byte-for-byte equivalent.
+- Identifier evidence remains distinct from an asserted security identity; an issuer-level historical claim cannot establish an otherwise unknown share class.
+- `scripts/verify-native-directory-evidence.sql` requires zero missing issuers and four validated restrictive constraints.
+- Historical price completion reads the exact native listing checkpoint; another venue's matching symbol cannot complete the source series.
+- Physical legacy table/column names and compatibility triggers retire with the final directory cutover; source evidence and URL aliases remain preserved in native storage.

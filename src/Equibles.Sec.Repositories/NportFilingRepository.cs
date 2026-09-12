@@ -49,7 +49,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
 
     /// <summary>
     /// The reported holding rows carrying the stock's current CUSIP or any of its retired-CUSIP
-    /// aliases (<see cref="CommonStockCusipAlias"/>), across all NPORT filings. After an issuer-level
+    /// aliases (<see cref="EquityIssuerCusipAlias"/>), across all NPORT filings. After an issuer-level
     /// CUSIP change a fund keeps reporting the position under the old CUSIP — a laggard filer for a
     /// quarter or two, and every historical report forever — so the reverse lookup must match the
     /// alias too, mirroring the 13F import-time alias union, or the fund reads as having exited.
@@ -69,7 +69,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     /// <summary>
     /// Holdings carrying the exact listed security's authoritative CUSIP identity. A primary
     /// listing uses the stock's current and retired CUSIPs; a secondary listing uses only its
-    /// <see cref="CommonStockListedCusip"/> rows, so sibling fund series never bleed together.
+    /// <see cref="EquityListingCusipEvidence"/> rows, so sibling fund series never bleed together.
     /// </summary>
     public IQueryable<NportHolding> GetHoldingsByListingCusip(
         CommonStock stock,
@@ -94,8 +94,8 @@ public class NportFilingRepository : BaseRepository<NportFiling>
         );
         return isPrimary
             ? DbContext
-                .Set<CommonStockCusipAlias>()
-                .Where(a => a.CommonStockId == stock.Id)
+                .Set<EquityIssuerCusipAlias>()
+                .Where(a => a.EquityIssuerId == stock.Id)
                 .Select(a => a.Cusip)
                 .Union(
                     DbContext
@@ -104,8 +104,8 @@ public class NportFilingRepository : BaseRepository<NportFiling>
                         .Select(s => s.Cusip)
                 )
             : DbContext
-                .Set<CommonStockListedCusip>()
-                .Where(c => c.CommonStockId == stock.Id && c.ListedTicker == listedTicker)
+                .Set<EquityListingCusipEvidence>()
+                .Where(c => c.EquityIssuerId == stock.Id && c.ListedTicker == listedTicker)
                 .Select(c => c.Cusip);
     }
 

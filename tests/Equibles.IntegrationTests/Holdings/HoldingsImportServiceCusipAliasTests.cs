@@ -28,7 +28,7 @@ namespace Equibles.IntegrationTests.Holdings;
 /// Class A conversion retired 11259V106 for 113006100, and until aliases
 /// existed, whichever CUSIP was NOT stored on the stock silently dropped at
 /// BuildCusipMapping. Pin both resolution rules: (1) a retired CUSIP maps via
-/// its <see cref="CommonStockCusipAlias"/> row, (2) a stock's CURRENT CUSIP
+/// its <see cref="EquityIssuerCusipAlias"/> row, (2) a stock's CURRENT CUSIP
 /// wins over another stock's alias claiming the same CUSIP.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -146,8 +146,8 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         using (var seed = FreshContext())
         {
             seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockCusipAlias>()
-                .Add(new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "11259V106" });
+            seed.Set<EquityIssuerCusipAlias>()
+                .Add(new EquityIssuerCusipAlias { EquityIssuerId = stock.Id, Cusip = "11259V106" });
             await seed.SaveChangesAsync();
         }
 
@@ -264,8 +264,10 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         using (var seed = FreshContext())
         {
             seed.Set<CommonStock>().AddRange(stockA, stockB);
-            seed.Set<CommonStockCusipAlias>()
-                .Add(new CommonStockCusipAlias { CommonStockId = stockB.Id, Cusip = "999999999" });
+            seed.Set<EquityIssuerCusipAlias>()
+                .Add(
+                    new EquityIssuerCusipAlias { EquityIssuerId = stockB.Id, Cusip = "999999999" }
+                );
             await seed.SaveChangesAsync();
         }
 

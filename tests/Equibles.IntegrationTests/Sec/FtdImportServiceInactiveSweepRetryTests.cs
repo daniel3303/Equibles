@@ -38,11 +38,11 @@ public class FtdImportServiceInactiveSweepRetryTests
             DelistedOn = new DateOnly(2020, 6, 30),
         };
         db.Set<CommonStock>().Add(stock);
-        db.Set<CommonStockDelistedListing>()
+        db.Set<EquityListingRetirementEvidence>()
             .Add(
-                new CommonStockDelistedListing
+                new EquityListingRetirementEvidence
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ListedTicker = stock.Ticker,
                     DelistedOn = stock.DelistedOn.Value,
                     HistoricalCusipBackfillRequestedAt = DateTime.UtcNow.AddMinutes(-1),
