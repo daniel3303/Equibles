@@ -61,3 +61,13 @@
 - Validate ISIN check digits and LEI MOD 97-10 at both source and native-import boundaries; malformed related identifiers cannot establish ownership through an embedded CUSIP.
 - `EquityMarkets:LisbonEnabled` (`EQUITY_MARKETS_LISBON_ENABLED` in Compose) enables daily source reconciliation; unresolved records retry after fifteen minutes without deleting retained identities.
 - Enable the worker only after native migrations and exchange-qualified MVC surfaces have passed verification; source acquisition and import alone do not complete the whole-database cutover.
+
+## Corporate action source listings
+
+- Actions retain their original issuer, symbol, amounts, dates, provenance, and applied markers; nullable listing identity preserves unresolvable historical evidence.
+- Backfill a split only when its exact recorded U.S. symbol or alias identifies one listing and no second retained event claims that listing/date.
+- Historical dividends have no recorded listing or currency; leave both absent until source-backed capture supplies a separate attributed observation.
+- Exact native actions are unique per listing/date; unattributed source rows retain their original uniqueness without blocking another venue.
+- Recorded listing attribution is immutable, and reverse directory changes cannot invalidate an action's ownership or dividend denomination.
+- Action validation locks its listing/security while checking ownership; native reads select an exact listing and never include sibling or unattributed events.
+- Capture and reconciliation consumers must complete their native transition before foreign price writes are enabled.

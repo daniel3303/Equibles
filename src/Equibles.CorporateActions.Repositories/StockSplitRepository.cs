@@ -15,6 +15,9 @@ public class StockSplitRepository : BaseRepository<StockSplit>
         return GetAll().Where(s => s.EquityIssuerId == commonStockId);
     }
 
+    public IQueryable<StockSplit> GetByListing(Guid listingId) =>
+        GetAll().Where(row => row.EquityListingId == listingId);
+
     /// <summary>
     /// The stock's splits already effective as of <paramref name="asOf"/> — the set every
     /// read-time restatement must use. Split rows are captured at announcement, ahead of their

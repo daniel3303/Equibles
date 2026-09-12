@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,6 @@ namespace Equibles.CorporateActions.Data.Models;
 /// declared cash amount per share. The (stock, ex-date) pair is unique — it is
 /// the idempotency guard for the capture upsert.
 /// </summary>
-[Index(nameof(EquityIssuerId), nameof(ExDate), IsUnique = true)]
 [Index(nameof(PriceAdjustmentAppliedTime))]
 public class CashDividend
 {
@@ -20,6 +20,13 @@ public class CashDividend
     [Column("CommonStockId")]
     public Guid EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
+
+    // Earlier captures did not retain the source listing or denomination.
+    public Guid? EquityListingId { get; set; }
+    public virtual EquityListing Listing { get; set; }
+
+    [MaxLength(3)]
+    public string Currency { get; set; }
 
     public DateOnly ExDate { get; set; }
 

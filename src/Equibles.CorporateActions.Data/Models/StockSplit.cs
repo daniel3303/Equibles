@@ -22,6 +22,10 @@ public class StockSplit
     public Guid EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
 
+    // Null retains historical evidence whose exact source listing cannot be proved.
+    public Guid? EquityListingId { get; set; }
+    public virtual EquityListing Listing { get; set; }
+
     /// <summary>
     /// The exact listed ticker whose Yahoo series produced this issuer-level action. The price
     /// reconciliation lane uses it instead of whichever symbol is primary later. Null preserves
