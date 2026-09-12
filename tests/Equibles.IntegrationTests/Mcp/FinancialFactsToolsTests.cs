@@ -130,6 +130,8 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
                 new StockSplit
                 {
                     EquityIssuerId = stock.Id,
+                    EquityListingId = stock.Presentation.EquityListingId,
+                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                     EffectiveDate = new DateOnly(2022, 7, 18),
                     Numerator = 20m,
                     Denominator = 1m,

@@ -97,6 +97,8 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
                 new StockSplit
                 {
                     EquityIssuerId = stock.Id,
+                    EquityListingId = stock.Presentation.EquityListingId,
+                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                     EffectiveDate = new DateOnly(2025, 1, 15),
                     Numerator = 2m,
                     Denominator = 1m,

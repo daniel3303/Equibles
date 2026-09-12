@@ -296,8 +296,12 @@ public class Form144ProposedSalesToolTests : IDisposable
         result.Should().Contain("| - |");
     }
 
-    [Fact]
-    public async Task GetForm144ProposedSales_NoticeBeforeSplit_PercentUsesTheSplitAdjustedShareCount()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetForm144ProposedSales_NoticeBeforeSplit_PercentRequiresAttributedShareBasis(
+        bool attributed
+    )
     {
         // The filed share count sits on the pre-split basis while the issuer record's
         // count is current — restate the numerator so the ratio compares like with like
@@ -309,6 +313,8 @@ public class Form144ProposedSalesToolTests : IDisposable
                 new StockSplit
                 {
                     EquityIssuerId = stock.Id,
+                    EquityListingId = attributed ? stock.Presentation.EquityListingId : null,
+                    PriceSeriesTicker = attributed ? stock.Presentation.Listing.Ticker : null,
                     EffectiveDate = new DateOnly(2026, 3, 1),
                     Numerator = 10,
                     Denominator = 1,
@@ -323,7 +329,16 @@ public class Form144ProposedSalesToolTests : IDisposable
 
         // The Shares column stays as filed; only the percent numerator is restated.
         result.Should().Contain("| 10,000 |");
-        result.Should().Contain("| 0.005% |");
+        if (attributed)
+        {
+            result.Should().Contain("| 0.005% |");
+        }
+        else
+        {
+            result.Should().Contain("| $3,000,000 | - |");
+            result.Should().Contain("Unresolved split attribution");
+            result.Should().NotContain("0.0005%");
+        }
     }
 
     [Fact]

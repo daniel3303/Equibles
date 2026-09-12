@@ -561,8 +561,9 @@ public class InsiderTradingTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
+                var allSplits = splits;
                 splits = PriceSeriesSplitScope.ForListing(
-                    splits,
+                    allSplits,
                     stock.Presentation.Listing.Ticker,
                     stock.Presentation.Listing.Ticker
                 );
@@ -583,17 +584,39 @@ public class InsiderTradingTools
                         // Remarks is where a filer states the sale runs under a 10b5-1 plan, which
                         // is the difference between pre-scheduled and discretionary selling. Keep
                         // the complete filed text — a plan disclosure can occur at the end.
-                        var percentOfOutstanding = FormatPercentOfOutstanding(
-                            SplitAdjustment.AdjustShareCount(
-                                f.SharesToBeSold,
-                                f.FilingDate,
-                                splits
-                            ),
-                            stock.Presentation.Listing.Security.SharesOutstanding
-                        );
+                        var percentOfOutstanding = PriceSeriesSplitScope.HasUnresolvedBasis(
+                            allSplits,
+                            stock.Presentation.Listing.Ticker,
+                            f.FilingDate
+                        )
+                            ? "-"
+                            : FormatPercentOfOutstanding(
+                                SplitAdjustment.AdjustShareCount(
+                                    f.SharesToBeSold,
+                                    f.FilingDate,
+                                    splits
+                                ),
+                                stock.Presentation.Listing.Security.SharesOutstanding
+                            );
                         return $"| {f.FilingDate:yyyy-MM-dd} | {MarkdownTable.EscapeCell(f.SellerName, "-")} | {MarkdownTable.EscapeCell(f.RelationshipToIssuer, "-")} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {percentOfOutstanding} | {approxSaleDate} | {MarkdownTable.EscapeCell(f.BrokerName, "-")} | {MarkdownTable.EscapeCell(f.Remarks, "-")} |";
                     }
                 );
+
+                if (
+                    filings.Any(f =>
+                        PriceSeriesSplitScope.HasUnresolvedBasis(
+                            allSplits,
+                            stock.Presentation.Listing.Ticker,
+                            f.FilingDate
+                        )
+                    )
+                )
+                {
+                    result.AppendLine();
+                    result.AppendLine(
+                        "Unresolved split attribution prevents a current-basis percentage; proposed shares and market values remain as filed."
+                    );
+                }
 
                 var note = McpOutput.PagedTruncationNote(filings.Count, totalCount, offset);
                 if (note.Length > 0)

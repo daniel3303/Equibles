@@ -212,6 +212,8 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
                 new StockSplit
                 {
                     EquityIssuerId = stock.Id,
+                    EquityListingId = stock.Presentation.EquityListingId,
+                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                     EffectiveDate = new DateOnly(2026, 3, 1),
                     Numerator = 10m,
                     Denominator = 1m,

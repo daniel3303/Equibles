@@ -55,6 +55,8 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
             new StockSplit
             {
                 EquityIssuerId = apple.Id,
+                EquityListingId = apple.Presentation.EquityListingId,
+                PriceSeriesTicker = apple.Presentation.Listing.Ticker,
                 EffectiveDate = new DateOnly(2024, 11, 15),
                 Numerator = 2,
                 Denominator = 1,

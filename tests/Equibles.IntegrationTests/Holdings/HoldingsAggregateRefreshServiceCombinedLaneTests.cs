@@ -145,6 +145,8 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
             new StockSplit
             {
                 EquityIssuerId = stock.Id,
+                EquityListingId = stock.Presentation.EquityListingId,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = OpenPrev.AddDays(30),
                 Numerator = 2,
                 Denominator = 1,

@@ -161,6 +161,8 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
             new StockSplit
             {
                 EquityIssuerId = stock.Id,
+                EquityListingId = stock.Presentation.EquityListingId,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = new DateOnly(2026, 5, 15),
                 Numerator = 2,
                 Denominator = 1,

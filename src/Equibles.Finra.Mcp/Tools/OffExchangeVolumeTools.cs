@@ -209,7 +209,7 @@ public class OffExchangeVolumeTools
     // renderers keep the table intact); a no-op when every note is empty.
     private static string AppendNotes(string table, IEnumerable<string> notes)
     {
-        var renderedNotes = notes.Where(note => note.Length > 0).ToList();
+        var renderedNotes = notes.Where(note => !string.IsNullOrEmpty(note)).ToList();
         return renderedNotes.Count == 0 ? table : $"{table}\n{string.Join("\n", renderedNotes)}\n";
     }
 

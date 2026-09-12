@@ -224,3 +224,10 @@
 - Captured-source replay queued 44 verified listings, retained 165 bars across 41 listings with exact parsed OHLCV values, and retained 44 source captures. A second import preserved all IDs and values, and the existing U.S. ADR stayed unchanged.
 - The source replay used an isolated PostgreSQL database; production rollout and final legacy-table retirement remain pending.
 - Each split/dividend transaction revalidates the complete pre-fetch source binding under its own directory lock; an earlier quotation check cannot authorize a later action write.
+
+## Explicit split attribution in regression fixtures
+
+- Restatement fixtures bind each known split to its exact native listing; issuer-only observations cannot provide a primary-listing ratio.
+- Unattributed splits keep both primary and secondary holding values pending while retaining filed quantities.
+- Form 144 current-basis percentages remain absent across unresolved split attribution; filed shares and market values remain unchanged.
+- Off-exchange volume output accepts absent explanatory notes without failing valid history requests.

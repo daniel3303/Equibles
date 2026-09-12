@@ -221,11 +221,11 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ImportDataSet_SecondaryWithUnattributedPostReportSplit_StaysHonestlyPending()
+    public async Task ImportDataSet_UnattributedPostReportSplit_KeepsBothListingsPending()
     {
         // An issuer split captured without per-series attribution proves nothing about the
         // sibling class's own basis. The secondary row must import its SHARES but refuse a
-        // value; the primary row values normally with the factor applied.
+        // value; the primary row also remains pending without exact split attribution.
         EquityIssuer stock = await SeedAlphabet();
         var reportDate = new DateOnly(2026, 3, 31);
 
@@ -275,8 +275,11 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         holdings.Should().HaveCount(2);
 
         var primary = holdings.Single(h => h.ListedTicker == null);
-        primary.ValuePending.Should().BeFalse();
-        primary.Value.Should().Be((long)(1000 * 20m * 8.50m));
+        primary
+            .ValuePending.Should()
+            .BeTrue("an issuer-only split does not establish the primary listing's share basis");
+        primary.Shares.Should().Be(1000);
+        primary.Value.Should().Be(0L);
 
         var classC = holdings.Single(h => h.ListedTicker == "GOOG");
         classC.Shares.Should().Be(500, "the position itself still imports and displays");
