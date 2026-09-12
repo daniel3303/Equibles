@@ -328,8 +328,8 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
         await DbContext.Set<CommonStock>().Where(row => row.Id == stock.Id).ExecuteDeleteAsync();
-        (await DbContext.Set<DailyStockPrice>().CountAsync()).Should().Be(0);
-        (await DbContext.Set<LegacyDailyStockPrice>().CountAsync()).Should().Be(0);
+        (await DbContext.Set<DailyStockPrice>().CountAsync()).Should().Be(1);
+        (await DbContext.Set<LegacyDailyStockPrice>().CountAsync()).Should().Be(1);
         var retained = await DbContext.Set<EquityDailyStockPrice>().SingleAsync();
         retained.Should().BeEquivalentTo(native, options => options.Excluding(row => row.Listing));
         var unattributed = await DbContext.Set<UnattributedDailyStockPrice>().SingleAsync();
@@ -341,6 +341,23 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
                     options.Excluding(row => row.CommonStock).Excluding(row => row.CommonStockId)
             );
         unattributed.EquityIssuerId.Should().Be(stock.Id);
+        await VerifyConservation();
+
+        retained.Close = 12.9876m;
+        await DbContext.SaveChangesAsync();
+        var original = await DbContext.Set<DailyStockPrice>().SingleAsync();
+        original.Id.Should().Be(retained.Id);
+        original.Close.Should().Be(12.9876m);
+        original.ListedTicker.Should().Be("RETAIN");
+        original.Volume = 1234567890;
+        await DbContext.SaveChangesAsync();
+        await DbContext.Entry(retained).ReloadAsync();
+        retained.Volume.Should().Be(1234567890);
+        var originalUnknown = await DbContext.Set<LegacyDailyStockPrice>().SingleAsync();
+        originalUnknown.Close = 2.9876m;
+        await DbContext.SaveChangesAsync();
+        await DbContext.Entry(unattributed).ReloadAsync();
+        unattributed.Close.Should().Be(2.9876m);
         await VerifyConservation();
     }
 

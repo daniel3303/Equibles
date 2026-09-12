@@ -293,3 +293,13 @@
 - Run the FINRA/FTD identity audits plus `scripts/verify-native-listing-observation-rollout.sql`; all four checkpoints, required columns, valid indexes and validated restrictive foreign keys must pass.
 - Compare every original observation and import-partition field separately; completion counters alone cannot prove conservation.
 - Remove the temporary progress table with the bridges and old ownership columns after complete reconciliation and retirement of every old writer.
+
+## Resumable native price copy
+
+- The initial price expansion commits empty native tables and old-writer mirrors before copying observations.
+- Both original price stores receive restrictive native issuer ownership before copying; a retiring directory deletion cannot erase an uncopied source row.
+- Each 10,000-ID batch locks its selected source rows, copies exact values and GUIDs, compares every mapped field, and commits with `NativePriceMigrationProgress`.
+- A conflicting target row, unknown source column or unresolved native owner refuses the unfinished batch; already committed batches remain available for retry.
+- Source updates and deletes serialize with their copied batch; other source rows remain writable and inserts behind the cursor are mirrored immediately.
+- Run `scripts/verify-native-price-rollout.sql` for both completed checkpoints and validated restrictive source-owner constraints, then `scripts/verify-native-equity-prices.sql` for full-row conservation.
+- Retire both original stores, temporary price mirrors and copy checkpoints after complete restored-data and production reconciliation and retirement of every original writer.

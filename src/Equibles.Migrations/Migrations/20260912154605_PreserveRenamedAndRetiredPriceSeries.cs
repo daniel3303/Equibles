@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -29,7 +29,7 @@ namespace Equibles.Migrations.Migrations
                             DELETE FROM "UnattributedDailyStockPrice" WHERE "Id" = OLD."Id";
                             RETURN OLD;
                         END IF;
-                        SELECT "Id" INTO STRICT owner_id FROM "EquityIssuer" WHERE "CommonStockId" = NEW."CommonStockId";
+                        SELECT "Id" INTO STRICT owner_id FROM "EquityIssuer" WHERE "Id" = NEW."CommonStockId";
                         INSERT INTO "UnattributedDailyStockPrice" ("Id", "EquityIssuerId", "Date", "Open", "High", "Low", "Close", "AdjustedClose", "Volume", "CreationTime")
                         VALUES (NEW."Id", owner_id, NEW."Date", NEW."Open", NEW."High", NEW."Low", NEW."Close", NEW."AdjustedClose", NEW."Volume", NEW."CreationTime")
                         ON CONFLICT ("Id") DO UPDATE SET
@@ -81,7 +81,7 @@ namespace Equibles.Migrations.Migrations
                         RETURN OLD;
                     END IF;
                     SELECT m.* INTO mapping FROM "LegacyEquityListing" m
-                    JOIN "CommonStock" s ON s."Id" = m."CommonStockId"
+                    JOIN "EquityIssuer" s ON s."Id" = m."CommonStockId"
                     WHERE m."EquityListingId" = NEW."EquityListingId";
                     IF FOUND THEN
                         IF NEW."SourceTicker" IS DISTINCT FROM mapping."ListedTicker"
