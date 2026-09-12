@@ -189,7 +189,7 @@ public class CongressTools
                     query = query.Where(t => t.TransactionType == typeFilter);
                 if (stock != null)
                     query = query.Where(t =>
-                        t.CommonStockId == stock.Id
+                        t.EquityIssuerId == stock.Id
                         && (
                             t.FiledTicker == listedTicker
                             || (t.FiledTicker == "" && listedTicker == stock.Ticker)
@@ -201,7 +201,7 @@ public class CongressTools
                 var totalCount = await query.CountAsync();
 
                 var trades = await query
-                    .Include(t => t.CommonStock)
+                    .Include(t => t.Issuer)
                     .OrderNewestFirst()
                     .Skip(offset)
                     .Take(maxResults)
@@ -220,7 +220,7 @@ public class CongressTools
                         var type = t.TransactionType.NameForHumans();
                         var amount = FormatAmountRange(t);
                         var filedTicker = string.IsNullOrWhiteSpace(t.FiledTicker)
-                            ? t.CommonStock?.Ticker
+                            ? t.Issuer?.Presentation?.Listing?.Ticker
                             : t.FiledTicker;
                         return $"| {t.TransactionDate:yyyy-MM-dd} | {t.FilingDate:yyyy-MM-dd} | {filedTicker} | {type} | {amount} | {EscapeCell(t.AssetName)} | {EscapeCell(t.AssetType)} | {FormatOwner(t.OwnerType)} | {EscapeCell(t.Subholding)} |";
                     }

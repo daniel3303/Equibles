@@ -158,7 +158,7 @@ public class CongressSyncServiceTests
         result.Should().ContainSingle();
         var trade = result[0];
         trade.CongressMemberId.Should().Be(member.Id);
-        trade.CommonStockId.Should().Be(stock.Id);
+        trade.EquityIssuerId.Should().Be(stock.Id);
         trade.TransactionDate.Should().Be(new DateOnly(2024, 6, 15));
         trade.FilingDate.Should().Be(new DateOnly(2024, 7, 15));
         trade.TransactionType.Should().Be(CongressTransactionType.Purchase);
@@ -240,8 +240,8 @@ public class CongressSyncServiceTests
         result.Should().HaveCount(3);
         result.Count(t => t.CongressMemberId == pelosi.Id).Should().Be(2);
         result.Count(t => t.CongressMemberId == tuberville.Id).Should().Be(1);
-        result.Count(t => t.CommonStockId == apple.Id).Should().Be(1);
-        result.Count(t => t.CommonStockId == msft.Id).Should().Be(2);
+        result.Count(t => t.EquityIssuerId == apple.Id).Should().Be(1);
+        result.Count(t => t.EquityIssuerId == msft.Id).Should().Be(2);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -563,14 +563,14 @@ public class CongressSyncServiceTests
         // Both trades should produce the same composite key
         result.Should().HaveCount(2);
         var key1 = (
-            result[0].CommonStockId,
+            result[0].EquityIssuerId,
             result[0].CongressMemberId,
             result[0].TransactionDate,
             result[0].TransactionType,
             result[0].AssetName
         );
         var key2 = (
-            result[1].CommonStockId,
+            result[1].EquityIssuerId,
             result[1].CongressMemberId,
             result[1].TransactionDate,
             result[1].TransactionType,
@@ -821,7 +821,7 @@ public class CongressSyncServiceTests
         var result = InvokeBuildTrades(service, matched, members, stocks);
 
         result.Should().ContainSingle();
-        result[0].CommonStockId.Should().Be(apple.Id);
+        result[0].EquityIssuerId.Should().Be(apple.Id);
         result[0].CongressMemberId.Should().Be(pelosi.Id);
     }
 

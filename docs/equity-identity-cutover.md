@@ -122,3 +122,11 @@
 - Preserve source precedence, ratio precision, creation times, applied timestamps, and the dividend amount last incorporated into price history.
 - Native-issuer preservation tests compare every stored column across the migration and removal of the old owner, including primary, secondary, and unattributed splits on the same date.
 - Exact action attribution and native price writers remain required before final legacy table retirement; this intermediate migration does not complete that cutover.
+
+## Native congressional-trade issuers
+
+- Congressional trades retain nullable issuer associations under `EquityIssuer`; removing a legacy company row no longer clears a resolved association.
+- The restrictive native foreign key preserves historical ownership; unresolved issuer GUIDs remain null.
+- Preserve the filed ticker, complete or partial source-row identity, original trade GUID, all filed amounts and metadata, timestamps, and import/filing ledgers without replay or reclassification.
+- Dated SEC evidence continues to decide issuer resolution; present-day ticker spelling never fills an unresolved association.
+- The physical `CommonStockId` column remains only through the retiring-binary window and is renamed, without changing values, in the final contract migration.

@@ -195,7 +195,7 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
                     new CongressionalTrade
                     {
                         CongressMemberId = member.Id,
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         TransactionDate = new DateOnly(2026, 3, 15),
                         FilingDate = new DateOnly(2026, 4, 14),
                         TransactionType = CongressTransactionType.Purchase,

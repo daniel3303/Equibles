@@ -57,7 +57,9 @@ public class CongressToolsLowercaseTransactionTypeTests : ParadeDbMcpTestBase
                 new CongressionalTrade
                 {
                     CongressMember = pelosi,
-                    CommonStock = stock,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                        .Security.Issuer,
                     TransactionDate = new DateOnly(2026, 3, 10),
                     FilingDate = new DateOnly(2026, 4, 9),
                     TransactionType = CongressTransactionType.Purchase,
@@ -69,7 +71,9 @@ public class CongressToolsLowercaseTransactionTypeTests : ParadeDbMcpTestBase
                 new CongressionalTrade
                 {
                     CongressMember = pelosi,
-                    CommonStock = stock,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                        .Security.Issuer,
                     TransactionDate = new DateOnly(2026, 3, 20),
                     FilingDate = new DateOnly(2026, 4, 19),
                     TransactionType = CongressTransactionType.Sale,

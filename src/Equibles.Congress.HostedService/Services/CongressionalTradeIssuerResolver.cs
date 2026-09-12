@@ -39,7 +39,7 @@ public class CongressionalTradeIssuerResolver
         var unresolved = await _dbContext
             .Set<CongressionalTrade>()
             .Where(trade =>
-                trade.CommonStockId == null
+                trade.EquityIssuerId == null
                 && trade.FiledTicker != ""
                 && (
                     evidence.Any(row =>
@@ -75,7 +75,7 @@ public class CongressionalTradeIssuerResolver
             if (!issuerId.HasValue)
                 continue;
 
-            unresolved[index].CommonStockId = issuerId;
+            unresolved[index].EquityIssuerId = issuerId;
             linked++;
         }
 

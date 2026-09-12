@@ -68,14 +68,16 @@ public class CongressionalTradeRepositoryDateRangeTests : ParadeDbMcpTestBase
             );
     }
 
-    private static CongressionalTrade MakeTrade(
+    private CongressionalTrade MakeTrade(
         CommonStock stock,
         CongressMember member,
         DateOnly transactionDate
     ) =>
         new()
         {
-            CommonStock = stock,
+            Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                .Security.Issuer,
             CongressMember = member,
             TransactionDate = transactionDate,
             FilingDate = transactionDate.AddDays(10),

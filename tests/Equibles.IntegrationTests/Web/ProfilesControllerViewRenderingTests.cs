@@ -114,7 +114,9 @@ public class ProfilesControllerViewRenderingTests
                 new CongressionalTrade
                 {
                     CongressMember = member,
-                    CommonStock = stock,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(db, stock)
+                        .Security.Issuer,
                     TransactionDate = new DateOnly(2024, 7, 1),
                     FilingDate = new DateOnly(2024, 7, 20),
                     TransactionType = CongressTransactionType.Purchase,

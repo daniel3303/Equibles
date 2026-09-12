@@ -54,7 +54,7 @@ public class StocksCongressionalTradesSeededTests
             db.Add(
                 new CongressionalTrade
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     CongressMemberId = memberId,
                     TransactionDate = transactionDate,
                     FilingDate = transactionDate.AddDays(2),
@@ -68,7 +68,7 @@ public class StocksCongressionalTradesSeededTests
             db.Add(
                 new CongressionalTrade
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     CongressMemberId = memberId,
                     TransactionDate = transactionDate.AddDays(-1),
                     FilingDate = transactionDate.AddDays(1),
@@ -82,7 +82,7 @@ public class StocksCongressionalTradesSeededTests
             db.Add(
                 new CongressionalTrade
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     CongressMemberId = memberId,
                     TransactionDate = transactionDate.AddDays(-2),
                     FilingDate = transactionDate,

@@ -659,7 +659,7 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new CongressionalTrade
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     CongressMemberId = member.Id,
                     TransactionDate = new DateOnly(2025, 1, 10),
                     FilingDate = new DateOnly(2025, 2, 1),
@@ -671,7 +671,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new CongressionalTrade
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     CongressMemberId = member.Id,
                     TransactionDate = new DateOnly(2025, 3, 20),
                     FilingDate = new DateOnly(2025, 4, 5),
@@ -714,7 +714,7 @@ public class StockTabServiceTests : IDisposable
             .Add(
                 new CongressionalTrade
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     CongressMemberId = member.Id,
                     TransactionDate = new DateOnly(2025, 2, 15),
                     FilingDate = new DateOnly(2025, 3, 1),

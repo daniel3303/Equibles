@@ -85,7 +85,7 @@ public class CongressionalTradesNegativeMaxResultsTests
                 .Add(
                     new CongressionalTrade
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         CongressMemberId = memberId,
                         TransactionDate = new DateOnly(2026, 4, 1),
                         FilingDate = new DateOnly(2026, 4, 3),

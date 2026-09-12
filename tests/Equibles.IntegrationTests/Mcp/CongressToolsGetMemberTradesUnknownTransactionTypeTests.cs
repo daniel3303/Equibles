@@ -121,7 +121,7 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
         output.Should().NotContain("2026-03-02");
     }
 
-    private static CongressionalTrade MakeTrade(
+    private CongressionalTrade MakeTrade(
         CongressMember member,
         CommonStock stock,
         DateOnly transactionDate,
@@ -131,8 +131,10 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
         {
             CongressMember = member,
             CongressMemberId = member.Id,
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                .Security.Issuer,
+            EquityIssuerId = stock.Id,
             TransactionDate = transactionDate,
             FilingDate = transactionDate.AddDays(30),
             TransactionType = type,

@@ -201,7 +201,7 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             CongressMemberId = member.Id,
             TransactionDate = date,
             FilingDate = date.AddDays(10),

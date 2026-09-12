@@ -11,7 +11,7 @@ public class CongressionalTradeRepository : BaseRepository<CongressionalTrade>
 
     public IQueryable<CongressionalTrade> GetByStock(CommonStock stock)
     {
-        return GetAll().Where(t => t.CommonStockId == stock.Id);
+        return GetAll().Where(t => t.EquityIssuerId == stock.Id);
     }
 
     public IQueryable<CongressionalTrade> GetByListing(CommonStock stock, string listedTicker)
@@ -23,7 +23,7 @@ public class CongressionalTradeRepository : BaseRepository<CongressionalTrade>
         );
         return GetAll()
             .Where(t =>
-                t.CommonStockId == stock.Id
+                t.EquityIssuerId == stock.Id
                 && (t.FiledTicker == listedTicker || (isPrimary && t.FiledTicker == ""))
             );
     }
@@ -32,7 +32,7 @@ public class CongressionalTradeRepository : BaseRepository<CongressionalTrade>
     {
         return GetAll()
             .Where(t =>
-                t.CommonStockId == stock.Id && t.TransactionDate >= from && t.TransactionDate <= to
+                t.EquityIssuerId == stock.Id && t.TransactionDate >= from && t.TransactionDate <= to
             );
     }
 

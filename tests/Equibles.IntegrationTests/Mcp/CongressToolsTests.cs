@@ -40,7 +40,7 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     private static CongressMember CrenshawMember() =>
         new() { Name = "Dan Crenshaw", Position = CongressPosition.Representative };
 
-    private static CongressionalTrade TradeFor(
+    private CongressionalTrade TradeFor(
         CongressMember member,
         CommonStock stock,
         DateOnly transactionDate,
@@ -56,8 +56,10 @@ public class CongressToolsTests : ParadeDbMcpTestBase
         {
             CongressMember = member,
             CongressMemberId = member.Id,
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                .Security.Issuer,
+            EquityIssuerId = stock.Id,
             TransactionDate = transactionDate,
             FilingDate = transactionDate.AddDays(30),
             TransactionType = type,

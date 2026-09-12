@@ -159,7 +159,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         }
     }
 
-    private static CongressionalTrade Trade(
+    private CongressionalTrade Trade(
         CongressMember member,
         CommonStock stock,
         DateOnly transactionDate,
@@ -168,7 +168,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         new()
         {
             CongressMemberId = member.Id,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             TransactionDate = transactionDate,
             FilingDate = filingDate,
             TransactionType = CongressTransactionType.Purchase,
@@ -373,7 +373,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         (await verify.Set<CongressMember>().AsNoTracking().CountAsync()).Should().Be(1);
         var trade = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
-        trade.CommonStockId.Should().BeNull();
+        trade.EquityIssuerId.Should().BeNull();
         trade.FiledTicker.Should().Be("ZZZZ");
     }
 
@@ -412,14 +412,14 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         var stored = await verify
             .Set<CongressionalTrade>()
             .AsNoTracking()
-            .Include(trade => trade.CommonStock)
+            .Include(trade => trade.Issuer)
             .SingleAsync();
         stored.FiledTicker.Should().Be("AAPL");
-        stored.CommonStock.Ticker.Should().Be("AAPL");
+        stored.Issuer.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 
     [Fact]
-    public async Task CommonStockDeletion_PreservesFiledTradeAndClearsDerivedIssuerLink()
+    public async Task CommonStockDeletion_PreservesFiledTradeAndNativeIssuerLink()
     {
         var stock = new CommonStock { Ticker = "ACME", Name = "Acme Corporation" };
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
@@ -428,7 +428,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             new CongressionalTrade
             {
                 CongressMember = member,
-                CommonStock = stock,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
                 FiledTicker = "ACME",
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 15),
@@ -449,7 +451,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
 
         await using var verify = Fixture.CreateDbContext();
         var stored = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
-        stored.CommonStockId.Should().BeNull();
+        stored.EquityIssuerId.Should().Be(stock.Id);
         stored.FiledTicker.Should().Be("ACME");
     }
 
@@ -486,7 +488,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         await DbContext.SaveChangesAsync();
 
         (await resolver.RelinkUnresolved(CancellationToken.None)).Should().Be(1);
-        trade.CommonStockId.Should().Be(issuer.Id);
+        trade.EquityIssuerId.Should().Be(issuer.Id);
     }
 
     [Fact]
@@ -524,7 +526,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             new CongressionalTrade
             {
                 CongressMember = member,
-                CommonStock = currentIssuer,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, currentIssuer)
+                    .Security.Issuer,
                 TransactionDate = new DateOnly(2021, 6, 1),
                 FilingDate = new DateOnly(2021, 6, 15),
                 TransactionType = CongressTransactionType.Purchase,
@@ -555,7 +559,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
 
         await using var verify = Fixture.CreateDbContext();
         var corrected = await verify.Set<CongressionalTrade>().AsNoTracking().SingleAsync();
-        corrected.CommonStockId.Should().Be(historicalIssuer.Id);
+        corrected.EquityIssuerId.Should().Be(historicalIssuer.Id);
         corrected.FiledTicker.Should().Be("GOLD");
         corrected.SourceId.Should().Be("house-4304");
         corrected.SourceRowIndex.Should().Be(source.SourceRowIndex);
@@ -630,8 +634,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             {
                 CongressMember = member,
                 CongressMemberId = member.Id,
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
+                EquityIssuerId = stock.Id,
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 15),
                 TransactionType = CongressTransactionType.Purchase,
@@ -678,8 +684,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             {
                 CongressMember = member,
                 CongressMemberId = member.Id,
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
+                EquityIssuerId = stock.Id,
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 15),
                 TransactionType = CongressTransactionType.Purchase,
@@ -720,8 +728,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             {
                 CongressMember = member,
                 CongressMemberId = member.Id,
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
+                EquityIssuerId = stock.Id,
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 14),
                 TransactionType = CongressTransactionType.Purchase,
@@ -793,8 +803,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             {
                 CongressMember = member,
                 CongressMemberId = member.Id,
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
+                EquityIssuerId = stock.Id,
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 14),
                 TransactionType = CongressTransactionType.Purchase,
@@ -879,8 +891,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             {
                 CongressMember = member,
                 CongressMemberId = member.Id,
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
+                EquityIssuerId = stock.Id,
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 14),
                 TransactionType = CongressTransactionType.Purchase,
@@ -942,8 +956,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             {
                 CongressMember = member,
                 CongressMemberId = member.Id,
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
+                EquityIssuerId = stock.Id,
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 15),
                 TransactionType = CongressTransactionType.Purchase,
@@ -1014,8 +1030,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             {
                 CongressMember = member,
                 CongressMemberId = member.Id,
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
+                EquityIssuerId = stock.Id,
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 15),
                 TransactionType = CongressTransactionType.Purchase,
@@ -1057,8 +1075,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             {
                 CongressMember = member,
                 CongressMemberId = member.Id,
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
+                EquityIssuerId = stock.Id,
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 15),
                 TransactionType = CongressTransactionType.Purchase,
@@ -1071,8 +1091,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             {
                 CongressMember = member,
                 CongressMemberId = member.Id,
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
+                EquityIssuerId = stock.Id,
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 15),
                 TransactionType = CongressTransactionType.Purchase,
@@ -1121,8 +1143,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
             {
                 CongressMember = member,
                 CongressMemberId = member.Id,
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                    .Security.Issuer,
+                EquityIssuerId = stock.Id,
                 TransactionDate = new DateOnly(2024, 6, 1),
                 FilingDate = new DateOnly(2024, 6, 15),
                 TransactionType = CongressTransactionType.Purchase,

@@ -236,7 +236,7 @@ public class CongressionalTradeRepositoryTests : IDisposable
         };
     }
 
-    private static CongressionalTrade CreateTrade(
+    private CongressionalTrade CreateTrade(
         CongressMember member,
         CommonStock stock,
         DateOnly? transactionDate = null,
@@ -253,8 +253,10 @@ public class CongressionalTradeRepositoryTests : IDisposable
             Id = Guid.NewGuid(),
             CongressMemberId = member.Id,
             CongressMember = member,
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(_dbContext, stock)
+                .Security.Issuer,
             TransactionDate = txDate,
             FilingDate = filingDate ?? txDate.AddDays(30),
             TransactionType = type,
@@ -301,7 +303,7 @@ public class CongressionalTradeRepositoryTests : IDisposable
         var result = _repository.GetByStock(apple).ToList();
 
         result.Should().HaveCount(2);
-        result.Should().AllSatisfy(t => t.CommonStockId.Should().Be(apple.Id));
+        result.Should().AllSatisfy(t => t.EquityIssuerId.Should().Be(apple.Id));
     }
 
     [Fact]
@@ -598,7 +600,7 @@ public class CongressionalTradeRepositoryTests : IDisposable
 
         persisted.Should().NotBeNull();
         persisted.CongressMemberId.Should().Be(pelosi.Id);
-        persisted.CommonStockId.Should().Be(apple.Id);
+        persisted.EquityIssuerId.Should().Be(apple.Id);
         persisted.TransactionDate.Should().Be(new DateOnly(2024, 5, 10));
         persisted.FilingDate.Should().Be(new DateOnly(2024, 6, 9));
         persisted.TransactionType.Should().Be(CongressTransactionType.Sale);

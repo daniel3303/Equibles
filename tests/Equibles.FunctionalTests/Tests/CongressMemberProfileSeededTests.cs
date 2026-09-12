@@ -52,7 +52,7 @@ public class CongressMemberProfileSeededTests
             db.Add(
                 new CongressionalTrade
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     CongressMemberId = memberId,
                     TransactionDate = new DateOnly(2025, 6, 10),
                     FilingDate = new DateOnly(2025, 7, 1),

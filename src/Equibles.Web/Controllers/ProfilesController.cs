@@ -404,7 +404,8 @@ public class ProfilesController : BaseController
             {
                 Ticker =
                     trade.FiledTicker != "" ? trade.FiledTicker
-                    : trade.CommonStock != null ? trade.CommonStock.Ticker
+                    : trade.Issuer != null && trade.Issuer.Presentation != null
+                        ? trade.Issuer.Presentation.Listing.Ticker
                     : null,
                 TransactionDate = trade.TransactionDate,
                 AssetName = trade.AssetName,
