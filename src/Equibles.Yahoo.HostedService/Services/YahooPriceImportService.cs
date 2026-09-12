@@ -1301,11 +1301,41 @@ public class YahooPriceImportService
                 return false;
             }
 
+            var recordedSymbolListingId = await stockRepo.GetEquityListingId(
+                target.CommonStockId,
+                target.Ticker
+            );
+            var priceListingId = recordedSymbolListingId;
+            if (priceListingId == null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return false;
+            }
+            var firstPriceDate = prices.Min(price => price.Date);
+            if (
+                await splitRepo
+                    .GetEffectiveByStock(target.CommonStockId, settledBefore)
+                    .AnyAsync(
+                        split =>
+                            split.PriceSeriesTicker == null && split.EffectiveDate > firstPriceDate,
+                        cancellationToken
+                    )
+            )
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _logger.LogWarning(
+                    "Cannot replace {Ticker} history while captured split source identity is unresolved",
+                    target.Ticker
+                );
+                return false;
+            }
             var capturedBoundaries = await splitRepo
                 .GetEffectiveByStock(target.CommonStockId, settledBefore)
                 .Where(split =>
-                    split.PriceSeriesTicker == target.Ticker
-                    || (currentSeries.IsPrimary && split.PriceSeriesTicker == null)
+                    split.EquityListingId == priceListingId
+                    || split.EquityListingId == null
+                        && recordedSymbolListingId == priceListingId
+                        && split.PriceSeriesTicker == target.Ticker
                 )
                 .Select(split => new SplitBasisDefinition(
                     split.EffectiveDate,
@@ -2339,12 +2369,29 @@ public class YahooPriceImportService
 
         using var scope = _scopeFactory.CreateScope();
         var captureManager = scope.ServiceProvider.GetRequiredService<StockSplitCaptureManager>();
-        var count = await captureManager.Capture(
+        var stockRepository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        var nativeListingId = await stockRepository.GetEquityListingId(
             target.CommonStockId,
-            target.Ticker,
-            captured,
-            cancellationToken
+            target.Ticker
         );
+        if (nativeListingId == null)
+            return;
+        var count =
+            target.IsHistorical && target.HistoryEndDate.HasValue
+                ? await captureManager.CaptureForHistoricalListing(
+                    target.CommonStockId,
+                    nativeListingId.Value,
+                    target.Ticker,
+                    target.HistoryEndDate.Value,
+                    captured,
+                    cancellationToken
+                )
+                : await captureManager.Capture(
+                    target.CommonStockId,
+                    target.Ticker,
+                    captured,
+                    cancellationToken
+                );
         if (count > 0)
             _logger.LogInformation(
                 "Captured {Count} stock split(s) for {Ticker} on {StockId}",

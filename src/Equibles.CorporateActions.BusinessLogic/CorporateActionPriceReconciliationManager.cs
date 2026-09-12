@@ -359,11 +359,17 @@ public class CorporateActionPriceReconciliationManager
         var rows = await _splitRepository
             .GetPendingPriceAdjustment()
             .Where(split => split.PriceSeriesTicker != null && split.EffectiveDate < settledBefore)
+            .Where(split =>
+                split.EquityListingId == null || split.Listing.MarketCountryCode == "US"
+            )
             .Select(split => new
             {
                 split.Id,
                 split.EquityIssuerId,
-                split.PriceSeriesTicker,
+                PriceSeriesTicker = split.EquityListingId == null
+                    ? split.PriceSeriesTicker
+                    : split.Listing.Ticker,
+                split.EquityListingId,
                 split.EffectiveDate,
                 split.Numerator,
                 split.Denominator,
@@ -387,7 +393,8 @@ public class CorporateActionPriceReconciliationManager
                                 row.EffectiveDate,
                                 row.Numerator,
                                 row.Denominator,
-                                row.Source
+                                row.Source,
+                                row.EquityListingId
                             ))
                             .ToList()
             );
@@ -451,7 +458,12 @@ public class CorporateActionPriceReconciliationManager
         return locked
             .Where(split =>
                 split.EquityIssuerId == selectedSeries.CommonStockId
-                && split.PriceSeriesTicker == selectedSeries.ListedTicker
+                && (
+                    split.EquityListingId == null
+                        ? split.PriceSeriesTicker == selectedSeries.ListedTicker
+                        : split.Listing.MarketCountryCode == "US"
+                            && split.Listing.Ticker == selectedSeries.ListedTicker
+                )
                 // Keep the selection and stamping predicates identical so a legacy premature
                 // marker can be replaced with a post-effective marker after the provider fetch.
                 && !split.IsPriceAdjustmentApplied()
@@ -462,6 +474,7 @@ public class CorporateActionPriceReconciliationManager
                     return false;
 
                 return split.EffectiveDate == selected.EffectiveDate
+                    && split.EquityListingId == selected.EquityListingId
                     && split.Numerator == selected.Numerator
                     && split.Denominator == selected.Denominator
                     && split.Source == selected.Source;

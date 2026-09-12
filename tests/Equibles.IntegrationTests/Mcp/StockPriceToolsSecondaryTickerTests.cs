@@ -114,7 +114,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestClosingPrices_LegacyPrimarySplit_DoesNotClipSecondaryRange()
+    public async Task GetLatestClosingPrices_UnknownSplit_AlsoBoundsSecondaryRange()
     {
         EquityIssuer stock = await SeedBerkshire();
         DbContext
@@ -154,8 +154,9 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetLatestClosingPrices("BRK-A");
 
-        result.Should().Contain("| 900000.00 | 749200.00 |");
-        result.Should().NotContain("latest recorded split");
+        result.Should().Contain("| 749200.00\\* | 749200.00\\* |");
+        result.Should().NotContain("900000.00");
+        result.Should().Contain("latest recorded split");
     }
 
     [Fact]

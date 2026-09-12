@@ -104,9 +104,8 @@ public class BacktestPriceLoader
         foreach (var key in listingKeys)
         {
             var primaryTicker = primaryTickers.GetValueOrDefault(key.CommonStockId);
-            var scoped = PriceSeriesSplitScope.ForListing(
+            var scoped = PriceSeriesSplitScope.ForPriceComparison(
                 splits.Where(split => split.EquityIssuerId == key.CommonStockId),
-                primaryTicker,
                 key.ListedTicker
             );
             splitDatesByListing[key] = scoped

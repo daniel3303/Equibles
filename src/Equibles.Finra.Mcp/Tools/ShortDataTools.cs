@@ -134,17 +134,27 @@ public class ShortDataTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(
-                    splits,
-                    stock.Presentation.Listing.Ticker,
-                    listedTicker
+                var unresolvedBasis = records.Any(row =>
+                    PriceSeriesSplitScope.HasUnresolvedBasis(splits, listedTicker, row.Date)
                 );
+                splits = unresolvedBasis
+                    ? []
+                    : PriceSeriesSplitScope.ForListing(
+                        splits,
+                        stock.Presentation.Listing.Ticker,
+                        listedTicker
+                    );
 
                 var table = MarkdownTable.Render(
                     records.OrderBy(r => r.Date).ToList(),
                     $"No short volume data found for {listedTicker} in the specified date range.",
                     $"Daily short volume for {listedTicker}{ListingName(stock, listedTicker)}:",
-                    "_Volumes are trades reported to FINRA facilities (off-exchange/TRF) only — not consolidated tape volume; a 40-50% Short % is the normal baseline. Short Exempt = short sales exempt from Reg SHO price-test restrictions. Share counts are restated onto today's split basis._",
+                    "_Volumes are trades reported to FINRA facilities (off-exchange/TRF) only — not consolidated tape volume; a 40-50% Short % is the normal baseline. Short Exempt = short sales exempt from Reg SHO price-test restrictions. "
+                        + (
+                            unresolvedBasis
+                                ? "Share counts are as reported on each date; unresolved split attribution prevents comparison on one share basis._"
+                                : "Share counts are restated onto today's split basis._"
+                        ),
                     "| Date | Short Volume | Short Exempt | Total Volume | Short % |",
                     "|------|-------------|--------------|-------------|---------|",
                     r =>
@@ -228,6 +238,16 @@ public class ShortDataTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
+                if (
+                    calculationRows.Any(row =>
+                        PriceSeriesSplitScope.HasUnresolvedBasis(
+                            splits,
+                            listedTicker,
+                            row.SettlementDate
+                        )
+                    )
+                )
+                    return $"Split-adjusted short interest for {listedTicker} is unavailable for this range because historical split attribution is unresolved. Original FINRA observations are retained.";
                 splits = PriceSeriesSplitScope.ForListing(
                     splits,
                     stock.Presentation.Listing.Ticker,
@@ -380,6 +400,15 @@ public class ShortDataTools
                     .OrderByDescending(day => day)
                     .FirstOrDefaultAsync();
                 var adjusted = rawRecords
+                    .Where(row =>
+                        !PriceSeriesSplitScope.HasUnresolvedBasis(
+                            splitRows.Where(split =>
+                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
+                            ),
+                            row.ListedTicker,
+                            previousDate
+                        )
+                    )
                     .Select(row =>
                     {
                         var listedTicker = row.ListedTicker;
@@ -539,6 +568,15 @@ public class ShortDataTools
                     .Where(split => stockIds.Contains(split.EquityIssuerId))
                     .ToListAsync();
                 var adjusted = rawRecords
+                    .Where(row =>
+                        !PriceSeriesSplitScope.HasUnresolvedBasis(
+                            splitRows.Where(split =>
+                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
+                            ),
+                            row.ListedTicker,
+                            row.Date
+                        )
+                    )
                     .Select(row =>
                     {
                         var listedTicker = row.ListedTicker;

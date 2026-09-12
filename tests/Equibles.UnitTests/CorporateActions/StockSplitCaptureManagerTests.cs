@@ -190,7 +190,7 @@ public class StockSplitCaptureManagerTests
     }
 
     [Fact]
-    public async Task Capture_UnattributedLegacyRow_RemainsPrimaryOnly()
+    public async Task Capture_UnattributedLegacyRow_RemainsIntactBesideNewSourceObservations()
     {
         await using var context = NewDb();
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
@@ -239,7 +239,10 @@ public class StockSplitCaptureManagerTests
         attributed.PriceSeriesTicker.Should().Be("GOOG");
         attributed.Numerator.Should().Be(20m);
         attributed.PriceAdjustmentAppliedTime.Should().BeNull();
-        (await context.Set<StockSplit>().CountAsync()).Should().Be(2);
+        (await context.Set<StockSplit>().CountAsync()).Should().Be(3);
+        (await context.Set<StockSplit>().SingleAsync(row => row.PriceSeriesTicker == null))
+            .Numerator.Should()
+            .Be(2m);
     }
 
     [Theory]

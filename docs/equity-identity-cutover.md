@@ -189,3 +189,10 @@
 - Explicit GUID generation is application-owned for issuer, security, and listing entities; `PreserveAssignedEquityIdentityKeys` changes EF metadata without changing stored rows.
 - U.S. source-symbol readers use native listings directly; ambiguous same-owner/same-symbol U.S. matches cannot merge histories.
 - Retained historical migration fixtures continue to seed the historical schema. An unattributed FINRA row still triggers an atomic migration refusal; its unknown identity must be resolved or preserved explicitly before final cutover.
+
+## Split capture and historical basis
+
+- New split observations reference the locked exact listing; source symbols remain unchanged after a listing rename.
+- Only one exact recorded U.S. listing may receive previously missing source attribution; unresolved original events remain separate and unchanged.
+- An unknown historical split prevents price comparisons or history replacement across its date; it never supplies a restatement ratio.
+- Full native reconciliation and dividend capture must precede foreign price writers.

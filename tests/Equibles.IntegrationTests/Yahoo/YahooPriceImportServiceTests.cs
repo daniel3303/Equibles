@@ -252,11 +252,30 @@ public class YahooPriceImportServiceTests : IDisposable
             .ToList();
         _yahooClient
             .GetChart("GONE", floor, delistedOn)
-            .Returns(new YahooChartData { FirstTradeDate = floor, Prices = prices });
+            .Returns(
+                new YahooChartData
+                {
+                    FirstTradeDate = floor,
+                    Prices = prices,
+                    Splits =
+                    [
+                        new StockSplitEvent
+                        {
+                            Date = prices[0].Date,
+                            Numerator = 2,
+                            Denominator = 1,
+                        },
+                    ],
+                }
+            );
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         await _yahooClient.Received(1).GetChart("GONE", floor, delistedOn);
+        var capturedSplit = _splitRepo.GetByStock(stock.Id).Single();
+        capturedSplit.EquityListingId.Should().Be(stock.Presentation.EquityListingId);
+        capturedSplit.PriceSeriesTicker.Should().Be("GONE");
+        capturedSplit.EffectiveDate.Should().Be(prices[0].Date);
         EquityIssuer retained = _stockRepo.GetAll().Single(row => row.Id == stock.Id);
         GetDelistedListing(retained).HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
         retained
@@ -1846,14 +1865,16 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        // The full response omitted the older 1:16 event, but the applicable database row is
-        // still authoritative. Primary-series legacy null attribution follows the same rule.
+        // Exact captured source evidence still validates an omitted event; unresolved ownership
+        // prevents replacing stored history with a potentially different split basis.
         _priceRepo
             .GetPrimarySeries()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
-            .Equal(51.20m, 58.00m, 57.00m, 60.00m);
+            .Equal(
+                legacyNullAttribution ? [3.00m, 57.10m, 56.00m] : [51.20m, 58.00m, 57.00m, 60.00m]
+            );
     }
 
     [Fact]
@@ -1924,7 +1945,7 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_PrimaryBecomesSecondaryBeforeReplacement_ExcludesLegacyPrimarySplit()
+    public async Task Import_PrimaryBecomesSecondaryBeforeReplacement_PreservesUnknownSplitBasis()
     {
         EquityIssuer stock = CreateStock("OLD", "Designation Change Company");
         await SeedStocks(stock);
@@ -1994,15 +2015,15 @@ public class YahooPriceImportServiceTests : IDisposable
 
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        // OLD was primary when the crawl target was built but secondary at the locked write. The
-        // legacy null split belongs only to the current primary, so it cannot block or restate OLD.
+        // A designation change provides no evidence about an old unattributed split. Preserve
+        // the stored history until the split's security and basis can be established.
         _priceRepo
             .GetAllSeries()
             .Where(price => price.SourceTicker == "OLD")
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
-            .Equal(10.00m, 10.50m, 11.00m, 12.00m);
+            .Equal(10.00m, 10.50m, 11.00m);
     }
 
     [Fact]

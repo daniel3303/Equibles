@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Finra.BusinessLogic;
 using Equibles.Finra.Data.Models;
@@ -55,6 +56,38 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
         );
 
     // ── GetShortVolume ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetShortVolume_UnknownSplit_PublishesReportedCountsWithTheirBasis()
+    {
+        var stock = GmeStock();
+        DbContext.Add(stock);
+        DbContext.Add(
+            new DailyShortVolume
+            {
+                Listing = stock.Presentation.Listing,
+                ListedTicker = "GME",
+                Date = new DateOnly(2026, 4, 1),
+                ShortVolume = 1000,
+                TotalVolume = 2000,
+                Market = "ALL",
+            }
+        );
+        DbContext.Add(
+            new StockSplit
+            {
+                Issuer = stock,
+                EffectiveDate = new DateOnly(2026, 4, 2),
+                Numerator = 2,
+                Denominator = 1,
+            }
+        );
+        await DbContext.SaveChangesAsync();
+        var result = await Sut().GetShortVolume("GME", "2026-04-01", "2026-04-30");
+        result.Should().Contain("as reported on each date");
+        result.Should().Contain("1,000");
+        result.Should().NotContain("restated onto today's split basis");
+    }
 
     [Fact]
     public async Task GetShortVolume_UnknownTicker_ReturnsStockNotFoundMessage()

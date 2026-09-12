@@ -125,6 +125,7 @@ public class InsiderTradingToolsOwnershipRankingTests
             new StockSplit
             {
                 EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = new DateOnly(2024, 6, 10),
                 Numerator = 40,
                 Denominator = 1,

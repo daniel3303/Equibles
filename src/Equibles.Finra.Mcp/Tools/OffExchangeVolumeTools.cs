@@ -96,11 +96,20 @@ public class OffExchangeVolumeTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(
-                    splits,
-                    stock.Presentation.Listing.Ticker,
-                    listedTicker
+                var unresolvedBasis = records.Any(row =>
+                    PriceSeriesSplitScope.HasUnresolvedBasis(
+                        splits,
+                        listedTicker,
+                        row.WeekStartDate
+                    )
                 );
+                splits = unresolvedBasis
+                    ? []
+                    : PriceSeriesSplitScope.ForListing(
+                        splits,
+                        stock.Presentation.Listing.Ticker,
+                        listedTicker
+                    );
 
                 var table = MarkdownTable.Render(
                     records.OrderBy(r => r.WeekStartDate).ToList(),
@@ -118,6 +127,9 @@ public class OffExchangeVolumeTools
 
                 var notes = new[]
                 {
+                    unresolvedBasis
+                        ? "Volumes are as reported each week; unresolved split attribution prevents comparison on one share basis."
+                        : null,
                     HistoricalCoverageNote(records),
                     NewestKeptNote(records.Count, total, "weeks"),
                 };

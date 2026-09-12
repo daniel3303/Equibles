@@ -10,6 +10,10 @@ public class StockSplitRepository : BaseRepository<StockSplit>
     public StockSplitRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
+    // Detached read models still need the recorded listing's current symbol and venue.
+    public override IQueryable<StockSplit> GetAll() =>
+        base.GetAll().Include(split => split.Listing);
+
     public IQueryable<StockSplit> GetByStock(Guid commonStockId)
     {
         return GetAll().Where(s => s.EquityIssuerId == commonStockId);

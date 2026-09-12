@@ -28,9 +28,9 @@ public static class SplitBasisResolver
     /// be used. A successful result does not prove the basis of raw stored price rows.
     /// <para>
     /// <paramref name="listedTicker"/> names the exact security; null means the filer's
-    /// primary (<paramref name="primaryTicker"/>). A PRIMARY figure uses every split captured
-    /// from its own series — unattributed legacy rows included, since only the primary series
-    /// could produce them. A SECONDARY figure may only be moved by splits attributed to that
+    /// primary (<paramref name="primaryTicker"/>). A PRIMARY figure uses splits captured
+    /// from its own series; an unattributed event leaves its basis unresolved.
+    /// A SECONDARY figure may only be moved by splits attributed to that
     /// listing — and while ANY post-date split of the issuer is attributed elsewhere (or to no
     /// listing), the class's own split history is unknowable from stored data, so the caller
     /// honestly defers rather than assuming the classes split together.
@@ -53,7 +53,10 @@ public static class SplitBasisResolver
         }
 
         var positionSeries = listedTicker ?? primaryTicker;
+        if (PriceSeriesSplitScope.HasUnresolvedBasis(splits, positionSeries, asOfDate))
+            return false;
         var resolved = 1m;
+        Guid? matchedListingId = null;
         foreach (var split in splits)
         {
             // A figure dated on the effective date is already post-split, so the comparison is
@@ -63,14 +66,23 @@ public static class SplitBasisResolver
                 continue;
             }
 
-            var belongsToSeries =
-                split.PriceSeriesTicker == null
-                    ? listedTicker == null
-                    : string.Equals(
-                        split.PriceSeriesTicker,
-                        positionSeries,
-                        StringComparison.OrdinalIgnoreCase
-                    );
+            if (split.PriceSeriesTicker == null)
+                return false;
+            if (split.EquityListingId != null)
+            {
+                if (split.Listing == null)
+                    return false;
+                if (split.Listing.MarketCountryCode != "US")
+                    continue;
+            }
+
+            var sourceTicker =
+                split.EquityListingId == null ? split.PriceSeriesTicker : split.Listing.Ticker;
+            var belongsToSeries = string.Equals(
+                sourceTicker,
+                positionSeries,
+                StringComparison.OrdinalIgnoreCase
+            );
             if (!belongsToSeries)
             {
                 // Another listing of the same issuer split after the as-of date: for a
@@ -89,10 +101,7 @@ public static class SplitBasisResolver
                 // ratio-sized error this class exists to prevent. Unknown basis: defer.
                 var attributedToKnownSibling =
                     secondaryTickers != null
-                    && secondaryTickers.Contains(
-                        split.PriceSeriesTicker,
-                        StringComparer.OrdinalIgnoreCase
-                    );
+                    && secondaryTickers.Contains(sourceTicker, StringComparer.OrdinalIgnoreCase);
                 if (!attributedToKnownSibling)
                 {
                     return false;
@@ -103,6 +112,13 @@ public static class SplitBasisResolver
             if (!split.IsPriceAdjustmentApplied())
             {
                 return false;
+            }
+
+            if (split.EquityListingId is { } listingId)
+            {
+                if (matchedListingId != null && matchedListingId != listingId)
+                    return false;
+                matchedListingId = listingId;
             }
 
             // A malformed stored action makes the basis unprovable. Returning a factor of zero or

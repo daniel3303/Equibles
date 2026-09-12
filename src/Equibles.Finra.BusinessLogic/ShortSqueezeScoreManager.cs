@@ -570,9 +570,8 @@ public class ShortSqueezeScoreManager
         {
             var ticker = primaryTickers[group.Key];
             var latestDate = group.Max(bar => bar.Date);
-            var applicableSplits = PriceSeriesSplitScope.ForListing(
+            var applicableSplits = PriceSeriesSplitScope.ForPriceComparison(
                 splitsByStock.GetValueOrDefault(group.Key) ?? [],
-                ticker,
                 ticker
             );
             var splitBoundary = applicableSplits

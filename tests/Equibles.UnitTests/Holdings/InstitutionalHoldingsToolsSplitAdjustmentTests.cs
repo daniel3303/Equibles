@@ -96,6 +96,7 @@ public class InstitutionalHoldingsToolsSplitAdjustmentTests
             new StockSplit
             {
                 EquityIssuerId = apple.Id,
+                PriceSeriesTicker = apple.Presentation.Listing.Ticker,
                 EffectiveDate = SplitDate,
                 Numerator = 2,
                 Denominator = 1,

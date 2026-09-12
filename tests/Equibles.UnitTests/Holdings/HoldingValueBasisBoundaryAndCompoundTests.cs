@@ -12,6 +12,7 @@ public class HoldingValueBasisBoundaryAndCompoundTests
     ) =>
         new()
         {
+            PriceSeriesTicker = "TEST",
             EffectiveDate = effectiveDate,
             Numerator = numerator,
             Denominator = denominator,

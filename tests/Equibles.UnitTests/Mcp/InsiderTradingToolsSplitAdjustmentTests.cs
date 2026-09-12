@@ -91,6 +91,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
             new StockSplit
             {
                 EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = new DateOnly(2024, 6, 10),
                 Numerator = 10,
                 Denominator = 1,
@@ -155,6 +156,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
             new StockSplit
             {
                 EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(7),
                 Numerator = 10,
                 Denominator = 1,
@@ -204,6 +206,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
             new StockSplit
             {
                 EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = new DateOnly(2024, 6, 10),
                 Numerator = 10,
                 Denominator = 1,

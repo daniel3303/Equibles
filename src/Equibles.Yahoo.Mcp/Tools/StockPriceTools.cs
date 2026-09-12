@@ -280,9 +280,8 @@ public class StockPriceTools
                     // provider refresh cannot certify the basis of raw rows, so a captured split
                     // inside the requested year moves the comparison start to that split date.
                     var cutoff = price.Date.AddDays(-365);
-                    var applicableSplits = PriceSeriesSplitScope.ForListing(
+                    var applicableSplits = PriceSeriesSplitScope.ForPriceComparison(
                         batchSplits.Where(split => split.EquityIssuerId == stock.Id),
-                        stock.Presentation.Listing.Ticker,
                         priceTicker
                     );
                     var comparableWindow = ComparablePriceWindow.Resolve(
