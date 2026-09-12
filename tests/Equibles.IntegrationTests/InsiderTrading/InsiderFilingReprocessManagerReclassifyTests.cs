@@ -40,13 +40,12 @@ public class InsiderFilingReprocessManagerReclassifyTests : ParadeDbMcpTestBase
         var impossibleDate = new DateOnly(2035, 6, 14);
         var accession = "0000320193-24-000001";
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var owner = new InsiderOwner
         {
             Id = Guid.NewGuid(),

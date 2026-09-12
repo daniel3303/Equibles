@@ -25,7 +25,10 @@ public class CongressionalTradeRepositoryDateRangeTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetByStock_DateRangeInclusiveBoundaries_ReturnsTradesOnlyWithinBounds()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var member = new CongressMember
         {
             Name = "Test, Member",
@@ -43,7 +46,9 @@ public class CongressionalTradeRepositoryDateRangeTests : ParadeDbMcpTestBase
         DbContext.ChangeTracker.Clear();
 
         await using var verify = Fixture.CreateDbContext();
-        var trackedStock = verify.Set<CommonStock>().Single(s => s.Ticker == "AAPL");
+        EquityIssuer trackedStock = verify
+            .Set<EquityIssuer>()
+            .Single(s => s.Presentation.Listing.Ticker == "AAPL");
         var sut = new CongressionalTradeRepository(verify);
 
         var trades = await sut.GetByStock(
@@ -69,7 +74,7 @@ public class CongressionalTradeRepositoryDateRangeTests : ParadeDbMcpTestBase
     }
 
     private CongressionalTrade MakeTrade(
-        CommonStock stock,
+        EquityIssuer stock,
         CongressMember member,
         DateOnly transactionDate
     ) =>

@@ -21,11 +21,11 @@ public class ShortDataToolsGetShortVolumeCultureInvarianceTests : ParadeDbMcpTes
         new(
             new DailyShortVolumeRepository(DbContext),
             new ShortInterestRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new ShortSqueezeScoreManager(
                 new ShortInterestRepository(DbContext),
                 new DailyShortVolumeRepository(DbContext),
-                new CommonStockRepository(DbContext),
+                new EquityIssuerRepository(DbContext),
                 new StockSplitRepository(DbContext),
                 new FailToDeliverRepository(DbContext),
                 new EquityDailyStockPriceRepository(DbContext),
@@ -52,22 +52,25 @@ public class ShortDataToolsGetShortVolumeCultureInvarianceTests : ParadeDbMcpTes
     [Fact]
     public async Task GetShortVolume_UnderNonInvariantCulture_RendersVolumeCultureInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GME",
-            Name = "GameStop Corp",
-            Cik = "0001326380",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GME",
+            Name: "GameStop Corp",
+            Cik: "0001326380"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<DailyShortVolume>()
             .Add(
                 new DailyShortVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = new DateOnly(2026, 3, 15),
                     ShortVolume = 1_234_567,
                     ShortExemptVolume = 12_345,

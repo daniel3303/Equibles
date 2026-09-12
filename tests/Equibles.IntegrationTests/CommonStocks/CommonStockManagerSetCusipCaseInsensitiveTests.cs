@@ -18,27 +18,26 @@ namespace Equibles.IntegrationTests.CommonStocks;
 /// </summary>
 public class CommonStockManagerSetCusipCaseInsensitiveTests
 {
-    private readonly CommonStockManager _sut;
+    private readonly EquityIdentityManager _sut;
     private readonly IBus _publishEndpoint = Substitute.For<IBus>();
-    private readonly CommonStockRepository _repository;
+    private readonly EquityIssuerRepository _repository;
 
     public CommonStockManagerSetCusipCaseInsensitiveTests()
     {
         var context = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _repository = new CommonStockRepository(context);
-        _sut = new CommonStockManager(_repository, _publishEndpoint);
+        _repository = new EquityIssuerRepository(context);
+        _sut = new EquityIdentityManager(_repository, _publishEndpoint);
     }
 
     [Fact]
     public async Task SetCusip_CusipDiffersOnlyByLetterCase_IsNoOpPublishesNothingAndKeepsStoredValue()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GOOGL",
-            Name = "Alphabet Inc",
-            Cik = "0001652044",
-            Cusip = "38259P508",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GOOGL",
+            Name: "Alphabet Inc",
+            Cik: "0001652044",
+            Cusip: "38259P508"
+        );
         _repository.Add(stock);
         await _repository.SaveChanges();
 
@@ -48,6 +47,6 @@ public class CommonStockManagerSetCusipCaseInsensitiveTests
             .DidNotReceive()
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
         // Guard returns before mutation, so the stored CUSIP is untouched.
-        stock.Cusip.Should().Be("38259P508");
+        stock.Presentation.Listing.Security.Cusip.Should().Be("38259P508");
     }
 }

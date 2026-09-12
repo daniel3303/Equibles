@@ -29,23 +29,22 @@ public class FinancialFactsToolsComparativeWindowLeakTests : ParadeDbMcpTestBase
         new(
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialFactsTools>()
         );
 
-    private static CommonStock Nvidia() =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp",
-            Cik = "0001045810",
-        };
+    private static EquityIssuer Nvidia() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp",
+            Cik: "0001045810"
+        );
 
     private void AddAnnualFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         int fiscalYearStamp,
         DateOnly periodStart,
@@ -77,10 +76,10 @@ public class FinancialFactsToolsComparativeWindowLeakTests : ParadeDbMcpTestBase
             );
     }
 
-    private async Task<CommonStock> SeedNvdaEps()
+    private async Task<EquityIssuer> SeedNvdaEps()
     {
-        var stock = Nvidia();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Nvidia();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var eps = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -168,8 +167,8 @@ public class FinancialFactsToolsComparativeWindowLeakTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_FiscalPeriodFilter_ReturnsOnlyMatchingPeriods()
     {
-        var stock = Nvidia();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Nvidia();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var revenue = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -225,8 +224,8 @@ public class FinancialFactsToolsComparativeWindowLeakTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_UnknownFiscalPeriod_ReturnsGuidance()
     {
-        var stock = Nvidia();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Nvidia();
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetFinancialFact("NVDA", "revenue", fiscalPeriod: "H1");

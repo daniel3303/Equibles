@@ -35,7 +35,7 @@ public class ShortDataTools
 
     private readonly DailyShortVolumeRepository _shortVolumeRepository;
     private readonly ShortInterestRepository _shortInterestRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly ShortSqueezeScoreManager _shortSqueezeScoreManager;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly IMemoryCache _memoryCache;
@@ -48,7 +48,7 @@ public class ShortDataTools
     public ShortDataTools(
         DailyShortVolumeRepository shortVolumeRepository,
         ShortInterestRepository shortInterestRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         ShortSqueezeScoreManager shortSqueezeScoreManager,
         StockSplitRepository stockSplitRepository,
         IMemoryCache memoryCache,
@@ -134,7 +134,11 @@ public class ShortDataTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, listedTicker);
+                splits = PriceSeriesSplitScope.ForListing(
+                    splits,
+                    stock.Presentation.Listing.Ticker,
+                    listedTicker
+                );
 
                 var table = MarkdownTable.Render(
                     records.OrderBy(r => r.Date).ToList(),
@@ -224,7 +228,11 @@ public class ShortDataTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, listedTicker);
+                splits = PriceSeriesSplitScope.ForListing(
+                    splits,
+                    stock.Presentation.Listing.Ticker,
+                    listedTicker
+                );
 
                 // FINRA's raw change is (current − previous) where the previous position is on
                 // the PREVIOUS settlement's split basis, so scaling it by the current factor
@@ -280,7 +288,7 @@ public class ShortDataTools
         );
     }
 
-    private static string ListingName(CommonStock stock, string listedTicker) =>
+    private static string ListingName(EquityIssuer stock, string listedTicker) =>
         !SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker)
             ? $" ({stock.Name})"
             : string.Empty;
@@ -759,7 +767,7 @@ public class ShortDataTools
     }
 
     // Thin forwarder so existing reflection-based normalization tests still find the method.
-    private Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker) =>
+    private Task<(EquityIssuer Stock, string Error)> ResolveStockByTicker(string ticker) =>
         _commonStockRepository.ResolveByTicker(ticker);
 
     [McpServerTool(Name = "GetShortSqueezeScores", Title = "Short Squeeze Scores", ReadOnly = true)]
@@ -792,7 +800,7 @@ public class ShortDataTools
         return _runner.Execute(
             async () =>
             {
-                CommonStock requestedStock = null;
+                EquityIssuer requestedStock = null;
                 if (!string.IsNullOrWhiteSpace(ticker))
                 {
                     var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
@@ -905,7 +913,7 @@ public class ShortDataTools
     // factor breakdown (raw reading + universe percentile per factor). The board answers
     // "what looks squeeze-prone"; this answers "does MY stock look squeeze-prone".
     private static string RenderSingleSqueezeScore(
-        CommonStock stock,
+        EquityIssuer stock,
         IReadOnlyList<ShortSqueezeScore> scores,
         DateOnly settlementDate
     )
@@ -921,7 +929,7 @@ public class ShortDataTools
         }
 
         if (index < 0)
-            return $"{stock.Ticker} is not in the scored universe at settlement {settlementDate:yyyy-MM-dd} ({scores.Count} stocks scored) — it reported no FINRA short interest, has no usable share count, an implausible short-interest ratio, or a non-equity/trust listing. Use GetShortInterest for its raw series.";
+            return $"{stock.Presentation.Listing.Ticker} is not in the scored universe at settlement {settlementDate:yyyy-MM-dd} ({scores.Count} stocks scored) — it reported no FINRA short interest, has no usable share count, an implausible short-interest ratio, or a non-equity/trust listing. Use GetShortInterest for its raw series.";
 
         var score = scores[index];
         var sb = new System.Text.StringBuilder();

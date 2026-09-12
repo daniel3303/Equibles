@@ -28,11 +28,11 @@ public class ShortDataToolsStrictDateArgumentsTests : ParadeDbMcpTestBase
         new(
             new DailyShortVolumeRepository(DbContext),
             new ShortInterestRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new ShortSqueezeScoreManager(
                 new ShortInterestRepository(DbContext),
                 new DailyShortVolumeRepository(DbContext),
-                new CommonStockRepository(DbContext),
+                new EquityIssuerRepository(DbContext),
                 new StockSplitRepository(DbContext),
                 new FailToDeliverRepository(DbContext),
                 new EquityDailyStockPriceRepository(DbContext),
@@ -48,24 +48,27 @@ public class ShortDataToolsStrictDateArgumentsTests : ParadeDbMcpTestBase
     public ShortDataToolsStrictDateArgumentsTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private async Task<CommonStock> SeedGmeWithVolume()
+    private async Task<EquityIssuer> SeedGmeWithVolume()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GME",
-            Name = "GameStop Corp",
-            Cik = "0001326380",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GME",
+            Name: "GameStop Corp",
+            Cik: "0001326380"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<DailyShortVolume>()
             .Add(
                 new DailyShortVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = new DateOnly(2026, 4, 1),
                     ShortVolume = 1_000_000,
                     ShortExemptVolume = 0,
@@ -115,14 +118,13 @@ public class ShortDataToolsStrictDateArgumentsTests : ParadeDbMcpTestBase
     public async Task GetShortInterest_UnparseableStartDate_ReturnsError()
     {
         DbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Ticker = "GME",
-                    Name = "GameStop Corp",
-                    Cik = "0001326380",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "GME",
+                    Name: "GameStop Corp",
+                    Cik: "0001326380"
+                )
             );
         await DbContext.SaveChangesAsync();
 
@@ -135,14 +137,13 @@ public class ShortDataToolsStrictDateArgumentsTests : ParadeDbMcpTestBase
     public async Task GetShortInterest_InvertedRange_ReturnsExplicitError()
     {
         DbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Ticker = "GME",
-                    Name = "GameStop Corp",
-                    Cik = "0001326380",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "GME",
+                    Name: "GameStop Corp",
+                    Cik: "0001326380"
+                )
             );
         await DbContext.SaveChangesAsync();
 
@@ -180,22 +181,25 @@ public class ShortDataToolsStrictDateArgumentsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterestSnapshot_UnknownSortBy_ReturnsError()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GME",
-            Name = "GameStop Corp",
-            Cik = "0001326380",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GME",
+            Name: "GameStop Corp",
+            Cik: "0001326380"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<ShortInterest>()
             .Add(
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 1_000,
                     ChangeInShortPosition = 0,

@@ -125,10 +125,10 @@ public class FundScoringWorkerTests : IDisposable
                     .GetService(typeof(FundScoringManager))
                     .Returns(_ => new FundScoringManager(
                         new InstitutionalHoldingRepository(_dbContext),
-                        new CommonStockRepository(_dbContext),
+                        new EquityIssuerRepository(_dbContext),
                         new BacktestPriceLoader(
                             new EquityDailyStockPriceRepository(_dbContext),
-                            new CommonStockRepository(_dbContext),
+                            new EquityIssuerRepository(_dbContext),
                             new StockSplitRepository(_dbContext)
                         ),
                         new FundScoreRepository(_dbContext)
@@ -144,8 +144,11 @@ public class FundScoringWorkerTests : IDisposable
     {
         SeedBenchmark();
 
-        var held = new CommonStock { Ticker = "AAA", Name = "Alpha Co" };
-        _dbContext.Set<CommonStock>().Add(held);
+        EquityIssuer held = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAA",
+            Name: "Alpha Co"
+        );
+        _dbContext.Set<EquityIssuer>().Add(held);
         AddPrice(held, EarlyPriceDate, 100m);
         AddPrice(held, Today, 200m);
 
@@ -183,14 +186,17 @@ public class FundScoringWorkerTests : IDisposable
 
     private void SeedBenchmark()
     {
-        var benchmark = new CommonStock { Ticker = "SPY", Name = "S&P 500 ETF" };
-        _dbContext.Set<CommonStock>().Add(benchmark);
+        EquityIssuer benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SPY",
+            Name: "S&P 500 ETF"
+        );
+        _dbContext.Set<EquityIssuer>().Add(benchmark);
         AddPrice(benchmark, EarlyPriceDate, 100m);
         AddPrice(benchmark, Today, 100m);
         _dbContext.SaveChanges();
     }
 
-    private void AddPrice(CommonStock stock, DateOnly date, decimal close)
+    private void AddPrice(EquityIssuer stock, DateOnly date, decimal close)
     {
         _dbContext
             .Set<EquityDailyStockPrice>()
@@ -200,9 +206,9 @@ public class FundScoringWorkerTests : IDisposable
                     Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
                         _dbContext,
                         stock,
-                        stock.Ticker
+                        stock.Presentation.Listing.Ticker
                     ),
-                    SourceTicker = stock.Ticker,
+                    SourceTicker = stock.Presentation.Listing.Ticker,
                     Date = date,
                     Open = close,
                     High = close,

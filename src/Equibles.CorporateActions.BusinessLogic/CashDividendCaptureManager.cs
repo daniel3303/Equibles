@@ -1,5 +1,6 @@
 using System.Data;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data.Models;
@@ -18,11 +19,11 @@ namespace Equibles.CorporateActions.BusinessLogic;
 public class CashDividendCaptureManager
 {
     private readonly CashDividendRepository _dividendRepository;
-    private readonly CommonStockRepository _stockRepository;
+    private readonly EquityIssuerRepository _stockRepository;
 
     public CashDividendCaptureManager(
         CashDividendRepository dividendRepository,
-        CommonStockRepository stockRepository
+        EquityIssuerRepository stockRepository
     )
     {
         _dividendRepository = dividendRepository;
@@ -47,11 +48,15 @@ public class CashDividendCaptureManager
             IsolationLevel.ReadCommitted,
             cancellationToken
         );
-        var stock = await _stockRepository.GetForUpdate(commonStockId, cancellationToken);
+        EquityIssuer stock = await _stockRepository.GetForUpdate(commonStockId, cancellationToken);
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, listedTicker);
         if (
             resolvedTicker == null
-            || !string.Equals(resolvedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(
+                resolvedTicker,
+                stock.Presentation.Listing.Ticker,
+                StringComparison.OrdinalIgnoreCase
+            )
         )
         {
             await transaction.RollbackAsync(cancellationToken);

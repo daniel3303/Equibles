@@ -32,21 +32,20 @@ public class RevenueBreakdownToolsTotalRowAndOverlapTests : ParadeDbMcpTestBase
         new(
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             ErrorManager,
             NullLogger<RevenueBreakdownTools>()
         );
 
-    private CommonStock AddStock(string ticker)
+    private EquityIssuer AddStock(string ticker)
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = $"{ticker} Inc.",
-            Cik = "0000320193",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: $"{ticker} Inc.",
+            Cik: "0000320193"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
@@ -64,7 +63,7 @@ public class RevenueBreakdownToolsTotalRowAndOverlapTests : ParadeDbMcpTestBase
     }
 
     private void AddFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         int fy,
         decimal value,
@@ -119,7 +118,7 @@ public class RevenueBreakdownToolsTotalRowAndOverlapTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetRevenueBreakdown_NestedParentAlongsideComponents_TotalRowAndOverlapCaution()
     {
-        var stock = AddStock("AAPL");
+        EquityIssuer stock = AddStock("AAPL");
         var revenue = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
         // Consolidated total: 416.
         AddFact(stock, revenue, 2024, 416_000_000_000m);
@@ -155,7 +154,7 @@ public class RevenueBreakdownToolsTotalRowAndOverlapTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetRevenueBreakdown_SingleCleanScheme_TotalRowButNoOverlapCaution()
     {
-        var stock = AddStock("CLEAN");
+        EquityIssuer stock = AddStock("CLEAN");
         var revenue = AddConcept("Revenues");
         AddFact(stock, revenue, 2024, 100_000_000_000m);
         AddFact(
@@ -184,7 +183,7 @@ public class RevenueBreakdownToolsTotalRowAndOverlapTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetRevenueBreakdown_MoreYearsThanMaxYears_AppendsTruncationNote()
     {
-        var stock = AddStock("YEARS");
+        EquityIssuer stock = AddStock("YEARS");
         var revenue = AddConcept("Revenues");
         foreach (var fy in new[] { 2022, 2023, 2024 })
         {

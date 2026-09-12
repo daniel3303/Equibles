@@ -28,12 +28,12 @@ public class BacktestPriceLoader
     internal const int ListingQueryBatchSize = 64;
 
     private readonly EquityDailyStockPriceRepository _priceRepository;
-    private readonly CommonStockRepository _stockRepository;
+    private readonly EquityIssuerRepository _stockRepository;
     private readonly StockSplitRepository _splitRepository;
 
     public BacktestPriceLoader(
         EquityDailyStockPriceRepository priceRepository,
-        CommonStockRepository stockRepository,
+        EquityIssuerRepository stockRepository,
         StockSplitRepository splitRepository
     )
     {
@@ -48,7 +48,7 @@ public class BacktestPriceLoader
     /// </summary>
     public async Task<BacktestResult> RunBacktest(
         IReadOnlyList<BacktestQuarterSnapshot> snapshots,
-        CommonStock benchmarkStock,
+        EquityIssuer benchmarkStock,
         string benchmarkListedTicker,
         DateOnly from,
         DateOnly to,
@@ -68,8 +68,8 @@ public class BacktestPriceLoader
             .Distinct()
             .ToArray();
         var primaryTickers = await _stockRepository
-            .GetByIdsIncludingInactive(stockIds)
-            .Select(stock => new { stock.Id, stock.Ticker })
+            .GetByIds(stockIds)
+            .Select(stock => new { stock.Id, Ticker = stock.Presentation.Listing.Ticker })
             .ToDictionaryAsync(stock => stock.Id, stock => stock.Ticker, cancellationToken);
 
         var listingKeys = requested
@@ -118,15 +118,21 @@ public class BacktestPriceLoader
 
         var requestedKeys = listingKeys.ToHashSet();
         var mappings = await _priceRepository
-            .GetLegacyIdentities(listingKeys.Select(key => key.CommonStockId).Distinct())
+            .GetUsListingReferences(listingKeys.Select(key => key.CommonStockId).Distinct())
             .Select(mapping => new
             {
-                mapping.CommonStockId,
-                mapping.ListedTicker,
-                mapping.EquityListingId,
+                CommonStockId = mapping.Security.EquityIssuerId,
+                ListedTicker = mapping.Ticker,
+                EquityListingId = mapping.Id,
             })
             .ToListAsync(cancellationToken);
         var listingIds = mappings
+            .GroupBy(mapping => new ListingKey(
+                mapping.CommonStockId,
+                NormalizeTicker(mapping.ListedTicker)
+            ))
+            .Where(group => group.Count() == 1)
+            .Select(group => group.Single())
             .Where(mapping =>
                 requestedKeys.Contains(
                     new ListingKey(mapping.CommonStockId, NormalizeTicker(mapping.ListedTicker))

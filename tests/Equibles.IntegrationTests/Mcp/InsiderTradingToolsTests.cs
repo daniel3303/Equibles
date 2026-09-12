@@ -22,7 +22,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
             new InsiderTransactionRepository(DbContext),
             new InsiderOwnerRepository(DbContext),
             new Form144FilingRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<InsiderTradingTools>()
@@ -30,14 +30,13 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
 
     // ── Helpers ────────────────────────────────────────────────────────
 
-    private static CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
+    private static EquityIssuer CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
     {
-        return new CommonStock
-        {
-            Ticker = ticker,
-            Name = name,
-            Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: name,
+            Cik: Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString()
+        );
     }
 
     private static InsiderOwner CreateOwner(
@@ -65,7 +64,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     }
 
     private static InsiderTransaction CreateTransaction(
-        CommonStock stock,
+        EquityIssuer stock,
         InsiderOwner owner,
         DateOnly? transactionDate = null,
         DateOnly? filingDate = null,
@@ -98,9 +97,9 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         };
     }
 
-    private async Task SeedStock(CommonStock stock)
+    private async Task SeedStock(EquityIssuer stock)
     {
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
     }
 
@@ -141,7 +140,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_StockWithTransactions_ReturnsFormattedTable()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(
             name: "Tim Cook",
             isDirector: false,
@@ -179,7 +178,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_MultipleTransactions_OrderedByDateDescending()
     {
-        var stock = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer stock = CreateStock("MSFT", "Microsoft Corp.");
         var owner = CreateOwner(cik: "0001111111", name: "Satya Nadella", isDirector: true);
         await SeedStock(stock);
         await SeedOwner(owner);
@@ -221,7 +220,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_TiedDates_UseFilingIdentityBeforeTheLimit()
     {
-        var stock = CreateStock("TIE", "Tie Corp.");
+        EquityIssuer stock = CreateStock("TIE", "Tie Corp.");
         var alpha = CreateOwner("0001111101", "Alpha Insider");
         var bravo = CreateOwner("0001111102", "Bravo Insider");
         var charlie = CreateOwner("0001111103", "Charlie Insider");
@@ -254,7 +253,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_RespectsMaxResults()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(name: "Insider A");
         await SeedStock(stock);
         await SeedOwner(owner);
@@ -282,7 +281,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_AcquiredTransaction_ShowsBuy()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(name: "Buyer");
         await SeedStock(stock);
         await SeedOwner(owner);
@@ -303,7 +302,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_AwardTransaction_ShowsAward()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(name: "Awardee");
         await SeedStock(stock);
         await SeedOwner(owner);
@@ -324,7 +323,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_GiftTransaction_ShowsGift()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(name: "Gifter");
         await SeedStock(stock);
         await SeedOwner(owner);
@@ -345,7 +344,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_ExerciseTransaction_ShowsExercise()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(name: "Exerciser");
         await SeedStock(stock);
         await SeedOwner(owner);
@@ -366,7 +365,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_OwnerWithMultipleRoles_ShowsAllRoles()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(
             name: "Multi Role",
             isDirector: true,
@@ -388,7 +387,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_OwnerWithNoRoles_ShowsInsider()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(
             name: "Plain Insider",
             isDirector: false,
@@ -407,7 +406,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_ContainsTableHeader()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(name: "Header Test");
         await SeedStock(stock);
         await SeedOwner(owner);
@@ -426,7 +425,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_OffsetPagesNewestFirst_AndRejectsPastEnd()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStock(stock);
         await SeedOwner(owner);
@@ -454,7 +453,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderTransactions_InvertedDateRange_ReturnsExplicitError()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         await SeedStock(stock);
 
         var result = await Sut()
@@ -477,7 +476,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetInsiderOwnership_ReturnsOwnershipSummary()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var owner = CreateOwner(
             name: "Tim Cook",
             isDirector: false,
@@ -589,7 +588,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         // The insiderName filter is the pivot SearchInsiders points at: it matches the
         // SEC-filed name with the same case-insensitive token-AND contract (ILike, so
         // Postgres-only). Rows by other insiders must not leak through.
-        var stock = CreateStock("NVDA", "NVIDIA Corp");
+        EquityIssuer stock = CreateStock("NVDA", "NVIDIA Corp");
         var huang = CreateOwner(cik: "0000111001", name: "HUANG JEN HSUN");
         var kress = CreateOwner(cik: "0000111002", name: "Kress Colette");
         await SeedStock(stock);
@@ -608,7 +607,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
     public async Task GetInsiderTransactions_InsiderNameFilter_NoMatch_SaysFiltersMatchedNothing()
     {
         // A filtered empty result must not read like "this stock has no insider data".
-        var stock = CreateStock("NVDA", "NVIDIA Corp");
+        EquityIssuer stock = CreateStock("NVDA", "NVIDIA Corp");
         var owner = CreateOwner(cik: "0000111003", name: "Kress Colette");
         await SeedStock(stock);
         await SeedOwner(owner);
@@ -652,8 +651,8 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         // The company column is the disambiguator for common surnames and carries the
         // ticker the sibling (ticker-keyed) tools need. It comes from the owner's most
         // recent transaction issuer.
-        var older = CreateStock("INTC", "Intel Corp");
-        var newer = CreateStock("NVDA", "NVIDIA Corp");
+        EquityIssuer older = CreateStock("INTC", "Intel Corp");
+        EquityIssuer newer = CreateStock("NVDA", "NVIDIA Corp");
         var owner = CreateOwner(cik: "0000222001", name: "HUANG JEN HSUN");
         await SeedStock(older);
         await SeedStock(newer);
@@ -699,7 +698,7 @@ public class InsiderTradingToolsTests : ParadeDbMcpTestBase
         // Without an ORDER BY, Postgres returns an arbitrary subset/order for common
         // surnames. The contract is: most recently active filers first, never-filed
         // owners last (the DESC NULLS FIRST trap), name as tie-breaker.
-        var stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
         var stale = CreateOwner(cik: "0000333001", name: "Smith Stale");
         var active = CreateOwner(cik: "0000333002", name: "Smith Active");
         var neverFiled = CreateOwner(cik: "0000333003", name: "Smith Neverfiled");

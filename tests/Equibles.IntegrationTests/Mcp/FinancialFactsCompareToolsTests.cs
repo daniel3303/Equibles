@@ -22,22 +22,21 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         new(
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialFactsTools>()
         );
 
-    private CommonStock AddStock(string ticker, string name)
+    private EquityIssuer AddStock(string ticker, string name)
     {
-        var s = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = ticker,
-        };
-        DbContext.Set<CommonStock>().Add(s);
+        EquityIssuer s = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: ticker
+        );
+        DbContext.Set<EquityIssuer>().Add(s);
         return s;
     }
 
@@ -59,7 +58,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
     }
 
     private void AddRevenue(
-        CommonStock stock,
+        EquityIssuer stock,
         decimal value,
         DateOnly filed,
         int fy = 2023,
@@ -124,7 +123,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         var sut = new FinancialFactsTools(
             new FinancialFactRepository(null),
             new FinancialConceptRepository(null),
-            new CommonStockRepository(null),
+            new EquityIssuerRepository(null),
             new StockSplitRepository(null),
             new Equibles.Errors.BusinessLogic.ErrorManager(null),
             NullLogger<FinancialFactsTools>()
@@ -138,8 +137,8 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task CompareFinancialFact_PeerSet_RendersRowsLatestRestatedAndListsSkipped()
     {
-        var apple = AddStock("AAPL", "Apple Inc.");
-        var msft = AddStock("MSFT", "Microsoft Corp");
+        EquityIssuer apple = AddStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = AddStock("MSFT", "Microsoft Corp");
         AddStock("GOOGL", "Alphabet Inc."); // no facts
         // Apple restated: 380 then 400 (latest filed wins).
         AddRevenue(apple, 380_000_000_000m, new DateOnly(2024, 1, 15), accn: "aapl-orig");
@@ -161,7 +160,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task CompareFinancialFact_PerShareValue_RestatesEachCompanyAcrossItsSplits()
     {
-        var alphabet = AddStock("GOOGL", "Alphabet Inc.");
+        EquityIssuer alphabet = AddStock("GOOGL", "Alphabet Inc.");
         var dilutedEps = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -224,7 +223,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task CompareFinancialFact_SameDayAmendments_DeterministicByAccession()
     {
-        var apple = AddStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = AddStock("AAPL", "Apple Inc.");
         var filed = new DateOnly(2024, 6, 1);
         // Two filings, SAME filed date — accession is the stable tiebreak.
         AddRevenue(apple, 350_000_000_000m, filed, accn: "0000320193-24-000001");

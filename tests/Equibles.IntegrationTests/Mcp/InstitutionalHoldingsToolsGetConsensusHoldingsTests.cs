@@ -36,24 +36,21 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
     [Fact]
     public async Task GetInstitutionConsensusHoldings_ThreeFunds_RanksConsensusFirst()
     {
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
-        var nvda = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
+        EquityIssuer nvda = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         var fundA = new InstitutionalHolder { Cik = "CH00001", Name = "Consensus A LP" };
         var fundB = new InstitutionalHolder { Cik = "CH00002", Name = "Consensus B LP" };
         var fundC = new InstitutionalHolder { Cik = "CH00003", Name = "Consensus C LP" };
@@ -92,18 +89,16 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
     [Fact]
     public async Task GetInstitutionConsensusHoldings_MinFundsFilter_ExcludesBelowThreshold()
     {
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var nvda = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer nvda = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         var fundA = new InstitutionalHolder { Cik = "CH00004", Name = "Filter A LP" };
         var fundB = new InstitutionalHolder { Cik = "CH00005", Name = "Filter B LP" };
         DbContext.AddRange(aapl, nvda, fundA, fundB);
@@ -130,12 +125,11 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
     [Fact]
     public async Task GetInstitutionConsensusHoldings_NoCommonQuarter_ReportsNoOverlap()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var fundA = new InstitutionalHolder { Cik = "CH00006", Name = "Mismatch A LP" };
         var fundB = new InstitutionalHolder { Cik = "CH00007", Name = "Mismatch B LP" };
         DbContext.AddRange(stock, fundA, fundB);
@@ -156,7 +150,7 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             new StockSplitRepository(ctx),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(ctx),
@@ -167,7 +161,7 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsTests : Pa
         );
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long value

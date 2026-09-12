@@ -24,7 +24,10 @@ public class PrincipalValueRepairTransactionTests(ParadeDbFixture fixture) : IAs
     public async Task FailedRollupRollsBackPositionAndCanRetry()
     {
         var date = new DateOnly(2026, 6, 30);
-        var stock = new CommonStock { Ticker = "PRN", Name = "Principal issuer" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "PRN",
+            Name: "Principal issuer"
+        );
         var holder = new InstitutionalHolder { Cik = "0001900923", Name = "Principal filer" };
         var holding = new InstitutionalHolding
         {

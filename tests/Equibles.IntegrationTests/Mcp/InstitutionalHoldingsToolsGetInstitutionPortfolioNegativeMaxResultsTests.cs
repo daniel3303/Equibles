@@ -24,7 +24,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioNegativeMaxResults
         new(
             new InstitutionalHoldingRepository(DbContext),
             new InstitutionalHolderRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(DbContext),
@@ -37,12 +37,11 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioNegativeMaxResults
     [Fact]
     public async Task GetInstitutionPortfolio_NegativeMaxResults_DoesNotSurfaceInternalError()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
         var holder = new InstitutionalHolder
         {
             Cik = "0001067983",
@@ -50,7 +49,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioNegativeMaxResults
             City = "Omaha",
             StateOrCountry = "NE",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<InstitutionalHolder>().Add(holder);
         await DbContext.SaveChangesAsync();
 

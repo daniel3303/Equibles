@@ -52,6 +52,9 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
 
     private static void ConfigureEquityIdentity(ModelBuilder builder)
     {
+        builder.Entity<EquityIssuer>().Property(issuer => issuer.Id).ValueGeneratedNever();
+        builder.Entity<EquitySecurity>().Property(security => security.Id).ValueGeneratedNever();
+        builder.Entity<EquityListing>().Property(listing => listing.Id).ValueGeneratedNever();
         builder
             .Entity<EquityIssuer>()
             .HasOne(row => row.CommonStock)

@@ -33,18 +33,16 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksValueSortTests : ParadeD
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C1",
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "C2",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C1"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "C2"
+        );
         DbContext.AddRange(aapl, msft);
 
         var holders = new InstitutionalHolder[4];
@@ -81,7 +79,7 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksValueSortTests : ParadeD
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             new StockSplitRepository(ctx),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(ctx),
@@ -92,7 +90,7 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksValueSortTests : ParadeD
         );
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -108,6 +106,7 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksValueSortTests : ParadeD
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{holder.Cik}-{stock.Ticker}-{reportDate:yyyyMMdd}",
+            AccessionNumber =
+                $"acc-{holder.Cik}-{stock.Presentation.Listing.Ticker}-{reportDate:yyyyMMdd}",
         };
 }

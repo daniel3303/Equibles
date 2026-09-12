@@ -51,14 +51,13 @@ public class DocumentScraperUpdateCompanyMetadataErrorIsolationTests
             }
         );
         dbContext.Database.EnsureCreated();
-        var company = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "AAPL Inc",
-            Cik = "0000320193",
-        };
-        dbContext.Set<CommonStock>().Add(company);
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "AAPL Inc",
+            Cik: "0000320193"
+        );
+        dbContext.Set<EquityIssuer>().Add(company);
         dbContext.SaveChanges();
 
         var secEdgarClient = Substitute.For<ISecEdgarClient>();
@@ -68,10 +67,10 @@ public class DocumentScraperUpdateCompanyMetadataErrorIsolationTests
 
         var services = new ServiceCollection();
         services.AddSingleton(dbContext);
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         services.AddScoped<DocumentRepository>();
         services.AddSingleton(Substitute.For<IBus>());
-        services.AddScoped<CommonStockManager>();
+        services.AddScoped<EquityIdentityManager>();
         services.AddSingleton(secEdgarClient);
         services.AddSingleton(Substitute.For<IDocumentPersistenceService>());
         var provider = services.BuildServiceProvider();
@@ -104,7 +103,9 @@ public class DocumentScraperUpdateCompanyMetadataErrorIsolationTests
         // scraping error, fiscal columns untouched.
         result.CompaniesProcessed.Should().Be(1);
         result.Errors.Should().Be(0);
-        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(c => c.Id == company.Id);
         persisted.FiscalYearEndMonth.Should().BeNull();
     }
 }

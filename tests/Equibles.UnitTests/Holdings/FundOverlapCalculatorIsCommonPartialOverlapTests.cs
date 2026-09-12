@@ -20,9 +20,9 @@ public class FundOverlapCalculatorIsCommonPartialOverlapTests
     [Fact]
     public void Calculate_PartialOverlap_IsCommonTrueOnSharedRowAndFalseOnSingleFundRows()
     {
-        var aapl = MakeStock("AAPL", "Apple Inc.");
-        var msft = MakeStock("MSFT", "Microsoft Corp.");
-        var nvda = MakeStock("NVDA", "NVIDIA Corp.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = MakeStock("MSFT", "Microsoft Corp.");
+        EquityIssuer nvda = MakeStock("NVDA", "NVIDIA Corp.");
         var fundA = MakeHolder("Fund A", "C001");
         var fundB = MakeHolder("Fund B", "C002");
 
@@ -57,14 +57,13 @@ public class FundOverlapCalculatorIsCommonPartialOverlapTests
         nvdaRow.IsCommon.Should().BeFalse();
     }
 
-    private static CommonStock MakeStock(string ticker, string name) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = "C" + Guid.NewGuid().ToString("N")[..7],
-        };
+    private static EquityIssuer MakeStock(string ticker, string name) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: "C" + Guid.NewGuid().ToString("N")[..7]
+        );
 
     private static InstitutionalHolder MakeHolder(string name, string cik) =>
         new()
@@ -76,7 +75,7 @@ public class FundOverlapCalculatorIsCommonPartialOverlapTests
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         long shares,
         long value
     ) =>

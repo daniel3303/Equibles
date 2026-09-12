@@ -36,16 +36,15 @@ public class ShortInterestImportServiceBulkFetchThresholdTests : ParadeDbMcpTest
     {
         var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
 
-        var stocks = new List<CommonStock>();
+        var stocks = new List<EquityIssuer>();
         for (var i = 0; i < 502; i++)
         {
             stocks.Add(
-                new CommonStock
-                {
-                    Cik = i.ToString("D10"),
-                    Ticker = $"T{i:D4}",
-                    Name = $"Tracked {i}",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Cik: i.ToString("D10"),
+                    Ticker: $"T{i:D4}",
+                    Name: $"Tracked {i}"
+                )
             );
         }
         DbContext.AddRange(stocks);
@@ -55,9 +54,13 @@ public class ShortInterestImportServiceBulkFetchThresholdTests : ParadeDbMcpTest
             new ShortInterest
             {
                 EquityListingId = Equibles
-                    .TestSupport.NativeListingSeed.ForStock(DbContext, stocks[0], stocks[0].Ticker)
+                    .TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stocks[0],
+                        stocks[0].Presentation.Listing.Ticker
+                    )
                     .Id,
-                ListedTicker = stocks[0].Ticker,
+                ListedTicker = stocks[0].Presentation.Listing.Ticker,
                 SettlementDate = settlementDate,
                 CurrentShortPosition = 1,
             }
@@ -72,7 +75,7 @@ public class ShortInterestImportServiceBulkFetchThresholdTests : ParadeDbMcpTest
         finraClient.GetShortInterest(settlementDate).Returns(new List<ShortInterestRecord>());
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(ShortInterestRepository), new ShortInterestRepository(DbContext))
         );

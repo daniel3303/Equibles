@@ -40,13 +40,12 @@ public class InstitutionsBacktestReportDateOverflowTests
             // Benchmark stock must exist so Execute proceeds past the benchmark lookup and
             // reaches the rebalance-date computation.
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "SPY",
-                    Name = "SPDR S&P 500 ETF Trust",
-                    Cik = "0000884394",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "SPY",
+                    Name: "SPDR S&P 500 ETF Trust",
+                    Cik: "0000884394"
+                )
             );
 
             var filer = new InstitutionalHolder { Cik = filerCik, Name = "Berkshire Hathaway Inc" };

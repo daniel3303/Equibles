@@ -52,12 +52,12 @@ public class InstitutionalHoldingRepositoryScreenMaxPctFloatTests : IAsyncLifeti
     {
         await using var seed = FreshContext();
         // DENSE — 80% of float, must be excluded by MaxPctFloat=50.
-        var dense = await SeedStock(seed, ticker: "DENSE", sharesOutStanding: 1_000);
+        EquityIssuer dense = await SeedStock(seed, ticker: "DENSE", sharesOutStanding: 1_000);
         // SPARSE — 5% of float, must survive.
-        var sparse = await SeedStock(seed, ticker: "SPARSE", sharesOutStanding: 1_000);
+        EquityIssuer sparse = await SeedStock(seed, ticker: "SPARSE", sharesOutStanding: 1_000);
         // UNK — SharesOutStanding == 0 (unknown). Without the divide-by-zero guard
         // the Postgres query would throw rather than excluding this stock.
-        var unknown = await SeedStock(seed, ticker: "UNK", sharesOutStanding: 0);
+        EquityIssuer unknown = await SeedStock(seed, ticker: "UNK", sharesOutStanding: 0);
         var holder = await SeedHolder(seed, cik: "mp");
         seed.Add(MakeHolding(dense, holder, Current, shares: 800, value: 800));
         seed.Add(MakeHolding(sparse, holder, Current, shares: 50, value: 50));
@@ -76,19 +76,18 @@ public class InstitutionalHoldingRepositoryScreenMaxPctFloatTests : IAsyncLifeti
         rows[0].PercentOfFloat.Should().BeApproximately(5.0, 0.01);
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker,
         long sharesOutStanding = 0
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Test Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-            SharesOutStanding = sharesOutStanding,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Test Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
+            SharesOutStanding: sharesOutStanding
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -106,7 +105,7 @@ public class InstitutionalHoldingRepositoryScreenMaxPctFloatTests : IAsyncLifeti
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,

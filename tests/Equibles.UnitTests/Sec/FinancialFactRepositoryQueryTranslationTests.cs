@@ -38,7 +38,10 @@ public class FinancialFactRepositoryQueryTranslationTests
         );
     }
 
-    private static readonly CommonStock Stock = new() { Id = Guid.NewGuid(), Ticker = "HD" };
+    private static readonly EquityIssuer Stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+        Id: Guid.NewGuid(),
+        Ticker: "HD"
+    );
 
     [Fact]
     public void GetMeasuredFlows_FullYear_TranslatesTheAnnualBoundsAgainstThePeriodStart()

@@ -65,7 +65,7 @@ public class StockTabServiceLoadFundTabAvailabilityTests : IDisposable
             new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
     }
 
@@ -74,7 +74,10 @@ public class StockTabServiceLoadFundTabAvailabilityTests : IDisposable
     [Fact]
     public async Task LoadFundTabAvailability_FundWithBothFilings_ReportsBothAvailable()
     {
-        var fund = new CommonStock { Ticker = "PHD", Name = "Pioneer Floating Rate Fund" };
+        EquityIssuer fund = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "PHD",
+            Name: "Pioneer Floating Rate Fund"
+        );
         _dbContext.Add(fund);
         _dbContext.Add(
             new NportFiling
@@ -103,7 +106,10 @@ public class StockTabServiceLoadFundTabAvailabilityTests : IDisposable
     [Fact]
     public async Task LoadFundTabAvailability_OperatingCompanyWithNoFundFilings_ReportsNeitherAvailable()
     {
-        var stock = new CommonStock { Ticker = "ARE", Name = "Alexandria Real Estate Equities" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ARE",
+            Name: "Alexandria Real Estate Equities"
+        );
         _dbContext.Add(stock);
         await _dbContext.SaveChangesAsync();
 
@@ -116,7 +122,10 @@ public class StockTabServiceLoadFundTabAvailabilityTests : IDisposable
     [Fact]
     public async Task LoadFundTabAvailability_OnlyNportFiling_ReportsHoldingsAvailableButNotOperations()
     {
-        var fund = new CommonStock { Ticker = "ABC", Name = "Holdings Only Fund" };
+        EquityIssuer fund = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ABC",
+            Name: "Holdings Only Fund"
+        );
         _dbContext.Add(fund);
         _dbContext.Add(
             new NportFiling
@@ -137,7 +146,10 @@ public class StockTabServiceLoadFundTabAvailabilityTests : IDisposable
     [Fact]
     public async Task LoadFundTabAvailability_OnlyNCenFiling_ReportsOperationsAvailableButNotHoldings()
     {
-        var fund = new CommonStock { Ticker = "XYZ", Name = "Operations Only Fund" };
+        EquityIssuer fund = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XYZ",
+            Name: "Operations Only Fund"
+        );
         _dbContext.Add(fund);
         _dbContext.Add(
             new NCenFiling

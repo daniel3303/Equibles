@@ -51,19 +51,18 @@ public class SharesOutstandingProviderSplitRestatementTests
             new StockSplitRepository(db)
         );
 
-    private static CommonStock Stock() =>
-        new()
-        {
-            Ticker = "BYND",
-            Name = "Beyond Meat",
-            Cik = "0001655210",
-        };
+    private static EquityIssuer Stock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BYND",
+            Name: "Beyond Meat",
+            Cik: "0001655210"
+        );
 
     private static FinancialConcept CoverPageConcept() =>
         new() { Taxonomy = FactTaxonomy.Dei, Tag = "EntityCommonStockSharesOutstanding" };
 
     private static FinancialFact Fact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly filed,
@@ -88,7 +87,7 @@ public class SharesOutstandingProviderSplitRestatementTests
         };
 
     private static FinancialFact ClassFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly filed,
@@ -104,7 +103,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     }
 
     private static StockSplit Split(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly effective,
         decimal numerator,
         decimal denominator,
@@ -124,7 +123,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     public async Task ReverseSplitEffectiveAfterTheFactsAsOfDate_RestatesTheCount()
     {
         await using var db = NewDb();
-        var stock = Stock();
+        EquityIssuer stock = Stock();
         var concept = CoverPageConcept();
         db.AddRange(stock, concept);
         // The BYND shape: 10-Q filed Aug 6 with the count as of Aug 1; 1-for-30 effective Aug 14.
@@ -141,7 +140,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     public async Task FactStatedOnTheEffectiveDate_IsAlreadyPostSplit_NotRestated()
     {
         await using var db = NewDb();
-        var stock = Stock();
+        EquityIssuer stock = Stock();
         var concept = CoverPageConcept();
         db.AddRange(stock, concept);
         var effective = Today.AddDays(-4);
@@ -160,7 +159,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     public async Task AnnouncedFutureSplit_DoesNotRestateAnything()
     {
         await using var db = NewDb();
-        var stock = Stock();
+        EquityIssuer stock = Stock();
         var concept = CoverPageConcept();
         db.AddRange(stock, concept);
         db.Add(Fact(stock, concept, 515_818_978m, Today.AddDays(-12), Today.AddDays(-17)));
@@ -177,7 +176,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     public async Task SplitAttributedToASiblingSeries_DoesNotRescaleTheEntityCount()
     {
         await using var db = NewDb();
-        var stock = Stock();
+        EquityIssuer stock = Stock();
         var concept = CoverPageConcept();
         db.AddRange(stock, concept);
         db.Add(Fact(stock, concept, 515_818_978m, Today.AddDays(-12), Today.AddDays(-17)));
@@ -193,7 +192,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     public async Task LegacyNullAttributedSplit_RestatesLikeThePrimarySeries()
     {
         await using var db = NewDb();
-        var stock = Stock();
+        EquityIssuer stock = Stock();
         var concept = CoverPageConcept();
         db.AddRange(stock, concept);
         db.Add(Fact(stock, concept, 100_000_000m, Today.AddDays(-12), Today.AddDays(-17)));
@@ -210,7 +209,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     public async Task PerClassSum_IsRestatedByTheSameRule()
     {
         await using var db = NewDb();
-        var stock = Stock();
+        EquityIssuer stock = Stock();
         var concept = CoverPageConcept();
         db.AddRange(stock, concept);
         db.Add(
@@ -245,7 +244,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     public async Task CorruptSplitRatio_LeavesTheCountAsFiled()
     {
         await using var db = NewDb();
-        var stock = Stock();
+        EquityIssuer stock = Stock();
         var concept = CoverPageConcept();
         db.AddRange(stock, concept);
         db.Add(Fact(stock, concept, 515_818_978m, Today.AddDays(-12), Today.AddDays(-17)));
@@ -262,7 +261,7 @@ public class SharesOutstandingProviderSplitRestatementTests
     public async Task GetReportedSharesOutstanding_StaysAsFiled()
     {
         await using var db = NewDb();
-        var stock = Stock();
+        EquityIssuer stock = Stock();
         var concept = CoverPageConcept();
         db.AddRange(stock, concept);
         db.Add(Fact(stock, concept, 515_818_978m, Today.AddDays(-12), Today.AddDays(-17)));

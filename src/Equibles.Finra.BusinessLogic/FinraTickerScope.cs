@@ -10,7 +10,7 @@ namespace Equibles.Finra.BusinessLogic;
 public static class FinraTickerScope
 {
     public static string SecondaryListingUnavailable(
-        CommonStock stock,
+        EquityIssuer stock,
         string requestedTicker,
         string dataset
     )
@@ -20,12 +20,12 @@ public static class FinraTickerScope
 
         var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, requestedTicker);
         return $"No exact {dataset} series is available for {listedTicker}. It is a separate "
-            + $"listing on the same SEC filer as {stock.Ticker} ({stock.Name}); {stock.Ticker}'s "
+            + $"listing on the same SEC filer as {stock.Presentation.Listing.Ticker} ({stock.Name}); {stock.Presentation.Listing.Ticker}'s "
             + "FINRA rows are not substituted.";
     }
 
     public static string IssuerDerivedModelUnavailable(
-        CommonStock stock,
+        EquityIssuer stock,
         string requestedTicker,
         string dataset
     )

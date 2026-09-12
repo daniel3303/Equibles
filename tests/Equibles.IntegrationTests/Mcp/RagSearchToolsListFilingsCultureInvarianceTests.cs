@@ -24,7 +24,7 @@ public class RagSearchToolsListFilingsCultureInvarianceTests : ParadeDbMcpTestBa
     {
         var ragManager = new RagManager(
             HybridChunkSearcherFactory.Bm25Only(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             NullLogger<RagManager>()
         );
         var secDocumentService = new SecDocumentService(
@@ -34,7 +34,7 @@ public class RagSearchToolsListFilingsCultureInvarianceTests : ParadeDbMcpTestBa
         return new RagSearchTools(
             ragManager,
             secDocumentService,
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new DocumentRepository(DbContext),
             Substitute.For<IFileManager>(),
             ErrorManager,
@@ -45,12 +45,11 @@ public class RagSearchToolsListFilingsCultureInvarianceTests : ParadeDbMcpTestBa
     [Fact]
     public async Task ListFilings_UnderNonGregorianCulture_RendersDatesAndCountsInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
         var file = new File
         {

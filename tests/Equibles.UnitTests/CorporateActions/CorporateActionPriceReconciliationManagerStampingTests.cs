@@ -24,7 +24,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         new(
             new StockSplitRepository(db),
             new CashDividendRepository(db),
-            new CommonStockRepository(db),
+            new EquityIssuerRepository(db),
             new CorporateActionPriceReconciliationCursorRepository(db)
         );
 
@@ -47,17 +47,16 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         return context;
     }
 
-    private static CommonStock Stock(
+    private static EquityIssuer Stock(
         Guid id,
         string ticker = "AAPL",
         List<string> secondaryTickers = null
     ) =>
-        new()
-        {
-            Id = id,
-            Ticker = ticker,
-            SecondaryTickers = secondaryTickers ?? [],
-        };
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: id,
+            Ticker: ticker,
+            SecondaryTickers: secondaryTickers ?? []
+        );
 
     private static StockSplit PendingSplit(
         Guid stockId,
@@ -407,15 +406,15 @@ public class CorporateActionPriceReconciliationManagerStampingTests
     {
         await using var db = NewDb();
         var stockId = Guid.NewGuid();
-        var stock = Stock(stockId);
+        EquityIssuer stock = Stock(stockId);
         db.Add(stock);
         db.Add(PendingDividend(stockId, new DateOnly(2024, 5, 9)));
         await db.SaveChangesAsync();
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
-        stock.Ticker = "MSFT";
-        stock.SecondaryTickers = ["AAPL"];
+        stock.Presentation.Listing.Ticker = "MSFT";
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["AAPL"]);
         await db.SaveChangesAsync();
 
         var stamped = await manager.StampApplied(selected, DateTime.UtcNow);
@@ -434,9 +433,9 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         await using var db = NewDb();
         var stockId = Guid.NewGuid();
         var expectedDelistedOn = new DateOnly(2026, 7, 31);
-        var stock = Stock(stockId);
-        stock.Active = false;
-        stock.DelistedOn = expectedDelistedOn.AddDays(1);
+        EquityIssuer stock = Stock(stockId);
+        stock.Presentation.Listing.Active = false;
+        stock.Presentation.Listing.DelistedOn = expectedDelistedOn.AddDays(1);
         var split = PendingSplit(stockId, new DateOnly(2026, 7, 15));
         db.Add(stock);
         db.Add(split);
@@ -463,9 +462,9 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         await using var db = NewDb();
         var stockId = Guid.NewGuid();
         var expectedDelistedOn = new DateOnly(2026, 7, 31);
-        var stock = Stock(stockId);
-        stock.Active = true;
-        stock.DelistedOn = expectedDelistedOn;
+        EquityIssuer stock = Stock(stockId);
+        stock.Presentation.Listing.Active = true;
+        stock.Presentation.Listing.DelistedOn = expectedDelistedOn;
         var split = PendingSplit(stockId, new DateOnly(2026, 7, 15));
         db.Add(stock);
         db.Add(split);
@@ -492,7 +491,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         await using var db = NewDb();
         var stockId = Guid.NewGuid();
         var delistedOn = new DateOnly(2026, 7, 31);
-        var stock = Stock(stockId, "LIVE");
+        EquityIssuer stock = Stock(stockId, "LIVE");
         var listing = new EquityListingRetirementEvidence
         {
             EquityIssuerId = stockId,

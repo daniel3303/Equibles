@@ -53,18 +53,16 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C1",
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "C2",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C1"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "C2"
+        );
         var holder = new InstitutionalHolder { Cik = "1", Name = "Big Fund" };
         DbContext.AddRange(aapl, msft, holder);
         // AAPL: Δ +500_000 value
@@ -97,18 +95,16 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C1",
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "C2",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C1"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "C2"
+        );
         DbContext.AddRange(aapl, msft);
         // AAPL gets 3 new filers (none in prior), MSFT gets 1 new filer.
         for (var i = 0; i < 3; i++)
@@ -146,12 +142,11 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
     {
         var prior = new DateOnly(2099, 9, 30);
         var current = new DateOnly(2099, 12, 31);
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C1",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C1"
+        );
         var currentFiler = new InstitutionalHolder { Cik = "current", Name = "Current Filer" };
         var carriedFiler = new InstitutionalHolder { Cik = "carried", Name = "Carried Filer" };
         DbContext.AddRange(stock, currentFiler, carriedFiler);
@@ -180,7 +175,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             new StockSplitRepository(ctx),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(ctx),
@@ -191,7 +186,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityTests : ParadeDbM
         );
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,

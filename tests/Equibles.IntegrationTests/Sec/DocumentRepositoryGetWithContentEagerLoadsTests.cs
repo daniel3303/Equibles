@@ -26,7 +26,10 @@ public class DocumentRepositoryGetWithContentEagerLoadsTests : ParadeDbMcpTestBa
     [Fact]
     public async Task GetWithContent_LoadsContentAndCommonStock_WithoutLazyLoading()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = new File
         {
             Name = "10k",

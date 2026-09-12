@@ -25,7 +25,7 @@ namespace Equibles.IntegrationTests.Yahoo;
 public class YahooPriceImportServiceCompanyProfilePreservesSectorTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly CommonStockRepository _stockRepo;
+    private readonly EquityIssuerRepository _stockRepo;
     private readonly IndustryRepository _industryRepo;
     private readonly SectorRepository _sectorRepo;
     private readonly IYahooFinanceClient _yahooClient;
@@ -37,7 +37,7 @@ public class YahooPriceImportServiceCompanyProfilePreservesSectorTests : IDispos
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
-        _stockRepo = new CommonStockRepository(_dbContext);
+        _stockRepo = new EquityIssuerRepository(_dbContext);
         _industryRepo = new IndustryRepository(_dbContext);
         _sectorRepo = new SectorRepository(_dbContext);
         EquityDailyStockPriceRepository priceRepo = new EquityDailyStockPriceRepository(_dbContext);
@@ -53,7 +53,7 @@ public class YahooPriceImportServiceCompanyProfilePreservesSectorTests : IDispos
         var dividendRepo = new CashDividendRepository(_dbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(EquityDailyStockPriceRepository), priceRepo),
-            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(EquityIssuerRepository), _stockRepo),
             (typeof(StockSplitRepository), splitRepo),
             (typeof(IndustryRepository), _industryRepo),
             (typeof(SectorRepository), _sectorRepo),
@@ -104,13 +104,12 @@ public class YahooPriceImportServiceCompanyProfilePreservesSectorTests : IDispos
         _industryRepo.Add(industry);
         await _industryRepo.SaveChanges();
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "PFE",
-            Name = "PFE Inc.",
-            Cik = "CIK-PFE",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "PFE",
+            Name: "PFE Inc.",
+            Cik: "CIK-PFE"
+        );
         _stockRepo.Add(stock);
         await _stockRepo.SaveChanges();
 

@@ -28,11 +28,11 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
         new(
             new DailyShortVolumeRepository(DbContext),
             new ShortInterestRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new ShortSqueezeScoreManager(
                 new ShortInterestRepository(DbContext),
                 new DailyShortVolumeRepository(DbContext),
-                new CommonStockRepository(DbContext),
+                new EquityIssuerRepository(DbContext),
                 new StockSplitRepository(DbContext),
                 new FailToDeliverRepository(DbContext),
                 new EquityDailyStockPriceRepository(DbContext),
@@ -48,28 +48,31 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
     public ShortDataToolsHistoryOutputNotesTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private CommonStock AddGme()
+    private EquityIssuer AddGme()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GME",
-            Name = "GameStop Corp",
-            Cik = "0001326380",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GME",
+            Name: "GameStop Corp",
+            Cik: "0001326380"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
-    private void AddVolume(CommonStock stock, DateOnly date) =>
+    private void AddVolume(EquityIssuer stock, DateOnly date) =>
         DbContext
             .Set<DailyShortVolume>()
             .Add(
                 new DailyShortVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = date,
                     ShortVolume = 1_000_000,
                     ShortExemptVolume = 0,
@@ -79,7 +82,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
             );
 
     private void AddShortInterest(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly settlementDate,
         long position,
         long previous,
@@ -91,9 +94,13 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = settlementDate,
                     CurrentShortPosition = position,
                     PreviousShortPosition = previous,
@@ -106,7 +113,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortVolume_TruncatedRange_AppendsNewestKeptNote()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         for (var day = 1; day <= 5; day++)
             AddVolume(stock, new DateOnly(2026, 4, day));
         await DbContext.SaveChangesAsync();
@@ -121,7 +128,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortVolume_CompleteRange_HasNoTruncationNote()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddVolume(stock, new DateOnly(2026, 4, 1));
         await DbContext.SaveChangesAsync();
 
@@ -136,7 +143,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
     {
         // Full-universe FINRA daily files were only loaded from a fixed floor; a range
         // before it must say so instead of the generic (false-reading) "no data for GME".
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddVolume(stock, new DateOnly(2026, 4, 6));
         await DbContext.SaveChangesAsync();
 
@@ -149,7 +156,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortVolume_EmptyRangeInsideCoverage_KeepsGenericMessage()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddVolume(stock, new DateOnly(2026, 4, 6));
         await DbContext.SaveChangesAsync();
 
@@ -163,7 +170,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterest_TruncatedRange_AppendsNewestKeptNote()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddShortInterest(stock, new DateOnly(2026, 2, 13), 100, 90, 10);
         AddShortInterest(stock, new DateOnly(2026, 2, 27), 110, 100, 10);
         AddShortInterest(stock, new DateOnly(2026, 3, 13), 120, 110, 10);
@@ -184,7 +191,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
         // mixes a pre-split previous position with a post-split current one. The displayed
         // Change must equal the difference of the two DISPLAYED (restated) positions —
         // 5,500,000 − 5,000,000 = +500,000 — not the raw 5,500,000 − 500,000 = +5,000,000.
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddShortInterest(
             stock,
             new DateOnly(2026, 2, 27),
@@ -226,7 +233,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterest_OneSettlementRange_UsesPreRangeRowForSplitChange()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddShortInterest(
             stock,
             new DateOnly(2026, 2, 27),
@@ -247,7 +254,7 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
                 new StockSplit
                 {
                     EquityIssuerId = stock.Id,
-                    PriceSeriesTicker = stock.Ticker,
+                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                     EffectiveDate = new DateOnly(2026, 3, 1),
                     Numerator = 10m,
                     Denominator = 1m,
@@ -267,16 +274,20 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterest_CappedDaysToCover_RendersSentinel()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         DbContext
             .Set<ShortInterest>()
             .Add(
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 13),
                     CurrentShortPosition = 1_000,
                     ChangeInShortPosition = 0,

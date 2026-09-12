@@ -17,16 +17,16 @@ public class ShortInterestRepository : BaseRepository<ShortInterest>
     public IQueryable<ShortInterest> GetHistoryByListingId(Guid listingId) =>
         GetAll().Where(row => row.EquityListingId == listingId);
 
-    public IQueryable<ShortInterest> GetByStock(CommonStock stock, DateOnly date) =>
+    public IQueryable<ShortInterest> GetByStock(EquityIssuer stock, DateOnly date) =>
         GetHistoryByStock(stock).Where(row => row.SettlementDate == date);
 
     public IQueryable<ShortInterest> GetByListing(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
         DateOnly date
     ) => GetHistoryByListing(stock, listedTicker).Where(row => row.SettlementDate == date);
 
-    public IQueryable<ShortInterest> GetHistoryByStock(CommonStock stock) =>
+    public IQueryable<ShortInterest> GetHistoryByStock(EquityIssuer stock) =>
         GetAll()
             .Where(row =>
                 row.Listing.Security.EquityIssuerId == stock.Id
@@ -34,15 +34,20 @@ public class ShortInterestRepository : BaseRepository<ShortInterest>
             );
 
     public virtual IQueryable<ShortInterest> GetHistoryByListing(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker
     )
     {
         var listingIds = DbContext
-            .Set<LegacyEquityListing>()
-            .Where(row => row.CommonStockId == stock.Id && row.ListedTicker == listedTicker)
-            .Select(row => row.EquityListingId);
-        return GetAll().Where(row => listingIds.Contains(row.EquityListingId));
+            .Set<EquityListing>()
+            .Where(row =>
+                row.Security.EquityIssuerId == stock.Id
+                && row.MarketCountryCode == "US"
+                && row.Ticker == listedTicker
+            )
+            .Select(row => row.Id);
+        return GetAll()
+            .Where(row => listingIds.Count() == 1 && listingIds.Contains(row.EquityListingId));
     }
 
     public IQueryable<DateOnly> GetLatestSettlementDate()

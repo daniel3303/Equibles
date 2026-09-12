@@ -33,7 +33,7 @@ public class BacktestPriceLoaderSplitComparabilityTests : IDisposable
         );
         _loader = new BacktestPriceLoader(
             new EquityDailyStockPriceRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new StockSplitRepository(_dbContext)
         );
     }
@@ -166,7 +166,7 @@ public class BacktestPriceLoaderSplitComparabilityTests : IDisposable
     private static readonly DateOnly ReportDate = new(2026, 1, 15);
 
     private Task<BacktestResult> Run(
-        CommonStock benchmark,
+        EquityIssuer benchmark,
         IReadOnlyList<BacktestQuarterSnapshot> snapshots
     ) => _loader.RunBacktest(snapshots, benchmark, "SPY", Start, End);
 
@@ -185,27 +185,25 @@ public class BacktestPriceLoaderSplitComparabilityTests : IDisposable
             ],
         };
 
-    private async Task<(CommonStock Stock, CommonStock Benchmark)> SeedStocks()
+    private async Task<(EquityIssuer Stock, EquityIssuer Benchmark)> SeedStocks()
     {
-        var stock = new CommonStock
-        {
-            Id = StockId,
-            Ticker = "ACME",
-            Name = "Acme Corp",
-        };
-        var benchmark = new CommonStock
-        {
-            Id = BenchmarkId,
-            Ticker = "SPY",
-            Name = "SPDR S&P 500",
-        };
-        _dbContext.Set<CommonStock>().AddRange(stock, benchmark);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: StockId,
+            Ticker: "ACME",
+            Name: "Acme Corp"
+        );
+        EquityIssuer benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: BenchmarkId,
+            Ticker: "SPY",
+            Name: "SPDR S&P 500"
+        );
+        _dbContext.Set<EquityIssuer>().AddRange(stock, benchmark);
         await _dbContext.SaveChangesAsync();
         return (stock, benchmark);
     }
 
     private async Task SeedSplit(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly effectiveDate,
         decimal numerator,
         decimal denominator
@@ -220,14 +218,14 @@ public class BacktestPriceLoaderSplitComparabilityTests : IDisposable
                     EffectiveDate = effectiveDate,
                     Numerator = numerator,
                     Denominator = denominator,
-                    PriceSeriesTicker = stock.Ticker,
+                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 }
             );
         await _dbContext.SaveChangesAsync();
     }
 
     private async Task SeedPrices(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
         params (DateOnly Date, decimal Close)[] bars
     )

@@ -270,13 +270,23 @@ public class InsiderTransactionPriceBackfillManager
 
         var identityByStock = (
             await _dbContext
-                .Set<CommonStock>()
+                .Set<EquityIssuer>()
                 .Where(cs => stockIds.Contains(cs.Id))
                 .Select(cs => new
                 {
                     cs.Id,
-                    cs.Ticker,
-                    cs.SecondaryTickers,
+                    Ticker = cs.Presentation.Listing.Ticker,
+                    SecondaryTickers = cs
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (
+                                nativeListing.IsDirectoryListed
+                                && nativeListing.Id != cs.Presentation.EquityListingId
+                            )
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList(),
                 })
                 .ToListAsync()
         ).ToDictionary(cs => cs.Id, cs => new StockIdentity(cs.Ticker, cs.SecondaryTickers ?? []));

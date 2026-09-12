@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.BusinessLogic.Models;
@@ -23,13 +24,13 @@ public class HoldingsCloneBacktestProvider
 
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly InstitutionalHoldingRepository _holdingRepository;
-    private readonly CommonStockRepository _stockRepository;
+    private readonly EquityIssuerRepository _stockRepository;
     private readonly BacktestPriceLoader _priceLoader;
 
     public HoldingsCloneBacktestProvider(
         InstitutionalHolderRepository holderRepository,
         InstitutionalHoldingRepository holdingRepository,
-        CommonStockRepository stockRepository,
+        EquityIssuerRepository stockRepository,
         BacktestPriceLoader priceLoader
     )
     {
@@ -84,7 +85,7 @@ public class HoldingsCloneBacktestProvider
         }
         outcome.HolderName = holder.Name;
 
-        var benchmarkStock = await _stockRepository.GetByTicker(outcome.Benchmark);
+        EquityIssuer benchmarkStock = await _stockRepository.GetUsByTicker(outcome.Benchmark);
         if (benchmarkStock == null)
         {
             outcome.BenchmarkNotFound = true;

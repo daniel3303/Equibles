@@ -66,7 +66,7 @@ public class StockTabServiceLoadKeyMetricsQuarterlyEpsTests : IDisposable
             new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
     }
 
@@ -78,15 +78,14 @@ public class StockTabServiceLoadKeyMetricsQuarterlyEpsTests : IDisposable
     [Fact]
     public async Task LoadKeyMetrics_OnlyQuarterlyEps_ReturnsNullEpsAndPeRatio()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-            MarketCapitalization = 3_200_000_000_000,
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193",
+            MarketCapitalization: 3_200_000_000_000
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
 
         _dbContext
             .Set<EquityDailyStockPrice>()

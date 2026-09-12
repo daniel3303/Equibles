@@ -49,20 +49,18 @@ public class HoldingsExportInstitutionTests
                 }
             );
             db.AddRange(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                },
-                new CommonStock
-                {
-                    Id = msftId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: msftId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019"
+                )
             );
             db.Add(MakeHolding(aaplId, holderId, reportDate, 100_000, 25_000_000));
             db.Add(MakeHolding(msftId, holderId, reportDate, 50_000, 10_000_000));
@@ -110,13 +108,12 @@ public class HoldingsExportInstitutionTests
                 }
             );
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "TKR",
-                    Name = "Test Inc.",
-                    Cik = "0000099500",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "TKR",
+                    Name: "Test Inc.",
+                    Cik: "0000099500"
+                )
             );
             db.Add(MakeHolding(stockId, holderId, reportDate, 1, 1));
             await Task.CompletedTask;

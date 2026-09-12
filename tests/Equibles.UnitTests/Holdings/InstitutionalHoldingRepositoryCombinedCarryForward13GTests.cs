@@ -45,7 +45,7 @@ public class InstitutionalHoldingRepositoryCombinedCarryForward13GTests
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -71,12 +71,11 @@ public class InstitutionalHoldingRepositoryCombinedCarryForward13GTests
     {
         await using var db = NewDb();
 
-        var stock = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         var carried = new InstitutionalHolder { Cik = "1", Name = "Not-Yet-Filed Capital" };
         var filed = new InstitutionalHolder { Cik = "2", Name = "Early Filer LP" };
         db.AddRange(stock, carried, filed);
@@ -120,12 +119,11 @@ public class InstitutionalHoldingRepositoryCombinedCarryForward13GTests
     {
         await using var db = NewDb();
 
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var realFiler = new InstitutionalHolder { Cik = "1", Name = "Real 13F Filer" };
         var eventOnly = new InstitutionalHolder { Cik = "2", Name = "13G Event Filer" };
         db.AddRange(stock, realFiler, eventOnly);
@@ -155,12 +153,11 @@ public class InstitutionalHoldingRepositoryCombinedCarryForward13GTests
     {
         await using var db = NewDb();
 
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         var holder = new InstitutionalHolder { Cik = "1", Name = "Carried Capital" };
         db.AddRange(stock, holder);
         Equibles.TestSupport.NativeListingSeed.ForStock(db, stock);

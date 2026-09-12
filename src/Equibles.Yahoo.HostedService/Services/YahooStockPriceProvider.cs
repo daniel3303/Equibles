@@ -55,10 +55,17 @@ public class YahooStockPriceProvider : IStockPriceProvider
             // re-applied in memory — the small overfetch beats a per-pair query.
             var prices = await _dbContext
                 .Set<EquityDailyStockPrice>()
+                .Where(p => p.Listing.MarketCountryCode == "US")
                 .Where(p =>
-                    _dbContext
-                        .Set<LegacyEquityListing>()
-                        .Any(mapping => mapping.EquityListingId == p.EquityListingId)
+                    p.EquityListingId == p.Listing.Security.Issuer.Presentation.EquityListingId
+                    || !_dbContext
+                        .Set<EquityListing>()
+                        .Any(other =>
+                            other.Id != p.EquityListingId
+                            && other.MarketCountryCode == "US"
+                            && other.Ticker == p.Listing.Ticker
+                            && other.Security.EquityIssuerId == p.Listing.Security.EquityIssuerId
+                        )
                 )
                 .Where(p =>
                     stockIds.Contains(p.Listing.Security.EquityIssuerId)

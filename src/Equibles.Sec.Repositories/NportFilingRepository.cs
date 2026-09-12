@@ -61,9 +61,9 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     /// NPORT identity, so the lookup is empty for them (callers guard, and a NULL never matches
     /// an IN) — cusip-less holding rows (bonds, foreign instruments) are never swept in.
     /// </summary>
-    public IQueryable<NportHolding> GetHoldingsByStockCusip(CommonStock stock)
+    public IQueryable<NportHolding> GetHoldingsByStockCusip(EquityIssuer stock)
     {
-        return GetHoldingsByListingCusip(stock, stock.Ticker);
+        return GetHoldingsByListingCusip(stock, stock.Presentation.Listing.Ticker);
     }
 
     /// <summary>
@@ -72,7 +72,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     /// <see cref="EquityListingCusipEvidence"/> rows, so sibling fund series never bleed together.
     /// </summary>
     public IQueryable<NportHolding> GetHoldingsByListingCusip(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker
     )
     {
@@ -85,32 +85,40 @@ public class NportFilingRepository : BaseRepository<NportFiling>
             .Where(h => h.Cusip != null && cusips.Contains(h.Cusip));
     }
 
-    private IQueryable<string> GetCusipIdentity(CommonStock stock, string listedTicker)
+    private IQueryable<string> GetCusipIdentity(EquityIssuer stock, string listedTicker)
     {
-        var isPrimary = string.Equals(
-            listedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
-        return isPrimary
-            ? DbContext
-                .Set<EquityIssuerCusipAlias>()
-                .Where(a => a.EquityIssuerId == stock.Id)
-                .Select(a => a.Cusip)
-                .Union(
-                    DbContext
-                        .Set<CommonStock>()
-                        .Where(s => s.Id == stock.Id && s.Cusip != null)
-                        .Select(s => s.Cusip)
+        var isPrimary =
+            stock.Presentation?.Listing is { MarketCountryCode: "US" } primary
+            && string.Equals(listedTicker, primary.Ticker, StringComparison.OrdinalIgnoreCase);
+        var native = DbContext
+            .Set<EquitySecurity>()
+            .Where(security =>
+                security.EquityIssuerId == stock.Id
+                && security.Cusip != null
+                && security.Listings.Any(listing =>
+                    listing.MarketCountryCode == "US" && listing.Ticker == listedTicker
                 )
-            : DbContext
-                .Set<EquityListingCusipEvidence>()
-                .Where(c => c.EquityIssuerId == stock.Id && c.ListedTicker == listedTicker)
-                .Select(c => c.Cusip);
+            )
+            .Select(security => security.Cusip);
+        return isPrimary
+            ? native.Union(
+                DbContext
+                    .Set<EquityIssuerCusipAlias>()
+                    .Where(alias => alias.EquityIssuerId == stock.Id)
+                    .Select(alias => alias.Cusip)
+            )
+            : native.Union(
+                DbContext
+                    .Set<EquityListingCusipEvidence>()
+                    .Where(evidence =>
+                        evidence.EquityIssuerId == stock.Id && evidence.ListedTicker == listedTicker
+                    )
+                    .Select(evidence => evidence.Cusip)
+            );
     }
 
     public Task<bool> HasCusipIdentity(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
         CancellationToken cancellationToken = default
     ) => GetCusipIdentity(stock, listedTicker).AnyAsync(cancellationToken);

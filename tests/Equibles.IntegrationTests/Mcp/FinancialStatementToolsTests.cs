@@ -23,20 +23,19 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         new(
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialStatementTools>()
         );
 
-    private static CommonStock Apple() =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+    private static EquityIssuer Apple() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
 
     [Fact]
     public async Task GetFinancialStatement_UnknownTicker_ReturnsNotFound()
@@ -49,7 +48,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_UnknownStatement_ReturnsGuidance()
     {
-        DbContext.Set<CommonStock>().Add(Apple());
+        DbContext.Set<EquityIssuer>().Add(Apple());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetFinancialStatement("AAPL", statement: "wat");
@@ -60,7 +59,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_NoFacts_ReturnsNotIngestedMessage()
     {
-        DbContext.Set<CommonStock>().Add(Apple());
+        DbContext.Set<EquityIssuer>().Add(Apple());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetFinancialStatement("AAPL", statement: "income");
@@ -71,7 +70,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_SeededIncomeStatement_RendersLatestFiledTableAndDefaultsToLatest()
     {
-        var stock = Apple();
+        EquityIssuer stock = Apple();
         var revenue = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -79,7 +78,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             Tag = "Revenues",
             Label = "Revenues",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<FinancialConcept>().Add(revenue);
         DbContext
             .Set<FinancialFact>()
@@ -134,7 +133,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     }
 
     private async Task SeedRevenue(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         int fiscalYear,
         SecFiscalPeriod period,
@@ -169,7 +168,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_ExplicitPeriodNeverReported_DoesNotSilentlyFallBack()
     {
-        var stock = Apple();
+        EquityIssuer stock = Apple();
         var revenue = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -177,7 +176,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             Tag = "Revenues",
             Label = "Revenues",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<FinancialConcept>().Add(revenue);
         // Only an annual figure exists.
         await SeedRevenue(
@@ -206,7 +205,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_MultipleYears_DefaultsToLatestAnnual()
     {
-        var stock = Apple();
+        EquityIssuer stock = Apple();
         var revenue = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -214,7 +213,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             Tag = "Revenues",
             Label = "Revenues",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<FinancialConcept>().Add(revenue);
         await SeedRevenue(
             stock,
@@ -245,7 +244,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_PerShareUnit_FormatsWithCents()
     {
-        var stock = Apple();
+        EquityIssuer stock = Apple();
         var eps = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -253,7 +252,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             Tag = "EarningsPerShareDiluted",
             Label = "EarningsPerShareDiluted",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<FinancialConcept>().Add(eps);
         await SeedRevenue(stock, eps, 2023, SecFiscalPeriod.FullYear, 6.13m, "USD/shares", "a-eps");
 
@@ -265,7 +264,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_PerShareLine_RestatesAcrossSplitWithoutChangingDollarLines()
     {
-        var stock = Apple();
+        EquityIssuer stock = Apple();
         var revenue = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -280,7 +279,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             Tag = "EarningsPerShareDiluted",
             Label = "Diluted EPS",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<FinancialConcept>().AddRange(revenue, dilutedEps);
         DbContext
             .Set<StockSplit>()
@@ -323,7 +322,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_QuarterlyFlows_ShowExactSpansAndDropEarlierEndpoint()
     {
-        var stock = Apple();
+        EquityIssuer stock = Apple();
         var revenue = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -345,7 +344,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             Tag = "GrossProfit",
             Label = "Gross profit",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<FinancialConcept>().AddRange(revenue, netIncome, grossProfit);
 
         FinancialFact Fact(
@@ -425,7 +424,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_LaterProxyDuplicate_DoesNotOutrankTenK()
     {
-        var stock = Apple();
+        EquityIssuer stock = Apple();
         var revenue = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -433,7 +432,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             Tag = "Revenues",
             Label = "Revenue",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<FinancialConcept>().Add(revenue);
         await SeedRevenue(
             stock,
@@ -479,7 +478,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_OverlongLatestStampDoesNotBecomeTheDefaultPeriod()
     {
-        var stock = Apple();
+        EquityIssuer stock = Apple();
         var revenue = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -487,7 +486,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             Tag = "Revenues",
             Label = "Revenue",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<FinancialConcept>().Add(revenue);
         await SeedRevenue(
             stock,
@@ -529,7 +528,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_OverlongPreferredTagCannotHideAValidVariant()
     {
-        var stock = Apple();
+        EquityIssuer stock = Apple();
         var preferred = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -542,7 +541,7 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
             Taxonomy = FactTaxonomy.UsGaap,
             Tag = "ResearchAndDevelopmentExpenseSoftwareExcludingAcquiredInProcessCost",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<FinancialConcept>().AddRange(preferred, variant);
 
         FinancialFact Fact(

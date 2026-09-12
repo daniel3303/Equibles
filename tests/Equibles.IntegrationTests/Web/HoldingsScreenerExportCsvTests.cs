@@ -45,12 +45,11 @@ public class HoldingsScreenerExportCsvTests
                     Name = "Export Holder",
                 }
             );
-            var stock = new CommonStock
-            {
-                Ticker = "EXPT",
-                Name = "Export Corp.",
-                Cik = "0000099991",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "EXPT",
+                Name: "Export Corp.",
+                Cik: "0000099991"
+            );
             db.Add(stock);
             db.Add(MakeHolding(stock.Id, holderId, q1, 100, 100_000));
             db.Add(MakeHolding(stock.Id, holderId, q2, 150, 150_000));
@@ -90,13 +89,11 @@ public class HoldingsScreenerExportCsvTests
                     Name = "Comma Holder",
                 }
             );
-            var stock = new CommonStock
-            {
-                Ticker = "CMA",
-                // Company name contains a comma + a double quote — both must be escaped.
-                Name = "Acme, \"Special\" Co.",
-                Cik = "0000099992",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "CMA",
+                Name: "Acme, \"Special\" Co.",
+                Cik: "0000099992"
+            );
             db.Add(stock);
             db.Add(MakeHolding(stock.Id, holderId, q1, 1, 1));
             db.Add(MakeHolding(stock.Id, holderId, q2, 1, 1));
@@ -131,12 +128,11 @@ public class HoldingsScreenerExportCsvTests
                     Name = "Newline Holder",
                 }
             );
-            var stock = new CommonStock
-            {
-                Ticker = "NLN",
-                Name = "Acme\nNew Line Inc.",
-                Cik = "0000099995",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "NLN",
+                Name: "Acme\nNew Line Inc.",
+                Cik: "0000099995"
+            );
             db.Add(stock);
             db.Add(MakeHolding(stock.Id, holderId, q1, 1, 1));
             db.Add(MakeHolding(stock.Id, holderId, q2, 1, 1));
@@ -167,18 +163,16 @@ public class HoldingsScreenerExportCsvTests
                     Name = "Filter Export Holder",
                 }
             );
-            var big = new CommonStock
-            {
-                Ticker = "EXBIG",
-                Name = "Export Big",
-                Cik = "0000099993",
-            };
-            var small = new CommonStock
-            {
-                Ticker = "EXSML",
-                Name = "Export Small",
-                Cik = "0000099994",
-            };
+            EquityIssuer big = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "EXBIG",
+                Name: "Export Big",
+                Cik: "0000099993"
+            );
+            EquityIssuer small = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "EXSML",
+                Name: "Export Small",
+                Cik: "0000099994"
+            );
             db.AddRange(big, small);
             db.Add(MakeHolding(big.Id, holderId, q1, 1, 9_000_000));
             db.Add(MakeHolding(big.Id, holderId, q2, 1, 10_000_000));

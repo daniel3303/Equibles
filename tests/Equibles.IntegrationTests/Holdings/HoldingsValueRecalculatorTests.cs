@@ -129,12 +129,11 @@ public class HoldingsValueRecalculatorTests : IDisposable
     public async Task Recalculate_PendingHoldings_SetsValueToSharesTimesPrice()
     {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple"
+        );
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
@@ -146,7 +145,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
             valuePending: true
         );
 
-        seedContext.Set<CommonStock>().Add(stock);
+        seedContext.Set<EquityIssuer>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
         seedContext.Set<InstitutionalHolding>().Add(holding);
         await seedContext.SaveChangesAsync();
@@ -182,12 +181,11 @@ public class HoldingsValueRecalculatorTests : IDisposable
     public async Task Recalculate_PendingHoldingWithManagerEntries_RecalculatesEntryValues()
     {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "TSLA",
-            Name = "Tesla",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "TSLA",
+            Name: "Tesla"
+        );
         var holder = CreateHolder("BlackRock");
         var reportDate = new DateOnly(2024, 6, 30);
 
@@ -216,7 +214,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
             ]
         );
 
-        seedContext.Set<CommonStock>().Add(stock);
+        seedContext.Set<EquityIssuer>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
         seedContext.Set<InstitutionalHolding>().Add(holding);
         await seedContext.SaveChangesAsync();
@@ -256,12 +254,11 @@ public class HoldingsValueRecalculatorTests : IDisposable
     public async Task Recalculate_HoldingsNotPending_AreNotModified()
     {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft"
+        );
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
@@ -274,7 +271,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
             value: 99999
         );
 
-        seedContext.Set<CommonStock>().Add(stock);
+        seedContext.Set<EquityIssuer>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
         seedContext.Set<InstitutionalHolding>().Add(alreadyValued);
         await seedContext.SaveChangesAsync();
@@ -304,12 +301,11 @@ public class HoldingsValueRecalculatorTests : IDisposable
     public async Task Recalculate_MixOfPendingAndNonPending_OnlyUpdatesPending()
     {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GOOG",
-            Name = "Alphabet",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GOOG",
+            Name: "Alphabet"
+        );
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
@@ -332,7 +328,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
             value: 77777
         );
 
-        seedContext.Set<CommonStock>().Add(stock);
+        seedContext.Set<EquityIssuer>().Add(stock);
         seedContext.Set<InstitutionalHolder>().AddRange(holder, holder2);
         seedContext.Set<InstitutionalHolding>().AddRange(pendingHolding, nonPendingHolding);
         await seedContext.SaveChangesAsync();
@@ -372,12 +368,11 @@ public class HoldingsValueRecalculatorTests : IDisposable
     public async Task Recalculate_NoPricesAvailable_LeavesHoldingsPending()
     {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "NVDA",
-            Name = "NVIDIA",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NVDA",
+            Name: "NVIDIA"
+        );
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
@@ -389,7 +384,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
             valuePending: true
         );
 
-        seedContext.Set<CommonStock>().Add(stock);
+        seedContext.Set<EquityIssuer>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
         seedContext.Set<InstitutionalHolding>().Add(holding);
         await seedContext.SaveChangesAsync();
@@ -421,18 +416,16 @@ public class HoldingsValueRecalculatorTests : IDisposable
     public async Task Recalculate_PriceAvailableForSomeStocks_OnlyRecalculatesThoseWithPrices()
     {
         var seedContext = CreateSharedContext();
-        var stockWithPrice = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple",
-        };
-        var stockWithoutPrice = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AMZN",
-            Name = "Amazon",
-        };
+        EquityIssuer stockWithPrice = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple"
+        );
+        EquityIssuer stockWithoutPrice = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AMZN",
+            Name: "Amazon"
+        );
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
@@ -452,7 +445,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
             valuePending: true
         );
 
-        seedContext.Set<CommonStock>().AddRange(stockWithPrice, stockWithoutPrice);
+        seedContext.Set<EquityIssuer>().AddRange(stockWithPrice, stockWithoutPrice);
         seedContext.Set<InstitutionalHolder>().AddRange(holder, holder2);
         seedContext.Set<InstitutionalHolding>().AddRange(holdingWithPrice, holdingWithoutPrice);
         await seedContext.SaveChangesAsync();
@@ -508,12 +501,11 @@ public class HoldingsValueRecalculatorTests : IDisposable
     public async Task Recalculate_AllHoldingsAlreadyValued_ReturnsEarlyWithoutCallingPriceProvider()
     {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "META",
-            Name = "Meta",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "META",
+            Name: "Meta"
+        );
         var holder = CreateHolder();
         var reportDate = new DateOnly(2024, 3, 31);
 
@@ -526,7 +518,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
             value: 50000
         );
 
-        seedContext.Set<CommonStock>().Add(stock);
+        seedContext.Set<EquityIssuer>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
         seedContext.Set<InstitutionalHolding>().Add(holding);
         await seedContext.SaveChangesAsync();

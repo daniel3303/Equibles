@@ -30,7 +30,7 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
         var exDate = new DateOnly(2026, 7, 31);
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Add(new CommonStock { Id = stockId, Ticker = "GRTUF" });
+            seed.Add(Equibles.TestSupport.EquityIssuerSeed.Create(Id: stockId, Ticker: "GRTUF"));
             await seed.SaveChangesAsync();
             seed.Add(
                 new CashDividend
@@ -56,7 +56,7 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
         {
             var changes = await new CashDividendCaptureManager(
                 new CashDividendRepository(capture),
-                new CommonStockRepository(capture)
+                new EquityIssuerRepository(capture)
             ).Capture(
                 stockId,
                 "GRTUF",
@@ -101,7 +101,7 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
 
         var externalReplay = await new CashDividendCaptureManager(
             new CashDividendRepository(verification),
-            new CommonStockRepository(verification)
+            new EquityIssuerRepository(verification)
         ).Capture(
             stockId,
             "GRTUF",
@@ -129,7 +129,7 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
         new(
             new StockSplitRepository(context),
             new CashDividendRepository(context),
-            new CommonStockRepository(context),
+            new EquityIssuerRepository(context),
             new CorporateActionPriceReconciliationCursorRepository(context)
         );
 }

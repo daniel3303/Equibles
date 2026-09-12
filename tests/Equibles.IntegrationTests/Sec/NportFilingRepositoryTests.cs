@@ -27,15 +27,14 @@ public class NportFilingRepositoryTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private static CommonStock CreateStock(string ticker = "VOO", string cik = "0000036405")
+    private static EquityIssuer CreateStock(string ticker = "VOO", string cik = "0000036405")
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker,
-            Cik = cik,
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker,
+            Cik: cik
+        );
     }
 
     private static NportFiling CreateFiling(
@@ -90,9 +89,9 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_ReturnsOnlyFilingsForThatStock()
     {
-        var voo = CreateStock("VOO", "0000036405");
-        var other = CreateStock("SPY", "0000884394");
-        _dbContext.Set<CommonStock>().AddRange(voo, other);
+        EquityIssuer voo = CreateStock("VOO", "0000036405");
+        EquityIssuer other = CreateStock("SPY", "0000884394");
+        _dbContext.Set<EquityIssuer>().AddRange(voo, other);
         await _dbContext.SaveChangesAsync();
 
         _repository.Add(CreateFiling(voo.Id, "0000036405-24-000002"));
@@ -109,8 +108,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAccessionNumber_ExistingAccession_ReturnsFiling()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
         _repository.Add(CreateFiling(stock.Id, "0000036405-24-000002"));
         await _repository.SaveChanges();
@@ -126,8 +125,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAccessionNumber_NonExistentAccession_ReturnsEmpty()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
         _repository.Add(CreateFiling(stock.Id, "0000036405-24-000002"));
         await _repository.SaveChanges();
@@ -140,8 +139,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task Add_FilingWithHoldings_PersistsChildRows()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var filing = CreateFiling(stock.Id);
@@ -196,8 +195,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestPerSeries_ReturnsTheNewestReportPerSeries()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var older = CreateFiling(stock.Id, "0000036405-24-000001", new DateOnly(2024, 11, 20));
@@ -239,8 +238,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestPerSeries_IdlessNameVariants_CollapseToTheNewestReport()
     {
-        var stock = CreateStock("CLM", "0000814083");
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock("CLM", "0000814083");
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var renamed = CreateFiling(
@@ -283,8 +282,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestPerSeries_IdlessOlderReport_SupersededByNewerIdCarryingReport()
     {
-        var stock = CreateStock("FMN", "0001212422");
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock("FMN", "0001212422");
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var idless = CreateFiling(
@@ -317,8 +316,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestPerSeries_DistinctSeriesIdsWithSameName_BothSurvive()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var seriesA = CreateFiling(
@@ -350,8 +349,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetHoldingsByCusip_ReturnsOnlyRowsCarryingThatCusip()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
         var filing = CreateFiling(stock.Id);
         filing.Holdings.Add(
@@ -413,8 +412,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestPerSeries_SameSecSeriesAcrossPopulations_NewestWinsOnce()
     {
-        var stock = CreateStock("AAXJ", "0001100663");
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock("AAXJ", "0001100663");
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var tracked = CreateFiling(
@@ -445,8 +444,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestPerSeries_SameCrossPopulationPeriod_LatestFilingDateWins()
     {
-        var stock = CreateStock("AAXJ", "0001100663");
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock("AAXJ", "0001100663");
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var tracked = CreateFiling(
@@ -477,8 +476,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestPerSeries_SameCrossPopulationDates_HighestAccessionWins()
     {
-        var stock = CreateStock("AAXJ", "0001100663");
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock("AAXJ", "0001100663");
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var tracked = CreateFiling(
@@ -560,9 +559,9 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetSeriesFilings_TrackedFund_ReturnsOnlyThatStocksSeries()
     {
-        var voo = CreateStock("VOO", "0000036405");
-        var spy = CreateStock("SPY", "0000884394");
-        _dbContext.Set<CommonStock>().AddRange(voo, spy);
+        EquityIssuer voo = CreateStock("VOO", "0000036405");
+        EquityIssuer spy = CreateStock("SPY", "0000884394");
+        _dbContext.Set<EquityIssuer>().AddRange(voo, spy);
         await _dbContext.SaveChangesAsync();
 
         _repository.Add(CreateFiling(voo.Id, "0000036405-24-000001"));
@@ -597,8 +596,8 @@ public class NportFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetSeriesReportsByPeriod_CollapsesAmendmentsToTheLatestFilingPerPeriod()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var q1Original = CreateFiling(stock.Id, "0000036405-25-000001", new DateOnly(2025, 2, 10));

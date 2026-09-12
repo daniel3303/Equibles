@@ -36,12 +36,11 @@ public class FinancialFactsImportServiceTryBuildParsedFactWhitespaceAccnTests
             Fy = 2024,
             Filed = new DateOnly(2025, 1, 15),
         };
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            FiscalYearEndMonth = 9,
-            FiscalYearEndDay = 30,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            FiscalYearEndMonth: 9,
+            FiscalYearEndDay: 30
+        );
 
         var result = TryBuildParsedFactMethod.Invoke(
             null,

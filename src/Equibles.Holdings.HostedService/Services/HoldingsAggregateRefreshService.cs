@@ -589,7 +589,7 @@ public class HoldingsAggregateRefreshService
             .Set<InstitutionalHolding>()
             .Where(h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F)
             .Join(
-                dbContext.Set<CommonStock>(),
+                dbContext.Set<EquityIssuer>(),
                 h => h.EquityIssuerId,
                 s => s.Id,
                 (h, s) => new { h.Value, s.IndustryId }
@@ -721,16 +721,17 @@ public class HoldingsAggregateRefreshService
                 && h.FilingType == FilingType.Form13F
             )
             .Join(
-                dbContext.Set<CommonStock>(),
+                dbContext.Set<EquityIssuer>(),
                 holding => holding.EquityIssuerId,
                 stock => stock.Id,
                 (holding, stock) => new { Holding = holding, Stock = stock }
             )
-            .Where(row => row.Stock.Active)
+            .Where(row => row.Stock.Presentation.Listing.Active)
             .GroupBy(row => new
             {
                 row.Holding.EquityIssuerId,
-                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Stock.Ticker,
+                PriceSeriesTicker = row.Holding.ListedTicker
+                    ?? row.Stock.Presentation.Listing.Ticker,
             })
             .Select(group => new
             {

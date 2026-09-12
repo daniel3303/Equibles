@@ -13,20 +13,25 @@ public class FailToDeliverRepository : BaseRepository<FailToDeliver>
     public IQueryable<FailToDeliver> GetByListingId(Guid listingId) =>
         GetAll().Where(row => row.EquityListingId == listingId);
 
-    public IQueryable<FailToDeliver> GetByStock(CommonStock stock) =>
+    public IQueryable<FailToDeliver> GetByStock(EquityIssuer stock) =>
         GetAll()
             .Where(row =>
                 row.EquityListingId == row.Listing.Security.Issuer.Presentation.EquityListingId
                 && row.Listing.Security.EquityIssuerId == stock.Id
             );
 
-    public IQueryable<FailToDeliver> GetByListing(CommonStock stock, string listedTicker)
+    public IQueryable<FailToDeliver> GetByListing(EquityIssuer stock, string listedTicker)
     {
         var listingIds = DbContext
-            .Set<LegacyEquityListing>()
-            .Where(row => row.CommonStockId == stock.Id && row.ListedTicker == listedTicker)
-            .Select(row => row.EquityListingId);
-        return GetAll().Where(row => listingIds.Contains(row.EquityListingId));
+            .Set<EquityListing>()
+            .Where(row =>
+                row.Security.EquityIssuerId == stock.Id
+                && row.MarketCountryCode == "US"
+                && row.Ticker == listedTicker
+            )
+            .Select(row => row.Id);
+        return GetAll()
+            .Where(row => listingIds.Count() == 1 && listingIds.Contains(row.EquityListingId));
     }
 
     public IQueryable<DateOnly> GetLatestDate()

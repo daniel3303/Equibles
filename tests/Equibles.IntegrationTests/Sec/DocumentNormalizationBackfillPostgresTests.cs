@@ -211,14 +211,13 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
 
     private async Task<Document> SeedLegacyDocument(string ticker, byte[] content = null)
     {
-        var company = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = "NVIDIA Corporation",
-            Cik = "0001045810",
-        };
-        DbContext.Set<CommonStock>().Add(company);
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: "NVIDIA Corporation",
+            Cik: "0001045810"
+        );
+        DbContext.Set<EquityIssuer>().Add(company);
         await DbContext.SaveChangesAsync();
 
         var fileManager = CreateFileManager();

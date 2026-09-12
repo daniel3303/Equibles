@@ -1,5 +1,6 @@
 using System.Data;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data.Models;
@@ -17,11 +18,11 @@ namespace Equibles.CorporateActions.BusinessLogic;
 public class StockSplitCaptureManager
 {
     private readonly StockSplitRepository _splitRepository;
-    private readonly CommonStockRepository _stockRepository;
+    private readonly EquityIssuerRepository _stockRepository;
 
     public StockSplitCaptureManager(
         StockSplitRepository splitRepository,
-        CommonStockRepository stockRepository
+        EquityIssuerRepository stockRepository
     )
     {
         _splitRepository = splitRepository;
@@ -42,7 +43,7 @@ public class StockSplitCaptureManager
             IsolationLevel.ReadCommitted,
             cancellationToken
         );
-        var stock = await _stockRepository.GetForUpdate(commonStockId, cancellationToken);
+        EquityIssuer stock = await _stockRepository.GetForUpdate(commonStockId, cancellationToken);
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, listedTicker);
         if (resolvedTicker == null)
         {
@@ -60,7 +61,7 @@ public class StockSplitCaptureManager
 
             var isPrimary = string.Equals(
                 resolvedTicker,
-                stock.Ticker,
+                stock.Presentation.Listing.Ticker,
                 StringComparison.OrdinalIgnoreCase
             );
             var match = existing.FirstOrDefault(s =>

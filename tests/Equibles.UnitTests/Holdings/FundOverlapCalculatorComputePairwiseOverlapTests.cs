@@ -21,10 +21,10 @@ public class FundOverlapCalculatorComputePairwiseOverlapTests
         // Fund B: AAPL, GOOG (2 positions)
         // Fund C: MSFT, GOOG, TSLA (3 positions)
         // A∩B = {AAPL} = 1, A∩C = {MSFT} = 1, B∩C = {GOOG} = 1
-        var aapl = MakeStock("AAPL");
-        var msft = MakeStock("MSFT");
-        var goog = MakeStock("GOOG");
-        var tsla = MakeStock("TSLA");
+        EquityIssuer aapl = MakeStock("AAPL");
+        EquityIssuer msft = MakeStock("MSFT");
+        EquityIssuer goog = MakeStock("GOOG");
+        EquityIssuer tsla = MakeStock("TSLA");
         var holderA = MakeHolder("Fund A");
         var holderB = MakeHolder("Fund B");
         var holderC = MakeHolder("Fund C");
@@ -63,13 +63,12 @@ public class FundOverlapCalculatorComputePairwiseOverlapTests
         matrix.SharedTickerCounts[2][1].Should().Be(1, "symmetry: C∩B = B∩C");
     }
 
-    private static CommonStock MakeStock(string ticker) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker,
-        };
+    private static EquityIssuer MakeStock(string ticker) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker
+        );
 
     private static InstitutionalHolder MakeHolder(string name) =>
         new()
@@ -81,7 +80,7 @@ public class FundOverlapCalculatorComputePairwiseOverlapTests
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         long value
     ) =>
         new()

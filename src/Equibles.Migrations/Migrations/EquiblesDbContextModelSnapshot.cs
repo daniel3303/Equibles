@@ -359,7 +359,6 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquityIssuer", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<string>("Cik")
@@ -537,7 +536,6 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquityListing", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<bool>("Active")
@@ -724,7 +722,6 @@ namespace Equibles.Migrations.Migrations
             modelBuilder.Entity("Equibles.CommonStocks.Data.Models.EquitySecurity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<string>("Cusip")

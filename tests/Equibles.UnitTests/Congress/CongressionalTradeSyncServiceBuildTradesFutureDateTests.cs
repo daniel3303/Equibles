@@ -33,7 +33,7 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
     private static List<CongressionalTrade> InvokeBuildTrades(
         CongressionalTradeSyncService sut,
         DisclosureTransaction tx,
-        CommonStock stock,
+        EquityIssuer stock,
         CongressMember member
     )
     {
@@ -52,15 +52,14 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
             );
     }
 
-    private static (CommonStock, CongressMember) Fixtures()
+    private static (EquityIssuer, CongressMember) Fixtures()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "IBM",
-            Name = "International Business Machines",
-            Cik = "0000051143",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "IBM",
+            Name: "International Business Machines",
+            Cik: "0000051143"
+        );
         var member = new CongressMember { Id = Guid.NewGuid(), Name = "Pete Sessions" };
         return (stock, member);
     }
@@ -76,7 +75,7 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
         var tx = new DisclosureTransaction
         {
             MemberName = member.Name,
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
             AssetName = "International Business Machines Corporation (IBM)",
             TransactionType = CongressTransactionType.Purchase,
             OwnerType = "SP",
@@ -100,7 +99,7 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
         var tx = new DisclosureTransaction
         {
             MemberName = member.Name,
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
             AssetName = "International Business Machines Corporation (IBM)",
             TransactionType = CongressTransactionType.Purchase,
             OwnerType = "SP",

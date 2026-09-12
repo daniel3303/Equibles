@@ -20,8 +20,8 @@ public class FundOverlapCalculatorComputePairwiseOverlapSingleFundTests
     {
         // One fund holding two real positions. The oracle, derived purely from the
         // contract: a 1×1 matrix whose sole cell counts the fund's Value > 0 stocks (2).
-        var aapl = MakeStock("AAPL");
-        var msft = MakeStock("MSFT");
+        EquityIssuer aapl = MakeStock("AAPL");
+        EquityIssuer msft = MakeStock("MSFT");
         var holderA = MakeHolder("Fund A");
 
         var overlap = FundOverlapCalculator.Calculate(
@@ -39,13 +39,12 @@ public class FundOverlapCalculatorComputePairwiseOverlapSingleFundTests
             .Be(2, "the lone diagonal cell counts the fund's two Value > 0 positions");
     }
 
-    private static CommonStock MakeStock(string ticker) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker,
-        };
+    private static EquityIssuer MakeStock(string ticker) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker
+        );
 
     private static InstitutionalHolder MakeHolder(string name) =>
         new()
@@ -57,7 +56,7 @@ public class FundOverlapCalculatorComputePairwiseOverlapSingleFundTests
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         long value
     ) =>
         new()

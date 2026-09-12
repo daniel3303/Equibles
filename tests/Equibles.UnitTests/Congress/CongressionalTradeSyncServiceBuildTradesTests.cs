@@ -39,13 +39,12 @@ public class CongressionalTradeSyncServiceBuildTradesTests
         );
 
         var member = new CongressMember { Id = Guid.NewGuid(), Name = "Jane Smith" };
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
         var tx = new DisclosureTransaction
         {
             MemberName = "Jane Smith",

@@ -32,7 +32,10 @@ public class DocumentTextToolsReadDocumentLinesCultureInvarianceTests : ParadeDb
     public async Task ReadDocumentLines_UnderNonInvariantCulture_RendersLineCountsCultureInvariantly()
     {
         var content = string.Join("\n", Enumerable.Repeat("x", 1500)); // 1500 lines
-        var stock = new CommonStock { Ticker = "MSFT", Name = "Microsoft Corp." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp."
+        );
         var file = new File
         {
             Name = "10k",

@@ -14,8 +14,8 @@ public interface IFilingDiscoveryService
     /// best-effort — the periodic per-company reconciliation sweep is the
     /// correctness backstop for anything they miss.
     /// </summary>
-    Task<List<CommonStock>> DiscoverCompaniesWithNewFilings(
-        IReadOnlyList<CommonStock> trackedCompanies,
+    Task<List<EquityIssuer>> DiscoverCompaniesWithNewFilings(
+        IReadOnlyList<EquityIssuer> trackedCompanies,
         CancellationToken cancellationToken = default
     );
 

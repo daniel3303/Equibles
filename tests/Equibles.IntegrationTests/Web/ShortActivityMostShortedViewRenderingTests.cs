@@ -26,12 +26,11 @@ public class ShortActivityMostShortedViewRenderingTests
         {
             var stockId = Guid.NewGuid();
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "GME",
-                    Name = "GameStop Corp.",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "GME",
+                    Name: "GameStop Corp."
+                )
             );
             db.Add(
                 new ShortInterest

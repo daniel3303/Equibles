@@ -41,7 +41,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         _manager = new ShortSqueezeScoreManager(
             new ShortInterestRepository(_dbContext),
             new DailyShortVolumeRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new StockSplitRepository(_dbContext),
             new FailToDeliverRepository(_dbContext),
             new EquityDailyStockPriceRepository(_dbContext),
@@ -58,9 +58,9 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         // the slowest cover and a rising short-volume share, COLD the opposite, MID
         // between — so the composite must rank HOT > MID > COLD with the extremes at
         // the percentile bounds.
-        var hot = SeedStock("HOT", sharesOutstanding: 1_000_000);
-        var mid = SeedStock("MID", sharesOutstanding: 1_000_000);
-        var cold = SeedStock("COLD", sharesOutstanding: 1_000_000);
+        EquityIssuer hot = SeedStock("HOT", sharesOutstanding: 1_000_000);
+        EquityIssuer mid = SeedStock("MID", sharesOutstanding: 1_000_000);
+        EquityIssuer cold = SeedStock("COLD", sharesOutstanding: 1_000_000);
         SeedShortInterest(hot, shortPosition: 300_000, daysToCover: 8m);
         SeedShortInterest(mid, shortPosition: 150_000, daysToCover: 4m);
         SeedShortInterest(cold, shortPosition: 50_000, daysToCover: 1m);
@@ -90,8 +90,8 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         // NOVOL has no daily short-volume rows, so its trend factor must be null and
         // its composite the mean of the two remaining percentiles — not a defaulted
         // zero that would sink it below peers with identical short interest.
-        var withVolume = SeedStock("HASVOL", sharesOutstanding: 1_000_000);
-        var withoutVolume = SeedStock("NOVOL", sharesOutstanding: 1_000_000);
+        EquityIssuer withVolume = SeedStock("HASVOL", sharesOutstanding: 1_000_000);
+        EquityIssuer withoutVolume = SeedStock("NOVOL", sharesOutstanding: 1_000_000);
         SeedShortInterest(withVolume, shortPosition: 100_000, daysToCover: 2m);
         SeedShortInterest(withoutVolume, shortPosition: 200_000, daysToCover: 5m);
         SeedShortVolume(withVolume, priorShort: 300, recentShort: 500);
@@ -109,16 +109,20 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     [Fact]
     public async Task Compute_ReportedDaysToCoverMissing_ComputedFromAverageDailyVolume()
     {
-        var stock = SeedStock("CALC", sharesOutstanding: 1_000_000);
+        EquityIssuer stock = SeedStock("CALC", sharesOutstanding: 1_000_000);
         _dbContext
             .Set<ShortInterest>()
             .Add(
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = SettlementDate,
                     CurrentShortPosition = 120_000,
                     AverageDailyVolume = 40_000,
@@ -139,17 +143,21 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         // average daily volume — a division-by-zero placeholder, not a measurement.
         // The factor must drop out (like a missing trend) so an untradeable shell
         // can't outrank genuinely squeezed stocks on the sentinel alone.
-        var shell = SeedStock("SHEL", sharesOutstanding: 2_000_000);
-        var real = SeedStock("REAL", sharesOutstanding: 1_000_000);
+        EquityIssuer shell = SeedStock("SHEL", sharesOutstanding: 2_000_000);
+        EquityIssuer real = SeedStock("REAL", sharesOutstanding: 1_000_000);
         _dbContext
             .Set<ShortInterest>()
             .Add(
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(_dbContext, shell, shell.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            shell,
+                            shell.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = shell.Ticker,
+                    ListedTicker = shell.Presentation.Listing.Ticker,
                     SettlementDate = SettlementDate,
                     CurrentShortPosition = 200_000,
                     AverageDailyVolume = 0,
@@ -181,8 +189,8 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     {
         // SharesOutStanding == 0 means "unknown" across the codebase — a percent of an
         // unknown denominator is meaningless, so the stock must not be scored at all.
-        var known = SeedStock("KNOWN", sharesOutstanding: 1_000_000);
-        var unknown = SeedStock("UNKNOWN", sharesOutstanding: 0);
+        EquityIssuer known = SeedStock("KNOWN", sharesOutstanding: 1_000_000);
+        EquityIssuer unknown = SeedStock("UNKNOWN", sharesOutstanding: 0);
         SeedShortInterest(known, shortPosition: 100_000, daysToCover: 2m);
         SeedShortInterest(unknown, shortPosition: 900_000, daysToCover: 9m);
         await _dbContext.SaveChangesAsync();
@@ -201,9 +209,9 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         // Such a stock must drop out of the universe (the unknown-share-count treatment),
         // not rank as top squeeze risk on a meaningless figure, while an extreme-but-genuine
         // reading (the 2021 GameStop peak was ~1.4x) is still scored.
-        var typical = SeedStock("TYP", sharesOutstanding: 1_000_000);
-        var extreme = SeedStock("EXTR", sharesOutstanding: 1_000_000);
-        var impossible = SeedStock("NOTE", sharesOutstanding: 1);
+        EquityIssuer typical = SeedStock("TYP", sharesOutstanding: 1_000_000);
+        EquityIssuer extreme = SeedStock("EXTR", sharesOutstanding: 1_000_000);
+        EquityIssuer impossible = SeedStock("NOTE", sharesOutstanding: 1);
         SeedShortInterest(typical, shortPosition: 100_000, daysToCover: 2m);
         SeedShortInterest(extreme, shortPosition: 1_400_000, daysToCover: 8m);
         SeedShortInterest(impossible, shortPosition: 15_566, daysToCover: 1m);
@@ -222,13 +230,13 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         // exchange-traded note (a baby bond) can never be a squeeze candidate —
         // the issuer's common-share record is the wrong denominator for it.
         // Units stay in: MLP common units are genuine operating equity.
-        var equity = SeedStock("EQTY", sharesOutstanding: 1_000_000);
-        var note = SeedStock(
+        EquityIssuer equity = SeedStock("EQTY", sharesOutstanding: 1_000_000);
+        EquityIssuer note = SeedStock(
             "NOTE",
             sharesOutstanding: 1_000_000,
             listedSecurityType: ListedSecurityType.DebtSecurities
         );
-        var mlp = SeedStock(
+        EquityIssuer mlp = SeedStock(
             "MLP",
             sharesOutstanding: 1_000_000,
             listedSecurityType: ListedSecurityType.Units
@@ -249,7 +257,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         // An empty FTD table means the feed is absent, not that no stock ever fails
         // to deliver — the factor must be unknowable (null) rather than a flattering
         // universe-wide zero.
-        var stock = SeedStock("NOFTD", sharesOutstanding: 1_000_000);
+        EquityIssuer stock = SeedStock("NOFTD", sharesOutstanding: 1_000_000);
         SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
         await _dbContext.SaveChangesAsync();
 
@@ -265,8 +273,8 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         // FAILS has a 50k worst day on a 1M share count (5%); CLEAN appears nowhere
         // in a live feed, which is a true zero — delivery is fine — not a missing
         // factor. The zero must be scored, keeping CLEAN below FAILS on the factor.
-        var fails = SeedStock("FAILS", sharesOutstanding: 1_000_000);
-        var clean = SeedStock("CLEAN", sharesOutstanding: 1_000_000);
+        EquityIssuer fails = SeedStock("FAILS", sharesOutstanding: 1_000_000);
+        EquityIssuer clean = SeedStock("CLEAN", sharesOutstanding: 1_000_000);
         SeedShortInterest(fails, shortPosition: 100_000, daysToCover: 2m);
         SeedShortInterest(clean, shortPosition: 100_000, daysToCover: 2m);
         _dbContext
@@ -276,7 +284,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                 {
                     EquityListingId = NativeListingSeed.ForStock(_dbContext, fails).Id,
 
-                    ListedTicker = fails.Ticker,
+                    ListedTicker = fails.Presentation.Listing.Ticker,
                     SettlementDate = SettlementDate.AddDays(-3),
                     Quantity = 50_000,
                     Price = 10m,
@@ -285,7 +293,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                 {
                     EquityListingId = NativeListingSeed.ForStock(_dbContext, fails).Id,
 
-                    ListedTicker = fails.Ticker,
+                    ListedTicker = fails.Presentation.Listing.Ticker,
                     SettlementDate = SettlementDate.AddDays(-10),
                     Quantity = 20_000,
                     Price = 10m,
@@ -308,8 +316,8 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     {
         // BUILD grew its short position 50% versus the previous report; SHRINK cut
         // it in half. The change factor must carry the signed fraction for both.
-        var build = SeedStock("BUILD", sharesOutstanding: 1_000_000);
-        var shrink = SeedStock("SHRINK", sharesOutstanding: 1_000_000);
+        EquityIssuer build = SeedStock("BUILD", sharesOutstanding: 1_000_000);
+        EquityIssuer shrink = SeedStock("SHRINK", sharesOutstanding: 1_000_000);
         SeedShortInterest(
             build,
             shortPosition: 150_000,
@@ -330,18 +338,26 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(_dbContext, build, build.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            build,
+                            build.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = build.Ticker,
+                    ListedTicker = build.Presentation.Listing.Ticker,
                     SettlementDate = SettlementDate.AddDays(-14),
                     CurrentShortPosition = 100_000,
                 },
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(_dbContext, shrink, shrink.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            shrink,
+                            shrink.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = shrink.Ticker,
+                    ListedTicker = shrink.Presentation.Listing.Ticker,
                     SettlementDate = SettlementDate.AddDays(-14),
                     CurrentShortPosition = 200_000,
                 }
@@ -357,7 +373,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     [Fact]
     public async Task Compute_NoPreviousPosition_ChangeFactorDropsOut()
     {
-        var fresh = SeedStock("FRESH", sharesOutstanding: 1_000_000);
+        EquityIssuer fresh = SeedStock("FRESH", sharesOutstanding: 1_000_000);
         SeedShortInterest(fresh, shortPosition: 100_000, daysToCover: 2m);
         await _dbContext.SaveChangesAsync();
 
@@ -373,7 +389,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         // Price factors anchor on the CURRENT price tape (squeeze pressure now),
         // not the settlement date — so the seeded series must be recent relative
         // to the wall clock the manager loads against.
-        var stock = SeedStock("PRICED", sharesOutstanding: 1_000_000);
+        EquityIssuer stock = SeedStock("PRICED", sharesOutstanding: 1_000_000);
         SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         for (var i = 0; i < 65; i++)
@@ -387,9 +403,9 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                         Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
                             _dbContext,
                             stock,
-                            stock.Ticker
+                            stock.Presentation.Listing.Ticker
                         ),
-                        SourceTicker = stock.Ticker,
+                        SourceTicker = stock.Presentation.Listing.Ticker,
                         Date = today.AddDays(i - 64),
                         Open = close,
                         High = close,
@@ -416,7 +432,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
         bool legacyNullAttribution
     )
     {
-        var stock = SeedStock("SPLIT", sharesOutstanding: 1_000_000);
+        EquityIssuer stock = SeedStock("SPLIT", sharesOutstanding: 1_000_000);
         SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var splitDate = today.AddDays(-4);
@@ -432,9 +448,9 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                         Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
                             _dbContext,
                             stock,
-                            stock.Ticker
+                            stock.Presentation.Listing.Ticker
                         ),
-                        SourceTicker = stock.Ticker,
+                        SourceTicker = stock.Presentation.Listing.Ticker,
                         Date = date,
                         Open = close,
                         High = close,
@@ -454,7 +470,9 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                 new StockSplit
                 {
                     EquityIssuerId = stock.Id,
-                    PriceSeriesTicker = legacyNullAttribution ? null : stock.Ticker,
+                    PriceSeriesTicker = legacyNullAttribution
+                        ? null
+                        : stock.Presentation.Listing.Ticker,
                     EffectiveDate = splitDate,
                     Numerator = 10m,
                     Denominator = 1m,
@@ -473,7 +491,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     [Fact]
     public async Task Compute_FuturePrimarySplit_DoesNotClipCurrentPriceFactors()
     {
-        var stock = SeedStock("FUTURE", sharesOutstanding: 1_000_000);
+        EquityIssuer stock = SeedStock("FUTURE", sharesOutstanding: 1_000_000);
         SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         for (var i = 0; i < 65; i++)
@@ -487,9 +505,9 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                         Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
                             _dbContext,
                             stock,
-                            stock.Ticker
+                            stock.Presentation.Listing.Ticker
                         ),
-                        SourceTicker = stock.Ticker,
+                        SourceTicker = stock.Presentation.Listing.Ticker,
                         Date = today.AddDays(i - 64),
                         Open = close,
                         High = close,
@@ -507,7 +525,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                 new StockSplit
                 {
                     EquityIssuerId = stock.Id,
-                    PriceSeriesTicker = stock.Ticker,
+                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                     EffectiveDate = today.AddDays(1),
                     Numerator = 10m,
                     Denominator = 1m,
@@ -525,7 +543,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     [Fact]
     public async Task Compute_SecondaryListingHistory_DoesNotSupplyPrimaryPriceFactors()
     {
-        var stock = SeedStock("PRIMARY", sharesOutstanding: 1_000_000);
+        EquityIssuer stock = SeedStock("PRIMARY", sharesOutstanding: 1_000_000);
         SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         for (var i = 0; i < 65; i++)
@@ -565,7 +583,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     [Fact]
     public async Task Compute_NoPriceHistory_PriceFactorsDropOut()
     {
-        var stock = SeedStock("NOPX", sharesOutstanding: 1_000_000);
+        EquityIssuer stock = SeedStock("NOPX", sharesOutstanding: 1_000_000);
         SeedShortInterest(stock, shortPosition: 100_000, daysToCover: 2m);
         await _dbContext.SaveChangesAsync();
 
@@ -583,8 +601,8 @@ public class ShortSqueezeScoreManagerTests : IDisposable
     {
         // A source flags REPORT as near earnings; PEER is not flagged. The boost is
         // additive on top of the weighted base and must mark the flag for consumers.
-        var reporting = SeedStock("REPORT", sharesOutstanding: 1_000_000);
-        var peer = SeedStock("PEER", sharesOutstanding: 1_000_000);
+        EquityIssuer reporting = SeedStock("REPORT", sharesOutstanding: 1_000_000);
+        EquityIssuer peer = SeedStock("PEER", sharesOutstanding: 1_000_000);
         SeedShortInterest(reporting, shortPosition: 100_000, daysToCover: 2m);
         SeedShortInterest(peer, shortPosition: 200_000, daysToCover: 4m);
         _earningsSource.NearEarnings.Add(reporting.Id);
@@ -622,26 +640,25 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             builder.Entity<FailToDeliver>();
     }
 
-    private CommonStock SeedStock(
+    private EquityIssuer SeedStock(
         string ticker,
         long sharesOutstanding,
         ListedSecurityType listedSecurityType = ListedSecurityType.Unknown
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Corp.",
-            Cik = ticker,
-            SharesOutStanding = sharesOutstanding,
-            ListedSecurityType = listedSecurityType,
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Corp.",
+            Cik: ticker,
+            SharesOutStanding: sharesOutstanding,
+            ListedSecurityType: listedSecurityType
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
     private void SeedShortInterest(
-        CommonStock stock,
+        EquityIssuer stock,
         long shortPosition,
         decimal daysToCover,
         long previousPosition = 0
@@ -653,9 +670,13 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = SettlementDate,
                     CurrentShortPosition = shortPosition,
                     PreviousShortPosition = previousPosition,
@@ -666,7 +687,7 @@ public class ShortSqueezeScoreManagerTests : IDisposable
 
     // One row in the prior window and one in the recent window, constant total volume,
     // so the pooled short-volume share trend is exactly (recentShort - priorShort) / 1000.
-    private void SeedShortVolume(CommonStock stock, long priorShort, long recentShort)
+    private void SeedShortVolume(EquityIssuer stock, long priorShort, long recentShort)
     {
         _dbContext
             .Set<DailyShortVolume>()
@@ -674,9 +695,13 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                 new DailyShortVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = SettlementDate.AddDays(-20),
                     ShortVolume = priorShort,
                     TotalVolume = 1000,
@@ -685,9 +710,13 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                 new DailyShortVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = SettlementDate.AddDays(-5),
                     ShortVolume = recentShort,
                     TotalVolume = 1000,

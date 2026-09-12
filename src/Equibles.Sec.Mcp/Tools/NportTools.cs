@@ -19,12 +19,12 @@ namespace Equibles.Sec.Mcp.Tools;
 public class NportTools
 {
     private readonly NportFilingRepository _nportRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly McpToolRunner _runner;
 
     public NportTools(
         NportFilingRepository nportRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         ErrorManager errorManager,
         ILogger<NportTools> logger
     )

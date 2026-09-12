@@ -44,7 +44,7 @@ public class YahooPriceImportServiceReplacePriceRowsTests
                 null,
                 [
                     new EquityDailyStockPriceRepository(db),
-                    new CommonStockRepository(db),
+                    new EquityIssuerRepository(db),
                     new PriceSeriesTarget(ticker, commonStockId, isPrimary),
                     floor,
                     today,
@@ -97,17 +97,16 @@ public class YahooPriceImportServiceReplacePriceRowsTests
             Volume = 1000,
         };
 
-    private static CommonStock Stock(
+    private static EquityIssuer Stock(
         Guid stockId,
         string ticker = "AAPL",
         List<string> secondaryTickers = null
     ) =>
-        new()
-        {
-            Id = stockId,
-            Ticker = ticker,
-            SecondaryTickers = secondaryTickers ?? [],
-        };
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: stockId,
+            Ticker: ticker,
+            SecondaryTickers: secondaryTickers ?? []
+        );
 
     [Fact]
     public async Task ReplacePriceRows_SwapsWindowRowsForTheFreshSeries()

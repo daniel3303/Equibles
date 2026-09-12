@@ -60,17 +60,30 @@ public class ImpossiblePositionRepairService
             .Set<InstitutionalHolding>()
             .Where(h => h.ShareType == ShareType.Shares && !h.ValueUnavailable && h.Shares > 0)
             .Join(
-                dbContext.Set<CommonStock>(),
+                dbContext.Set<EquityIssuer>(),
                 h => h.EquityIssuerId,
                 cs => cs.Id,
                 (h, cs) =>
                     new
                     {
                         Holding = h,
-                        cs.Ticker,
-                        cs.SecondaryTickers,
-                        cs.SharesOutStanding,
-                        cs.MarketCapitalization,
+                        Ticker = cs.Presentation.Listing.Ticker,
+                        SecondaryTickers = cs
+                            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                            .Where(nativeListing =>
+                                nativeListing.MarketCountryCode == "US"
+                                && (
+                                    nativeListing.IsDirectoryListed
+                                    && nativeListing.Id != cs.Presentation.EquityListingId
+                                )
+                            )
+                            .Select(nativeListing => nativeListing.Ticker)
+                            .ToList(),
+                        SharesOutStanding = cs.Presentation.Listing.Security.SharesOutstanding,
+                        MarketCapitalization = cs.Presentation
+                            .Listing
+                            .Security
+                            .MarketCapitalization,
                     }
             )
             .Where(x =>

@@ -41,7 +41,10 @@ public class EquityIdentityFoundationTests : ParadeDbMcpTestBase
     [Fact]
     public async Task CrossListing_SharesIssuerAndSecurity_WithoutChangingLegacyLookup()
     {
-        var stock = new CommonStock { Ticker = "SAME", Name = "Existing issuer" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SAME",
+            Name: "Existing issuer"
+        );
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
         var issuer = await DbContext.Set<EquityIssuer>().SingleAsync();
@@ -55,7 +58,9 @@ public class EquityIdentityFoundationTests : ParadeDbMcpTestBase
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
-        (await new CommonStockRepository(DbContext).GetByTicker("SAME")).Id.Should().Be(stock.Id);
+        (await new EquityIssuerRepository(DbContext).GetUsByTicker("SAME"))
+            .Id.Should()
+            .Be(stock.Id);
         (await DbContext.Set<EquityListing>().CountAsync()).Should().Be(4);
         (await DbContext.Set<EquitySecurity>().CountAsync()).Should().Be(3);
         (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(1);

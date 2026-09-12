@@ -25,7 +25,7 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
     private StockPriceTools Sut() =>
         new(
             new EquityDailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
@@ -34,10 +34,14 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_WhenTheWindowHoldsAnAdjustment_RendersTheAdjustedClose()
     {
-        var stock = await SeedPrices(adjustedOffset: -3m);
+        EquityIssuer stock = await SeedPrices(adjustedOffset: -3m);
 
         var result = await Sut()
-            .GetStockPrices(stock.Ticker, startDate: "2025-01-06", endDate: "2025-01-20");
+            .GetStockPrices(
+                stock.Presentation.Listing.Ticker,
+                startDate: "2025-01-06",
+                endDate: "2025-01-20"
+            );
 
         result.Should().Contain("| Date | Open | High | Low | Close | Adj Close | Volume |");
         result.Should().Contain("97.00");
@@ -52,10 +56,14 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
     public async Task GetStockPrices_WhenNothingWasAdjusted_OmitsTheColumnAndSaysWhy()
     {
         // This stored window has an identical adjusted series, so the column would repeat Close.
-        var stock = await SeedPrices(adjustedOffset: 0m);
+        EquityIssuer stock = await SeedPrices(adjustedOffset: 0m);
 
         var result = await Sut()
-            .GetStockPrices(stock.Ticker, startDate: "2025-01-06", endDate: "2025-01-20");
+            .GetStockPrices(
+                stock.Presentation.Listing.Ticker,
+                startDate: "2025-01-06",
+                endDate: "2025-01-20"
+            );
 
         result.Should().Contain("| Date | Open | High | Low | Close | Volume |");
         result.Should().NotContain("| Date | Open | High | Low | Close | Adj Close | Volume |");
@@ -69,10 +77,14 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_EqualAdjustedClose_DoesNotCertifySplitBasis()
     {
-        var stock = await SeedPrices(adjustedOffset: 0m);
+        EquityIssuer stock = await SeedPrices(adjustedOffset: 0m);
 
         var result = await Sut()
-            .GetStockPrices(stock.Ticker, startDate: "2025-01-06", endDate: "2025-01-20");
+            .GetStockPrices(
+                stock.Presentation.Listing.Ticker,
+                startDate: "2025-01-06",
+                endDate: "2025-01-20"
+            );
 
         result
             .Should()
@@ -80,10 +92,10 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
         result.Should().NotContain("Once pending actions reconcile");
     }
 
-    private async Task<CommonStock> SeedPrices(decimal adjustedOffset)
+    private async Task<EquityIssuer> SeedPrices(decimal adjustedOffset)
     {
-        var stock = MakeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = MakeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
 
         var start = new DateOnly(2025, 1, 6);
@@ -113,11 +125,10 @@ public class StockPriceToolsAdjustedCloseTests : ParadeDbMcpTestBase
         return stock;
     }
 
-    private static CommonStock MakeStock() =>
-        new()
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+    private static EquityIssuer MakeStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
 }

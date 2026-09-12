@@ -19,12 +19,12 @@ namespace Equibles.Sec.Mcp.Tools;
 public class FormDTools
 {
     private readonly FormDFilingRepository _formDRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly McpToolRunner _runner;
 
     public FormDTools(
         FormDFilingRepository formDRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         ErrorManager errorManager,
         ILogger<FormDTools> logger
     )

@@ -25,14 +25,14 @@ public class CongressTools
     private readonly CongressionalTradeRepository _tradeRepository;
     private readonly CongressMemberRepository _memberRepository;
     private readonly CongressionalAnnualDisclosureRepository _disclosureRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly McpToolRunner _runner;
 
     public CongressTools(
         CongressionalTradeRepository tradeRepository,
         CongressMemberRepository memberRepository,
         CongressionalAnnualDisclosureRepository disclosureRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         ErrorManager errorManager,
         ILogger<CongressTools> logger
     )
@@ -169,7 +169,7 @@ public class CongressTools
                 if (typeError != null)
                     return typeError;
 
-                CommonStock stock = null;
+                EquityIssuer stock = null;
                 string listedTicker = null;
                 if (!string.IsNullOrWhiteSpace(ticker))
                 {
@@ -192,7 +192,10 @@ public class CongressTools
                         t.EquityIssuerId == stock.Id
                         && (
                             t.FiledTicker == listedTicker
-                            || (t.FiledTicker == "" && listedTicker == stock.Ticker)
+                            || (
+                                t.FiledTicker == ""
+                                && listedTicker == stock.Presentation.Listing.Ticker
+                            )
                         )
                     );
 
@@ -233,7 +236,7 @@ public class CongressTools
         );
     }
 
-    private static string ListingLabel(CommonStock stock, string listedTicker) =>
+    private static string ListingLabel(EquityIssuer stock, string listedTicker) =>
         SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker)
             ? listedTicker
             : $"{listedTicker} ({stock.Name})";

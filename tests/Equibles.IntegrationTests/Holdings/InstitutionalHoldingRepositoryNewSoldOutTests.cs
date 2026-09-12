@@ -47,7 +47,7 @@ public class InstitutionalHoldingRepositoryNewSoldOutTests : IAsyncLifetime
     public async Task GetQuarterlyNewSoldOutPositions_HolderAppearsOnlyInCurrent_CountsAsNew()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "AAPL");
+        EquityIssuer stock = await SeedStock(seed, "AAPL");
         var holder = await SeedHolder(seed, "1");
         seed.Add(MakeHolding(stock, holder, Current, shares: 1_000));
         await seed.SaveChangesAsync();
@@ -66,7 +66,7 @@ public class InstitutionalHoldingRepositoryNewSoldOutTests : IAsyncLifetime
     public async Task GetQuarterlyNewSoldOutPositions_HolderAppearsOnlyInPrior_CountsAsSoldOut()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "MSFT");
+        EquityIssuer stock = await SeedStock(seed, "MSFT");
         var holder = await SeedHolder(seed, "2");
         seed.Add(MakeHolding(stock, holder, Prior, shares: 1_000));
         await seed.SaveChangesAsync();
@@ -85,7 +85,7 @@ public class InstitutionalHoldingRepositoryNewSoldOutTests : IAsyncLifetime
     public async Task GetQuarterlyNewSoldOutPositions_HolderInBothQuarters_CountsAsNeither()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "NVDA");
+        EquityIssuer stock = await SeedStock(seed, "NVDA");
         var holder = await SeedHolder(seed, "3");
         seed.Add(MakeHolding(stock, holder, Prior, shares: 1_000));
         seed.Add(MakeHolding(stock, holder, Current, shares: 1_500));
@@ -105,7 +105,7 @@ public class InstitutionalHoldingRepositoryNewSoldOutTests : IAsyncLifetime
     public async Task GetQuarterlyNewSoldOutPositions_MixedFilersPerStock_CountsBothBuckets()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "TSLA");
+        EquityIssuer stock = await SeedStock(seed, "TSLA");
         var newcomer1 = await SeedHolder(seed, "4");
         var newcomer2 = await SeedHolder(seed, "5");
         var exiter = await SeedHolder(seed, "6");
@@ -129,17 +129,16 @@ public class InstitutionalHoldingRepositoryNewSoldOutTests : IAsyncLifetime
         row.SoldOutFilerCount.Should().Be(1);
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Test Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Test Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}"
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -157,7 +156,7 @@ public class InstitutionalHoldingRepositoryNewSoldOutTests : IAsyncLifetime
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares

@@ -74,8 +74,8 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -149,19 +149,18 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         );
     }
 
-    private async Task<CommonStock> SeedAlphabet()
+    private async Task<EquityIssuer> SeedAlphabet()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GOOGL",
-            Name = "Alphabet Inc",
-            Cik = "1652044",
-            Cusip = "02079K305",
-            SecondaryTickers = ["GOOG"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GOOGL",
+            Name: "Alphabet Inc",
+            Cik: "1652044",
+            Cusip: "02079K305",
+            SecondaryTickers: ["GOOG"]
+        );
         using var seed = FreshContext();
-        seed.Set<CommonStock>().Add(stock);
+        seed.Set<EquityIssuer>().Add(stock);
         seed.Set<EquityListingCusipEvidence>()
             .Add(
                 new EquityListingCusipEvidence
@@ -178,7 +177,7 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
     [Fact]
     public async Task ImportDataSet_BothClassesFiledSameQuarter_ImportsTwoRowsEachOnItsOwnPrice()
     {
-        var stock = await SeedAlphabet();
+        EquityIssuer stock = await SeedAlphabet();
         var reportDate = new DateOnly(2026, 3, 31);
 
         // Distinct closes so a cross-class pricing bug shows up in the derived values,
@@ -227,7 +226,7 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         // An issuer split captured without per-series attribution proves nothing about the
         // sibling class's own basis. The secondary row must import its SHARES but refuse a
         // value; the primary row values normally with the factor applied.
-        var stock = await SeedAlphabet();
+        EquityIssuer stock = await SeedAlphabet();
         var reportDate = new DateOnly(2026, 3, 31);
 
         using (var seed = FreshContext())
@@ -293,26 +292,24 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         // Precedence pin, mirroring the alias rule: a CURRENT primary assignment outranks
         // another stock's listed-cusip claim on the same CUSIP (a shape only bad data can
         // produce). Primary > alias > listing.
-        var owner = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAA",
-            Name = "Current Owner Corp",
-            Cik = "0000000001",
-            Cusip = "999999999",
-        };
-        var claimant = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BBB",
-            Name = "Listing Claimant Corp",
-            Cik = "0000000002",
-            Cusip = "888888888",
-            SecondaryTickers = ["BBB-A"],
-        };
+        EquityIssuer owner = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAA",
+            Name: "Current Owner Corp",
+            Cik: "0000000001",
+            Cusip: "999999999"
+        );
+        EquityIssuer claimant = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BBB",
+            Name: "Listing Claimant Corp",
+            Cik: "0000000002",
+            Cusip: "888888888",
+            SecondaryTickers: ["BBB-A"]
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().AddRange(owner, claimant);
+            seed.Set<EquityIssuer>().AddRange(owner, claimant);
             seed.Set<EquityListingCusipEvidence>()
                 .Add(
                     new EquityListingCusipEvidence

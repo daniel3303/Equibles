@@ -31,18 +31,16 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioTests : ParadeDbMc
     public async Task GetInstitutionPortfolio_BigValueLowSharesVsLowValueBigShares_RanksByValueDescending()
     {
         var holder = new InstitutionalHolder { Cik = "1", Name = "Berkshire Hathaway Inc." };
-        var bigDollar = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var pennyStock = new CommonStock
-        {
-            Ticker = "PNY",
-            Name = "Penny Stock Co.",
-            Cik = "0001999999",
-        };
+        EquityIssuer bigDollar = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer pennyStock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "PNY",
+            Name: "Penny Stock Co.",
+            Cik: "0001999999"
+        );
         DbContext.Add(holder);
         DbContext.Add(bigDollar);
         DbContext.Add(pennyStock);
@@ -63,7 +61,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioTests : ParadeDbMc
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -95,12 +93,11 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioTests : ParadeDbMc
         var tickers = new[] { "PGA", "PGB", "PGC", "PGD" };
         foreach (var (ticker, index) in tickers.Select((t, i) => (t, i)))
         {
-            var stock = new CommonStock
-            {
-                Ticker = ticker,
-                Name = $"{ticker} Corp",
-                Cik = $"000077000{index}",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: ticker,
+                Name: $"{ticker} Corp",
+                Cik: $"000077000{index}"
+            );
             DbContext.Add(stock);
             DbContext.Add(MakeHolding(holder, stock, reportDate, shares: 1_000, value: 5_000_000));
         }
@@ -111,7 +108,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioTests : ParadeDbMc
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -136,7 +133,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioTests : ParadeDbMc
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly reportDate,
         long shares,
         long value
@@ -151,6 +148,6 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioTests : ParadeDbMc
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{stock.Ticker}",
+            AccessionNumber = $"acc-{stock.Presentation.Listing.Ticker}",
         };
 }

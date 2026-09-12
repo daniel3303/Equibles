@@ -32,22 +32,21 @@ public class DocumentPersistenceServiceXbrlTests : ParadeDbMcpTestBase
     private const string XbrlBody =
         "<html xmlns:ix=\"http://www.xbrl.org/2013/inlineXBRL\"><body><ix:nonFraction>42</ix:nonFraction></body></html>";
 
-    private async Task<CommonStock> SeedCompany()
+    private async Task<EquityIssuer> SeedCompany()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         await using (var seed = Fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync();
         }
         DbContext.ChangeTracker.Clear();
-        return await DbContext.Set<CommonStock>().SingleAsync(s => s.Id == apple.Id);
+        return await DbContext.Set<EquityIssuer>().SingleAsync(s => s.Id == apple.Id);
     }
 
     private DocumentPersistenceService BuildSut() =>
@@ -66,7 +65,7 @@ public class DocumentPersistenceServiceXbrlTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Save_WithCapturedInlineXbrl_StoresGzipFileAndRecordsXbrlFields()
     {
-        var apple = await SeedCompany();
+        EquityIssuer apple = await SeedCompany();
         var rawBytes = Encoding.UTF8.GetBytes(XbrlBody);
 
         await BuildSut()
@@ -100,7 +99,7 @@ public class DocumentPersistenceServiceXbrlTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Save_WithNotPresentXbrl_RecordsStatusWithoutFile()
     {
-        var apple = await SeedCompany();
+        EquityIssuer apple = await SeedCompany();
 
         await BuildSut()
             .Save(

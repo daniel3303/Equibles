@@ -15,7 +15,7 @@ public class StockPriceToolsGetBollingerBandsCultureInvarianceTests : ParadeDbMc
     private StockPriceTools Sut() =>
         new(
             new EquityDailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
@@ -34,13 +34,12 @@ public class StockPriceToolsGetBollingerBandsCultureInvarianceTests : ParadeDbMc
     [Fact]
     public async Task GetBollingerBands_UnderNonInvariantCulture_RendersCloseCultureInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
 
         // 20 bars for the default period=20 window. The oldest bar's Close is 123.45 — it lands

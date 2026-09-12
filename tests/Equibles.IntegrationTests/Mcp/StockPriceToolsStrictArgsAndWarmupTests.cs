@@ -21,7 +21,7 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
     private StockPriceTools Sut() =>
         new(
             new EquityDailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
@@ -30,16 +30,11 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
     public StockPriceToolsStrictArgsAndWarmupTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private static CommonStock Stock(string ticker = "AAPL", string name = "Apple Inc") =>
-        new()
-        {
-            Ticker = ticker,
-            Name = name,
-            Cik = "0000320193",
-        };
+    private static EquityIssuer Stock(string ticker = "AAPL", string name = "Apple Inc") =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: ticker, Name: name, Cik: "0000320193");
 
     private EquityDailyStockPrice PriceFor(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly date,
         decimal close = 150.00m,
         long volume = 50_000_000
@@ -59,10 +54,10 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
             Volume = volume,
         };
 
-    private async Task<CommonStock> SeedDailyCloses(DateOnly firstDate, params decimal[] closes)
+    private async Task<EquityIssuer> SeedDailyCloses(DateOnly firstDate, params decimal[] closes)
     {
-        var stock = Stock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Stock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         for (var i = 0; i < closes.Length; i++)
             DbContext
                 .Set<EquityDailyStockPrice>()
@@ -79,7 +74,7 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
         // The old shared ParseDateOr silently replaced "07/15/2026" with the default
         // 1-year window and returned a plausible table for a range the caller never
         // asked for. A malformed date must be an explicit, self-correctable error.
-        DbContext.Set<CommonStock>().Add(Stock());
+        DbContext.Set<EquityIssuer>().Add(Stock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetStockPrices("AAPL", startDate: "07/15/2026");
@@ -92,7 +87,7 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
     {
         // startDate > endDate used to fall through to the query and come back as
         // "No price data found ..." — indistinguishable from a real data gap.
-        DbContext.Set<CommonStock>().Add(Stock());
+        DbContext.Set<EquityIssuer>().Add(Stock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut()
@@ -107,7 +102,7 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
     public async Task GetOnBalanceVolume_MalformedEndDate_ReturnsInvalidArgumentError()
     {
         // The same strict parsing must guard the indicator tools' shared window loader.
-        DbContext.Set<CommonStock>().Add(Stock());
+        DbContext.Set<EquityIssuer>().Add(Stock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetOnBalanceVolume("AAPL", endDate: "last week");
@@ -275,8 +270,8 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
         // (BRK.B) is the same symbol in a different notation — a mechanical format
         // conversion, so the lookup folds '.' to '-' on a miss instead of reporting
         // the stock as not found.
-        var brk = Stock(ticker: "BRK-B", name: "Berkshire Hathaway Inc");
-        DbContext.Set<CommonStock>().Add(brk);
+        EquityIssuer brk = Stock(ticker: "BRK-B", name: "Berkshire Hathaway Inc");
+        DbContext.Set<EquityIssuer>().Add(brk);
         DbContext
             .Set<EquityDailyStockPrice>()
             .Add(PriceFor(brk, new DateOnly(2026, 4, 5), close: 412.34m));
@@ -291,8 +286,8 @@ public class StockPriceToolsStrictArgsAndWarmupTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_DotClassTicker_ResolvesDashStoredForm()
     {
-        var brk = Stock(ticker: "BRK-B", name: "Berkshire Hathaway Inc");
-        DbContext.Set<CommonStock>().Add(brk);
+        EquityIssuer brk = Stock(ticker: "BRK-B", name: "Berkshire Hathaway Inc");
+        DbContext.Set<EquityIssuer>().Add(brk);
         DbContext
             .Set<EquityDailyStockPrice>()
             .Add(PriceFor(brk, new DateOnly(2026, 4, 5), close: 412.34m));

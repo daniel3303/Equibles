@@ -29,7 +29,7 @@ public class StockPriceToolsGetLatestClosingPricesDayChangeGapTests : ParadeDbMc
     private StockPriceTools Sut() =>
         new(
             new EquityDailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
@@ -37,13 +37,12 @@ public class StockPriceToolsGetLatestClosingPricesDayChangeGapTests : ParadeDbMc
 
     private async Task Seed(string ticker, params (DateOnly Date, decimal Close)[] bars)
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Inc",
-            Cik = ticker.PadLeft(10, '0'),
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Inc",
+            Cik: ticker.PadLeft(10, '0')
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
 
         foreach (var (date, close) in bars)

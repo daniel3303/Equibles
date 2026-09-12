@@ -18,7 +18,7 @@ public class CongressToolsTests : ParadeDbMcpTestBase
             new CongressionalTradeRepository(DbContext),
             new CongressMemberRepository(DbContext),
             new CongressionalAnnualDisclosureRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             ErrorManager,
             NullLogger<CongressTools>()
         );
@@ -26,13 +26,12 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     public CongressToolsTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private static CommonStock NvdaStock() =>
-        new()
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corporation",
-            Cik = "0001045810",
-        };
+    private static EquityIssuer NvdaStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corporation",
+            Cik: "0001045810"
+        );
 
     private static CongressMember PelosiMember() =>
         new() { Name = "Nancy Pelosi", Position = CongressPosition.Representative };
@@ -42,7 +41,7 @@ public class CongressToolsTests : ParadeDbMcpTestBase
 
     private CongressionalTrade TradeFor(
         CongressMember member,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly transactionDate,
         CongressTransactionType type = CongressTransactionType.Purchase,
         long amountFrom = 1_000,
@@ -84,7 +83,7 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_NoTrades_ReturnsEmptyRangeMessage()
     {
-        DbContext.Set<CommonStock>().Add(NvdaStock());
+        DbContext.Set<EquityIssuer>().Add(NvdaStock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut()
@@ -96,9 +95,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_RendersTradeRowsWithMemberName()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext
             .Set<CongressionalTrade>()
@@ -126,9 +125,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_OptionAsset_IsAttributedAsInstrumentAndTableSafe()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext
             .Set<CongressionalTrade>()
@@ -162,9 +161,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_FiltersByTransactionType()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext
             .Set<CongressionalTrade>()
@@ -206,9 +205,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_OrdersByTransactionDateDescending()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext
             .Set<CongressionalTrade>()
@@ -228,9 +227,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_TiedDates_UseRowIdentityBeforeTheLimit()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         var day = new DateOnly(2026, 3, 15);
         var alpha = TradeFor(pelosi, stock, day, assetName: "Alpha Lot");
@@ -320,10 +319,10 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetMemberTrades_RendersTradeRowsForMember()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
         var crenshaw = CrenshawMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().AddRange(pelosi, crenshaw);
         DbContext
             .Set<CongressionalTrade>()
@@ -347,9 +346,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     {
         // Four trades tied on transaction AND filing date so only the Id tiebreak orders
         // them — exactly where a partial order would repeat or skip rows between pages.
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         var markers = new[] { "Alpha Lot", "Bravo Lot", "Charlie Lot", "Delta Lot" };
         DbContext
@@ -389,15 +388,14 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetMemberTrades_TickerFilterUsesResolvedStockIdentity()
     {
-        var nvda = NvdaStock();
-        var apple = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer nvda = NvdaStock();
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().AddRange(nvda, apple);
+        DbContext.Set<EquityIssuer>().AddRange(nvda, apple);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext
             .Set<CongressionalTrade>()
@@ -422,9 +420,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetMemberTrades_FiltersByDateRange()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext
             .Set<CongressionalTrade>()
@@ -578,7 +576,7 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_MalformedStartDate_ErrorsWithAcceptedFormat()
     {
-        DbContext.Set<CommonStock>().Add(NvdaStock());
+        DbContext.Set<EquityIssuer>().Add(NvdaStock());
         await DbContext.SaveChangesAsync();
 
         // US-style dates must correct the caller, never silently fall back to the default
@@ -603,9 +601,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_TitleEchoesEffectiveDateWindow()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext.Set<CongressionalTrade>().Add(TradeFor(pelosi, stock, new DateOnly(2026, 3, 15)));
         await DbContext.SaveChangesAsync();
@@ -625,9 +623,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_MoreTradesThanMaxResults_AppendsTruncationNote()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext
             .Set<CongressionalTrade>()
@@ -656,9 +654,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_HouseOwnerCode_RenderedAsSenateLabel()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext
             .Set<CongressionalTrade>()
@@ -676,9 +674,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetMemberTrades_RendersFilingDateColumn()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         // Filed 30 days after the trade: STOCK Act disclosures lag, so the date the market
         // learned of the trade must be visible next to the transaction date.
@@ -699,9 +697,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetMemberTrades_MemberNameWrongCase_StillResolves()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext.Set<CongressionalTrade>().Add(TradeFor(pelosi, stock, new DateOnly(2026, 3, 15)));
         await DbContext.SaveChangesAsync();
@@ -715,9 +713,9 @@ public class CongressToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetMemberTrades_UniquePartialName_ResolvesUnambiguously()
     {
-        var stock = NvdaStock();
+        EquityIssuer stock = NvdaStock();
         var pelosi = PelosiMember();
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().AddRange(pelosi, CrenshawMember());
         DbContext.Set<CongressionalTrade>().Add(TradeFor(pelosi, stock, new DateOnly(2026, 3, 15)));
         await DbContext.SaveChangesAsync();

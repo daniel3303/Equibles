@@ -35,7 +35,7 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
     private static readonly DateOnly AfterWindow = new(2026, 9, 1);
 
     private InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -58,10 +58,16 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
             FilingType = FilingType.Form13F,
         };
 
-    private async Task<(CommonStock Stock, StockCombinedQuarterService Service)> Seed()
+    private async Task<(EquityIssuer Stock, StockCombinedQuarterService Service)> Seed()
     {
-        var stock = new CommonStock { Ticker = "ARE", Name = "Alexandria Real Estate" };
-        var other = new CommonStock { Ticker = "OTHR", Name = "Other Co" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ARE",
+            Name: "Alexandria Real Estate"
+        );
+        EquityIssuer other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OTHR",
+            Name: "Other Co"
+        );
         var continuing = new InstitutionalHolder { Cik = "1", Name = "Continuing Fund" };
         var carried = new InstitutionalHolder { Cik = "2", Name = "Carried Fund" };
         var exited = new InstitutionalHolder { Cik = "3", Name = "Exited Fund" };

@@ -32,16 +32,21 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
     public DocumentPersistenceServiceSaveTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    [Fact]
-    public async Task Save_CommitsTransactionAndPersistsDocumentLinkedToCompanyAndContent()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Save_CommitsTransactionAndPersistsDocumentLinkedToCompanyAndContent(
+        bool unlisted
+    )
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        if (unlisted)
+            apple = new EquityIssuer { Name = "Unlisted filer", Cik = "777" };
         // FileManager is the unit under test's only non-DbContext collaborator — substitute it
         // so the test is independent of Equibles.Media.BusinessLogic; the persistence step is
         // what we want to verify, not the file-byte writing.
@@ -67,12 +72,12 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
         // context lands it as Unchanged.
         await using (var seed = Fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             seed.Set<File>().Add(savedFile);
             await seed.SaveChangesAsync();
         }
         DbContext.ChangeTracker.Clear();
-        apple = await DbContext.Set<CommonStock>().SingleAsync(s => s.Id == apple.Id);
+        apple = await DbContext.Set<EquityIssuer>().SingleAsync(s => s.Id == apple.Id);
         // SaveFile in production returns the row it just persisted via the same DbContext;
         // re-fetch from the SUT context so EF tracks it as Unchanged when Save uses it as
         // the Document.Content navigation.
@@ -136,12 +141,13 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
         // Save announces the persisted document on the bus after the commit, carrying the
         // assigned id and the metadata a consumer needs — the earnings-call linker keys off
         // DocumentType + Items without re-querying the financial database.
+        var expectedTicker = unlisted ? null : "AAPL";
         await bus.Received(1)
             .Publish(
                 Arg.Is<DocumentSaved>(e =>
                     e.DocumentId == saved.Id
                     && e.CommonStockId == apple.Id
-                    && e.Ticker == apple.Ticker
+                    && e.Ticker == expectedTicker
                     && e.DocumentType == DocumentType.EightK.Value
                     && e.AccessionNumber == "0000320193-24-000123"
                     && e.Items == "2.02,9.01"

@@ -20,11 +20,11 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
         new(
             new DailyShortVolumeRepository(DbContext),
             new ShortInterestRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new ShortSqueezeScoreManager(
                 new ShortInterestRepository(DbContext),
                 new DailyShortVolumeRepository(DbContext),
-                new CommonStockRepository(DbContext),
+                new EquityIssuerRepository(DbContext),
                 new StockSplitRepository(DbContext),
                 new FailToDeliverRepository(DbContext),
                 new EquityDailyStockPriceRepository(DbContext),
@@ -40,21 +40,19 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     public ShortDataToolsTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private static CommonStock GmeStock() =>
-        new()
-        {
-            Ticker = "GME",
-            Name = "GameStop Corp",
-            Cik = "0001326380",
-        };
+    private static EquityIssuer GmeStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GME",
+            Name: "GameStop Corp",
+            Cik: "0001326380"
+        );
 
-    private static CommonStock AmcStock() =>
-        new()
-        {
-            Ticker = "AMC",
-            Name = "AMC Entertainment",
-            Cik = "0001411579",
-        };
+    private static EquityIssuer AmcStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AMC",
+            Name: "AMC Entertainment",
+            Cik: "0001411579"
+        );
 
     // ── GetShortVolume ───────────────────────────────────────────────────
 
@@ -73,7 +71,7 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortVolume_StockWithoutData_ReturnsEmptyRangeMessage()
     {
-        DbContext.Set<CommonStock>().Add(GmeStock());
+        DbContext.Set<EquityIssuer>().Add(GmeStock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut()
@@ -85,16 +83,20 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortVolume_SecondaryListing_DoesNotReturnPrimarySeries()
     {
-        var stock = GmeStock();
-        stock.SecondaryTickers = ["GME-A"];
+        EquityIssuer stock = GmeStock();
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["GME-A"]);
         DbContext.Add(stock);
         DbContext.Add(
             new DailyShortVolume
             {
                 EquityListingId = Equibles
-                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                    .TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        stock.Presentation.Listing.Ticker
+                    )
                     .Id,
-                ListedTicker = stock.Ticker,
+                ListedTicker = stock.Presentation.Listing.Ticker,
                 Date = DateOnly.FromDateTime(DateTime.UtcNow),
                 ShortVolume = 100,
                 TotalVolume = 200,
@@ -111,17 +113,21 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortVolume_StockWithData_RendersAscendingTable()
     {
-        var stock = GmeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<DailyShortVolume>()
             .AddRange(
                 new DailyShortVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = new DateOnly(2026, 4, 1),
                     ShortVolume = 1_000_000,
                     ShortExemptVolume = 50_000,
@@ -131,9 +137,13 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                 new DailyShortVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = new DateOnly(2026, 4, 2),
                     ShortVolume = 1_500_000,
                     ShortExemptVolume = 75_000,
@@ -159,17 +169,21 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortVolume_ComputesShortPercentageCorrectly()
     {
-        var stock = GmeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<DailyShortVolume>()
             .Add(
                 new DailyShortVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = new DateOnly(2026, 4, 1),
                     ShortVolume = 750_000,
                     ShortExemptVolume = 25_000,
@@ -188,16 +202,20 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortVolume_MaxResultsLimitsRows()
     {
-        var stock = GmeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var days = Enumerable
             .Range(1, 5)
             .Select(i => new DailyShortVolume
             {
                 EquityListingId = Equibles
-                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                    .TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        stock.Presentation.Listing.Ticker
+                    )
                     .Id,
-                ListedTicker = stock.Ticker,
+                ListedTicker = stock.Presentation.Listing.Ticker,
                 Date = new DateOnly(2026, 4, i),
                 ShortVolume = 1_000_000,
                 ShortExemptVolume = 0,
@@ -219,7 +237,7 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortVolume_TrimsAndUppercasesTicker()
     {
-        DbContext.Set<CommonStock>().Add(GmeStock());
+        DbContext.Set<EquityIssuer>().Add(GmeStock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetShortVolume("  gme  ");
@@ -240,16 +258,20 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterest_SecondaryListing_DoesNotReturnPrimarySeries()
     {
-        var stock = GmeStock();
-        stock.SecondaryTickers = ["GME-A"];
+        EquityIssuer stock = GmeStock();
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["GME-A"]);
         DbContext.Add(stock);
         DbContext.Add(
             new ShortInterest
             {
                 EquityListingId = Equibles
-                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                    .TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        stock.Presentation.Listing.Ticker
+                    )
                     .Id,
-                ListedTicker = stock.Ticker,
+                ListedTicker = stock.Presentation.Listing.Ticker,
                 SettlementDate = DateOnly.FromDateTime(DateTime.UtcNow),
                 CurrentShortPosition = 100,
             }
@@ -265,17 +287,21 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterest_StockWithData_RendersTable()
     {
-        var stock = GmeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<ShortInterest>()
             .Add(
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 50_000_000,
                     PreviousShortPosition = 45_000_000,
@@ -299,17 +325,21 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterest_NegativeChange_RendersWithoutPlusSign()
     {
-        var stock = GmeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<ShortInterest>()
             .Add(
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 40_000_000,
                     PreviousShortPosition = 45_000_000,
@@ -329,17 +359,21 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterest_NullDaysToCover_RendersEmDash()
     {
-        var stock = GmeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<ShortInterest>()
             .Add(
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 1_000,
                     ChangeInShortPosition = 0,
@@ -367,9 +401,9 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterestSnapshot_RanksByDaysToCoverDescending()
     {
-        var gme = GmeStock();
-        var amc = AmcStock();
-        DbContext.Set<CommonStock>().AddRange(gme, amc);
+        EquityIssuer gme = GmeStock();
+        EquityIssuer amc = AmcStock();
+        DbContext.Set<EquityIssuer>().AddRange(gme, amc);
         var snapshotDate = new DateOnly(2026, 3, 15);
         DbContext
             .Set<ShortInterest>()
@@ -377,9 +411,13 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, gme, gme.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            gme,
+                            gme.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = gme.Ticker,
+                    ListedTicker = gme.Presentation.Listing.Ticker,
                     SettlementDate = snapshotDate,
                     CurrentShortPosition = 50_000_000,
                     ChangeInShortPosition = 1_000_000,
@@ -389,9 +427,13 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, amc, amc.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            amc,
+                            amc.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = amc.Ticker,
+                    ListedTicker = amc.Presentation.Listing.Ticker,
                     SettlementDate = snapshotDate,
                     CurrentShortPosition = 30_000_000,
                     ChangeInShortPosition = 500_000,
@@ -410,18 +452,22 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterestSnapshot_MinDaysToCoverFiltersResults()
     {
-        var gme = GmeStock();
-        var amc = AmcStock();
-        DbContext.Set<CommonStock>().AddRange(gme, amc);
+        EquityIssuer gme = GmeStock();
+        EquityIssuer amc = AmcStock();
+        DbContext.Set<EquityIssuer>().AddRange(gme, amc);
         DbContext
             .Set<ShortInterest>()
             .AddRange(
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, gme, gme.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            gme,
+                            gme.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = gme.Ticker,
+                    ListedTicker = gme.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 1_000,
                     ChangeInShortPosition = 0,
@@ -431,9 +477,13 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, amc, amc.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            amc,
+                            amc.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = amc.Ticker,
+                    ListedTicker = amc.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 1_000,
                     ChangeInShortPosition = 0,
@@ -452,14 +502,13 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterestSnapshot_ExcludesZeroVolumeStocks()
     {
-        var gme = GmeStock();
-        var pennyStock = new CommonStock
-        {
-            Ticker = "BLNC",
-            Name = "Penny Corp",
-            Cik = "0009999999",
-        };
-        DbContext.Set<CommonStock>().AddRange(gme, pennyStock);
+        EquityIssuer gme = GmeStock();
+        EquityIssuer pennyStock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BLNC",
+            Name: "Penny Corp",
+            Cik: "0009999999"
+        );
+        DbContext.Set<EquityIssuer>().AddRange(gme, pennyStock);
         var snapshotDate = new DateOnly(2026, 3, 15);
         DbContext
             .Set<ShortInterest>()
@@ -467,9 +516,13 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, gme, gme.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            gme,
+                            gme.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = gme.Ticker,
+                    ListedTicker = gme.Presentation.Listing.Ticker,
                     SettlementDate = snapshotDate,
                     CurrentShortPosition = 50_000_000,
                     ChangeInShortPosition = 1_000_000,
@@ -482,10 +535,10 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                         .TestSupport.NativeListingSeed.ForStock(
                             DbContext,
                             pennyStock,
-                            pennyStock.Ticker
+                            pennyStock.Presentation.Listing.Ticker
                         )
                         .Id,
-                    ListedTicker = pennyStock.Ticker,
+                    ListedTicker = pennyStock.Presentation.Listing.Ticker,
                     SettlementDate = snapshotDate,
                     CurrentShortPosition = 1,
                     ChangeInShortPosition = 0,
@@ -504,17 +557,21 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetShortInterestSnapshot_UsesOnlyLatestSettlementDate()
     {
-        var gme = GmeStock();
-        DbContext.Set<CommonStock>().Add(gme);
+        EquityIssuer gme = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(gme);
         DbContext
             .Set<ShortInterest>()
             .AddRange(
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, gme, gme.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            gme,
+                            gme.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = gme.Ticker,
+                    ListedTicker = gme.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 2, 28),
                     CurrentShortPosition = 99_999,
                     ChangeInShortPosition = 0,
@@ -524,9 +581,13 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
                 new ShortInterest
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, gme, gme.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            gme,
+                            gme.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = gme.Ticker,
+                    ListedTicker = gme.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 100_000,
                     ChangeInShortPosition = 0,
@@ -547,7 +608,7 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     // ── GetLargestShortVolume ────────────────────────────────────────────
 
     private DailyShortVolume ShortVolume(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly date,
         long shortVolume,
         long totalVolume,
@@ -556,9 +617,13 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
         new()
         {
             EquityListingId = Equibles
-                .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                .TestSupport.NativeListingSeed.ForStock(
+                    DbContext,
+                    stock,
+                    stock.Presentation.Listing.Ticker
+                )
                 .Id,
-            ListedTicker = stock.Ticker,
+            ListedTicker = stock.Presentation.Listing.Ticker,
             Date = date,
             ShortVolume = shortVolume,
             ShortExemptVolume = exemptVolume,
@@ -577,9 +642,9 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLargestShortVolume_RanksByShortVolumeDescending()
     {
-        var gme = GmeStock();
-        var amc = AmcStock();
-        DbContext.Set<CommonStock>().AddRange(gme, amc);
+        EquityIssuer gme = GmeStock();
+        EquityIssuer amc = AmcStock();
+        DbContext.Set<EquityIssuer>().AddRange(gme, amc);
         var day = new DateOnly(2026, 4, 2);
         DbContext
             .Set<DailyShortVolume>()
@@ -599,8 +664,8 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLargestShortVolume_DefaultsToLatestTradingDay()
     {
-        var gme = GmeStock();
-        DbContext.Set<CommonStock>().Add(gme);
+        EquityIssuer gme = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(gme);
         DbContext
             .Set<DailyShortVolume>()
             .AddRange(
@@ -619,8 +684,8 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLargestShortVolume_ExplicitDate_OverridesLatest()
     {
-        var gme = GmeStock();
-        DbContext.Set<CommonStock>().Add(gme);
+        EquityIssuer gme = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(gme);
         DbContext
             .Set<DailyShortVolume>()
             .AddRange(
@@ -639,8 +704,8 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLargestShortVolume_ComputesShortPercentage()
     {
-        var gme = GmeStock();
-        DbContext.Set<CommonStock>().Add(gme);
+        EquityIssuer gme = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(gme);
         DbContext
             .Set<DailyShortVolume>()
             .Add(
@@ -661,9 +726,9 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLargestShortVolume_MinShortVolumeFiltersResults()
     {
-        var gme = GmeStock();
-        var amc = AmcStock();
-        DbContext.Set<CommonStock>().AddRange(gme, amc);
+        EquityIssuer gme = GmeStock();
+        EquityIssuer amc = AmcStock();
+        DbContext.Set<EquityIssuer>().AddRange(gme, amc);
         var day = new DateOnly(2026, 4, 2);
         DbContext
             .Set<DailyShortVolume>()
@@ -682,9 +747,9 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLargestShortVolume_ExcludesZeroTotalVolume()
     {
-        var gme = GmeStock();
-        var amc = AmcStock();
-        DbContext.Set<CommonStock>().AddRange(gme, amc);
+        EquityIssuer gme = GmeStock();
+        EquityIssuer amc = AmcStock();
+        DbContext.Set<EquityIssuer>().AddRange(gme, amc);
         var day = new DateOnly(2026, 4, 2);
         DbContext
             .Set<DailyShortVolume>()
@@ -703,9 +768,9 @@ public class ShortDataToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLargestShortVolume_MaxResultsLimitsRows()
     {
-        var gme = GmeStock();
-        var amc = AmcStock();
-        DbContext.Set<CommonStock>().AddRange(gme, amc);
+        EquityIssuer gme = GmeStock();
+        EquityIssuer amc = AmcStock();
+        DbContext.Set<EquityIssuer>().AddRange(gme, amc);
         var day = new DateOnly(2026, 4, 2);
         DbContext
             .Set<DailyShortVolume>()

@@ -34,13 +34,12 @@ public class InstitutionalHoldingRepositoryDoubleDownThresholdBoundaryTests : ID
     [Fact]
     public async Task GetDoubleDownPositions_IncreaseExactlyAtThreshold_IsIncluded()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var atThreshold = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -56,7 +55,7 @@ public class InstitutionalHoldingRepositoryDoubleDownThresholdBoundaryTests : ID
         var previous = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
 
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(atThreshold, belowThreshold);
         _dbContext

@@ -27,7 +27,10 @@ public class InstitutionalHoldingsToolsRenderTopHoldersTableCultureInvarianceTes
     [Fact]
     public void RenderTopHoldersTable_UnderNonInvariantCulture_RendersCellsCultureInvariantly()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var holder = new InstitutionalHolder { Name = "ACME Capital" };
         var holdings = new List<InstitutionalHolding>
         {

@@ -20,7 +20,7 @@ public class InsiderTradingToolsGetForm144ProposedSalesTests : ParadeDbMcpTestBa
             new InsiderTransactionRepository(DbContext),
             new InsiderOwnerRepository(DbContext),
             new Form144FilingRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<InsiderTradingTools>()
@@ -33,13 +33,12 @@ public class InsiderTradingToolsGetForm144ProposedSalesTests : ParadeDbMcpTestBa
     [Fact]
     public async Task GetForm144ProposedSales_StockWithFiling_RendersForm144Row()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<Form144Filing>()
             .Add(

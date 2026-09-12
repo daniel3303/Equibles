@@ -31,7 +31,10 @@ public class DocumentTextToolsSearchKeywordNoContentTests : ParadeDbMcpTestBase
     [Fact]
     public async Task SearchDocumentKeyword_DocumentContentBytesNull_ReturnsHasNoContentMessage()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = new File
         {
             Name = "10k",

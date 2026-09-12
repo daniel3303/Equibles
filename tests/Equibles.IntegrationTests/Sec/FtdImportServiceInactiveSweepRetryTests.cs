@@ -29,32 +29,31 @@ public class FtdImportServiceInactiveSweepRetryTests
             new CommonStocksModuleConfiguration(),
             new SecTestModuleConfiguration()
         );
-        var stock = new CommonStock
-        {
-            Ticker = "GONE",
-            Name = "Formerly Listed Corp",
-            Cik = "42",
-            Active = false,
-            DelistedOn = new DateOnly(2020, 6, 30),
-        };
-        db.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONE",
+            Name: "Formerly Listed Corp",
+            Cik: "42",
+            Active: false,
+            DelistedOn: new DateOnly(2020, 6, 30)
+        );
+        db.Set<EquityIssuer>().Add(stock);
         db.Set<EquityListingRetirementEvidence>()
             .Add(
                 new EquityListingRetirementEvidence
                 {
                     EquityIssuerId = stock.Id,
-                    ListedTicker = stock.Ticker,
-                    DelistedOn = stock.DelistedOn.Value,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
+                    DelistedOn = stock.Presentation.Listing.DelistedOn.Value,
                     HistoricalCusipBackfillRequestedAt = DateTime.UtcNow.AddMinutes(-1),
                 }
             );
         await db.SaveChangesAsync();
 
         var bus = Substitute.For<IBus>();
-        var stockRepo = new CommonStockRepository(db);
+        EquityIssuerRepository stockRepo = new EquityIssuerRepository(db);
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), stockRepo),
-            (typeof(CommonStockManager), new CommonStockManager(stockRepo, bus)),
+            (typeof(EquityIssuerRepository), stockRepo),
+            (typeof(EquityIdentityManager), new EquityIdentityManager(stockRepo, bus)),
             (typeof(BackfillStateRepository), new BackfillStateRepository(db))
         );
         var secClient = Substitute.For<ISecEdgarClient>();

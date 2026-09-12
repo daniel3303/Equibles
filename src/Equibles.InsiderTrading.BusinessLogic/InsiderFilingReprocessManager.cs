@@ -524,9 +524,23 @@ public class InsiderFilingReprocessManager
             .GetEffectiveByStock(first.EquityIssuerId, DateOnly.FromDateTime(DateTime.UtcNow))
             .ToListAsync();
         var identity = await _dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .Where(cs => cs.Id == first.EquityIssuerId)
-            .Select(cs => new { cs.Ticker, cs.SecondaryTickers })
+            .Select(cs => new
+            {
+                Ticker = cs.Presentation.Listing.Ticker,
+                SecondaryTickers = cs
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != cs.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
+            })
             .FirstOrDefaultAsync();
 
         foreach (var row in rows)

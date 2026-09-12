@@ -38,7 +38,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
     }
 
     public Task<bool> Exists(
-        CommonStock company,
+        EquityIssuer company,
         DocumentType documentType,
         DateOnly reportingDate,
         DateOnly reportingForDate,
@@ -58,7 +58,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         HashSet<string> KnownAccessions,
         HashSet<(DateOnly FilingDate, DateOnly ReportDate)> LegacyKeys
     )> GetKnownFilingKeys(
-        CommonStock company,
+        EquityIssuer company,
         DocumentType documentType,
         IReadOnlyCollection<string> accessionNumbers,
         CancellationToken cancellationToken = default
@@ -73,7 +73,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
     }
 
     public async Task Save(
-        CommonStock company,
+        EquityIssuer company,
         byte[] content,
         string fileName,
         DocumentType documentType,
@@ -123,7 +123,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             new DocumentSaved(
                 document.Id,
                 company.Id,
-                company.Ticker,
+                company.Presentation?.Listing?.Ticker,
                 documentType.Value,
                 reportingDate,
                 reportingForDate,

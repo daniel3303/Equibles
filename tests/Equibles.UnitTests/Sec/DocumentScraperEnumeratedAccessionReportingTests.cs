@@ -66,10 +66,10 @@ public class DocumentScraperEnumeratedAccessionReportingTests
     {
         var services = new ServiceCollection();
         services.AddSingleton(dbContext);
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         services.AddScoped<DocumentRepository>();
         services.AddSingleton(Substitute.For<IBus>());
-        services.AddScoped<CommonStockManager>();
+        services.AddScoped<EquityIdentityManager>();
         services.AddSingleton(_secEdgarClient);
         services.AddSingleton(_persistence);
         var provider = services.BuildServiceProvider();
@@ -87,22 +87,21 @@ public class DocumentScraperEnumeratedAccessionReportingTests
         );
     }
 
-    private static CommonStock SeedCompany(EquiblesFinancialDbContext db)
+    private static EquityIssuer SeedCompany(EquiblesFinancialDbContext db)
     {
-        var stock = new CommonStock
-        {
-            Ticker = "EBS",
-            Name = "Emergent BioSolutions Inc.",
-            Cik = "1367644",
-        };
-        db.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "EBS",
+            Name: "Emergent BioSolutions Inc.",
+            Cik: "1367644"
+        );
+        db.Set<EquityIssuer>().Add(stock);
         db.SaveChanges();
         return stock;
     }
 
     private static Task InvokeProcess(
         DocumentScraper scraper,
-        CommonStock company,
+        EquityIssuer company,
         ScrapingResult result
     )
     {
@@ -117,7 +116,7 @@ public class DocumentScraperEnumeratedAccessionReportingTests
     public async Task ProcessCompanyDocumentsWithScope_ReportsEnumeratedAccessions_EvenWhenAlreadyIngested()
     {
         using var db = NewDbContext();
-        var company = SeedCompany(db);
+        EquityIssuer company = SeedCompany(db);
         const string newAccession = "0001367644-26-000080";
         const string knownAccession = "0001367644-26-000070";
 
@@ -148,7 +147,7 @@ public class DocumentScraperEnumeratedAccessionReportingTests
         // retry in discovery.
         _persistence
             .GetKnownFilingKeys(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<IReadOnlyCollection<string>>(),
                 Arg.Any<CancellationToken>()
@@ -181,7 +180,7 @@ public class DocumentScraperEnumeratedAccessionReportingTests
     public async Task ProcessCompanyDocumentsWithScope_EnumerationFailure_ReportsNothingForThatType()
     {
         using var db = NewDbContext();
-        var company = SeedCompany(db);
+        EquityIssuer company = SeedCompany(db);
 
         _discovery.HasPendingFeedAccessions.Returns(true);
         // A dead enumeration must not report accessions it never saw — the
@@ -213,7 +212,7 @@ public class DocumentScraperEnumeratedAccessionReportingTests
     public async Task ProcessCompanyDocumentsWithScope_NothingPending_SkipsCollectionAndReport()
     {
         using var db = NewDbContext();
-        var company = SeedCompany(db);
+        EquityIssuer company = SeedCompany(db);
 
         _discovery.HasPendingFeedAccessions.Returns(false);
         _secEdgarClient

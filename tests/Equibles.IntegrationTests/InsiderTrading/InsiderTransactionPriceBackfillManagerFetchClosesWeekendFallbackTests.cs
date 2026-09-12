@@ -55,7 +55,9 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
         var friday = new DateOnly(2024, 6, 14);
         var saturday = new DateOnly(2024, 6, 15);
 
-        _dbContext.Set<CommonStock>().Add(new CommonStock { Id = stockId, Ticker = "WKND" });
+        _dbContext
+            .Set<EquityIssuer>()
+            .Add(Equibles.TestSupport.EquityIssuerSeed.Create(Id: stockId, Ticker: "WKND"));
 
         _dbContext
             .Set<EquityDailyStockPrice>()

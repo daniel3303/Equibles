@@ -27,7 +27,7 @@ public class CongressToolsLowercaseTransactionTypeTests : ParadeDbMcpTestBase
             new CongressionalTradeRepository(DbContext),
             new CongressMemberRepository(DbContext),
             new CongressionalAnnualDisclosureRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             ErrorManager,
             NullLogger<CongressTools>()
         );
@@ -38,18 +38,17 @@ public class CongressToolsLowercaseTransactionTypeTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetCongressionalTrades_LowercaseTransactionType_FiltersCaseInsensitively()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corporation",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corporation",
+            Cik: "0001045810"
+        );
         var pelosi = new CongressMember
         {
             Name = "Nancy Pelosi",
             Position = CongressPosition.Representative,
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<CongressMember>().Add(pelosi);
         DbContext
             .Set<CongressionalTrade>()

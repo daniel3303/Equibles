@@ -23,7 +23,10 @@ public class InstitutionalHoldingsToolsRenderTopHoldersTableZeroDivisorTests
     [Fact]
     public void RenderTopHoldersTable_TotalSharesAllZero_RowsRenderWithoutNaN()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var holder = new InstitutionalHolder { Name = "Test Fund" };
         var holdings = new List<InstitutionalHolding>
         {

@@ -48,7 +48,7 @@ public class InstitutionalHoldingRepositoryDoubleDownTests : IAsyncLifetime
         //   reducer:  100 → 50 shares  (−50%)   — decrease, excluded
         // Also seed a new-position holder with Q4 only (no Q3) — excluded.
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "AAPL");
+        EquityIssuer stock = await SeedStock(seed, "AAPL");
         var doubler = await SeedHolder(seed, "doubler");
         var modest = await SeedHolder(seed, "modest");
         var reducer = await SeedHolder(seed, "reducer");
@@ -77,17 +77,16 @@ public class InstitutionalHoldingRepositoryDoubleDownTests : IAsyncLifetime
         positions[0].Ticker.Should().Be("AAPL");
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}"
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -105,7 +104,7 @@ public class InstitutionalHoldingRepositoryDoubleDownTests : IAsyncLifetime
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,

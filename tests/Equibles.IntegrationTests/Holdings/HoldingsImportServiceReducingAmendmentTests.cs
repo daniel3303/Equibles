@@ -67,8 +67,8 @@ public class HoldingsImportServiceReducingAmendmentTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -123,25 +123,23 @@ public class HoldingsImportServiceReducingAmendmentTests : IAsyncLifetime
     [Fact]
     public async Task ImportDataSet_AmendmentDropsOneOfTwoPositions_RemovesDroppedHolding()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
-        var microsoft = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft Corp",
-            Cik = "0000789019",
-            Cusip = "594918104",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
+        EquityIssuer microsoft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corp",
+            Cik: "0000789019",
+            Cusip: "594918104"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().AddRange(apple, microsoft);
+            seed.Set<EquityIssuer>().AddRange(apple, microsoft);
             await seed.SaveChangesAsync();
         }
 

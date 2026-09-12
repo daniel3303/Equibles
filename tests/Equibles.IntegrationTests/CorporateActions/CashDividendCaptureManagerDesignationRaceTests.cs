@@ -29,32 +29,31 @@ public class CashDividendCaptureManagerDesignationRaceTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "GOOGL",
-                    SecondaryTickers = ["GOOG"],
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "GOOGL",
+                    SecondaryTickers: ["GOOG"]
+                )
             );
             await seed.SaveChangesAsync();
         }
 
         await using var capture = _fixture.CreateDbContext();
-        var stockRepository = new CommonStockRepository(capture);
-        var staleStock = await stockRepository.GetByPrimaryTicker("GOOGL");
+        EquityIssuerRepository stockRepository = new EquityIssuerRepository(capture);
+        EquityIssuer staleStock = await stockRepository.GetPrimaryUsByTicker("GOOGL");
         staleStock.Should().NotBeNull();
 
         await using (var designation = _fixture.CreateDbContext())
         {
-            var currentStock = await designation.Set<CommonStock>().SingleAsync();
-            currentStock.Ticker = "GOOG";
-            currentStock.SecondaryTickers = ["GOOGL"];
+            EquityIssuer currentStock = await designation.Set<EquityIssuer>().SingleAsync();
+            currentStock.Presentation.Listing.Ticker = "GOOG";
+            Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(currentStock, ["GOOGL"]);
             await designation.SaveChangesAsync();
         }
 
         // This context still holds the pre-fetch snapshot. The capture boundary must acquire the
         // row lock and refresh it before deciding whether the observed ticker is still primary.
-        staleStock.Ticker.Should().Be("GOOGL");
+        staleStock.Presentation.Listing.Ticker.Should().Be("GOOGL");
         var manager = new CashDividendCaptureManager(
             new CashDividendRepository(capture),
             stockRepository
@@ -69,7 +68,7 @@ public class CashDividendCaptureManagerDesignationRaceTests : IAsyncLifetime
         var staleWrite = await manager.Capture(stockId, "GOOGL", [dividend]);
 
         staleWrite.Should().Be(0);
-        staleStock.Ticker.Should().Be("GOOG");
+        staleStock.Presentation.Listing.Ticker.Should().Be("GOOG");
         (await capture.Set<CashDividend>().ToListAsync()).Should().BeEmpty();
 
         var currentWrite = await manager.Capture(stockId, "GOOG", [dividend]);

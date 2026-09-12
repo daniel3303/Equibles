@@ -30,13 +30,12 @@ public class StocksHoldingsOwnershipTrendSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             var holder = new InstitutionalHolder { Cik = "H0000001", Name = "Test Holder" };
             db.Add(holder);

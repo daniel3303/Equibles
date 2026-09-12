@@ -62,8 +62,8 @@ public class FinancialFactsScraperWorkerDoWorkTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(FinancialConceptRepository))
                     .Returns(new FinancialConceptRepository(ctx));
                 sp.GetService(typeof(FinancialFactsSyncStatusRepository))
@@ -94,29 +94,33 @@ public class FinancialFactsScraperWorkerDoWorkTests : IAsyncLifetime
     [Fact]
     public async Task DoWork_IteratesOnlyCikBearingStocks_AndCheckpointsEachViaImport()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var msft = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft Corp",
-            Cik = "0000789019",
-        };
-        var noCik = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "NOCIK",
-            Name = "No CIK Co",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corp",
+            Cik: "0000789019"
+        );
+        EquityIssuer noCik = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NOCIK",
+            Name: "No CIK Co"
+        );
+        var unlisted = new EquityIssuer { Name = "Unlisted filer", Cik = "777" };
+        var foreign = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "FOREIGN",
+            Name: "Foreign filer",
+            Cik: "888"
+        );
+        foreign.Presentation.Listing.MarketCountryCode = "PT";
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().AddRange(apple, msft, noCik);
+            seed.Set<EquityIssuer>().AddRange(apple, msft, noCik, unlisted, foreign);
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
@@ -170,7 +174,7 @@ public class FinancialFactsScraperWorkerDoWorkTests : IAsyncLifetime
         statusStockIds
             .Should()
             .BeEquivalentTo(
-                [apple.Id, msft.Id],
+                [apple.Id, msft.Id, unlisted.Id, foreign.Id],
                 "DoWork must iterate each Cik-bearing stock through Import (which checkpoints sync status), and skip Cik-less stocks via the GetAll().Where(Cik != null) filter"
             );
     }

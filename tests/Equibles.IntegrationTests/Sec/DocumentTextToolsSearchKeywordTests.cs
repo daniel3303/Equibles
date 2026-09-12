@@ -36,7 +36,10 @@ public class DocumentTextToolsSearchKeywordTests : ParadeDbMcpTestBase
             "First line of the filing.\n"
             + "Revenue grew 15% year-over-year.\n"
             + "Operating expenses remained stable.";
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = new File
         {
             Name = "10k",

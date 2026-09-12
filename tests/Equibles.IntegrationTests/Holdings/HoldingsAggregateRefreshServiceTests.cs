@@ -84,8 +84,8 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
         await using var seed = FreshContext();
         var tech = await SeedSector(seed, "Technology");
         var industry = await SeedIndustry(seed, "Software", tech.Id);
-        var aapl = await SeedStock(seed, "AAPL", industry.Id);
-        var msft = await SeedStock(seed, "MSFT", industry.Id);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry.Id);
+        EquityIssuer msft = await SeedStock(seed, "MSFT", industry.Id);
         var holder = await SeedHolder(seed, "H001");
         seed.AddRange(
             MakeHolding(aapl, holder, Q4, 100_000, "acc-q4"),
@@ -113,9 +113,9 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
         var energy = await SeedSector(seed, "Energy");
         var techIndustry = await SeedIndustry(seed, "Software", tech.Id);
         var energyIndustry = await SeedIndustry(seed, "Oil & Gas", energy.Id);
-        var aapl = await SeedStock(seed, "AAPL", techIndustry.Id);
-        var msft = await SeedStock(seed, "MSFT", techIndustry.Id);
-        var xom = await SeedStock(seed, "XOM", energyIndustry.Id);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", techIndustry.Id);
+        EquityIssuer msft = await SeedStock(seed, "MSFT", techIndustry.Id);
+        EquityIssuer xom = await SeedStock(seed, "XOM", energyIndustry.Id);
         var holder = await SeedHolder(seed, "H001");
         seed.AddRange(
             MakeHolding(aapl, holder, Q4, 500_000, "acc-q4"),
@@ -151,8 +151,8 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
             var energy = await SeedSector(seed, "Energy");
             var techIndustry = await SeedIndustry(seed, "Software", tech.Id);
             var energyIndustry = await SeedIndustry(seed, "Oil & Gas", energy.Id);
-            var aapl = await SeedStock(seed, "AAPL", techIndustry.Id);
-            var xom = await SeedStock(seed, "XOM", energyIndustry.Id);
+            EquityIssuer aapl = await SeedStock(seed, "AAPL", techIndustry.Id);
+            EquityIssuer xom = await SeedStock(seed, "XOM", energyIndustry.Id);
             xomId = xom.Id;
             var holder = await SeedHolder(seed, "H001");
             seed.AddRange(
@@ -200,7 +200,7 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
         await using var seed = FreshContext();
         var tech = await SeedSector(seed, "Technology");
         var industry = await SeedIndustry(seed, "Software", tech.Id);
-        var aapl = await SeedStock(seed, "AAPL", industry.Id);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry.Id);
         var holder = await SeedHolder(seed, "H001");
         seed.AddRange(MakeHolding(aapl, holder, Q4, 100_000, "acc-q4"));
         await seed.SaveChangesAsync();
@@ -225,7 +225,7 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
         await using var seed = FreshContext();
         var tech = await SeedSector(seed, "Technology");
         var industry = await SeedIndustry(seed, "Software", tech.Id);
-        var aapl = await SeedStock(seed, "AAPL", industry.Id);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry.Id);
         var holder = await SeedHolder(seed, "H001");
         seed.AddRange(
             MakeHolding(aapl, holder, Q3, 100_000, "acc-q3"),
@@ -270,19 +270,18 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
         return industry;
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker,
         Guid industryId
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-            IndustryId = industryId,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
+            IndustryId: industryId
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -300,7 +299,7 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long value,
@@ -322,7 +321,7 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
             // (CommonStock, Holder, ReportDate, ShareType, OptionType,
             // FilingType) stays disambiguated across the test seeds.
             Cusip =
-                $"{stock.Ticker[..Math.Min(4, stock.Ticker.Length)]}{stock.Id.GetHashCode():X8}"[
+                $"{stock.Presentation.Listing.Ticker[..Math.Min(4, stock.Presentation.Listing.Ticker.Length)]}{stock.Id.GetHashCode():X8}"[
                     ..9
                 ],
         };

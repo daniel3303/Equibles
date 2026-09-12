@@ -62,15 +62,14 @@ public class GetMemberTradesNegativeMaxResultsTests
 
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            db.Set<CommonStock>()
+            db.Set<EquityIssuer>()
                 .Add(
-                    new CommonStock
-                    {
-                        Id = stockId,
-                        Ticker = "NVDA",
-                        Name = "NVIDIA Corp",
-                        Cik = "0001045810",
-                    }
+                    Equibles.TestSupport.EquityIssuerSeed.Create(
+                        Id: stockId,
+                        Ticker: "NVDA",
+                        Name: "NVIDIA Corp",
+                        Cik: "0001045810"
+                    )
                 );
             db.Set<CongressMember>()
                 .Add(

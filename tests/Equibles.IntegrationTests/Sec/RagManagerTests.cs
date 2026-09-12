@@ -54,7 +54,7 @@ public class RagManagerTests
         // These tests exercise BuildContext only, which never touches the searcher — pass null.
         return new RagManager(
             hybridChunkSearcher: null,
-            Substitute.For<CommonStockRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
+            Substitute.For<EquityIssuerRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
             Substitute.For<ILogger<RagManager>>()
         );
     }

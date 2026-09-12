@@ -28,13 +28,12 @@ public class NportFilingReprocessManagerRelationalTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Run_FilingWithExistingHoldings_ReplacesScheduleThroughTheRelationalBranch()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BTEC",
-            Name = "Big Tech Index ETF",
-            Cik = "0001771146",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BTEC",
+            Name: "Big Tech Index ETF",
+            Cik: "0001771146"
+        );
         var filing = new NportFiling
         {
             Id = Guid.NewGuid(),
@@ -76,7 +75,7 @@ public class NportFilingReprocessManagerRelationalTests : ParadeDbMcpTestBase
         );
         var manager = new NportFilingReprocessManager(
             new NportFilingRepository(runCtx),
-            new CommonStockRepository(runCtx),
+            new EquityIssuerRepository(runCtx),
             secClient,
             runCtx,
             errorReporter,

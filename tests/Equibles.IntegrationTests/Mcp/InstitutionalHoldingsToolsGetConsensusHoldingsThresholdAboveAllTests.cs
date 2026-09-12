@@ -34,12 +34,11 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsThresholdA
     [Fact]
     public async Task GetInstitutionConsensusHoldings_MinFundsHigherThanAnyStocksConsensus_ReportsNoMatches()
     {
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var fundA = new InstitutionalHolder { Cik = "T_A", Name = "Threshold A" };
         var fundB = new InstitutionalHolder { Cik = "T_B", Name = "Threshold B" };
         DbContext.AddRange(aapl, fundA, fundB);
@@ -54,7 +53,7 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsThresholdA
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -74,7 +73,7 @@ public class InstitutionalHoldingsToolsGetInstitutionConsensusHoldingsThresholdA
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long value

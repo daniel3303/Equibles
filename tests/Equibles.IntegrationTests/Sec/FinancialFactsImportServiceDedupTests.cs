@@ -77,16 +77,15 @@ public class FinancialFactsImportServiceDedupTests : IAsyncLifetime
     [Fact]
     public async Task Import_DuplicateConceptPeriodAccessionTuples_CollapsesToLatestFiledOneRow()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync();
         }
 

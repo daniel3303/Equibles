@@ -33,12 +33,11 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
     [Fact]
     public async Task GetInstitutionalOwnershipHistory_UnderNonInvariantCulture_RendersTotalSharesCultureInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var holder = new InstitutionalHolder
         {
             Cik = "0001067983",
@@ -69,7 +68,7 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -105,7 +104,7 @@ public class InstitutionalHoldingsToolsRenderOwnershipHistoryCultureInvarianceTe
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,

@@ -27,7 +27,10 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioUnvaluedDisclos
         );
 
         var holder = new InstitutionalHolder { Name = "ACME Capital", Cik = "0001234567" };
-        var stock = new CommonStock { Ticker = "NVDA", Name = "Nvidia Corp" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "Nvidia Corp"
+        );
         var holdings = new List<InstitutionalHolding>
         {
             new()

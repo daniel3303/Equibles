@@ -38,7 +38,7 @@ public class InstitutionalHoldingsToolsRenderMostHeldStocksTableCultureInvarianc
                 PreviousValue = 1_000_000_000L,
             },
         };
-        var stocks = new Dictionary<Guid, CommonStock>();
+        var stocks = new Dictionary<Guid, EquityIssuer>();
         object[] args = [targetDate, previousDate, "filers", 1_234, true, rows, stocks];
 
         var original = CultureInfo.CurrentCulture;

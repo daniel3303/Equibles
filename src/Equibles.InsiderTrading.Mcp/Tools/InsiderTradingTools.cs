@@ -29,7 +29,7 @@ public class InsiderTradingTools
     private readonly InsiderTransactionRepository _transactionRepository;
     private readonly InsiderOwnerRepository _ownerRepository;
     private readonly Form144FilingRepository _form144Repository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
@@ -37,7 +37,7 @@ public class InsiderTradingTools
         InsiderTransactionRepository transactionRepository,
         InsiderOwnerRepository ownerRepository,
         Form144FilingRepository form144Repository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<InsiderTradingTools> logger
@@ -196,8 +196,8 @@ public class InsiderTradingTools
                     return $"No results at offset {offset} - only {total} insider transactions match; lower offset.";
                 if (transactions.Count == 0)
                     return filtered
-                        ? $"No insider transactions found for {stock.Ticker} matching the given filters."
-                        : $"No insider transactions found for {stock.Ticker}.";
+                        ? $"No insider transactions found for {stock.Presentation.Listing.Ticker} matching the given filters."
+                        : $"No insider transactions found for {stock.Presentation.Listing.Ticker}.";
 
                 // Each row is an as-filed record: the per-row Shares, Price, and Value stay
                 // exactly as reported so Shares × Price = Value holds within the row (the total
@@ -208,10 +208,16 @@ public class InsiderTradingTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
+                splits = PriceSeriesSplitScope.ForListing(
+                    splits,
+                    stock.Presentation.Listing.Ticker,
+                    stock.Presentation.Listing.Ticker
+                );
 
                 var sb = new StringBuilder();
-                sb.AppendLine($"Recent insider transactions for {stock.Name} ({stock.Ticker}):");
+                sb.AppendLine(
+                    $"Recent insider transactions for {stock.Name} ({stock.Presentation.Listing.Ticker}):"
+                );
                 sb.AppendLine(
                     $"Showing transactions {offset + 1}-{offset + transactions.Count} of {total}"
                 );
@@ -353,7 +359,11 @@ public class InsiderTradingTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
+                splits = PriceSeriesSplitScope.ForListing(
+                    splits,
+                    stock.Presentation.Listing.Ticker,
+                    stock.Presentation.Listing.Ticker
+                );
                 var positions = latestTransactions
                     .GroupBy(t => t.InsiderOwnerId)
                     .Select(group => BuildOwnershipPosition([.. group], splits))
@@ -373,10 +383,12 @@ public class InsiderTradingTools
                 if (ranked.Count == 0 && offset > 0)
                     return $"No results at offset {offset} - only {positions.Count} insiders on file; lower offset.";
                 if (ranked.Count == 0)
-                    return $"No insider ownership data found for {stock.Ticker}.";
+                    return $"No insider ownership data found for {stock.Presentation.Listing.Ticker}.";
 
                 var sb = new StringBuilder();
-                sb.AppendLine($"Insider ownership summary for {stock.Name} ({stock.Ticker}):");
+                sb.AppendLine(
+                    $"Insider ownership summary for {stock.Name} ({stock.Presentation.Listing.Ticker}):"
+                );
                 sb.AppendLine($"Showing {ranked.Count} insiders with most recent data");
                 sb.AppendLine(
                     "_Each row is as-of that insider's most recent filing: the filing's closing balance per security and ownership bucket (actual shares only), summed into Direct and Indirect and restated onto today's split basis. A filing reports one balance per indirect vehicle and keeps no vehicle identity, so Indirect can understate an insider holding through several vehicles. Former insiders may linger with stale dates or zero shares._"
@@ -524,8 +536,8 @@ public class InsiderTradingTools
                 if (totalCount == 0)
                 {
                     if (fromDay.HasValue || toDay.HasValue)
-                        return $"No Form 144 proposed sales match the requested filing-date range for {stock.Ticker} (fromDate={fromDay?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unbounded"}, toDate={toDay?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unbounded"}).";
-                    return $"No Form 144 proposed sales found for {stock.Ticker}.";
+                        return $"No Form 144 proposed sales match the requested filing-date range for {stock.Presentation.Listing.Ticker} (fromDate={fromDay?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unbounded"}, toDate={toDay?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unbounded"}).";
+                    return $"No Form 144 proposed sales found for {stock.Presentation.Listing.Ticker}.";
                 }
 
                 offset = McpLimit.ClampOffset(offset);
@@ -549,9 +561,13 @@ public class InsiderTradingTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
+                splits = PriceSeriesSplitScope.ForListing(
+                    splits,
+                    stock.Presentation.Listing.Ticker,
+                    stock.Presentation.Listing.Ticker
+                );
                 var result = MarkdownTable.Start(
-                    $"Recent proposed sales (Form 144) for {stock.Name} ({stock.Ticker}):",
+                    $"Recent proposed sales (Form 144) for {stock.Name} ({stock.Presentation.Listing.Ticker}):",
                     $"Showing notices {offset + 1}-{offset + filings.Count} of {totalCount}, newest first",
                     "| Filed | Seller | Relationship | Shares | Market Value | % Outstanding | Approx. Sale Date | Broker | Remarks |",
                     "|-------|--------|--------------|--------|--------------|---------------|-------------------|--------|---------|"
@@ -573,7 +589,7 @@ public class InsiderTradingTools
                                 f.FilingDate,
                                 splits
                             ),
-                            stock.SharesOutStanding
+                            stock.Presentation.Listing.Security.SharesOutstanding
                         );
                         return $"| {f.FilingDate:yyyy-MM-dd} | {MarkdownTable.EscapeCell(f.SellerName, "-")} | {MarkdownTable.EscapeCell(f.RelationshipToIssuer, "-")} | {McpFormat.WholeNumber(f.SharesToBeSold)} | ${McpFormat.WholeNumber(f.AggregateMarketValue)} | {percentOfOutstanding} | {approxSaleDate} | {MarkdownTable.EscapeCell(f.BrokerName, "-")} | {MarkdownTable.EscapeCell(f.Remarks, "-")} |";
                     }
@@ -713,6 +729,6 @@ public class InsiderTradingTools
     }
 
     // Thin forwarder so existing reflection-based normalization tests still find the method.
-    private Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker) =>
+    private Task<(EquityIssuer Stock, string Error)> ResolveStockByTicker(string ticker) =>
         _commonStockRepository.ResolveByTicker(ticker);
 }

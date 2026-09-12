@@ -35,12 +35,11 @@ public class InstitutionalHoldingRepositoryGetCombinedQuarterFallbackTests : IDi
     [Fact]
     public async Task GetCombinedQuarter_HolderFiledCurrent_ExcludesTheirPreviousRow_AndFallsBackForNonFiler()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var filer = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -56,7 +55,7 @@ public class InstitutionalHoldingRepositoryGetCombinedQuarterFallbackTests : IDi
         var previous = new DateOnly(2024, 3, 31);
         var current = new DateOnly(2024, 6, 30);
 
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(filer, nonFiler);
         _dbContext

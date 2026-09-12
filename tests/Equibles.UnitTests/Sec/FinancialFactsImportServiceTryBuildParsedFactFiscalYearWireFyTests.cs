@@ -30,13 +30,12 @@ public class FinancialFactsImportServiceTryBuildParsedFactFiscalYearWireFyTests
         var serviceType = typeof(FinancialFactsImportService);
         var parsedFactType = serviceType.GetNestedType("ParsedFact", BindingFlags.NonPublic);
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "FOO",
-            FiscalYearEndMonth = null,
-            FiscalYearEndDay = null,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "FOO",
+            FiscalYearEndMonth: null,
+            FiscalYearEndDay: null
+        );
         var value = new CompanyFactValue
         {
             Start = null,

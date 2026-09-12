@@ -34,17 +34,16 @@ public class ShortVolumeImportServiceCollisionRowHealTests : ParadeDbMcpTestBase
     public ShortVolumeImportServiceCollisionRowHealTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private CommonStock _stock;
+    private EquityIssuer _stock;
     private DateOnly _corruptDate;
 
     private async Task SeedStockAndCorruptRow()
     {
-        _stock = new CommonStock
-        {
-            Cik = "0000000778",
-            Ticker = "TESTW",
-            Name = "Collision Heal Test Inc.",
-        };
+        _stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000778",
+            Ticker: "TESTW",
+            Name: "Collision Heal Test Inc."
+        );
         _corruptDate = PreviousTradingDay(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1));
         DbContext.Add(_stock);
         // The collision artifact: a row for a day whose file (stubbed below) only ever
@@ -53,9 +52,13 @@ public class ShortVolumeImportServiceCollisionRowHealTests : ParadeDbMcpTestBase
             new DailyShortVolume
             {
                 EquityListingId = Equibles
-                    .TestSupport.NativeListingSeed.ForStock(DbContext, _stock, _stock.Ticker)
+                    .TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        _stock,
+                        _stock.Presentation.Listing.Ticker
+                    )
                     .Id,
-                ListedTicker = _stock.Ticker,
+                ListedTicker = _stock.Presentation.Listing.Ticker,
                 Date = _corruptDate,
                 ShortVolume = 5_000,
                 TotalVolume = 9_000,
@@ -85,7 +88,7 @@ public class ShortVolumeImportServiceCollisionRowHealTests : ParadeDbMcpTestBase
     private ShortVolumeImportService BuildService(IFinraClient finraClient)
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(DbContext))
         );

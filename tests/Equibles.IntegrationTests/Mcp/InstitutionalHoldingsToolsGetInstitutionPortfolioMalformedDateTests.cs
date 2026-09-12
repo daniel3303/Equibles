@@ -32,18 +32,16 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioMalformedDateTests
     public async Task GetInstitutionPortfolio_MalformedReportDate_ReturnsCorrectionListingDates()
     {
         var holder = new InstitutionalHolder { Cik = "1", Name = "Berkshire Hathaway Inc." };
-        var apple = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var microsoft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer microsoft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         DbContext.Add(holder);
         DbContext.Add(apple);
         DbContext.Add(microsoft);
@@ -60,7 +58,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioMalformedDateTests
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -85,18 +83,16 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioMalformedDateTests
     public async Task GetInstitutionPortfolio_OffQuarterReportDate_SnapsToPriorReportWithNote()
     {
         var holder = new InstitutionalHolder { Cik = "1", Name = "Berkshire Hathaway Inc." };
-        var apple = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var microsoft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer microsoft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         DbContext.Add(holder);
         DbContext.Add(apple);
         DbContext.Add(microsoft);
@@ -113,7 +109,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioMalformedDateTests
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -137,7 +133,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioMalformedDateTests
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly reportDate,
         long shares,
         long value
@@ -152,6 +148,6 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioMalformedDateTests
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{stock.Ticker}",
+            AccessionNumber = $"acc-{stock.Presentation.Listing.Ticker}",
         };
 }

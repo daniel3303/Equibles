@@ -17,7 +17,7 @@ public class CongressToolsGetMemberTradesCultureInvarianceTests : ParadeDbMcpTes
             new CongressionalTradeRepository(DbContext),
             new CongressMemberRepository(DbContext),
             new CongressionalAnnualDisclosureRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             ErrorManager,
             NullLogger<CongressTools>()
         );
@@ -34,12 +34,11 @@ public class CongressToolsGetMemberTradesCultureInvarianceTests : ParadeDbMcpTes
     [Fact]
     public async Task GetMemberTrades_UnderNonInvariantCulture_RendersAmountCultureInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corporation",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corporation",
+            Cik: "0001045810"
+        );
         var member = new CongressMember
         {
             Name = "Nancy Pelosi",

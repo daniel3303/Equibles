@@ -209,14 +209,11 @@ public class GovernmentContractsImportServiceParentFallbackTests
     private static Guid SeedCompany(DbContextOptions<EquiblesFinancialDbContext> options)
     {
         using var seed = NewContext(options);
-        var stock = new CommonStock
-        {
-            Ticker = "CACI",
-            // The EDGAR-shaped stored name; the SAM parent name matches it only through the
-            // normaliser's slash-marker stripping.
-            Name = "Caci International Inc /De/",
-            Cik = "1",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "CACI",
+            Name: "Caci International Inc /De/",
+            Cik: "1"
+        );
         seed.Add(stock);
         seed.SaveChanges();
         return stock.Id;
@@ -250,7 +247,7 @@ public class GovernmentContractsImportServiceParentFallbackTests
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => NewContext(options));
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         services.AddScoped<GovernmentContractRepository>();
         services.AddScoped<GovernmentContractsScanStateRepository>();
         services.AddScoped<GovernmentContractRecipientParentRepository>();

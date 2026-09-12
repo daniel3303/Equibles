@@ -34,12 +34,11 @@ public class InstitutionalHoldingRepositoryGetLatestByStockPerHolderTests : IDis
     [Fact]
     public async Task GetLatestByStock_HolderWithOnlyOlderFiling_StillReturnsThatHoldersLatestRow()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var holderA = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -55,7 +54,7 @@ public class InstitutionalHoldingRepositoryGetLatestByStockPerHolderTests : IDis
         var q1 = new DateOnly(2024, 3, 31);
         var q2 = new DateOnly(2024, 6, 30);
 
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(holderA, holderB);
         _dbContext
             .Set<InstitutionalHolding>()

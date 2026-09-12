@@ -25,12 +25,11 @@ public class SearchControllerDateFilterTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "GXA",
-                    Name = "Globex Alpha Corp",
-                    MarketCapitalization = 1_000_000_000d,
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "GXA",
+                    Name: "Globex Alpha Corp",
+                    MarketCapitalization: 1_000_000_000d
+                )
             );
             await Task.CompletedTask;
         });

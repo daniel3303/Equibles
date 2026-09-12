@@ -18,7 +18,7 @@ public class HolderQuarterlyActivityCalculatorActiveRowZeroTotalPercentTests
     [Fact]
     public void Group_InitiatedRowWithZeroTotalCurrentValue_ReturnsFiniteZeroPercent()
     {
-        var aapl = MakeStock("AAPL", "Apple Inc.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
 
         var result = HolderQuarterlyActivityCalculator.Group(
             [MakeHolding(aapl, shares: 1_000, value: 0)],
@@ -31,16 +31,15 @@ public class HolderQuarterlyActivityCalculatorActiveRowZeroTotalPercentTests
         initiated.PercentOfPortfolio.Should().Be(0);
     }
 
-    private static CommonStock MakeStock(string ticker, string name) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = "C" + Guid.NewGuid().ToString("N")[..7],
-        };
+    private static EquityIssuer MakeStock(string ticker, string name) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: "C" + Guid.NewGuid().ToString("N")[..7]
+        );
 
-    private static InstitutionalHolding MakeHolding(CommonStock stock, long shares, long value) =>
+    private static InstitutionalHolding MakeHolding(EquityIssuer stock, long shares, long value) =>
         new()
         {
             EquityIssuerId = stock.Id,

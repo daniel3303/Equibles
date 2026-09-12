@@ -23,7 +23,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
         );
         _tools = new FormDTools(
             new FormDFilingRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             errorManager: null,
             NullLogger<FormDTools>.Instance
         );
@@ -31,16 +31,15 @@ public class FormDExemptOfferingsToolTests : IDisposable
 
     public void Dispose() => _dbContext.Dispose();
 
-    private CommonStock SeedStock(string ticker = "AAPL", string cik = "0000320193")
+    private EquityIssuer SeedStock(string ticker = "AAPL", string cik = "0000320193")
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = "Apple Inc.",
-            Cik = cik,
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: "Apple Inc.",
+            Cik: cik
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.SaveChanges();
         return stock;
     }
@@ -66,7 +65,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     [Fact]
     public async Task GetFormDOfferings_WithFilings_RendersTableNewestFirst()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext
             .Set<FormDFiling>()
             .Add(MakeFiling(stock.Id, "older", new DateOnly(2025, 1, 5), offeringAmount: 1000000));
@@ -89,7 +88,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     [Fact]
     public async Task GetFormDOfferings_IndefiniteAmount_RendersIndefinite()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext
             .Set<FormDFiling>()
             .Add(MakeFiling(stock.Id, "acc", new DateOnly(2025, 2, 28), indefinite: true));
@@ -103,7 +102,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     [Fact]
     public async Task GetFormDOfferings_RespectsMaxResults()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         for (var i = 0; i < 5; i++)
         {
             _dbContext
@@ -121,7 +120,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     [Fact]
     public async Task GetFormDOfferings_RendersOfferingIdentityColumns()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var filing = MakeFiling(stock.Id, "0001213900-25-000001", new DateOnly(2025, 3, 1));
         filing.DateOfFirstSale = new DateOnly(2024, 11, 20);
         filing.TotalRemaining = 123_456;
@@ -140,7 +139,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     [Fact]
     public async Task GetFormDOfferings_WithAmendment_AppendsChainGroupingNote()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var amendment = MakeFiling(stock.Id, "acc-a", new DateOnly(2025, 3, 1));
         amendment.IsAmendment = true;
         _dbContext.Set<FormDFiling>().Add(amendment);
@@ -155,7 +154,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     [Fact]
     public async Task GetFormDOfferings_WithoutAmendments_OmitsChainGroupingNote()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext.Set<FormDFiling>().Add(MakeFiling(stock.Id, "acc", new DateOnly(2025, 3, 1)));
         await _dbContext.SaveChangesAsync();
 
@@ -167,7 +166,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     [Fact]
     public async Task GetFormDOfferings_DateRange_FiltersByFilingDate()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext
             .Set<FormDFiling>()
             .Add(MakeFiling(stock.Id, "early", new DateOnly(2025, 1, 10), offeringAmount: 111_000));
@@ -189,7 +188,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     [Fact]
     public async Task GetFormDOfferings_DateRangeWithoutMatches_NamesTheAppliedRange()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext.Set<FormDFiling>().Add(MakeFiling(stock.Id, "old", new DateOnly(2025, 1, 10)));
         await _dbContext.SaveChangesAsync();
 
@@ -228,7 +227,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     [Fact]
     public async Task GetFormDOfferings_OffsetPagesNewestFirst_AndRejectsPastEnd()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext
             .Set<FormDFiling>()
             .AddRange(

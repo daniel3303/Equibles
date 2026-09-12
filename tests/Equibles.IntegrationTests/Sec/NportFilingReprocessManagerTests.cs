@@ -299,7 +299,7 @@ public class NportFilingReprocessManagerTests
         );
 
         var repo = new NportFilingRepository(dbContext);
-        var commonStockRepo = new CommonStockRepository(dbContext);
+        EquityIssuerRepository commonStockRepo = new EquityIssuerRepository(dbContext);
         var secClient = Substitute.For<ISecEdgarClient>();
 
         // The error reporter is only reached when a submission fails to parse; the valid-XML paths

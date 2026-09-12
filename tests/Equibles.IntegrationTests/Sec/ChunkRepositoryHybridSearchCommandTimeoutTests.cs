@@ -32,15 +32,18 @@ public class ChunkRepositoryHybridSearchCommandTimeoutTests : ParadeDbMcpTestBas
     [Fact]
     public async Task HybridSearch_AppliesFiveSecondCommandTimeoutToTheBm25Query()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         DbContext.Add(stock);
         var doc = SeedDocument(stock, new DateOnly(2026, 1, 15));
-        SeedChunk(doc, "Services revenue grew substantially this quarter.", stock.Ticker);
+        SeedChunk(
+            doc,
+            "Services revenue grew substantially this quarter.",
+            stock.Presentation.Listing.Ticker
+        );
         await DbContext.SaveChangesAsync();
 
         // Fresh DbContext with a capturing interceptor wired in. The
@@ -72,7 +75,7 @@ public class ChunkRepositoryHybridSearchCommandTimeoutTests : ParadeDbMcpTestBas
             );
     }
 
-    private Document SeedDocument(CommonStock stock, DateOnly reportingDate)
+    private Document SeedDocument(EquityIssuer stock, DateOnly reportingDate)
     {
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
         var file = new File

@@ -1,5 +1,6 @@
 using System.Text;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Repositories;
 using Equibles.Media.BusinessLogic;
@@ -18,7 +19,7 @@ public class StocksController : BaseController
 {
     private const int FilingActivityDays = 30;
 
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly InstitutionalHolderRepository _institutionalHolderRepository;
     private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
     private readonly DocumentRepository _documentRepository;
@@ -26,7 +27,7 @@ public class StocksController : BaseController
     private readonly IFileManager _fileManager;
 
     public StocksController(
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         InstitutionalHolderRepository institutionalHolderRepository,
         InstitutionalHoldingRepository institutionalHoldingRepository,
         DocumentRepository documentRepository,
@@ -60,20 +61,22 @@ public class StocksController : BaseController
         var query = _commonStockRepository.Search(search);
 
         if (minMarketCap.HasValue)
-            query = query.Where(s => s.MarketCapitalization >= minMarketCap.Value);
+            query = query.Where(s =>
+                s.Presentation.Listing.Security.MarketCapitalization >= minMarketCap.Value
+            );
 
         // The later OrderBy replaces the repository's default Ticker ordering;
         // Ticker is the tie-breaker so paging stays stable on equal market caps.
         query = sort switch
         {
-            StockSort.Name => query.OrderBy(s => s.Name).ThenBy(s => s.Ticker),
+            StockSort.Name => query.OrderBy(s => s.Name).ThenBy(s => s.Presentation.Listing.Ticker),
             StockSort.MarketCapDescending => query
-                .OrderByDescending(s => s.MarketCapitalization)
-                .ThenBy(s => s.Ticker),
+                .OrderByDescending(s => s.Presentation.Listing.Security.MarketCapitalization)
+                .ThenBy(s => s.Presentation.Listing.Ticker),
             StockSort.MarketCapAscending => query
-                .OrderBy(s => s.MarketCapitalization)
-                .ThenBy(s => s.Ticker),
-            _ => query.OrderBy(s => s.Ticker),
+                .OrderBy(s => s.Presentation.Listing.Security.MarketCapitalization)
+                .ThenBy(s => s.Presentation.Listing.Ticker),
+            _ => query.OrderBy(s => s.Presentation.Listing.Ticker),
         };
 
         var totalCount = await query.CountAsync();
@@ -83,11 +86,11 @@ public class StocksController : BaseController
             .Page(page, pageSize)
             .Select(s => new StockListItemViewModel
             {
-                Ticker = s.Ticker,
+                Ticker = s.Presentation.Listing.Ticker,
                 Name = s.Name,
                 Industry = s.Industry != null ? s.Industry.Name : null,
-                MarketCapitalization = s.MarketCapitalization,
-                Cusip = s.Cusip,
+                MarketCapitalization = s.Presentation.Listing.Security.MarketCapitalization,
+                Cusip = s.Presentation.Listing.Security.Cusip,
             })
             .ToListAsync();
 
@@ -237,14 +240,16 @@ public class StocksController : BaseController
     private async Task<IActionResult> ShowStockTab(
         string ticker,
         string activeTab,
-        Func<Equibles.CommonStocks.Data.Models.CommonStock, Task<object>> loadTab
+        Func<Equibles.CommonStocks.Data.Models.EquityIssuer, Task<object>> loadTab
     )
     {
-        var stock = await LoadStock(ticker);
+        EquityIssuer stock = await LoadStock(ticker);
         if (stock == null)
             return NotFound();
 
-        var listedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker) ?? stock.Ticker;
+        var listedTicker =
+            SecondaryTickerPolicy.ResolveListedTicker(stock, ticker)
+            ?? stock.Presentation.Listing.Ticker;
         var viewModel = BuildStockViewModel(stock, activeTab, listedTicker);
 
         var since = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-FilingActivityDays);
@@ -284,23 +289,23 @@ public class StocksController : BaseController
         return result.Count > 0 ? result : null;
     }
 
-    private async Task<Equibles.CommonStocks.Data.Models.CommonStock> LoadStock(string ticker)
+    private async Task<Equibles.CommonStocks.Data.Models.EquityIssuer> LoadStock(string ticker)
     {
         var normalizedTicker = TickerNormalizer.Normalize(ticker);
         if (normalizedTicker == null)
             return null;
 
-        var stock = await _commonStockRepository.GetByTicker(normalizedTicker);
+        EquityIssuer stock = await _commonStockRepository.GetUsByTicker(normalizedTicker);
         if (stock != null || !normalizedTicker.Contains('.'))
             return stock;
 
         // U.S. class-share symbols are commonly entered with dot notation while the
         // authoritative stored/Yahoo spelling uses a dash (BRK.A -> BRK-A).
-        return await _commonStockRepository.GetByTicker(normalizedTicker.Replace('.', '-'));
+        return await _commonStockRepository.GetUsByTicker(normalizedTicker.Replace('.', '-'));
     }
 
     private StockDetailViewModel BuildStockViewModel(
-        Equibles.CommonStocks.Data.Models.CommonStock stock,
+        Equibles.CommonStocks.Data.Models.EquityIssuer stock,
         string activeTab,
         string listedTicker
     )
@@ -371,7 +376,7 @@ public class StocksController : BaseController
         if (normalizedTicker == null || validatedCik == null)
             return NotFound();
 
-        var stock = await _commonStockRepository.GetByTicker(normalizedTicker);
+        EquityIssuer stock = await _commonStockRepository.GetUsByTicker(normalizedTicker);
         if (stock == null)
             return NotFound();
 

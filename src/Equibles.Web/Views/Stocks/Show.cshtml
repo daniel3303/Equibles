@@ -3,7 +3,7 @@
 
 @{
     var stock = Model.Stock;
-    var listingTicker = Model.ListingTicker ?? stock.Ticker;
+    var listingTicker = Model.ListingTicker ?? stock.Presentation.Listing.Ticker;
     ViewData["Title"] = $"{listingTicker} - {stock.Name}";
     ViewData["Description"] = $"{listingTicker} - {stock.Name}. View institutional holdings, short volume, short interest, and SEC filings for {listingTicker}.";
     var activeTab = Model.ActiveTab;
@@ -44,16 +44,16 @@
                             <div class="font-mono text-sm">@stock.Cik</div>
                         </div>
                     }
-                    @if (!string.IsNullOrEmpty(stock.Cusip)) {
+                    @if (!string.IsNullOrEmpty(stock.Presentation.Listing.Security.Cusip)) {
                         <div>
                             <div class="text-xs text-base-content/50 uppercase tracking-wider">CUSIP</div>
-                            <div class="font-mono text-sm">@stock.Cusip</div>
+                            <div class="font-mono text-sm">@stock.Presentation.Listing.Security.Cusip</div>
                         </div>
                     }
-                    @if (stock.SharesOutStanding > 0) {
+                    @if (stock.Presentation.Listing.Security.SharesOutstanding > 0) {
                         <div>
                             <div class="text-xs text-base-content/50 uppercase tracking-wider">Shares Outstanding</div>
-                            <div class="font-semibold">@stock.SharesOutStanding.ToString("N0")</div>
+                            <div class="font-semibold">@stock.Presentation.Listing.Security.SharesOutstanding.ToString("N0")</div>
                         </div>
                     }
                     @if (!string.IsNullOrEmpty(stock.Website)) {

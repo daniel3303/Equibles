@@ -66,12 +66,12 @@ public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(EquityListingRepository))
                     .Returns(new EquityListingRepository(ctx));
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
+                sp.GetService(typeof(EquityIdentityManager))
                     .Returns(
-                        new CommonStockManager(
-                            new CommonStockRepository(ctx),
+                        new EquityIdentityManager(
+                            new EquityIssuerRepository(ctx),
                             Substitute.For<IBus>()
                         )
                     );
@@ -131,7 +131,9 @@ public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
                 if (!deletedOnce)
                 {
                     using var deleteCtx = _fixture.CreateDbContext();
-                    var staleApple = deleteCtx.Set<CommonStock>().Single(s => s.Ticker == "AAPL");
+                    CommonStock staleApple = deleteCtx
+                        .Set<CommonStock>()
+                        .Single(s => s.Ticker == "AAPL");
                     deleteCtx.Set<CommonStock>().Remove(staleApple);
                     deleteCtx.SaveChanges();
                     deletedOnce = true;

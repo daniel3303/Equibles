@@ -459,26 +459,48 @@ public class HoldingsImportService
         _logger.LogInformation("Found {Count} unique CUSIPs in INFOTABLE", uniqueCusips.Count);
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var uniqueCusipsList = uniqueCusips.ToList();
 
         // Historical filings must resolve identities that are no longer in the live directory.
         // The default repository surface is active-only by design, so this importer opts into
         // retained inactive rows explicitly.
-        var query = stockRepo.GetAllIncludingInactive();
+        var query = stockRepo.GetAll();
         if (_workerOptions.TickersToSync?.Count > 0)
         {
             query = query.Where(stock =>
-                _workerOptions.TickersToSync.Contains(stock.Ticker)
-                || stock.SecondaryTickers.Any(ticker =>
-                    _workerOptions.TickersToSync.Contains(ticker)
-                )
+                _workerOptions.TickersToSync.Contains(stock.Presentation.Listing.Ticker)
+                || stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != stock.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList()
+                    .Any(ticker => _workerOptions.TickersToSync.Contains(ticker))
             );
         }
 
-        var stocksWithCusip = await query
-            .Where(cs => cs.Cusip != null && uniqueCusipsList.Contains(cs.Cusip))
-            .Select(cs => new { cs.Id, cs.Cusip })
+        var securityClaims = await query
+            .SelectMany(issuer => issuer.Securities)
+            .Where(security => security.Cusip != null && uniqueCusipsList.Contains(security.Cusip))
+            .Select(security => new
+            {
+                security.Id,
+                security.EquityIssuerId,
+                security.Cusip,
+                PrimarySecurityId = (Guid?)security.Issuer.Presentation.Listing.EquitySecurityId,
+                UsTickers = security
+                    .Listings.Where(listing => listing.MarketCountryCode == "US")
+                    .Select(listing => listing.Ticker)
+                    .Distinct()
+                    .ToList(),
+            })
             .ToListAsync(cancellationToken);
 
         // Retired CUSIPs must keep resolving: after an issuer-level CUSIP change,
@@ -550,9 +572,26 @@ public class HoldingsImportService
                 string.Join(", ", contested)
             );
         }
-        foreach (var stock in stocksWithCusip)
+        // A retained security keeps its CUSIP after the issuer chooses a different presentation.
+        // Ambiguous securities or venue symbols cannot be assigned to the current primary.
+        foreach (
+            var claims in securityClaims.GroupBy(
+                claim => claim.Cusip,
+                StringComparer.OrdinalIgnoreCase
+            )
+        )
         {
-            cusipMapping[stock.Cusip] = new CusipTarget(stock.Id, null);
+            cusipMapping.Remove(claims.Key);
+            if (claims.Count() != 1)
+                continue;
+            var security = claims.Single();
+            if (security.Id == security.PrimarySecurityId)
+                cusipMapping[security.Cusip] = new CusipTarget(security.EquityIssuerId, null);
+            else if (security.UsTickers.Count == 1)
+                cusipMapping[security.Cusip] = new CusipTarget(
+                    security.EquityIssuerId,
+                    security.UsTickers[0]
+                );
         }
 
         _logger.LogInformation(
@@ -575,12 +614,22 @@ public class HoldingsImportService
         var mappedStockIds = cusipMapping.Values.Select(t => t.CommonStockId).Distinct().ToList();
         context.IssuerSizes = await LoadIssuerSizes(stockRepo, mappedStockIds, cancellationToken);
         var tickerIdentities = await stockRepo
-            .GetByIdsIncludingInactive(mappedStockIds)
+            .GetByIds(mappedStockIds)
             .Select(cs => new
             {
                 cs.Id,
-                cs.Ticker,
-                cs.SecondaryTickers,
+                Ticker = cs.Presentation.Listing.Ticker,
+                SecondaryTickers = cs
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != cs.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
             })
             .ToListAsync(cancellationToken);
         context.PrimaryTickers = tickerIdentities.ToDictionary(cs => cs.Id, cs => cs.Ticker);
@@ -609,19 +658,19 @@ public class HoldingsImportService
     /// this data set actually references.
     /// </summary>
     private static async Task<Dictionary<Guid, IssuerSize>> LoadIssuerSizes(
-        CommonStockRepository stockRepo,
+        EquityIssuerRepository stockRepo,
         List<Guid> stockIds,
         CancellationToken cancellationToken
     )
     {
         var sizes = await stockRepo
-            .GetAllIncludingInactive()
-            .Where(cs => stockIds.Contains(cs.Id))
+            .GetAll()
+            .Where(cs => stockIds.Contains(cs.Id) && cs.Presentation != null)
             .Select(cs => new
             {
                 cs.Id,
-                cs.SharesOutStanding,
-                cs.MarketCapitalization,
+                SharesOutStanding = cs.Presentation.Listing.Security.SharesOutstanding,
+                MarketCapitalization = cs.Presentation.Listing.Security.MarketCapitalization,
             })
             .ToListAsync(cancellationToken);
 

@@ -30,7 +30,10 @@ public class DocumentTextToolsReadLinesInvalidRangeTests : ParadeDbMcpTestBase
     public async Task ReadDocumentLines_StartLineBeyondDocument_ReturnsInvalidRangeMessage()
     {
         var content = "Alpha\nBeta\nGamma"; // 3 lines total
-        var stock = new CommonStock { Ticker = "MSFT", Name = "Microsoft Corp." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp."
+        );
         var file = new File
         {
             Name = "10q",

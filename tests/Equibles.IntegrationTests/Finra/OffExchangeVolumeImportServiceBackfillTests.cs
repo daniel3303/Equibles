@@ -29,7 +29,7 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly OffExchangeVolumeRepository _volumeRepo;
     private readonly FinraImportPartitionRepository _partitionRepo;
-    private readonly CommonStockRepository _stockRepo;
+    private readonly EquityIssuerRepository _stockRepo;
     private readonly IFinraClient _finraClient;
     private readonly WorkerOptions _workerOptions;
     private readonly TimeProvider _timeProvider;
@@ -43,7 +43,7 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
         );
         _volumeRepo = new OffExchangeVolumeRepository(_dbContext);
         _partitionRepo = new FinraImportPartitionRepository(_dbContext);
-        _stockRepo = new CommonStockRepository(_dbContext);
+        _stockRepo = new EquityIssuerRepository(_dbContext);
         _finraClient = Substitute.For<IFinraClient>();
         _workerOptions = new WorkerOptions();
         _timeProvider = Substitute.For<TimeProvider>();
@@ -51,7 +51,7 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(OffExchangeVolumeRepository), _volumeRepo),
-            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(EquityIssuerRepository), _stockRepo),
             (typeof(EquityListingRepository), new EquityListingRepository(_dbContext))
         );
 
@@ -83,12 +83,11 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
     [Fact]
     public async Task Import_CurrentSymbolCannotOverwriteFormerSymbol_LeavesPartitionUnmarked()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Fixture issuer",
-            Cik = "0000000001",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Fixture issuer",
+            Cik: "0000000001"
+        );
         var listing = Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
         var week = WeekStart(DateOnly.FromDateTime(Now.UtcDateTime)).AddDays(-14);
         var original = new OffExchangeVolume
@@ -127,19 +126,39 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
     [Fact]
     public async Task Import_StoredWeekBetweenFloorAndToday_BackfillsEarlierSkipsStoredAndFetchesForward()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "CIK-AAPL",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "CIK-AAPL"
+        );
         _stockRepo.AddRange([apple]);
-        foreach (var owner in _dbContext.Set<CommonStock>().Local.ToList())
+        foreach (EquityIssuer owner in _dbContext.Set<EquityIssuer>().Local.ToList())
         foreach (
-            var ticker in new[] { owner.Ticker }
-                .Concat(owner.ReferenceTickers)
-                .Concat(owner.SecondaryTickers)
+            var ticker in new[] { owner.Presentation.Listing.Ticker }
+                .Concat(
+                    owner
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (nativeListing.IsReferenceListed)
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
+                .Concat(
+                    owner
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (
+                                nativeListing.IsDirectoryListed
+                                && nativeListing.Id != owner.Presentation.EquityListingId
+                            )
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
         )
             Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner, ticker);
         await _stockRepo.SaveChanges();
@@ -155,9 +174,13 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
                 new OffExchangeVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(_dbContext, apple, apple.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            apple,
+                            apple.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = apple.Ticker,
+                    ListedTicker = apple.Presentation.Listing.Ticker,
                     WeekStartDate = storedWeek,
                     AtsVolume = 1,
                     NonAtsOtcVolume = 1,
@@ -196,19 +219,39 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
     [Fact]
     public async Task Import_TierOneOnly_RetriesUntilAllDelayedTiersArePublished()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "CIK-AAPL",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "CIK-AAPL"
+        );
         _stockRepo.AddRange([apple]);
-        foreach (var owner in _dbContext.Set<CommonStock>().Local.ToList())
+        foreach (EquityIssuer owner in _dbContext.Set<EquityIssuer>().Local.ToList())
         foreach (
-            var ticker in new[] { owner.Ticker }
-                .Concat(owner.ReferenceTickers)
-                .Concat(owner.SecondaryTickers)
+            var ticker in new[] { owner.Presentation.Listing.Ticker }
+                .Concat(
+                    owner
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (nativeListing.IsReferenceListed)
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
+                .Concat(
+                    owner
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (
+                                nativeListing.IsDirectoryListed
+                                && nativeListing.Id != owner.Presentation.EquityListingId
+                            )
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
         )
             Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner, ticker);
         await _stockRepo.SaveChanges();
@@ -250,19 +293,39 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
     [Fact]
     public async Task Import_PartialTierRefresh_PreservesExistingCompleteWeek()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "CIK-AAPL",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "CIK-AAPL"
+        );
         _stockRepo.AddRange([apple]);
-        foreach (var owner in _dbContext.Set<CommonStock>().Local.ToList())
+        foreach (EquityIssuer owner in _dbContext.Set<EquityIssuer>().Local.ToList())
         foreach (
-            var ticker in new[] { owner.Ticker }
-                .Concat(owner.ReferenceTickers)
-                .Concat(owner.SecondaryTickers)
+            var ticker in new[] { owner.Presentation.Listing.Ticker }
+                .Concat(
+                    owner
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (nativeListing.IsReferenceListed)
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
+                .Concat(
+                    owner
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (
+                                nativeListing.IsDirectoryListed
+                                && nativeListing.Id != owner.Presentation.EquityListingId
+                            )
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
         )
             Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner, ticker);
         await _stockRepo.SaveChanges();
@@ -276,9 +339,13 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
                 new OffExchangeVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(_dbContext, apple, apple.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            apple,
+                            apple.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = apple.Ticker,
+                    ListedTicker = apple.Presentation.Listing.Ticker,
                     WeekStartDate = week,
                     AtsVolume = 9_000,
                     AtsTradeCount = 90,
@@ -314,7 +381,7 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
     }
 
     private async Task SeedCompletedPartition(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly week,
         DateTime? importedAt = null
     )
@@ -332,11 +399,14 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
         _dbContext.ChangeTracker.Clear();
     }
 
-    private static string ResolveListingUniverse(CommonStock stock) =>
+    private static string ResolveListingUniverse(EquityIssuer stock) =>
         FinraImportScope.ResolveListingUniverse(
             new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
             {
-                [stock.Ticker] = new(stock.Id, stock.Ticker),
+                [stock.Presentation.Listing.Ticker] = new(
+                    stock.Id,
+                    stock.Presentation.Listing.Ticker
+                ),
             }
         );
 

@@ -19,7 +19,7 @@ namespace Equibles.UnitTests.Sec;
 // (FullYear), which would route every unplaceable fact into the annual bucket.
 public class FinancialFactsImportServiceTryBuildParsedFactUnmappableFpTests
 {
-    private static object Invoke(CompanyFactValue value, CommonStock stock)
+    private static object Invoke(CompanyFactValue value, EquityIssuer stock)
     {
         var method = typeof(FinancialFactsImportService).GetMethod(
             "TryBuildParsedFact",
@@ -46,12 +46,11 @@ public class FinancialFactsImportServiceTryBuildParsedFactUnmappableFpTests
     public void TryBuildParsedFact_UnmappableFpWithResolvableDates_KeepsDateDerivedIdentity()
     {
         // Instant at Dec 31 against a Sep-30 FYE: first quarter of FY2025.
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            FiscalYearEndMonth = 9,
-            FiscalYearEndDay = 30,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            FiscalYearEndMonth: 9,
+            FiscalYearEndDay: 30
+        );
 
         var result = Invoke(UnmappableFpInstant(), stock);
 
@@ -66,7 +65,7 @@ public class FinancialFactsImportServiceTryBuildParsedFactUnmappableFpTests
     {
         // No fiscal-year end on the stock → the resolver cannot place the period
         // either; defaulting would corrupt the annual bucket, so the value drops.
-        var stock = new CommonStock { Ticker = "AAPL" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL");
 
         var result = Invoke(UnmappableFpInstant(), stock);
 

@@ -35,10 +35,13 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
     private CompanySyncService BuildSut(ISecEdgarClient secEdgarClient)
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -75,22 +78,21 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
         await BuildSut(client).SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().ContainSingle();
         stocks[0].Cik.Should().Be("0000000010");
-        stocks[0].Ticker.Should().Be("NEW");
+        stocks[0].Presentation.Listing.Ticker.Should().Be("NEW");
     }
 
     [Fact]
     public async Task SyncCompaniesFromSecApi_TickerReuse_RetainsInactivePriorIdentity()
     {
         DbContext.Add(
-            new CommonStock
-            {
-                Cik = "0000000020",
-                Ticker = "REPL",
-                Name = "Old Holder",
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Cik: "0000000020",
+                Ticker: "REPL",
+                Name: "Old Holder"
+            )
         );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -104,13 +106,19 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
 
         // The incoming CIK owns the live ticker while the prior identity remains for history.
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().HaveCount(2);
-        stocks.Should().ContainSingle(stock => stock.Cik == "0000000020" && !stock.Active);
         stocks
             .Should()
             .ContainSingle(stock =>
-                stock.Cik == "0000000021" && stock.Ticker == "REPL" && stock.Active
+                stock.Cik == "0000000020" && !stock.Presentation.Listing.Active
+            );
+        stocks
+            .Should()
+            .ContainSingle(stock =>
+                stock.Cik == "0000000021"
+                && stock.Presentation.Listing.Ticker == "REPL"
+                && stock.Presentation.Listing.Active
             );
     }
 
@@ -118,12 +126,11 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
     public async Task SyncCompaniesFromSecApi_TwoActiveCiksSameTickerMetadataMissing_AttachesIncomingAsSubsidiary()
     {
         DbContext.Add(
-            new CommonStock
-            {
-                Cik = "0000000030",
-                Ticker = "DUAL",
-                Name = "Incumbent",
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Cik: "0000000030",
+                Ticker: "DUAL",
+                Name: "Incumbent"
+            )
         );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -143,24 +150,23 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
         await BuildSut(client).SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var incumbent = await verify
-            .Set<CommonStock>()
+        EquityIssuer incumbent = await verify
+            .Set<EquityIssuer>()
             .AsNoTracking()
             .SingleAsync(s => s.Cik == "0000000030");
         incumbent.SecondaryCiks.Should().Contain("0000000031");
-        (await verify.Set<CommonStock>().AsNoTracking().CountAsync()).Should().Be(1);
+        (await verify.Set<EquityIssuer>().AsNoTracking().CountAsync()).Should().Be(1);
     }
 
     [Fact]
     public async Task SyncCompaniesFromSecApi_IncomingListedIncumbentNot_LogsManualReviewWithoutSwap()
     {
         DbContext.Add(
-            new CommonStock
-            {
-                Cik = "0000000040",
-                Ticker = "DUAL",
-                Name = "Incumbent",
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Cik: "0000000040",
+                Ticker: "DUAL",
+                Name: "Incumbent"
+            )
         );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -201,11 +207,11 @@ public class CompanySyncServiceDispatchTests : ParadeDbMcpTestBase
         // Incoming is the listed entity → not auto-swapped: incumbent keeps the
         // ticker, no subsidiary attached, no new row.
         await using var verify = Fixture.CreateDbContext();
-        var incumbent = await verify
-            .Set<CommonStock>()
+        EquityIssuer incumbent = await verify
+            .Set<EquityIssuer>()
             .AsNoTracking()
             .SingleAsync(s => s.Cik == "0000000040");
         incumbent.SecondaryCiks.Should().BeEmpty();
-        (await verify.Set<CommonStock>().AsNoTracking().CountAsync()).Should().Be(1);
+        (await verify.Set<EquityIssuer>().AsNoTracking().CountAsync()).Should().Be(1);
     }
 }

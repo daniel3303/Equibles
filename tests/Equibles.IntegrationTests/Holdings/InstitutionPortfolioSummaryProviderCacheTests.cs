@@ -35,13 +35,12 @@ public class InstitutionPortfolioSummaryProviderCacheTests : IDisposable
     [Fact]
     public async Task Get_DirtyIngestBypassesCachedSummaryUntilSnapshotRefresh()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var holder = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -85,13 +84,12 @@ public class InstitutionPortfolioSummaryProviderCacheTests : IDisposable
     [Fact]
     public async Task Get_CleanSnapshotVersionInvalidatesCachedSummary()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         var holder = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),

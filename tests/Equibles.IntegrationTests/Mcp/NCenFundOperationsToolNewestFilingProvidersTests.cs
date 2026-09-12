@@ -29,7 +29,7 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
         );
         _tools = new NCenTools(
             new NCenFilingRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new FundSeriesRepository(_dbContext),
             errorManager: null,
             NullLogger<NCenTools>.Instance
@@ -41,14 +41,13 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
     [Fact]
     public async Task GetFundNcenReports_NewestFilingHasNoProviders_SeparatesLatestSnapshotFromHistory()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MXF",
-            Name = "Mexico Fund Inc",
-            Cik = "0000065433",
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MXF",
+            Name: "Mexico Fund Inc",
+            Cik: "0000065433"
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
 
         // Older filing carries a provider; newest filing carries none.
         var older = MakeFiling(stock.Id, "older", new DateOnly(2023, 1, 5));
@@ -79,14 +78,13 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
     [Fact]
     public async Task GetFundNcenReports_HistoryPreservesOmissionsExactNamesAndMarkdownBoundaries()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MXF",
-            Name = "Mexico Fund Inc",
-            Cik = "0000065433",
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MXF",
+            Name: "Mexico Fund Inc",
+            Cik: "0000065433"
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
 
         var older = MakeFiling(stock.Id, "older", new DateOnly(2023, 1, 5));
         older.ServiceProviders.Add(
@@ -125,14 +123,13 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
     [Fact]
     public async Task GetFundNcenReports_SameDayAmendmentWinsAndHistoryIsDeterministic()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MXF",
-            Name = "Mexico Fund Inc",
-            Cik = "0000065433",
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MXF",
+            Name: "Mexico Fund Inc",
+            Cik: "0000065433"
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
 
         var filed = new DateOnly(2025, 1, 15);
         var original = MakeFiling(stock.Id, "0000065433-25-000001", filed);

@@ -36,18 +36,19 @@ public class YahooPriceImportServiceConcurrentWriterTests : ParadeDbMcpTestBase
     [Fact]
     public async Task FlushPriceBatch_ConcurrentDateAlreadyCommitted_SkipsItAndCommitsRemainingRows()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Cik = "0000000991",
-            Ticker = "RACE",
-            Name = "Concurrent Writer Test",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Cik: "0000000991",
+            Ticker: "RACE",
+            Name: "Concurrent Writer Test"
+        );
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
         var listingId =
-            await new CommonStockRepository(DbContext).GetEquityListingId(stock.Id, stock.Ticker)
-            ?? throw new InvalidOperationException("Missing fixture listing.");
+            await new EquityIssuerRepository(DbContext).GetEquityListingId(
+                stock.Id,
+                stock.Presentation.Listing.Ticker
+            ) ?? throw new InvalidOperationException("Missing fixture listing.");
         DbContext.ChangeTracker.Clear();
 
         var collisionDate = new DateOnly(2026, 8, 20);
@@ -61,7 +62,7 @@ public class YahooPriceImportServiceConcurrentWriterTests : ParadeDbMcpTestBase
         await using var flushContext = Fixture.CreateDbContext();
         await using var concurrentWriter = Fixture.CreateDbContext();
         await using var writerTransaction = await concurrentWriter.Database.BeginTransactionAsync();
-        var writerStockRepo = new CommonStockRepository(concurrentWriter);
+        EquityIssuerRepository writerStockRepo = new EquityIssuerRepository(concurrentWriter);
         EquityDailyStockPriceRepository writerPriceRepo = new EquityDailyStockPriceRepository(
             concurrentWriter
         );
@@ -82,7 +83,7 @@ public class YahooPriceImportServiceConcurrentWriterTests : ParadeDbMcpTestBase
             .AsNoTracking()
             .Where(price =>
                 price.Listing.Security.EquityIssuerId == stock.Id
-                && price.SourceTicker == stock.Ticker
+                && price.SourceTicker == stock.Presentation.Listing.Ticker
             )
             .OrderBy(price => price.Date)
             .ToListAsync();
@@ -93,7 +94,7 @@ public class YahooPriceImportServiceConcurrentWriterTests : ParadeDbMcpTestBase
     private YahooPriceImportService BuildService(EquiblesFinancialDbContext context)
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(context)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(context)),
             (typeof(EquityDailyStockPriceRepository), new EquityDailyStockPriceRepository(context))
         );
         return new YahooPriceImportService(

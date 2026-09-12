@@ -55,14 +55,13 @@ public class GetFundNcenReportsNegativeMaxResultsTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            db.Set<CommonStock>()
+            db.Set<EquityIssuer>()
                 .Add(
-                    new CommonStock
-                    {
-                        Ticker = "SPY",
-                        Name = "SPDR S&P 500 ETF Trust",
-                        Cik = "0000884394",
-                    }
+                    Equibles.TestSupport.EquityIssuerSeed.Create(
+                        Ticker: "SPY",
+                        Name: "SPDR S&P 500 ETF Trust",
+                        Cik: "0000884394"
+                    )
                 );
             await db.SaveChangesAsync();
         });

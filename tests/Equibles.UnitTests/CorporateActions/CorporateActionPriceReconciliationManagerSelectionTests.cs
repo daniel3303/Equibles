@@ -24,7 +24,7 @@ public class CorporateActionPriceReconciliationManagerSelectionTests
         new(
             new StockSplitRepository(db),
             new CashDividendRepository(db),
-            new CommonStockRepository(db),
+            new EquityIssuerRepository(db),
             new CorporateActionPriceReconciliationCursorRepository(db)
         );
 
@@ -47,17 +47,16 @@ public class CorporateActionPriceReconciliationManagerSelectionTests
         return context;
     }
 
-    private static CommonStock Stock(
+    private static EquityIssuer Stock(
         Guid id,
         string ticker = "AAPL",
         List<string> secondaryTickers = null
     ) =>
-        new()
-        {
-            Id = id,
-            Ticker = ticker,
-            SecondaryTickers = secondaryTickers ?? [],
-        };
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: id,
+            Ticker: ticker,
+            SecondaryTickers: secondaryTickers ?? []
+        );
 
     private static StockSplit PendingSplit(
         Guid stockId,

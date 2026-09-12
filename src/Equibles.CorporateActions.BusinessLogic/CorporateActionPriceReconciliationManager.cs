@@ -1,4 +1,5 @@
 using System.Data;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data.Models;
@@ -15,13 +16,13 @@ public class CorporateActionPriceReconciliationManager
 {
     private readonly StockSplitRepository _splitRepository;
     private readonly CashDividendRepository _dividendRepository;
-    private readonly CommonStockRepository _stockRepository;
+    private readonly EquityIssuerRepository _stockRepository;
     private readonly CorporateActionPriceReconciliationCursorRepository _cursorRepository;
 
     public CorporateActionPriceReconciliationManager(
         StockSplitRepository splitRepository,
         CashDividendRepository dividendRepository,
-        CommonStockRepository stockRepository,
+        EquityIssuerRepository stockRepository,
         CorporateActionPriceReconciliationCursorRepository cursorRepository
     )
     {
@@ -288,7 +289,7 @@ public class CorporateActionPriceReconciliationManager
             IsolationLevel.ReadCommitted,
             cancellationToken
         );
-        var stock = await _stockRepository.GetForUpdate(
+        EquityIssuer stock = await _stockRepository.GetForUpdate(
             selectedSeries.CommonStockId,
             cancellationToken
         );
@@ -316,7 +317,10 @@ public class CorporateActionPriceReconciliationManager
         }
         else if (
             expectedActive != null
-            && (stock.Active != expectedActive.Value || stock.DelistedOn != expectedDelistedOn)
+            && (
+                stock.Presentation.Listing.Active != expectedActive.Value
+                || stock.Presentation.Listing.DelistedOn != expectedDelistedOn
+            )
         )
         {
             await transaction.RollbackAsync(cancellationToken);
@@ -325,7 +329,7 @@ public class CorporateActionPriceReconciliationManager
 
         var unchangedSplits = await LoadUnchangedSplits(selectedSeries, cancellationToken);
         var isStillPrimary = string.Equals(
-            stock.Ticker,
+            stock.Presentation.Listing.Ticker,
             selectedSeries.ListedTicker,
             StringComparison.OrdinalIgnoreCase
         );
@@ -410,8 +414,8 @@ public class CorporateActionPriceReconciliationManager
 
         var stockIds = rows.Select(row => row.EquityIssuerId).Distinct().ToList();
         var primaryTickers = await _stockRepository
-            .GetByIds(stockIds)
-            .Select(stock => new { stock.Id, stock.Ticker })
+            .GetCurrentUsDirectoryByIds(stockIds)
+            .Select(stock => new { stock.Id, Ticker = stock.Presentation.Listing.Ticker })
             .ToDictionaryAsync(stock => stock.Id, stock => stock.Ticker, cancellationToken);
 
         return rows.Where(row => primaryTickers.ContainsKey(row.EquityIssuerId))

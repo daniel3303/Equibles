@@ -61,17 +61,16 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     [Fact]
     public async Task SeedCusips_SymbolCusipChanged_UpdatesStockRecordsAliasAndPublishesEvent()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BBUC",
-            Name = "Brookfield Business Corp",
-            Cik = "1654795",
-            Cusip = "11259V106",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BBUC",
+            Name: "Brookfield Business Corp",
+            Cik: "1654795",
+            Cusip: "11259V106"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -83,11 +82,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
+                sp.GetService(typeof(EquityIdentityManager))
                     .Returns(
-                        new CommonStockManager(new CommonStockRepository(ctx), publishEndpoint)
+                        new EquityIdentityManager(new EquityIssuerRepository(ctx), publishEndpoint)
                     );
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
@@ -152,8 +151,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             );
 
         using var verify = FreshContext();
-        var persisted = await verify.Set<CommonStock>().FirstAsync(s => s.Id == stock.Id);
-        persisted.Cusip.Should().Be("113006100");
+        EquityIssuer persisted = await verify.Set<EquityIssuer>().FirstAsync(s => s.Id == stock.Id);
+        persisted.Presentation.Listing.Security.Cusip.Should().Be("113006100");
 
         var alias = await verify.Set<EquityIssuerCusipAlias>().SingleAsync();
         alias.Cusip.Should().Be("11259V106");
@@ -163,17 +162,16 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     [Fact]
     public async Task SeedCusips_CurrentCusipIsOwnAlias_PromotesAliasAndRetiresPreviousCusip()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "TAP",
-            Name = "Molson Coors Beverage Co",
-            Cik = "24545",
-            Cusip = "60871R100",
-            SecondaryTickers = ["TAP-A"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TAP",
+            Name: "Molson Coors Beverage Co",
+            Cik: "24545",
+            Cusip: "60871R100",
+            SecondaryTickers: ["TAP-A"]
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityIssuerCusipAlias>()
                 .Add(new EquityIssuerCusipAlias { EquityIssuerId = stock.Id, Cusip = "60871R209" });
             await seed.SaveChangesAsync();
@@ -188,7 +186,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(1);
         using var verify = FreshContext();
-        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R209");
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("60871R209");
         (await verify.Set<EquityIssuerCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
         await bus.Received(1)
             .Publish(
@@ -206,13 +206,12 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         bool reverse
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = "TAP",
-            Name = "Molson Coors Beverage Co",
-            Cik = "24545",
-            Cusip = "60871R100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TAP",
+            Name: "Molson Coors Beverage Co",
+            Cik: "24545",
+            Cusip: "60871R100"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Add(stock);
@@ -232,7 +231,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R100");
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("60871R100");
         (await verify.Set<EquityIssuerCusipAlias>().AnyAsync()).Should().BeFalse();
         await bus.DidNotReceive()
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
@@ -241,17 +242,16 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     [Fact]
     public async Task SeedCusips_ExactPrimaryListingClaim_ReassignsDisplacedCusipToProvenSibling()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "BF-B",
-            Name = "Brown Forman Corp",
-            Cik = "14693",
-            Cusip = "115637100",
-            SecondaryTickers = ["BF-A"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BF-B",
+            Name: "Brown Forman Corp",
+            Cik: "14693",
+            Cusip: "115637100",
+            SecondaryTickers: ["BF-A"]
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityListingCusipEvidence>()
                 .Add(
                     new EquityListingCusipEvidence
@@ -276,7 +276,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(1);
         using var verify = FreshContext();
-        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("115637209");
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("115637209");
         var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
         listing.ListedTicker.Should().Be("BF-A");
         listing.Cusip.Should().Be("115637100");
@@ -286,17 +288,16 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     [Fact]
     public async Task SeedCusips_ExactPrimaryListingWithoutDisplacedEvidence_LeavesDesignationsAlone()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "BF-B",
-            Name = "Brown Forman Corp",
-            Cik = "14693",
-            Cusip = "115637100",
-            SecondaryTickers = ["BF-A"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BF-B",
+            Name: "Brown Forman Corp",
+            Cik: "14693",
+            Cusip: "115637100",
+            SecondaryTickers: ["BF-A"]
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityListingCusipEvidence>()
                 .Add(
                     new EquityListingCusipEvidence
@@ -317,7 +318,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("115637100");
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("115637100");
         var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
         listing.ListedTicker.Should().Be("BF-B");
         listing.Cusip.Should().Be("115637209");
@@ -326,17 +329,16 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     [Fact]
     public async Task SeedCusips_ConflictingLatestSecondaryCusips_LeavesDesignationsAlone()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "BF-B",
-            Name = "Brown Forman Corp",
-            Cik = "14693",
-            Cusip = "115637100",
-            SecondaryTickers = ["BF-A"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BF-B",
+            Name: "Brown Forman Corp",
+            Cik: "14693",
+            Cusip: "115637100",
+            SecondaryTickers: ["BF-A"]
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityListingCusipEvidence>()
                 .Add(
                     new EquityListingCusipEvidence
@@ -361,7 +363,9 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("115637100");
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("115637100");
         var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
         listing.ListedTicker.Should().Be("BF-B");
         listing.Cusip.Should().Be("115637209");
@@ -370,21 +374,19 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     [Fact]
     public async Task SeedCusips_ManagerRejectsCaseVariantForeignClaim_DoesNotCountSeed()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "BF-B",
-            Name = "Brown Forman Corp",
-            Cik = "14693",
-            Cusip = "11563R100",
-            SecondaryTickers = ["BF-A"],
-        };
-        var foreign = new CommonStock
-        {
-            Ticker = "OTHER",
-            Name = "Other Corp",
-            Cik = "99999",
-            Cusip = "999999999",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BF-B",
+            Name: "Brown Forman Corp",
+            Cik: "14693",
+            Cusip: "11563R100",
+            SecondaryTickers: ["BF-A"]
+        );
+        EquityIssuer foreign = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OTHER",
+            Name: "Other Corp",
+            Cik: "99999",
+            Cusip: "999999999"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.AddRange(stock, foreign);
@@ -417,8 +419,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
-            .Cusip.Should()
+        (await verify.Set<EquityIssuer>().SingleAsync(row => row.Id == stock.Id))
+            .Presentation.Listing.Security.Cusip.Should()
             .Be("11563R100");
         (await verify.Set<EquityListingCusipEvidence>().CountAsync()).Should().Be(2);
     }
@@ -426,29 +428,32 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     [Fact]
     public async Task SeedInactiveCusips_AuthoritativeHistoricalMatch_SeedsRetainedIdentity()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GONE",
-            Name = "Formerly Listed Corp",
-            Cik = "0000000042",
-            Active = false,
-            DelistedOn = new DateOnly(2020, 6, 30),
-            HistoricalCusipBackfillRequestedAt = DateTime.UtcNow,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GONE",
+            Name: "Formerly Listed Corp",
+            Cik: "0000000042",
+            Active: false,
+            DelistedOn: new DateOnly(2020, 6, 30),
+            HistoricalCusipBackfillRequestedAt: DateTime.UtcNow
+        );
         var listing = new EquityListingRetirementEvidence
         {
             EquityIssuerId = stock.Id,
-            ListedTicker = stock.Ticker,
-            DelistedOn = stock.DelistedOn.Value,
-            HistoricalCusipBackfillRequestedAt = stock.HistoricalCusipBackfillRequestedAt,
+            ListedTicker = stock.Presentation.Listing.Ticker,
+            DelistedOn = stock.Presentation.Listing.DelistedOn.Value,
+            HistoricalCusipBackfillRequestedAt = stock
+                .Presentation
+                .Listing
+                .HistoricalCusipBackfillRequestedAt,
         };
-        var sweepBase = stock.HistoricalCusipBackfillRequestedAt!.Value.AddMinutes(1);
+        var sweepBase =
+            stock.Presentation.Listing.HistoricalCusipBackfillRequestedAt!.Value.AddMinutes(1);
         var sweepStartedAt = new DateTime(sweepBase.Ticks / 10 * 10 + 7, DateTimeKind.Utc);
         StageHistoricalCusip(listing, "123456789", listing.DelistedOn, sweepStartedAt);
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityListingRetirementEvidence>().Add(listing);
             await seed.SaveChangesAsync();
         }
@@ -461,10 +466,10 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
-                    .Returns(new CommonStockManager(new CommonStockRepository(ctx), bus));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
+                sp.GetService(typeof(EquityIdentityManager))
+                    .Returns(new EquityIdentityManager(new EquityIssuerRepository(ctx), bus));
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;
@@ -493,8 +498,10 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(1);
         using var verify = FreshContext();
-        var persisted = await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id);
-        persisted.Cusip.Should().Be("123456789");
+        EquityIssuer persisted = await verify
+            .Set<EquityIssuer>()
+            .SingleAsync(row => row.Id == stock.Id);
+        persisted.Presentation.Listing.Security.Cusip.Should().Be("123456789");
         (
             await verify
                 .Set<EquityListingRetirementEvidence>()
@@ -515,27 +522,26 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     public async Task SeedInactiveCusips_RequestChangedAfterSweepStarted_LeavesIdentityForNextPass()
     {
         var requestedAt = DateTime.UtcNow;
-        var stock = new CommonStock
-        {
-            Ticker = "GONE",
-            Name = "Formerly Listed Corp",
-            Cik = "0000000042",
-            Active = false,
-            DelistedOn = new DateOnly(2020, 6, 30),
-            HistoricalCusipBackfillRequestedAt = requestedAt,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONE",
+            Name: "Formerly Listed Corp",
+            Cik: "0000000042",
+            Active: false,
+            DelistedOn: new DateOnly(2020, 6, 30),
+            HistoricalCusipBackfillRequestedAt: requestedAt
+        );
         var listing = new EquityListingRetirementEvidence
         {
             EquityIssuerId = stock.Id,
-            ListedTicker = stock.Ticker,
-            DelistedOn = stock.DelistedOn.Value,
+            ListedTicker = stock.Presentation.Listing.Ticker,
+            DelistedOn = stock.Presentation.Listing.DelistedOn.Value,
             HistoricalCusipBackfillRequestedAt = requestedAt,
         };
         var sweepStartedAt = requestedAt.AddMinutes(-1);
         StageHistoricalCusip(listing, "123456789", listing.DelistedOn, sweepStartedAt);
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityListingRetirementEvidence>().Add(listing);
             await seed.SaveChangesAsync();
         }
@@ -556,8 +562,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
-            .Cusip.Should()
+        (await verify.Set<EquityIssuer>().SingleAsync(row => row.Id == stock.Id))
+            .Presentation.Listing.Security.Cusip.Should()
             .BeNull();
         await bus.DidNotReceive()
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
@@ -567,27 +573,26 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     public async Task SeedInactiveCusips_MatchAfterCurrentDelistingCutoff_IsRejected()
     {
         var requestedAt = DateTime.UtcNow;
-        var stock = new CommonStock
-        {
-            Ticker = "GONE",
-            Name = "Formerly Listed Corp",
-            Cik = "0000000042",
-            Active = false,
-            DelistedOn = new DateOnly(2020, 6, 30),
-            HistoricalCusipBackfillRequestedAt = requestedAt,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONE",
+            Name: "Formerly Listed Corp",
+            Cik: "0000000042",
+            Active: false,
+            DelistedOn: new DateOnly(2020, 6, 30),
+            HistoricalCusipBackfillRequestedAt: requestedAt
+        );
         var listing = new EquityListingRetirementEvidence
         {
             EquityIssuerId = stock.Id,
-            ListedTicker = stock.Ticker,
-            DelistedOn = stock.DelistedOn.Value,
+            ListedTicker = stock.Presentation.Listing.Ticker,
+            DelistedOn = stock.Presentation.Listing.DelistedOn.Value,
             HistoricalCusipBackfillRequestedAt = requestedAt,
         };
         var sweepStartedAt = requestedAt.AddMinutes(1);
         StageHistoricalCusip(listing, "123456789", listing.DelistedOn.AddDays(1), sweepStartedAt);
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityListingRetirementEvidence>().Add(listing);
             await seed.SaveChangesAsync();
         }
@@ -608,8 +613,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
-            .Cusip.Should()
+        (await verify.Set<EquityIssuer>().SingleAsync(row => row.Id == stock.Id))
+            .Presentation.Listing.Security.Cusip.Should()
             .BeNull();
         (
             await verify
@@ -626,13 +631,12 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     public async Task SeedInactiveCusips_DelistedSibling_RecordsExactListedCusip()
     {
         var requestedAt = DateTime.UtcNow;
-        var stock = new CommonStock
-        {
-            Ticker = "LIVE",
-            Name = "Still Listed Filer",
-            Cik = "0000000042",
-            Cusip = "111111111",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "LIVE",
+            Name: "Still Listed Filer",
+            Cik: "0000000042",
+            Cusip: "111111111"
+        );
         var listing = new EquityListingRetirementEvidence
         {
             EquityIssuerId = stock.Id,
@@ -644,7 +648,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         StageHistoricalCusip(listing, "222222222", listing.DelistedOn, sweepStartedAt);
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityListingRetirementEvidence>().Add(listing);
             await seed.SaveChangesAsync();
         }
@@ -682,26 +686,25 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     public async Task SeedInactiveCusips_PrimaryCandidateClaimedBySameFilerSibling_RefusesMerge()
     {
         var requestedAt = DateTime.UtcNow;
-        var stock = new CommonStock
-        {
-            Ticker = "MAIN",
-            Name = "Formerly Listed Filer",
-            Cik = "0000000042",
-            Active = false,
-            DelistedOn = new DateOnly(2020, 6, 30),
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MAIN",
+            Name: "Formerly Listed Filer",
+            Cik: "0000000042",
+            Active: false,
+            DelistedOn: new DateOnly(2020, 6, 30)
+        );
         var listing = new EquityListingRetirementEvidence
         {
             EquityIssuerId = stock.Id,
-            ListedTicker = stock.Ticker,
-            DelistedOn = stock.DelistedOn.Value,
+            ListedTicker = stock.Presentation.Listing.Ticker,
+            DelistedOn = stock.Presentation.Listing.DelistedOn.Value,
             HistoricalCusipBackfillRequestedAt = requestedAt,
         };
         var sweepStartedAt = requestedAt.AddMinutes(1);
         StageHistoricalCusip(listing, "222222222", listing.DelistedOn, sweepStartedAt);
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityListingRetirementEvidence>().Add(listing);
             seed.Set<EquityListingCusipEvidence>()
                 .Add(
@@ -730,8 +733,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
-            .Cusip.Should()
+        (await verify.Set<EquityIssuer>().SingleAsync(row => row.Id == stock.Id))
+            .Presentation.Listing.Security.Cusip.Should()
             .BeNull();
         (
             await verify
@@ -746,13 +749,12 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     public async Task SeedInactiveCusips_SiblingCandidateEqualsParentPrimaryCusip_RefusesMerge()
     {
         var requestedAt = DateTime.UtcNow;
-        var stock = new CommonStock
-        {
-            Ticker = "MAIN",
-            Name = "Formerly Listed Filer",
-            Cik = "0000000042",
-            Cusip = "222222222",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MAIN",
+            Name: "Formerly Listed Filer",
+            Cik: "0000000042",
+            Cusip: "222222222"
+        );
         var listing = new EquityListingRetirementEvidence
         {
             EquityIssuerId = stock.Id,
@@ -761,10 +763,15 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             HistoricalCusipBackfillRequestedAt = requestedAt,
         };
         var sweepStartedAt = requestedAt.AddMinutes(1);
-        StageHistoricalCusip(listing, stock.Cusip, listing.DelistedOn, sweepStartedAt);
+        StageHistoricalCusip(
+            listing,
+            stock.Presentation.Listing.Security.Cusip,
+            listing.DelistedOn,
+            sweepStartedAt
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityListingRetirementEvidence>().Add(listing);
             await seed.SaveChangesAsync();
         }
@@ -776,7 +783,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         )!;
         var matches = new Dictionary<Guid, (string Cusip, DateOnly SettlementDate)>
         {
-            [listing.Id] = (stock.Cusip, listing.DelistedOn),
+            [listing.Id] = (stock.Presentation.Listing.Security.Cusip, listing.DelistedOn),
         };
 
         var seeded = await (Task<int>)
@@ -798,24 +805,22 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         const string contestedCusip = "555555555";
         var sweepStartedAt = DateTime.UtcNow.AddMinutes(-1);
         var settlementDate = new DateOnly(2020, 6, 30);
-        var owner = new CommonStock
-        {
-            Ticker = "OWNER",
-            Name = "Identity Owner",
-            Cik = "8000000001",
-        };
-        var historical = new CommonStock
-        {
-            Ticker = "OLD",
-            Name = "Historical Candidate",
-            Cik = "8000000002",
-            Active = false,
-            DelistedOn = settlementDate,
-        };
+        EquityIssuer owner = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OWNER",
+            Name: "Identity Owner",
+            Cik: "8000000001"
+        );
+        EquityIssuer historical = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OLD",
+            Name: "Historical Candidate",
+            Cik: "8000000002",
+            Active: false,
+            DelistedOn: settlementDate
+        );
         var listing = new EquityListingRetirementEvidence
         {
             EquityIssuerId = historical.Id,
-            ListedTicker = historical.Ticker,
+            ListedTicker = historical.Presentation.Listing.Ticker,
             DelistedOn = settlementDate,
         };
         StageHistoricalCusip(listing, contestedCusip, settlementDate, sweepStartedAt);
@@ -826,17 +831,17 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         }
 
         await using var claimingContext = _fixture.CreateDbContext();
-        var claimingRepository = new CommonStockRepository(claimingContext);
+        EquityIssuerRepository claimingRepository = new EquityIssuerRepository(claimingContext);
         await using var claimTransaction = await claimingRepository.BeginCusipIdentityWrite();
-        var claimingStock = await claimingContext
-            .Set<CommonStock>()
+        EquityIssuer claimingStock = await claimingContext
+            .Set<EquityIssuer>()
             .SingleAsync(stock => stock.Id == owner.Id);
-        claimingStock.Cusip = contestedCusip;
+        claimingStock.Presentation.Listing.Security.Cusip = contestedCusip;
         await claimingContext.SaveChangesAsync();
 
         await using var finalizingContext = _fixture.CreateDbContext();
-        var finalizer = new CommonStockManager(
-            new CommonStockRepository(finalizingContext),
+        EquityIdentityManager finalizer = new EquityIdentityManager(
+            new EquityIssuerRepository(finalizingContext),
             Substitute.For<IBus>()
         );
         var finalization = finalizer.SeedDelistedListingCusip(
@@ -852,8 +857,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         (await finalization).Should().Be(DelistedListingCusipSeedResult.ClaimedByAnotherStock);
 
         await using var verify = _fixture.CreateDbContext();
-        (await verify.Set<CommonStock>().SingleAsync(stock => stock.Id == owner.Id))
-            .Cusip.Should()
+        (await verify.Set<EquityIssuer>().SingleAsync(stock => stock.Id == owner.Id))
+            .Presentation.Listing.Security.Cusip.Should()
             .Be(contestedCusip);
         (
             await verify
@@ -867,14 +872,13 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     [Fact]
     public async Task SetCusip_ConcurrentDesignationChange_AbstainsFromStaleTransition()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "TAP",
-            Name = "Molson Coors Beverage Co",
-            Cik = "24545",
-            Cusip = "60871R100",
-            SecondaryTickers = ["TAP-A"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TAP",
+            Name: "Molson Coors Beverage Co",
+            Cik: "24545",
+            Cusip: "60871R100",
+            SecondaryTickers: ["TAP-A"]
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Add(stock);
@@ -884,17 +888,20 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         }
 
         await using var staleContext = _fixture.CreateDbContext();
-        var staleStock = await staleContext
-            .Set<CommonStock>()
+        EquityIssuer staleStock = await staleContext
+            .Set<EquityIssuer>()
             .SingleAsync(row => row.Id == stock.Id);
         var bus = Substitute.For<IBus>();
-        var staleManager = new CommonStockManager(new CommonStockRepository(staleContext), bus);
+        EquityIdentityManager staleManager = new EquityIdentityManager(
+            new EquityIssuerRepository(staleContext),
+            bus
+        );
 
         await using var writerContext = _fixture.CreateDbContext();
-        var writerRepository = new CommonStockRepository(writerContext);
+        EquityIssuerRepository writerRepository = new EquityIssuerRepository(writerContext);
         await using var writerTransaction = await writerRepository.BeginCusipIdentityWrite();
-        var lockedStock = await writerRepository.GetForUpdate(stock.Id);
-        lockedStock.Cusip = "60871R217";
+        EquityIssuer lockedStock = await writerRepository.GetForUpdate(stock.Id);
+        lockedStock.Presentation.Listing.Security.Cusip = "60871R217";
         await writerRepository.SaveChanges();
 
         var staleTransition = staleManager.SetCusip(staleStock, "60871R209");
@@ -905,8 +912,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         await staleTransition;
 
         await using var verify = _fixture.CreateDbContext();
-        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
-            .Cusip.Should()
+        (await verify.Set<EquityIssuer>().SingleAsync(row => row.Id == stock.Id))
+            .Presentation.Listing.Security.Cusip.Should()
             .Be("60871R217");
         (await verify.Set<EquityIssuerCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R209");
         await bus.DidNotReceive()
@@ -916,20 +923,18 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     [Fact]
     public async Task SetCusip_CaseVariantForeignAliasClaim_Abstains()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "TAP",
-            Name = "Molson Coors Beverage Co",
-            Cik = "24545",
-            Cusip = "60871R100",
-        };
-        var foreign = new CommonStock
-        {
-            Ticker = "OTHER",
-            Name = "Other Corp",
-            Cik = "99999",
-            Cusip = "999999999",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TAP",
+            Name: "Molson Coors Beverage Co",
+            Cik: "24545",
+            Cusip: "60871R100"
+        );
+        EquityIssuer foreign = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OTHER",
+            Name: "Other Corp",
+            Cik: "99999",
+            Cusip: "999999999"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.AddRange(stock, foreign);
@@ -942,15 +947,20 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         }
 
         await using var context = _fixture.CreateDbContext();
-        var tracked = await context.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id);
+        EquityIssuer tracked = await context
+            .Set<EquityIssuer>()
+            .SingleAsync(row => row.Id == stock.Id);
         var bus = Substitute.For<IBus>();
-        var manager = new CommonStockManager(new CommonStockRepository(context), bus);
+        EquityIdentityManager manager = new EquityIdentityManager(
+            new EquityIssuerRepository(context),
+            bus
+        );
 
         await manager.SetCusip(tracked, "60871R209");
 
         await using var verify = _fixture.CreateDbContext();
-        (await verify.Set<CommonStock>().SingleAsync(row => row.Id == stock.Id))
-            .Cusip.Should()
+        (await verify.Set<EquityIssuer>().SingleAsync(row => row.Id == stock.Id))
+            .Presentation.Listing.Security.Cusip.Should()
             .Be("60871R100");
         (await verify.Set<EquityIssuerCusipAlias>().CountAsync()).Should().Be(2);
         await bus.DidNotReceive()
@@ -964,26 +974,24 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         // the freed symbol, and the FTD feed now maps that symbol to a CUSIP
         // that already identifies a different tracked stock. Adopting it would
         // leave two stocks sharing one CUSIP, so the row must be skipped.
-        var staleStock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "TICK",
-            Name = "Delisted Corp",
-            Cik = "0000000001",
-            Cusip = "111111111",
-        };
-        var currentOwner = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "NEWCO",
-            Name = "New Owner Corp",
-            Cik = "0000000002",
-            Cusip = "222222222",
-            Active = false,
-        };
+        EquityIssuer staleStock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "TICK",
+            Name: "Delisted Corp",
+            Cik: "0000000001",
+            Cusip: "111111111"
+        );
+        EquityIssuer currentOwner = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NEWCO",
+            Name: "New Owner Corp",
+            Cik: "0000000002",
+            Cusip: "222222222",
+            Active: false
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().AddRange(staleStock, currentOwner);
+            seed.Set<EquityIssuer>().AddRange(staleStock, currentOwner);
             await seed.SaveChangesAsync();
         }
 
@@ -995,11 +1003,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
+                sp.GetService(typeof(EquityIdentityManager))
                     .Returns(
-                        new CommonStockManager(new CommonStockRepository(ctx), publishEndpoint)
+                        new EquityIdentityManager(new EquityIssuerRepository(ctx), publishEndpoint)
                     );
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
@@ -1046,8 +1054,10 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
 
         using var verify = FreshContext();
-        var persistedStale = await verify.Set<CommonStock>().FirstAsync(s => s.Id == staleStock.Id);
-        persistedStale.Cusip.Should().Be("111111111");
+        EquityIssuer persistedStale = await verify
+            .Set<EquityIssuer>()
+            .FirstAsync(s => s.Id == staleStock.Id);
+        persistedStale.Presentation.Listing.Security.Cusip.Should().Be("111111111");
     }
 
     [Theory]
@@ -1057,23 +1067,21 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         bool listingClaim
     )
     {
-        var target = new CommonStock
-        {
-            Ticker = "TICK",
-            Name = "Target Corp",
-            Cik = "0000000001",
-            Cusip = "111111111",
-        };
-        var owner = new CommonStock
-        {
-            Ticker = "OWNER",
-            Name = "Identity Owner Corp",
-            Cik = "0000000002",
-            Cusip = "333333333",
-        };
+        EquityIssuer target = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TICK",
+            Name: "Target Corp",
+            Cik: "0000000001",
+            Cusip: "111111111"
+        );
+        EquityIssuer owner = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OWNER",
+            Name: "Identity Owner Corp",
+            Cik: "0000000002",
+            Cusip: "333333333"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().AddRange(target, owner);
+            seed.Set<EquityIssuer>().AddRange(target, owner);
             if (listingClaim)
             {
                 seed.Set<EquityListingCusipEvidence>()
@@ -1128,8 +1136,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
 
         seeded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStock>().SingleAsync(stock => stock.Id == target.Id))
-            .Cusip.Should()
+        (await verify.Set<EquityIssuer>().SingleAsync(stock => stock.Id == target.Id))
+            .Presentation.Listing.Security.Cusip.Should()
             .Be("111111111");
         await bus.DidNotReceive()
             .Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
@@ -1138,17 +1146,16 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
     [Fact]
     public async Task SeedCusips_CusipUnchanged_UpdatesNothingAndPublishesNothing()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BBUC",
-            Name = "Brookfield Business Corp",
-            Cik = "1654795",
-            Cusip = "113006100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BBUC",
+            Name: "Brookfield Business Corp",
+            Cik: "1654795",
+            Cusip: "113006100"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -1160,11 +1167,11 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
+                sp.GetService(typeof(EquityIdentityManager))
                     .Returns(
-                        new CommonStockManager(new CommonStockRepository(ctx), publishEndpoint)
+                        new EquityIdentityManager(new EquityIssuerRepository(ctx), publishEndpoint)
                     );
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
@@ -1218,13 +1225,13 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             .Returns(_ =>
             {
                 var ctx = FreshContext();
-                var repository = new CommonStockRepository(ctx);
+                EquityIssuerRepository repository = new EquityIssuerRepository(ctx);
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository)).Returns(repository);
+                sp.GetService(typeof(EquityIssuerRepository)).Returns(repository);
                 sp.GetService(typeof(EquityListingRepository))
                     .Returns(new EquityListingRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
-                    .Returns(new CommonStockManager(repository, bus));
+                sp.GetService(typeof(EquityIdentityManager))
+                    .Returns(new EquityIdentityManager(repository, bus));
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;

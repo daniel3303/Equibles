@@ -19,12 +19,11 @@ public class CurrentShareEvidenceTests(ParadeDbFixture fixture) : ParadeDbMcpTes
     [InlineData(2027)]
     public async Task InvalidCurrentContextFallsBackWithoutLosingForeignForm(int invalidYear)
     {
-        var stock = new CommonStock
-        {
-            Ticker = "DATE",
-            Name = "Date evidence",
-            Cik = "0000001234",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "DATE",
+            Name: "Date evidence",
+            Cik: "0000001234"
+        );
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
         var concept = new FinancialConcept

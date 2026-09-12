@@ -42,13 +42,12 @@ public class HoldingsActivityControllerMostHeldTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -83,27 +82,24 @@ public class HoldingsActivityControllerMostHeldTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                },
-                new CommonStock
-                {
-                    Id = msftId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                },
-                new CommonStock
-                {
-                    Id = nvdaId,
-                    Ticker = "NVDA",
-                    Name = "NVIDIA Corp.",
-                    Cik = "0001045810",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: msftId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: nvdaId,
+                    Ticker: "NVDA",
+                    Name: "NVIDIA Corp.",
+                    Cik: "0001045810"
+                )
             );
 
             var holders = new List<InstitutionalHolder>();

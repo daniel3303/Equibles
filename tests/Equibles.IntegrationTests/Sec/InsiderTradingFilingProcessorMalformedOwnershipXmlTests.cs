@@ -85,12 +85,11 @@ public class InsiderTradingFilingProcessorMalformedOwnershipXmlTests
             ReportDate = new DateOnly(2024, 3, 15),
             Cik = "0000320193",
         };
-        var company = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
 
         var result = await processor.Process(filing, company);
 

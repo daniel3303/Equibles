@@ -28,12 +28,11 @@ public class SecDocumentSearchProviderDedupTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Search_MultipleMatchingChunksPerDocument_CollapsesToOneHitPerDocument()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         DbContext.Add(stock);
 
         var doc1 = SeedDocument(stock, new DateOnly(2026, 1, 15));
@@ -41,10 +40,30 @@ public class SecDocumentSearchProviderDedupTests : ParadeDbMcpTestBase
 
         // doc1 has THREE chunks all matching the rare token; doc2 has one. A
         // missing dedup would yield 4 hits instead of 2 (one per document).
-        SeedChunk(doc1, 0, "zzqxquantum disclosure of segment revenue.", stock.Ticker);
-        SeedChunk(doc1, 1, "Further zzqxquantum commentary on liquidity.", stock.Ticker);
-        SeedChunk(doc1, 2, "Risk factors mention zzqxquantum exposure.", stock.Ticker);
-        SeedChunk(doc2, 0, "Subsequent zzqxquantum events note.", stock.Ticker);
+        SeedChunk(
+            doc1,
+            0,
+            "zzqxquantum disclosure of segment revenue.",
+            stock.Presentation.Listing.Ticker
+        );
+        SeedChunk(
+            doc1,
+            1,
+            "Further zzqxquantum commentary on liquidity.",
+            stock.Presentation.Listing.Ticker
+        );
+        SeedChunk(
+            doc1,
+            2,
+            "Risk factors mention zzqxquantum exposure.",
+            stock.Presentation.Listing.Ticker
+        );
+        SeedChunk(
+            doc2,
+            0,
+            "Subsequent zzqxquantum events note.",
+            stock.Presentation.Listing.Ticker
+        );
 
         await DbContext.SaveChangesAsync();
 
@@ -75,19 +94,18 @@ public class SecDocumentSearchProviderDedupTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Search_ContentHitProjectsTheDocumentDateWhenChunkCacheDisagrees()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         DbContext.Add(stock);
         var document = SeedDocument(stock, new DateOnly(2023, 9, 30));
         SeedChunk(
             document,
             0,
             "zzqxoffcalendar transcript supply chain concentration.",
-            stock.Ticker,
+            stock.Presentation.Listing.Ticker,
             new DateOnly(2023, 12, 31)
         );
         await DbContext.SaveChangesAsync();
@@ -106,7 +124,7 @@ public class SecDocumentSearchProviderDedupTests : ParadeDbMcpTestBase
         group.Hits[0].Subtitle.Should().Be("2023-09-30");
     }
 
-    private Document SeedDocument(CommonStock stock, DateOnly reportingDate)
+    private Document SeedDocument(EquityIssuer stock, DateOnly reportingDate)
     {
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
         var file = new File

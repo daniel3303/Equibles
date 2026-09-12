@@ -23,7 +23,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryNegativeMaxPeriodsTests :
         new(
             new InstitutionalHoldingRepository(DbContext),
             new InstitutionalHolderRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(DbContext),
@@ -36,12 +36,11 @@ public class InstitutionalHoldingsToolsOwnershipHistoryNegativeMaxPeriodsTests :
     [Fact]
     public async Task GetInstitutionalOwnershipHistory_NegativeMaxPeriods_DoesNotSurfaceInternalError()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
         var holder = new InstitutionalHolder
         {
             Cik = "0001067983",
@@ -49,7 +48,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryNegativeMaxPeriodsTests :
             City = "Omaha",
             StateOrCountry = "NE",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<InstitutionalHolder>().Add(holder);
         await DbContext.SaveChangesAsync();
 

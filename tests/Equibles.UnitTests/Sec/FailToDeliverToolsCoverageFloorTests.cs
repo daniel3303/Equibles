@@ -29,12 +29,11 @@ public class FailToDeliverToolsCoverageFloorTests
         var options = NewDbOptions();
         using (var seed = NewContext(options))
         {
-            var stock = new CommonStock
-            {
-                Ticker = "FTDC",
-                Name = "Coverage Corp",
-                Cik = "1",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "FTDC",
+                Name: "Coverage Corp",
+                Cik: "1"
+            );
             seed.Add(stock);
             seed.SaveChanges();
             seed.Add(
@@ -42,7 +41,7 @@ public class FailToDeliverToolsCoverageFloorTests
                 {
                     EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
 
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 2),
                     Quantity = 1000,
                     Price = 10m,
@@ -51,12 +50,11 @@ public class FailToDeliverToolsCoverageFloorTests
             // Another stock carries a sparse trickle-era row BELOW the per-date
             // threshold — it must NOT set the floor — plus enough same-date rows to
             // make 2026-03-02 the first dense date.
-            var other = new CommonStock
-            {
-                Ticker = "FTDO",
-                Name = "Other Corp",
-                Cik = "2",
-            };
+            EquityIssuer other = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "FTDO",
+                Name: "Other Corp",
+                Cik: "2"
+            );
             seed.Add(other);
             seed.SaveChanges();
             seed.Add(
@@ -64,7 +62,7 @@ public class FailToDeliverToolsCoverageFloorTests
                 {
                     EquityListingId = NativeListingSeed.ForStock(seed, other).Id,
 
-                    ListedTicker = other.Ticker,
+                    ListedTicker = other.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 1, 15),
                     Quantity = 5,
                     Price = 1m,
@@ -77,7 +75,7 @@ public class FailToDeliverToolsCoverageFloorTests
                     {
                         EquityListingId = NativeListingSeed.ForStock(seed, other).Id,
 
-                        ListedTicker = other.Ticker,
+                        ListedTicker = other.Presentation.Listing.Ticker,
                         SettlementDate = new DateOnly(2026, 3, 2),
                         Quantity = 10 + i,
                         Price = 1m,
@@ -120,12 +118,11 @@ public class FailToDeliverToolsCoverageFloorTests
         var options = NewDbOptions();
         using (var seed = NewContext(options))
         {
-            var stock = new CommonStock
-            {
-                Ticker = "FTDS",
-                Name = "Sparse Corp",
-                Cik = "3",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "FTDS",
+                Name: "Sparse Corp",
+                Cik: "3"
+            );
             seed.Add(stock);
             seed.SaveChanges();
             // One row short of the threshold on the earlier date: not covered.
@@ -136,7 +133,7 @@ public class FailToDeliverToolsCoverageFloorTests
                     {
                         EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
 
-                        ListedTicker = stock.Ticker,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         SettlementDate = new DateOnly(2025, 6, 2),
                         Quantity = i + 1,
                         Price = 1m,
@@ -151,7 +148,7 @@ public class FailToDeliverToolsCoverageFloorTests
                     {
                         EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
 
-                        ListedTicker = stock.Ticker,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         SettlementDate = new DateOnly(2026, 3, 2),
                         Quantity = i + 1,
                         Price = 1m,
@@ -185,7 +182,7 @@ public class FailToDeliverToolsCoverageFloorTests
     private static FailToDeliverTools NewTools(EquiblesFinancialDbContext ctx) =>
         new(
             new FailToDeliverRepository(ctx),
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             new MemoryCache(new MemoryCacheOptions()),
             new ErrorManager(null),
             NullLogger<FailToDeliverTools>.Instance

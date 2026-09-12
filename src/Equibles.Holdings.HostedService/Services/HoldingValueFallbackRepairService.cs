@@ -330,13 +330,23 @@ public class HoldingValueFallbackRepairService
             .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());
         var tickerIdentities = await dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .Where(cs => stockIds.Contains(cs.Id))
             .Select(cs => new
             {
                 cs.Id,
-                cs.Ticker,
-                cs.SecondaryTickers,
+                Ticker = cs.Presentation.Listing.Ticker,
+                SecondaryTickers = cs
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != cs.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
             })
             .ToListAsync(cancellationToken);
         var primaryTickers = tickerIdentities.ToDictionary(cs => cs.Id, cs => cs.Ticker);

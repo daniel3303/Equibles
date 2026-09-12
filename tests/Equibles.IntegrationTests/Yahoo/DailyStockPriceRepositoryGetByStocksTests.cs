@@ -37,10 +37,10 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
         var end = new DateOnly(2024, 6, 20);
 
         _dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AddRange(
-                new CommonStock { Id = inSet, Ticker = "IN" },
-                new CommonStock { Id = notInSet, Ticker = "OUT" }
+                Equibles.TestSupport.EquityIssuerSeed.Create(Id: inSet, Ticker: "IN"),
+                Equibles.TestSupport.EquityIssuerSeed.Create(Id: notInSet, Ticker: "OUT")
             );
 
         _dbContext
@@ -69,7 +69,9 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
         var stockId = Guid.NewGuid();
         var start = new DateOnly(2026, 8, 7);
         var end = new DateOnly(2026, 8, 11);
-        _dbContext.Set<CommonStock>().Add(new CommonStock { Id = stockId, Ticker = "THIN" });
+        _dbContext
+            .Set<EquityIssuer>()
+            .Add(Equibles.TestSupport.EquityIssuerSeed.Create(Id: stockId, Ticker: "THIN"));
         _dbContext
             .Set<EquityDailyStockPrice>()
             .AddRange(

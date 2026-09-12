@@ -33,25 +33,28 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
     public ShortVolumeImportServicePipelineTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private CommonStock _stock;
+    private EquityIssuer _stock;
 
     private async Task SeedStockAndLatestRow()
     {
-        _stock = new CommonStock
-        {
-            Cik = "0000000777",
-            Ticker = "TESTV",
-            Name = "Short Volume Test Inc.",
-        };
+        _stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000777",
+            Ticker: "TESTV",
+            Name: "Short Volume Test Inc."
+        );
         DbContext.Add(_stock);
         // A "latest" row 3 days back bounds the loop to the last 3 days.
         DbContext.Add(
             new DailyShortVolume
             {
                 EquityListingId = Equibles
-                    .TestSupport.NativeListingSeed.ForStock(DbContext, _stock, _stock.Ticker)
+                    .TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        _stock,
+                        _stock.Presentation.Listing.Ticker
+                    )
                     .Id,
-                ListedTicker = _stock.Ticker,
+                ListedTicker = _stock.Presentation.Listing.Ticker,
                 Date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-3),
                 ShortVolume = 1,
                 TotalVolume = 1,
@@ -64,7 +67,7 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
     private ShortVolumeImportService BuildService(IFinraClient finraClient)
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(DbContext))
         );

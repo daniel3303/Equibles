@@ -16,7 +16,7 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
     private FailToDeliverTools Sut() =>
         new(
             new FailToDeliverRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new MemoryCache(new MemoryCacheOptions()),
             ErrorManager,
             NullLogger<FailToDeliverTools>()
@@ -25,13 +25,12 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
     public FailToDeliverToolsTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private static CommonStock GmeStock() =>
-        new()
-        {
-            Ticker = "GME",
-            Name = "GameStop Corp",
-            Cik = "0001326380",
-        };
+    private static EquityIssuer GmeStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GME",
+            Name: "GameStop Corp",
+            Cik: "0001326380"
+        );
 
     // ── GetFailsToDeliver ────────────────────────────────────────────────
 
@@ -46,7 +45,7 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFailsToDeliver_StockWithoutFtds_ReturnsEmptyRangeMessage()
     {
-        DbContext.Set<CommonStock>().Add(GmeStock());
+        DbContext.Set<EquityIssuer>().Add(GmeStock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut()
@@ -58,15 +57,15 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFailsToDeliver_RendersTableAscendingWithValue()
     {
-        var stock = GmeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<FailToDeliver>()
             .AddRange(
                 new FailToDeliver
                 {
                     EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 4, 1),
                     Quantity = 100_000,
                     Price = 25.50m,
@@ -74,7 +73,7 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
                 new FailToDeliver
                 {
                     EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 4, 2),
                     Quantity = 200_000,
                     Price = 26.00m,
@@ -98,15 +97,15 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFailsToDeliver_DateRangeExcludesOutsideRows()
     {
-        var stock = GmeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<FailToDeliver>()
             .AddRange(
                 new FailToDeliver
                 {
                     EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 1, 15),
                     Quantity = 99_999,
                     Price = 1m,
@@ -114,7 +113,7 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
                 new FailToDeliver
                 {
                     EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2026, 4, 15),
                     Quantity = 200_000,
                     Price = 1m,
@@ -132,14 +131,14 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFailsToDeliver_MaxResultsLimitsRows()
     {
-        var stock = GmeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = GmeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var ftds = Enumerable
             .Range(1, 5)
             .Select(i => new FailToDeliver
             {
                 EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
-                ListedTicker = stock.Ticker,
+                ListedTicker = stock.Presentation.Listing.Ticker,
                 SettlementDate = new DateOnly(2026, 4, i),
                 Quantity = 10_000 * i,
                 Price = 25.00m,
@@ -164,7 +163,7 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFailsToDeliver_TrimsAndUppercasesTicker()
     {
-        DbContext.Set<CommonStock>().Add(GmeStock());
+        DbContext.Set<EquityIssuer>().Add(GmeStock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetFailsToDeliver("  gme  ");

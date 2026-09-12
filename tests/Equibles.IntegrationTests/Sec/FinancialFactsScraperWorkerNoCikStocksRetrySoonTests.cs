@@ -65,8 +65,8 @@ public class FinancialFactsScraperWorkerNoCikStocksRetrySoonTests : IAsyncLifeti
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(FinancialConceptRepository))
                     .Returns(new FinancialConceptRepository(ctx));
                 sp.GetService(typeof(FinancialFactsSyncStatusRepository))
@@ -99,14 +99,13 @@ public class FinancialFactsScraperWorkerNoCikStocksRetrySoonTests : IAsyncLifeti
         // filter must exclude it, leaving stockIds.Count == 0.
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>()
+            seed.Set<EquityIssuer>()
                 .Add(
-                    new CommonStock
-                    {
-                        Id = Guid.NewGuid(),
-                        Ticker = "NOCIK",
-                        Name = "Pre-sync placeholder",
-                    }
+                    Equibles.TestSupport.EquityIssuerSeed.Create(
+                        Id: Guid.NewGuid(),
+                        Ticker: "NOCIK",
+                        Name: "Pre-sync placeholder"
+                    )
                 );
             await seed.SaveChangesAsync(CancellationToken.None);
         }

@@ -22,13 +22,13 @@ namespace Equibles.Finra.Mcp.Tools;
 public class OffExchangeVolumeTools
 {
     private readonly OffExchangeVolumeRepository _offExchangeVolumeRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public OffExchangeVolumeTools(
         OffExchangeVolumeRepository offExchangeVolumeRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<OffExchangeVolumeTools> logger
@@ -96,7 +96,11 @@ public class OffExchangeVolumeTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, listedTicker);
+                splits = PriceSeriesSplitScope.ForListing(
+                    splits,
+                    stock.Presentation.Listing.Ticker,
+                    listedTicker
+                );
 
                 var table = MarkdownTable.Render(
                     records.OrderBy(r => r.WeekStartDate).ToList(),
@@ -124,7 +128,7 @@ public class OffExchangeVolumeTools
         );
     }
 
-    private static string ListingName(CommonStock stock, string listedTicker) =>
+    private static string ListingName(EquityIssuer stock, string listedTicker) =>
         !SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker)
             ? $" ({stock.Name})"
             : string.Empty;

@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -101,8 +102,9 @@ public class ConceptMetadataWorker : BaseScraperWorker
             stoppingToken.ThrowIfCancellationRequested();
 
             using var scope = ScopeFactory.CreateScope();
-            var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-            var stock = await stockRepository.Get(stockId);
+            EquityIssuerRepository stockRepository =
+                scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+            EquityIssuer stock = await stockRepository.Get(stockId);
             if (stock == null)
                 continue;
 

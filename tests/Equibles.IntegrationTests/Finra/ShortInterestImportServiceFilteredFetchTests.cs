@@ -36,18 +36,16 @@ public class ShortInterestImportServiceFilteredFetchTests : ParadeDbMcpTestBase
     {
         var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
 
-        var have = new CommonStock
-        {
-            Cik = "0000000111",
-            Ticker = "HAVE",
-            Name = "Already Has Data Inc.",
-        };
-        var missing = new CommonStock
-        {
-            Cik = "0000000222",
-            Ticker = "MISS",
-            Name = "Needs Data Inc.",
-        };
+        EquityIssuer have = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000111",
+            Ticker: "HAVE",
+            Name: "Already Has Data Inc."
+        );
+        EquityIssuer missing = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000222",
+            Ticker: "MISS",
+            Name: "Needs Data Inc."
+        );
         DbContext.AddRange(have, missing);
         // HAVE already has short interest for the date → not missing, so the
         // missing set ({MISS}) is a strict subset of tracked → filtered fetch.
@@ -55,9 +53,13 @@ public class ShortInterestImportServiceFilteredFetchTests : ParadeDbMcpTestBase
             new ShortInterest
             {
                 EquityListingId = Equibles
-                    .TestSupport.NativeListingSeed.ForStock(DbContext, have, have.Ticker)
+                    .TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        have,
+                        have.Presentation.Listing.Ticker
+                    )
                     .Id,
-                ListedTicker = have.Ticker,
+                ListedTicker = have.Presentation.Listing.Ticker,
                 SettlementDate = settlementDate,
                 CurrentShortPosition = 1,
             }
@@ -89,7 +91,7 @@ public class ShortInterestImportServiceFilteredFetchTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(ShortInterestRepository), new ShortInterestRepository(DbContext))
         );

@@ -47,12 +47,11 @@ public class InstitutionalHoldingRepositoryDoubleDownDegeneratePriorTests : IAsy
         // "degenerate": 1 share / $70 prior ballooning to 1.9M shares — an effectively
         // new position, not a double down. "genuine": a $100k position grown 50%.
         await using var seed = FreshContext();
-        var stock = new CommonStock
-        {
-            Ticker = "WBS",
-            Name = "Webster Financial",
-            Cik = "0000801337",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "WBS",
+            Name: "Webster Financial",
+            Cik: "0000801337"
+        );
         var degenerate = new InstitutionalHolder { Cik = "degenerate", Name = "Placeholder Prior" };
         var genuine = new InstitutionalHolder { Cik = "genuine", Name = "Conviction Capital" };
         seed.AddRange(stock, degenerate, genuine);
@@ -85,7 +84,7 @@ public class InstitutionalHoldingRepositoryDoubleDownDegeneratePriorTests : IAsy
     }
 
     private static InstitutionalHolding Holding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,

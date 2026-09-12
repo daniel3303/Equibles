@@ -213,14 +213,13 @@ public class CongressionalTradeRepositoryTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private static CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
+    private static EquityIssuer CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name
+        );
     }
 
     private static CongressMember CreateMember(
@@ -238,7 +237,7 @@ public class CongressionalTradeRepositoryTests : IDisposable
 
     private CongressionalTrade CreateTrade(
         CongressMember member,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly? transactionDate = null,
         DateOnly? filingDate = null,
         CongressTransactionType type = CongressTransactionType.Purchase,
@@ -268,18 +267,18 @@ public class CongressionalTradeRepositoryTests : IDisposable
     }
 
     private async Task<(
-        CommonStock apple,
-        CommonStock msft,
+        EquityIssuer apple,
+        EquityIssuer msft,
         CongressMember pelosi,
         CongressMember tuberville
     )> SeedStandardData()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.");
         var pelosi = CreateMember("Nancy Pelosi", CongressPosition.Representative);
         var tuberville = CreateMember("Tommy Tuberville", CongressPosition.Senator);
 
-        _dbContext.Set<CommonStock>().AddRange(apple, msft);
+        _dbContext.Set<EquityIssuer>().AddRange(apple, msft);
         _dbContext.Set<CongressMember>().AddRange(pelosi, tuberville);
         await _dbContext.SaveChangesAsync();
 
@@ -324,8 +323,8 @@ public class CongressionalTradeRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_EmptyDatabase_ReturnsEmpty()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var result = _repository.GetByStock(stock).ToList();
@@ -489,8 +488,8 @@ public class CongressionalTradeRepositoryTests : IDisposable
     public async Task GetByMember_MultipleStocks_ReturnsAll()
     {
         var (apple, msft, pelosi, _) = await SeedStandardData();
-        var goog = CreateStock("GOOG", "Alphabet Inc.");
-        _dbContext.Set<CommonStock>().Add(goog);
+        EquityIssuer goog = CreateStock("GOOG", "Alphabet Inc.");
+        _dbContext.Set<EquityIssuer>().Add(goog);
         await _dbContext.SaveChangesAsync();
 
         _dbContext

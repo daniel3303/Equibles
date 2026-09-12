@@ -31,13 +31,13 @@ public class FundScoringManager
     private const decimal MaxStorableMagnitude = 9_999_999_999_999m;
 
     private readonly InstitutionalHoldingRepository _holdingRepository;
-    private readonly CommonStockRepository _stockRepository;
+    private readonly EquityIssuerRepository _stockRepository;
     private readonly BacktestPriceLoader _priceLoader;
     private readonly FundScoreRepository _fundScoreRepository;
 
     public FundScoringManager(
         InstitutionalHoldingRepository holdingRepository,
-        CommonStockRepository stockRepository,
+        EquityIssuerRepository stockRepository,
         BacktestPriceLoader priceLoader,
         FundScoreRepository fundScoreRepository
     )
@@ -69,7 +69,7 @@ public class FundScoringManager
         if (benchmarkTicker == null)
             return null;
 
-        var benchmarkStock = await _stockRepository.GetByTicker(benchmarkTicker);
+        EquityIssuer benchmarkStock = await _stockRepository.GetUsByTicker(benchmarkTicker);
         if (benchmarkStock == null)
             return null;
 
@@ -101,7 +101,7 @@ public class FundScoringManager
         InstitutionalHolder holder,
         DateOnly asOf,
         int windowYears,
-        CommonStock benchmarkStock,
+        EquityIssuer benchmarkStock,
         string benchmarkListedTicker
     )
     {

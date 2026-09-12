@@ -89,11 +89,11 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         return result;
     }
 
-    public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
+    public async Task<bool> Process(FilingData filing, EquityIssuer companyOutContext)
     {
         // Capture IDs from the outer-scope entity to avoid leaking untracked entities into inner scope
         var companyId = companyOutContext.Id;
-        var companyTicker = companyOutContext.Ticker;
+        var companyTicker = companyOutContext.Presentation?.Listing?.Ticker;
         var companyCiks = new List<string> { companyOutContext.Cik };
         companyCiks.AddRange(companyOutContext.SecondaryCiks);
 
@@ -346,8 +346,18 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         await ApplyPriceValidity(
             transactions,
             companyId,
-            companyOutContext.Ticker,
-            companyOutContext.SecondaryTickers,
+            companyOutContext.Presentation?.Listing?.Ticker,
+            companyOutContext
+                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                .Where(nativeListing =>
+                    nativeListing.MarketCountryCode == "US"
+                    && (
+                        nativeListing.IsDirectoryListed
+                        && nativeListing.Id != companyOutContext.Presentation?.EquityListingId
+                    )
+                )
+                .Select(nativeListing => nativeListing.Ticker)
+                .ToList(),
             dailyStockPriceRepository,
             stockSplitRepository,
             priceValidator

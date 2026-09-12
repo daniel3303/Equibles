@@ -22,8 +22,8 @@ public class HolderQuarterlyActivityCalculatorTests
     [Fact]
     public void Group_OnlyCurrent_AllStocksAreInitiated()
     {
-        var aapl = MakeStock("AAPL", "Apple Inc.");
-        var msft = MakeStock("MSFT", "Microsoft Corp.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = MakeStock("MSFT", "Microsoft Corp.");
 
         var result = HolderQuarterlyActivityCalculator.Group(
             [
@@ -40,7 +40,7 @@ public class HolderQuarterlyActivityCalculatorTests
     [Fact]
     public void Group_OnlyPrevious_AllStocksAreExited()
     {
-        var aapl = MakeStock("AAPL", "Apple Inc.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
 
         var result = HolderQuarterlyActivityCalculator.Group(
             [],
@@ -56,7 +56,7 @@ public class HolderQuarterlyActivityCalculatorTests
     [Fact]
     public void Group_HigherCurrentShares_ClassifiesAsIncreased()
     {
-        var aapl = MakeStock("AAPL", "Apple Inc.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
 
         var result = HolderQuarterlyActivityCalculator.Group(
             [MakeHolding(aapl, shares: 1_500, value: 1_500_000)],
@@ -70,7 +70,7 @@ public class HolderQuarterlyActivityCalculatorTests
     [Fact]
     public void Group_LowerCurrentShares_ClassifiesAsReduced()
     {
-        var aapl = MakeStock("AAPL", "Apple Inc.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
 
         var result = HolderQuarterlyActivityCalculator.Group(
             [MakeHolding(aapl, shares: 600, value: 600_000)],
@@ -84,8 +84,8 @@ public class HolderQuarterlyActivityCalculatorTests
     [Fact]
     public void Group_PercentOfPortfolio_DividesByCurrentQuarterTotalValue()
     {
-        var aapl = MakeStock("AAPL", "Apple Inc.");
-        var msft = MakeStock("MSFT", "Microsoft Corp.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = MakeStock("MSFT", "Microsoft Corp.");
 
         var result = HolderQuarterlyActivityCalculator.Group(
             [
@@ -104,7 +104,7 @@ public class HolderQuarterlyActivityCalculatorTests
     [Fact]
     public void Group_MultipleRowsSameStock_AggregatedIntoOneEntry()
     {
-        var aapl = MakeStock("AAPL", "Apple Inc.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
 
         var result = HolderQuarterlyActivityCalculator.Group(
             [
@@ -119,16 +119,15 @@ public class HolderQuarterlyActivityCalculatorTests
         result[StockPositionChangeType.Unchanged][0].CurrentShares.Should().Be(1_000);
     }
 
-    private static CommonStock MakeStock(string ticker, string name) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = "C" + Guid.NewGuid().ToString("N")[..7],
-        };
+    private static EquityIssuer MakeStock(string ticker, string name) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: "C" + Guid.NewGuid().ToString("N")[..7]
+        );
 
-    private static InstitutionalHolding MakeHolding(CommonStock stock, long shares, long value) =>
+    private static InstitutionalHolding MakeHolding(EquityIssuer stock, long shares, long value) =>
         new()
         {
             EquityIssuerId = stock.Id,

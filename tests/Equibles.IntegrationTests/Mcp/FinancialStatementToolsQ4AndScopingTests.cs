@@ -29,22 +29,21 @@ public class FinancialStatementToolsQ4AndScopingTests : ParadeDbMcpTestBase
         new(
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialStatementTools>()
         );
 
-    private CommonStock AddApple()
+    private EquityIssuer AddApple()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
@@ -62,7 +61,7 @@ public class FinancialStatementToolsQ4AndScopingTests : ParadeDbMcpTestBase
     }
 
     private void AddFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         int fy,
         SecFiscalPeriod period,
@@ -99,7 +98,7 @@ public class FinancialStatementToolsQ4AndScopingTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_Q4IncomeWithOnlyBalanceInstantsUnderQ4_ExplainsTheFilingConventionInsteadOfEmptyTable()
     {
-        var stock = AddApple();
+        EquityIssuer stock = AddApple();
         var revenue = AddConcept("Revenues");
         var assets = AddConcept("Assets");
         // The annual income figure — Q4 flows live inside this duration.
@@ -149,7 +148,7 @@ public class FinancialStatementToolsQ4AndScopingTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_StatementWithNoIngestedLines_SaysSoInsteadOfClaimingNothingIngested()
     {
-        var stock = AddApple();
+        EquityIssuer stock = AddApple();
         var assets = AddConcept("Assets");
         AddFact(
             stock,
@@ -179,7 +178,7 @@ public class FinancialStatementToolsQ4AndScopingTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialStatement_MixedFilingVintages_FlagsTheRestatementSpan()
     {
-        var stock = AddApple();
+        EquityIssuer stock = AddApple();
         var revenue = AddConcept("Revenues");
         var netIncome = AddConcept("NetIncomeLoss");
         AddFact(

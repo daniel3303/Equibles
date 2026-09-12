@@ -34,12 +34,11 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityCombinedTests : IDis
     [Fact]
     public async Task GetQuarterlyActivityCombined_NonFilerSharesCarriedIntoCurrentTotals()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var filer = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -55,7 +54,7 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityCombinedTests : IDis
         var previous = new DateOnly(2024, 3, 31);
         var current = new DateOnly(2024, 6, 30);
 
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(filer, nonFiler);
         _dbContext

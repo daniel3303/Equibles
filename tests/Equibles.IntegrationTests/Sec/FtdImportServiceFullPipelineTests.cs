@@ -94,10 +94,10 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(EquityListingRepository))
                     .Returns(new EquityListingRepository(ctx));
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
-                    .Returns(new CommonStockManager(new CommonStockRepository(ctx), bus));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
+                sp.GetService(typeof(EquityIdentityManager))
+                    .Returns(new EquityIdentityManager(new EquityIssuerRepository(ctx), bus));
                 sp.GetService(typeof(FailToDeliverRepository))
                     .Returns(new FailToDeliverRepository(ctx));
                 var errorRepository = new ErrorRepository(ctx);
@@ -121,24 +121,23 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
         var retiringDate = transitionMonth.AddDays(5);
         var replacementDate = transitionMonth.AddDays(20);
         var latestSettledDate = currentMonth.AddDays(-1);
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "TAP",
-            Name = "Molson Coors Beverage Co",
-            Cik = "24545",
-            Cusip = "60871R100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "TAP",
+            Name: "Molson Coors Beverage Co",
+            Cik: "24545",
+            Cusip: "60871R100"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<FailToDeliver>()
                 .Add(
                     new FailToDeliver
                     {
                         EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
 
-                        ListedTicker = stock.Ticker,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         SettlementDate = latestSettledDate,
                         Quantity = 777,
                         Price = 52.00m,
@@ -219,7 +218,9 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
         await bus.Received(1).Publish(Arg.Any<StockCusipChanged>(), Arg.Any<CancellationToken>());
 
         await using var verify = _fixture.CreateDbContext();
-        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R209");
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("60871R209");
         (await verify.Set<EquityIssuerCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
         var storedFtd = await verify.Set<FailToDeliver>().SingleAsync();
         storedFtd.SettlementDate.Should().Be(latestSettledDate);
@@ -235,24 +236,23 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
         var retiringDate = replayMonth.AddDays(5);
         var replacementDate = replayMonth.AddDays(20);
         var latestSettledDate = currentMonth.AddDays(-1);
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "TAP",
-            Name = "Molson Coors Beverage Co",
-            Cik = "24545",
-            Cusip = "60871R100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "TAP",
+            Name: "Molson Coors Beverage Co",
+            Cik: "24545",
+            Cusip: "60871R100"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<FailToDeliver>()
                 .Add(
                     new FailToDeliver
                     {
                         EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
 
-                        ListedTicker = stock.Ticker,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         SettlementDate = latestSettledDate,
                         Quantity = 777,
                         Price = 52.00m,
@@ -321,7 +321,9 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
             );
 
         await using var verify = _fixture.CreateDbContext();
-        (await verify.Set<CommonStock>().SingleAsync()).Cusip.Should().Be("60871R209");
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("60871R209");
         (await verify.Set<EquityIssuerCusipAlias>().SingleAsync()).Cusip.Should().Be("60871R100");
         var storedFtd = await verify.Set<FailToDeliver>().SingleAsync();
         storedFtd.SettlementDate.Should().Be(latestSettledDate);
@@ -334,17 +336,16 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
         // AAPL has no Cusip yet — SeedCusips' Postgres-only `GetByTickers(...).Where(s.Cusip == null)`
         // path must lift the FTD-derived CUSIP onto the stock row. If that path regresses,
         // the assertion on apple.Cusip catches it.
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
 
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync();
         }
 
@@ -420,9 +421,11 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
 
         // SeedCusips path — only reachable when GetByTickers' Postgres array translation
         // resolves the AAPL row AND the Cusip-null filter kicks in.
-        var reloadedApple = await verify.Set<CommonStock>().SingleAsync(s => s.Id == apple.Id);
+        EquityIssuer reloadedApple = await verify
+            .Set<EquityIssuer>()
+            .SingleAsync(s => s.Id == apple.Id);
         reloadedApple
-            .Cusip.Should()
+            .Presentation.Listing.Security.Cusip.Should()
             .Be(
                 "037833100",
                 "SeedCusips should lift the FTD-derived CUSIP onto a Cusip-less CommonStock row"
@@ -437,24 +440,23 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
         );
         var oldDate = replayMonth.AddDays(14);
         var newDate = replayMonth.AddDays(19);
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<FailToDeliver>()
                 .Add(
                     new FailToDeliver
                     {
                         EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
 
-                        ListedTicker = stock.Ticker,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         SettlementDate = oldDate,
                         Quantity = 777,
                         Price = 180m,
@@ -507,16 +509,15 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
     public async Task Import_IdentityPreparationFails_StillImportsNewRecords()
     {
         var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(-1).AddDays(-1);
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 

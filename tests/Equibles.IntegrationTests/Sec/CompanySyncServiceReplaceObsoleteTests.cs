@@ -40,14 +40,13 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
     public async Task SyncCompaniesFromSecApi_NewCikReusesTickerOfDroppedCik_RetainsHistoricalRow()
     {
         // Seed an "obsolete" stock whose CIK no longer appears in SEC's feed.
-        var obsolete = new CommonStock
-        {
-            Cik = "0000000999",
-            Ticker = "REUSED",
-            Name = "Defunct Old Inc.",
-            PriceHistoryBackfilledTickers = ["REUSED"],
-            HistoricalPriceBackfillAttemptedAt = DateTime.UtcNow,
-        };
+        EquityIssuer obsolete = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000999",
+            Ticker: "REUSED",
+            Name: "Defunct Old Inc.",
+            PriceHistoryBackfilledTickers: ["REUSED"],
+            HistoricalPriceBackfillAttemptedAt: DateTime.UtcNow
+        );
         var exactPriceId = Guid.NewGuid();
         DbContext.Add(
             new EquityDailyStockPrice
@@ -91,10 +90,13 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -114,16 +116,26 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
         await sut.SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().HaveCount(2, "ticker reuse must not erase historical identities");
-        stocks.Should().ContainSingle(stock => stock.Cik == "0000000111" && stock.Active);
-        var retired = stocks
+        stocks
             .Should()
-            .ContainSingle(stock => stock.Cik == "0000000999" && !stock.Active)
+            .ContainSingle(stock => stock.Cik == "0000000111" && stock.Presentation.Listing.Active);
+        EquityIssuer retired = stocks
+            .Should()
+            .ContainSingle(stock => stock.Cik == "0000000999" && !stock.Presentation.Listing.Active)
             .Subject;
-        retired.PriceHistoryBackfilledTickers.Should().BeEmpty();
-        retired.HistoricalPriceBackfillAttemptedAt.Should().BeNull();
-        stocks.Should().OnlyContain(stock => stock.Ticker == "REUSED");
+        retired
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .BeEmpty();
+        retired.Presentation.Listing.HistoricalPriceBackfillAttemptedAt.Should().BeNull();
+        stocks.Should().OnlyContain(stock => stock.Presentation.Listing.Ticker == "REUSED");
         (await verify.Set<EquityDailyStockPrice>().AsNoTracking().ToListAsync())
             .Should()
             .ContainSingle("retiring a listing must preserve its exact historical prices");
@@ -132,13 +144,12 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
     [Fact]
     public async Task SyncCompaniesFromSecApi_TickerHeldByReferenceOwner_PreservesOwnerAndHistory()
     {
-        var referenceOwner = new CommonStock
-        {
-            Cik = "0000000999",
-            Ticker = "REUSED",
-            Name = "Reference-owned ETF",
-            ReferenceTickers = ["REUSED"],
-        };
+        EquityIssuer referenceOwner = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000999",
+            Ticker: "REUSED",
+            Name: "Reference-owned ETF",
+            ReferenceTickers: ["REUSED"]
+        );
         var exactPriceId = Guid.NewGuid();
         DbContext.Add(
             new EquityDailyStockPrice
@@ -176,10 +187,13 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
             ]);
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -198,10 +212,18 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
         await sut.SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stock = await verify.Set<CommonStock>().AsNoTracking().SingleAsync();
+        EquityIssuer stock = await verify.Set<EquityIssuer>().AsNoTracking().SingleAsync();
         stock.Id.Should().Be(referenceOwner.Id);
         stock.Cik.Should().Be("0000000999");
-        stock.ReferenceTickers.Should().Equal("REUSED");
+        stock
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .Equal("REUSED");
         (await verify.Set<EquityDailyStockPrice>().AsNoTracking().SingleAsync())
             .Id.Should()
             .Be(exactPriceId);

@@ -49,12 +49,11 @@ public class SharesOutstandingProviderComparativePeriodTests
     public async Task GetSummedPerClassSharesOutstanding_LatestFilingCarriesComparativePriorPeriodRows_SumsOnlyLatestAsOfDate()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "GOOGL",
-            Name = "Alphabet",
-            Cik = "0001652044",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GOOGL",
+            Name: "Alphabet",
+            Cik: "0001652044"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -123,7 +122,7 @@ public class SharesOutstandingProviderComparativePeriodTests
     }
 
     private static FinancialFact ClassFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly filed,

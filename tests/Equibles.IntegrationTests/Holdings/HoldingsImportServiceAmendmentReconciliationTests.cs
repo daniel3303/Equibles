@@ -68,8 +68,8 @@ public class HoldingsImportServiceAmendmentReconciliationTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -124,17 +124,16 @@ public class HoldingsImportServiceAmendmentReconciliationTests : IAsyncLifetime
     [Fact]
     public async Task ImportDataSet_AmendmentAfterOriginalSameCikAndPeriod_ReplacesNotDuplicates()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -227,25 +226,23 @@ public class HoldingsImportServiceAmendmentReconciliationTests : IAsyncLifetime
         // rollup must recompute the ORIGINAL filing row too (its position count drops),
         // not leave it stale — even though the original accession is absent from this
         // archive's submissions. This pins the (holder, quarter) recompute unit.
-        var aapl = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
-        var msft = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft Corp",
-            Cik = "0000789019",
-            Cusip = "594918104",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corp",
+            Cik: "0000789019",
+            Cusip: "594918104"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().AddRange(aapl, msft);
+            seed.Set<EquityIssuer>().AddRange(aapl, msft);
             await seed.SaveChangesAsync();
         }
 

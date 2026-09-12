@@ -15,7 +15,7 @@ public class StockPriceToolsGetLatestClosingPricesCultureInvarianceTests : Parad
     private StockPriceTools Sut() =>
         new(
             new EquityDailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
@@ -33,12 +33,11 @@ public class StockPriceToolsGetLatestClosingPricesCultureInvarianceTests : Parad
     [Fact]
     public async Task GetLatestClosingPrices_UnderNonInvariantCulture_RendersCloseAndVolumeCultureInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
         EquityDailyStockPrice price = new EquityDailyStockPrice
         {
             Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, stock, null),

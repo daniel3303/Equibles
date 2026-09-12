@@ -28,23 +28,38 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     private StockPriceTools Sut() =>
         new(
             new EquityDailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
         );
 
-    private async Task<CommonStock> SeedBerkshire()
+    private async Task<EquityIssuer> SeedBerkshire(bool historicalSource = false)
     {
-        var stock = new CommonStock
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BRK-B",
+            Name: "Berkshire Hathaway Inc",
+            Cik: "0001067983",
+            SecondaryTickers: ["BRK-A"]
+        );
+        if (historicalSource)
         {
-            Ticker = "BRK-B",
-            Name = "Berkshire Hathaway Inc",
-            Cik = "0001067983",
-            SecondaryTickers = ["BRK-A"],
-        };
-        DbContext.Set<CommonStock>().Add(stock);
-        await DbContext.SaveChangesAsync();
+            var source = new CommonStock
+            {
+                Ticker = "BRK-B",
+                Name = stock.Name,
+                Cik = stock.Cik,
+                SecondaryTickers = ["BRK-A"],
+            };
+            DbContext.Add(source);
+            await DbContext.SaveChangesAsync();
+            stock = await new EquityIssuerRepository(DbContext).Get(source.Id);
+        }
+        else
+        {
+            DbContext.Add(stock);
+            await DbContext.SaveChangesAsync();
+        }
 
         DbContext
             .Set<EquityDailyStockPrice>()
@@ -101,7 +116,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLatestClosingPrices_LegacyPrimarySplit_DoesNotClipSecondaryRange()
     {
-        var stock = await SeedBerkshire();
+        EquityIssuer stock = await SeedBerkshire();
         DbContext
             .Set<EquityDailyStockPrice>()
             .Add(
@@ -146,7 +161,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLatestClosingPrices_LegacyNullSplit_ClipsPrimaryRange()
     {
-        var stock = await SeedBerkshire();
+        EquityIssuer stock = await SeedBerkshire();
         DbContext
             .Set<EquityDailyStockPrice>()
             .Add(
@@ -192,7 +207,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLatestClosingPrices_SecondarySplit_ClipsOnlyThatSecondaryRange()
     {
-        var stock = await SeedBerkshire();
+        EquityIssuer stock = await SeedBerkshire();
         DbContext
             .Set<EquityDailyStockPrice>()
             .Add(
@@ -238,7 +253,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_ASecondarySymbol_ServesItsOwnSeries()
     {
-        var stock = await SeedBerkshire();
+        EquityIssuer stock = await SeedBerkshire();
 
         var result = await Sut().GetStockPrices("BRK-A");
 
@@ -253,7 +268,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task LegacyTableRow_CanCoexistButIsNeverPublished()
     {
-        var stock = await SeedBerkshire();
+        var stock = await SeedBerkshire(historicalSource: true);
         var legacyId = Guid.NewGuid();
         var date = new DateOnly(2026, 7, 31);
         var createdAt = DateTime.UtcNow;
@@ -302,7 +317,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetBollingerBands_ASecondarySymbol_UsesTheSecondarySeries()
     {
-        var stock = await SeedBerkshire();
+        EquityIssuer stock = await SeedBerkshire();
 
         // Every indicator shares one resolution path, so none can drift back to primary bars.
         var result = await Sut().GetBollingerBands("BRK-A");

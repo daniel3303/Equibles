@@ -52,7 +52,7 @@ public class StockSplitRepositoryEffectiveTests
     public async Task GetEffectiveByStock_ExcludesAnnouncedFutureSplit_KeepsPastAndSameDay()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Ticker = "NVDA" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "NVDA");
         var asOf = new DateOnly(2026, 8, 13);
         db.Add(stock);
         db.AddRange(
@@ -74,8 +74,8 @@ public class StockSplitRepositoryEffectiveTests
     public async Task GetEffective_BatchVariant_AppliesTheSameCutoffAcrossStocks()
     {
         await using var db = NewDb();
-        var first = new CommonStock { Ticker = "AAA" };
-        var second = new CommonStock { Ticker = "BBB" };
+        EquityIssuer first = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAA");
+        EquityIssuer second = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "BBB");
         var asOf = new DateOnly(2026, 8, 13);
         db.AddRange(first, second);
         db.AddRange(

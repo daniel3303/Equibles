@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
@@ -17,12 +18,12 @@ namespace Equibles.Yahoo.Mcp.Tools;
 public class DividendTools
 {
     private readonly CashDividendRepository _cashDividendRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly McpToolRunner _runner;
 
     public DividendTools(
         CashDividendRepository cashDividendRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         ErrorManager errorManager,
         ILogger<DividendTools> logger
     )
@@ -60,12 +61,18 @@ public class DividendTools
                 if (normalizedTicker == null)
                     return McpToolExecutor.StockNotFound(ticker);
 
-                var stock = await _commonStockRepository.GetByTicker(normalizedTicker);
+                EquityIssuer stock = await _commonStockRepository.GetUsByTicker(normalizedTicker);
                 if (stock == null)
                     return McpToolExecutor.StockNotFound(ticker);
-                if (!string.Equals(stock.Ticker, normalizedTicker, StringComparison.Ordinal))
+                if (
+                    !string.Equals(
+                        stock.Presentation.Listing.Ticker,
+                        normalizedTicker,
+                        StringComparison.Ordinal
+                    )
+                )
                 {
-                    return $"Dividend history is available only for the current primary ticker {stock.Ticker}; {normalizedTicker} is a separate listing and is not assumed to share its dividends.";
+                    return $"Dividend history is available only for the current primary ticker {stock.Presentation.Listing.Ticker}; {normalizedTicker} is a separate listing and is not assumed to share its dividends.";
                 }
 
                 var start = startDate.HasValue
@@ -85,12 +92,12 @@ public class DividendTools
                         return McpOutput.PagedTruncationNote(0, total, offset);
 
                     return start.HasValue || end.HasValue
-                        ? $"No stored cash-dividend records match the ex-date range for {stock.Ticker}."
-                        : $"No cash-dividend records are stored for {stock.Ticker}.";
+                        ? $"No stored cash-dividend records match the ex-date range for {stock.Presentation.Listing.Ticker}."
+                        : $"No cash-dividend records are stored for {stock.Presentation.Listing.Ticker}.";
                 }
 
                 var result = MarkdownTable.Start(
-                    $"Declared cash dividends for {MarkdownTable.EscapeCell(stock.Name)} ({MarkdownTable.EscapeCell(stock.Ticker)}), newest first:",
+                    $"Declared cash dividends for {MarkdownTable.EscapeCell(stock.Name)} ({MarkdownTable.EscapeCell(stock.Presentation.Listing.Ticker)}), newest first:",
                     "Ex-Date | Amount Per Share | Source",
                     "--------|------------------|-------"
                 );

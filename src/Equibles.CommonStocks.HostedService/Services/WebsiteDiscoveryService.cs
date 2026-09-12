@@ -180,22 +180,23 @@ public class WebsiteDiscoveryService : IImporter
     private async Task<List<WebsiteSourceStock>> LoadCandidates(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository repo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
         var cutoff = DateTime.UtcNow.AddDays(-_options.CheckCooldownDays);
         // Largest companies first: a single bad bulk run can leave thousands of stocks pending,
         // and alphabetical order buries the high-value ones (e.g. TSLA, WMT) behind obscure
         // tickers for hours. Market cap is the priority signal; unknown caps (0) drain last,
         // tie-broken alphabetically for a stable order.
-        var rows = await repo.GetAll()
+        var rows = await repo.GetCurrentUsDirectory()
             .Where(PendingDiscovery(cutoff))
-            .OrderByDescending(s => s.MarketCapitalization)
-            .ThenBy(s => s.Ticker)
+            .OrderByDescending(s => s.Presentation.Listing.Security.MarketCapitalization)
+            .ThenBy(s => s.Presentation.Listing.Ticker)
             .Take(_options.BatchSize)
             .Select(s => new
             {
                 s.Id,
-                s.Ticker,
+                Ticker = s.Presentation.Listing.Ticker,
                 s.Cik,
             })
             .ToListAsync(cancellationToken);
@@ -206,9 +207,10 @@ public class WebsiteDiscoveryService : IImporter
     private async Task<bool> Persist(Guid commonStockId, string website)
     {
         using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository repo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
-        var stock = await repo.Get(commonStockId);
+        EquityIssuer stock = await repo.GetCurrentUsDirectoryIssuer(commonStockId);
         // The stock may have been deleted, or filled in by an overlapping run,
         // between loading the batch and persisting — leave an existing value alone.
         if (stock == null || !string.IsNullOrEmpty(stock.Website))
@@ -223,16 +225,19 @@ public class WebsiteDiscoveryService : IImporter
         // commits (financial-domain event, bypasses any bus outbox); the consumer is idempotent and
         // a reconciliation backstop in IR discovery's candidate query catches a publish lost to a
         // crash, so at-least-once delivery is safe.
-        await _bus.Publish(new StockWebsiteDiscovered(stock.Id, stock.Ticker, website));
+        await _bus.Publish(
+            new StockWebsiteDiscovered(stock.Id, stock.Presentation.Listing.Ticker, website)
+        );
         return true;
     }
 
     private async Task MarkChecked(Guid commonStockId)
     {
         using var scope = _scopeFactory.CreateScope();
-        var repo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository repo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
-        var stock = await repo.Get(commonStockId);
+        EquityIssuer stock = await repo.GetCurrentUsDirectoryIssuer(commonStockId);
         if (stock == null)
             return;
 
@@ -246,7 +251,7 @@ public class WebsiteDiscoveryService : IImporter
     /// attempt since <paramref name="cutoff"/> (never-attempted stocks are always
     /// eligible).
     /// </summary>
-    public static Expression<Func<CommonStock, bool>> PendingDiscovery(DateTime cutoff)
+    public static Expression<Func<EquityIssuer, bool>> PendingDiscovery(DateTime cutoff)
     {
         return s =>
             (s.Website == null || s.Website == "")

@@ -176,3 +176,16 @@
 - `EquityIssuer.LegalEntityIdentifier` stores optional source-backed issuer identity; a ticker, name, or currency cannot establish that identity.
 - Finite completion query: `scripts/verify-native-directory-identity.sql` requires `missing_listings = 0` and `wrong_market = 0`.
 - Retire the country backfill trigger and legacy mapping after native directory writers replace every old writer; preserve the native keys and source evidence.
+
+
+## Native issuer and directory consumers
+
+- Runtime issuer readers and source writers use `EquityIssuerRepository` and `EquityIdentityManager`; `CommonStock` remains a historical schema mapping only until the final contract migration.
+- Issuer profile data lives on `EquityIssuer`, instrument characteristics on `EquitySecurity`, and trading identity/status/checkpoints on `EquityListing`.
+- The U.S. directory query excludes issuer-only records; SEC ingestion uses CIK identity independently of market listing eligibility.
+- Directory updates serialize under a database advisory lock and issuer row lock. Refresh refuses pending issuer, security, listing, or presentation changes before reloading any tracked values.
+- A source primary-symbol change selects a new listing while retaining the old listing, security, and all attached observations. Foreign listing rows remain unchanged.
+- Failed directory saves restore both database state and the tracked identity graph before another save can occur.
+- Explicit GUID generation is application-owned for issuer, security, and listing entities; `PreserveAssignedEquityIdentityKeys` changes EF metadata without changing stored rows.
+- U.S. source-symbol readers use native listings directly; ambiguous same-owner/same-symbol U.S. matches cannot merge histories.
+- Retained historical migration fixtures continue to seed the historical schema. An unattributed FINRA row still triggers an atomic migration refusal; its unknown identity must be resolved or preserved explicitly before final cutover.

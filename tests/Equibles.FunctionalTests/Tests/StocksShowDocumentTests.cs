@@ -31,18 +31,16 @@ public class StocksShowDocumentTests
         var docId = Guid.NewGuid();
         await _web.ResetAndSeedAsync(async db =>
         {
-            var aapl = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            };
-            var msft = new CommonStock
-            {
-                Ticker = "MSFT",
-                Name = "Microsoft Corp.",
-                Cik = "0000789019",
-            };
+            EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple Inc.",
+                Cik: "0000320193"
+            );
+            EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "MSFT",
+                Name: "Microsoft Corp.",
+                Cik: "0000789019"
+            );
             db.Add(aapl);
             db.Add(msft);
 

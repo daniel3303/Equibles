@@ -56,18 +56,16 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
     [Fact]
     public async Task GetInstitutionSummary_TwoQuarterHolder_RendersAllMetricsAndCaption()
     {
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         var holder = new InstitutionalHolder { Cik = "00010002", Name = "Big Fund LP" };
         DbContext.AddRange(aapl, msft, holder);
         var prior = new DateOnly(2024, 9, 30);
@@ -100,12 +98,11 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
     [Fact]
     public async Task GetInstitutionSummary_ExplicitReportDate_HonorsArgumentWhenItMatches()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "TSLA",
-            Name = "Tesla Inc.",
-            Cik = "0001318605",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TSLA",
+            Name: "Tesla Inc.",
+            Cik: "0001318605"
+        );
         var holder = new InstitutionalHolder { Cik = "00010003", Name = "Targeted Capital" };
         DbContext.AddRange(stock, holder);
         var q3 = new DateOnly(2024, 9, 30);
@@ -180,18 +177,16 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
         // single disclosed stake shares the holdings table but is not part of the 13F
         // portfolio — reported AUM and position count must reflect the 13F holdings only,
         // never the 13F + 13G sum that doubled cross-filing holders' AUM (GH-3929).
-        var apple = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var tesla = new CommonStock
-        {
-            Ticker = "TSLA",
-            Name = "Tesla Inc.",
-            Cik = "0001318605",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer tesla = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TSLA",
+            Name: "Tesla Inc.",
+            Cik: "0001318605"
+        );
         var holder = new InstitutionalHolder { Cik = "00090001", Name = "Crossfiling Capital" };
         DbContext.AddRange(apple, tesla, holder);
         var quarterEnd = new DateOnly(2026, 3, 31);
@@ -231,7 +226,7 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             new StockSplitRepository(ctx),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(ctx),
@@ -242,7 +237,7 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
         );
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,

@@ -56,7 +56,7 @@ public class StockTabServicePriceTabMinSyncDateTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_PricesBeforeMinSyncDate_AreExcludedFromSeries()
     {
-        var stock = SeedStockWithPricesAround(new DateOnly(2024, 6, 1));
+        EquityIssuer stock = SeedStockWithPricesAround(new DateOnly(2024, 6, 1));
 
         var sut = CreateService(new WorkerOptions { MinSyncDate = new DateTime(2024, 6, 1) });
         var result = await sut.LoadPriceTab(stock);
@@ -71,7 +71,7 @@ public class StockTabServicePriceTabMinSyncDateTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_NoMinSyncDateConfigured_RendersFullHistory()
     {
-        var stock = SeedStockWithPricesAround(new DateOnly(2024, 6, 1));
+        EquityIssuer stock = SeedStockWithPricesAround(new DateOnly(2024, 6, 1));
 
         var sut = CreateService(workerOptions: null);
         var result = await sut.LoadPriceTab(stock);
@@ -81,16 +81,15 @@ public class StockTabServicePriceTabMinSyncDateTests : IDisposable
     }
 
     // Seeds 5 consecutive daily rows before the pivot date and 5 from it onward.
-    private CommonStock SeedStockWithPricesAround(DateOnly pivot)
+    private EquityIssuer SeedStockWithPricesAround(DateOnly pivot)
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         for (var i = -5; i < 5; i++)
         {
             _dbContext
@@ -134,7 +133,7 @@ public class StockTabServicePriceTabMinSyncDateTests : IDisposable
             new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             workerOptions == null ? null : Options.Create(workerOptions)
         );
 }

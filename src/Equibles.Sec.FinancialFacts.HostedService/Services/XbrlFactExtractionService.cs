@@ -624,7 +624,6 @@ public class XbrlFactExtractionService
             return;
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
         var listedRepository =
             scope.ServiceProvider.GetRequiredService<IssuerSecurityRegistrationRepository>();
         var evidenceRepository =
@@ -683,17 +682,6 @@ public class XbrlFactExtractionService
                 tickerRow.Title
             );
             primaryListing.Security.RegistrationTitle = tickerRow.Title;
-        }
-
-        // Keep retiring readers synchronized until the legacy core is removed at cutover.
-        var stock = await stockRepository
-            .GetByIds([issuer.Id])
-            .FirstOrDefaultAsync(cancellationToken);
-        var legacyTicker = NormalizeTradingSymbol(stock?.Ticker);
-        if (legacyTicker != null && existingBySymbol.TryGetValue(legacyTicker, out var legacyRow))
-        {
-            stock.ListedSecurityType = ListedSecurityClassifier.Classify(legacyRow.Title);
-            stock.ListedSecurityTitle = legacyRow.Title;
         }
 
         await listedRepository.SaveChanges();

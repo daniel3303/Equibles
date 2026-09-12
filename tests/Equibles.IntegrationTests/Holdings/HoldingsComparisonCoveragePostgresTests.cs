@@ -19,8 +19,14 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
     [InlineData(20)]
     public async Task History_BatchesEvidenceRegardlessOfQuarterCount(int quarterCount)
     {
-        var stock = new CommonStock { Ticker = "COVER", Name = "Coverage subject" };
-        var other = new CommonStock { Ticker = "OTHER", Name = "Other issuer" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "COVER",
+            Name: "Coverage subject"
+        );
+        EquityIssuer other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OTHER",
+            Name: "Other issuer"
+        );
         var stable = new InstitutionalHolder { Cik = "1", Name = "Stable filer" };
         var rotating = new InstitutionalHolder { Cik = "2", Name = "Rotating filer" };
         var dates = Enumerable
@@ -52,7 +58,7 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
     }
 
     private static InstitutionalHolding Holding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly date
     ) =>

@@ -39,12 +39,11 @@ public class ShortInterestRepositoryGetStockIdsBySettlementDateTests : IDisposab
 
         foreach (var id in new[] { onDateA, onDateB, otherDateOnly })
             _dbContext.Add(
-                new CommonStock
-                {
-                    Id = id,
-                    Ticker = id.ToString("N"),
-                    Name = "Fixture issuer",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: id,
+                    Ticker: id.ToString("N"),
+                    Name: "Fixture issuer"
+                )
             );
 
         _dbContext

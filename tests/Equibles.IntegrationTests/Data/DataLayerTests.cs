@@ -356,7 +356,7 @@ public class ModuleConfigurationTests : IDisposable
     {
         var context = CreateContext(new CommonStocksModuleConfiguration());
 
-        context.Set<CommonStock>().Should().NotBeNull();
+        context.Set<EquityIssuer>().Should().NotBeNull();
         context.Set<Industry>().Should().NotBeNull();
     }
 
@@ -614,16 +614,18 @@ public class ModuleConfigurationTests : IDisposable
             new CboeModuleConfiguration()
         );
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "TEST",
-            Name = "Test Corp",
-            Cik = "0000000001",
-        };
-        context.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "TEST",
+            Name: "Test Corp",
+            Cik: "0000000001"
+        );
+        context.Set<EquityIssuer>().Add(stock);
         context.SaveChanges();
 
-        context.Set<CommonStock>().Should().ContainSingle(s => s.Ticker == "TEST");
+        context
+            .Set<EquityIssuer>()
+            .Should()
+            .ContainSingle(s => s.Presentation.Listing.Ticker == "TEST");
     }
 }

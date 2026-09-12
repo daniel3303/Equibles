@@ -19,7 +19,7 @@ public class NportToolsGetFundsHoldingStockNegativeMaxResultsTests : ParadeDbMcp
     private NportTools Sut() =>
         new(
             new NportFilingRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             ErrorManager,
             NullLogger<NportTools>()
         );
@@ -35,7 +35,7 @@ public class NportToolsGetFundsHoldingStockNegativeMaxResultsTests : ParadeDbMcp
         // negative value becomes a negative SQL LIMIT that PostgreSQL rejects. A real current
         // position is seeded so the query reaches .Take rather than the earlier no-data return.
         SeedStock("AAPL", HeldCusip);
-        var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
+        EquityIssuer fund = SeedStock("VOO", cusip: null, cik: "0000036405");
 
         var filing = MakeFiling(fund.Id, "acc-current", RecentFilingDate);
         filing.Holdings.Add(MakeHolding(HeldCusip, 5_000_000m));
@@ -52,17 +52,16 @@ public class NportToolsGetFundsHoldingStockNegativeMaxResultsTests : ParadeDbMcp
             );
     }
 
-    private CommonStock SeedStock(string ticker, string cusip, string cik = null)
+    private EquityIssuer SeedStock(string ticker, string cusip, string cik = null)
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker == "VOO" ? "Vanguard 500 Index Fund" : $"{ticker} Inc.",
-            Cik = cik ?? $"00009430{Math.Abs(ticker.GetHashCode()) % 100:D2}",
-            Cusip = cusip,
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker == "VOO" ? "Vanguard 500 Index Fund" : $"{ticker} Inc.",
+            Cik: cik ?? $"00009430{Math.Abs(ticker.GetHashCode()) % 100:D2}",
+            Cusip: cusip
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.SaveChanges();
         return stock;
     }

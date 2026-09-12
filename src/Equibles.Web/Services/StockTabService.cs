@@ -49,7 +49,7 @@ public class StockTabService
     private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly MarketActivityShareRestater _marketActivityShareRestater;
     private readonly StockSplitRepository _stockSplitRepository;
 
@@ -82,7 +82,7 @@ public class StockTabService
         EquityDailyStockPriceRepository dailyStockPriceRepository,
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         IOptions<WorkerOptions> workerOptions = null,
         MarketActivityShareRestater marketActivityShareRestater = null,
         StockSplitRepository stockSplitRepository = null
@@ -114,7 +114,7 @@ public class StockTabService
     // The stock's splits effective as of today, for restating share balances onto today's
     // post-split basis at read time (stored rows stay as filed). Empty when the optional
     // repository is absent (test constructors), which keeps every consumer as-filed.
-    private async Task<IReadOnlyList<StockSplit>> LoadEffectiveSplits(CommonStock stock)
+    private async Task<IReadOnlyList<StockSplit>> LoadEffectiveSplits(EquityIssuer stock)
     {
         if (_stockSplitRepository == null)
             return [];
@@ -122,20 +122,21 @@ public class StockTabService
             .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
             .AsNoTracking()
             .Where(split =>
-                split.PriceSeriesTicker == null || split.PriceSeriesTicker == stock.Ticker
+                split.PriceSeriesTicker == null
+                || split.PriceSeriesTicker == stock.Presentation.Listing.Ticker
             )
             .ToListAsync();
     }
 
     // Whether the holdings tab should OPEN in the combined view: the newest quarter's filing
     // window is still open and a prior quarter exists to carry non-filers forward from.
-    public async Task<bool> ShouldDefaultToCombined(CommonStock stock)
+    public async Task<bool> ShouldDefaultToCombined(EquityIssuer stock)
     {
         var reportDates = await LoadClampedReportDates(stock);
         return reportDates.Count >= 2 && CombinedQuarterHelper.IsFilingWindowOpen(reportDates[0]);
     }
 
-    public async Task<HoldingsTabViewModel> LoadHoldingsTab(CommonStock stock, DateOnly? date)
+    public async Task<HoldingsTabViewModel> LoadHoldingsTab(EquityIssuer stock, DateOnly? date)
     {
         var reportDates = await LoadClampedReportDates(stock);
 
@@ -150,7 +151,7 @@ public class StockTabService
             {
                 AvailableDates = reportDates,
                 SelectedDate = selectedDate,
-                Ticker = stock.Ticker,
+                Ticker = stock.Presentation.Listing.Ticker,
                 IsCombinedAvailable = isCombinedAvailable,
             };
         }
@@ -178,7 +179,7 @@ public class StockTabService
             allPrevious,
             filersWithCurrentQuarterFilings,
             effectiveSplits,
-            stock.Ticker
+            stock.Presentation.Listing.Ticker
         );
 
         var allChanges = grouped.SelectMany(g => g.Value).ToList();
@@ -194,16 +195,20 @@ public class StockTabService
         {
             AvailableDates = reportDates,
             SelectedDate = selectedDate,
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
             TotalValue = allCurrent.Sum(h => h.Value),
             // Restated onto today's split basis so the header stat matches the ownership
             // trend's latest point (the trend is restated by MarketActivityShareRestater)
             // and stays comparable to today's SharesOutStanding.
             TotalShares = allCurrent.Sum(h =>
-                HoldingShareRestatement.RestateToToday(h, effectiveSplits, stock.Ticker)
+                HoldingShareRestatement.RestateToToday(
+                    h,
+                    effectiveSplits,
+                    stock.Presentation.Listing.Ticker
+                )
             ),
             HolderCount = allCurrent.Select(h => h.InstitutionalHolderId).Distinct().Count(),
-            SharesOutstanding = stock.SharesOutStanding,
+            SharesOutstanding = stock.Presentation.Listing.Security.SharesOutstanding,
             OwnershipTrend = await LoadOwnershipTrend(stock),
             GroupedHolders = grouped,
             BucketCounts = bucketCounts,
@@ -215,7 +220,7 @@ public class StockTabService
         };
     }
 
-    public async Task<HoldingsTabViewModel> LoadHoldingsCombinedTab(CommonStock stock)
+    public async Task<HoldingsTabViewModel> LoadHoldingsCombinedTab(EquityIssuer stock)
     {
         var reportDates = await LoadClampedReportDates(stock);
 
@@ -224,7 +229,7 @@ public class StockTabService
             return new HoldingsTabViewModel
             {
                 AvailableDates = reportDates,
-                Ticker = stock.Ticker,
+                Ticker = stock.Presentation.Listing.Ticker,
                 IsCombinedView = true,
                 IsCombinedAvailable = false,
             };
@@ -259,7 +264,11 @@ public class StockTabService
                         .ThenByDescending(h => h.FilingDate)
                         .First(),
                     CurrentShares = g.Sum(h =>
-                        HoldingShareRestatement.RestateToToday(h, effectiveSplits, stock.Ticker)
+                        HoldingShareRestatement.RestateToToday(
+                            h,
+                            effectiveSplits,
+                            stock.Presentation.Listing.Ticker
+                        )
                     ),
                     CurrentValue = g.Sum(h => h.Value),
                     ChangeType = PositionChangeType.Unchanged,
@@ -283,13 +292,17 @@ public class StockTabService
         {
             AvailableDates = reportDates,
             SelectedDate = current,
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
             TotalValue = allCombined.Sum(h => h.Value),
             TotalShares = allCombined.Sum(h =>
-                HoldingShareRestatement.RestateToToday(h, effectiveSplits, stock.Ticker)
+                HoldingShareRestatement.RestateToToday(
+                    h,
+                    effectiveSplits,
+                    stock.Presentation.Listing.Ticker
+                )
             ),
             HolderCount = holders.Count,
-            SharesOutstanding = stock.SharesOutStanding,
+            SharesOutstanding = stock.Presentation.Listing.Security.SharesOutstanding,
             OwnershipTrend = await LoadOwnershipTrend(stock),
             GroupedHolders = grouped,
             BucketCounts = grouped.ToDictionary(g => g.Key, g => g.Value.Count),
@@ -298,7 +311,7 @@ public class StockTabService
         };
     }
 
-    public async Task<ShortVolumeTabViewModel> LoadShortVolumeTab(CommonStock stock)
+    public async Task<ShortVolumeTabViewModel> LoadShortVolumeTab(EquityIssuer stock)
     {
         // AsNoTracking: the rows are mutated below for display (restated onto today's
         // split basis) and must never flush back through a tracked context.
@@ -319,10 +332,14 @@ public class StockTabService
             // exactly as filed (same-observation ratios are split-invariant).
             row.TotalVolume = SplitAdjustment.AdjustShareCount(row.TotalVolume, factor);
         }
-        return new ShortVolumeTabViewModel { ShortVolumes = shortVolumes, Ticker = stock.Ticker };
+        return new ShortVolumeTabViewModel
+        {
+            ShortVolumes = shortVolumes,
+            Ticker = stock.Presentation.Listing.Ticker,
+        };
     }
 
-    public async Task<ShortInterestTabViewModel> LoadShortInterestTab(CommonStock stock)
+    public async Task<ShortInterestTabViewModel> LoadShortInterestTab(EquityIssuer stock)
     {
         var shortInterests = await FetchMostRecentAscending(
             _shortInterestRepository.GetHistoryByStock(stock).AsNoTracking(),
@@ -358,28 +375,32 @@ public class StockTabService
         return new ShortInterestTabViewModel
         {
             ShortInterests = shortInterests,
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
         };
     }
 
     // FINRA report magnitudes belong to the stock's PRIMARY listed series, so restatement
     // uses only splits attributed to that exact series (a sibling share class's split must
     // never rescale them).
-    private async Task<List<StockSplit>> LoadPrimarySeriesSplits(CommonStock stock) =>
+    private async Task<List<StockSplit>> LoadPrimarySeriesSplits(EquityIssuer stock) =>
         PriceSeriesSplitScope.ForListing(
             await LoadEffectiveSplits(stock),
-            stock.Ticker,
-            stock.Ticker
+            stock.Presentation.Listing.Ticker,
+            stock.Presentation.Listing.Ticker
         );
 
-    public async Task<FtdTabViewModel> LoadFtdTab(CommonStock stock)
+    public async Task<FtdTabViewModel> LoadFtdTab(EquityIssuer stock)
     {
         var ftds = await FetchMostRecentAscending(
             _failToDeliverRepository.GetByStock(stock),
             f => f.SettlementDate,
             90
         );
-        return new FtdTabViewModel { FailsToDeliver = ftds, Ticker = stock.Ticker };
+        return new FtdTabViewModel
+        {
+            FailsToDeliver = ftds,
+            Ticker = stock.Presentation.Listing.Ticker,
+        };
     }
 
     // Fetch the most recent N rows from a query in descending order then re-sort
@@ -411,16 +432,20 @@ public class StockTabService
         Expression<Func<T, TKey>> orderKey
     ) => source.TakeMostRecent(orderKey, RecentRowLimit).ToListAsync();
 
-    public async Task<DocumentsTabViewModel> LoadDocumentsTab(CommonStock stock)
+    public async Task<DocumentsTabViewModel> LoadDocumentsTab(EquityIssuer stock)
     {
         var documents = await TakeMostRecent(
             _documentRepository.GetByIssuerId((stock).Id),
             d => d.ReportingDate
         );
-        return new DocumentsTabViewModel { Documents = documents, Ticker = stock.Ticker };
+        return new DocumentsTabViewModel
+        {
+            Documents = documents,
+            Ticker = stock.Presentation.Listing.Ticker,
+        };
     }
 
-    public async Task<InsiderTradingTabViewModel> LoadInsiderTradingTab(CommonStock stock)
+    public async Task<InsiderTradingTabViewModel> LoadInsiderTradingTab(EquityIssuer stock)
     {
         var transactionQuery = _insiderTransactionRepository
             .GetByIssuerIdWithOwner((stock).Id)
@@ -433,33 +458,41 @@ public class StockTabService
         return new InsiderTradingTabViewModel
         {
             Transactions = transactions,
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
         };
     }
 
-    public async Task<ProposedSalesTabViewModel> LoadProposedSalesTab(CommonStock stock)
+    public async Task<ProposedSalesTabViewModel> LoadProposedSalesTab(EquityIssuer stock)
     {
         var filings = await TakeMostRecent(
             _form144FilingRepository.GetByIssuerId((stock).Id),
             f => f.FilingDate
         );
-        return new ProposedSalesTabViewModel { Filings = filings, Ticker = stock.Ticker };
+        return new ProposedSalesTabViewModel
+        {
+            Filings = filings,
+            Ticker = stock.Presentation.Listing.Ticker,
+        };
     }
 
-    public async Task<ExemptOfferingsTabViewModel> LoadExemptOfferingsTab(CommonStock stock)
+    public async Task<ExemptOfferingsTabViewModel> LoadExemptOfferingsTab(EquityIssuer stock)
     {
         var filings = await TakeMostRecent(
             _formDFilingRepository.GetByIssuerId((stock).Id),
             f => f.FilingDate
         );
-        return new ExemptOfferingsTabViewModel { Filings = filings, Ticker = stock.Ticker };
+        return new ExemptOfferingsTabViewModel
+        {
+            Filings = filings,
+            Ticker = stock.Presentation.Listing.Ticker,
+        };
     }
 
     // Whether the stock has any fund-only filings, used to decide if the
     // Fund Operations (N-CEN) and Fund Holdings (NPORT) tabs are shown at all.
     // Operating companies file neither, so both flags are false for them.
     public async Task<(bool HasFundHoldings, bool HasFundOperations)> LoadFundTabAvailability(
-        CommonStock stock
+        EquityIssuer stock
     )
     {
         var hasFundHoldings = await _nportFilingRepository.GetByIssuerId(stock.Id).AnyAsync();
@@ -467,16 +500,20 @@ public class StockTabService
         return (hasFundHoldings, hasFundOperations);
     }
 
-    public async Task<FundOperationsTabViewModel> LoadFundOperationsTab(CommonStock stock)
+    public async Task<FundOperationsTabViewModel> LoadFundOperationsTab(EquityIssuer stock)
     {
         var filings = await TakeMostRecent(
             _nCenFilingRepository.GetByIssuerId((stock).Id).Include(f => f.ServiceProviders),
             f => f.FilingDate
         );
-        return new FundOperationsTabViewModel { Filings = filings, Ticker = stock.Ticker };
+        return new FundOperationsTabViewModel
+        {
+            Filings = filings,
+            Ticker = stock.Presentation.Listing.Ticker,
+        };
     }
 
-    public async Task<FundHoldingsTabViewModel> LoadFundHoldingsTab(CommonStock stock)
+    public async Task<FundHoldingsTabViewModel> LoadFundHoldingsTab(EquityIssuer stock)
     {
         var filing = await _nportFilingRepository
             .GetByIssuerId(stock.Id)
@@ -484,7 +521,7 @@ public class StockTabService
             .FirstOrDefaultAsync();
 
         if (filing == null)
-            return new FundHoldingsTabViewModel { Ticker = stock.Ticker };
+            return new FundHoldingsTabViewModel { Ticker = stock.Presentation.Listing.Ticker };
 
         // NPORT-P reports can carry thousands of positions; show the largest by value and
         // report the full count rather than loading the whole schedule into the page.
@@ -497,14 +534,16 @@ public class StockTabService
 
         return new FundHoldingsTabViewModel
         {
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
             Filing = filing,
             Holdings = holdings,
             TotalHoldings = totalHoldings,
         };
     }
 
-    public async Task<CongressionalTradesTabViewModel> LoadCongressionalTradesTab(CommonStock stock)
+    public async Task<CongressionalTradesTabViewModel> LoadCongressionalTradesTab(
+        EquityIssuer stock
+    )
     {
         IQueryable<Congress.Data.Models.CongressionalTrade> tradeQuery =
             _congressionalTradeRepository.GetByStock(stock).Include(t => t.CongressMember);
@@ -513,13 +552,17 @@ public class StockTabService
             tradeQuery = tradeQuery.Where(t => t.TransactionDate >= minDate);
         }
         var trades = await TakeMostRecent(tradeQuery, t => t.TransactionDate);
-        return new CongressionalTradesTabViewModel { Trades = trades, Ticker = stock.Ticker };
+        return new CongressionalTradesTabViewModel
+        {
+            Trades = trades,
+            Ticker = stock.Presentation.Listing.Ticker,
+        };
     }
 
-    public Task<PriceTabViewModel> LoadPriceTab(CommonStock stock) =>
-        LoadPriceTab(stock, stock.Ticker);
+    public Task<PriceTabViewModel> LoadPriceTab(EquityIssuer stock) =>
+        LoadPriceTab(stock, stock.Presentation.Listing.Ticker);
 
-    public async Task<PriceTabViewModel> LoadPriceTab(CommonStock stock, string listedTicker)
+    public async Task<PriceTabViewModel> LoadPriceTab(EquityIssuer stock, string listedTicker)
     {
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, listedTicker);
         var priceQuery = _dailyStockPriceRepository.GetTradedByStock(stock, resolvedTicker);
@@ -579,14 +622,14 @@ public class StockTabService
     // the stock has no prices, the benchmark isn't tracked, this stock IS the
     // benchmark, or the benchmark has no prices in the lookback window.
     private async Task<PriceReturns> LoadBenchmarkReturns(
-        CommonStock stock,
+        EquityIssuer stock,
         List<EquityDailyStockPrice> stockPrices
     )
     {
         if (stockPrices.Count == 0)
             return null;
 
-        var benchmark = await _commonStockRepository.GetByPrimaryTicker(BenchmarkTicker);
+        EquityIssuer benchmark = await _commonStockRepository.GetPrimaryUsByTicker(BenchmarkTicker);
         if (benchmark == null || benchmark.Id == stock.Id)
             return null;
 
@@ -606,7 +649,7 @@ public class StockTabService
     }
 
     public async Task<FinancialsTabViewModel> LoadFinancialsTab(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialStatementType statementType,
         int? year,
         SecFiscalPeriod? period
@@ -616,7 +659,7 @@ public class StockTabService
 
         var viewModel = new FinancialsTabViewModel
         {
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
             StatementType = statementType,
             AvailablePeriods = availablePeriods,
         };
@@ -642,7 +685,7 @@ public class StockTabService
         return viewModel;
     }
 
-    private async Task<List<FinancialsPeriodOption>> BuildAvailablePeriods(CommonStock stock)
+    private async Task<List<FinancialsPeriodOption>> BuildAvailablePeriods(EquityIssuer stock)
     {
         // Only periods with an actual STATEMENT fact qualify: filer-extension
         // (Custom) KPI facts also live in the consolidated context now, and a
@@ -695,7 +738,7 @@ public class StockTabService
     }
 
     private async Task<List<FinancialsLineViewModel>> BuildStatementLines(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialStatementType statementType,
         int fiscalYear,
         SecFiscalPeriod fiscalPeriod
@@ -848,12 +891,15 @@ public class StockTabService
             _ => 0,
         };
 
-    public Task<KeyMetricsViewModel> LoadKeyMetrics(CommonStock stock) =>
-        LoadKeyMetrics(stock, stock.Ticker);
+    public Task<KeyMetricsViewModel> LoadKeyMetrics(EquityIssuer stock) =>
+        LoadKeyMetrics(stock, stock.Presentation.Listing.Ticker);
 
-    public async Task<KeyMetricsViewModel> LoadKeyMetrics(CommonStock stock, string listedTicker)
+    public async Task<KeyMetricsViewModel> LoadKeyMetrics(EquityIssuer stock, string listedTicker)
     {
-        var vm = new KeyMetricsViewModel { MarketCapitalization = stock.MarketCapitalization };
+        var vm = new KeyMetricsViewModel
+        {
+            MarketCapitalization = stock.Presentation.Listing.Security.MarketCapitalization,
+        };
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, listedTicker);
 
         var recentPrices = await _dailyStockPriceRepository
@@ -871,7 +917,13 @@ public class StockTabService
 
         // SEC EPS facts belong to the filer's primary share basis. Keep the secondary listing's
         // exact price/range, but never combine it with primary-only per-share fundamentals.
-        if (!string.Equals(resolvedTicker, stock.Ticker, StringComparison.Ordinal))
+        if (
+            !string.Equals(
+                resolvedTicker,
+                stock.Presentation.Listing.Ticker,
+                StringComparison.Ordinal
+            )
+        )
             return vm;
 
         var epsConcept = await _financialConceptRepository
@@ -902,7 +954,7 @@ public class StockTabService
     }
 
     public async Task<HolderDetailViewModel> LoadHolderDetail(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder
     )
     {
@@ -926,7 +978,7 @@ public class StockTabService
                 holding.Shares = HoldingShareRestatement.RestateToToday(
                     holding,
                     effectiveSplits,
-                    stock.Ticker
+                    stock.Presentation.Listing.Ticker
                 );
         }
 
@@ -939,7 +991,10 @@ public class StockTabService
     }
 
     // Stamp each holder's first-owned quarter for this stock via one batched lookup.
-    private async Task ApplyQuarterFirstOwned(CommonStock stock, List<HolderPositionChange> changes)
+    private async Task ApplyQuarterFirstOwned(
+        EquityIssuer stock,
+        List<HolderPositionChange> changes
+    )
     {
         var holderIds = changes.Select(h => h.InstitutionalHolderId).Distinct().ToList();
         var firstOwned = await _institutionalHoldingRepository
@@ -953,14 +1008,14 @@ public class StockTabService
     }
 
     private Task<List<InstitutionalHolding>> LoadHoldingsByStockWithHolder(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly reportDate
     ) => _institutionalHoldingRepository.Get13FByStockWithHolder(stock, reportDate).ToListAsync();
 
     // Report dates for the holdings tab, newest first, clamped to the sync
     // floor: quarters before it hold partial filings, so their dates must not
     // appear in the selector, the stats, or the combined view's quarter pair.
-    private async Task<List<DateOnly>> LoadClampedReportDates(CommonStock stock)
+    private async Task<List<DateOnly>> LoadClampedReportDates(EquityIssuer stock)
     {
         IEnumerable<DateOnly> dates =
             await _institutionalHoldingRepository.Get13FReportDatesByStockSnapshotBacked(stock);
@@ -974,7 +1029,7 @@ public class StockTabService
     // Mirrors the header-stat semantics per report date: Shares summed over every
     // row (share classes included), holders counted distinct — so the trend's
     // latest point matches the stats shown for the latest quarter.
-    private async Task<List<OwnershipTrendPoint>> LoadOwnershipTrend(CommonStock stock)
+    private async Task<List<OwnershipTrendPoint>> LoadOwnershipTrend(EquityIssuer stock)
     {
         var snapshotActivity =
             await _institutionalHoldingRepository.GetStockActivitySnapshotsByStockSnapshotBacked(

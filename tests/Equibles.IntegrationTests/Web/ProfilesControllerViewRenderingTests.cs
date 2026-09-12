@@ -27,7 +27,10 @@ public class ProfilesControllerViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple Inc."
+            );
             var holder = new InstitutionalHolder
             {
                 Cik = "0001067983",
@@ -65,7 +68,10 @@ public class ProfilesControllerViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock { Ticker = "MSFT", Name = "Microsoft Corp" };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "MSFT",
+                Name: "Microsoft Corp"
+            );
             var owner = new InsiderOwner
             {
                 OwnerCik = "0001214156",
@@ -103,7 +109,10 @@ public class ProfilesControllerViewRenderingTests
         var memberId = Guid.NewGuid();
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock { Ticker = "NVDA", Name = "NVIDIA Corp" };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "NVDA",
+                Name: "NVIDIA Corp"
+            );
             var member = new CongressMember
             {
                 Id = memberId,

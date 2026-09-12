@@ -61,8 +61,8 @@ public class FinancialFactsImportServiceSecEdgarHttpFailureTests : IAsyncLifetim
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(FinancialConceptRepository))
                     .Returns(new FinancialConceptRepository(ctx));
                 sp.GetService(typeof(FinancialFactsSyncStatusRepository))
@@ -78,16 +78,15 @@ public class FinancialFactsImportServiceSecEdgarHttpFailureTests : IAsyncLifetim
     [Fact]
     public async Task Import_GetCompanyFactsThrowsHttpRequestException_ReturnsWithoutCrashOrWrites()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 

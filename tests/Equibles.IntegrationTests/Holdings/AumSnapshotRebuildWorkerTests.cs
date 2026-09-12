@@ -213,7 +213,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
             .Select(i => new DateOnly(2023, 12, 31).AddMonths(3 * i))
             .ToList();
         InstitutionalHolder holder;
-        CommonStock aapl;
+        EquityIssuer aapl;
         await using (var seed = FreshContext())
         {
             var tech = new Sector { Name = "Technology" };
@@ -222,13 +222,12 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
             var industry = new Industry { Name = "Software", SectorId = tech.Id };
             seed.Add(industry);
             await seed.SaveChangesAsync();
-            aapl = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple",
-                Cik = "C0000320193",
-                IndustryId = industry.Id,
-            };
+            aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple",
+                Cik: "C0000320193",
+                IndustryId: industry.Id
+            );
             seed.Add(aapl);
             holder = new InstitutionalHolder { Cik = "H001", Name = "Holder H001" };
             seed.Add(holder);
@@ -262,7 +261,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                     {
                         EquityIssuerId = aapl.Id,
                         ReportDate = quarter,
-                        PriceSeriesTicker = aapl.Ticker,
+                        PriceSeriesTicker = aapl.Presentation.Listing.Ticker,
                         CurrentShares = 1_000,
                     }
                 );
@@ -303,7 +302,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
             .Range(0, 5)
             .Select(i => new DateOnly(2023, 12, 31).AddMonths(3 * i))
             .ToList();
-        CommonStock stock;
+        EquityIssuer stock;
         await using (var seed = FreshContext())
         {
             var sector = new Sector { Name = "Technology" };
@@ -312,13 +311,12 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
             var industry = new Industry { Name = "Software", SectorId = sector.Id };
             seed.Add(industry);
             await seed.SaveChangesAsync();
-            stock = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple",
-                Cik = "C0000320193",
-                IndustryId = industry.Id,
-            };
+            stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple",
+                Cik: "C0000320193",
+                IndustryId: industry.Id
+            );
             var holder = new InstitutionalHolder { Cik = "H001", Name = "Holder H001" };
             seed.AddRange(stock, holder);
             await seed.SaveChangesAsync();
@@ -399,7 +397,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         var oldest = quarters[0];
         var recent = quarters.Skip(1).ToList();
         InstitutionalHolder holder;
-        CommonStock aapl;
+        EquityIssuer aapl;
         await using (var seed = FreshContext())
         {
             var tech = new Sector { Name = "Technology" };
@@ -408,13 +406,12 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
             var industry = new Industry { Name = "Software", SectorId = tech.Id };
             seed.Add(industry);
             await seed.SaveChangesAsync();
-            aapl = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple",
-                Cik = "C0000320193",
-                IndustryId = industry.Id,
-            };
+            aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple",
+                Cik: "C0000320193",
+                IndustryId: industry.Id
+            );
             seed.Add(aapl);
             holder = new InstitutionalHolder { Cik = "H001", Name = "Holder H001" };
             seed.Add(holder);
@@ -459,7 +456,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                     {
                         EquityIssuerId = aapl.Id,
                         ReportDate = quarter,
-                        PriceSeriesTicker = aapl.Ticker,
+                        PriceSeriesTicker = aapl.Presentation.Listing.Ticker,
                         CurrentShares = 1_000,
                     }
                 );
@@ -548,13 +545,12 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         var industry = new Industry { Name = "Software", SectorId = tech.Id };
         seed.Add(industry);
         await seed.SaveChangesAsync();
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "C0000320193",
-            IndustryId = industry.Id,
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "C0000320193",
+            IndustryId: industry.Id
+        );
         seed.Add(aapl);
         var holder = new InstitutionalHolder { Cik = "H001", Name = "Holder H001" };
         seed.Add(holder);
@@ -567,7 +563,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long value,
@@ -587,7 +583,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
             InvestmentDiscretion = InvestmentDiscretion.Sole,
             AccessionNumber = accession,
             Cusip =
-                $"{stock.Ticker[..Math.Min(4, stock.Ticker.Length)]}{stock.Id.GetHashCode():X8}"[
+                $"{stock.Presentation.Listing.Ticker[..Math.Min(4, stock.Presentation.Listing.Ticker.Length)]}{stock.Id.GetHashCode():X8}"[
                     ..9
                 ],
         };

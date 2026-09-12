@@ -24,7 +24,10 @@ public class FinancialFactsImportServiceTryBuildParsedFactInstantPeriodStartTest
         var serviceType = typeof(FinancialFactsImportService);
         var parsedFactType = serviceType.GetNestedType("ParsedFact", BindingFlags.NonPublic);
 
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL"
+        );
         var instantEnd = new DateOnly(2024, 12, 31);
         var value = new CompanyFactValue
         {

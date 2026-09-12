@@ -25,12 +25,11 @@ public class InsiderTradingToolsGetRoleOfficerBlankTitleTests : ParadeDbMcpTestB
     [Fact]
     public async Task GetInsiderTransactions_OfficerWithBlankTitle_ShowsGenericOfficerRole()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var owner = new InsiderOwner
         {
             OwnerCik = "0001234567",
@@ -43,7 +42,7 @@ public class InsiderTradingToolsGetRoleOfficerBlankTitleTests : ParadeDbMcpTestB
             OfficerTitle = "   ",
             IsTenPercentOwner = false,
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<InsiderOwner>().Add(owner);
         DbContext
             .Set<InsiderTransaction>()
@@ -72,7 +71,7 @@ public class InsiderTradingToolsGetRoleOfficerBlankTitleTests : ParadeDbMcpTestB
             new InsiderTransactionRepository(DbContext),
             new InsiderOwnerRepository(DbContext),
             new Form144FilingRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<InsiderTradingTools>()

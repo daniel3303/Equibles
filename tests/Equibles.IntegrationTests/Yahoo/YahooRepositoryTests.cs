@@ -14,8 +14,8 @@ public class DailyStockPriceRepositoryTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly EquityDailyStockPriceRepository _repository;
-    private readonly CommonStock _apple;
-    private readonly CommonStock _microsoft;
+    private readonly EquityIssuer _apple;
+    private readonly EquityIssuer _microsoft;
 
     public DailyStockPriceRepositoryTests()
     {
@@ -25,20 +25,18 @@ public class DailyStockPriceRepositoryTests : IDisposable
         );
         _repository = new EquityDailyStockPriceRepository(_dbContext);
 
-        _apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            SecondaryTickers = ["AAPL-WS"],
-        };
-        _microsoft = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-        };
-        _dbContext.Set<CommonStock>().AddRange(_apple, _microsoft);
+        _apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            SecondaryTickers: ["AAPL-WS"]
+        );
+        _microsoft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corp."
+        );
+        _dbContext.Set<EquityIssuer>().AddRange(_apple, _microsoft);
         _dbContext.SaveChanges();
     }
 
@@ -48,7 +46,7 @@ public class DailyStockPriceRepositoryTests : IDisposable
     }
 
     private EquityDailyStockPrice CreatePrice(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly date,
         decimal close = 150m,
         decimal open = 148m,
@@ -64,9 +62,9 @@ public class DailyStockPriceRepositoryTests : IDisposable
             Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
                 _dbContext,
                 stock,
-                listedTicker ?? stock.Ticker
+                listedTicker ?? stock.Presentation.Listing.Ticker
             ),
-            SourceTicker = listedTicker ?? stock.Ticker,
+            SourceTicker = listedTicker ?? stock.Presentation.Listing.Ticker,
             Date = date,
             Open = open,
             High = high,
@@ -124,8 +122,8 @@ public class DailyStockPriceRepositoryTests : IDisposable
             CreatePrice(_apple, date, close: 12m, listedTicker: "AAPL-WS")
         );
 
-        _apple.Ticker = "AAPL-WS";
-        _apple.SecondaryTickers = ["AAPL"];
+        Equibles.CommonStocks.Data.Helpers.UsEquityDirectory.SelectPrimary(_apple, "AAPL-WS");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(_apple, ["AAPL"]);
         var presentation = _dbContext
             .Set<EquityIssuerPresentation>()
             .Single(row => row.EquityIssuerId == _apple.Id);
@@ -351,9 +349,9 @@ public class YahooStockPriceProviderTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly YahooStockPriceProvider _provider;
-    private readonly CommonStock _apple;
-    private readonly CommonStock _microsoft;
-    private readonly CommonStock _google;
+    private readonly EquityIssuer _apple;
+    private readonly EquityIssuer _microsoft;
+    private readonly EquityIssuer _google;
 
     public YahooStockPriceProviderTests()
     {
@@ -363,25 +361,22 @@ public class YahooStockPriceProviderTests : IDisposable
         );
         _provider = new YahooStockPriceProvider(_dbContext);
 
-        _apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
-        _microsoft = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-        };
-        _google = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GOOG",
-            Name = "Alphabet Inc.",
-        };
-        _dbContext.Set<CommonStock>().AddRange(_apple, _microsoft, _google);
+        _apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
+        _microsoft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corp."
+        );
+        _google = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GOOG",
+            Name: "Alphabet Inc."
+        );
+        _dbContext.Set<EquityIssuer>().AddRange(_apple, _microsoft, _google);
         _dbContext.SaveChanges();
     }
 
@@ -390,7 +385,7 @@ public class YahooStockPriceProviderTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private EquityDailyStockPrice CreatePrice(CommonStock stock, DateOnly date, decimal close)
+    private EquityDailyStockPrice CreatePrice(EquityIssuer stock, DateOnly date, decimal close)
     {
         return new EquityDailyStockPrice
         {
@@ -435,14 +430,13 @@ public class YahooStockPriceProviderTests : IDisposable
         // request must get ITS series, and the primary request must never pick up the
         // secondary's bar.
         var date = new DateOnly(2026, 3, 2);
-        var brk = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BRK-B",
-            Name = "Berkshire Hathaway Inc.",
-            SecondaryTickers = ["BRK-A"],
-        };
-        _dbContext.Set<CommonStock>().Add(brk);
+        EquityIssuer brk = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BRK-B",
+            Name: "Berkshire Hathaway Inc.",
+            SecondaryTickers: ["BRK-A"]
+        );
+        _dbContext.Set<EquityIssuer>().Add(brk);
         await _dbContext.SaveChangesAsync();
 
         EquityDailyStockPrice classA = CreatePrice(brk, date, 774_300m);
@@ -470,14 +464,13 @@ public class YahooStockPriceProviderTests : IDisposable
         // holding stays honestly pending — substituting the primary's close would value the
         // position on the wrong security.
         var date = new DateOnly(2026, 3, 2);
-        var brk = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BRK-B",
-            Name = "Berkshire Hathaway Inc.",
-            SecondaryTickers = ["BRK-A"],
-        };
-        _dbContext.Set<CommonStock>().Add(brk);
+        EquityIssuer brk = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BRK-B",
+            Name: "Berkshire Hathaway Inc.",
+            SecondaryTickers: ["BRK-A"]
+        );
+        _dbContext.Set<EquityIssuer>().Add(brk);
         await _dbContext.SaveChangesAsync();
 
         await SeedPrices(CreatePrice(brk, date, 515.06m));

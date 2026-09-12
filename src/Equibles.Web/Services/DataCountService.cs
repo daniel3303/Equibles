@@ -16,7 +16,7 @@ namespace Equibles.Web.Services;
 [Service]
 public class DataCountService
 {
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly DocumentRepository _documentRepository;
     private readonly InsiderTransactionRepository _insiderTransactionRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
@@ -29,7 +29,7 @@ public class DataCountService
     private readonly CboeVixDailyRepository _cboeVixDailyRepository;
 
     public DataCountService(
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         DocumentRepository documentRepository,
         InsiderTransactionRepository insiderTransactionRepository,
         CongressionalTradeRepository congressionalTradeRepository,

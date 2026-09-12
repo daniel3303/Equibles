@@ -36,19 +36,18 @@ public class SecRepositoryTests : IDisposable
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
-    private CommonStock CreateStock(
+    private EquityIssuer CreateStock(
         string ticker = "AAPL",
         string name = "Apple Inc.",
         List<string> secondaryTickers = null
     )
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            SecondaryTickers = secondaryTickers ?? [],
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            SecondaryTickers: secondaryTickers ?? []
+        );
     }
 
     private File CreateFile(string name = "filing", string extension = "html")
@@ -65,7 +64,7 @@ public class SecRepositoryTests : IDisposable
     }
 
     private Document CreateDocument(
-        CommonStock stock,
+        EquityIssuer stock,
         DocumentType type = null,
         DateOnly? reportingDate = null,
         DateOnly? reportingForDate = null,
@@ -84,14 +83,24 @@ public class SecRepositoryTests : IDisposable
                     Name = stock.Name,
                     Presentation = new EquityIssuerPresentation
                     {
-                        Listing = new EquityListing { Ticker = stock.Ticker },
+                        Listing = new EquityListing { Ticker = stock.Presentation.Listing.Ticker },
                     },
                     Securities =
                     [
                         new EquitySecurity
                         {
                             Listings = stock
-                                .SecondaryTickers.Select(ticker => new EquityListing
+                                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                                .Where(nativeListing =>
+                                    nativeListing.MarketCountryCode == "US"
+                                    && (
+                                        nativeListing.IsDirectoryListed
+                                        && nativeListing.Id != stock.Presentation.EquityListingId
+                                    )
+                                )
+                                .Select(nativeListing => nativeListing.Ticker)
+                                .ToList()
+                                .Select(ticker => new EquityListing
                                 {
                                     Ticker = ticker,
                                     IsDirectoryListed = true,
@@ -110,20 +119,20 @@ public class SecRepositoryTests : IDisposable
         };
     }
 
-    private async Task<CommonStock> SeedStock(
+    private async Task<EquityIssuer> SeedStock(
         string ticker = "AAPL",
         string name = "Apple Inc.",
         List<string> secondaryTickers = null
     )
     {
-        var stock = CreateStock(ticker, name, secondaryTickers);
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock(ticker, name, secondaryTickers);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
         return stock;
     }
 
     private FailToDeliver CreateFtd(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly? settlementDate = null,
         long quantity = 5000,
         decimal price = 150m
@@ -134,7 +143,7 @@ public class SecRepositoryTests : IDisposable
             Id = Guid.NewGuid(),
 
             EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
-            ListedTicker = stock.Ticker,
+            ListedTicker = stock.Presentation.Listing.Ticker,
             SettlementDate = settlementDate ?? new DateOnly(2025, 3, 1),
             Quantity = quantity,
             Price = price,
@@ -150,8 +159,8 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByCompany_ReturnsOnlyDocumentsForGivenCompany()
     {
-        var apple = await SeedStock("AAPL", "Apple");
-        var msft = await SeedStock("MSFT", "Microsoft");
+        EquityIssuer apple = await SeedStock("AAPL", "Apple");
+        EquityIssuer msft = await SeedStock("MSFT", "Microsoft");
 
         _documentRepo.Add(CreateDocument(apple));
         _documentRepo.Add(CreateDocument(apple));
@@ -167,7 +176,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByCompany_NoDocuments_ReturnsEmpty()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
 
         var result = await _documentRepo.GetByIssuerId((stock).Id).ToListAsync();
 
@@ -179,7 +188,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByTicker_MatchesPrimaryTicker_CaseInsensitive()
     {
-        var stock = await SeedStock("AAPL", "Apple");
+        EquityIssuer stock = await SeedStock("AAPL", "Apple");
         _documentRepo.Add(CreateDocument(stock));
         await _documentRepo.SaveChanges();
 
@@ -191,7 +200,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByTicker_MatchesSecondaryTicker()
     {
-        var stock = await SeedStock("META", "Meta Platforms", ["FB"]);
+        EquityIssuer stock = await SeedStock("META", "Meta Platforms", ["FB"]);
         _documentRepo.Add(CreateDocument(stock));
         await _documentRepo.SaveChanges();
 
@@ -203,7 +212,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByTicker_NoMatch_ReturnsEmpty()
     {
-        var stock = await SeedStock("AAPL", "Apple");
+        EquityIssuer stock = await SeedStock("AAPL", "Apple");
         _documentRepo.Add(CreateDocument(stock));
         await _documentRepo.SaveChanges();
 
@@ -215,8 +224,8 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByTicker_DoesNotReturnOtherCompanies()
     {
-        var apple = await SeedStock("AAPL", "Apple");
-        var msft = await SeedStock("MSFT", "Microsoft");
+        EquityIssuer apple = await SeedStock("AAPL", "Apple");
+        EquityIssuer msft = await SeedStock("MSFT", "Microsoft");
         _documentRepo.Add(CreateDocument(apple));
         _documentRepo.Add(CreateDocument(msft));
         await _documentRepo.SaveChanges();
@@ -231,7 +240,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByDocumentType_ReturnsOnlyMatchingType()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         _documentRepo.Add(CreateDocument(stock, DocumentType.TenK));
         _documentRepo.Add(CreateDocument(stock, DocumentType.TenQ));
         _documentRepo.Add(CreateDocument(stock, DocumentType.TenK));
@@ -246,7 +255,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByDocumentType_NoMatch_ReturnsEmpty()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         _documentRepo.Add(CreateDocument(stock, DocumentType.TenK));
         await _documentRepo.SaveChanges();
 
@@ -260,7 +269,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByDateRange_BothBounds_FiltersCorrectly()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         _documentRepo.Add(CreateDocument(stock, reportingDate: new DateOnly(2025, 1, 1)));
         _documentRepo.Add(CreateDocument(stock, reportingDate: new DateOnly(2025, 6, 15)));
         _documentRepo.Add(CreateDocument(stock, reportingDate: new DateOnly(2025, 12, 31)));
@@ -276,7 +285,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByDateRange_OnlyFromDate_FiltersFromInclusive()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         _documentRepo.Add(CreateDocument(stock, reportingDate: new DateOnly(2025, 1, 1)));
         _documentRepo.Add(CreateDocument(stock, reportingDate: new DateOnly(2025, 6, 15)));
         await _documentRepo.SaveChanges();
@@ -291,7 +300,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByDateRange_OnlyToDate_FiltersToInclusive()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         _documentRepo.Add(CreateDocument(stock, reportingDate: new DateOnly(2025, 1, 1)));
         _documentRepo.Add(CreateDocument(stock, reportingDate: new DateOnly(2025, 6, 15)));
         await _documentRepo.SaveChanges();
@@ -306,7 +315,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByDateRange_NoBounds_ReturnsAll()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         _documentRepo.Add(CreateDocument(stock, reportingDate: new DateOnly(2024, 1, 1)));
         _documentRepo.Add(CreateDocument(stock, reportingDate: new DateOnly(2025, 12, 31)));
         await _documentRepo.SaveChanges();
@@ -319,7 +328,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByDateRange_NoMatches_ReturnsEmpty()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         _documentRepo.Add(CreateDocument(stock, reportingDate: new DateOnly(2025, 1, 1)));
         await _documentRepo.SaveChanges();
 
@@ -335,7 +344,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task Exists_MatchingDocument_ReturnsTrue()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         var doc = CreateDocument(
             stock,
             DocumentType.TenK,
@@ -358,7 +367,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task Exists_DifferentType_ReturnsFalse()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         _documentRepo.Add(
             CreateDocument(
                 stock,
@@ -382,7 +391,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task Exists_DifferentDate_ReturnsFalse()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         _documentRepo.Add(
             CreateDocument(
                 stock,
@@ -406,7 +415,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task Exists_EmptyDatabase_ReturnsFalse()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
 
         var result = await _documentRepo.Exists(
             (stock).Id,
@@ -423,7 +432,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetWithContent_ExistingDocument_ReturnsDocument()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         var doc = CreateDocument(stock);
         _documentRepo.Add(doc);
         await _documentRepo.SaveChanges();
@@ -451,8 +460,8 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_ReturnsOnlyFtdsForGivenStock()
     {
-        var apple = await SeedStock("AAPL", "Apple");
-        var msft = await SeedStock("MSFT", "Microsoft");
+        EquityIssuer apple = await SeedStock("AAPL", "Apple");
+        EquityIssuer msft = await SeedStock("MSFT", "Microsoft");
 
         _ftdRepo.Add(CreateFtd(apple, new DateOnly(2025, 1, 1)));
         _ftdRepo.Add(CreateFtd(apple, new DateOnly(2025, 1, 2)));
@@ -468,7 +477,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_NoFtds_ReturnsEmpty()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
 
         var result = await _ftdRepo.GetByStock(stock).ToListAsync();
 
@@ -480,7 +489,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestDate_MultipleDates_ReturnsOnlyLatest()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         _ftdRepo.Add(CreateFtd(stock, new DateOnly(2025, 1, 1)));
         _ftdRepo.Add(CreateFtd(stock, new DateOnly(2025, 3, 15)));
         _ftdRepo.Add(CreateFtd(stock, new DateOnly(2025, 2, 10)));
@@ -502,8 +511,8 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestDate_DuplicateDates_ReturnsDistinctLatest()
     {
-        var apple = await SeedStock("AAPL", "Apple");
-        var msft = await SeedStock("MSFT", "Microsoft");
+        EquityIssuer apple = await SeedStock("AAPL", "Apple");
+        EquityIssuer msft = await SeedStock("MSFT", "Microsoft");
         _ftdRepo.Add(CreateFtd(apple, new DateOnly(2025, 3, 15)));
         _ftdRepo.Add(CreateFtd(msft, new DateOnly(2025, 3, 15)));
         _ftdRepo.Add(CreateFtd(apple, new DateOnly(2025, 1, 1)));
@@ -519,7 +528,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task Ftd_Add_PersistsEntity()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         var ftd = CreateFtd(stock, new DateOnly(2025, 5, 1), 10000, 175.50m);
 
         _ftdRepo.Add(ftd);
@@ -535,7 +544,7 @@ public class SecRepositoryTests : IDisposable
     [Fact]
     public async Task Ftd_Delete_RemovesEntity()
     {
-        var stock = await SeedStock();
+        EquityIssuer stock = await SeedStock();
         var ftd = CreateFtd(stock);
         _ftdRepo.Add(ftd);
         await _ftdRepo.SaveChanges();

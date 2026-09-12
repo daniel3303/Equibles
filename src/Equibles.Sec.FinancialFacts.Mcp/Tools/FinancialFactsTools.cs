@@ -36,14 +36,14 @@ public class FinancialFactsTools
 
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public FinancialFactsTools(
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<FinancialFactsTools> logger
@@ -140,7 +140,7 @@ public class FinancialFactsTools
                 // under several of the alias's tags (the ASC 606 transition).
                 var conceptPriority = await ResolveConceptPriority(conceptRefs);
                 if (conceptPriority.Count == 0)
-                    return $"No '{concept}' data has been ingested for {stock.Ticker}.";
+                    return $"No '{concept}' data has been ingested for {stock.Presentation.Listing.Ticker}.";
 
                 var facts = await _financialFactRepository
                     .GetConsolidatedByIssuerId(stock.Id)
@@ -152,7 +152,7 @@ public class FinancialFactsTools
                 var aliasLatestPeriodEnd =
                     facts.Count == 0 ? (DateOnly?)null : facts.Max(f => f.PeriodEnd);
                 var coverageNote = BuildCoverageNote(
-                    stock.Ticker,
+                    stock.Presentation.Listing.Ticker,
                     aliasLatestPeriodEnd,
                     companyLatestPeriodEnd
                 );
@@ -202,14 +202,18 @@ public class FinancialFactsTools
                 var shown = perPeriod.Take(Math.Clamp(maxResults, 1, MaxResultsCap)).ToList();
 
                 if (shown.Count == 0)
-                    return $"No '{concept}' data found for {stock.Ticker} with the given filters.";
+                    return $"No '{concept}' data found for {stock.Presentation.Listing.Ticker} with the given filters.";
 
                 var splits = shown.Any(FinancialFactSplitAdjustment.IsPerShare)
                     ? await _stockSplitRepository
                         .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                         .ToListAsync()
                     : [];
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
+                splits = PriceSeriesSplitScope.ForListing(
+                    splits,
+                    stock.Presentation.Listing.Ticker,
+                    stock.Presentation.Listing.Ticker
+                );
 
                 return RenderFactHistoryTable(
                     concept,
@@ -290,7 +294,7 @@ public class FinancialFactsTools
 
                 // Two queries instead of 2N: batch-load the requested stocks,
                 // then all matching facts in one go keyed by company.
-                var stocks = await _commonStockRepository.GetByTickers(requested).ToListAsync();
+                var stocks = await _commonStockRepository.GetUsByTickers(requested).ToListAsync();
                 var stockByTicker = BuildComparisonStockMap(requested, stocks);
 
                 var stockIds = stocks.Select(s => s.Id).ToList();
@@ -399,7 +403,7 @@ public class FinancialFactsTools
 
     private static string RenderFactHistoryTable(
         string concept,
-        CommonStock stock,
+        EquityIssuer stock,
         bool asOriginallyReported,
         List<FinancialFact> perPeriod,
         int totalPeriods,
@@ -409,7 +413,7 @@ public class FinancialFactsTools
     {
         var basis = asOriginallyReported ? "as originally reported" : "latest restated";
         var result = MarkdownTable.Start(
-            $"{concept} for {stock.Ticker} ({FactMarkdown.Cell(stock.Name)}) — {basis}:",
+            $"{concept} for {stock.Presentation.Listing.Ticker} ({FactMarkdown.Cell(stock.Name)}) — {basis}:",
             "| Period Start | Period End | FY | Period | Value | Unit | Form | Filed | Accession |",
             "|--------------|------------|---:|--------|------:|------|------|-------|-----------|"
         );
@@ -479,7 +483,7 @@ public class FinancialFactsTools
         List<string> Skipped
     ) BuildComparisonRows(
         IReadOnlyList<string> requested,
-        IReadOnlyDictionary<string, CommonStock> stockByTicker,
+        IReadOnlyDictionary<string, EquityIssuer> stockByTicker,
         IReadOnlyDictionary<Guid, FinancialFact> bestByStock
     )
     {
@@ -491,7 +495,7 @@ public class FinancialFactsTools
         var rowTickerByStockId = new Dictionary<Guid, string>();
         foreach (var ticker in requested)
         {
-            if (!stockByTicker.TryGetValue(ticker, out var stock))
+            if (!stockByTicker.TryGetValue(ticker, out EquityIssuer stock))
             {
                 skipped.Add(
                     $"{FactMarkdown.Cell(ticker)} (not found in the tracked SEC issuer set)"
@@ -511,21 +515,24 @@ public class FinancialFactsTools
             }
             // The row stays traceable to the caller's input: a secondary-ticker
             // request shows that ticker, with the primary in parentheses.
-            var label = ticker == stock.Ticker ? stock.Ticker : $"{ticker} ({stock.Ticker})";
+            var label =
+                ticker == stock.Presentation.Listing.Ticker
+                    ? stock.Presentation.Listing.Ticker
+                    : $"{ticker} ({stock.Presentation.Listing.Ticker})";
             rows.Add((label, stock.Name, best));
         }
         return (rows, skipped);
     }
 
-    internal static Dictionary<string, CommonStock> BuildComparisonStockMap(
+    internal static Dictionary<string, EquityIssuer> BuildComparisonStockMap(
         IReadOnlyList<string> requested,
-        IReadOnlyList<CommonStock> stocks
+        IReadOnlyList<EquityIssuer> stocks
     )
     {
-        var stockByTicker = new Dictionary<string, CommonStock>(StringComparer.Ordinal);
+        var stockByTicker = new Dictionary<string, EquityIssuer>(StringComparer.Ordinal);
         foreach (var ticker in requested)
         {
-            var stock = ResolveComparisonStock(stocks, ticker);
+            EquityIssuer stock = ResolveComparisonStock(stocks, ticker);
             if (stock != null)
                 stockByTicker.Add(ticker, stock);
         }
@@ -568,14 +575,28 @@ public class FinancialFactsTools
             tickers?.Split(',', StringSplitOptions.TrimEntries)
         );
 
-    private static CommonStock ResolveComparisonStock(
-        IReadOnlyList<CommonStock> stocks,
+    private static EquityIssuer ResolveComparisonStock(
+        IReadOnlyList<EquityIssuer> stocks,
         string ticker
     ) =>
         stocks
-            .Where(stock => stock.Ticker == ticker || stock.SecondaryTickers.Contains(ticker))
-            .OrderBy(stock => stock.Ticker == ticker ? 0 : 1)
-            .ThenBy(stock => stock.Ticker, StringComparer.Ordinal)
+            .Where(stock =>
+                stock.Presentation.Listing.Ticker == ticker
+                || stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != stock.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList()
+                    .Contains(ticker)
+            )
+            .OrderBy(stock => stock.Presentation.Listing.Ticker == ticker ? 0 : 1)
+            .ThenBy(stock => stock.Presentation.Listing.Ticker, StringComparer.Ordinal)
             .FirstOrDefault();
 
     // Peer period ends further apart than one calendar quarter mean the rows

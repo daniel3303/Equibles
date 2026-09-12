@@ -163,12 +163,7 @@ public class ShortActivityControllerTests
     {
         var stockId = Guid.NewGuid();
         db.Add(
-            new CommonStock
-            {
-                Id = stockId,
-                Ticker = ticker,
-                Name = name,
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(Id: stockId, Ticker: ticker, Name: name)
         );
         db.Add(
             new ShortInterest

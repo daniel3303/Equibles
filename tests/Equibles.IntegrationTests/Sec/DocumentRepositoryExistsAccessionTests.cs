@@ -20,7 +20,7 @@ public class DocumentRepositoryExistsAccessionTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DocumentRepository _repository;
-    private readonly CommonStock _company;
+    private readonly EquityIssuer _company;
     private static readonly DateOnly FilingDate = new(2025, 3, 10);
     private static readonly DateOnly ReportDate = new(2025, 3, 10);
 
@@ -42,13 +42,12 @@ public class DocumentRepositoryExistsAccessionTests : IDisposable
         _dbContext.Database.EnsureCreated();
         _repository = new DocumentRepository(_dbContext);
 
-        _company = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        _company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         _dbContext.Add(_company);
         _dbContext.SaveChanges();
     }

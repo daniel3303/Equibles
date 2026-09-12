@@ -34,23 +34,21 @@ public class InstitutionalHoldingRepositoryReportDatesByStockTests : IDisposable
     [Fact]
     public async Task GetReportDatesByStock_ReturnsDistinctDatesNewestFirst_ScopedToStock()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
-        var other = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
+        EquityIssuer other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corp."
+        );
         var q1 = new DateOnly(2024, 3, 31);
         var q2 = new DateOnly(2024, 6, 30);
         var q3 = new DateOnly(2024, 9, 30);
 
-        _dbContext.Set<CommonStock>().AddRange(stock, other);
+        _dbContext.Set<EquityIssuer>().AddRange(stock, other);
         _dbContext
             .Set<InstitutionalHolding>()
             .AddRange(

@@ -60,7 +60,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
             new InsiderTransactionRepository(db),
             new InsiderOwnerRepository(db),
             new Form144FilingRepository(db),
-            new CommonStockRepository(db),
+            new EquityIssuerRepository(db),
             new StockSplitRepository(db),
             new ErrorManager(new ErrorRepository(db)),
             Substitute.For<ILogger<InsiderTradingTools>>()
@@ -71,12 +71,11 @@ public class InsiderTradingToolsSplitAdjustmentTests
     {
         await using var db = NewDb();
 
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         var owner = new InsiderOwner
         {
             OwnerCik = "0009876543",
@@ -139,12 +138,11 @@ public class InsiderTradingToolsSplitAdjustmentTests
     {
         await using var db = NewDb();
 
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         var owner = new InsiderOwner
         {
             OwnerCik = "0009876543",
@@ -195,12 +193,11 @@ public class InsiderTradingToolsSplitAdjustmentTests
     {
         await using var db = NewDb();
 
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         db.Add(stock);
 
         db.Add(

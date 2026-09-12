@@ -45,12 +45,11 @@ public class SharesOutstandingProviderTests
     public async Task GetReportedSharesOutstanding_PicksLatestFiledConsolidatedFact_IgnoringDimensional()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "COPR",
-            Name = "Idaho Copper",
-            Cik = "0001263364",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "COPR",
+            Name: "Idaho Copper",
+            Cik: "0001263364"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -99,12 +98,11 @@ public class SharesOutstandingProviderTests
     public async Task GetReportedSharesOutstanding_OnlyDimensionalPerClassFacts_ReturnsNull()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "GOOGL",
-            Name = "Alphabet",
-            Cik = "0001652044",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GOOGL",
+            Name: "Alphabet",
+            Cik: "0001652044"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -151,12 +149,11 @@ public class SharesOutstandingProviderTests
     public async Task GetSummedPerClassSharesOutstanding_SumsLatestFilingAcrossShareClasses()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "GOOGL",
-            Name = "Alphabet",
-            Cik = "0001652044",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GOOGL",
+            Name: "Alphabet",
+            Cik: "0001652044"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -248,12 +245,11 @@ public class SharesOutstandingProviderTests
     public async Task GetSummedPerClassSharesOutstanding_OnlyConsolidatedFact_ReturnsNull()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -288,12 +284,11 @@ public class SharesOutstandingProviderTests
     public async Task GetSummedPerClassSharesOutstanding_IgnoresNonClassAxisDimensionalFacts()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "GOOGL",
-            Name = "Alphabet",
-            Cik = "0001652044",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GOOGL",
+            Name: "Alphabet",
+            Cik: "0001652044"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -331,12 +326,11 @@ public class SharesOutstandingProviderTests
     public async Task GetSummedPerClassSharesOutstanding_DeduplicatesRestatedClassRow_InLatestFiling()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "GOOGL",
-            Name = "Alphabet",
-            Cik = "0001652044",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GOOGL",
+            Name: "Alphabet",
+            Cik: "0001652044"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -411,12 +405,11 @@ public class SharesOutstandingProviderTests
         // when it switched to per-class reporting, so the latest CONSOLIDATED fact is the stale
         // 2010 122,530,193 while the current entity total is the sum of the 2026 per-class facts.
         // The stale consolidated value must not win (#5158).
-        var stock = new CommonStock
-        {
-            Ticker = "MA",
-            Name = "Mastercard Incorporated",
-            Cik = "0001141391",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MA",
+            Name: "Mastercard Incorporated",
+            Cik: "0001141391"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -480,12 +473,11 @@ public class SharesOutstandingProviderTests
     )
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "LTM",
-            Name = "Latam Airlines Group S.A.",
-            Cik = "0001047716",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "LTM",
+            Name: "Latam Airlines Group S.A.",
+            Cik: "0001047716"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -521,12 +513,11 @@ public class SharesOutstandingProviderTests
     public async Task IsForeignPrivateIssuer_DomesticTenKFiler_ReturnsFalse()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -560,12 +551,11 @@ public class SharesOutstandingProviderTests
     public async Task IsForeignPrivateIssuer_NoSharesFacts_ReturnsFalse()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "NEW",
-            Name = "Freshly Listed Co",
-            Cik = "0009999999",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NEW",
+            Name: "Freshly Listed Co",
+            Cik: "0009999999"
+        );
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -584,12 +574,11 @@ public class SharesOutstandingProviderTests
     public async Task IsForeignPrivateIssuer_KeysOffLatestFiledFact()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "XYZ",
-            Name = "Redomiciled Co",
-            Cik = "0008888888",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XYZ",
+            Name: "Redomiciled Co",
+            Cik: "0008888888"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -640,12 +629,11 @@ public class SharesOutstandingProviderTests
         // CommonStockSharesOutstanding line carries a nominal placeholder of 1 — filed the SAME day.
         // The placeholder must never be chosen as the entity total; the per-class cover-page sum is
         // authoritative, else SharesOutStanding is pinned to 1 and short interest % of shares explodes.
-        var stock = new CommonStock
-        {
-            Ticker = "BRUN",
-            Name = "Boost Run Inc.",
-            Cik = "0001999001",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BRUN",
+            Name: "Boost Run Inc.",
+            Cik: "0001999001"
+        );
         var deiCoverPage = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -703,12 +691,11 @@ public class SharesOutstandingProviderTests
         // An issuer that reports no dei cover-page count at all — only the us-gaap balance-sheet
         // CommonStockSharesOutstanding consolidated line. With no authoritative cover-page figure to
         // prefer, the balance-sheet count is the best available and must still be returned.
-        var stock = new CommonStock
-        {
-            Ticker = "OLD",
-            Name = "Legacy Filer",
-            Cik = "0007777001",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OLD",
+            Name: "Legacy Filer",
+            Cik: "0007777001"
+        );
         var usGaapBalanceSheet = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.UsGaap,
@@ -730,7 +717,7 @@ public class SharesOutstandingProviderTests
     }
 
     private static FinancialFact ClassFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly filed,
@@ -761,7 +748,7 @@ public class SharesOutstandingProviderTests
     }
 
     private static FinancialFact Fact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly filed,

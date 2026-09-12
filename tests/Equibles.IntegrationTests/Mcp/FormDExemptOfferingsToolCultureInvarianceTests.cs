@@ -32,7 +32,7 @@ public class FormDExemptOfferingsToolCultureInvarianceTests : IDisposable
         );
         _tools = new FormDTools(
             new FormDFilingRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             errorManager: null,
             NullLogger<FormDTools>.Instance
         );
@@ -43,14 +43,13 @@ public class FormDExemptOfferingsToolCultureInvarianceTests : IDisposable
     [Fact]
     public async Task GetFormDOfferings_UnderNonInvariantCulture_RendersOfferingAmountInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext
             .Set<FormDFiling>()
             .Add(

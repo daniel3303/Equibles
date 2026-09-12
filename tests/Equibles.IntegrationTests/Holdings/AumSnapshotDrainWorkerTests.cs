@@ -298,7 +298,7 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
         var dirtyAt = DateTime.UtcNow.AddHours(-2);
         await using (var seed = FreshContext())
         {
-            var stockId = await seed.Set<CommonStock>().Select(s => s.Id).FirstAsync();
+            var stockId = await seed.Set<EquityIssuer>().Select(s => s.Id).FirstAsync();
             seed.AddRange(
                 new AumQuarterlySnapshot { ReportDate = Q4, DirtyAt = dirtyAt },
                 new AumQuarterlySnapshot { ReportDate = missingDate, DirtyAt = dirtyAt },
@@ -598,20 +598,18 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
         var industry = new Industry { Name = "Software", SectorId = tech.Id };
         seed.Add(industry);
         await seed.SaveChangesAsync();
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "C0000320193",
-            IndustryId = industry.Id,
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft",
-            Cik = "C0000789019",
-            IndustryId = industry.Id,
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "C0000320193",
+            IndustryId: industry.Id
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft",
+            Cik: "C0000789019",
+            IndustryId: industry.Id
+        );
         seed.AddRange(aapl, msft);
         var holder = new InstitutionalHolder { Cik = "H001", Name = "Holder H001" };
         seed.Add(holder);
@@ -624,7 +622,7 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long value,
@@ -642,7 +640,7 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
             InvestmentDiscretion = InvestmentDiscretion.Sole,
             AccessionNumber = accession,
             Cusip =
-                $"{stock.Ticker[..Math.Min(4, stock.Ticker.Length)]}{stock.Id.GetHashCode():X8}"[
+                $"{stock.Presentation.Listing.Ticker[..Math.Min(4, stock.Presentation.Listing.Ticker.Length)]}{stock.Id.GetHashCode():X8}"[
                     ..9
                 ],
         };

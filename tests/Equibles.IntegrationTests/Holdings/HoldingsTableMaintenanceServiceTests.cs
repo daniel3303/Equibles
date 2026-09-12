@@ -72,21 +72,20 @@ public class HoldingsTableMaintenanceServiceTests : IAsyncLifetime
     {
         await using var ctx = _fixture.CreateDbContext();
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "VACU",
-            Name = "Vacuum Test Co.",
-            Cik = "0009980001",
-            Cusip = "099800015",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "VACU",
+            Name: "Vacuum Test Co.",
+            Cik: "0009980001",
+            Cusip: "099800015"
+        );
         var holder = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
             Cik = "0001000020",
             Name = "Vacuum Filer",
         };
-        ctx.Set<CommonStock>().Add(stock);
+        ctx.Set<EquityIssuer>().Add(stock);
         ctx.Set<InstitutionalHolder>().Add(holder);
         ctx.Set<InstitutionalHolding>()
             .AddRange(

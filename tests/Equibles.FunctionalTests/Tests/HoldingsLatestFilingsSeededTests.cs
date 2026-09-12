@@ -40,20 +40,18 @@ public class HoldingsLatestFilingsSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                },
-                new CommonStock
-                {
-                    Id = msftId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: msftId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019"
+                )
             );
 
             var filerA = new InstitutionalHolder { Cik = "F0000001", Name = "Alpha Capital" };

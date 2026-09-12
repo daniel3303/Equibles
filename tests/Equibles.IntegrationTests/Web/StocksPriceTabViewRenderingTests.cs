@@ -54,20 +54,18 @@ public class StocksPriceTabViewRenderingTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc."
+                )
             );
             db.Add(
-                new CommonStock
-                {
-                    Id = spyId,
-                    Ticker = "SPY",
-                    Name = "SPDR S&P 500 ETF",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: spyId,
+                    Ticker: "SPY",
+                    Name: "SPDR S&P 500 ETF"
+                )
             );
             var start = new DateOnly(2025, 6, 2);
             // 6 bars each → the 5-day window is in range for both series, so the
@@ -98,12 +96,11 @@ public class StocksPriceTabViewRenderingTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc."
+                )
             );
             AddDailyPrices(
                 db,
@@ -138,13 +135,12 @@ public class StocksPriceTabViewRenderingTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "BRK-B",
-                    SecondaryTickers = ["BRK-A"],
-                    Name = "Berkshire Hathaway Inc.",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "BRK-B",
+                    SecondaryTickers: ["BRK-A"],
+                    Name: "Berkshire Hathaway Inc."
+                )
             );
             var date = new DateOnly(2026, 8, 3);
             db.AddRange(

@@ -109,12 +109,11 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
     )
     {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = Guid.NewGuid().ToString()[..4],
-            Name = "Issuer",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: Guid.NewGuid().ToString()[..4],
+            Name: "Issuer"
+        );
         var holder = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -151,7 +150,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
             ],
         };
 
-        seedContext.Set<CommonStock>().Add(stock);
+        seedContext.Set<EquityIssuer>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
         seedContext.Set<InstitutionalHolding>().Add(holding);
         await seedContext.SaveChangesAsync();
@@ -179,10 +178,15 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         }
         using (var stockContext = CreateSharedContext())
         {
-            foreach (var stock in await stockContext.Set<CommonStock>().ToListAsync())
+            foreach (
+                EquityIssuer stock in await stockContext
+                    .Set<EquityIssuer>()
+                    .Include(issuer => issuer.Presentation.Listing.Security)
+                    .ToListAsync()
+            )
             {
-                stock.SharesOutStanding = 100_000;
-                stock.MarketCapitalization = 5_000_000;
+                stock.Presentation.Listing.Security.SharesOutstanding = 100_000;
+                stock.Presentation.Listing.Security.MarketCapitalization = 5_000_000;
             }
             await stockContext.SaveChangesAsync();
         }

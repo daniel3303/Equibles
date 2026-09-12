@@ -35,7 +35,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly EquityDailyStockPriceRepository _priceRepo;
-    private readonly CommonStockRepository _stockRepo;
+    private readonly EquityIssuerRepository _stockRepo;
     private readonly IYahooFinanceClient _yahooClient;
     private readonly ISharesOutstandingProvider _sharesProvider;
     private readonly YahooPriceImportService _sut;
@@ -47,7 +47,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
             new YahooModuleConfiguration()
         );
         _priceRepo = new EquityDailyStockPriceRepository(_dbContext);
-        _stockRepo = new CommonStockRepository(_dbContext);
+        _stockRepo = new EquityIssuerRepository(_dbContext);
 
         _yahooClient = Substitute.For<IYahooFinanceClient>();
         _sharesProvider = Substitute.For<ISharesOutstandingProvider>();
@@ -61,7 +61,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
         var dividendRepo = new CashDividendRepository(_dbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(EquityDailyStockPriceRepository), _priceRepo),
-            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(EquityIssuerRepository), _stockRepo),
             (typeof(StockSplitRepository), splitRepo),
             (typeof(IndustryRepository), new IndustryRepository(_dbContext)),
             (typeof(SectorRepository), new SectorRepository(_dbContext)),
@@ -97,13 +97,12 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
     [Fact]
     public async Task Import_CommonStockDeletedBeforeFlush_DoesNotInsertOrphanPrices()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "CIK-AAPL",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "CIK-AAPL"
+        );
         _stockRepo.Add(apple);
         await _stockRepo.SaveChanges();
 
@@ -116,6 +115,9 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
             .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(_ =>
             {
+                _dbContext.Remove(apple.Presentation);
+                _dbContext.RemoveRange(apple.Securities.SelectMany(security => security.Listings));
+                _dbContext.RemoveRange(apple.Securities);
                 _dbContext.Remove(apple);
                 _dbContext.SaveChanges();
                 return new YahooChartData
@@ -148,13 +150,12 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
     [Fact]
     public async Task Import_CommonStockDeletedBeforeProfileWrite_DoesNotCreateTaxonomyRows()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "CIK-AAPL",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "CIK-AAPL"
+        );
         _stockRepo.Add(apple);
         await _stockRepo.SaveChanges();
 
@@ -165,6 +166,9 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
             .GetCompanyProfile("AAPL")
             .Returns(_ =>
             {
+                _dbContext.Remove(apple.Presentation);
+                _dbContext.RemoveRange(apple.Securities.SelectMany(security => security.Listings));
+                _dbContext.RemoveRange(apple.Securities);
                 _dbContext.Remove(apple);
                 _dbContext.SaveChanges();
                 return new CompanyProfile
@@ -176,7 +180,7 @@ public class YahooPriceImportServiceMissingCommonStockTests : IDisposable
 
         await _sut.Import(CancellationToken.None);
 
-        _dbContext.Set<CommonStock>().Should().BeEmpty();
+        _dbContext.Set<EquityIssuer>().Should().BeEmpty();
         _dbContext.Set<Equibles.CommonStocks.Data.Models.Taxonomies.Industry>().Should().BeEmpty();
         _dbContext.Set<Equibles.CommonStocks.Data.Models.Taxonomies.Sector>().Should().BeEmpty();
     }

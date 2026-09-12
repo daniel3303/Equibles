@@ -33,7 +33,7 @@ namespace Equibles.IntegrationTests.Yahoo;
 public class YahooPriceImportServiceCompanyProfileTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly CommonStockRepository _stockRepo;
+    private readonly EquityIssuerRepository _stockRepo;
     private readonly IndustryRepository _industryRepo;
     private readonly SectorRepository _sectorRepo;
     private readonly IYahooFinanceClient _yahooClient;
@@ -45,7 +45,7 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
-        _stockRepo = new CommonStockRepository(_dbContext);
+        _stockRepo = new EquityIssuerRepository(_dbContext);
         _industryRepo = new IndustryRepository(_dbContext);
         _sectorRepo = new SectorRepository(_dbContext);
         EquityDailyStockPriceRepository priceRepo = new EquityDailyStockPriceRepository(_dbContext);
@@ -61,7 +61,7 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
         var dividendRepo = new CashDividendRepository(_dbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(EquityDailyStockPriceRepository), priceRepo),
-            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(EquityIssuerRepository), _stockRepo),
             (typeof(StockSplitRepository), splitRepo),
             (typeof(IndustryRepository), _industryRepo),
             (typeof(SectorRepository), _sectorRepo),
@@ -102,7 +102,7 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
     [Fact]
     public async Task Import_FirstRun_CreatesSectorIndustryAndLinksToStock()
     {
-        var stock = SeedStock("AAPL");
+        EquityIssuer stock = SeedStock("AAPL");
         _yahooClient
             .GetCompanyProfile("AAPL")
             .Returns(
@@ -117,7 +117,7 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
         industries.Should().ContainSingle().Which.Name.Should().Be("Consumer Electronics");
         industries[0].SectorId.Should().Be(sectors[0].Id);
 
-        var refreshed = _stockRepo.GetAll().Single(s => s.Id == stock.Id);
+        EquityIssuer refreshed = _stockRepo.GetCurrentUsDirectory().Single(s => s.Id == stock.Id);
         refreshed.IndustryId.Should().Be(industries[0].Id);
     }
 
@@ -166,12 +166,12 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
     [Fact]
     public async Task Import_NullProfile_LeavesStockIndustryUntouched()
     {
-        var stock = SeedStock("UNKNOWN");
+        EquityIssuer stock = SeedStock("UNKNOWN");
         _yahooClient.GetCompanyProfile("UNKNOWN").Returns((CompanyProfile)null);
 
         await _service.Import(CancellationToken.None);
 
-        var refreshed = _stockRepo.GetAll().Single(s => s.Id == stock.Id);
+        EquityIssuer refreshed = _stockRepo.GetCurrentUsDirectory().Single(s => s.Id == stock.Id);
         refreshed.IndustryId.Should().BeNull();
         _sectorRepo.GetAll().Should().BeEmpty();
         _industryRepo.GetAll().Should().BeEmpty();
@@ -184,14 +184,14 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
         // regression that weakened it to the latter would let a whitespace-only industry
         // through and create an Industry row with a blank name. The existing `null profile`
         // pin doesn't cover this path.
-        var stock = SeedStock("WSI");
+        EquityIssuer stock = SeedStock("WSI");
         _yahooClient
             .GetCompanyProfile("WSI")
             .Returns(new CompanyProfile { Sector = "Technology", Industry = "   " });
 
         await _service.Import(CancellationToken.None);
 
-        var refreshed = _stockRepo.GetAll().Single(s => s.Id == stock.Id);
+        EquityIssuer refreshed = _stockRepo.GetCurrentUsDirectory().Single(s => s.Id == stock.Id);
         refreshed.IndustryId.Should().BeNull();
         _sectorRepo.GetAll().Should().BeEmpty();
         _industryRepo.GetAll().Should().BeEmpty();
@@ -218,15 +218,14 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
         _sectorRepo.GetAll().Single().Name.Should().Be("Technology");
     }
 
-    private CommonStock SeedStock(string ticker)
+    private EquityIssuer SeedStock(string ticker)
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = $"{ticker} Inc.",
-            Cik = $"CIK-{ticker}",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: $"{ticker} Inc.",
+            Cik: $"CIK-{ticker}"
+        );
         _stockRepo.Add(stock);
         _stockRepo.SaveChanges().GetAwaiter().GetResult();
         return stock;

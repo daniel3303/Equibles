@@ -143,7 +143,7 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
         var listingId = (
-            await new CommonStockRepository(DbContext).GetEquityListingId(stock.Id, "BOTH-B")
+            await new EquityIssuerRepository(DbContext).GetEquityListingId(stock.Id, "BOTH-B")
         ).Value;
         var price = new EquityDailyStockPrice
         {
@@ -233,7 +233,16 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         );
         await DbContext.SaveChangesAsync();
         var repository = new EquityDailyStockPriceRepository(DbContext);
-        (await repository.GetByStock(stock, "SAME").SingleAsync()).Close.Should().Be(10m);
+        (
+            await repository
+                .GetByStock(
+                    await DbContext.Set<EquityIssuer>().SingleAsync(row => row.Id == stock.Id),
+                    "SAME"
+                )
+                .SingleAsync()
+        )
+            .Close.Should()
+            .Be(10m);
         (await repository.GetByListing(abroad.Id).SingleAsync()).Close.Should().Be(90m);
         (await DbContext.Set<DailyStockPrice>().CountAsync()).Should().Be(1);
         var provider = new Equibles.Yahoo.HostedService.Services.YahooStockPriceProvider(DbContext);

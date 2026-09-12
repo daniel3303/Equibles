@@ -32,12 +32,11 @@ public class InsiderFilingRejectedDateReplayTests(ParadeDbFixture fixture)
             Path.Combine(AppContext.BaseDirectory, "TestAssets", "snex-invalid-dates.xml")
         );
         var root = XElement.Parse(xml);
-        var stock = new CommonStock
-        {
-            Ticker = "SNEX",
-            Name = "StoneX",
-            Cik = "913760",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SNEX",
+            Name: "StoneX",
+            Cik: "913760"
+        );
         var owner = new InsiderOwner { Name = "Source owner", OwnerCik = "1" };
         var filing = new FilingData
         {
@@ -143,12 +142,11 @@ public class InsiderFilingRejectedDateReplayTests(ParadeDbFixture fixture)
             Path.Combine(AppContext.BaseDirectory, "TestAssets", "oprx-invalid-dates.xml")
         );
         var root = XElement.Parse(xml);
-        var stock = new CommonStock
-        {
-            Ticker = "OPRX",
-            Name = "OptimizeRx",
-            Cik = "1448431",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OPRX",
+            Name: "OptimizeRx",
+            Cik: "1448431"
+        );
         var filing = new FilingData
         {
             AccessionNumber = accession,
@@ -187,12 +185,11 @@ public class InsiderFilingRejectedDateReplayTests(ParadeDbFixture fixture)
     [Fact]
     public async Task Amendment_SeesRejectedOriginalBeforeConvertingRemainingRowsToMarker()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193"
+        );
         var owner = new InsiderOwner { Name = "Owner", OwnerCik = "1234567" };
         const string original = "0000000001-24-000001";
         const string amended = "0000000001-24-000002";

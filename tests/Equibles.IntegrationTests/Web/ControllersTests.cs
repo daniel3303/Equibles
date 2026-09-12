@@ -275,7 +275,7 @@ public class HomeControllerTests
 public class StocksControllerTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly InstitutionalHolderRepository _institutionalHolderRepository;
     private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
     private readonly DocumentRepository _documentRepository;
@@ -299,7 +299,7 @@ public class StocksControllerTests : IDisposable
             new YahooModuleConfiguration()
         );
 
-        _commonStockRepository = new CommonStockRepository(_dbContext);
+        _commonStockRepository = new EquityIssuerRepository(_dbContext);
         _institutionalHolderRepository = new InstitutionalHolderRepository(_dbContext);
         _institutionalHoldingRepository = new InstitutionalHoldingRepository(_dbContext);
         _documentRepository = new DocumentRepository(_dbContext);
@@ -319,7 +319,7 @@ public class StocksControllerTests : IDisposable
             new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
     }
 
@@ -347,16 +347,15 @@ public class StocksControllerTests : IDisposable
         return controller;
     }
 
-    private CommonStock SeedStock(string ticker = "AAPL", string name = "Apple Inc.")
+    private EquityIssuer SeedStock(string ticker = "AAPL", string name = "Apple Inc.")
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = Guid.NewGuid().ToString()[..10],
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: Guid.NewGuid().ToString()[..10]
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.SaveChanges();
         return stock;
     }
@@ -546,19 +545,11 @@ public class StocksControllerTests : IDisposable
     {
         // The GUID is the durable document identity; a stale ticker prefix redirects to the
         // owning stock so the filing never renders under misleading branding.
-        var owningStock = SeedStock("AAPL", "Apple Inc.");
+        EquityIssuer owningStock = SeedStock("AAPL", "Apple Inc.");
         var document = new Document
         {
             Id = Guid.NewGuid(),
-            Issuer = new EquityIssuer
-            {
-                Id = owningStock.Id,
-                Name = owningStock.Name,
-                Presentation = new EquityIssuerPresentation
-                {
-                    Listing = new EquityListing { Ticker = owningStock.Ticker },
-                },
-            },
+            Issuer = owningStock,
             ContentId = Guid.NewGuid(),
             Content = new Equibles.Media.Data.Models.File
             {
@@ -903,7 +894,7 @@ public class StatusControllerTests : IDisposable
         _errorRepository = new ErrorRepository(_dbContext);
         _errorManager = new ErrorManager(_errorRepository);
         _dataCountService = new DataCountService(
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new DocumentRepository(_dbContext),
             new InsiderTransactionRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),

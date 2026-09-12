@@ -25,7 +25,7 @@ public class NportFundsHoldingStockToolTests : IDisposable
         );
         _tools = new NportTools(
             new NportFilingRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             errorManager: null,
             NullLogger<NportTools>.Instance
         );
@@ -58,7 +58,7 @@ public class NportFundsHoldingStockToolTests : IDisposable
     public async Task GetFundsHoldingStock_FundHoldsStockOnLatestReport_ReturnsThePosition()
     {
         SeedStock("AAPL", HeldCusip);
-        var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
+        EquityIssuer fund = SeedStock("VOO", cusip: null, cik: "0000036405");
 
         var filing = MakeFiling(fund.Id, "acc-current", RecentFilingDate);
         filing.Holdings.Add(MakeHolding(HeldCusip, 5_000_000m));
@@ -78,7 +78,7 @@ public class NportFundsHoldingStockToolTests : IDisposable
         // The fund held the stock on an older report but not on its latest one — the
         // position was exited, so the reverse lookup must not show it as current.
         SeedStock("AAPL", HeldCusip);
-        var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
+        EquityIssuer fund = SeedStock("VOO", cusip: null, cik: "0000036405");
 
         var older = MakeFiling(fund.Id, "acc-older", RecentFilingDate.AddMonths(-7));
         older.Holdings.Add(MakeHolding(HeldCusip, 5_000_000m));
@@ -103,13 +103,13 @@ public class NportFundsHoldingStockToolTests : IDisposable
         // (a laggard filer, and every historical report forever), so the reverse lookup must resolve it
         // through the alias — mirroring the 13F import-time alias union — instead of showing the fund
         // as having exited.
-        var stock = SeedStock("BBUC", cusip: "113006100");
+        EquityIssuer stock = SeedStock("BBUC", cusip: "113006100");
         _dbContext
             .Set<EquityIssuerCusipAlias>()
             .Add(new EquityIssuerCusipAlias { EquityIssuerId = stock.Id, Cusip = "11259V106" });
         _dbContext.SaveChanges();
 
-        var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
+        EquityIssuer fund = SeedStock("VOO", cusip: null, cik: "0000036405");
         var filing = MakeFiling(fund.Id, "acc-current", RecentFilingDate);
         filing.Holdings.Add(MakeHolding("11259V106", 5_000_000m));
         _dbContext.Set<NportFiling>().Add(filing);
@@ -124,9 +124,9 @@ public class NportFundsHoldingStockToolTests : IDisposable
     [Fact]
     public async Task GetFundsHoldingStock_FlattensAndEscapesExternalMarkdownBoundaries()
     {
-        var stock = SeedStock("AAPL", HeldCusip);
+        EquityIssuer stock = SeedStock("AAPL", HeldCusip);
         stock.Name = "APPLE\n# SYNTHETIC | INC";
-        var fund = SeedStock("VOO", cusip: null, cik: "0000036405");
+        EquityIssuer fund = SeedStock("VOO", cusip: null, cik: "0000036405");
         var filing = MakeFiling(fund.Id, "acc-current", RecentFilingDate);
         filing.RegistrantName = "VANGUARD\n# ROW | TRUST";
         filing.SeriesName = "INDEX\r\nFUND | EXTRA";
@@ -168,8 +168,8 @@ public class NportFundsHoldingStockToolTests : IDisposable
     public async Task GetFundsHoldingStock_OffsetPagesAfterValueRanking_AndRejectsPastEnd()
     {
         SeedStock("AAPL", HeldCusip);
-        var lowFund = SeedStock("LOWF", cusip: null, cik: "0000001001");
-        var highFund = SeedStock("HIGHF", cusip: null, cik: "0000001002");
+        EquityIssuer lowFund = SeedStock("LOWF", cusip: null, cik: "0000001001");
+        EquityIssuer highFund = SeedStock("HIGHF", cusip: null, cik: "0000001002");
         var low = MakeFiling(lowFund.Id, "low", RecentFilingDate);
         low.SeriesId = "SLOW";
         low.SeriesName = "Low Value Fund";
@@ -189,17 +189,16 @@ public class NportFundsHoldingStockToolTests : IDisposable
         pastEnd.Should().Contain("No results at offset 2 - only 2 current fund positions match");
     }
 
-    private CommonStock SeedStock(string ticker, string cusip, string cik = null)
+    private EquityIssuer SeedStock(string ticker, string cusip, string cik = null)
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker == "VOO" ? "Vanguard 500 Index Fund" : $"{ticker} Inc.",
-            Cik = cik ?? $"00009430{Math.Abs(ticker.GetHashCode()) % 100:D2}",
-            Cusip = cusip,
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker == "VOO" ? "Vanguard 500 Index Fund" : $"{ticker} Inc.",
+            Cik: cik ?? $"00009430{Math.Abs(ticker.GetHashCode()) % 100:D2}",
+            Cusip: cusip
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.SaveChanges();
         return stock;
     }

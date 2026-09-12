@@ -26,12 +26,15 @@ public class StockSplitCaptureManagerTests
     )
     {
         await using var context = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "SPLT" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "SPLT"
+        );
         var applied = new DateTime(2026, 8, 6, 0, 0, 0, DateTimeKind.Utc);
         var existing = new StockSplit
         {
             EquityIssuerId = stock.Id,
-            PriceSeriesTicker = stock.Ticker,
+            PriceSeriesTicker = stock.Presentation.Listing.Ticker,
             EffectiveDate = new DateOnly(2025, 1, 29),
             Numerator = 1m,
             Denominator = 2m,
@@ -48,7 +51,8 @@ public class StockSplitCaptureManagerTests
             Source = incomingSource,
         };
 
-        var changed = await NewManager(context).Capture(stock.Id, stock.Ticker, [incoming]);
+        var changed = await NewManager(context)
+            .Capture(stock.Id, stock.Presentation.Listing.Ticker, [incoming]);
 
         changed.Should().Be(replaces ? 1 : 0);
         context.ChangeTracker.Clear();
@@ -62,11 +66,14 @@ public class StockSplitCaptureManagerTests
     public async Task Capture_SourceUpgradeWithoutRatioChange_RevalidatesAppliedMarker()
     {
         await using var context = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "SPLT" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "SPLT"
+        );
         context.Add(stock);
         await context.SaveChangesAsync();
         var manager = NewManager(context);
-        await manager.Capture(stock.Id, stock.Ticker, [Split()]);
+        await manager.Capture(stock.Id, stock.Presentation.Listing.Ticker, [Split()]);
         var existing = await context.Set<StockSplit>().SingleAsync();
         var applied = DateTime.UtcNow;
         existing.PriceAdjustmentAppliedTime = applied;
@@ -74,12 +81,16 @@ public class StockSplitCaptureManagerTests
         var incoming = Split();
         incoming.Source = StockSplitSource.External;
 
-        (await manager.Capture(stock.Id, stock.Ticker, [incoming])).Should().Be(1);
+        (await manager.Capture(stock.Id, stock.Presentation.Listing.Ticker, [incoming]))
+            .Should()
+            .Be(1);
         context.ChangeTracker.Clear();
         existing = await context.Set<StockSplit>().SingleAsync();
         existing.Source.Should().Be(StockSplitSource.External);
         existing.PriceAdjustmentAppliedTime.Should().BeNull();
-        (await manager.Capture(stock.Id, stock.Ticker, [Split(20m)])).Should().Be(0);
+        (await manager.Capture(stock.Id, stock.Presentation.Listing.Ticker, [Split(20m)]))
+            .Should()
+            .Be(0);
     }
 
     private static EquiblesFinancialDbContext NewDb()
@@ -102,7 +113,7 @@ public class StockSplitCaptureManagerTests
     }
 
     private static StockSplitCaptureManager NewManager(EquiblesFinancialDbContext context) =>
-        new(new StockSplitRepository(context), new CommonStockRepository(context));
+        new(new StockSplitRepository(context), new EquityIssuerRepository(context));
 
     private static CapturedSplit Split(decimal numerator = 2m) =>
         new()
@@ -117,12 +128,11 @@ public class StockSplitCaptureManagerTests
     public async Task Capture_CurrentSecondaryTarget_WritesExactSeriesAction()
     {
         await using var context = NewDb();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GOOG",
-            SecondaryTickers = ["GOOGL"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GOOG",
+            SecondaryTickers: ["GOOGL"]
+        );
         context.Add(stock);
         await context.SaveChangesAsync();
 
@@ -145,12 +155,11 @@ public class StockSplitCaptureManagerTests
     public async Task Capture_SameDateAlreadyAttributedToSibling_AddsIndependentPrimaryAction()
     {
         await using var context = NewDb();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GOOG",
-            SecondaryTickers = ["GOOGL"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GOOG",
+            SecondaryTickers: ["GOOGL"]
+        );
         context.Add(stock);
         context.Add(
             new StockSplit
@@ -184,12 +193,11 @@ public class StockSplitCaptureManagerTests
     public async Task Capture_UnattributedLegacyRow_RemainsPrimaryOnly()
     {
         await using var context = NewDb();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GOOG",
-            SecondaryTickers = ["GOOGL"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GOOG",
+            SecondaryTickers: ["GOOGL"]
+        );
         context.Add(stock);
         context.Add(
             new StockSplit
@@ -245,13 +253,17 @@ public class StockSplitCaptureManagerTests
     )
     {
         await using var context = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "SAFE" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "SAFE"
+        );
         context.Add(stock);
         await context.SaveChangesAsync();
         var split = Split(numerator);
         split.Denominator = denominator;
 
-        var changes = await NewManager(context).Capture(stock.Id, stock.Ticker, [split]);
+        var changes = await NewManager(context)
+            .Capture(stock.Id, stock.Presentation.Listing.Ticker, [split]);
 
         changes.Should().Be(0);
         (await context.Set<StockSplit>().ToListAsync()).Should().BeEmpty();

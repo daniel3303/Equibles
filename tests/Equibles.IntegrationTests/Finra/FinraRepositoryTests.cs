@@ -28,20 +28,19 @@ public class DailyShortVolumeRepositoryTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
+    private EquityIssuer CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
     private DailyShortVolume CreateVolume(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly date,
         long shortVolume = 1_000_000,
         long shortExemptVolume = 5_000,
@@ -56,10 +55,10 @@ public class DailyShortVolumeRepositoryTests : IDisposable
                 .TestSupport.NativeListingSeed.ForStock(
                     _dbContext,
                     stock,
-                    listedTicker ?? stock.Ticker
+                    listedTicker ?? stock.Presentation.Listing.Ticker
                 )
                 .Id,
-            ListedTicker = listedTicker ?? stock.Ticker,
+            ListedTicker = listedTicker ?? stock.Presentation.Listing.Ticker,
             Date = date,
             ShortVolume = shortVolume,
             ShortExemptVolume = shortExemptVolume,
@@ -73,7 +72,7 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByStock_ReturnsAllVolumesForStock()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext
             .Set<DailyShortVolume>()
             .AddRange(
@@ -92,8 +91,8 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByStock_ReturnsEmpty_WhenStockHasNoData()
     {
-        var stockWithData = CreateStock("AAPL", "Apple");
-        var stockWithout = CreateStock("GOOG", "Alphabet");
+        EquityIssuer stockWithData = CreateStock("AAPL", "Apple");
+        EquityIssuer stockWithout = CreateStock("GOOG", "Alphabet");
         _dbContext
             .Set<DailyShortVolume>()
             .Add(CreateVolume(stockWithData, new DateOnly(2025, 1, 1)));
@@ -107,8 +106,8 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByStock_DoesNotReturnVolumesFromOtherStocks()
     {
-        var apple = CreateStock("AAPL", "Apple");
-        var msft = CreateStock("MSFT", "Microsoft");
+        EquityIssuer apple = CreateStock("AAPL", "Apple");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft");
         _dbContext
             .Set<DailyShortVolume>()
             .AddRange(
@@ -125,7 +124,7 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByListing_SeparatesEtfsCarriedByOneFiler()
     {
-        var trust = CreateStock("VB", "Vanguard Index Funds");
+        EquityIssuer trust = CreateStock("VB", "Vanguard Index Funds");
         var date = new DateOnly(2025, 1, 2);
         _dbContext
             .Set<DailyShortVolume>()
@@ -145,7 +144,7 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_FindsRecordForSpecificDate()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var targetDate = new DateOnly(2025, 3, 15);
         _dbContext
             .Set<DailyShortVolume>()
@@ -164,7 +163,7 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_ReturnsEmpty_WhenNoRecordForDate()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext.Set<DailyShortVolume>().Add(CreateVolume(stock, new DateOnly(2025, 1, 1)));
         await _dbContext.SaveChangesAsync();
 
@@ -176,8 +175,8 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_ReturnsEmpty_WhenDateExistsForDifferentStock()
     {
-        var apple = CreateStock("AAPL", "Apple");
-        var msft = CreateStock("MSFT", "Microsoft");
+        EquityIssuer apple = CreateStock("AAPL", "Apple");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft");
         var date = new DateOnly(2025, 5, 1);
         _dbContext.Set<DailyShortVolume>().Add(CreateVolume(apple, date));
         await _dbContext.SaveChangesAsync();
@@ -192,7 +191,7 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestDate_ReturnsMostRecentDate()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext
             .Set<DailyShortVolume>()
             .AddRange(
@@ -218,8 +217,8 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestDate_ReturnsSingleDate_WhenMultipleStocksShareLatestDate()
     {
-        var apple = CreateStock("AAPL", "Apple");
-        var msft = CreateStock("MSFT", "Microsoft");
+        EquityIssuer apple = CreateStock("AAPL", "Apple");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft");
         var latestDate = new DateOnly(2025, 6, 15);
         _dbContext
             .Set<DailyShortVolume>()
@@ -240,8 +239,8 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetByDate_ReturnsAllRecordsForGivenDate()
     {
-        var apple = CreateStock("AAPL", "Apple");
-        var msft = CreateStock("MSFT", "Microsoft");
+        EquityIssuer apple = CreateStock("AAPL", "Apple");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft");
         var date = new DateOnly(2025, 4, 1);
         _dbContext
             .Set<DailyShortVolume>()
@@ -264,7 +263,7 @@ public class DailyShortVolumeRepositoryTests : IDisposable
     [Fact]
     public async Task GetByDate_ReturnsEmpty_WhenNoRecordsForDate()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext.Set<DailyShortVolume>().Add(CreateVolume(stock, new DateOnly(2025, 1, 1)));
         await _dbContext.SaveChangesAsync();
 
@@ -293,20 +292,19 @@ public class ShortInterestRepositoryTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
+    private EquityIssuer CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
     private ShortInterest CreateInterest(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly settlementDate,
         long currentShortPosition = 10_000_000,
         long previousShortPosition = 9_500_000,
@@ -322,10 +320,10 @@ public class ShortInterestRepositoryTests : IDisposable
                 .TestSupport.NativeListingSeed.ForStock(
                     _dbContext,
                     stock,
-                    listedTicker ?? stock.Ticker
+                    listedTicker ?? stock.Presentation.Listing.Ticker
                 )
                 .Id,
-            ListedTicker = listedTicker ?? stock.Ticker,
+            ListedTicker = listedTicker ?? stock.Presentation.Listing.Ticker,
             SettlementDate = settlementDate,
             CurrentShortPosition = currentShortPosition,
             PreviousShortPosition = previousShortPosition,
@@ -340,7 +338,7 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByStock_ReturnsAllInterestRecordsForStock()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext
             .Set<ShortInterest>()
             .AddRange(
@@ -359,8 +357,8 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByStock_ReturnsEmpty_WhenStockHasNoData()
     {
-        var stockWithData = CreateStock("AAPL", "Apple");
-        var stockWithout = CreateStock("GOOG", "Alphabet");
+        EquityIssuer stockWithData = CreateStock("AAPL", "Apple");
+        EquityIssuer stockWithout = CreateStock("GOOG", "Alphabet");
         _dbContext
             .Set<ShortInterest>()
             .Add(CreateInterest(stockWithData, new DateOnly(2025, 1, 15)));
@@ -374,8 +372,8 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByStock_DoesNotReturnRecordsFromOtherStocks()
     {
-        var apple = CreateStock("AAPL", "Apple");
-        var msft = CreateStock("MSFT", "Microsoft");
+        EquityIssuer apple = CreateStock("AAPL", "Apple");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft");
         _dbContext
             .Set<ShortInterest>()
             .AddRange(
@@ -392,7 +390,7 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByListing_SeparatesEtfsCarriedByOneFiler()
     {
-        var trust = CreateStock("VB", "Vanguard Index Funds");
+        EquityIssuer trust = CreateStock("VB", "Vanguard Index Funds");
         var date = new DateOnly(2025, 1, 15);
         _dbContext
             .Set<ShortInterest>()
@@ -412,7 +410,7 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_FindsRecordForSpecificSettlementDate()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var targetDate = new DateOnly(2025, 3, 15);
         _dbContext
             .Set<ShortInterest>()
@@ -431,7 +429,7 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_ReturnsEmpty_WhenNoRecordForSettlementDate()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext.Set<ShortInterest>().Add(CreateInterest(stock, new DateOnly(2025, 1, 15)));
         await _dbContext.SaveChangesAsync();
 
@@ -443,8 +441,8 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_ReturnsEmpty_WhenDateExistsForDifferentStock()
     {
-        var apple = CreateStock("AAPL", "Apple");
-        var msft = CreateStock("MSFT", "Microsoft");
+        EquityIssuer apple = CreateStock("AAPL", "Apple");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft");
         var date = new DateOnly(2025, 5, 15);
         _dbContext.Set<ShortInterest>().Add(CreateInterest(apple, date));
         await _dbContext.SaveChangesAsync();
@@ -459,7 +457,7 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestSettlementDate_ReturnsMostRecentDate()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext
             .Set<ShortInterest>()
             .AddRange(
@@ -485,8 +483,8 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestSettlementDate_ReturnsSingleDate_WhenMultipleStocksShareIt()
     {
-        var apple = CreateStock("AAPL", "Apple");
-        var msft = CreateStock("MSFT", "Microsoft");
+        EquityIssuer apple = CreateStock("AAPL", "Apple");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft");
         var latestDate = new DateOnly(2025, 6, 15);
         _dbContext
             .Set<ShortInterest>()
@@ -507,8 +505,8 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetBySettlementDate_ReturnsAllRecordsForGivenDate()
     {
-        var apple = CreateStock("AAPL", "Apple");
-        var msft = CreateStock("MSFT", "Microsoft");
+        EquityIssuer apple = CreateStock("AAPL", "Apple");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft");
         var date = new DateOnly(2025, 4, 15);
         _dbContext
             .Set<ShortInterest>()
@@ -531,7 +529,7 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task GetBySettlementDate_ReturnsEmpty_WhenNoRecordsForDate()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext.Set<ShortInterest>().Add(CreateInterest(stock, new DateOnly(2025, 1, 15)));
         await _dbContext.SaveChangesAsync();
 
@@ -545,7 +543,7 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task ShortInterest_PersistsNullableFieldsCorrectly()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext
             .Set<ShortInterest>()
             .Add(
@@ -568,7 +566,7 @@ public class ShortInterestRepositoryTests : IDisposable
     [Fact]
     public async Task ShortInterest_PersistsAllFieldValues()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var interest = CreateInterest(
             stock,
             new DateOnly(2025, 7, 15),

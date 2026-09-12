@@ -39,12 +39,11 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
     {
         var sut = new EmbeddingRepository(DbContext);
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = new File
         {
             Id = Guid.NewGuid(),
@@ -87,7 +86,7 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
             vector: new Vector(new ReadOnlyMemory<float>(new[] { 0f, 0f, 1f }))
         );
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         DbContext.Set<Chunk>().AddRange(chunkX.chunk, chunkY.chunk, chunkZ.chunk);
@@ -116,12 +115,11 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
     [Fact]
     public async Task SearchSimilarChunks_DateWindowUsesDocumentDateWhenChunkCacheDisagrees()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var insideFile = MakeFile("inside");
         var beforeFile = MakeFile("before");
         var afterFile = MakeFile("after");

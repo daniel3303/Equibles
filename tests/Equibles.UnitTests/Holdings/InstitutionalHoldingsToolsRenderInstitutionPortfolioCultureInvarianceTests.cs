@@ -12,7 +12,10 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
     [Fact]
     public void RenderInstitutionPortfolio_DoesNotApplyEquitySplitToPrincipal()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple"
+        );
         var holder = new InstitutionalHolder { Name = "Principal holder", Cik = "123" };
         var holding = new InstitutionalHolding
         {
@@ -29,7 +32,7 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
                 new StockSplit
                 {
                     EquityIssuerId = stock.Id,
-                    PriceSeriesTicker = stock.Ticker,
+                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                     EffectiveDate = new DateOnly(2025, 1, 15),
                     Numerator = 10,
                     Denominator = 1,
@@ -94,7 +97,10 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
         );
 
         var holder = new InstitutionalHolder { Name = "ACME Capital", Cik = "0001234567" };
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var holdings = new List<InstitutionalHolding>
         {
             new()

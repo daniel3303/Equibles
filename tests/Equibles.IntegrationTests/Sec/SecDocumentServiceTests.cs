@@ -29,32 +29,20 @@ public class SecDocumentServiceTests
         _sut = new SecDocumentService(_documentRepository, logger);
     }
 
-    private CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
+    private EquityIssuer CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = name,
-            Cik = Guid.NewGuid().ToString(),
-        };
-        _context.Set<CommonStock>().Add(stock);
-        _context.Add(
-            new EquityIssuer
-            {
-                Id = stock.Id,
-                Name = stock.Name,
-                Presentation = new EquityIssuerPresentation
-                {
-                    Listing = new EquityListing { Ticker = stock.Ticker },
-                },
-            }
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: name,
+            Cik: Guid.NewGuid().ToString()
         );
+        _context.Set<EquityIssuer>().Add(stock);
         _context.SaveChanges();
         return stock;
     }
 
     private Document CreateDocument(
-        CommonStock stock,
+        EquityIssuer stock,
         DocumentType docType,
         DateOnly reportingDate,
         DateOnly reportingForDate,
@@ -89,8 +77,8 @@ public class SecDocumentServiceTests
     [Fact]
     public async Task GetRecentDocuments_NullTicker_ReturnsMarketWideDocuments()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var microsoft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer microsoft = CreateStock("MSFT", "Microsoft Corp.");
         CreateDocument(
             apple,
             DocumentType.TenK,
@@ -122,7 +110,7 @@ public class SecDocumentServiceTests
     [Fact]
     public async Task GetRecentDocuments_ReturnsMatchingDocuments()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         CreateDocument(
             stock,
             DocumentType.TenK,
@@ -140,7 +128,7 @@ public class SecDocumentServiceTests
     [Fact]
     public async Task GetRecentDocuments_FilterByStartDate()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         CreateDocument(
             stock,
             DocumentType.TenK,
@@ -163,7 +151,7 @@ public class SecDocumentServiceTests
     [Fact]
     public async Task GetRecentDocuments_FilterByEndDate()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         CreateDocument(
             stock,
             DocumentType.TenK,
@@ -186,7 +174,7 @@ public class SecDocumentServiceTests
     [Fact]
     public async Task GetRecentDocuments_FilterByDocumentType()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         CreateDocument(
             stock,
             DocumentType.TenK,
@@ -209,7 +197,7 @@ public class SecDocumentServiceTests
     [Fact]
     public async Task GetRecentDocuments_FilterByItemNumber_UsesExactTokenMatch()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         CreateDocument(
             stock,
             DocumentType.EightK,
@@ -234,7 +222,7 @@ public class SecDocumentServiceTests
     [Fact]
     public async Task GetRecentDocuments_Pagination_RespectsMaxItemsAndPage()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         for (var i = 1; i <= 5; i++)
         {
             CreateDocument(
@@ -256,7 +244,7 @@ public class SecDocumentServiceTests
     [Fact]
     public async Task GetRecentDocuments_OrderByReportingDateDescending()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         CreateDocument(
             stock,
             DocumentType.TenK,
@@ -287,7 +275,7 @@ public class SecDocumentServiceTests
     [Fact]
     public async Task GetRecentDocuments_DifferentTicker_ReturnsEmpty()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         CreateDocument(
             stock,
             DocumentType.TenK,

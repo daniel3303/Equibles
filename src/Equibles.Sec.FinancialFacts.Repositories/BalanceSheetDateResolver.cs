@@ -22,7 +22,7 @@ public static class BalanceSheetDateResolver
     public static async Task<DateOnly?> Resolve(
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
-        CommonStock stock,
+        EquityIssuer stock,
         int fiscalYear,
         SecFiscalPeriod fiscalPeriod,
         CancellationToken cancellationToken = default

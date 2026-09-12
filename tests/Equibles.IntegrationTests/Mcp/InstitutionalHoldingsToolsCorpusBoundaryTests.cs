@@ -22,12 +22,11 @@ public class InstitutionalHoldingsToolsCorpusBoundaryTests : ParadeDbMcpTestBase
     {
         var prior = new DateOnly(2019, 12, 31);
         var current = new DateOnly(2020, 3, 31);
-        var stock = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft",
-            Cik = "C1",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft",
+            Cik: "C1"
+        );
         var sparse = new InstitutionalHolder { Cik = "H1", Name = "Sparse filer" };
         var currentOnly = new InstitutionalHolder { Cik = "H2", Name = "Current filer" };
         DbContext.AddRange(stock, sparse, currentOnly);
@@ -52,12 +51,11 @@ public class InstitutionalHoldingsToolsCorpusBoundaryTests : ParadeDbMcpTestBase
     {
         var prior = new DateOnly(2019, 12, 31);
         var current = new DateOnly(2020, 3, 31);
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "C1",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "C1"
+        );
         var filer = new InstitutionalHolder { Cik = "H1", Name = "Filer" };
         DbContext.AddRange(stock, filer);
         DbContext.Add(MakeHolding(stock, filer, prior, 1, 1));
@@ -78,12 +76,11 @@ public class InstitutionalHoldingsToolsCorpusBoundaryTests : ParadeDbMcpTestBase
     {
         var prior = new DateOnly(2019, 9, 30);
         var current = new DateOnly(2019, 12, 31);
-        var stock = new CommonStock
-        {
-            Ticker = "ARE",
-            Name = "Alexandria",
-            Cik = "C1",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ARE",
+            Name: "Alexandria",
+            Cik: "C1"
+        );
         var filer = new InstitutionalHolder { Cik = "H1", Name = "Filer" };
         DbContext.AddRange(stock, filer);
         DbContext.Add(MakeHolding(stock, filer, prior, 1, 0));
@@ -103,7 +100,7 @@ public class InstitutionalHoldingsToolsCorpusBoundaryTests : ParadeDbMcpTestBase
         new(
             new InstitutionalHoldingRepository(dbContext),
             new InstitutionalHolderRepository(dbContext),
-            new CommonStockRepository(dbContext),
+            new EquityIssuerRepository(dbContext),
             new StockSplitRepository(dbContext),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(dbContext),
@@ -114,7 +111,7 @@ public class InstitutionalHoldingsToolsCorpusBoundaryTests : ParadeDbMcpTestBase
         );
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -130,6 +127,7 @@ public class InstitutionalHoldingsToolsCorpusBoundaryTests : ParadeDbMcpTestBase
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{holder.Cik}-{stock.Ticker}-{reportDate:yyyyMMdd}",
+            AccessionNumber =
+                $"acc-{holder.Cik}-{stock.Presentation.Listing.Ticker}-{reportDate:yyyyMMdd}",
         };
 }

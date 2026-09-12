@@ -53,13 +53,12 @@ public class StockPricesNegativeMaxResultsTests : IClassFixture<McpServerAppFixt
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple Inc",
-                Cik = "0000320193",
-            };
-            db.Set<CommonStock>().Add(stock);
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple Inc",
+                Cik: "0000320193"
+            );
+            db.Set<EquityIssuer>().Add(stock);
             await db.SaveChangesAsync();
 
             db.Set<EquityDailyStockPrice>()
@@ -90,18 +89,26 @@ public class StockPricesNegativeMaxResultsTests : IClassFixture<McpServerAppFixt
     }
 
     private static EquityDailyStockPrice BuildPrice(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly date,
         decimal close,
         long volume
     ) =>
         new()
         {
-            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(null, stock, stock.Ticker),
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                null,
+                stock,
+                stock.Presentation.Listing.Ticker
+            ),
             EquityListingId = Equibles
-                .TestSupport.NativeListingSeed.ForStock(null, stock, stock.Ticker)
+                .TestSupport.NativeListingSeed.ForStock(
+                    null,
+                    stock,
+                    stock.Presentation.Listing.Ticker
+                )
                 .Id,
-            SourceTicker = stock.Ticker,
+            SourceTicker = stock.Presentation.Listing.Ticker,
             Date = date,
             Open = close - 1m,
             High = close + 1m,

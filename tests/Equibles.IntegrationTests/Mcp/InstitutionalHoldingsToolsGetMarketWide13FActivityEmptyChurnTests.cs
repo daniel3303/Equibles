@@ -34,12 +34,11 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityEmptyChurnTests :
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C1",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C1"
+        );
         var filer = new InstitutionalHolder { Cik = "H1", Name = "Continuing Filer" };
         DbContext.AddRange(aapl, filer);
         // Same filer holds the same stock in both quarters → no new-positions, no sold-outs.
@@ -52,7 +51,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityEmptyChurnTests :
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -69,7 +68,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityEmptyChurnTests :
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -85,6 +84,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityEmptyChurnTests :
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{holder.Cik}-{stock.Ticker}-{reportDate:yyyyMMdd}",
+            AccessionNumber =
+                $"acc-{holder.Cik}-{stock.Presentation.Listing.Ticker}-{reportDate:yyyyMMdd}",
         };
 }

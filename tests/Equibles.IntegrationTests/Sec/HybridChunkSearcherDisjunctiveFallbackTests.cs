@@ -60,17 +60,17 @@ public class HybridChunkSearcherDisjunctiveFallbackTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Search_DisjunctiveFallback_ConjunctiveHitsKeepTheirRankAheadOfBroadHits()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var document = SeedDocument(stock);
         // Chunk 0 matches every token; chunk 1 only some — the fallback must append the
         // broad hit AFTER the precise one, never displace it.
         SeedChunk(
             document,
             "Data center revenue growth drivers include accelerated computing.",
-            stock.Ticker,
+            stock.Presentation.Listing.Ticker,
             0
         );
-        SeedChunk(document, OnPointContent, stock.Ticker, 1);
+        SeedChunk(document, OnPointContent, stock.Presentation.Listing.Ticker, 1);
         await DbContext.SaveChangesAsync();
 
         var sut = HybridChunkSearcherFactory.Bm25Only(DbContext);
@@ -89,26 +89,25 @@ public class HybridChunkSearcherDisjunctiveFallbackTests : ParadeDbMcpTestBase
 
     private async Task<Document> SeedOnPointChunk()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var document = SeedDocument(stock);
-        SeedChunk(document, OnPointContent, stock.Ticker);
+        SeedChunk(document, OnPointContent, stock.Presentation.Listing.Ticker);
         await DbContext.SaveChangesAsync();
         return document;
     }
 
-    private CommonStock SeedStock()
+    private EquityIssuer SeedStock()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "Nvidia Corp.",
-            Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "Nvidia Corp.",
+            Cik: Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString()
+        );
         DbContext.Add(stock);
         return stock;
     }
 
-    private Document SeedDocument(CommonStock stock)
+    private Document SeedDocument(EquityIssuer stock)
     {
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
         var file = new File

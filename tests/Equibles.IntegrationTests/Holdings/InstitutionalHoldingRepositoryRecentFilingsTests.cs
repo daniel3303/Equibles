@@ -55,7 +55,7 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
         // materialised page from each filer's earliest holding report date, keyed
         // on the correct InstitutionalHolderId — a broken key would flag both or neither.
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "AAPL");
+        EquityIssuer stock = await SeedStock(seed, "AAPL");
         var returningFiler = await SeedHolder(seed, "returning");
         var newFiler = await SeedHolder(seed, "firsttime");
 
@@ -89,7 +89,7 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
         // rollup row whose counts deliberately differ from the seeded holdings to
         // prove the read path uses the rollup table.
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "MSFT");
+        EquityIssuer stock = await SeedStock(seed, "MSFT");
         var holder = await SeedHolder(seed, "rollup");
 
         // A holding exists for this accession, but the rollup independently claims 3
@@ -117,8 +117,8 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
         // into one InstitutionalFiling row per accession with COUNT / SUM matching
         // the old inline feed grouping. This statement mirrors the migration's Sql.
         await using var seed = FreshContext();
-        var stockA = await SeedStock(seed, "NVDA");
-        var stockB = await SeedStock(seed, "AMD");
+        EquityIssuer stockA = await SeedStock(seed, "NVDA");
+        EquityIssuer stockB = await SeedStock(seed, "AMD");
         var filerA = await SeedHolder(seed, "filerA");
         var filerB = await SeedHolder(seed, "filerB");
 
@@ -166,17 +166,16 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
                  "ReportDate", "IsAmendment";
         """;
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Test Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Test Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}"
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -194,7 +193,7 @@ public class InstitutionalHoldingRepositoryRecentFilingsTests : IAsyncLifetime
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         string accession,

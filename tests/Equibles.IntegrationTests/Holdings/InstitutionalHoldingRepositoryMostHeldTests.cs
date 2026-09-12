@@ -47,9 +47,9 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task GetMostHeld_RanksByCurrentFilerCount_DescendingByDefault()
     {
         await using var seed = FreshContext();
-        var aapl = await SeedStock(seed, "AAPL");
-        var msft = await SeedStock(seed, "MSFT");
-        var nvda = await SeedStock(seed, "NVDA");
+        EquityIssuer aapl = await SeedStock(seed, "AAPL");
+        EquityIssuer msft = await SeedStock(seed, "MSFT");
+        EquityIssuer nvda = await SeedStock(seed, "NVDA");
         var holders = new List<InstitutionalHolder>();
         for (var i = 0; i < 5; i++)
             holders.Add(await SeedHolder(seed, cik: $"h{i}"));
@@ -82,8 +82,8 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task GetMostHeld_StockSoldOutInCurrentQuarter_ExcludedFromRanking()
     {
         await using var seed = FreshContext();
-        var aapl = await SeedStock(seed, "AAPL");
-        var tsla = await SeedStock(seed, "TSLA");
+        EquityIssuer aapl = await SeedStock(seed, "AAPL");
+        EquityIssuer tsla = await SeedStock(seed, "TSLA");
         var holder = await SeedHolder(seed, cik: "h1");
 
         // AAPL stays held in current. TSLA was held last quarter only.
@@ -106,7 +106,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task GetMostHeld_StockNewInCurrentQuarter_PreviousFieldsAreZero()
     {
         await using var seed = FreshContext();
-        var nvda = await SeedStock(seed, "NVDA");
+        EquityIssuer nvda = await SeedStock(seed, "NVDA");
         var h1 = await SeedHolder(seed, cik: "h1");
         var h2 = await SeedHolder(seed, cik: "h2");
 
@@ -135,7 +135,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task GetMostHeld_QuarterOverQuarterDelta_ReflectsBothQuarters()
     {
         await using var seed = FreshContext();
-        var msft = await SeedStock(seed, "MSFT");
+        EquityIssuer msft = await SeedStock(seed, "MSFT");
         var h1 = await SeedHolder(seed, cik: "h1");
         var h2 = await SeedHolder(seed, cik: "h2");
         var h3 = await SeedHolder(seed, cik: "h3");
@@ -165,8 +165,8 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task GetUniqueFilerIds_CountsDistinctHoldersForReportDate()
     {
         await using var seed = FreshContext();
-        var aapl = await SeedStock(seed, "AAPL");
-        var msft = await SeedStock(seed, "MSFT");
+        EquityIssuer aapl = await SeedStock(seed, "AAPL");
+        EquityIssuer msft = await SeedStock(seed, "MSFT");
         var h1 = await SeedHolder(seed, cik: "h1");
         var h2 = await SeedHolder(seed, cik: "h2");
         var h3 = await SeedHolder(seed, cik: "h3");
@@ -232,7 +232,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task Get13FUniverseFilerCount_MissingSnapshot_FallsBackToExactDistinctCount()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "AAPL");
+        EquityIssuer stock = await SeedStock(seed, "AAPL");
         var h1 = await SeedHolder(seed, "h1");
         var h2 = await SeedHolder(seed, "h2");
         seed.Add(MakeHolding(stock, h1, Current, shares: 100, value: 100_000));
@@ -251,7 +251,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task Get13FUniverseFilerCount_DirtyZeroStub_FallsBackToExactDistinctCount()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "MSFT");
+        EquityIssuer stock = await SeedStock(seed, "MSFT");
         var h1 = await SeedHolder(seed, "dirty-h1");
         var h2 = await SeedHolder(seed, "dirty-h2");
         seed.Add(MakeHolding(stock, h1, Current, shares: 100, value: 100_000));
@@ -278,7 +278,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task Get13FUniverseFilerCount_CombinedDirtyWindowUsesMaterializedHolderUnion()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "AAPL");
+        EquityIssuer stock = await SeedStock(seed, "AAPL");
         var currentFiler = await SeedHolder(seed, "current-filer");
         var carryForwardFiler = await SeedHolder(seed, "carry-filer");
         var newlyImportedFiler = await SeedHolder(seed, "new-filer");
@@ -343,7 +343,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task Get13FUniverseFilerCount_MissingCombinedSnapshotFallsBackToExactUnion()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "MSFT");
+        EquityIssuer stock = await SeedStock(seed, "MSFT");
         var bothQuarters = await SeedHolder(seed, "both-quarters");
         var priorOnly = await SeedHolder(seed, "prior-only");
         seed.AddRange(
@@ -365,7 +365,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task Get13FUniverseFilerCount_ExistingCombinedSnapshotReturnsZeroHolderUnion()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "ZERO");
+        EquityIssuer stock = await SeedStock(seed, "ZERO");
         var liveHolder = await SeedHolder(seed, "live-holder");
         seed.Add(MakeHolding(stock, liveHolder, Current, shares: 100, value: 100_000));
         seed.Add(
@@ -396,7 +396,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     public async Task GetMarketActivitySnapshotBacked_WithRetryStrategy_ReadsVersionedGeneration()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "RETRY");
+        EquityIssuer stock = await SeedStock(seed, "RETRY");
         var computedAt = DateTime.UtcNow;
         seed.AddRange(
             new StockQuarterlyActivity
@@ -416,7 +416,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
             {
                 EquityIssuerId = stock.Id,
                 ReportDate = Current,
-                PriceSeriesTicker = stock.Ticker,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 CurrentShares = 1_200,
                 PreviousShares = 1_000,
                 ComputedAt = computedAt,
@@ -436,20 +436,19 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
         rows[0].CommonStockId.Should().Be(stock.Id);
         rows[0].CurrentShares.Should().Be(1_200);
         rows[0].ListingShares.Should().ContainSingle();
-        rows[0].ListingShares[0].PriceSeriesTicker.Should().Be(stock.Ticker);
+        rows[0].ListingShares[0].PriceSeriesTicker.Should().Be(stock.Presentation.Listing.Ticker);
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Test Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Test Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}"
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -467,7 +466,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -483,6 +482,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{holder.Cik}-{reportDate:yyyyMMdd}-{stock.Ticker}",
+            AccessionNumber =
+                $"acc-{holder.Cik}-{reportDate:yyyyMMdd}-{stock.Presentation.Listing.Ticker}",
         };
 }

@@ -33,20 +33,18 @@ public class ProfilesInstitutionBacktestExtremeFromDateTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                },
-                new CommonStock
-                {
-                    Id = spyId,
-                    Ticker = "SPY",
-                    Name = "SPDR S&P 500 ETF",
-                    Cik = "0000884394",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: spyId,
+                    Ticker: "SPY",
+                    Name: "SPDR S&P 500 ETF",
+                    Cik: "0000884394"
+                )
             );
             db.Add(
                 new InstitutionalHolder

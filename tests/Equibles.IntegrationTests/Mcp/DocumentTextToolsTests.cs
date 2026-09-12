@@ -36,13 +36,12 @@ public class DocumentTextToolsTests : ParadeDbMcpTestBase
         string companyName = "Apple Inc"
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = companyName,
-            Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: companyName,
+            Cik: Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString()
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
 
         var fileContent = new FileContent { Bytes = Encoding.UTF8.GetBytes(content) };
         var file = new File

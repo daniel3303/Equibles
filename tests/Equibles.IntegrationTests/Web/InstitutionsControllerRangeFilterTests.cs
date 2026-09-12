@@ -236,14 +236,13 @@ public class InstitutionsControllerRangeFilterTests
         html.Should().NotContain("Dormant Fund LP");
     }
 
-    private static CommonStock MakeStock(Guid id, string ticker, string cik) =>
-        new()
-        {
-            Id = id,
-            Ticker = ticker,
-            Name = ticker,
-            Cik = cik,
-        };
+    private static EquityIssuer MakeStock(Guid id, string ticker, string cik) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: id,
+            Ticker: ticker,
+            Name: ticker,
+            Cik: cik
+        );
 
     private static InstitutionalHolding MakeHolding(Guid stockId, Guid holderId, long value) =>
         new()

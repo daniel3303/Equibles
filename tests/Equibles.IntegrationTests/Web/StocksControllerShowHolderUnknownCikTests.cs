@@ -40,20 +40,19 @@ public class StocksControllerShowHolderUnknownCikTests
             new CorporateActionsModuleConfiguration()
         );
 
-        ctx.Set<CommonStock>()
+        ctx.Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Id = Guid.NewGuid(),
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
         await ctx.SaveChangesAsync();
 
         var sut = new StocksController(
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             new InstitutionalHolderRepository(ctx),
             institutionalHoldingRepository: null!,
             documentRepository: null!,

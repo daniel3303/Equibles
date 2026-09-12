@@ -47,7 +47,7 @@ public class NportFilingReprocessManager
     internal const int MaxReprocessAttempts = 3;
 
     private readonly NportFilingRepository _filingRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ErrorReporter _errorReporter;
@@ -60,7 +60,7 @@ public class NportFilingReprocessManager
 
     public NportFilingReprocessManager(
         NportFilingRepository filingRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         ISecEdgarClient secEdgarClient,
         EquiblesFinancialDbContext dbContext,
         ErrorReporter errorReporter,
@@ -464,9 +464,9 @@ public class NportFilingReprocessManager
             return _trackedCusips;
 
         var cusips = await _commonStockRepository
-            .GetAll()
-            .Where(c => c.Cusip != null && c.Cusip != "")
-            .Select(c => c.Cusip)
+            .GetSecurities()
+            .Where(security => security.Cusip != null && security.Cusip != "")
+            .Select(security => security.Cusip)
             .ToListAsync();
 
         _trackedCusips = new HashSet<string>(cusips, StringComparer.OrdinalIgnoreCase);

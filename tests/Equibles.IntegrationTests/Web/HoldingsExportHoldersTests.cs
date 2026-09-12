@@ -34,12 +34,11 @@ public class HoldingsExportHoldersTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "EMPT",
-                    Name = "Empty Co.",
-                    Cik = "0000099001",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "EMPT",
+                    Name: "Empty Co.",
+                    Cik: "0000099001"
+                )
             );
             await Task.CompletedTask;
         });
@@ -59,13 +58,12 @@ public class HoldingsExportHoldersTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -112,13 +110,12 @@ public class HoldingsExportHoldersTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -152,13 +149,12 @@ public class HoldingsExportHoldersTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "NVDA",
-                    Name = "NVIDIA Corp.",
-                    Cik = "0001045810",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "NVDA",
+                    Name: "NVIDIA Corp.",
+                    Cik: "0001045810"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -195,13 +191,12 @@ public class HoldingsExportHoldersTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "GOOG",
-                    Name = "Alphabet Inc.",
-                    Cik = "0001652044",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "GOOG",
+                    Name: "Alphabet Inc.",
+                    Cik: "0001652044"
+                )
             );
             db.AddRange(
                 new InstitutionalHolder

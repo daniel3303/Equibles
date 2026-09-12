@@ -37,18 +37,16 @@ public class CompanySyncServiceActiveTickerCollisionTests : ParadeDbMcpTestBase
     {
         // mover (CIK A, "OLD") wants "AAPL"; holder (CIK B) already owns "AAPL"
         // and is still in the SEC feed — so the rename must be refused.
-        var mover = new CommonStock
-        {
-            Cik = "0000000001",
-            Ticker = "OLD",
-            Name = "Mover Inc.",
-        };
-        var holder = new CommonStock
-        {
-            Cik = "0000000002",
-            Ticker = "AAPL",
-            Name = "Holder Inc.",
-        };
+        EquityIssuer mover = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000001",
+            Ticker: "OLD",
+            Name: "Mover Inc."
+        );
+        EquityIssuer holder = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000002",
+            Ticker: "AAPL",
+            Name: "Holder Inc."
+        );
         DbContext.Add(mover);
         DbContext.Add(holder);
         await DbContext.SaveChangesAsync();
@@ -78,10 +76,13 @@ public class CompanySyncServiceActiveTickerCollisionTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -102,10 +103,10 @@ public class CompanySyncServiceActiveTickerCollisionTests : ParadeDbMcpTestBase
 
         // The collision is refused: the mover keeps "OLD", the holder keeps "AAPL".
         await using var verify = Fixture.CreateDbContext();
-        var moverRow = await verify
-            .Set<CommonStock>()
+        EquityIssuer moverRow = await verify
+            .Set<EquityIssuer>()
             .AsNoTracking()
             .SingleAsync(s => s.Cik == "0000000001");
-        moverRow.Ticker.Should().Be("OLD");
+        moverRow.Presentation.Listing.Ticker.Should().Be("OLD");
     }
 }

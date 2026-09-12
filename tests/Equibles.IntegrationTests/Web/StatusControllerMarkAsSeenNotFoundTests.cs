@@ -79,7 +79,7 @@ public class StatusControllerMarkAsSeenNotFoundTests : IDisposable
         var errorRepository = new ErrorRepository(_dbContext);
         var errorManager = Substitute.ForPartsOf<ErrorManager>(errorRepository);
         var dataCountService = new DataCountService(
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new DocumentRepository(_dbContext),
             new InsiderTransactionRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),

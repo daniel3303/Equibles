@@ -36,7 +36,7 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
     public async Task Extract_CoverWithNoteAndCommonRows_PersistsListingsAndClassifiesTicker()
     {
         // The QVC shape: the stock row's ticker IS the listed baby bond.
-        var stock = SeedStock(ticker: "QVCC");
+        EquityIssuer stock = SeedStock(ticker: "QVCC");
         var document = await SeedDocument(
             stock,
             CoverEnvelope(
@@ -70,15 +70,19 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
         evidence.Select(row => row.Ticker).Should().Equal("QVCC", "QVCGA");
         evidence.Should().OnlyContain(row => row.FiledDate == new DateOnly(2026, 5, 15));
 
-        var reloaded = await ReloadStock(stock);
-        reloaded.ListedSecurityType.Should().Be(ListedSecurityType.DebtSecurities);
-        reloaded.ListedSecurityTitle.Should().Be("6.875% Senior Secured Notes due 2068");
+        EquityIssuer reloaded = await ReloadStock(stock);
+        reloaded
+            .Presentation.Listing.Security.RegistrationType.Should()
+            .Be(ListedSecurityType.DebtSecurities);
+        reloaded
+            .Presentation.Listing.Security.RegistrationTitle.Should()
+            .Be("6.875% Senior Secured Notes due 2068");
     }
 
     [Fact]
     public async Task Extract_OlderFiling_NeverOverwritesNewerStatement()
     {
-        var stock = SeedStock(ticker: "SOHO");
+        EquityIssuer stock = SeedStock(ticker: "SOHO");
         var newer = await SeedDocument(
             stock,
             CoverEnvelope(("C1", "Common Stock, par value $0.01", "SOHO", "NASDAQ")),
@@ -116,8 +120,10 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
             .ToListAsync(CancellationToken.None);
         evidenceDates.Should().Equal(new DateOnly(2025, 3, 20), new DateOnly(2026, 4, 15));
 
-        var reloaded = await ReloadStock(stock);
-        reloaded.ListedSecurityType.Should().Be(ListedSecurityType.CommonShares);
+        EquityIssuer reloaded = await ReloadStock(stock);
+        reloaded
+            .Presentation.Listing.Security.RegistrationType.Should()
+            .Be(ListedSecurityType.CommonShares);
     }
 
     [Fact]
@@ -126,7 +132,7 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
         // The ticker feed writes class shares with a dash; the filing uses a
         // dot. Both must normalize onto the same row or the class share never
         // classifies.
-        var stock = SeedStock(ticker: "BRK-B");
+        EquityIssuer stock = SeedStock(ticker: "BRK-B");
         var document = await SeedDocument(
             stock,
             CoverEnvelope(("C1", "Class B Common Stock", "BRK.B", "NYSE")),
@@ -136,16 +142,20 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
 
         await BuildSut().Extract(document, CancellationToken.None);
 
-        var reloaded = await ReloadStock(stock);
-        reloaded.ListedSecurityType.Should().Be(ListedSecurityType.CommonShares);
-        reloaded.ListedSecurityTitle.Should().Be("Class B Common Stock");
+        EquityIssuer reloaded = await ReloadStock(stock);
+        reloaded
+            .Presentation.Listing.Security.RegistrationType.Should()
+            .Be(ListedSecurityType.CommonShares);
+        reloaded
+            .Presentation.Listing.Security.RegistrationTitle.Should()
+            .Be("Class B Common Stock");
     }
 
     [Fact]
     public async Task Extract_EnvelopeWithoutCoverFacts_LeavesClassificationUntouched()
     {
         // Many report types carry no 12(b) table; absence is not evidence.
-        var stock = SeedStock(ticker: "ACME");
+        EquityIssuer stock = SeedStock(ticker: "ACME");
         var document = await SeedDocument(
             stock,
             CoverEnvelope(),
@@ -158,15 +168,17 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
         (await DbContext.Set<IssuerSecurityRegistration>().CountAsync(CancellationToken.None))
             .Should()
             .Be(0);
-        var reloaded = await ReloadStock(stock);
-        reloaded.ListedSecurityType.Should().Be(ListedSecurityType.Unknown);
-        reloaded.ListedSecurityTitle.Should().BeNull();
+        EquityIssuer reloaded = await ReloadStock(stock);
+        reloaded
+            .Presentation.Listing.Security.RegistrationType.Should()
+            .Be(ListedSecurityType.Unknown);
+        reloaded.Presentation.Listing.Security.RegistrationTitle.Should().BeNull();
     }
 
     [Fact]
     public async Task Extract_SameDocumentTwice_KeepsOneRowPerSymbol()
     {
-        var stock = SeedStock(ticker: "ACME");
+        EquityIssuer stock = SeedStock(ticker: "ACME");
         var document = await SeedDocument(
             stock,
             CoverEnvelope(("C1", "Common Stock", "ACME", "NYSE")),
@@ -190,14 +202,22 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Extract_AfterLegacyOwnerRetirement_PersistsNativeEvidenceAndClassification()
     {
-        var stock = SeedStock("NATIVE");
+        var legacy = new CommonStock
+        {
+            Ticker = "NATIVE",
+            Name = "Native Corp.",
+            Cik = "NATIVE",
+        };
+        DbContext.Add(legacy);
+        await DbContext.SaveChangesAsync();
+        var stock = await new EquityIssuerRepository(DbContext).Get(legacy.Id);
         var document = await SeedDocument(
             stock,
             CoverEnvelope(("C1", "Class A Common Stock", "NATIVE", "NYSE")),
             "0000000001-26-000010",
             new DateOnly(2026, 6, 1)
         );
-        DbContext.Remove(stock);
+        DbContext.Remove(legacy);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -222,7 +242,7 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(EquiblesFinancialDbContext), DbContext),
             (typeof(FinancialConceptRepository), new FinancialConceptRepository(DbContext)),
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
                 typeof(EquityIssuerTickerEvidenceRepository),
@@ -244,28 +264,27 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
         );
     }
 
-    private CommonStock SeedStock(string ticker)
+    private EquityIssuer SeedStock(string ticker)
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Corp.",
-            Cik = ticker,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Corp.",
+            Cik: ticker
+        );
         DbContext.Add(stock);
         return stock;
     }
 
-    private async Task<CommonStock> ReloadStock(CommonStock stock)
+    private async Task<EquityIssuer> ReloadStock(EquityIssuer stock)
     {
         return await DbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AsNoTracking()
             .FirstAsync(s => s.Id == stock.Id, CancellationToken.None);
     }
 
     private async Task<Document> SeedDocument(
-        CommonStock stock,
+        EquityIssuer stock,
         string envelope,
         string accession,
         DateOnly reportingDate

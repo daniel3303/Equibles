@@ -17,13 +17,13 @@ public class HoldingsActivityController : BaseController
     private const int MinHeatMapFilers = 3;
 
     private readonly InstitutionalHoldingRepository _holdingRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly AumQuarterlySnapshotRepository _aumSnapshotRepository;
     private readonly SectorQuarterlySnapshotRepository _sectorSnapshotRepository;
 
     public HoldingsActivityController(
         InstitutionalHoldingRepository holdingRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         AumQuarterlySnapshotRepository aumSnapshotRepository,
         SectorQuarterlySnapshotRepository sectorSnapshotRepository,
         ILogger<HoldingsActivityController> logger
@@ -437,11 +437,11 @@ public class HoldingsActivityController : BaseController
 
     private Task<Dictionary<Guid, StockLabel>> LoadStockLabels(List<Guid> stockIds) =>
         _commonStockRepository
-            .GetByIds(stockIds)
+            .GetCurrentUsDirectoryByIds(stockIds)
             .Select(s => new StockLabel
             {
                 Id = s.Id,
-                Ticker = s.Ticker,
+                Ticker = s.Presentation.Listing.Ticker,
                 Name = s.Name,
             })
             .ToDictionaryAsync(s => s.Id);

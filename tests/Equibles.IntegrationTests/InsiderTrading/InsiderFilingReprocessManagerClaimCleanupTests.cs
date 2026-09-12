@@ -28,13 +28,12 @@ public class InsiderFilingReprocessManagerClaimCleanupTests : ParadeDbMcpTestBas
         const string mismatchedTarget = "0000000001-24-000001";
         const string matchingTarget = "0000000001-24-000002";
         const string unknownTarget = "0000000001-24-000005";
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "TEST",
-            Name = "Test Company",
-            Cik = "0000000001",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "TEST",
+            Name: "Test Company",
+            Cik: "0000000001"
+        );
         var owner = new InsiderOwner
         {
             Id = Guid.NewGuid(),
@@ -122,13 +121,12 @@ public class InsiderFilingReprocessManagerClaimCleanupTests : ParadeDbMcpTestBas
     )
     {
         const string targetAccession = "0000000001-24-000011";
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "TEST",
-            Name = "Test Company",
-            Cik = "0000000001",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "TEST",
+            Name: "Test Company",
+            Cik: "0000000001"
+        );
         var owner = new InsiderOwner
         {
             Id = Guid.NewGuid(),
@@ -199,7 +197,7 @@ public class InsiderFilingReprocessManagerClaimCleanupTests : ParadeDbMcpTestBas
     }
 
     private static InsiderTransaction BuildClaim(
-        CommonStock stock,
+        EquityIssuer stock,
         InsiderOwner owner,
         string accessionNumber,
         string supersededAccessionNumber,

@@ -51,11 +51,15 @@ public class ShortInterestRepositoryGetAllSettlementDatesRelationalTests : Parad
             EquityListingId = Equibles
                 .TestSupport.NativeListingSeed.ForStock(
                     DbContext,
-                    new CommonStock { Ticker = ticker, Name = ticker },
-                    new CommonStock { Ticker = ticker, Name = ticker }.Ticker
+                    Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: ticker, Name: ticker),
+                    Equibles
+                        .TestSupport.EquityIssuerSeed.Create(Ticker: ticker, Name: ticker)
+                        .Presentation.Listing.Ticker
                 )
                 .Id,
-            ListedTicker = new CommonStock { Ticker = ticker, Name = ticker }.Ticker,
+            ListedTicker = Equibles
+                .TestSupport.EquityIssuerSeed.Create(Ticker: ticker, Name: ticker)
+                .Presentation.Listing.Ticker,
             SettlementDate = settlementDate,
             CurrentShortPosition = 1000,
         };

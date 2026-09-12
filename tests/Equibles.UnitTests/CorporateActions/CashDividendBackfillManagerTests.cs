@@ -49,13 +49,16 @@ public class CashDividendBackfillManagerTests
             yahooClient,
             new CashDividendCaptureManager(
                 new CashDividendRepository(db),
-                new CommonStockRepository(db)
+                new EquityIssuerRepository(db)
             )
         );
 
-    private static async Task<CommonStock> AddStock(EquiblesFinancialDbContext db)
+    private static async Task<EquityIssuer> AddStock(EquiblesFinancialDbContext db)
     {
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL"
+        );
         db.Add(stock);
         await db.SaveChangesAsync();
         return stock;
@@ -74,7 +77,7 @@ public class CashDividendBackfillManagerTests
     public async Task BackfillHistory_RequestsOneChartCoveringSinceThroughToday()
     {
         await using var db = NewDb();
-        var stock = await AddStock(db);
+        EquityIssuer stock = await AddStock(db);
         var since = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-730);
         var client = ClientReturning();
 
@@ -92,7 +95,7 @@ public class CashDividendBackfillManagerTests
     public async Task BackfillHistory_UpsertsReturnedDividendsAsYahooSourced()
     {
         await using var db = NewDb();
-        var stock = await AddStock(db);
+        EquityIssuer stock = await AddStock(db);
         var client = ClientReturning(
             new CashDividendEvent { Date = new DateOnly(2024, 2, 9), Amount = 0.24m },
             new CashDividendEvent { Date = new DateOnly(2024, 5, 9), Amount = 0.25m }
@@ -116,7 +119,7 @@ public class CashDividendBackfillManagerTests
     public async Task BackfillHistory_Rerun_IsIdempotentAndWritesNothing()
     {
         await using var db = NewDb();
-        var stock = await AddStock(db);
+        EquityIssuer stock = await AddStock(db);
         var client = ClientReturning(
             new CashDividendEvent { Date = new DateOnly(2024, 2, 9), Amount = 0.24m }
         );
@@ -134,7 +137,7 @@ public class CashDividendBackfillManagerTests
     public async Task BackfillHistory_NoDividendsInWindow_WritesNothingAndReturnsZero()
     {
         await using var db = NewDb();
-        var stock = await AddStock(db);
+        EquityIssuer stock = await AddStock(db);
 
         var captured = await NewManager(db, ClientReturning())
             .BackfillHistory(
@@ -151,7 +154,7 @@ public class CashDividendBackfillManagerTests
     public async Task BackfillHistory_AlreadyCancelled_ThrowsWithoutFetching()
     {
         await using var db = NewDb();
-        var stock = await AddStock(db);
+        EquityIssuer stock = await AddStock(db);
         var client = ClientReturning();
         using var cts = new CancellationTokenSource();
         cts.Cancel();

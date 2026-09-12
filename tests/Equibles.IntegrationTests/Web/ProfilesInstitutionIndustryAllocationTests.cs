@@ -40,38 +40,34 @@ public class ProfilesInstitutionIndustryAllocationTests
                 new Industry { Id = energyId, Name = "Energy" }
             );
             db.AddRange(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                    IndustryId = softwareId,
-                },
-                new CommonStock
-                {
-                    Id = msftId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                    IndustryId = softwareId,
-                },
-                new CommonStock
-                {
-                    Id = xomId,
-                    Ticker = "XOM",
-                    Name = "Exxon Mobil Corp.",
-                    Cik = "0000034088",
-                    IndustryId = energyId,
-                },
-                new CommonStock
-                {
-                    Id = unclassifiedId,
-                    Ticker = "OBSCURE",
-                    Name = "Obscure Inc.",
-                    Cik = "0009999999",
-                    IndustryId = null,
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193",
+                    IndustryId: softwareId
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: msftId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019",
+                    IndustryId: softwareId
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: xomId,
+                    Ticker: "XOM",
+                    Name: "Exxon Mobil Corp.",
+                    Cik: "0000034088",
+                    IndustryId: energyId
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: unclassifiedId,
+                    Ticker: "OBSCURE",
+                    Name: "Obscure Inc.",
+                    Cik: "0009999999",
+                    IndustryId: null
+                )
             );
             db.Add(
                 new InstitutionalHolder

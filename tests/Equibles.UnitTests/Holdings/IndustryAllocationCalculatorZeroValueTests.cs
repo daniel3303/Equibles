@@ -16,15 +16,14 @@ public class IndustryAllocationCalculatorZeroValueTests
     public void Calculate_AllHoldingsZeroValue_PercentOfPortfolioIsZeroNotNaN()
     {
         var industry = new Industry { Id = Guid.NewGuid(), Name = "Software" };
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "TEST",
-            Name = "Test Corp.",
-            Cik = "0099999999",
-            IndustryId = industry.Id,
-            Industry = industry,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "TEST",
+            Name: "Test Corp.",
+            Cik: "0099999999",
+            IndustryId: industry.Id,
+            Industry: industry
+        );
         var holding = new InstitutionalHolding
         {
             EquityIssuerId = stock.Id,

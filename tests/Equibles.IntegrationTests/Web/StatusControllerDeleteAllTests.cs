@@ -83,7 +83,7 @@ public class StatusControllerDeleteAllTests : ParadeDbMcpTestBase
         var flashMessage = Substitute.For<IFlashMessage>();
         var errorRepository = new ErrorRepository(DbContext);
         var dataCountService = new DataCountService(
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new DocumentRepository(DbContext),
             new InsiderTransactionRepository(DbContext),
             new CongressionalTradeRepository(DbContext),

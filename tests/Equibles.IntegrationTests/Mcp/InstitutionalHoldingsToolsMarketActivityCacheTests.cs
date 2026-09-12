@@ -25,12 +25,11 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C1",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C1"
+        );
         var holder = new InstitutionalHolder { Cik = "H1", Name = "Test Filer" };
         DbContext.AddRange(stock, holder);
         var computedAt = DateTime.UtcNow;
@@ -54,7 +53,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
             {
                 EquityIssuerId = stock.Id,
                 ReportDate = current,
-                PriceSeriesTicker = stock.Ticker,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 CurrentShares = 200,
                 PreviousShares = 100,
                 ComputedAt = computedAt,
@@ -100,12 +99,11 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var stock = new CommonStock
-        {
-            Ticker = "GONE",
-            Name = "Formerly Listed Inc.",
-            Cik = "C-DELISTED",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONE",
+            Name: "Formerly Listed Inc.",
+            Cik: "C-DELISTED"
+        );
         var holder = new InstitutionalHolder { Cik = "H-DELISTED", Name = "Test Filer" };
         DbContext.AddRange(stock, holder);
         var computedAt = DateTime.UtcNow;
@@ -129,7 +127,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
             {
                 EquityIssuerId = stock.Id,
                 ReportDate = current,
-                PriceSeriesTicker = stock.Ticker,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 CurrentShares = 200,
                 PreviousShares = 100,
                 ComputedAt = computedAt,
@@ -149,10 +147,10 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
 
         await using (var update = Fixture.CreateDbContext())
         {
-            var deactivated = await update
-                .Set<CommonStock>()
+            EquityIssuer deactivated = await update
+                .Set<EquityIssuer>()
                 .SingleAsync(row => row.Id == stock.Id);
-            deactivated.Active = false;
+            deactivated.Presentation.Listing.Active = false;
             await update.SaveChangesAsync();
         }
 
@@ -169,12 +167,11 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var stock = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "C2",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "C2"
+        );
         var holder = new InstitutionalHolder { Cik = "H2", Name = "Dirty Filer" };
         DbContext.AddRange(stock, holder);
         var computedAt = DateTime.UtcNow;
@@ -198,7 +195,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
             {
                 EquityIssuerId = stock.Id,
                 ReportDate = current,
-                PriceSeriesTicker = stock.Ticker,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 CurrentShares = 200,
                 PreviousShares = 100,
                 ComputedAt = computedAt,
@@ -260,7 +257,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
         return new InstitutionalHoldingsTools(
             holdingRepository,
             new InstitutionalHolderRepository(context),
-            new CommonStockRepository(context),
+            new EquityIssuerRepository(context),
             stockSplitRepository,
             new StockCombinedQuarterService(holdingRepository, stockSplitRepository),
             ErrorManager,
@@ -270,7 +267,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -286,6 +283,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{holder.Cik}-{stock.Ticker}-{reportDate:yyyyMMdd}",
+            AccessionNumber =
+                $"acc-{holder.Cik}-{stock.Presentation.Listing.Ticker}-{reportDate:yyyyMMdd}",
         };
 }

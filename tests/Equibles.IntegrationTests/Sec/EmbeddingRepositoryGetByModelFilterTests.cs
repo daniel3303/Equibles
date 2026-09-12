@@ -32,12 +32,11 @@ public class EmbeddingRepositoryGetByModelFilterTests : ParadeDbMcpTestBase
     {
         var sut = new EmbeddingRepository(DbContext);
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = new File
         {
             Id = Guid.NewGuid(),
@@ -67,7 +66,7 @@ public class EmbeddingRepositoryGetByModelFilterTests : ParadeDbMcpTestBase
         var prefixChunk = MakeChunkWithEmbedding(document, index: 1, model: "model-v1");
         var otherChunk = MakeChunkWithEmbedding(document, index: 2, model: "different-model");
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         DbContext.Set<Chunk>().AddRange(keepChunk.chunk, prefixChunk.chunk, otherChunk.chunk);

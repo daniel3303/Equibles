@@ -17,12 +17,12 @@ public enum DelistedListingCusipSeedResult
 }
 
 [Service]
-public class CommonStockManager
+public class EquityIdentityManager
 {
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly IBus _bus;
 
-    public CommonStockManager(CommonStockRepository commonStockRepository, IBus bus)
+    public EquityIdentityManager(EquityIssuerRepository commonStockRepository, IBus bus)
     {
         _commonStockRepository = commonStockRepository;
         _bus = bus;
@@ -62,7 +62,10 @@ public class CommonStockManager
             return DelistedListingCusipSeedResult.Skipped;
         }
 
-        var stock = await _commonStockRepository.GetForUpdate(stockId.Value, cancellationToken);
+        EquityIssuer stock = await _commonStockRepository.GetForUpdate(
+            stockId.Value,
+            cancellationToken
+        );
         if (stock == null)
         {
             return DelistedListingCusipSeedResult.Skipped;
@@ -96,11 +99,11 @@ public class CommonStockManager
         }
 
         var primaryClaims = await _commonStockRepository
-            .GetAllIncludingInactive()
-            .Where(candidate =>
-                candidate.Cusip != null && candidate.Cusip.ToUpper() == normalizedCusip
+            .GetSecurities()
+            .Where(security =>
+                security.Cusip != null && security.Cusip.ToUpper() == normalizedCusip
             )
-            .Select(candidate => candidate.Id)
+            .Select(security => new { security.Id, security.EquityIssuerId })
             .ToListAsync(cancellationToken);
         var aliasClaims = await _commonStockRepository
             .GetCusipAliases()
@@ -113,7 +116,7 @@ public class CommonStockManager
             .Select(candidate => new { candidate.EquityIssuerId, candidate.ListedTicker })
             .ToListAsync(cancellationToken);
         if (
-            primaryClaims.Any(ownerId => ownerId != stock.Id)
+            primaryClaims.Any(claim => claim.EquityIssuerId != stock.Id)
             || aliasClaims.Any(ownerId => ownerId != stock.Id)
             || listedClaims.Any(candidate => candidate.EquityIssuerId != stock.Id)
         )
@@ -121,11 +124,13 @@ public class CommonStockManager
             return DelistedListingCusipSeedResult.ClaimedByAnotherStock;
         }
 
-        var isPrimary = string.Equals(
-            listing.ListedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
+        var isPrimary =
+            stock.Presentation?.Listing is { MarketCountryCode: "US" }
+            && string.Equals(
+                listing.ListedTicker,
+                stock.Presentation?.Listing?.Ticker,
+                StringComparison.OrdinalIgnoreCase
+            );
         var exactListedClaim = listedClaims.FirstOrDefault(candidate =>
             candidate.EquityIssuerId == stock.Id
             && string.Equals(
@@ -135,14 +140,24 @@ public class CommonStockManager
             )
         );
         if (
-            aliasClaims.Count > 0
+            (
+                isPrimary
+                && primaryClaims.Any(claim =>
+                    claim.Id != stock.Presentation.Listing.EquitySecurityId
+                )
+            )
+            || aliasClaims.Count > 0
             || (isPrimary && listedClaims.Count > 0)
             || (!isPrimary && primaryClaims.Count > 0)
             || (!isPrimary && listedClaims.Count > 0 && exactListedClaim == null)
             || (
                 isPrimary
-                && stock.Cusip != null
-                && !string.Equals(stock.Cusip, normalizedCusip, StringComparison.OrdinalIgnoreCase)
+                && stock.Presentation.Listing.Security.Cusip != null
+                && !string.Equals(
+                    stock.Presentation.Listing.Security.Cusip,
+                    normalizedCusip,
+                    StringComparison.OrdinalIgnoreCase
+                )
             )
         )
         {
@@ -156,9 +171,9 @@ public class CommonStockManager
         }
 
         var identityAdded = false;
-        if (isPrimary && stock.Cusip == null)
+        if (isPrimary && stock.Presentation.Listing.Security.Cusip == null)
         {
-            stock.Cusip = normalizedCusip;
+            stock.Presentation.Listing.Security.Cusip = normalizedCusip;
             identityAdded = true;
         }
         else if (!isPrimary && exactListedClaim == null)
@@ -184,7 +199,12 @@ public class CommonStockManager
         if (identityAdded)
         {
             await _bus.Publish(
-                new StockCusipChanged(stock.Id, stock.Ticker, null, stock.Cusip),
+                new StockCusipChanged(
+                    stock.Id,
+                    stock.Presentation?.Listing?.Ticker,
+                    null,
+                    stock.Presentation?.Listing?.Security?.Cusip
+                ),
                 cancellationToken
             );
         }
@@ -219,7 +239,7 @@ public class CommonStockManager
     /// </para>
     /// </summary>
     public async Task<int> RecordRetiredCusipAliases(
-        CommonStock commonStock,
+        EquityIssuer commonStock,
         IEnumerable<string> retiredCusips
     )
     {
@@ -229,7 +249,13 @@ public class CommonStockManager
         var candidates = retiredCusips
             .Where(c => !string.IsNullOrWhiteSpace(c))
             .Select(c => c.Trim().ToUpperInvariant())
-            .Where(c => !string.Equals(c, commonStock.Cusip, StringComparison.OrdinalIgnoreCase))
+            .Where(c =>
+                !string.Equals(
+                    c,
+                    commonStock.Presentation.Listing.Security.Cusip,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (candidates.Count == 0)
@@ -246,9 +272,11 @@ public class CommonStockManager
         var taken = new HashSet<string>(alreadyRecorded, StringComparer.OrdinalIgnoreCase);
         taken.UnionWith(
             await _commonStockRepository
-                .GetAllIncludingInactive()
-                .Where(stock => stock.Cusip != null && candidates.Contains(stock.Cusip.ToUpper()))
-                .Select(stock => stock.Cusip)
+                .GetSecurities()
+                .Where(security =>
+                    security.Cusip != null && candidates.Contains(security.Cusip.ToUpper())
+                )
+                .Select(security => security.Cusip)
                 .ToListAsync()
         );
         // A CUSIP recorded as a sibling LISTING is a different security's current identity —
@@ -286,7 +314,12 @@ public class CommonStockManager
         // saves the financial context, so a bus outbox on another context would capture
         // the publish and never deliver it.
         await _bus.Publish(
-            new StockCusipChanged(commonStock.Id, commonStock.Ticker, null, commonStock.Cusip)
+            new StockCusipChanged(
+                commonStock.Id,
+                commonStock.Presentation.Listing.Ticker,
+                null,
+                commonStock.Presentation.Listing.Security.Cusip
+            )
         );
 
         return recorded;
@@ -319,7 +352,7 @@ public class CommonStockManager
     /// </para>
     /// </summary>
     public async Task<int> RecordListedTickerCusips(
-        CommonStock commonStock,
+        EquityIssuer commonStock,
         IReadOnlyCollection<(string ListedTicker, string Cusip)> candidates,
         IReadOnlyCollection<string> authoritativeHistoricalTickers = null
     )
@@ -328,7 +361,18 @@ public class CommonStockManager
         ArgumentNullException.ThrowIfNull(candidates);
 
         var secondaryTickers = new HashSet<string>(
-            commonStock.SecondaryTickers ?? [],
+            commonStock
+                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                .Where(nativeListing =>
+                    nativeListing.MarketCountryCode == "US"
+                    && (
+                        nativeListing.IsDirectoryListed
+                        && nativeListing.Id != commonStock.Presentation.EquityListingId
+                    )
+                )
+                .Select(nativeListing => nativeListing.Ticker)
+                .ToList()
+                ?? [],
             StringComparer.OrdinalIgnoreCase
         );
         secondaryTickers.UnionWith(authoritativeHistoricalTickers ?? []);
@@ -346,7 +390,11 @@ public class CommonStockManager
             )
             .Where(c =>
                 secondaryTickers.Contains(c.Ticker)
-                && !string.Equals(c.Cusip, commonStock.Cusip, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(
+                    c.Cusip,
+                    commonStock.Presentation.Listing.Security.Cusip,
+                    StringComparison.OrdinalIgnoreCase
+                )
             )
             // A CUSIP offered under TWO listed tickers is contradictory feed data; keeping an
             // arbitrary pairing would price the class from the other sibling's series. Drop it —
@@ -381,9 +429,11 @@ public class CommonStockManager
         );
         taken.UnionWith(
             await _commonStockRepository
-                .GetAllIncludingInactive()
-                .Where(cs => cs.Cusip != null && candidateCusips.Contains(cs.Cusip.ToUpper()))
-                .Select(cs => cs.Cusip)
+                .GetSecurities()
+                .Where(security =>
+                    security.Cusip != null && candidateCusips.Contains(security.Cusip.ToUpper())
+                )
+                .Select(security => security.Cusip)
                 .ToListAsync()
         );
 
@@ -416,7 +466,12 @@ public class CommonStockManager
         // saves the financial context, so a bus outbox on another context would capture
         // the publish and never deliver it.
         await _bus.Publish(
-            new StockCusipChanged(commonStock.Id, commonStock.Ticker, null, commonStock.Cusip)
+            new StockCusipChanged(
+                commonStock.Id,
+                commonStock.Presentation.Listing.Ticker,
+                null,
+                commonStock.Presentation.Listing.Security.Cusip
+            )
         );
 
         return recorded;
@@ -457,15 +512,15 @@ public class CommonStockManager
     /// </para>
     /// </summary>
     public async Task<bool> SetCusip(
-        CommonStock commonStock,
+        EquityIssuer commonStock,
         string cusip,
         string displacedListedTicker = null
     )
     {
         ArgumentNullException.ThrowIfNull(commonStock);
 
-        var observedCusip = commonStock.Cusip;
-        var observedTicker = commonStock.Ticker;
+        var observedCusip = commonStock.Presentation.Listing.Security.Cusip;
+        var observedTicker = commonStock.Presentation.Listing.Ticker;
         if (string.Equals(observedCusip, cusip, StringComparison.OrdinalIgnoreCase))
         {
             return false;
@@ -479,18 +534,40 @@ public class CommonStockManager
                 $"CommonStock {commonStock.Id} no longer exists."
             );
         if (
-            !string.Equals(commonStock.Cusip, observedCusip, StringComparison.OrdinalIgnoreCase)
+            !string.Equals(
+                commonStock.Presentation.Listing.Security.Cusip,
+                observedCusip,
+                StringComparison.OrdinalIgnoreCase
+            )
             || !string.Equals(
-                commonStock.Ticker,
+                commonStock.Presentation.Listing.Ticker,
                 observedTicker,
                 StringComparison.OrdinalIgnoreCase
             )
         )
             return false;
-        if (string.Equals(commonStock.Cusip, normalizedCusip, StringComparison.OrdinalIgnoreCase))
+        if (
+            string.Equals(
+                commonStock.Presentation.Listing.Security.Cusip,
+                normalizedCusip,
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
             return false;
 
-        var previousCusip = commonStock.Cusip;
+        var securityId = commonStock.Presentation.Listing.EquitySecurityId;
+        if (
+            await _commonStockRepository
+                .GetSecurities()
+                .AnyAsync(security =>
+                    security.Id != securityId
+                    && security.Cusip != null
+                    && security.Cusip.ToUpper() == normalizedCusip
+                )
+        )
+            return false;
+
+        var previousCusip = commonStock.Presentation.Listing.Security.Cusip;
         var claims = await GetCusipClaims(normalizedCusip);
         if (claims.PrimaryOwnerIds.Any(ownerId => ownerId != commonStock.Id))
             return false;
@@ -504,7 +581,7 @@ public class CommonStockManager
                 listing.EquityIssuerId == commonStock.Id
                 && string.Equals(
                     listing.ListedTicker,
-                    commonStock.Ticker,
+                    commonStock.Presentation.Listing.Ticker,
                     StringComparison.OrdinalIgnoreCase
                 )
             );
@@ -537,7 +614,7 @@ public class CommonStockManager
             await StageRetiredCusip(commonStock, previousCusip);
         }
 
-        commonStock.Cusip = normalizedCusip;
+        commonStock.Presentation.Listing.Security.Cusip = normalizedCusip;
 
         await _commonStockRepository.SaveChanges();
         if (transaction != null)
@@ -549,7 +626,7 @@ public class CommonStockManager
         await _bus.Publish(
             new StockCusipChanged(
                 commonStock.Id,
-                commonStock.Ticker,
+                commonStock.Presentation.Listing.Ticker,
                 previousCusip,
                 normalizedCusip
             )
@@ -564,9 +641,11 @@ public class CommonStockManager
     )> GetCusipClaims(string normalizedCusip)
     {
         var primaryOwnerIds = await _commonStockRepository
-            .GetAllIncludingInactive()
-            .Where(stock => stock.Cusip != null && stock.Cusip.ToUpper() == normalizedCusip)
-            .Select(stock => stock.Id)
+            .GetSecurities()
+            .Where(security =>
+                security.Cusip != null && security.Cusip.ToUpper() == normalizedCusip
+            )
+            .Select(security => security.EquityIssuerId)
             .ToListAsync();
         var aliases = await _commonStockRepository
             .GetCusipAliases()
@@ -580,7 +659,7 @@ public class CommonStockManager
     }
 
     private async Task<bool> TryStageExactListingPromotion(
-        CommonStock commonStock,
+        EquityIssuer commonStock,
         string previousCusip,
         string displacedListedTicker,
         IReadOnlyCollection<EquityIssuerCusipAlias> promotedAliases,
@@ -591,10 +670,18 @@ public class CommonStockManager
         if (
             previousCusip == null
             || displacedTicker == null
-            || !commonStock.SecondaryTickers.Contains(
-                displacedTicker,
-                StringComparer.OrdinalIgnoreCase
-            )
+            || !commonStock
+                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                .Where(nativeListing =>
+                    nativeListing.MarketCountryCode == "US"
+                    && (
+                        nativeListing.IsDirectoryListed
+                        && nativeListing.Id != commonStock.Presentation.EquityListingId
+                    )
+                )
+                .Select(nativeListing => nativeListing.Ticker)
+                .ToList()
+                .Contains(displacedTicker, StringComparer.OrdinalIgnoreCase)
         )
             return false;
 
@@ -626,15 +713,16 @@ public class CommonStockManager
         bool PrimaryClaimedElsewhere,
         List<EquityIssuerCusipAlias> Aliases,
         List<EquityListingCusipEvidence> Listings
-    )> GetDisplacedCusipClaims(CommonStock commonStock, string previousCusip)
+    )> GetDisplacedCusipClaims(EquityIssuer commonStock, string previousCusip)
     {
         var normalized = previousCusip.ToUpperInvariant();
         var primaryClaimedElsewhere = await _commonStockRepository
-            .GetAllIncludingInactive()
+            .GetAll()
             .AnyAsync(stock =>
                 stock.Id != commonStock.Id
-                && stock.Cusip != null
-                && stock.Cusip.ToUpper() == normalized
+                && stock.Securities.Any(security =>
+                    security.Cusip != null && security.Cusip.ToUpper() == normalized
+                )
             );
         var aliases = await _commonStockRepository
             .GetCusipAliases()
@@ -648,7 +736,7 @@ public class CommonStockManager
     }
 
     private static bool CanAssignDisplacedListing(
-        CommonStock commonStock,
+        EquityIssuer commonStock,
         string displacedTicker,
         (
             bool PrimaryClaimedElsewhere,
@@ -667,7 +755,7 @@ public class CommonStockManager
             )
         );
 
-    private async Task StageRetiredCusip(CommonStock commonStock, string previousCusip)
+    private async Task StageRetiredCusip(EquityIssuer commonStock, string previousCusip)
     {
         if (previousCusip == null)
             return;
@@ -699,7 +787,7 @@ public class CommonStockManager
     /// checkpoint so the predecessor's full XBRL history imports on the next cycle.
     /// Returns null on success, otherwise a reason the attachment was refused.
     /// </summary>
-    public async Task<string> AttachSecondaryCik(CommonStock commonStock, string cik)
+    public async Task<string> AttachSecondaryCik(EquityIssuer commonStock, string cik)
     {
         ArgumentNullException.ThrowIfNull(commonStock);
 
@@ -722,11 +810,16 @@ public class CommonStockManager
         var owner = await _commonStockRepository
             .GetAll()
             .Where(cs => cs.Cik == normalized || cs.SecondaryCiks.Contains(normalized))
-            .Select(cs => new { cs.Ticker })
+            .Select(cs => new
+            {
+                DisplayName = cs.Presentation == null
+                    ? cs.Name ?? cs.Cik
+                    : cs.Presentation.Listing.Ticker,
+            })
             .FirstOrDefaultAsync();
         if (owner != null)
         {
-            return $"CIK {normalized} already belongs to {owner.Ticker}.";
+            return $"CIK {normalized} already belongs to {owner.DisplayName}.";
         }
 
         commonStock.SecondaryCiks = [.. commonStock.SecondaryCiks, normalized];
@@ -734,7 +827,11 @@ public class CommonStockManager
 
         // Publish via the root bus (bypasses any bus outbox) after the write commits.
         await _bus.Publish(
-            new StockSecondaryCikAttached(commonStock.Id, commonStock.Ticker, normalized)
+            new StockSecondaryCikAttached(
+                commonStock.Id,
+                commonStock.Presentation?.Listing?.Ticker,
+                normalized
+            )
         );
         return null;
     }
@@ -744,7 +841,7 @@ public class CommonStockManager
     /// facts stay (they were the operator's deliberate backfill); the scrapers simply
     /// stop sweeping the detached CIK. Returns null on success, otherwise a reason.
     /// </summary>
-    public async Task<string> DetachSecondaryCik(CommonStock commonStock, string cik)
+    public async Task<string> DetachSecondaryCik(EquityIssuer commonStock, string cik)
     {
         ArgumentNullException.ThrowIfNull(commonStock);
 
@@ -797,7 +894,7 @@ public class CommonStockManager
     /// detach it if the surrounding update is rolled back.
     /// </summary>
     public async Task<EquityIssuerTickerAlias> RecordTickerAlias(
-        CommonStock commonStock,
+        EquityIssuer commonStock,
         string retiredTicker
     )
     {
@@ -807,7 +904,7 @@ public class CommonStockManager
             string.IsNullOrWhiteSpace(retiredTicker)
             || string.Equals(
                 retiredTicker.Trim(),
-                commonStock.Ticker,
+                commonStock.Presentation?.Listing?.Ticker,
                 StringComparison.OrdinalIgnoreCase
             )
         )
@@ -817,18 +914,18 @@ public class CommonStockManager
 
         var normalized = retiredTicker.Trim().ToUpperInvariant();
 
-        // The stock keeping the symbol as a secondary listing isn't a retirement — the live
-        // lookup still resolves it, so an alias would never fire (and would turn into a wrong
-        // redirect the day the secondary is dropped without a rename).
+        // A retained live listing is not a retired URL, regardless of the presentation choice.
         if (
-            commonStock.SecondaryTickers != null
-            && commonStock.SecondaryTickers.Any(t =>
-                string.Equals(t, normalized, StringComparison.OrdinalIgnoreCase)
+            commonStock.Securities.Any(security =>
+                security.Listings.Any(listing =>
+                    listing.MarketCountryCode == "US"
+                    && listing.Active
+                    && (listing.IsDirectoryListed || listing.IsReferenceListed)
+                    && string.Equals(listing.Ticker, normalized, StringComparison.OrdinalIgnoreCase)
+                )
             )
         )
-        {
             return null;
-        }
 
         // Never shadow a live symbol: if any OTHER stock currently lists it (primary or
         // secondary), the live resolution wins on every lookup and the alias would only
@@ -839,9 +936,16 @@ public class CommonStockManager
         // stale row and no alias is ever recorded on the one path that matters.
         var liveHolder = await _commonStockRepository
             .GetAll()
-            .AnyAsync(cs =>
-                cs.Id != commonStock.Id
-                && (cs.Ticker == normalized || cs.SecondaryTickers.Contains(normalized))
+            .AnyAsync(issuer =>
+                issuer.Id != commonStock.Id
+                && issuer.Securities.Any(security =>
+                    security.Listings.Any(listing =>
+                        listing.MarketCountryCode == "US"
+                        && listing.Active
+                        && (listing.IsDirectoryListed || listing.IsReferenceListed)
+                        && listing.Ticker == normalized
+                    )
+                )
             );
         if (liveHolder)
         {
@@ -852,7 +956,7 @@ public class CommonStockManager
         // depends on: the symbol this stock is renaming TO may sit in the alias map from an
         // earlier retirement (its own A→B→A round trip, or another issuer's). Once it is live
         // again the alias is at best shadowed and at worst a wrong redirect, so it goes.
-        var adopted = commonStock.Ticker?.ToUpperInvariant();
+        var adopted = commonStock.Presentation?.Listing?.Ticker?.ToUpperInvariant();
         if (adopted != null)
         {
             var staleAdopted = await _commonStockRepository
@@ -891,7 +995,7 @@ public class CommonStockManager
     /// <see cref="SetCusip"/>, this mutates a single non-key field and must not
     /// re-run the full ticker/CIK uniqueness validation.
     /// </summary>
-    public async Task SetFiscalYearEnd(CommonStock commonStock, int month, int? day)
+    public async Task SetFiscalYearEnd(EquityIssuer commonStock, int month, int? day)
     {
         ArgumentNullException.ThrowIfNull(commonStock);
 
@@ -933,7 +1037,7 @@ public class CommonStockManager
     /// <see cref="SetFiscalYearEnd"/>, this mutates non-key fields and must not
     /// re-run the full ticker/CIK uniqueness validation.
     /// </summary>
-    public async Task SetSecClassification(CommonStock commonStock, string sic, string entityType)
+    public async Task SetSecClassification(EquityIssuer commonStock, string sic, string entityType)
     {
         ArgumentNullException.ThrowIfNull(commonStock);
 
@@ -950,63 +1054,68 @@ public class CommonStockManager
         await _commonStockRepository.SaveChanges();
     }
 
-    public async Task<CommonStock> Create(CommonStock commonStock)
+    public async Task<EquityIssuer> Create(EquityIssuer commonStock)
     {
+        ValidateValues(commonStock);
+        await using var transaction = await _commonStockRepository.BeginDirectoryIdentityWrite();
         await ValidateCommonStock(commonStock, true);
         _commonStockRepository.Add(commonStock);
         await _commonStockRepository.SaveChanges();
+        if (transaction != null)
+            await transaction.CommitAsync();
         return commonStock;
     }
 
-    public async Task<CommonStock> Update(CommonStock commonStock)
+    public async Task<EquityIssuer> Update(EquityIssuer commonStock)
     {
+        ValidateValues(commonStock);
+        await using var transaction = await _commonStockRepository.BeginDirectoryIdentityWrite();
+        await _commonStockRepository.LockIssuerForDirectoryWrite(commonStock.Id);
         await ValidateCommonStock(commonStock, false);
         await _commonStockRepository.SaveChanges();
+        if (transaction != null)
+            await transaction.CommitAsync();
         return commonStock;
     }
 
-    private async Task ValidateCommonStock(CommonStock commonStock, bool isInsert)
+    private async Task ValidateCommonStock(EquityIssuer commonStock, bool isInsert)
+    {
+        ValidateValues(commonStock);
+        var primary = commonStock.Presentation?.Listing;
+        if (primary?.MarketCountryCode == "US")
+        {
+            var existing = await _commonStockRepository.GetPrimaryUsByTicker(primary.Ticker);
+            if (existing != null && (isInsert || existing.Id != commonStock.Id))
+                throw new DomainValidationException(
+                    $"Issuer with ticker {primary.Ticker} already exists"
+                );
+        }
+        if (commonStock.Cik != null)
+        {
+            var existing = await _commonStockRepository.GetByCik(commonStock.Cik);
+            if (existing != null && (isInsert || existing.Id != commonStock.Id))
+                throw new DomainValidationException(
+                    $"Issuer with cik {commonStock.Cik} already exists"
+                );
+        }
+    }
+
+    private static void ValidateValues(EquityIssuer commonStock)
     {
         ArgumentNullException.ThrowIfNull(commonStock);
 
-        // Required fields: a whitespace-only value is not a provided value.
-        // Ticker is the globally-unique key and the lookup key, so accepting
-        // whitespace would corrupt the uniqueness invariant and ticker lookups.
-        RequireNonBlank(commonStock.Ticker, "Ticker");
         RequireNonBlank(commonStock.Name, "Name");
-        RequireNonBlank(commonStock.Cik, "Cik");
-
-        if (commonStock.MarketCapitalization < 0)
+        if (commonStock.Cik != null)
+            RequireNonBlank(commonStock.Cik, "Cik");
+        foreach (var security in commonStock.Securities)
         {
-            throw new DomainValidationException("MarketCapitalization cannot be negative");
+            if (security.MarketCapitalization < 0)
+                throw new DomainValidationException("MarketCapitalization cannot be negative");
+            if (security.SharesOutstanding < 0)
+                throw new DomainValidationException("SharesOutStanding cannot be negative");
+            foreach (var listing in security.Listings)
+                RequireNonBlank(listing.Ticker, "Ticker");
         }
-
-        if (commonStock.SharesOutStanding < 0)
-        {
-            throw new DomainValidationException("SharesOutStanding cannot be negative");
-        }
-
-        // Primary ticker must be globally unique across all companies.
-        var existingByTicker = await _commonStockRepository.GetByPrimaryTicker(commonStock.Ticker);
-        if (existingByTicker != null && (isInsert || existingByTicker.Id != commonStock.Id))
-        {
-            throw new DomainValidationException(
-                $"CommonStock with ticker {commonStock.Ticker} already exists"
-            );
-        }
-
-        var existingByCik = await _commonStockRepository.GetByCik(commonStock.Cik);
-        if (existingByCik != null && (isInsert || existingByCik.Id != commonStock.Id))
-        {
-            throw new DomainValidationException(
-                $"CommonStock with cik {commonStock.Cik} already exists"
-            );
-        }
-
-        // Secondary tickers are allowed to overlap with primary or secondary tickers of other
-        // companies. In SEC filings a preferred-share ticker can legitimately appear under both
-        // the parent REIT filer and its operating-partnership filer, so cross-company overlap
-        // is valid. Lookups resolve ambiguity via GetByTicker's primary-first ordering.
     }
 
     private static void RequireNonBlank(string value, string name)

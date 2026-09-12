@@ -25,5 +25,5 @@ public interface IShortInterestEstimateSource
     /// must stay visibly separate from FINRA's reported positions, and must label itself as an
     /// estimate. It is the implementation's job to say so — the tool appends the text verbatim.
     /// </remarks>
-    Task<string> Describe(CommonStock stock, CancellationToken cancellationToken = default);
+    Task<string> Describe(EquityIssuer stock, CancellationToken cancellationToken = default);
 }

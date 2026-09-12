@@ -21,7 +21,7 @@ public class RevenueBreakdownToolsTests : ParadeDbMcpTestBase
         new(
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             ErrorManager,
             NullLogger<RevenueBreakdownTools>()
         );
@@ -40,7 +40,7 @@ public class RevenueBreakdownToolsTests : ParadeDbMcpTestBase
     }
 
     private void AddDimensionalFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         int fy,
         decimal value,
@@ -103,14 +103,13 @@ public class RevenueBreakdownToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetRevenueBreakdown_OperatingSegmentsQualifier_SurfacesLatestYear()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "OPSEG",
-            Name = "Operating Segments Corp.",
-            Cik = "0009830003",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "OPSEG",
+            Name: "Operating Segments Corp.",
+            Cik: "0009830003"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         var asc606 = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
 
         // FY2024 — Cloud reported single-axis (old-style filing).

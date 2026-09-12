@@ -31,19 +31,23 @@ public class TickerMapService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
         var query =
-            tickersToSync?.Count > 0 ? stockRepo.GetByTickers(tickersToSync) : stockRepo.GetAll();
+            tickersToSync?.Count > 0
+                ? stockRepo.GetUsByTickers(tickersToSync)
+                : stockRepo.GetCurrentUsDirectory();
         var delistedListings = stockRepo.GetDelistedListings();
         query = query.Where(stock =>
             !delistedListings.Any(listing =>
-                listing.EquityIssuerId == stock.Id && listing.ListedTicker == stock.Ticker
+                listing.EquityIssuerId == stock.Id
+                && listing.ListedTicker == stock.Presentation.Listing.Ticker
             )
         );
 
         return await query.ToDictionaryAsync(
-            s => s.Ticker,
+            s => s.Presentation.Listing.Ticker,
             s => s.Id,
             comparer ?? StringComparer.OrdinalIgnoreCase,
             cancellationToken
@@ -61,15 +65,22 @@ public class TickerMapService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var stocks = await stockRepo
-            .GetAll()
-            .Where(stock => stock.Active)
+            .GetCurrentUsDirectory()
+            .Where(stock => stock.Presentation.Listing.Active)
             .Select(stock => new
             {
                 stock.Id,
-                stock.Ticker,
-                stock.ReferenceTickers,
+                Ticker = stock.Presentation.Listing.Ticker,
+                ReferenceTickers = stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
             })
             .ToListAsync(cancellationToken);
         var rawDelisted = await stockRepo
@@ -142,24 +153,22 @@ public class TickerMapService
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
         var issuerIds = source.Values.Select(row => row.CommonStockId).Distinct().ToList();
-        var mappings = await repository
-            .GetLegacyMappings(issuerIds)
-            .Select(row => new
-            {
-                row.CommonStockId,
-                row.ListedTicker,
-                row.EquityListingId,
-                row.Listing.Security.EquityIssuerId,
-            })
-            .ToDictionaryAsync(
-                row => new ListedSecurityKey(row.CommonStockId, row.ListedTicker),
-                row => new EquityListingReference(
-                    row.EquityListingId,
-                    row.EquityIssuerId,
-                    row.ListedTicker
-                ),
-                cancellationToken
-            );
+        var candidates = await repository
+            .GetAll()
+            .Where(listing =>
+                listing.MarketCountryCode == "US"
+                && issuerIds.Contains(listing.Security.EquityIssuerId)
+            )
+            .Select(listing => new EquityListingReference(
+                listing.Id,
+                listing.Security.EquityIssuerId,
+                listing.Ticker
+            ))
+            .ToListAsync(cancellationToken);
+        var mappings = candidates
+            .GroupBy(listing => new ListedSecurityKey(listing.EquityIssuerId, listing.ListedTicker))
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single());
         return source.ToDictionary(
             row => row.Key,
             row =>

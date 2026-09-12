@@ -22,19 +22,18 @@ public class FailToDeliverUpsertWhenMatchedTests : ParadeDbMcpTestBase
     [Fact]
     public async Task UpsertRange_OnExactListingAndSettlementDate_WhenMatched_OverwritesExistingRowQuantityAndPrice()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var settlementDate = new DateOnly(2026, 4, 1);
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         var existing = new FailToDeliver
         {
             EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
-            ListedTicker = stock.Ticker,
+            ListedTicker = stock.Presentation.Listing.Ticker,
             SettlementDate = settlementDate,
             Quantity = 999,
             Price = 10.00m,
@@ -50,7 +49,7 @@ public class FailToDeliverUpsertWhenMatchedTests : ParadeDbMcpTestBase
                 new FailToDeliver
                 {
                     EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = settlementDate,
                     Quantity = 12345,
                     Price = 187.50m,

@@ -12,17 +12,54 @@ internal static class NativeListingSeed
         Dictionary<string, EquityListing>
     > Detached = new();
 
-    public static EquityListing ForStockId(
+    public static EquityListing ForStockId(DbContext db, Guid issuerId, string listedTicker = null)
+    {
+        var issuer =
+            db.Set<EquityIssuer>().Local.FirstOrDefault(row => row.Id == issuerId)
+            ?? db.Set<EquityIssuer>()
+                .Include(row => row.Presentation)
+                    .ThenInclude(row => row.Listing)
+                .Include(row => row.Securities)
+                    .ThenInclude(row => row.Listings)
+                .SingleOrDefault(row => row.Id == issuerId);
+        return issuer != null
+            ? ForStock(db, issuer, listedTicker)
+            : ForStock(db, db.Set<CommonStock>().Single(row => row.Id == issuerId), listedTicker);
+    }
+
+    public static EquityListing ForStock(
         DbContext db,
-        Guid stockId,
+        EquityIssuer issuer,
         string listedTicker = null
-    ) =>
-        ForStock(
-            db,
-            db.Set<CommonStock>().Local.FirstOrDefault(row => row.Id == stockId)
-                ?? db.Set<CommonStock>().Single(row => row.Id == stockId),
-            listedTicker
-        );
+    )
+    {
+        var ticker = listedTicker ?? issuer.Presentation?.Listing.Ticker;
+        if (db != null)
+        {
+            var existing = db.Set<EquityListing>()
+                .Include(listing => listing.Security)
+                    .ThenInclude(security => security.Issuer)
+                        .ThenInclude(owner => owner.Presentation)
+                .SingleOrDefault(listing =>
+                    listing.MarketCountryCode == "US"
+                    && listing.Ticker == ticker
+                    && listing.Security.EquityIssuerId == issuer.Id
+                );
+            if (existing != null)
+                return existing;
+        }
+        if (db != null && db.Entry(issuer).State == EntityState.Detached)
+            issuer =
+                db.Set<EquityIssuer>().Local.FirstOrDefault(row => row.Id == issuer.Id)
+                ?? db.Set<EquityIssuer>().SingleOrDefault(row => row.Id == issuer.Id)
+                ?? issuer;
+        var listing = UsEquityDirectory.GetOrAddListing(issuer, ticker);
+        if (db != null && db.Entry(issuer).State == EntityState.Detached)
+            db.Add(issuer);
+        if (db != null && db.Entry(listing).State == EntityState.Detached)
+            db.Add(listing);
+        return listing;
+    }
 
     public static EquityListing ForStock(
         DbContext db,

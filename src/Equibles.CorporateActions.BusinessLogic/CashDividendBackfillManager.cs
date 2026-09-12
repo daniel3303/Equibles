@@ -31,7 +31,7 @@ public class CashDividendBackfillManager
     // them into CashDividend. Returns the number of rows written (new ex-dates
     // plus restated amounts); a re-run over already-captured history returns 0.
     public async Task<int> BackfillHistory(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly since,
         CancellationToken cancellationToken
     )
@@ -39,7 +39,11 @@ public class CashDividendBackfillManager
         cancellationToken.ThrowIfCancellationRequested();
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var chartData = await _yahooClient.GetChart(stock.Ticker, since, today);
+        var chartData = await _yahooClient.GetChart(
+            stock.Presentation.Listing.Ticker,
+            since,
+            today
+        );
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -55,6 +59,11 @@ public class CashDividendBackfillManager
             })
             .ToList();
 
-        return await _captureManager.Capture(stock.Id, stock.Ticker, captured, cancellationToken);
+        return await _captureManager.Capture(
+            stock.Id,
+            stock.Presentation.Listing.Ticker,
+            captured,
+            cancellationToken
+        );
     }
 }

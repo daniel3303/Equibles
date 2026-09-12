@@ -21,7 +21,7 @@ public class InsiderTradingToolsGetInsiderOwnershipCultureInvarianceTests : Para
             new InsiderTransactionRepository(DbContext),
             new InsiderOwnerRepository(DbContext),
             new Form144FilingRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<InsiderTradingTools>()
@@ -36,12 +36,11 @@ public class InsiderTradingToolsGetInsiderOwnershipCultureInvarianceTests : Para
     [Fact]
     public async Task GetInsiderOwnership_UnderNonInvariantCulture_RendersSharesOwnedCultureInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var owner = new InsiderOwner
         {
             OwnerCik = "0001234567",
@@ -66,7 +65,7 @@ public class InsiderTradingToolsGetInsiderOwnershipCultureInvarianceTests : Para
             AccessionNumber = "0001234567-24-000001",
             SecurityKind = InsiderSecurityKind.NonDerivative,
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<InsiderOwner>().Add(owner);
         DbContext.Set<InsiderTransaction>().Add(transaction);
         await DbContext.SaveChangesAsync();

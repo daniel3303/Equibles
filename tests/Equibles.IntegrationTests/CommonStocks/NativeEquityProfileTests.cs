@@ -105,7 +105,7 @@ public class NativeEquityProfileTests : ParadeDbMcpTestBase
         };
         DbContext.Add(source);
         await DbContext.SaveChangesAsync();
-        var issuer = await new EquityIssuerRepository(DbContext).GetByCik(source.Cik).SingleAsync();
+        var issuer = await new EquityIssuerRepository(DbContext).GetByCik(source.Cik);
         issuer.Description.Should().Be(source.Description);
         issuer.SecondaryCiks.Should().Equal(source.SecondaryCiks);
         issuer.Website.Should().Be(source.Website);

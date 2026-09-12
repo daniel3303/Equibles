@@ -39,20 +39,18 @@ public class InsiderDashboardSeededTests
 
         await _web.ResetAndSeedAsync(async db =>
         {
-            var aapl = new CommonStock
-            {
-                Id = stockAaplId,
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            };
-            var msft = new CommonStock
-            {
-                Id = stockMsftId,
-                Ticker = "MSFT",
-                Name = "Microsoft Corporation",
-                Cik = "0000789019",
-            };
+            EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: stockAaplId,
+                Ticker: "AAPL",
+                Name: "Apple Inc.",
+                Cik: "0000320193"
+            );
+            EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: stockMsftId,
+                Ticker: "MSFT",
+                Name: "Microsoft Corporation",
+                Cik: "0000789019"
+            );
             db.Add(aapl);
             db.Add(msft);
 

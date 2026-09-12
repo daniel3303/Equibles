@@ -24,12 +24,11 @@ public class HoldingsScreenerControllerTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "ONEQ",
-                Name = "Only One Quarter Corp.",
-                Cik = "0000000700",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "ONEQ",
+                Name: "Only One Quarter Corp.",
+                Cik: "0000000700"
+            );
             var holder = new InstitutionalHolder { Cik = "0007000001", Name = "Solo Holder" };
             db.Add(stock);
             db.Add(holder);
@@ -62,18 +61,16 @@ public class HoldingsScreenerControllerTests
                     Name = "Two Quarter Holder",
                 }
             );
-            var aapl = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            };
-            var msft = new CommonStock
-            {
-                Ticker = "MSFT",
-                Name = "Microsoft Corp.",
-                Cik = "0000789019",
-            };
+            EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple Inc.",
+                Cik: "0000320193"
+            );
+            EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "MSFT",
+                Name: "Microsoft Corp.",
+                Cik: "0000789019"
+            );
             db.AddRange(aapl, msft);
             db.Add(MakeHolding(aapl.Id, holderId, q1, 1_000, 1_000_000));
             db.Add(MakeHolding(aapl.Id, holderId, q2, 1_500, 1_500_000));
@@ -109,18 +106,16 @@ public class HoldingsScreenerControllerTests
                     Name = "Filter Holder",
                 }
             );
-            var big = new CommonStock
-            {
-                Ticker = "BIG",
-                Name = "Big Co.",
-                Cik = "0000007777",
-            };
-            var small = new CommonStock
-            {
-                Ticker = "SML",
-                Name = "Small Co.",
-                Cik = "0000007778",
-            };
+            EquityIssuer big = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "BIG",
+                Name: "Big Co.",
+                Cik: "0000007777"
+            );
+            EquityIssuer small = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "SML",
+                Name: "Small Co.",
+                Cik: "0000007778"
+            );
             db.AddRange(big, small);
             db.Add(MakeHolding(big.Id, holderId, q1, 1, 9_000_000));
             db.Add(MakeHolding(big.Id, holderId, q2, 1, 10_000_000));
@@ -160,20 +155,18 @@ public class HoldingsScreenerControllerTests
                     Name = "Industry Holder",
                 }
             );
-            var techStock = new CommonStock
-            {
-                Ticker = "TKR1",
-                Name = "Tech Stock Inc.",
-                Cik = "0000008881",
-                IndustryId = techId,
-            };
-            var energyStock = new CommonStock
-            {
-                Ticker = "TKR2",
-                Name = "Energy Stock Inc.",
-                Cik = "0000008882",
-                IndustryId = energyId,
-            };
+            EquityIssuer techStock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "TKR1",
+                Name: "Tech Stock Inc.",
+                Cik: "0000008881",
+                IndustryId: techId
+            );
+            EquityIssuer energyStock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "TKR2",
+                Name: "Energy Stock Inc.",
+                Cik: "0000008882",
+                IndustryId: energyId
+            );
             db.AddRange(techStock, energyStock);
             db.Add(MakeHolding(techStock.Id, holderId, q1, 1, 1));
             db.Add(MakeHolding(techStock.Id, holderId, q2, 1, 1));

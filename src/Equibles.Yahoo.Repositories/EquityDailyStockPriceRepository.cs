@@ -38,51 +38,54 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
     public IQueryable<EquityDailyStockPrice> GetByListing(Guid listingId) =>
         GetAllSeries().Where(price => price.EquityListingId == listingId);
 
-    public IQueryable<LegacyEquityListing> GetLegacyIdentities(IEnumerable<Guid> issuerIds) =>
+    public IQueryable<EquityListing> GetUsListingReferences(IEnumerable<Guid> issuerIds) =>
         DbContext
-            .Set<LegacyEquityListing>()
-            .Where(mapping => issuerIds.Contains(mapping.CommonStockId));
-
-    public IQueryable<LegacyEquityListing> GetLegacyIdentity(Guid listingId) =>
-        DbContext.Set<LegacyEquityListing>().Where(mapping => mapping.EquityListingId == listingId);
-
-    public virtual IQueryable<EquityDailyStockPrice> GetLegacySeries() =>
-        GetAllSeries()
-            .Where(price =>
-                DbContext
-                    .Set<LegacyEquityListing>()
-                    .Any(mapping => mapping.EquityListingId == price.EquityListingId)
+            .Set<EquityListing>()
+            .Where(listing =>
+                listing.MarketCountryCode == "US"
+                && issuerIds.Contains(listing.Security.EquityIssuerId)
             );
 
-    public IQueryable<EquityDailyStockPrice> GetLegacySeries(Guid issuerId, string ticker) =>
-        GetAllSeries()
+    public IQueryable<EquityListing> GetUsListingReference(Guid listingId) =>
+        DbContext
+            .Set<EquityListing>()
+            .Where(listing => listing.Id == listingId && listing.MarketCountryCode == "US");
+
+    public virtual IQueryable<EquityDailyStockPrice> GetUsSeries() =>
+        GetAllSeries().Where(price => price.Listing.MarketCountryCode == "US");
+
+    public IQueryable<EquityDailyStockPrice> GetUsSeries(Guid issuerId, string ticker) =>
+        GetUsSeries()
             .Where(price =>
-                DbContext
-                    .Set<LegacyEquityListing>()
-                    .Any(mapping =>
-                        mapping.CommonStockId == issuerId
-                        && mapping.ListedTicker == ticker
-                        && mapping.EquityListingId == price.EquityListingId
+                price.Listing.Security.EquityIssuerId == issuerId
+                && price.Listing.Ticker == ticker
+                && !DbContext
+                    .Set<EquityListing>()
+                    .Any(other =>
+                        other.Id != price.EquityListingId
+                        && other.MarketCountryCode == "US"
+                        && other.Ticker == ticker
+                        && other.Security.EquityIssuerId == issuerId
                     )
             );
 
-    public IQueryable<EquityDailyStockPrice> GetByStock(CommonStock stock)
+    public IQueryable<EquityDailyStockPrice> GetByStock(EquityIssuer stock)
     {
         return GetPrimarySeries().Where(p => p.Listing.Security.EquityIssuerId == stock.Id);
     }
 
     /// <summary>Prices for the exact listed ticker requested on a filer's row.</summary>
-    public IQueryable<EquityDailyStockPrice> GetByStock(CommonStock stock, string ticker)
+    public IQueryable<EquityDailyStockPrice> GetByStock(EquityIssuer stock, string ticker)
     {
         var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, ticker);
         if (resolvedTicker == null)
             return GetAllSeries().Where(_ => false);
 
-        return GetLegacySeries(stock.Id, resolvedTicker);
+        return GetUsSeries(stock.Id, resolvedTicker);
     }
 
     public IQueryable<EquityDailyStockPrice> GetByStock(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly startDate,
         DateOnly endDate
     )
@@ -96,7 +99,7 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
     }
 
     public IQueryable<EquityDailyStockPrice> GetByStock(
-        CommonStock stock,
+        EquityIssuer stock,
         string ticker,
         DateOnly startDate,
         DateOnly endDate
@@ -110,18 +113,18 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
     /// zero-volume carry-forward candles for a dormant symbol; customer-facing price surfaces
     /// must not present those synthetic rows as a newly settled market price.
     /// </summary>
-    public IQueryable<EquityDailyStockPrice> GetTradedByStock(CommonStock stock, string ticker)
+    public IQueryable<EquityDailyStockPrice> GetTradedByStock(EquityIssuer stock, string ticker)
     {
         return GetByStock(stock, ticker).Where(p => p.Volume > 0);
     }
 
-    public IQueryable<EquityDailyStockPrice> GetTradedByStock(CommonStock stock)
+    public IQueryable<EquityDailyStockPrice> GetTradedByStock(EquityIssuer stock)
     {
         return GetByStock(stock).Where(p => p.Volume > 0);
     }
 
     public IQueryable<EquityDailyStockPrice> GetTradedByStock(
-        CommonStock stock,
+        EquityIssuer stock,
         string ticker,
         DateOnly startDate,
         DateOnly endDate
@@ -131,7 +134,7 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
     }
 
     public IQueryable<EquityDailyStockPrice> GetTradedByStock(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly startDate,
         DateOnly endDate
     )
@@ -162,14 +165,14 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
             );
     }
 
-    public IQueryable<DateOnly> GetLatestDate(CommonStock stock)
+    public IQueryable<DateOnly> GetLatestDate(EquityIssuer stock)
     {
         return GetPrimarySeries()
             .Where(p => p.Listing.Security.EquityIssuerId == stock.Id)
             .LatestValue(p => p.Date);
     }
 
-    public IQueryable<DateOnly> GetLatestDate(CommonStock stock, string ticker)
+    public IQueryable<DateOnly> GetLatestDate(EquityIssuer stock, string ticker)
     {
         return GetByStock(stock, ticker).LatestValue(p => p.Date);
     }

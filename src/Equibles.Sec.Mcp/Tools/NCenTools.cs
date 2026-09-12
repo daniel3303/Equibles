@@ -19,13 +19,13 @@ namespace Equibles.Sec.Mcp.Tools;
 public class NCenTools
 {
     private readonly NCenFilingRepository _nCenRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly FundSeriesRepository _fundSeriesRepository;
     private readonly McpToolRunner _runner;
 
     public NCenTools(
         NCenFilingRepository nCenRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         FundSeriesRepository fundSeriesRepository,
         ErrorManager errorManager,
         ILogger<NCenTools> logger
@@ -88,7 +88,7 @@ public class NCenTools
                         return $"No registered fund found for '{safeFund}' in the tracked Form NPORT-P/N-CEN datasets. Use SearchFunds to find an exact profile id. Registered management investment companies and ETFs are in scope; vehicles outside those filing regimes may be absent, and fixed-income-only series can be missing from the tracked NPORT-P directory. This is a coverage result, not evidence that the fund does not exist.";
                     issuerId = stock.Id;
                     issuerName = stock.Name;
-                    displayTicker = stock.Ticker;
+                    displayTicker = stock.Presentation.Listing.Ticker;
                 }
 
                 var filings = await _nCenRepository

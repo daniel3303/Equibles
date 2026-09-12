@@ -75,8 +75,8 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -135,17 +135,16 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
     {
         // BBUC post-change shape: the stock carries the NEW CUSIP; a laggard
         // filer (or any historical data set) still reports the OLD one.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BBUC",
-            Name = "Brookfield Business Corp",
-            Cik = "1654795",
-            Cusip = "113006100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BBUC",
+            Name: "Brookfield Business Corp",
+            Cik: "1654795",
+            Cusip: "113006100"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<EquityIssuerCusipAlias>()
                 .Add(new EquityIssuerCusipAlias { EquityIssuerId = stock.Id, Cusip = "11259V106" });
             await seed.SaveChangesAsync();
@@ -189,22 +188,35 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         holding.Shares.Should().Be(921231);
     }
 
-    [Fact]
-    public async Task ImportDataSet_FilingReferencesInactiveStock_ResolvesRetainedIdentity()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task ImportDataSet_FilingReferencesInactiveStock_ResolvesRetainedIdentity(
+        int presentationState
+    )
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GONE",
-            Name = "Formerly Listed Corp",
-            Cik = "0000000042",
-            Cusip = "123456789",
-            Active = false,
-            DelistedOn = new DateOnly(2021, 6, 30),
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GONE",
+            Name: "Formerly Listed Corp",
+            Cik: "0000000042",
+            Cusip: "123456789",
+            Active: false,
+            DelistedOn: new DateOnly(2021, 6, 30)
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            if (presentationState == 1)
+                Equibles.CommonStocks.Data.Helpers.UsEquityDirectory.ReplaceDirectorySymbols(
+                    stock,
+                    "NEW",
+                    [],
+                    activate: true
+                );
+            if (presentationState == 2)
+                stock.Presentation = null;
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -226,7 +238,7 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         );
         var prices = new Dictionary<(Guid, string, DateOnly), decimal>
         {
-            [(stock.Id, null, reportDate)] = 20m,
+            [(stock.Id, presentationState != 0 ? "GONE" : null, reportDate)] = 20m,
         };
 
         var result = await CreateImporter(PriceProviderReturning(prices))
@@ -237,6 +249,7 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
         holding.EquityIssuerId.Should().Be(stock.Id);
         holding.Shares.Should().Be(2500);
+        holding.ListedTicker.Should().Be(presentationState != 0 ? "GONE" : null);
     }
 
     [Fact]
@@ -245,25 +258,23 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         // Precedence pin: if a CUSIP is simultaneously stock A's CURRENT value
         // and stock B's retired alias (a shape only bad data can produce), the
         // current assignment is authoritative.
-        var stockA = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAA",
-            Name = "Current Owner Corp",
-            Cik = "0000000001",
-            Cusip = "999999999",
-        };
-        var stockB = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BBB",
-            Name = "Stale Alias Corp",
-            Cik = "0000000002",
-            Cusip = "888888888",
-        };
+        EquityIssuer stockA = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAA",
+            Name: "Current Owner Corp",
+            Cik: "0000000001",
+            Cusip: "999999999"
+        );
+        EquityIssuer stockB = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BBB",
+            Name: "Stale Alias Corp",
+            Cik: "0000000002",
+            Cusip: "888888888"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().AddRange(stockA, stockB);
+            seed.Set<EquityIssuer>().AddRange(stockA, stockB);
             seed.Set<EquityIssuerCusipAlias>()
                 .Add(
                     new EquityIssuerCusipAlias { EquityIssuerId = stockB.Id, Cusip = "999999999" }

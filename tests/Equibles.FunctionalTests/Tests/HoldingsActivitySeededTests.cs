@@ -38,34 +38,30 @@ public class HoldingsActivitySeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                },
-                new CommonStock
-                {
-                    Id = msftId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                },
-                new CommonStock
-                {
-                    Id = nvdaId,
-                    Ticker = "NVDA",
-                    Name = "NVIDIA Corp.",
-                    Cik = "0001045810",
-                },
-                new CommonStock
-                {
-                    Id = tslaId,
-                    Ticker = "TSLA",
-                    Name = "Tesla Inc.",
-                    Cik = "0001318605",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: msftId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: nvdaId,
+                    Ticker: "NVDA",
+                    Name: "NVIDIA Corp.",
+                    Cik: "0001045810"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: tslaId,
+                    Ticker: "TSLA",
+                    Name: "Tesla Inc.",
+                    Cik: "0001318605"
+                )
             );
 
             var filer = new InstitutionalHolder { Cik = "F0000001", Name = "Test Fund" };

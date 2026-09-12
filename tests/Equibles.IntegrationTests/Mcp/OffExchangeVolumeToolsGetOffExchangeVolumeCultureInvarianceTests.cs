@@ -16,7 +16,7 @@ public class OffExchangeVolumeToolsGetOffExchangeVolumeCultureInvarianceTests : 
     private OffExchangeVolumeTools Sut() =>
         new(
             new OffExchangeVolumeRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<OffExchangeVolumeTools>()
@@ -34,22 +34,25 @@ public class OffExchangeVolumeToolsGetOffExchangeVolumeCultureInvarianceTests : 
     [Fact]
     public async Task GetOffExchangeVolume_UnderNonInvariantCulture_RendersVolumesCultureInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GME",
-            Name = "GameStop Corp",
-            Cik = "0001326380",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GME",
+            Name: "GameStop Corp",
+            Cik: "0001326380"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<OffExchangeVolume>()
             .Add(
                 new OffExchangeVolume
                 {
                     EquityListingId = Equibles
-                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
                         .Id,
-                    ListedTicker = stock.Ticker,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     WeekStartDate = new DateOnly(2026, 3, 16),
                     AtsVolume = 5_000_000,
                     AtsTradeCount = 11_111,

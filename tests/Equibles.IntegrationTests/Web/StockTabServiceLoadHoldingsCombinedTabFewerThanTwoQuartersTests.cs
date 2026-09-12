@@ -67,7 +67,7 @@ public class StockTabServiceLoadHoldingsCombinedTabFewerThanTwoQuartersTests : I
             new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
     }
 
@@ -79,14 +79,13 @@ public class StockTabServiceLoadHoldingsCombinedTabFewerThanTwoQuartersTests : I
     [Fact]
     public async Task LoadHoldingsCombinedTab_SingleReportDate_MarksCombinedUnavailableAndExposesAvailableDates()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
 
         var holder = new InstitutionalHolder
         {

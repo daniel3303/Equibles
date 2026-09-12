@@ -42,8 +42,8 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         ILogger<CongressionalTradeSyncService> logger = null
     )
     {
-        var stocks = DbContext.Set<CommonStock>().AsNoTracking().ToList();
-        foreach (var stock in stocks)
+        var stocks = DbContext.Set<EquityIssuer>().AsNoTracking().ToList();
+        foreach (EquityIssuer stock in stocks)
         {
             if (
                 DbContext
@@ -88,11 +88,11 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         );
     }
 
-    private static EquityIssuerTickerEvidence Evidence(CommonStock stock, DateOnly filedDate) =>
+    private static EquityIssuerTickerEvidence Evidence(EquityIssuer stock, DateOnly filedDate) =>
         new()
         {
             EquityIssuerId = stock.Id,
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
             FiledDate = filedDate,
             SourceDocumentId = Guid.NewGuid(),
             AccessionNumber = $"{stock.Id:N}"[..24] + filedDate.Year,
@@ -163,7 +163,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
 
     private CongressionalTrade Trade(
         CongressMember member,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly transactionDate,
         DateOnly filingDate
     ) =>
@@ -200,7 +200,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_TickerMatchesTrackedStock_UpsertsMemberAndPersistsTrade()
     {
-        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        DbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -224,8 +226,14 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_ReviewedBioguideAliases_MergesHistoryAndWritesRedirects()
     {
-        var apple = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
-        var microsoft = new CommonStock { Ticker = "MSFT", Name = "Microsoft Corp." };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
+        EquityIssuer microsoft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp."
+        );
         var survivor = new CongressMember
         {
             Name = "James Banks",
@@ -305,7 +313,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_DistinctSameDayTrades_AllPersistAndReprocessAddsNothing()
     {
-        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        DbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -332,7 +342,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_SameDaySameAssetDifferentAccounts_AllPersistOnce()
     {
-        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        DbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -363,7 +375,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_NoIssuerEvidence_PersistsUnlinkedSourceFact()
     {
-        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        DbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
@@ -383,8 +397,11 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     public async Task ProcessTransactions_StableSourceRowChangesTicker_RefusesReplayAndKeepsFiledFact()
     {
         DbContext.AddRange(
-            new CommonStock { Ticker = "AAPL", Name = "Apple Inc." },
-            new CommonStock { Ticker = "MSFT", Name = "Microsoft Corporation" }
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc."),
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "MSFT",
+                Name: "Microsoft Corporation"
+            )
         );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -460,7 +477,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task RelinkUnresolved_NewBracketingEvidence_LinksStoredSourceFactLater()
     {
-        var issuer = new CommonStock { Ticker = "ACME", Name = "Acme Corporation" };
+        EquityIssuer issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ACME",
+            Name: "Acme Corporation"
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         var trade = new CongressionalTrade
         {
@@ -496,8 +516,14 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_ReusedTickerReplay_RelinksLegacyRowToHistoricalIssuer()
     {
-        var historicalIssuer = new CommonStock { Ticker = "B", Name = "Barrick Gold" };
-        var currentIssuer = new CommonStock { Ticker = "GOLD", Name = "Gold.com" };
+        EquityIssuer historicalIssuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "B",
+            Name: "Barrick Gold"
+        );
+        EquityIssuer currentIssuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GOLD",
+            Name: "Gold.com"
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(historicalIssuer, currentIssuer, member);
         DbContext.AddRange(
@@ -576,7 +602,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_TransactionAfterFiling_KeepsSourceUnpersisted()
     {
-        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        DbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
         var transaction = Txn(
@@ -606,7 +634,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_UnmatchedFutureTransaction_KeepsSourceUnpersisted()
     {
-        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        DbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
         var transaction = Txn(
@@ -634,7 +664,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_ReplayedRangeFloor_RepairsLegacyRowAndRetainsFiledMetadata()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(stock, member);
         DbContext.Add(
@@ -684,7 +717,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_ReplayedExistingTrade_EnrichesEmptyFiledMetadata()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(stock, member);
         DbContext.Add(
@@ -728,7 +764,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         const string subholding =
             "150 Main Street Trust > Pershing Advisor Solutions LLC Brokerage";
         const string otherSubholding = "Different Brokerage Account";
-        var stock = new CommonStock { Ticker = "AVGO", Name = "Broadcom Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AVGO",
+            Name: "Broadcom Inc."
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(stock, member);
         DbContext.Add(
@@ -803,7 +842,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         // subholding field, so the legacy row stored "... F S: New" inside AssetName. The old
         // repair only recognized rows with a separable subholding and skipped these, leaving a
         // polluted twin beside the clean replayed row forever.
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(stock, member);
         DbContext.Add(
@@ -853,7 +895,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     {
         const string firstSubholding = "Brokerage Account A";
         const string secondSubholding = "Brokerage Account B";
-        var stock = new CommonStock { Ticker = "AVGO", Name = "Broadcom Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AVGO",
+            Name: "Broadcom Inc."
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(stock, member);
         DbContext.AddRange(LegacyTrade(firstSubholding), LegacyTrade(secondSubholding));
@@ -919,7 +964,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_DifferentAccountArrivesLater_PersistsBothAccounts()
     {
-        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        DbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
         var sut = BuildSut();
@@ -956,7 +1003,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_PartialStoredMetadata_PreservesBothFiledIdentities()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(stock, member);
         DbContext.Add(
@@ -1005,7 +1055,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_SameCycleEmptyMetadataDuplicate_PrefersFiledMetadata()
     {
-        DbContext.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        DbContext.Add(
+            Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+        );
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
         await (Task)
@@ -1030,7 +1082,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_ReplayedUnderAmount_RepairsLegacyZeroFloorRow()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(stock, member);
         DbContext.Add(
@@ -1075,7 +1130,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_TwoReplayedRangeFloors_RepairsBothLegacyRows()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(stock, member);
         DbContext.AddRange(
@@ -1143,7 +1201,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ProcessTransactions_ReplacementUpsertFails_RollsBackLegacyRepairDeletion()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(stock, member);
         DbContext.Add(

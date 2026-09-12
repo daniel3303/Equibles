@@ -41,7 +41,7 @@ internal readonly record struct PriceSeriesTarget(
 }
 
 internal readonly record struct LockedPriceSeries(
-    CommonStock Stock,
+    EquityIssuer Stock,
     bool IsPrimary,
     EquityListingRetirementEvidence HistoricalListing = null
 );
@@ -178,7 +178,8 @@ public class YahooPriceImportService
             return [];
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepository =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var delistedRows = await stockRepository
             .GetDelistedListings()
             .Where(listing => stockIds.Contains(listing.EquityIssuerId))
@@ -195,15 +196,38 @@ public class YahooPriceImportService
                         .ToHashSet(StringComparer.OrdinalIgnoreCase)
             );
         var stocks = await stockRepository
-            .GetByIds(stockIds)
+            .GetCurrentUsDirectoryByIds(stockIds)
             .Select(stock => new
             {
                 stock.Id,
-                stock.Ticker,
-                stock.SecondaryTickers,
-                stock.ReferenceTickers,
-                stock.PriceHistoryBackfilledTickers,
-                stock.YahooEnrichmentAttemptedAt,
+                Ticker = stock.Presentation.Listing.Ticker,
+                SecondaryTickers = stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != stock.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
+                ReferenceTickers = stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
+                PriceHistoryBackfilledTickers = stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (nativeListing.PriceHistoryBackfilled)
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
+                YahooEnrichmentAttemptedAt = stock.Presentation.Listing.YahooEnrichmentAttemptedAt,
             })
             .ToListAsync(cancellationToken);
 
@@ -274,7 +298,8 @@ public class YahooPriceImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepository =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var retryBefore = DateTime.UtcNow.AddDays(
             -Math.Max(1, _scraperOptions.HistoricalBackfillRetryDays)
         );
@@ -287,8 +312,8 @@ public class YahooPriceImportService
                 && !stockRepository
                     .GetCompletedPriceSeries()
                     .Any(mapping =>
-                        mapping.CommonStockId == listing.EquityIssuerId
-                        && mapping.ListedTicker == listing.ListedTicker
+                        mapping.Security.EquityIssuerId == listing.EquityIssuerId
+                        && mapping.Ticker == listing.ListedTicker
                     )
                 && (
                     listing.HistoricalPriceBackfillAttemptedAt == null
@@ -313,12 +338,15 @@ public class YahooPriceImportService
     }
 
     private static async Task<LockedPriceSeries?> LockPriceSeries(
-        CommonStockRepository stockRepository,
+        EquityIssuerRepository stockRepository,
         PriceSeriesTarget target,
         CancellationToken cancellationToken
     )
     {
-        var stock = await stockRepository.GetForUpdate(target.CommonStockId, cancellationToken);
+        EquityIssuer stock = await stockRepository.GetForUpdate(
+            target.CommonStockId,
+            cancellationToken
+        );
         if (stock == null)
             return null;
         EquityListingRetirementEvidence historicalListing = null;
@@ -342,7 +370,7 @@ public class YahooPriceImportService
             )
                 return null;
         }
-        if (!target.IsHistorical && !stock.Active)
+        if (!target.IsHistorical && !stock.Presentation.Listing.Active)
             return null;
 
         var resolvedTicker =
@@ -356,7 +384,11 @@ public class YahooPriceImportService
 
         return new LockedPriceSeries(
             stock,
-            string.Equals(resolvedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase),
+            string.Equals(
+                resolvedTicker,
+                stock.Presentation.Listing.Ticker,
+                StringComparison.OrdinalIgnoreCase
+            ),
             historicalListing
         );
     }
@@ -564,7 +596,8 @@ public class YahooPriceImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         await using var transaction = await stockRepo.CreateTransaction(
             IsolationLevel.ReadCommitted,
             cancellationToken
@@ -576,7 +609,7 @@ public class YahooPriceImportService
             return;
         }
 
-        lockedSeries.Value.Stock.YahooEnrichmentAttemptedAt = attemptedAt;
+        lockedSeries.Value.Stock.Presentation.Listing.YahooEnrichmentAttemptedAt = attemptedAt;
         if (
             !await SaveStockChanges(
                 stockRepo,
@@ -595,7 +628,8 @@ public class YahooPriceImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         await using var transaction = await stockRepo.CreateTransaction(
             IsolationLevel.ReadCommitted,
             cancellationToken
@@ -642,7 +676,7 @@ public class YahooPriceImportService
         EquityDailyStockPriceRepository priceRepo =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
         var rows = await priceRepo
-            .GetLegacySeries()
+            .GetUsSeries()
             .GroupBy(p => new
             {
                 CommonStockId = p.Listing.Security.EquityIssuerId,
@@ -777,10 +811,10 @@ public class YahooPriceImportService
         PriceSeriesTarget target;
         using (var identityScope = _scopeFactory.CreateScope())
         {
-            var stockRepository =
-                identityScope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-            var stock = await stockRepository
-                .GetAllIncludingInactive()
+            EquityIssuerRepository stockRepository =
+                identityScope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+            EquityIssuer stock = await stockRepository
+                .GetAll()
                 .FirstOrDefaultAsync(
                     candidate => candidate.Id == selectedSeries.CommonStockId,
                     cancellationToken
@@ -807,7 +841,7 @@ public class YahooPriceImportService
                     selectedSeries.ListedTicker,
                     StringComparison.OrdinalIgnoreCase
                 )
-                || (!stock.Active && delistedListing == null)
+                || (!stock.Presentation.Listing.Active && delistedListing == null)
             )
                 return;
 
@@ -816,7 +850,7 @@ public class YahooPriceImportService
                 selectedSeries.CommonStockId,
                 IsPrimary: string.Equals(
                     resolvedTicker,
-                    stock.Ticker,
+                    stock.Presentation.Listing.Ticker,
                     StringComparison.OrdinalIgnoreCase
                 ),
                 IsHistorical: delistedListing != null,
@@ -967,7 +1001,7 @@ public class YahooPriceImportService
                 split.Numerator,
                 split.Denominator,
                 priceRepository
-                    .GetLegacySeries()
+                    .GetUsSeries()
                     .Where(price =>
                         price.Listing.Security.EquityIssuerId == split.EquityIssuerId
                         && price.SourceTicker == split.PriceSeriesTicker
@@ -977,7 +1011,7 @@ public class YahooPriceImportService
                     .Select(price => (decimal?)price.Close)
                     .FirstOrDefault(),
                 priceRepository
-                    .GetLegacySeries()
+                    .GetUsSeries()
                     .Where(price =>
                         price.Listing.Security.EquityIssuerId == split.EquityIssuerId
                         && price.SourceTicker == split.PriceSeriesTicker
@@ -1210,7 +1244,8 @@ public class YahooPriceImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var splitRepo = scope.ServiceProvider.GetRequiredService<StockSplitRepository>();
         EquityDailyStockPriceRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
@@ -1233,7 +1268,7 @@ public class YahooPriceImportService
     // between the applicable-split read and the final row swap.
     private async Task<bool> ReplaceValidatedPriceRows(
         EquityDailyStockPriceRepository repo,
-        CommonStockRepository stockRepo,
+        EquityIssuerRepository stockRepo,
         StockSplitRepository splitRepo,
         PriceSeriesTarget target,
         DateOnly floor,
@@ -1391,7 +1426,8 @@ public class YahooPriceImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         EquityDailyStockPriceRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
         await using var transaction = await repo.CreateTransaction(
@@ -1404,7 +1440,7 @@ public class YahooPriceImportService
             return;
         }
 
-        var recycledRows = await repo.GetLegacySeries(target.CommonStockId, target.Ticker)
+        var recycledRows = await repo.GetUsSeries(target.CommonStockId, target.Ticker)
             .Where(price => price.Date > target.HistoryEndDate!.Value)
             .ToListAsync(cancellationToken);
         if (recycledRows.Count > 0)
@@ -1422,7 +1458,7 @@ public class YahooPriceImportService
     // a partial series on failure. Takes the repo so it is unit-testable without a live worker.
     private static async Task<bool> ReplacePriceRows(
         EquityDailyStockPriceRepository repo,
-        CommonStockRepository stockRepo,
+        EquityIssuerRepository stockRepo,
         PriceSeriesTarget target,
         DateOnly floor,
         DateOnly replaceThrough,
@@ -1471,7 +1507,7 @@ public class YahooPriceImportService
 
     private static async Task ReplaceLockedPriceRows(
         EquityDailyStockPriceRepository repo,
-        CommonStockRepository stockRepo,
+        EquityIssuerRepository stockRepo,
         PriceSeriesTarget target,
         DateOnly floor,
         DateOnly replaceThrough,
@@ -1516,13 +1552,12 @@ public class YahooPriceImportService
 
         if (target.RequiresFullHistory)
         {
-            lockedSeries.Stock.PriceHistoryBackfilledTickers = lockedSeries
-                .Stock.PriceHistoryBackfilledTickers.Append(target.Ticker)
-                .Select(TickerNormalizer.NormalizeListed)
-                .Where(ticker => ticker != null)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(ticker => ticker, StringComparer.Ordinal)
-                .ToList();
+            var completedListing = lockedSeries
+                .Stock.Securities.SelectMany(security => security.Listings)
+                .Single(listing =>
+                    listing.MarketCountryCode == "US" && listing.Ticker == target.Ticker
+                );
+            completedListing.PriceHistoryBackfilled = true;
             await stockRepo.SaveChanges();
         }
     }
@@ -1531,7 +1566,7 @@ public class YahooPriceImportService
     {
         using var scope = _scopeFactory.CreateScope();
         return await scope
-                .ServiceProvider.GetRequiredService<CommonStockRepository>()
+                .ServiceProvider.GetRequiredService<EquityIssuerRepository>()
                 .GetEquityListingId(issuerId, ticker)
             ?? throw new InvalidOperationException(
                 "The price series has no native listing identity."
@@ -1880,7 +1915,7 @@ public class YahooPriceImportService
         using var scope = _scopeFactory.CreateScope();
         EquityDailyStockPriceRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
-        return await repo.GetLegacySeries(target.CommonStockId, target.Ticker)
+        return await repo.GetUsSeries(target.CommonStockId, target.Ticker)
             .AnyAsync(cancellationToken);
     }
 
@@ -1919,7 +1954,8 @@ public class YahooPriceImportService
         using var scope = _scopeFactory.CreateScope();
         EquityDailyStockPriceRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         await using var transaction = await repo.CreateTransaction(
             IsolationLevel.ReadCommitted,
             cancellationToken
@@ -1934,7 +1970,7 @@ public class YahooPriceImportService
             );
             return 0;
         }
-        var stored = await repo.GetLegacySeries(target.CommonStockId, target.Ticker)
+        var stored = await repo.GetUsSeries(target.CommonStockId, target.Ticker)
             .Where(p => p.Date >= windowStart && p.Date < today)
             .ToListAsync(cancellationToken);
 
@@ -2020,7 +2056,7 @@ public class YahooPriceImportService
         {
             EquityDailyStockPriceRepository repo =
                 scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
-            targets = await repo.GetLegacySeries()
+            targets = await repo.GetUsSeries()
                 .AsNoTracking()
                 .Where(p =>
                     (
@@ -2106,7 +2142,8 @@ public class YahooPriceImportService
         {
             EquityDailyStockPriceRepository repo =
                 scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
-            var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+            EquityIssuerRepository stockRepo =
+                scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
             await using var transaction = await repo.CreateTransaction(
                 IsolationLevel.ReadCommitted,
                 cancellationToken
@@ -2132,7 +2169,7 @@ public class YahooPriceImportService
                 if (await LockPriceSeries(stockRepo, target, cancellationToken) != null)
                     validSeries.Add(series);
             }
-            var storedRows = await repo.GetLegacySeries()
+            var storedRows = await repo.GetUsSeries()
                 .Where(p => targetIds.Contains(p.Id))
                 .ToListAsync(cancellationToken);
 
@@ -2345,10 +2382,17 @@ public class YahooPriceImportService
             );
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         EquityDailyStockPriceRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
-        var identity = await repo.GetLegacyIdentity(first.EquityListingId).SingleAsync();
+        var identity = await repo.GetUsListingReference(first.EquityListingId)
+            .Select(listing => new
+            {
+                CommonStockId = listing.Security.EquityIssuerId,
+                ListedTicker = listing.Ticker,
+            })
+            .SingleAsync();
         if (identity.ListedTicker != first.SourceTicker)
             throw new InvalidOperationException(
                 "The source ticker does not match the registered price series."
@@ -2378,7 +2422,7 @@ public class YahooPriceImportService
         // this series lock. Rechecking while locked turns that collision into an idempotent skip
         // instead of rolling back every later row in this batch.
         var batchDates = batch.Select(price => price.Date).ToList();
-        var existingDates = await repo.GetLegacySeries()
+        var existingDates = await repo.GetUsSeries()
             .Where(p => p.EquityListingId == first.EquityListingId && batchDates.Contains(p.Date))
             .Select(p => p.Date)
             .ToListAsync();
@@ -2410,7 +2454,8 @@ public class YahooPriceImportService
         var stats = await _yahooClient.GetKeyStatistics(ticker) ?? new KeyStatistics();
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         await using var transaction = await stockRepo.CreateTransaction(
             IsolationLevel.ReadCommitted,
             cancellationToken
@@ -2426,7 +2471,7 @@ public class YahooPriceImportService
             );
             return;
         }
-        var stock = lockedSeries.Value.Stock;
+        EquityIssuer stock = lockedSeries.Value.Stock;
 
         // The SEC cover-page count (dei:EntityCommonStockSharesOutstanding) is authoritative and
         // current; Yahoo's figure is per-share-class and lags corporate actions. Defer to EDGAR
@@ -2469,7 +2514,9 @@ public class YahooPriceImportService
         // fact that the listing is a receipt — so the repair is to stop rescaling, not to divide.
         if (
             edgarShares != null
-            && ListedSecurityClassifier.IsAmericanDepositary(stock.ListedSecurityTitle)
+            && ListedSecurityClassifier.IsAmericanDepositary(
+                stock.Presentation.Listing.Security.RegistrationTitle
+            )
         )
             edgarShares = null;
 
@@ -2499,9 +2546,13 @@ public class YahooPriceImportService
         // counts only the US listing, so storing that count leaves the derived price
         // (cap ÷ shares) off by the ADR ratio / listing mix (CYATY 21x, SNHIY 12.8x, JHPCY 26x).
         var changed = false;
-        if (edgarShares == null && yahooShareBase != 0 && stock.SharesOutStanding != yahooShareBase)
+        if (
+            edgarShares == null
+            && yahooShareBase != 0
+            && stock.Presentation.Listing.Security.SharesOutstanding != yahooShareBase
+        )
         {
-            stock.SharesOutStanding = yahooShareBase;
+            stock.Presentation.Listing.Security.SharesOutstanding = yahooShareBase;
             changed = true;
         }
         // When the EDGAR count is the authoritative base (not dropped above), store it here too —
@@ -2512,9 +2563,12 @@ public class YahooPriceImportService
         // on the listed-security basis, and when such a refusal goes stale (a large legitimate
         // issuance moved the true count), it is corrected here, where Yahoo's agreeing share base
         // proves the EDGAR count plausible.
-        if (edgarShares is > 0 && stock.SharesOutStanding != edgarShares.Value)
+        if (
+            edgarShares is > 0
+            && stock.Presentation.Listing.Security.SharesOutstanding != edgarShares.Value
+        )
         {
-            stock.SharesOutStanding = edgarShares.Value;
+            stock.Presentation.Listing.Security.SharesOutstanding = edgarShares.Value;
             changed = true;
         }
         // Reconcile Yahoo's market cap onto the authoritative EDGAR share base so it never
@@ -2539,9 +2593,9 @@ public class YahooPriceImportService
             stats.MarketCapitalization,
             currentPrice
         );
-        if (marketCap != 0 && stock.MarketCapitalization != marketCap)
+        if (marketCap != 0 && stock.Presentation.Listing.Security.MarketCapitalization != marketCap)
         {
-            stock.MarketCapitalization = marketCap;
+            stock.Presentation.Listing.Security.MarketCapitalization = marketCap;
             changed = true;
         }
 
@@ -2628,7 +2682,8 @@ public class YahooPriceImportService
             return;
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var industryRepo = scope.ServiceProvider.GetRequiredService<IndustryRepository>();
         var sectorRepo = scope.ServiceProvider.GetRequiredService<SectorRepository>();
         await using var transaction = await stockRepo.CreateTransaction(
@@ -2646,7 +2701,7 @@ public class YahooPriceImportService
             );
             return;
         }
-        var stock = lockedSeries.Value.Stock;
+        EquityIssuer stock = lockedSeries.Value.Stock;
 
         // Upsert by case-insensitive name. Yahoo uses a small stable vocabulary, so
         // collisions are rare and a flat scan over Sector/Industry is fine — both tables
@@ -2679,7 +2734,7 @@ public class YahooPriceImportService
     }
 
     private async Task<bool> SaveStockChanges(
-        CommonStockRepository stockRepo,
+        EquityIssuerRepository stockRepo,
         Guid commonStockId,
         string ticker,
         CancellationToken cancellationToken
@@ -2693,7 +2748,7 @@ public class YahooPriceImportService
         catch (DbUpdateConcurrencyException)
         {
             var stillExists = await stockRepo
-                .GetAll()
+                .GetCurrentUsDirectory()
                 .AsNoTracking()
                 .AnyAsync(s => s.Id == commonStockId, cancellationToken);
             if (stillExists)
@@ -2817,14 +2872,14 @@ public class YahooPriceImportService
         {
             EquityDailyStockPriceRepository repo =
                 scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
-            storedDates = await repo.GetLegacySeries(target.CommonStockId, target.Ticker)
+            storedDates = await repo.GetUsSeries(target.CommonStockId, target.Ticker)
                 .Where(p => p.Date >= windowStart && p.Date < today)
                 .Select(p => p.Date)
                 .ToListAsync(cancellationToken);
             // The stock's first bar EVER, not first-in-window: the discriminator between "listed
             // mid-window" and "the feed failed to serve the window's leading edge" (see
             // FindEarliestGap). An aggregate on the (CommonStockId, Date) index.
-            earliestStored = await repo.GetLegacySeries(target.CommonStockId, target.Ticker)
+            earliestStored = await repo.GetUsSeries(target.CommonStockId, target.Ticker)
                 .MinAsync(p => (DateOnly?)p.Date, cancellationToken);
         }
 
@@ -2880,7 +2935,7 @@ public class YahooPriceImportService
             _scopeFactory,
             _workerOptions,
             repo =>
-                repo.GetLegacySeries(target.CommonStockId, target.Ticker)
+                repo.GetUsSeries(target.CommonStockId, target.Ticker)
                     .Select(p => p.Date)
                     .OrderByDescending(d => d),
             cancellationToken
@@ -2967,7 +3022,7 @@ public class YahooPriceImportService
         EquityDailyStockPriceRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
 
-        var dates = await repo.GetLegacySeries(target.CommonStockId, target.Ticker)
+        var dates = await repo.GetUsSeries(target.CommonStockId, target.Ticker)
             .Where(p => p.Date >= startDate && p.Date <= endDate)
             .Select(p => p.Date)
             .ToListAsync(cancellationToken);

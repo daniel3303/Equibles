@@ -32,25 +32,26 @@ public class CommonStockManagerCreateDuplicateCikTests
         // collision is the CIK. No existing test reaches it. A real repository is used
         // so GetByCik runs the actual lookup against the seeded row.
         var db = NewDb();
-        db.Set<CommonStock>()
+        db.Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Id = Guid.NewGuid(),
-                    Ticker = "AAA",
-                    Name = "Existing Co",
-                    Cik = "0000000005",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "AAA",
+                    Name: "Existing Co",
+                    Cik: "0000000005"
+                )
             );
         await db.SaveChangesAsync();
 
-        var sut = new CommonStockManager(new CommonStockRepository(db), Substitute.For<IBus>());
-        var incoming = new CommonStock
-        {
-            Ticker = "BBB",
-            Name = "New Co",
-            Cik = "0000000005",
-        };
+        EquityIdentityManager sut = new EquityIdentityManager(
+            new EquityIssuerRepository(db),
+            Substitute.For<IBus>()
+        );
+        EquityIssuer incoming = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BBB",
+            Name: "New Co",
+            Cik: "0000000005"
+        );
 
         var act = () => sut.Create(incoming);
 
@@ -58,6 +59,6 @@ public class CommonStockManagerCreateDuplicateCikTests
             "*cik*0000000005*already*"
         );
         // The incoming company was never persisted — only the pre-seeded row remains.
-        db.Set<CommonStock>().Count(cs => cs.Ticker == "BBB").Should().Be(0);
+        db.Set<EquityIssuer>().Count(cs => cs.Presentation.Listing.Ticker == "BBB").Should().Be(0);
     }
 }

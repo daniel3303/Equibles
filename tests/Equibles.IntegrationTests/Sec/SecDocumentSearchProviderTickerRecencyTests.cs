@@ -24,12 +24,11 @@ public class SecDocumentSearchProviderTickerRecencyTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Search_ExactTicker_ReturnsCompanysMostRecentFilingsNewestFirst()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "ARE",
-            Name = "Alexandria Real Estate",
-            Cik = "ARE",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ARE",
+            Name: "Alexandria Real Estate",
+            Cik: "ARE"
+        );
         DbContext.Add(stock);
 
         // Span old → new; only the 5 newest should come back, newest first — even though the older
@@ -78,12 +77,11 @@ public class SecDocumentSearchProviderTickerRecencyTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Search_ExactTicker_IsCaseInsensitive()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "ARE",
-            Name = "Alexandria Real Estate",
-            Cik = "ARE",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ARE",
+            Name: "Alexandria Real Estate",
+            Cik: "ARE"
+        );
         DbContext.Add(stock);
         SeedDocument(stock, new DateOnly(2026, 1, 26));
         await DbContext.SaveChangesAsync();
@@ -103,7 +101,7 @@ public class SecDocumentSearchProviderTickerRecencyTests : ParadeDbMcpTestBase
         group.Hits[0].RouteValues["ticker"].Should().Be("ARE");
     }
 
-    private void SeedDocument(CommonStock stock, DateOnly reportingDate)
+    private void SeedDocument(EquityIssuer stock, DateOnly reportingDate)
     {
         var fileContent = new Equibles.Media.Data.Models.FileContent
         {

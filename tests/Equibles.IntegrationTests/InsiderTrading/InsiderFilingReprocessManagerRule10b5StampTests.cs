@@ -37,13 +37,12 @@ public class InsiderFilingReprocessManagerRule10b5StampTests : ParadeDbMcpTestBa
         var filingDate = new DateOnly(2024, 6, 17);
         var accession = "0000320193-24-000002";
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var owner = new InsiderOwner
         {
             Id = Guid.NewGuid(),

@@ -30,13 +30,13 @@ public class StockPriceTools
     private const int BaselineSlackDays = 14;
 
     private readonly EquityDailyStockPriceRepository _priceRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public StockPriceTools(
         EquityDailyStockPriceRepository priceRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<StockPriceTools> logger
@@ -270,7 +270,7 @@ public class StockPriceTools
                         continue;
                     }
 
-                    var stock = selection.Stock;
+                    EquityIssuer stock = selection.Stock;
                     var priceTicker = selection.PriceTicker;
                     EquityDailyStockPrice price = selection.Price;
                     EquityDailyStockPrice previous = selection.Previous;
@@ -282,7 +282,7 @@ public class StockPriceTools
                     var cutoff = price.Date.AddDays(-365);
                     var applicableSplits = PriceSeriesSplitScope.ForListing(
                         batchSplits.Where(split => split.EquityIssuerId == stock.Id),
-                        stock.Ticker,
+                        stock.Presentation.Listing.Ticker,
                         priceTicker
                     );
                     var comparableWindow = ComparablePriceWindow.Resolve(
@@ -728,8 +728,12 @@ public class StockPriceTools
 
     // CommonStock.Name describes the primary SEC listing. Secondary symbols can identify a
     // different share class or fund series, and no authoritative per-listing name is stored.
-    private static string ListingTitle(CommonStock stock, string priceTicker) =>
-        string.Equals(stock.Ticker, priceTicker, StringComparison.OrdinalIgnoreCase)
+    private static string ListingTitle(EquityIssuer stock, string priceTicker) =>
+        string.Equals(
+            stock.Presentation.Listing.Ticker,
+            priceTicker,
+            StringComparison.OrdinalIgnoreCase
+        )
             ? $"{priceTicker} ({stock.Name})"
             : priceTicker;
 
@@ -738,7 +742,7 @@ public class StockPriceTools
     // This is a mechanical format conversion between two spellings of the same symbol, not a
     // heuristic. The returned PriceTicker is load-bearing: price queries use it so a secondary
     // listing can never fall through to the filer's primary bars.
-    private async Task<(CommonStock Stock, string PriceTicker, string Error)> ResolveTicker(
+    private async Task<(EquityIssuer Stock, string PriceTicker, string Error)> ResolveTicker(
         string ticker
     )
     {
@@ -752,9 +756,11 @@ public class StockPriceTools
         return resolved;
     }
 
-    private async Task<(CommonStock Stock, string PriceTicker, string Error)> ResolvePricedSpelling(
-        string lookupTicker
-    )
+    private async Task<(
+        EquityIssuer Stock,
+        string PriceTicker,
+        string Error
+    )> ResolvePricedSpelling(string lookupTicker)
     {
         var (stock, error) = await _commonStockRepository.ResolveByTicker(lookupTicker);
         if (stock == null)
@@ -818,7 +824,7 @@ public class StockPriceTools
     }
 
     private async Task<(
-        CommonStock Stock,
+        EquityIssuer Stock,
         string PriceTicker,
         List<EquityDailyStockPrice> Records,
         int RenderFrom,
@@ -1028,7 +1034,7 @@ public class StockPriceTools
     }
 
     private sealed record LatestPriceSelection(
-        CommonStock Stock,
+        EquityIssuer Stock,
         string PriceTicker,
         EquityDailyStockPrice Price,
         EquityDailyStockPrice Previous

@@ -54,13 +54,12 @@ public class ShortVolumeNegativeMaxResultsTests : IClassFixture<McpServerAppFixt
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "GME",
-                Name = "GameStop Corp",
-                Cik = "0001326380",
-            };
-            db.Set<CommonStock>().Add(stock);
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "GME",
+                Name: "GameStop Corp",
+                Cik: "0001326380"
+            );
+            db.Set<EquityIssuer>().Add(stock);
             await db.SaveChangesAsync();
 
             db.Set<DailyShortVolume>()
@@ -68,9 +67,13 @@ public class ShortVolumeNegativeMaxResultsTests : IClassFixture<McpServerAppFixt
                     new DailyShortVolume
                     {
                         EquityListingId = Equibles
-                            .TestSupport.NativeListingSeed.ForStock(db, stock, stock.Ticker)
+                            .TestSupport.NativeListingSeed.ForStock(
+                                db,
+                                stock,
+                                stock.Presentation.Listing.Ticker
+                            )
                             .Id,
-                        ListedTicker = stock.Ticker,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         Date = new DateOnly(2026, 4, 1),
                         ShortVolume = 1_200_000,
                         ShortExemptVolume = 50_000,

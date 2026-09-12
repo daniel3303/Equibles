@@ -23,7 +23,7 @@ public class NCenFundOperationsToolTests : IDisposable
         );
         _tools = new NCenTools(
             new NCenFilingRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new FundSeriesRepository(_dbContext),
             errorManager: null,
             NullLogger<NCenTools>.Instance
@@ -32,16 +32,15 @@ public class NCenFundOperationsToolTests : IDisposable
 
     public void Dispose() => _dbContext.Dispose();
 
-    private CommonStock SeedStock(string ticker = "MXF", string cik = "0000065433")
+    private EquityIssuer SeedStock(string ticker = "MXF", string cik = "0000065433")
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = "Mexico Fund Inc",
-            Cik = cik,
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: "Mexico Fund Inc",
+            Cik: cik
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.SaveChanges();
         return stock;
     }
@@ -98,7 +97,7 @@ public class NCenFundOperationsToolTests : IDisposable
     [Fact]
     public async Task GetFundNcenReports_WithFilings_RendersTableNewestFirstWithProviders()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext.Set<NCenFiling>().Add(MakeFiling(stock.Id, "older", new DateOnly(2023, 1, 5)));
 
         var newer = MakeFiling(stock.Id, "newer", new DateOnly(2025, 1, 15));
@@ -130,7 +129,7 @@ public class NCenFundOperationsToolTests : IDisposable
     [Fact]
     public async Task GetFundNcenReports_RespectsMaxResults()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         for (var i = 0; i < 5; i++)
         {
             _dbContext
@@ -147,7 +146,7 @@ public class NCenFundOperationsToolTests : IDisposable
     [Fact]
     public async Task GetFundNcenReports_GlossesRegistrationTypeCode()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext.Set<NCenFiling>().Add(MakeFiling(stock.Id, "acc", new DateOnly(2025, 1, 15)));
         await _dbContext.SaveChangesAsync();
 
@@ -159,7 +158,7 @@ public class NCenFundOperationsToolTests : IDisposable
     [Fact]
     public async Task GetFundNcenReports_FlattensAndEscapesFiledTableCodes()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2025, 1, 15));
         filing.InvestmentCompanyType = "N|2\n# TYPE";
         filing.InvestmentCompanyFileNumber = "811|02409\n# FILE";
@@ -203,7 +202,7 @@ public class NCenFundOperationsToolTests : IDisposable
     [Fact]
     public async Task GetFundNcenReports_VerifiedAliasWinsOverConflictingTrackedStockTicker()
     {
-        var conflictingStock = SeedStock("VOO");
+        EquityIssuer conflictingStock = SeedStock("VOO");
         _dbContext.Add(MakeFiling(conflictingStock.Id, "wrong-series", new DateOnly(2026, 5, 16)));
         _dbContext.Add(
             new FundSeries

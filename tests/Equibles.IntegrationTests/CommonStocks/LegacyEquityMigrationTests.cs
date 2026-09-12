@@ -154,7 +154,16 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
             )
                 .Should()
                 .Be(1);
-            var listings = await context.Set<EquityListing>().ToListAsync();
+            var listings = await context
+                .Set<EquityListing>()
+                .Select(row => new
+                {
+                    row.IdentityState,
+                    row.MarketIdentifierCode,
+                    row.TradingCurrency,
+                    row.QuoteUnitMultiplier,
+                })
+                .ToListAsync();
             listings
                 .Should()
                 .OnlyContain(row =>
@@ -165,12 +174,23 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
                 );
             var old = await new EquityListingRepository(context)
                 .GetByLegacyKey(stock.Id, "OLD")
+                .Select(listing => new { listing.Id })
                 .SingleAsync();
             (await new EquityDailyStockPriceRepository(context).GetByListing(old.Id).SingleAsync())
                 .Close.Should()
                 .Be(123.4567m);
-            (await new CommonStockRepository(context).GetByTicker("CLASS-B"))
-                .Id.Should()
+            (
+                await context
+                    .Set<EquityIssuer>()
+                    .Where(issuer =>
+                        issuer.Securities.Any(security =>
+                            security.Listings.Any(listing => listing.Ticker == "CLASS-B")
+                        )
+                    )
+                    .Select(issuer => issuer.Id)
+                    .SingleAsync()
+            )
+                .Should()
                 .Be(stock.Id);
             (await context.Set<CommonStock>().SingleAsync(row => row.Id == inactive.Id))
                 .Active.Should()

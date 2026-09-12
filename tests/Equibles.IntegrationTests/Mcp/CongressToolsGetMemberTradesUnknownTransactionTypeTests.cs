@@ -29,12 +29,11 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
             Name = "Nancy Pelosi",
             Position = CongressPosition.Representative,
         };
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corporation",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corporation",
+            Cik: "0001045810"
+        );
         DbContext.Add(member);
         DbContext.Add(stock);
         // One Purchase and one Sale on distinct dates, so a silently-ignored filter (both
@@ -53,7 +52,7 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
             new CongressionalTradeRepository(verify),
             new CongressMemberRepository(verify),
             new CongressionalAnnualDisclosureRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             ErrorManager,
             NullLogger<CongressTools>()
         );
@@ -82,12 +81,11 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
             Name = "Nancy Pelosi",
             Position = CongressPosition.Representative,
         };
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corporation",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corporation",
+            Cik: "0001045810"
+        );
         DbContext.Add(member);
         DbContext.Add(stock);
         DbContext.Add(
@@ -104,7 +102,7 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
             new CongressionalTradeRepository(verify),
             new CongressMemberRepository(verify),
             new CongressionalAnnualDisclosureRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             ErrorManager,
             NullLogger<CongressTools>()
         );
@@ -123,7 +121,7 @@ public class CongressToolsGetMemberTradesUnknownTransactionTypeTests : ParadeDbM
 
     private CongressionalTrade MakeTrade(
         CongressMember member,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly transactionDate,
         CongressTransactionType type
     ) =>

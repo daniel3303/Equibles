@@ -61,14 +61,14 @@ public class InsiderTradingToolsOwnershipRankingTests
             new InsiderTransactionRepository(db),
             new InsiderOwnerRepository(db),
             new Form144FilingRepository(db),
-            new CommonStockRepository(db),
+            new EquityIssuerRepository(db),
             new StockSplitRepository(db),
             new ErrorManager(new ErrorRepository(db)),
             Substitute.For<ILogger<InsiderTradingTools>>()
         );
 
     private static InsiderTransaction NewTransaction(
-        CommonStock stock,
+        EquityIssuer stock,
         InsiderOwner owner,
         DateOnly transactionDate,
         long sharesOwnedAfter,
@@ -100,12 +100,11 @@ public class InsiderTradingToolsOwnershipRankingTests
     public async Task GetInsiderOwnership_TopNCut_RanksOnSplitAdjustedCounts()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         var preSplitHolder = new InsiderOwner
         {
             OwnerCik = "0000000001",
@@ -171,12 +170,11 @@ public class InsiderTradingToolsOwnershipRankingTests
         // (TransactionOrder ASC) returned the FIRST row, publishing an intermediate
         // balance as the insider's current position (#7164, EquiblesCommercial).
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         var owner = new InsiderOwner
         {
             OwnerCik = "0000000041",
@@ -226,12 +224,11 @@ public class InsiderTradingToolsOwnershipRankingTests
         // actual-share position, and a derivative-only insider has no share position to
         // report.
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "TSM",
-            Name = "Taiwan Semiconductor",
-            Cik = "0001046179",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TSM",
+            Name: "Taiwan Semiconductor",
+            Cik: "0001046179"
+        );
         var mixed = new InsiderOwner
         {
             OwnerCik = "0000000051",
@@ -288,12 +285,11 @@ public class InsiderTradingToolsOwnershipRankingTests
     public async Task GetInsiderOwnership_Truncated_AppendsTruncationNote()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var first = new InsiderOwner
         {
             OwnerCik = "0000000011",
@@ -344,12 +340,11 @@ public class InsiderTradingToolsOwnershipRankingTests
         // Four insiders tied on the adjusted holding so only the name/id tiebreaks order
         // them — exactly where a partial order would repeat or skip rows between pages.
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         db.Add(stock);
         var names = new[] { "Alpha Holder", "Bravo Holder", "Charlie Holder", "Delta Holder" };
         foreach (var (name, index) in names.Select((n, i) => (n, i)))
@@ -389,12 +384,11 @@ public class InsiderTradingToolsOwnershipRankingTests
     public async Task GetInsiderOwnership_LowercaseTicker_EchoesCanonicalTicker()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var owner = new InsiderOwner
         {
             OwnerCik = "0000000021",
@@ -423,12 +417,11 @@ public class InsiderTradingToolsOwnershipRankingTests
     public async Task GetInsiderOwnership_LastTransaction_RendersDisplayName()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var owner = new InsiderOwner
         {
             OwnerCik = "0000000031",

@@ -74,12 +74,11 @@ public class GovernmentContractsToolsShortenSurrogateTests
             }
         );
         context.Database.EnsureCreated();
-        var stock = new CommonStock
-        {
-            Ticker = "RTX",
-            Name = "RTX Corp",
-            Cik = "0000101829",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "RTX",
+            Name: "RTX Corp",
+            Cik: "0000101829"
+        );
         context.Add(stock);
         context.Add(
             new GovernmentContract
@@ -116,7 +115,7 @@ public class GovernmentContractsToolsShortenSurrogateTests
         await context.SaveChangesAsync();
         var tools = new GovernmentContractsTools(
             new GovernmentContractRepository(context),
-            new CommonStockRepository(context),
+            new EquityIssuerRepository(context),
             new ErrorManager(null!),
             NullLogger<GovernmentContractsTools>.Instance
         );

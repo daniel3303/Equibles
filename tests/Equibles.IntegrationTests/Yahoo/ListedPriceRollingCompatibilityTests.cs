@@ -151,7 +151,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
         }
 
         await using var current = _fixture.CreateDbContext();
-        var stock = await current.Set<CommonStock>().SingleAsync(s => s.Id == stockId);
+        var stock = await current.Set<EquityIssuer>().SingleAsync(s => s.Id == stockId);
         EquityDailyStockPriceRepository repository = new EquityDailyStockPriceRepository(current);
         (await repository.GetByStock(stock).ToListAsync()).Should().BeEmpty();
         (await repository.GetByStock(stock, "GOOGL").ToListAsync()).Should().BeEmpty();
@@ -170,7 +170,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
 
         await using var identityContext = _fixture.CreateDbContext();
         var listingId = (
-            await new CommonStockRepository(identityContext).GetEquityListingId(stockId, "AAPL")
+            await new EquityIssuerRepository(identityContext).GetEquityListingId(stockId, "AAPL")
         ).Value;
         var firstDate = new DateOnly(2024, 1, 1);
         var freshRows = Enumerable
@@ -194,7 +194,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
                     null,
                     [
                         new EquityDailyStockPriceRepository(writer),
-                        new CommonStockRepository(writer),
+                        new EquityIssuerRepository(writer),
                         new PriceSeriesTarget("AAPL", stockId, IsPrimary: true),
                         firstDate,
                         firstDate.AddDays(501),
@@ -262,7 +262,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
             var manager = new CorporateActionPriceReconciliationManager(
                 new StockSplitRepository(selection),
                 new CashDividendRepository(selection),
-                new CommonStockRepository(selection),
+                new EquityIssuerRepository(selection),
                 new CorporateActionPriceReconciliationCursorRepository(selection)
             );
             selected = (
@@ -277,7 +277,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
         var stampingManager = new CorporateActionPriceReconciliationManager(
             new StockSplitRepository(stamping),
             new CashDividendRepository(stamping),
-            new CommonStockRepository(stamping),
+            new EquityIssuerRepository(stamping),
             new CorporateActionPriceReconciliationCursorRepository(stamping)
         );
         var appliedTime = new DateTime(2026, 8, 4, 12, 0, 0, DateTimeKind.Utc);

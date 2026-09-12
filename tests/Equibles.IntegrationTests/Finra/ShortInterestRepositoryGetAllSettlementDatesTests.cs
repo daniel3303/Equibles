@@ -53,12 +53,11 @@ public class ShortInterestRepositoryGetAllSettlementDatesTests : IDisposable
     private ShortInterest ShortInterest(Guid stockId, DateOnly settlementDate)
     {
         _dbContext.Add(
-            new CommonStock
-            {
-                Id = stockId,
-                Ticker = stockId.ToString("N"),
-                Name = "Fixture issuer",
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: stockId,
+                Ticker: stockId.ToString("N"),
+                Name: "Fixture issuer"
+            )
         );
         return new()
         {

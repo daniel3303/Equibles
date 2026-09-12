@@ -162,9 +162,12 @@ public class ShortSqueezeScoreManager
     /// (MLPs) EXCEPT the SIC-classified commodity/currency trusts, whose
     /// creatable units cannot be squeezed. Public so tests pin the gate.
     /// </summary>
-    public static readonly Expression<Func<CommonStock, bool>> SqueezeCandidateListing = s =>
-        !NonEquityListingTypes.Contains(s.ListedSecurityType)
-        && !(s.ListedSecurityType == ListedSecurityType.Units && s.Sic == CommodityTrustSic);
+    public static readonly Expression<Func<EquityIssuer, bool>> SqueezeCandidateListing = s =>
+        !NonEquityListingTypes.Contains(s.Presentation.Listing.Security.RegistrationType)
+        && !(
+            s.Presentation.Listing.Security.RegistrationType == ListedSecurityType.Units
+            && s.Sic == CommodityTrustSic
+        );
 
     /// <summary>
     /// Highest short-interest-to-shares-outstanding ratio accepted as a real measurement. No
@@ -179,7 +182,7 @@ public class ShortSqueezeScoreManager
 
     private readonly ShortInterestRepository _shortInterestRepository;
     private readonly DailyShortVolumeRepository _dailyShortVolumeRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly FailToDeliverRepository _failToDeliverRepository;
     private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
@@ -188,7 +191,7 @@ public class ShortSqueezeScoreManager
     public ShortSqueezeScoreManager(
         ShortInterestRepository shortInterestRepository,
         DailyShortVolumeRepository dailyShortVolumeRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         FailToDeliverRepository failToDeliverRepository,
         EquityDailyStockPriceRepository dailyStockPriceRepository,
@@ -240,16 +243,18 @@ public class ShortSqueezeScoreManager
 
         var stockIds = shortInterests.Select(s => s.CommonStockId).Distinct().ToList();
         var stocks = await _commonStockRepository
-            .GetAll()
-            .Where(s => stockIds.Contains(s.Id) && s.SharesOutStanding > 0)
+            .GetCurrentUsDirectory()
+            .Where(s =>
+                stockIds.Contains(s.Id) && s.Presentation.Listing.Security.SharesOutstanding > 0
+            )
             .Where(SqueezeCandidateListing)
             .Where(SecondaryTickerPolicy.PrimaryOperatingCompany)
             .Select(s => new
             {
                 s.Id,
-                s.Ticker,
-                s.SharesOutStanding,
-                s.MarketCapitalization,
+                Ticker = s.Presentation.Listing.Ticker,
+                SharesOutStanding = s.Presentation.Listing.Security.SharesOutstanding,
+                MarketCapitalization = s.Presentation.Listing.Security.MarketCapitalization,
             })
             .ToDictionaryAsync(s => s.Id, cancellationToken);
 

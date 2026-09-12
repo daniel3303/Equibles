@@ -59,27 +59,24 @@ public class InstitutionalHoldingsToolsGetInstitutionSectorAllocationTests : Par
     {
         var software = new Industry { Id = Guid.NewGuid(), Name = "Software" };
         var energy = new Industry { Id = Guid.NewGuid(), Name = "Energy" };
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-            IndustryId = software.Id,
-        };
-        var xom = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil Corp.",
-            Cik = "0000034088",
-            IndustryId = energy.Id,
-        };
-        var obscure = new CommonStock
-        {
-            Ticker = "OBSCURE",
-            Name = "Obscure Inc.",
-            Cik = "0009999999",
-            IndustryId = null,
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193",
+            IndustryId: software.Id
+        );
+        EquityIssuer xom = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil Corp.",
+            Cik: "0000034088",
+            IndustryId: energy.Id
+        );
+        EquityIssuer obscure = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OBSCURE",
+            Name: "Obscure Inc.",
+            Cik: "0009999999",
+            IndustryId: null
+        );
         var holder = new InstitutionalHolder { Cik = "S00010002", Name = "Allocator LP" };
         DbContext.AddRange(software, energy, aapl, xom, obscure, holder);
         var report = new DateOnly(2024, 12, 31);
@@ -113,7 +110,7 @@ public class InstitutionalHoldingsToolsGetInstitutionSectorAllocationTests : Par
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             new StockSplitRepository(ctx),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(ctx),
@@ -124,7 +121,7 @@ public class InstitutionalHoldingsToolsGetInstitutionSectorAllocationTests : Par
         );
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long value

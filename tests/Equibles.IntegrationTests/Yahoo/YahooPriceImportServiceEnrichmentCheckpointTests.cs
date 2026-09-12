@@ -131,10 +131,10 @@ public class YahooPriceImportServiceEnrichmentCheckpointTests : IAsyncLifetime
         attempts["AAPL"].Should().BeNull();
     }
 
-    private async Task SeedStocks(params CommonStock[] stocks)
+    private async Task SeedStocks(params EquityIssuer[] stocks)
     {
         await using var context = _fixture.CreateDbContext();
-        var repository = new CommonStockRepository(context);
+        EquityIssuerRepository repository = new EquityIssuerRepository(context);
         repository.AddRange(stocks);
         await repository.SaveChanges();
     }
@@ -143,22 +143,25 @@ public class YahooPriceImportServiceEnrichmentCheckpointTests : IAsyncLifetime
     {
         await using var context = _fixture.CreateDbContext();
         return await context
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AsNoTracking()
-            .ToDictionaryAsync(stock => stock.Ticker, stock => stock.YahooEnrichmentAttemptedAt);
+            .ToDictionaryAsync(
+                stock => stock.Presentation.Listing.Ticker,
+                stock => stock.Presentation.Listing.YahooEnrichmentAttemptedAt
+            );
     }
 
     private (YahooPriceImportService Service, EquiblesFinancialDbContext Context) CreateService()
     {
         var context = _fixture.CreateDbContext();
-        var stockRepository = new CommonStockRepository(context);
+        EquityIssuerRepository stockRepository = new EquityIssuerRepository(context);
         EquityDailyStockPriceRepository priceRepository = new EquityDailyStockPriceRepository(
             context
         );
         var splitRepository = new StockSplitRepository(context);
         var dividendRepository = new CashDividendRepository(context);
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), stockRepository),
+            (typeof(EquityIssuerRepository), stockRepository),
             (typeof(EquityDailyStockPriceRepository), priceRepository),
             (typeof(StockSplitRepository), splitRepository),
             (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>()),
@@ -202,12 +205,11 @@ public class YahooPriceImportServiceEnrichmentCheckpointTests : IAsyncLifetime
         return (service, context);
     }
 
-    private static CommonStock Stock(string ticker) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker,
-            Cik = $"CIK-{ticker}",
-        };
+    private static EquityIssuer Stock(string ticker) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker,
+            Cik: $"CIK-{ticker}"
+        );
 }

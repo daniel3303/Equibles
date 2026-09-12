@@ -38,12 +38,11 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ChunkDocumentBatch_PendingDocuments_PassesOnlyContent_ChunklessDocumentsToProcessor()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
 
         // Pending: has Content, no Chunks — must be picked up.
         var pendingFile = MakeFile();
@@ -81,7 +80,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             ),
         };
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().AddRange(pendingFile, chunkedFile);
         DbContext.Set<Document>().AddRange(pendingDoc, chunkedDoc);
         DbContext.Set<Chunk>().Add(existingChunk);
@@ -118,12 +117,11 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ChunkDocumentBatch_LegacyChunkedDocument_BackfillsMarkerWithoutProcessing()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = MakeFile();
         var document = MakeDocument(
             stock,
@@ -131,7 +129,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             contentId: file.Id,
             createdAt: DateTime.UtcNow.AddMinutes(-5)
         );
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         DbContext
@@ -143,7 +141,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
                     Content = "already chunked",
                     Index = 0,
                     DocumentType = document.DocumentType,
-                    Ticker = stock.Ticker,
+                    Ticker = stock.Presentation.Listing.Ticker,
                     ReportingDate = document.ReportingDate.ToDateTime(
                         TimeOnly.MinValue,
                         DateTimeKind.Utc
@@ -177,12 +175,11 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         var documentId = Guid.NewGuid();
         await using (var seed = Fixture.CreateDbContext())
         {
-            var stock = new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "AAPL",
+                Name: "Apple Inc."
+            );
             var file = MakeFile();
             var document = MakeDocument(
                 stock,
@@ -191,7 +188,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
                 createdAt: DateTime.UtcNow.AddMinutes(-5)
             );
             document.Id = documentId;
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<File>().Add(file);
             seed.Set<Document>().Add(document);
             seed.Set<Chunk>()
@@ -202,7 +199,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
                         Content = "legacy chunk",
                         Index = 0,
                         DocumentType = document.DocumentType,
-                        Ticker = stock.Ticker,
+                        Ticker = stock.Presentation.Listing.Ticker,
                         ReportingDate = document.ReportingDate.ToDateTime(
                             TimeOnly.MinValue,
                             DateTimeKind.Utc
@@ -286,12 +283,11 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         var documentId = Guid.NewGuid();
         await using (var seed = Fixture.CreateDbContext())
         {
-            var stock = new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "AAPL",
+                Name: "Apple Inc."
+            );
             var file = MakeFile();
             var document = MakeDocument(
                 stock,
@@ -300,7 +296,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
                 createdAt: DateTime.UtcNow.AddMinutes(-5)
             );
             document.Id = documentId;
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<File>().Add(file);
             seed.Set<Document>().Add(document);
             await seed.SaveChangesAsync();
@@ -389,12 +385,11 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         // which only behaves correctly against real Postgres. The unit-tier
         // DocumentManagerTests exercises only the IsConfigured guard clauses for
         // this method — the actual query is exclusively pinned here.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = MakeFile();
         var document = MakeDocument(
             stock,
@@ -424,7 +419,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             VectorDimension = 3,
         };
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         DbContext.Set<Chunk>().AddRange(pendingChunk, embeddedChunk);
@@ -496,12 +491,11 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         // BackfillState row. Reverting PersistCursor to lean on implicit change tracking, or
         // dropping hydration, would fail this — the floor would stay stale and the daily scan
         // would re-run on every restart, the exact regression this fix prevents.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = MakeFile();
         var document = MakeDocument(
             stock,
@@ -516,7 +510,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             createdAt: DateTime.UtcNow.AddMinutes(-5)
         );
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         DbContext.Set<Chunk>().Add(firstChunk);
@@ -592,12 +586,11 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         // stamped and the stranded rows would wait a whole day per fault (the #4143 starvation
         // moved downstream from the scan to its processing). The batch failure must rewind the
         // persisted stamp to the short failure spacing and must not advance the floor.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = MakeFile();
         var document = MakeDocument(
             stock,
@@ -612,7 +605,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             createdAt: DateTime.UtcNow.AddMinutes(-5)
         );
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         DbContext.Set<Chunk>().Add(pendingChunk);
@@ -648,12 +641,11 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ChunkDocumentBatch_FailingDocument_CountsTheAttemptAndStaysPending()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = MakeFile();
         var document = MakeDocument(
             stock,
@@ -662,7 +654,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
             createdAt: DateTime.UtcNow.AddMinutes(-5)
         );
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         await DbContext.SaveChangesAsync();
@@ -690,12 +682,11 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ChunkDocumentBatch_DocumentAtTheAttemptCeiling_IsParkedNotSelected()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = MakeFile();
         var document = MakeDocument(
             stock,
@@ -705,7 +696,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         );
         document.ChunkAttempts = Document.MaxChunkAttempts;
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         await DbContext.SaveChangesAsync();
@@ -729,12 +720,11 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ResetChunks_ParkedDocument_ReturnsItWithAFreshRetryBudget()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = MakeFile();
         var document = MakeDocument(
             stock,
@@ -745,7 +735,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         document.ChunkedAt = DateTime.UtcNow.AddMinutes(-9);
         document.ChunkAttempts = Document.MaxChunkAttempts;
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         await DbContext.SaveChangesAsync();
@@ -881,7 +871,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         };
 
     private static Document MakeDocument(
-        CommonStock stock,
+        EquityIssuer stock,
         File file,
         Guid contentId,
         DateTime createdAt

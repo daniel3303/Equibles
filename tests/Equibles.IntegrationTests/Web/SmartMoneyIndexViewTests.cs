@@ -97,14 +97,13 @@ public class SmartMoneyIndexViewTests
         html.Should().Contain("No fund scores");
     }
 
-    private static CommonStock MakeStock(Guid id, string ticker, string name) =>
-        new()
-        {
-            Id = id,
-            Ticker = ticker,
-            Name = name,
-            Cik = $"C{id.ToString("N")[..9]}",
-        };
+    private static EquityIssuer MakeStock(Guid id, string ticker, string name) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: id,
+            Ticker: ticker,
+            Name: name,
+            Cik: $"C{id.ToString("N")[..9]}"
+        );
 
     private static void AddPrice(
         Equibles.Data.EquiblesFinancialDbContext db,
