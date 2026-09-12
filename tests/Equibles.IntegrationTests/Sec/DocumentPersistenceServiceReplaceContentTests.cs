@@ -105,7 +105,7 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
         {
             var document = await seed.Set<Document>()
                 .Include(d => d.Content)
-                .SingleAsync(d => d.CommonStockId == apple.Id);
+                .SingleAsync(d => d.EquityIssuerId == apple.Id);
             documentId = document.Id;
             oldContentId = document.ContentId;
             oldContentHash = document.Content.ContentHash;
@@ -186,7 +186,7 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
 
         var document = await DbContext
             .Set<Document>()
-            .SingleAsync(d => d.CommonStockId == apple.Id);
+            .SingleAsync(d => d.EquityIssuerId == apple.Id);
         DbContext
             .Set<Chunk>()
             .Add(

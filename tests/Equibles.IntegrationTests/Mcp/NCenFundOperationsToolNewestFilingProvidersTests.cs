@@ -174,7 +174,7 @@ public class NCenFundOperationsToolNewestFilingProvidersTests : IDisposable
     {
         return new NCenFiling
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             AccessionNumber = accession,
             FilingDate = filingDate,
             IsAmendment = false,

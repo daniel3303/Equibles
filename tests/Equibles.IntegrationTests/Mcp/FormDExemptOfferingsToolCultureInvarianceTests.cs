@@ -56,7 +56,7 @@ public class FormDExemptOfferingsToolCultureInvarianceTests : IDisposable
             .Add(
                 new FormDFiling
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     AccessionNumber = "acc",
                     FilingDate = new DateOnly(2025, 5, 27),
                     IsAmendment = false,

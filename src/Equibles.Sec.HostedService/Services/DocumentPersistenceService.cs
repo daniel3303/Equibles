@@ -46,7 +46,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
     )
     {
         return _documentRepository.Exists(
-            company,
+            (company).Id,
             documentType,
             reportingDate,
             reportingForDate,
@@ -65,7 +65,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
     )
     {
         return _documentRepository.GetKnownFilingKeys(
-            company,
+            (company).Id,
             documentType,
             accessionNumbers,
             cancellationToken
@@ -97,7 +97,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
 
         var document = new Document
         {
-            CommonStock = company,
+            EquityIssuerId = company.Id,
             Content = file,
             DocumentType = documentType,
             ReportingDate = reportingDate,

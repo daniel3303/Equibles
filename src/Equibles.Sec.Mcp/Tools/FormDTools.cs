@@ -67,7 +67,7 @@ public class FormDTools
                 if (stockError != null)
                     return stockError;
 
-                var query = _formDRepository.GetByStock(stock);
+                var query = _formDRepository.GetByIssuerId((stock).Id);
 
                 DateOnly? fromDay = null;
                 DateOnly? toDay = null;

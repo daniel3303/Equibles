@@ -49,6 +49,7 @@ public class SecDocumentSearchProviderTickerRecencyTests : ParadeDbMcpTestBase
             SeedDocument(stock, date);
         }
         await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
 
         var sut = new SecDocumentSearchProvider(
             HybridChunkSearcherFactory.Bm25Only(DbContext),
@@ -86,6 +87,7 @@ public class SecDocumentSearchProviderTickerRecencyTests : ParadeDbMcpTestBase
         DbContext.Add(stock);
         SeedDocument(stock, new DateOnly(2026, 1, 26));
         await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
 
         var sut = new SecDocumentSearchProvider(
             HybridChunkSearcherFactory.Bm25Only(DbContext),
@@ -121,8 +123,7 @@ public class SecDocumentSearchProviderTickerRecencyTests : ParadeDbMcpTestBase
         DbContext.Add(
             new Document
             {
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 Content = file,
                 ContentId = file.Id,
                 DocumentType = DocumentType.TenK,

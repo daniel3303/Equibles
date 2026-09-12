@@ -255,7 +255,7 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
 
         var document = new Document
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             Content = contentFile,
             DocumentType = DocumentType.TenQ,
             ReportingDate = reportingDate,

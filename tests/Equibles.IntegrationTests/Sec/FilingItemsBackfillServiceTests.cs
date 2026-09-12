@@ -63,7 +63,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
         var document = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = companyId,
+            EquityIssuerId = companyId,
             Content = content,
             DocumentType = documentType ?? DocumentType.EightK,
             ReportingDate = reportingDate,

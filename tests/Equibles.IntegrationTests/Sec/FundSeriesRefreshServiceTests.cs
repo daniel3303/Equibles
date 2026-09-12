@@ -415,7 +415,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             new NCenFiling
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = cef.Id,
+                EquityIssuerId = cef.Id,
                 AccessionNumber = "0000038777-25-000099",
                 FilingDate = new DateOnly(2025, 2, 1),
                 RegistrantName = "Gabelli Equity Trust",
@@ -663,7 +663,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             RegistrantCik = registrantCik,
             AccessionNumber = accession,
             FilingDate = reportPeriod.AddDays(30),

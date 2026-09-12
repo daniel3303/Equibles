@@ -132,7 +132,11 @@ public class FinancialFactsImportService
                         stock.FiscalYearEndMonth,
                         stock.FiscalYearEndDay
                     )
-                    : await _calendarReader.Read(stock, incomingAnnualPeriods, cancellationToken);
+                    : await _calendarReader.Read(
+                        stock.Id,
+                        incomingAnnualPeriods,
+                        cancellationToken
+                    );
         }
         catch (InvalidDataException ex)
         {
@@ -533,7 +537,7 @@ public class FinancialFactsImportService
         var documentRepository = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
 
         var rows = await documentRepository
-            .GetByCompany(stock)
+            .GetByIssuerId((stock).Id)
             .Where(d => d.AccessionNumber != null)
             .Select(d => new
             {

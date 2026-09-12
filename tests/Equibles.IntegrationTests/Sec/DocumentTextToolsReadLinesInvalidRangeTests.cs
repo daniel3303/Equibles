@@ -41,7 +41,7 @@ public class DocumentTextToolsReadLinesInvalidRangeTests : ParadeDbMcpTestBase
         };
         var document = new Document
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenQ,

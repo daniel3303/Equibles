@@ -83,7 +83,7 @@ public class DocumentPersistenceServiceXbrlTests : ParadeDbMcpTestBase
             );
 
         await using var verify = Fixture.CreateDbContext();
-        var saved = await verify.Set<Document>().SingleAsync(d => d.CommonStockId == apple.Id);
+        var saved = await verify.Set<Document>().SingleAsync(d => d.EquityIssuerId == apple.Id);
 
         saved.XbrlStatus.Should().Be(XbrlCaptureStatus.Captured);
         saved.XbrlType.Should().Be(XbrlType.InlineIxbrl);
@@ -116,7 +116,7 @@ public class DocumentPersistenceServiceXbrlTests : ParadeDbMcpTestBase
             );
 
         await using var verify = Fixture.CreateDbContext();
-        var saved = await verify.Set<Document>().SingleAsync(d => d.CommonStockId == apple.Id);
+        var saved = await verify.Set<Document>().SingleAsync(d => d.EquityIssuerId == apple.Id);
 
         saved.XbrlStatus.Should().Be(XbrlCaptureStatus.NotPresent);
         saved.XbrlContentId.Should().BeNull();

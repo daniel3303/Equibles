@@ -50,7 +50,7 @@ public class EmbeddingRepositoryGetByModelFilterTests : ParadeDbMcpTestBase
         var document = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 3, 15),

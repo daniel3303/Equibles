@@ -38,7 +38,7 @@ public class NportFilingReprocessManagerRelationalTests : ParadeDbMcpTestBase
         var filing = new NportFiling
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             AccessionNumber = "0001104659-26-000099",
             FilingDate = new DateOnly(2026, 3, 30),
             ReportPeriodDate = new DateOnly(2026, 2, 28),

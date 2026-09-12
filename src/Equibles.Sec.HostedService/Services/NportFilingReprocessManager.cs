@@ -131,7 +131,7 @@ public class NportFilingReprocessManager
 
                 var filing = await _filingRepository
                     .GetAll()
-                    .Include(f => f.CommonStock)
+                    .Include(f => f.Issuer)
                     .FirstOrDefaultAsync(f => f.Id == filingId, cancellationToken);
 
                 // Deleted (or already advanced) by a concurrent ingest since the page was taken.
@@ -278,7 +278,7 @@ public class NportFilingReprocessManager
     {
         // A sweep-discovered filing has no tracked stock; its registrant CIK is the one to re-fetch
         // from. A feed-crawled filing carries no registrant CIK and re-fetches via its stock's.
-        var cik = filing.RegistrantCik ?? filing.CommonStock?.Cik;
+        var cik = filing.RegistrantCik ?? filing.Issuer?.Cik;
         if (string.IsNullOrEmpty(cik))
             throw new InvalidOperationException(
                 $"NPORT-P filing {filing.AccessionNumber} has no issuer CIK to re-fetch from EDGAR."
@@ -301,7 +301,7 @@ public class NportFilingReprocessManager
         var root = await EdgarXmlSubmissionParser.TryParseSubmission(
             content,
             filingData,
-            filing.CommonStock?.Ticker,
+            filing.Issuer?.Presentation?.Listing?.Ticker,
             "NPORT-P",
             "Nport.Reprocess",
             _logger,
@@ -312,7 +312,7 @@ public class NportFilingReprocessManager
                 $"NPORT-P {filing.AccessionNumber} content was not parseable XML."
             );
 
-        var parsed = NportFilingProcessor.ParseEntity(root, filing.CommonStockId, filingData);
+        var parsed = NportFilingProcessor.ParseEntity(root, filing.EquityIssuerId, filingData);
         if (parsed == null)
             throw new InvalidOperationException(
                 $"NPORT-P {filing.AccessionNumber} is missing its genInfo section."
@@ -330,7 +330,7 @@ public class NportFilingReprocessManager
             !string.IsNullOrEmpty(seriesId) && fullFidelitySeriesIds.Contains(seriesId);
 
         var reparsedHoldings = parsed.Holdings;
-        if (filing.CommonStockId == null && !fullFidelity)
+        if (filing.EquityIssuerId == null && !fullFidelity)
         {
             var trackedCusips = await GetTrackedCusips();
             reparsedHoldings = parsed

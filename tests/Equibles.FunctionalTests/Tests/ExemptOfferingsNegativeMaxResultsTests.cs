@@ -69,8 +69,7 @@ public class ExemptOfferingsNegativeMaxResultsTests
                 .Add(
                     new FormDFiling
                     {
-                        CommonStock = stock,
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         AccessionNumber = "0000320193-26-000001",
                         FilingDate = new DateOnly(2026, 4, 1),
                         EntityName = "Apple Inc",

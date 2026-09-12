@@ -450,7 +450,7 @@ public class DocumentScraper : IDocumentScraper
             // A 10-K's ReportingForDate is the period end, which is the fiscal
             // year-end by definition.
             var latestTenK = await documentRepository
-                .GetByCompany(company)
+                .GetByIssuerId((company).Id)
                 .Where(d => d.DocumentType == DocumentType.TenK)
                 .OrderByDescending(d => d.ReportingForDate)
                 .Select(d => new { d.ReportingForDate })

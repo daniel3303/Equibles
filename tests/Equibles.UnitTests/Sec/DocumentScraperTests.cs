@@ -709,7 +709,7 @@ public class DocumentScraperTests
             .Add(
                 new Document
                 {
-                    CommonStockId = company.Id,
+                    EquityIssuerId = company.Id,
                     DocumentType = documentType,
                     ReportingDate = reportingForDate,
                     ReportingForDate = reportingForDate,

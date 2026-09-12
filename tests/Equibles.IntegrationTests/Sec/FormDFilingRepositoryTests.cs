@@ -48,7 +48,7 @@ public class FormDFilingRepositoryTests : IDisposable
         return new FormDFiling
         {
             Id = Guid.NewGuid(),
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             AccessionNumber = accessionNumber,
             FilingDate = filingDate ?? new DateOnly(2025, 2, 28),
             IsAmendment = false,
@@ -82,10 +82,10 @@ public class FormDFilingRepositoryTests : IDisposable
         _repository.Add(CreateFiling(microsoft.Id, "0001950047-25-004044"));
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(apple).ToListAsync();
+        var result = await _repository.GetByIssuerId((apple).Id).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Should().OnlyContain(f => f.CommonStockId == apple.Id);
+        result.Should().OnlyContain(f => f.EquityIssuerId == apple.Id);
     }
 
     [Fact]

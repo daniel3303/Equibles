@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Microsoft.EntityFrameworkCore;
@@ -6,7 +7,7 @@ using File = Equibles.Media.Data.Models.File;
 
 namespace Equibles.Sec.Data.Models;
 
-[Index(nameof(CommonStockId), nameof(DocumentType))]
+[Index(nameof(EquityIssuerId), nameof(DocumentType))]
 [Index(nameof(DocumentType), IsUnique = false)]
 [Index(nameof(ReportingDate), IsUnique = false)]
 [Index(nameof(ReportingForDate), IsUnique = false)]
@@ -30,8 +31,9 @@ public class Document
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     public virtual List<Chunk> Chunks { get; set; } = [];
 

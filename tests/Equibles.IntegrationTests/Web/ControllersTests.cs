@@ -550,8 +550,15 @@ public class StocksControllerTests : IDisposable
         var document = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = owningStock.Id,
-            CommonStock = owningStock,
+            Issuer = new EquityIssuer
+            {
+                Id = owningStock.Id,
+                Name = owningStock.Name,
+                Presentation = new EquityIssuerPresentation
+                {
+                    Listing = new EquityListing { Ticker = owningStock.Ticker },
+                },
+            },
             ContentId = Guid.NewGuid(),
             Content = new Equibles.Media.Data.Models.File
             {

@@ -184,7 +184,7 @@ public class StocksTabsViewRenderingTests
             db.Add(
                 new FormDFiling
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     AccessionNumber = "0002058722-25-000001",
                     FilingDate = new DateOnly(2025, 2, 28),
                     IsAmendment = false,
@@ -230,7 +230,7 @@ public class StocksTabsViewRenderingTests
             db.Add(
                 new NCenFiling
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     AccessionNumber = "0000065433-24-000002",
                     FilingDate = new DateOnly(2025, 1, 15),
                     IsAmendment = false,
@@ -280,7 +280,7 @@ public class StocksTabsViewRenderingTests
             db.Add(
                 new NportFiling
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     AccessionNumber = "0000036405-25-000002",
                     FilingDate = new DateOnly(2025, 1, 31),
                     IsAmendment = false,

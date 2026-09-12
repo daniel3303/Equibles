@@ -323,12 +323,11 @@ public class NportFilingReprocessManagerTests
         return (manager, dbContext, secClient);
     }
 
-    private static CommonStock SeedStock(Equibles.Data.EquiblesFinancialDbContext dbContext)
+    private static EquityIssuer SeedStock(Equibles.Data.EquiblesFinancialDbContext dbContext)
     {
-        var stock = new CommonStock
+        var stock = new EquityIssuer
         {
             Id = Guid.NewGuid(),
-            Ticker = "BTEC",
             Name = "Big Tech Index ETF",
             Cik = "0001771146",
         };
@@ -340,14 +339,14 @@ public class NportFilingReprocessManagerTests
 
     private static NportFiling SeedFiling(
         Equibles.Data.EquiblesFinancialDbContext dbContext,
-        CommonStock stock,
+        EquityIssuer stock,
         int parserVersion
     )
     {
         var filing = new NportFiling
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             AccessionNumber = "0001104659-26-000099",
             FilingDate = new DateOnly(2026, 3, 30),
             ReportPeriodDate = new DateOnly(2026, 2, 28),
@@ -372,7 +371,7 @@ public class NportFilingReprocessManagerTests
         var filing = new NportFiling
         {
             Id = Guid.NewGuid(),
-            CommonStockId = null,
+            EquityIssuerId = null,
             RegistrantCik = "0001100663",
             SeriesId = "S000087771",
             AccessionNumber = "0001104659-26-000099",

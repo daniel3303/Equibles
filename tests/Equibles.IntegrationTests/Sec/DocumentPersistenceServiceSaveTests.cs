@@ -116,7 +116,7 @@ public class DocumentPersistenceServiceSaveTests : ParadeDbMcpTestBase
         );
 
         await using var verify = Fixture.CreateDbContext();
-        var saved = await verify.Set<Document>().SingleAsync(d => d.CommonStockId == apple.Id);
+        var saved = await verify.Set<Document>().SingleAsync(d => d.EquityIssuerId == apple.Id);
 
         // Each assertion catches a distinct silent-abort regression: the transaction must
         // commit (saved row exists), the Content FK must be set to the file the FileManager

@@ -69,12 +69,15 @@ public class FundSeriesRefreshService
             .Select(f => new FundSeriesAggregate
             {
                 LatestNportFilingId = f.Id,
-                CommonStockId = f.CommonStockId,
+                CommonStockId = f.EquityIssuerId,
                 RegistrantCik = f.RegistrantCik,
                 SeriesId = f.SeriesId,
                 SeriesName = f.SeriesName,
                 RegistrantName = f.RegistrantName,
-                Ticker = f.CommonStock.Ticker,
+                Ticker =
+                    f.Issuer == null || f.Issuer.Presentation == null
+                        ? null
+                        : f.Issuer.Presentation.Listing.Ticker,
                 LatestReportPeriodDate = f.ReportPeriodDate,
                 LatestFilingDate = f.FilingDate,
                 NetAssets = f.NetAssets,
@@ -231,13 +234,13 @@ public class FundSeriesRefreshService
             .Set<NCenFiling>()
             .Select(n => new
             {
-                n.CommonStockId,
+                n.EquityIssuerId,
                 n.FilingDate,
                 n.InvestmentCompanyType,
             })
             .ToListAsync(cancellationToken);
 
-        return ncen.GroupBy(n => n.CommonStockId)
+        return ncen.GroupBy(n => n.EquityIssuerId)
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderByDescending(n => n.FilingDate).First().InvestmentCompanyType

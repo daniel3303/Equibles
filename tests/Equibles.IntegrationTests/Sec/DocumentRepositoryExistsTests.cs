@@ -35,7 +35,7 @@ public class DocumentRepositoryExistsTests : ParadeDbMcpTestBase
         };
         var seeded = new Document
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,
@@ -54,7 +54,7 @@ public class DocumentRepositoryExistsTests : ParadeDbMcpTestBase
         var sut = new DocumentRepository(verify);
 
         var exactMatch = await sut.Exists(
-            trackedStock,
+            (trackedStock).Id,
             DocumentType.TenK,
             reportingDate: new DateOnly(2025, 1, 15),
             reportingForDate: new DateOnly(2024, 9, 30)
@@ -64,7 +64,7 @@ public class DocumentRepositoryExistsTests : ParadeDbMcpTestBase
         // ReportingForDate predicate from the AnyAsync expression would mistakenly
         // mark this row as "already present" and skip persisting it.
         var differentReportingFor = await sut.Exists(
-            trackedStock,
+            (trackedStock).Id,
             DocumentType.TenK,
             reportingDate: new DateOnly(2025, 1, 15),
             reportingForDate: new DateOnly(2024, 6, 30)

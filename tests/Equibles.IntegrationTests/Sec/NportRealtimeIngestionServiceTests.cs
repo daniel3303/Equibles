@@ -58,7 +58,7 @@ public class NportRealtimeIngestionServiceTests
         result.Stored.Should().Be(1);
 
         var stored = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
-        stored.CommonStockId.Should().BeNull();
+        stored.EquityIssuerId.Should().BeNull();
         stored.RegistrantCik.Should().Be("36405");
         stored.RegistrantName.Should().Be("VANGUARD INDEX FUNDS");
         // The bond is dropped; only the tracked-stock position is kept.

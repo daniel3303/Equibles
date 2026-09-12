@@ -43,9 +43,8 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
         bool standalone = false
     )
     {
-        var stock = new CommonStock
+        var stock = new EquityIssuer
         {
-            Ticker = "JHG",
             Name = "Calendar transition",
             Cik = "0001274173",
             FiscalYearEndMonth = unknownCurrent ? null : 6,
@@ -66,7 +65,7 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
         Document Annual(DateOnly end) =>
             new()
             {
-                CommonStock = stock,
+                Issuer = stock,
                 Content = NewFile(),
                 DocumentType = DocumentType.TenK,
                 ReportingForDate = end,
@@ -108,7 +107,7 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
         var bytes = Encoding.UTF8.GetBytes(envelope);
         var quarter = new Document
         {
-            CommonStock = stock,
+            Issuer = stock,
             Content = NewFile(),
             DocumentType = DocumentType.TenQ,
             ReportingForDate = quarterEnd,
@@ -137,7 +136,7 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
         var scopes = ServiceScopeSubstitute.Create((typeof(EquiblesFinancialDbContext), DbContext));
         var sut = new FiscalCalendarEvidenceReader(scopes, files, new InlineXbrlParser());
         var calendar = await sut.Read(
-            stock,
+            stock.Id,
             [(new(2025, 1, 1), oldEnd), (new(2026, 7, 1), newEnd)],
             CancellationToken.None
         );
@@ -167,7 +166,7 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
             await DbContext.SaveChangesAsync();
             files.GetContent(Arg.Any<File>()).Returns(GzipCompressor.Compress(completeBytes));
             var recovered = await sut.Read(
-                stock,
+                stock.Id,
                 [(new(2025, 1, 1), oldEnd), (new(2026, 7, 1), newEnd)],
                 CancellationToken.None
             );
@@ -184,23 +183,18 @@ public class FiscalCalendarEvidenceReaderTests(ParadeDbFixture fixture)
     [Fact]
     public async Task EvidenceCheckpointRearmsCompletedAndExhaustedXbrlDocuments()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "REPLAY",
-            Name = "Replay",
-            Cik = "0000000011",
-        };
+        var stock = new EquityIssuer { Name = "Replay", Cik = "0000000011" };
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
         var checkpoint = new FinancialFactsSyncStatus
         {
-            EquityIssuerId = stock.Id,
+            Issuer = stock,
             CalendarEvidenceFingerprint = new string('a', 64),
             LastCheckedAt = DateTime.UtcNow,
         };
         var document = new Document
         {
-            CommonStock = stock,
+            Issuer = stock,
             Content = new File
             {
                 Name = "filing",

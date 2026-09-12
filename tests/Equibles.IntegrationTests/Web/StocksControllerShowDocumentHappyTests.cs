@@ -51,8 +51,15 @@ public class StocksControllerShowDocumentHappyTests
         var document = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            Issuer = new EquityIssuer
+            {
+                Id = stock.Id,
+                Name = stock.Name,
+                Presentation = new EquityIssuerPresentation
+                {
+                    Listing = new EquityListing { Ticker = stock.Ticker },
+                },
+            },
             ContentId = Guid.NewGuid(),
             Content = new File
             {

@@ -75,8 +75,30 @@ public class SecRepositoryTests : IDisposable
         return new Document
         {
             Id = Guid.NewGuid(),
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Issuer =
+                _dbContext.Set<EquityIssuer>().Local.FirstOrDefault(row => row.Id == stock.Id)
+                ?? new EquityIssuer
+                {
+                    Id = stock.Id,
+                    Name = stock.Name,
+                    Presentation = new EquityIssuerPresentation
+                    {
+                        Listing = new EquityListing { Ticker = stock.Ticker },
+                    },
+                    Securities =
+                    [
+                        new EquitySecurity
+                        {
+                            Listings = stock
+                                .SecondaryTickers.Select(ticker => new EquityListing
+                                {
+                                    Ticker = ticker,
+                                    IsDirectoryListed = true,
+                                })
+                                .ToList(),
+                        },
+                    ],
+                },
             DocumentType = type ?? DocumentType.TenK,
             ReportingDate = reportingDate ?? new DateOnly(2025, 1, 15),
             ReportingForDate = reportingForDate ?? new DateOnly(2024, 12, 31),
@@ -134,10 +156,10 @@ public class SecRepositoryTests : IDisposable
         _documentRepo.Add(CreateDocument(msft));
         await _documentRepo.SaveChanges();
 
-        var result = await _documentRepo.GetByCompany(apple).ToListAsync();
+        var result = await _documentRepo.GetByIssuerId((apple).Id).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Should().AllSatisfy(d => d.CommonStockId.Should().Be(apple.Id));
+        result.Should().AllSatisfy(d => d.EquityIssuerId.Should().Be(apple.Id));
     }
 
     [Fact]
@@ -145,7 +167,7 @@ public class SecRepositoryTests : IDisposable
     {
         var stock = await SeedStock();
 
-        var result = await _documentRepo.GetByCompany(stock).ToListAsync();
+        var result = await _documentRepo.GetByIssuerId((stock).Id).ToListAsync();
 
         result.Should().BeEmpty();
     }
@@ -199,7 +221,7 @@ public class SecRepositoryTests : IDisposable
 
         var result = await _documentRepo.GetByTicker("MSFT").ToListAsync();
 
-        result.Should().ContainSingle().Which.CommonStockId.Should().Be(msft.Id);
+        result.Should().ContainSingle().Which.EquityIssuerId.Should().Be(msft.Id);
     }
 
     // ── GetByDocumentType ───────────────────────────────────────────────
@@ -322,7 +344,7 @@ public class SecRepositoryTests : IDisposable
         await _documentRepo.SaveChanges();
 
         var result = await _documentRepo.Exists(
-            stock,
+            (stock).Id,
             DocumentType.TenK,
             new DateOnly(2025, 3, 15),
             new DateOnly(2024, 12, 31)
@@ -346,7 +368,7 @@ public class SecRepositoryTests : IDisposable
         await _documentRepo.SaveChanges();
 
         var result = await _documentRepo.Exists(
-            stock,
+            (stock).Id,
             DocumentType.TenQ,
             new DateOnly(2025, 3, 15),
             new DateOnly(2024, 12, 31)
@@ -370,7 +392,7 @@ public class SecRepositoryTests : IDisposable
         await _documentRepo.SaveChanges();
 
         var result = await _documentRepo.Exists(
-            stock,
+            (stock).Id,
             DocumentType.TenK,
             new DateOnly(2025, 4, 15),
             new DateOnly(2024, 12, 31)
@@ -385,7 +407,7 @@ public class SecRepositoryTests : IDisposable
         var stock = await SeedStock();
 
         var result = await _documentRepo.Exists(
-            stock,
+            (stock).Id,
             DocumentType.TenK,
             new DateOnly(2025, 1, 1),
             new DateOnly(2024, 12, 31)

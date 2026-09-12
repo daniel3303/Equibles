@@ -70,3 +70,11 @@
 - The native buyback ranking currently carries only a ticker into rendering; native-only issuers and cross-exchange ticker collisions require listing-aware route resolution before rollout.
 - Preserve native listing identity through the ranking view model and MVC links, and verify native-only and colliding-ticker rendering during the route cutover.
 - A passing storage migration does not make a new listing publicly routable; do not deploy the intermediate consumer cutover before that dependency is complete.
+
+## Filing ownership
+
+- Documents, Form D, N-CEN and attributed N-PORT filings reference native issuers; unlinked trust reports retain their original null owner and registrant CIK.
+- Retargeting changes four foreign keys without rewriting source rows or their child relationships.
+- The real-schema graph test compares every stored column across documents, binary files, images, artifacts, chunks, embeddings, facts, statements, fund filings and their child rows before and after legacy owner removal.
+- That graph test does not authorize deleting legacy owners in production: other unmigrated relationships and price mirroring still require the final contract migration.
+- `scripts/verify-native-issuer-filings.sql` checks orphan attribution and validated restrictive native foreign keys after migration.

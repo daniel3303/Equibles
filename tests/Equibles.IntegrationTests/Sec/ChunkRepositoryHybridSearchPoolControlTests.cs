@@ -187,8 +187,7 @@ public class ChunkRepositoryHybridSearchPoolControlTests : ParadeDbMcpTestBase
 
         var document = new Document
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = documentType,

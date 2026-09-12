@@ -448,8 +448,7 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new Document
                 {
-                    CommonStockId = stock.Id,
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     DocumentType = DocumentType.TenK,
                     ReportingDate = new DateOnly(2025, 2, 15),
                     ReportingForDate = new DateOnly(2024, 12, 31),
@@ -458,8 +457,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new Document
                 {
-                    CommonStockId = stock.Id,
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     DocumentType = DocumentType.TenQ,
                     ReportingDate = new DateOnly(2025, 5, 1),
                     ReportingForDate = new DateOnly(2025, 3, 31),
@@ -499,8 +497,7 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new Document
                 {
-                    CommonStockId = apple.Id,
-                    CommonStock = apple,
+                    EquityIssuerId = apple.Id,
                     DocumentType = DocumentType.TenK,
                     ReportingDate = new DateOnly(2025, 2, 15),
                     ReportingForDate = new DateOnly(2024, 12, 31),
@@ -509,8 +506,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new Document
                 {
-                    CommonStockId = msft.Id,
-                    CommonStock = msft,
+                    EquityIssuerId = msft.Id,
                     DocumentType = DocumentType.TenQ,
                     ReportingDate = new DateOnly(2025, 5, 1),
                     ReportingForDate = new DateOnly(2025, 3, 31),

@@ -28,10 +28,17 @@ public class RagManagerBuildContextStartLineNumberTests
         // drops the conditional altogether, or replaces StartLineNumber with
         // (StartLineNumber ?? 0) on a future schema change — all compile clean and
         // silently emit `**Excerpt 1 (line ~0):**` for the entire PDF/HTML corpus.
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var stock = new EquityIssuer
+        {
+            Presentation = new EquityIssuerPresentation
+            {
+                Listing = new EquityListing { Ticker = "AAPL" },
+            },
+            Name = "Apple Inc.",
+        };
         var document = new Document
         {
-            CommonStock = stock,
+            Issuer = stock,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 12, 31),
         };

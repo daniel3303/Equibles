@@ -143,11 +143,11 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
             ).FiscalPeriod
             : default;
         fact.FiscalPeriod = SecFiscalPeriod.Q3;
-        document.CommonStock.FiscalYearEndMonth = 6;
-        document.CommonStock.FiscalYearEndDay = 30;
+        document.Issuer.FiscalYearEndMonth = 6;
+        document.Issuer.FiscalYearEndDay = 30;
         var annual = new Document
         {
-            CommonStock = document.CommonStock,
+            Issuer = document.Issuer,
             Content = document.Content,
             DocumentType = DocumentType.TenK,
             ReportingForDate = new(2024, 12, 31),
@@ -158,7 +158,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         DbContext.Add(
             new FinancialFact
             {
-                EquityIssuerId = document.CommonStockId,
+                EquityIssuerId = document.EquityIssuerId,
                 FinancialConceptId = fact.FinancialConceptId,
                 Document = annual,
                 Unit = "USD",
@@ -242,7 +242,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         fact.Value.Should().Be(originalValue);
         fact.FiscalYear.Should().Be(2025);
         fact.FiscalPeriod.Should().Be(SecFiscalPeriod.Q1);
-        document.CommonStock.FiscalYearEndMonth.Should().Be(6);
+        document.Issuer.FiscalYearEndMonth.Should().Be(6);
     }
 
     private XbrlFactExtractionService BuildSut(bool historicalCalendar = false)
@@ -307,7 +307,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         (
             await DbContext
                 .Set<FinancialFact>()
-                .CountAsync(f => f.EquityIssuerId == document.CommonStockId)
+                .CountAsync(f => f.EquityIssuerId == document.EquityIssuerId)
         )
             .Should()
             .Be(2);
@@ -326,8 +326,8 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         document.DocumentType = DocumentType.SixK;
         document.ReportingDate = new DateOnly(2026, 2, 1);
         document.ReportingForDate = new DateOnly(2025, 12, 31);
-        document.CommonStock.FiscalYearEndMonth = null;
-        document.CommonStock.FiscalYearEndDay = null;
+        document.Issuer.FiscalYearEndMonth = null;
+        document.Issuer.FiscalYearEndDay = null;
         await DbContext.SaveChangesAsync();
         var sut = BuildSut();
         await sut.Extract(document, CancellationToken.None);
@@ -351,9 +351,8 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
 
     private async Task<Document> SeedDocument(string envelope)
     {
-        var stock = new CommonStock
+        var stock = new EquityIssuer
         {
-            Ticker = "AAPL",
             Name = "Apple Inc.",
             Cik = "0000320193",
             FiscalYearEndMonth = 12,
@@ -380,7 +379,7 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
 
         var document = new Document
         {
-            CommonStock = stock,
+            Issuer = stock,
             Content = contentFile,
             DocumentType = DocumentType.TenQ,
             ReportingDate = new DateOnly(2025, 5, 1),

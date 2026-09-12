@@ -93,6 +93,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
                 Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
             };
             stockSet.Add(stock);
+            await DbContext.SaveChangesAsync();
         }
 
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
@@ -109,8 +110,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
 
         var document = new Document
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Issuer = await DbContext.Set<EquityIssuer>().SingleAsync(row => row.Id == stock.Id),
             Content = file,
             ContentId = file.Id,
             DocumentType = documentType,

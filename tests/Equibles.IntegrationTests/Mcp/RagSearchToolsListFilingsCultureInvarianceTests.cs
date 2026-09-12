@@ -63,8 +63,7 @@ public class RagSearchToolsListFilingsCultureInvarianceTests : ParadeDbMcpTestBa
         fileContent.FileId = file.Id;
         var document = new Document
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,

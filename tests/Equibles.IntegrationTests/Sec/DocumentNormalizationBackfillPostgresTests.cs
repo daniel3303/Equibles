@@ -236,7 +236,7 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
 
         var document = await DbContext
             .Set<Document>()
-            .SingleAsync(d => d.CommonStockId == company.Id);
+            .SingleAsync(d => d.EquityIssuerId == company.Id);
         document.NormalizedContentVersion = 0;
         await DbContext.SaveChangesAsync();
         return document;

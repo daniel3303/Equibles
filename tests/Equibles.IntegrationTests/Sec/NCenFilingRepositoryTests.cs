@@ -48,7 +48,7 @@ public class NCenFilingRepositoryTests : IDisposable
         return new NCenFiling
         {
             Id = Guid.NewGuid(),
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             AccessionNumber = accessionNumber,
             FilingDate = filingDate ?? new DateOnly(2025, 1, 15),
             IsAmendment = false,
@@ -79,10 +79,10 @@ public class NCenFilingRepositoryTests : IDisposable
         _repository.Add(CreateFiling(other.Id, "0000004969-24-000001"));
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(mexico).ToListAsync();
+        var result = await _repository.GetByIssuerId((mexico).Id).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Should().OnlyContain(f => f.CommonStockId == mexico.Id);
+        result.Should().OnlyContain(f => f.EquityIssuerId == mexico.Id);
     }
 
     [Fact]

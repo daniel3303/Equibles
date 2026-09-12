@@ -28,10 +28,17 @@ public class RagManagerTests
         // (StartPositions 500, 100, 300 in that sequence). Output should be "Excerpt 1 (line ~10)",
         // "Excerpt 3 (line ~30)", "Excerpt 2 (line ~50)" — but importantly the *content* must
         // appear at positions matching StartPosition ascending: "FIRST" → "SECOND" → "THIRD".
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var stock = new EquityIssuer
+        {
+            Presentation = new EquityIssuerPresentation
+            {
+                Listing = new EquityListing { Ticker = "AAPL" },
+            },
+            Name = "Apple Inc.",
+        };
         var document = new Document
         {
-            CommonStock = stock,
+            Issuer = stock,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 12, 31),
         };

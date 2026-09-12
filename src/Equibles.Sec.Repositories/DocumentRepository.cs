@@ -1,4 +1,3 @@
-using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Sec.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +10,7 @@ public class DocumentRepository : BaseRepository<Document>
         : base(dbContext) { }
 
     public async Task<bool> Exists(
-        CommonStock company,
+        Guid issuerId,
         DocumentType documentType,
         DateOnly reportingDate,
         DateOnly reportingForDate,
@@ -24,7 +23,7 @@ public class DocumentRepository : BaseRepository<Document>
         {
             return await GetAll()
                 .AnyAsync(d =>
-                    d.CommonStock == company
+                    d.EquityIssuerId == issuerId
                     && d.DocumentType == documentType
                     && d.ReportingDate == reportingDate
                     && d.ReportingForDate == reportingForDate
@@ -40,7 +39,7 @@ public class DocumentRepository : BaseRepository<Document>
         // match on the 4-field key so history is never re-ingested.
         return await GetAll()
             .AnyAsync(d =>
-                d.CommonStock == company
+                d.EquityIssuerId == issuerId
                 && (
                     d.AccessionNumber == accessionNumber
                     || (
@@ -53,17 +52,25 @@ public class DocumentRepository : BaseRepository<Document>
             );
     }
 
-    public IQueryable<Document> GetByCompany(CommonStock company)
+    public IQueryable<Document> GetByIssuerId(Guid issuerId)
     {
-        return GetAll().Where(d => d.CommonStock == company);
+        return GetAll().Where(d => d.EquityIssuerId == issuerId);
     }
 
     public IQueryable<Document> GetByTicker(string ticker)
     {
         return GetAll()
             .Where(d =>
-                d.CommonStock.Ticker.ToLower() == ticker.ToLower()
-                || d.CommonStock.SecondaryTickers.Contains(ticker.ToUpper())
+                (
+                    d.Issuer.Presentation != null
+                    && d.Issuer.Presentation.Listing.Ticker.ToLower() == ticker.ToLower()
+                )
+                || d.Issuer.Securities.Any(security =>
+                    security.Listings.Any(listing =>
+                        (listing.IsDirectoryListed || listing.IsReferenceListed)
+                        && listing.Ticker == ticker.ToUpper()
+                    )
+                )
             );
     }
 
@@ -132,7 +139,7 @@ public class DocumentRepository : BaseRepository<Document>
         if (document == null)
             return null;
 
-        await DbContext.Entry(document).Reference(d => d.CommonStock).LoadAsync(cancellationToken);
+        await DbContext.Entry(document).Reference(d => d.Issuer).LoadAsync(cancellationToken);
         await DbContext.Entry(document).Reference(d => d.Content).LoadAsync(cancellationToken);
         await DbContext.Entry(document).Collection(d => d.Chunks).LoadAsync(cancellationToken);
         return document;
@@ -169,7 +176,7 @@ public class DocumentRepository : BaseRepository<Document>
                     d.AccessionNumber != null
                     || (d.SourceUrl != null && d.SourceUrl.Contains("/Archives/edgar/data/"))
                 )
-                && d.CommonStock.Cik != null
+                && d.Issuer.Cik != null
             );
     }
 
@@ -188,7 +195,7 @@ public class DocumentRepository : BaseRepository<Document>
                     (d.AccessionNumber != null && d.AccessionNumber != "")
                     || (d.SourceUrl != null && d.SourceUrl.Contains("/Archives/edgar/data/"))
                 )
-                && d.CommonStock.Cik != null
+                && d.Issuer.Cik != null
             );
     }
 
@@ -215,7 +222,7 @@ public class DocumentRepository : BaseRepository<Document>
     }
 
     /// <summary>
-    /// One-batch dedup lookup for a (company, type) scrape pass: the subset of
+    /// One-batch dedup lookup for a (issuerId, type) scrape pass: the subset of
     /// <paramref name="accessionNumbers"/> already stored, plus the (filing date,
     /// report date) keys of legacy rows stored before accession stamping. Together
     /// they answer <see cref="Exists"/> for a whole filing list in two queries
@@ -225,7 +232,7 @@ public class DocumentRepository : BaseRepository<Document>
         HashSet<string> KnownAccessions,
         HashSet<(DateOnly FilingDate, DateOnly ReportDate)> LegacyKeys
     )> GetKnownFilingKeys(
-        CommonStock company,
+        Guid issuerId,
         DocumentType documentType,
         IReadOnlyCollection<string> accessionNumbers,
         CancellationToken cancellationToken = default
@@ -236,7 +243,7 @@ public class DocumentRepository : BaseRepository<Document>
         if (candidates.Count > 0)
         {
             var stored = await GetAll()
-                .Where(d => d.CommonStock == company && candidates.Contains(d.AccessionNumber))
+                .Where(d => d.EquityIssuerId == issuerId && candidates.Contains(d.AccessionNumber))
                 .Select(d => d.AccessionNumber)
                 .ToListAsync(cancellationToken);
             foreach (var accession in stored)
@@ -247,7 +254,7 @@ public class DocumentRepository : BaseRepository<Document>
 
         var legacyPairs = await GetAll()
             .Where(d =>
-                d.CommonStock == company
+                d.EquityIssuerId == issuerId
                 && d.DocumentType == documentType
                 && (d.AccessionNumber == null || d.AccessionNumber == "")
             )
@@ -340,7 +347,7 @@ public class DocumentRepository : BaseRepository<Document>
         return await GetAll()
             .Include(d => d.Content)
                 .ThenInclude(f => f.FileContent)
-            .Include(d => d.CommonStock)
+            .Include(d => d.Issuer)
             .FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
     }
 

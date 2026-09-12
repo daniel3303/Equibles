@@ -57,7 +57,7 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
         var document = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 3, 15),
@@ -128,7 +128,7 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
         var insideDocument = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = insideFile.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2023, 9, 30),
@@ -138,7 +138,7 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
         var beforeDocument = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = beforeFile.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2023, 6, 30),
@@ -148,7 +148,7 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
         var afterDocument = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = afterFile.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2023, 12, 31),

@@ -329,14 +329,18 @@ public class StocksController : BaseController
         if (document == null)
             return NotFound();
 
-        if (!string.Equals(document.CommonStock.Ticker, normalizedTicker, StringComparison.Ordinal))
+        var canonicalTicker = document.Issuer.Presentation?.Listing?.Ticker;
+        if (string.IsNullOrEmpty(canonicalTicker))
+            return NotFound();
+
+        if (!string.Equals(canonicalTicker, normalizedTicker, StringComparison.Ordinal))
         {
             // The GUID identifies one public filing globally. Stock ownership can move when
             // duplicate companies are reconciled, so an old ticker prefix must converge on the
             // filing's current canonical owner instead of stranding the still-valid document URL.
             return RedirectToActionPermanent(
                 nameof(ShowDocument),
-                new { ticker = document.CommonStock.Ticker, id }
+                new { ticker = canonicalTicker, id }
             );
         }
 

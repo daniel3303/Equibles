@@ -46,7 +46,7 @@ public class CurrentShareEvidenceTests(ParadeDbFixture fixture) : ParadeDbMcpTes
                 FinancialConcept = concept,
                 Document = new Document
                 {
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     DocumentType = form,
                     ReportingDate = filed,
                     ReportingForDate = report,

@@ -166,8 +166,8 @@ public class DocumentProcessor : IDocumentProcessor
         _logger.LogInformation(
             "Chunking document {DocumentId} for {Company} ({Ticker})",
             document.Id,
-            document.CommonStock.Name,
-            document.CommonStock.Ticker
+            document.Issuer.Name,
+            document.Issuer.Presentation?.Listing?.Ticker
         );
 
         var content = await GetDocumentContent(document);
@@ -213,7 +213,7 @@ public class DocumentProcessor : IDocumentProcessor
                 // equality against the Chunk ticker btree index (EmbeddingRepository), so the
                 // stored case must be an invariant, not a convention. Mechanical case
                 // normalization only — the symbol itself is authoritative.
-                Ticker = document.CommonStock.Ticker?.ToUpperInvariant(),
+                Ticker = document.Issuer.Presentation?.Listing?.Ticker?.ToUpperInvariant(),
                 ReportingDate = DateTime.SpecifyKind(
                     document.ReportingDate.ToDateTime(TimeOnly.MinValue),
                     DateTimeKind.Utc

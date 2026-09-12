@@ -75,7 +75,7 @@ public class NportToolsGetFundsHoldingStockNegativeMaxResultsTests : ParadeDbMcp
     private static NportFiling MakeFiling(Guid stockId, string accession, DateOnly filingDate) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             AccessionNumber = accession,
             FilingDate = filingDate,
             IsAmendment = false,

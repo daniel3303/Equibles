@@ -89,7 +89,7 @@ public class NCenTools
                 }
 
                 var filings = await _nCenRepository
-                    .GetByStock(stock)
+                    .GetByIssuerId((stock).Id)
                     .Include(f => f.ServiceProviders)
                     .OrderByDescending(f => f.FilingDate)
                     .ThenByDescending(f => f.IsAmendment)

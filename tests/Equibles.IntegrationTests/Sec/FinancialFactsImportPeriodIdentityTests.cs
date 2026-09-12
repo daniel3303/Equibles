@@ -111,7 +111,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
             seed.Add(
                 new Document
                 {
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     Content = File(),
                     DocumentType = DocumentType.TenK,
                     ReportingForDate = annualEnd,
@@ -122,7 +122,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
             seed.Add(
                 new Document
                 {
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     Content = File(),
                     DocumentType = DocumentType.TenQ,
                     ReportingForDate = quarterEnd,
@@ -488,7 +488,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                     new Document
                     {
                         Id = documentId,
-                        CommonStock = stock,
+                        EquityIssuerId = stock.Id,
                         Content = content,
                         DocumentType = form,
                         ReportingDate = filed,
@@ -618,7 +618,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                     new Document
                     {
                         Id = documentId,
-                        CommonStock = stock,
+                        EquityIssuerId = stock.Id,
                         Content = content,
                         DocumentType = DocumentType.TenK,
                         ReportingDate = filed,

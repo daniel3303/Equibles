@@ -9,22 +9,23 @@ namespace Equibles.Sec.Data.Models;
 /// <summary>
 /// A SEC Form N-CEN annual report filed by a registered investment company (mutual fund, ETF or
 /// closed-end fund). N-CEN appears in the registrant's EDGAR submissions feed, so each report is
-/// attributed to the registrant's <see cref="CommonStock"/>. The record captures the registrant's
+/// attributed to the registrant's <see cref="Issuer"/>. The record captures the registrant's
 /// operational facts — classification, file number, reporting period — plus the fund's key service
 /// providers (advisers, custodians, transfer agents, auditors and so on) in
 /// <see cref="ServiceProviders"/>. Both the original report ("N-CEN") and its amendments
 /// ("N-CEN/A") are stored, flagged via <see cref="IsAmendment"/>.
 /// </summary>
-[Index(nameof(CommonStockId), nameof(FilingDate))]
+[Index(nameof(EquityIssuerId), nameof(FilingDate))]
 [Index(nameof(AccessionNumber), IsUnique = true)]
 [Index(nameof(FilingDate))]
-public class NCenFiling : IStockFiling
+public class NCenFiling : IIssuerFiling
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     [MaxLength(32)]
     public string AccessionNumber { get; set; }

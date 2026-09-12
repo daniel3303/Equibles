@@ -11,10 +11,10 @@ namespace Equibles.Sec.Data.Models;
 ///
 /// A filing reaches the database two ways. Funds that are themselves tracked issuers (listed
 /// closed-end funds, standalone ETF trusts) are crawled through their EDGAR submissions feed and
-/// the report is attributed to the registrant's <see cref="CommonStock"/> — <see cref="CommonStockId"/>
+/// the report is attributed to the registrant's <see cref="Issuer"/> — <see cref="EquityIssuerId"/>
 /// is set, <see cref="RegistrantCik"/> is null. The giant multi-series fund-family trusts
 /// ("Vanguard Index Funds", "Fidelity Concord Street Trust", "iShares Trust") are not tracked
-/// issuers, so they are instead discovered by the daily-index NPORT-P sweep — <see cref="CommonStockId"/>
+/// issuers, so they are instead discovered by the daily-index NPORT-P sweep — <see cref="EquityIssuerId"/>
 /// is null and the registrant is identified by <see cref="RegistrantCik"/>. Exactly one of the two
 /// is set on each filing. A series can still appear in both populations over its history when its
 /// ingestion route changes; its SEC <see cref="SeriesId"/> remains the cross-population authority.
@@ -24,7 +24,7 @@ namespace Equibles.Sec.Data.Models;
 /// <see cref="Holdings"/>. Both the original report ("NPORT-P") and its amendments ("NPORT-P/A")
 /// are stored, flagged via <see cref="IsAmendment"/>.
 /// </summary>
-[Index(nameof(CommonStockId), nameof(FilingDate))]
+[Index(nameof(EquityIssuerId), nameof(FilingDate))]
 [Index(nameof(AccessionNumber), IsUnique = true)]
 [Index(nameof(FilingDate))]
 [Index(nameof(ParserVersion))]
@@ -48,13 +48,14 @@ public class NportFiling
     /// daily-index sweep, whose registrant is a fund-family trust that is not a tracked stock —
     /// those are identified by <see cref="RegistrantCik"/> instead.
     /// </summary>
-    public Guid? CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    [Column("CommonStockId")]
+    public Guid? EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     /// <summary>
     /// The registrant's SEC CIK, set on filings discovered by the daily-index NPORT-P sweep (where
     /// the registrant is not a tracked stock). Null on filings crawled through a tracked issuer's
-    /// submissions feed, whose registrant is identified by <see cref="CommonStockId"/>. Used both to
+    /// submissions feed, whose registrant is identified by <see cref="EquityIssuerId"/>. Used both to
     /// re-fetch the submission during reprocess and to scope a series to its registrant.
     /// </summary>
     [MaxLength(16)]

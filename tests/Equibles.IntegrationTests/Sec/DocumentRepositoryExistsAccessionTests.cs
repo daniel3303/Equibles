@@ -68,7 +68,7 @@ public class DocumentRepositoryExistsAccessionTests : IDisposable
         _dbContext.Add(
             new Document
             {
-                CommonStock = _company,
+                EquityIssuerId = _company.Id,
                 Content = file,
                 DocumentType = DocumentType.EightK,
                 ReportingDate = FilingDate,
@@ -85,7 +85,7 @@ public class DocumentRepositoryExistsAccessionTests : IDisposable
         SeedDocument("0000320193-25-000001");
 
         var exists = await _repository.Exists(
-            _company,
+            (_company).Id,
             DocumentType.EightK,
             FilingDate,
             ReportDate,
@@ -103,7 +103,7 @@ public class DocumentRepositoryExistsAccessionTests : IDisposable
         SeedDocument("0000320193-25-000001");
 
         var exists = await _repository.Exists(
-            _company,
+            (_company).Id,
             DocumentType.EightK,
             FilingDate,
             ReportDate,
@@ -121,7 +121,7 @@ public class DocumentRepositoryExistsAccessionTests : IDisposable
         SeedDocument(accessionNumber: null);
 
         var exists = await _repository.Exists(
-            _company,
+            (_company).Id,
             DocumentType.EightK,
             FilingDate,
             ReportDate,
@@ -137,7 +137,7 @@ public class DocumentRepositoryExistsAccessionTests : IDisposable
         SeedDocument("0000320193-25-000001");
 
         var exists = await _repository.Exists(
-            _company,
+            (_company).Id,
             DocumentType.EightK,
             FilingDate,
             ReportDate

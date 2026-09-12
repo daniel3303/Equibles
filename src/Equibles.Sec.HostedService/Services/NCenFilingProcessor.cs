@@ -71,7 +71,7 @@ public class NCenFilingProcessor : IssuerFeedFilingProcessor<NCenFiling, NCenFil
 
         var entity = new NCenFiling
         {
-            CommonStockId = companyId,
+            EquityIssuerId = companyId,
             AccessionNumber = filing.AccessionNumber,
             FilingDate = filing.FilingDate,
             IsAmendment = ParseIsAmendment(headerData, filing),

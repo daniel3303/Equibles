@@ -256,7 +256,7 @@ public class FormDExemptOfferingsToolTests : IDisposable
     {
         return new FormDFiling
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             AccessionNumber = accession,
             FilingDate = filingDate,
             IsAmendment = false,

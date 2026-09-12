@@ -237,7 +237,7 @@ public class NCenFundOperationsToolTests : IDisposable
     {
         return new NCenFiling
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             AccessionNumber = accession,
             FilingDate = filingDate,
             IsAmendment = false,

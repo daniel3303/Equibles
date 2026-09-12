@@ -49,7 +49,7 @@ public class NportFilingRepositoryTests : IDisposable
         return new NportFiling
         {
             Id = Guid.NewGuid(),
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             AccessionNumber = accessionNumber,
             FilingDate = filingDate ?? new DateOnly(2025, 1, 15),
             IsAmendment = false,
@@ -82,7 +82,7 @@ public class NportFilingRepositoryTests : IDisposable
             seriesName,
             seriesId
         );
-        filing.CommonStockId = null;
+        filing.EquityIssuerId = null;
         filing.RegistrantCik = registrantCik;
         return filing;
     }
@@ -100,10 +100,10 @@ public class NportFilingRepositoryTests : IDisposable
         _repository.Add(CreateFiling(other.Id, "0000884394-24-000001"));
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(voo).ToListAsync();
+        var result = await _repository.GetByIssuerId(voo.Id).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Should().OnlyContain(f => f.CommonStockId == voo.Id);
+        result.Should().OnlyContain(f => f.EquityIssuerId == voo.Id);
     }
 
     [Fact]
@@ -575,7 +575,7 @@ public class NportFilingRepositoryTests : IDisposable
             .ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Should().OnlyContain(f => f.CommonStockId == voo.Id);
+        result.Should().OnlyContain(f => f.EquityIssuerId == voo.Id);
     }
 
     [Fact]

@@ -38,6 +38,17 @@ public class SecDocumentServiceTests
             Cik = Guid.NewGuid().ToString(),
         };
         _context.Set<CommonStock>().Add(stock);
+        _context.Add(
+            new EquityIssuer
+            {
+                Id = stock.Id,
+                Name = stock.Name,
+                Presentation = new EquityIssuerPresentation
+                {
+                    Listing = new EquityListing { Ticker = stock.Ticker },
+                },
+            }
+        );
         _context.SaveChanges();
         return stock;
     }
@@ -61,8 +72,7 @@ public class SecDocumentServiceTests
 
         var doc = new Document
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             DocumentType = docType,
             ReportingDate = reportingDate,
             ReportingForDate = reportingForDate,

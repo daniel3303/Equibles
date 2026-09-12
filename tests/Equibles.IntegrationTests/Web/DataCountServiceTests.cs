@@ -202,8 +202,7 @@ public class DataCountServiceTests : IDisposable
             .AddRange(
                 new Document
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     DocumentType = DocumentType.TenK,
                     ReportingDate = new DateOnly(2025, 1, 15),
                     ReportingForDate = new DateOnly(2024, 12, 31),
@@ -212,8 +211,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new Document
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     DocumentType = DocumentType.TenQ,
                     ReportingDate = new DateOnly(2025, 4, 15),
                     ReportingForDate = new DateOnly(2025, 3, 31),

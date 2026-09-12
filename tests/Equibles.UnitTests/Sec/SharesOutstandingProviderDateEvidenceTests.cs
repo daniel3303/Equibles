@@ -330,7 +330,7 @@ public class SharesOutstandingProviderDateEvidenceTests
             FinancialConceptId = concept.Id,
             Document = new Document
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 DocumentType = form ?? DocumentType.TenQ,
                 ReportingForDate = report,
                 ReportingDate = filed,

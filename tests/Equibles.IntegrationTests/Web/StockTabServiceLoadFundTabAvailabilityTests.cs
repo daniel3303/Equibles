@@ -79,7 +79,7 @@ public class StockTabServiceLoadFundTabAvailabilityTests : IDisposable
         _dbContext.Add(
             new NportFiling
             {
-                CommonStockId = fund.Id,
+                EquityIssuerId = fund.Id,
                 AccessionNumber = "0001-NPORT",
                 FilingDate = new DateOnly(2026, 3, 31),
             }
@@ -87,7 +87,7 @@ public class StockTabServiceLoadFundTabAvailabilityTests : IDisposable
         _dbContext.Add(
             new NCenFiling
             {
-                CommonStockId = fund.Id,
+                EquityIssuerId = fund.Id,
                 AccessionNumber = "0001-NCEN",
                 FilingDate = new DateOnly(2026, 1, 31),
             }
@@ -121,7 +121,7 @@ public class StockTabServiceLoadFundTabAvailabilityTests : IDisposable
         _dbContext.Add(
             new NportFiling
             {
-                CommonStockId = fund.Id,
+                EquityIssuerId = fund.Id,
                 AccessionNumber = "0002-NPORT",
                 FilingDate = new DateOnly(2026, 3, 31),
             }
@@ -142,7 +142,7 @@ public class StockTabServiceLoadFundTabAvailabilityTests : IDisposable
         _dbContext.Add(
             new NCenFiling
             {
-                CommonStockId = fund.Id,
+                EquityIssuerId = fund.Id,
                 AccessionNumber = "0002-NCEN",
                 FilingDate = new DateOnly(2026, 1, 31),
             }

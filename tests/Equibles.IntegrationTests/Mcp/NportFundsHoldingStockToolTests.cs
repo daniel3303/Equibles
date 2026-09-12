@@ -213,7 +213,7 @@ public class NportFundsHoldingStockToolTests : IDisposable
     {
         return new NportFiling
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             AccessionNumber = accession,
             FilingDate = filingDate,
             IsAmendment = false,

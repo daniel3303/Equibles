@@ -414,7 +414,7 @@ public class StockTabService
     public async Task<DocumentsTabViewModel> LoadDocumentsTab(CommonStock stock)
     {
         var documents = await TakeMostRecent(
-            _documentRepository.GetByCompany(stock),
+            _documentRepository.GetByIssuerId((stock).Id),
             d => d.ReportingDate
         );
         return new DocumentsTabViewModel { Documents = documents, Ticker = stock.Ticker };
@@ -449,7 +449,7 @@ public class StockTabService
     public async Task<ExemptOfferingsTabViewModel> LoadExemptOfferingsTab(CommonStock stock)
     {
         var filings = await TakeMostRecent(
-            _formDFilingRepository.GetByStock(stock),
+            _formDFilingRepository.GetByIssuerId((stock).Id),
             f => f.FilingDate
         );
         return new ExemptOfferingsTabViewModel { Filings = filings, Ticker = stock.Ticker };
@@ -462,15 +462,15 @@ public class StockTabService
         CommonStock stock
     )
     {
-        var hasFundHoldings = await _nportFilingRepository.GetByStock(stock).AnyAsync();
-        var hasFundOperations = await _nCenFilingRepository.GetByStock(stock).AnyAsync();
+        var hasFundHoldings = await _nportFilingRepository.GetByIssuerId(stock.Id).AnyAsync();
+        var hasFundOperations = await _nCenFilingRepository.GetByIssuerId((stock).Id).AnyAsync();
         return (hasFundHoldings, hasFundOperations);
     }
 
     public async Task<FundOperationsTabViewModel> LoadFundOperationsTab(CommonStock stock)
     {
         var filings = await TakeMostRecent(
-            _nCenFilingRepository.GetByStock(stock).Include(f => f.ServiceProviders),
+            _nCenFilingRepository.GetByIssuerId((stock).Id).Include(f => f.ServiceProviders),
             f => f.FilingDate
         );
         return new FundOperationsTabViewModel { Filings = filings, Ticker = stock.Ticker };
@@ -479,7 +479,7 @@ public class StockTabService
     public async Task<FundHoldingsTabViewModel> LoadFundHoldingsTab(CommonStock stock)
     {
         var filing = await _nportFilingRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .OrderByDescending(f => f.FilingDate)
             .FirstOrDefaultAsync();
 

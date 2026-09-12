@@ -62,8 +62,7 @@ public class StocksShowDocumentTests
                 new Document
                 {
                     Id = docId,
-                    CommonStock = aapl,
-                    CommonStockId = aapl.Id,
+                    EquityIssuerId = aapl.Id,
                     Content = file,
                     ContentId = file.Id,
                     DocumentType = DocumentType.TenK,

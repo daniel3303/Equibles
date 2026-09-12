@@ -47,7 +47,7 @@ public class DocumentRepositoryGetByTickerTests : ParadeDbMcpTestBase
         };
         var document = new Document
         {
-            CommonStock = parent,
+            EquityIssuerId = parent.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,
@@ -69,6 +69,6 @@ public class DocumentRepositoryGetByTickerTests : ParadeDbMcpTestBase
 
         docs.Should().ContainSingle();
         docs[0].DocumentType.Should().Be(DocumentType.TenK);
-        docs[0].CommonStock.Ticker.Should().Be("AAPL");
+        docs[0].Issuer.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 }

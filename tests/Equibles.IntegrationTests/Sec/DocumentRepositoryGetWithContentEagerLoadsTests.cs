@@ -37,7 +37,7 @@ public class DocumentRepositoryGetWithContentEagerLoadsTests : ParadeDbMcpTestBa
         };
         var document = new Document
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,
@@ -58,6 +58,6 @@ public class DocumentRepositoryGetWithContentEagerLoadsTests : ParadeDbMcpTestBa
         // IsLoaded reports eager loading without dereferencing the navigation —
         // dereferencing would itself lazily load it and mask the regression.
         verify.Entry(loaded).Reference(d => d.Content).IsLoaded.Should().BeTrue();
-        verify.Entry(loaded).Reference(d => d.CommonStock).IsLoaded.Should().BeTrue();
+        verify.Entry(loaded).Reference(d => d.Issuer).IsLoaded.Should().BeTrue();
     }
 }

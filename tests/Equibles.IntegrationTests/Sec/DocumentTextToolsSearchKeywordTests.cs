@@ -47,7 +47,7 @@ public class DocumentTextToolsSearchKeywordTests : ParadeDbMcpTestBase
         };
         var document = new Document
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,

@@ -40,8 +40,15 @@ public class StocksControllerShowDocumentCrossTickerTests
         var appleDocument = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = apple.Id,
-            CommonStock = apple,
+            Issuer = new EquityIssuer
+            {
+                Id = apple.Id,
+                Name = apple.Name,
+                Presentation = new EquityIssuerPresentation
+                {
+                    Listing = new EquityListing { Ticker = apple.Ticker },
+                },
+            },
             ContentId = Guid.NewGuid(),
             Content = new File
             {

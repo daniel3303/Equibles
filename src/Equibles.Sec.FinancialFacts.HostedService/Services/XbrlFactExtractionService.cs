@@ -194,7 +194,7 @@ public class XbrlFactExtractionService
 
         var conceptIds = await ResolveConcepts(persistable, cancellationToken);
 
-        var stock = document.CommonStock;
+        var stock = document.Issuer;
         var incomingAnnualPeriods = parsed
             .Where(f =>
                 !f.IsInstant
@@ -212,7 +212,7 @@ public class XbrlFactExtractionService
                     stock.FiscalYearEndMonth,
                     stock.FiscalYearEndDay
                 )
-                : await _calendarReader.Read(stock, incomingAnnualPeriods, cancellationToken);
+                : await _calendarReader.Read(stock.Id, incomingAnnualPeriods, cancellationToken);
         var facts = new List<FinancialFact>();
         var consolidatedFills = new List<FinancialFact>();
         var dimensionsByKey = new Dictionary<string, List<ParsedXbrlDimension>>(
@@ -329,7 +329,7 @@ public class XbrlFactExtractionService
             return false;
 
         var sourceCik = fact.ConsolidatedCik;
-        var issuerCik = document.CommonStock?.Cik;
+        var issuerCik = document.Issuer?.Cik;
         return !string.IsNullOrEmpty(sourceCik)
             && !string.IsNullOrEmpty(issuerCik)
             && sourceCik.All(char.IsAsciiDigit)
@@ -501,7 +501,7 @@ public class XbrlFactExtractionService
 
     private static FinancialFact BuildFact(
         Document document,
-        CommonStock stock,
+        EquityIssuer stock,
         PersistableXbrlFact candidate,
         Guid conceptId,
         HistoricalFiscalCalendar calendar
@@ -630,7 +630,7 @@ public class XbrlFactExtractionService
             scope.ServiceProvider.GetRequiredService<CommonStockTickerEvidenceRepository>();
 
         var stock = await stockRepository
-            .GetByIds([document.CommonStockId])
+            .GetByIds([document.EquityIssuerId])
             .FirstOrDefaultAsync(cancellationToken);
         if (stock == null)
             return;

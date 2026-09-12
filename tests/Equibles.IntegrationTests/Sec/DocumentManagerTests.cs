@@ -255,7 +255,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
                             Content = "fresh chunk",
                             Index = 0,
                             DocumentType = document.DocumentType,
-                            Ticker = document.CommonStock.Ticker,
+                            Ticker = document.Issuer.Presentation.Listing.Ticker,
                             ReportingDate = document.ReportingDate.ToDateTime(
                                 TimeOnly.MinValue,
                                 DateTimeKind.Utc
@@ -327,7 +327,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
                             Content = "fresh chunk",
                             Index = 0,
                             DocumentType = document.DocumentType,
-                            Ticker = document.CommonStock.Ticker,
+                            Ticker = document.Issuer.Presentation.Listing.Ticker,
                             ReportingDate = document.ReportingDate.ToDateTime(
                                 TimeOnly.MinValue,
                                 DateTimeKind.Utc
@@ -889,7 +889,7 @@ public class DocumentManagerTests : ParadeDbMcpTestBase
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = contentId,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 3, 15),
