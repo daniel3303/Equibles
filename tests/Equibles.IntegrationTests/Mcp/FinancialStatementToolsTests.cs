@@ -261,8 +261,12 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("| EPS (Diluted) | $6.13 | USD/shares |");
     }
 
-    [Fact]
-    public async Task GetFinancialStatement_PerShareLine_RestatesAcrossSplitWithoutChangingDollarLines()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetFinancialStatement_PerShareLine_RestatesAcrossSplitWithoutChangingDollarLines(
+        bool attributed
+    )
     {
         EquityIssuer stock = Apple();
         var revenue = new FinancialConcept
@@ -287,8 +291,8 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
                 new StockSplit
                 {
                     EquityIssuerId = stock.Id,
-                    EquityListingId = stock.Presentation.EquityListingId,
-                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
+                    EquityListingId = attributed ? stock.Presentation.EquityListingId : null,
+                    PriceSeriesTicker = attributed ? stock.Presentation.Listing.Ticker : null,
                     EffectiveDate = new DateOnly(2022, 6, 1),
                     Numerator = 4m,
                     Denominator = 1m,
@@ -316,9 +320,17 @@ public class FinancialStatementToolsTests : ParadeDbMcpTestBase
         var result = await Sut().GetFinancialStatement("AAPL", statement: "income", year: 2021);
 
         result.Should().Contain("| Revenue | $100,000,000 | USD |");
-        result.Should().Contain("| EPS (Diluted) | $2.00 | USD/shares |");
-        result.Should().NotContain("| EPS (Diluted) | $8.00 | USD/shares |");
-        result.Should().Contain("Per-share values are split-adjusted");
+        if (attributed)
+        {
+            result.Should().Contain("| EPS (Diluted) | $2.00 | USD/shares |");
+            result.Should().Contain("Per-share values are split-adjusted");
+        }
+        else
+        {
+            result.Should().Contain("| EPS (Diluted) | $8.00 (as filed) | USD/shares |");
+            result.Should().Contain("split attribution is unresolved");
+            result.Should().NotContain("Per-share values are split-adjusted");
+        }
     }
 
     [Fact]

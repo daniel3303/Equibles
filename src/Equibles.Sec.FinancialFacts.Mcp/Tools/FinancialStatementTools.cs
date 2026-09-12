@@ -234,11 +234,6 @@ public class FinancialStatementTools
                         .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                         .ToListAsync()
                     : [];
-                splits = PriceSeriesSplitScope.ForListing(
-                    splits,
-                    stock.Presentation.Listing.Ticker,
-                    stock.Presentation.Listing.Ticker
-                );
 
                 return RenderStatementTable(
                     stock,
@@ -279,6 +274,7 @@ public class FinancialStatementTools
         var rendered = 0;
         var omitted = 0;
         var splitAdjusted = false;
+        var unresolvedBasis = false;
         DateOnly? earliestFiled = null;
         DateOnly? latestFiled = null;
         foreach (var line in statementLines)
@@ -293,11 +289,18 @@ public class FinancialStatementTools
                 continue;
             }
 
-            var value = FinancialFactSplitAdjustment.Restate(fact, splits, out var adjusted);
+            var value = FinancialFactSplitAdjustment.Restate(
+                fact,
+                splits,
+                stock.Presentation.EquityListingId,
+                out var adjusted,
+                out var unresolved
+            );
+            unresolvedBasis |= unresolved;
             splitAdjusted |= adjusted;
             result.AppendLine(
                 $"| {FactMarkdown.Cell(line.Label)} | "
-                    + $"{FactMarkdown.Value(value, fact.Unit)} | "
+                    + $"{FactMarkdown.Value(value, fact.Unit)}{(unresolved ? " (as filed)" : "")} | "
                     + $"{FactMarkdown.Cell(fact.Unit)} | "
                     + $"{(StatementQuarterDerivation.IsDerived(fact) ? "Derived quarter" : "Reported")} | "
                     + $"{fact.PeriodStart:yyyy-MM-dd} | "
@@ -324,6 +327,8 @@ public class FinancialStatementTools
 
         if (splitAdjusted)
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
+        if (unresolvedBasis)
+            result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
 
         if (
             selectedPeriod != SecFiscalPeriod.FullYear

@@ -209,11 +209,6 @@ public class FinancialFactsTools
                         .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                         .ToListAsync()
                     : [];
-                splits = PriceSeriesSplitScope.ForListing(
-                    splits,
-                    stock.Presentation.Listing.Ticker,
-                    stock.Presentation.Listing.Ticker
-                );
 
                 return RenderFactHistoryTable(
                     concept,
@@ -358,11 +353,6 @@ public class FinancialFactsTools
                                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                                 .Where(split =>
                                     splitAdjustedStockIds.Contains(split.EquityIssuerId)
-                                    && (
-                                        split.PriceSeriesTicker == null
-                                        || split.PriceSeriesTicker
-                                            == split.Issuer.Presentation.Listing.Ticker
-                                    )
                                 )
                                 .ToListAsync()
                         )
@@ -375,7 +365,11 @@ public class FinancialFactsTools
                     period,
                     rows,
                     skipped,
-                    splitsByStock
+                    splitsByStock,
+                    stocks.ToDictionary(
+                        stock => stock.Id,
+                        stock => stock.Presentation.EquityListingId
+                    )
                 );
             },
             "CompareFinancialFact",
@@ -418,15 +412,23 @@ public class FinancialFactsTools
             "|--------------|------------|---:|--------|------:|------|------|-------|-----------|"
         );
         var splitAdjusted = false;
+        var unresolvedBasis = false;
         result.AppendRows(
             perPeriod,
             f =>
             {
-                var value = FinancialFactSplitAdjustment.Restate(f, splits, out var adjusted);
+                var value = FinancialFactSplitAdjustment.Restate(
+                    f,
+                    splits,
+                    stock.Presentation.EquityListingId,
+                    out var adjusted,
+                    out var unresolved
+                );
+                unresolvedBasis |= unresolved;
                 splitAdjusted |= adjusted;
                 return $"| {f.PeriodStart:yyyy-MM-dd} | {f.PeriodEnd:yyyy-MM-dd} | {f.FiscalYear} | "
                     + $"{f.FiscalPeriod.NameForHumans()} | "
-                    + $"{FactMarkdown.Value(value, f.Unit)} | "
+                    + $"{FactMarkdown.Value(value, f.Unit)}{(unresolved ? " (as filed)" : "")} | "
                     + $"{FactMarkdown.Cell(f.Unit)} | "
                     + $"{FactMarkdown.Cell(f.Form?.DisplayName)} | "
                     + $"{f.FiledDate:yyyy-MM-dd} | "
@@ -436,6 +438,8 @@ public class FinancialFactsTools
 
         if (splitAdjusted)
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
+        if (unresolvedBasis)
+            result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
 
         // Rows are newest first, so "first N" reads correctly; a no-op empty
         // line when nothing was cut off.
@@ -611,7 +615,8 @@ public class FinancialFactsTools
         SecFiscalPeriod period,
         List<(string Ticker, string Name, FinancialFact Fact)> rows,
         List<string> skipped,
-        IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock
+        IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
+        IReadOnlyDictionary<Guid, Guid> listingIdsByStock
     )
     {
         var result = MarkdownTable.Start(
@@ -620,15 +625,23 @@ public class FinancialFactsTools
             "|--------|---------|------:|------|-----------|------|-------|"
         );
         var splitAdjusted = false;
+        var unresolvedBasis = false;
         result.AppendRows(
             rows,
             r =>
             {
                 var splits = splitsByStock.GetValueOrDefault(r.Fact.EquityIssuerId) ?? [];
-                var value = FinancialFactSplitAdjustment.Restate(r.Fact, splits, out var adjusted);
+                var value = FinancialFactSplitAdjustment.Restate(
+                    r.Fact,
+                    splits,
+                    listingIdsByStock[r.Fact.EquityIssuerId],
+                    out var adjusted,
+                    out var unresolved
+                );
+                unresolvedBasis |= unresolved;
                 splitAdjusted |= adjusted;
                 return $"| {FactMarkdown.Cell(r.Ticker)} | {FactMarkdown.Cell(r.Name)} | "
-                    + $"{FactMarkdown.Value(value, r.Fact.Unit)} | "
+                    + $"{FactMarkdown.Value(value, r.Fact.Unit)}{(unresolved ? " (as filed)" : "")} | "
                     + $"{FactMarkdown.Cell(r.Fact.Unit)} | "
                     + $"{r.Fact.PeriodEnd:yyyy-MM-dd} | "
                     + $"{FactMarkdown.Cell(r.Fact.Form?.DisplayName)} | "
@@ -638,6 +651,8 @@ public class FinancialFactsTools
 
         if (splitAdjusted)
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
+        if (unresolvedBasis)
+            result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
 
         if (rows.Count == 0)
             result.AppendLine(

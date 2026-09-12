@@ -10,6 +10,10 @@ internal static class FinancialFactSplitAdjustment
         "Per-share values are split-adjusted to today's share basis using splits effective "
         + "strictly after each fact's Filed date.";
 
+    internal const string UnresolvedNote =
+        "Values marked 'as filed' retain the source value because split attribution is unresolved; "
+        + "they have not been normalized to today's share basis.";
+
     // Only a share-denominated ratio may be split-adjusted. Filers publish many
     // other ratio units (USD/bbl, USD/MMBTU, USD/EUR, shares/USD, USD/Shareholder, …)
     // whose values a stock split does not change, so the denominator measure must
@@ -36,16 +40,25 @@ internal static class FinancialFactSplitAdjustment
     internal static decimal Restate(
         FinancialFact fact,
         IReadOnlyList<StockSplit> splits,
-        out bool adjusted
+        Guid listingId,
+        out bool adjusted,
+        out bool unresolved
     )
     {
-        if (!IsPerShare(fact))
+        adjusted = false;
+        unresolved =
+            IsPerShare(fact)
+            && PriceSeriesSplitScope.HasUnresolvedBasis(splits, listingId, fact.FiledDate);
+        if (!IsPerShare(fact) || unresolved)
         {
             adjusted = false;
             return fact.Value;
         }
 
-        var factor = SplitAdjustment.ShareCountFactor(fact.FiledDate, splits);
+        var factor = SplitAdjustment.ShareCountFactor(
+            fact.FiledDate,
+            PriceSeriesSplitScope.ForListing(splits, listingId)
+        );
         adjusted = factor != 0m && factor != 1m;
         return SplitAdjustment.AdjustPerShareValue(fact.Value, factor);
     }

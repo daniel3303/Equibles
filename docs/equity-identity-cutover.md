@@ -237,3 +237,9 @@
 - Unqualified filing-list, BM25, vector and PostgreSQL fallback searches require matching U.S. issuer claims; equal foreign tickers cannot enter their result sets.
 - Recorded U.S. co-registrants still contribute their filings, and direct issuer/document-ID reads retain foreign records.
 - Existing ticker index predicates remain in each search arm; market ownership is an additional native identity check.
+
+## Per-share financial facts
+
+- History, statements and peer comparisons select split ratios by the presentation listing ID; a foreign listing with the same ticker cannot restate its values.
+- Source symbols remain evidence after a rename; stable listing identity decides attribution.
+- Unattributed, conflicting or invalid post-filing splits preserve the filed value with an explicit unresolved-basis label; no original financial fact is rewritten.

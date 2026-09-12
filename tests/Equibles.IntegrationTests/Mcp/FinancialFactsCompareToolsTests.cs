@@ -157,8 +157,13 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("ZZZZ (not found in the tracked SEC issuer set)");
     }
 
-    [Fact]
-    public async Task CompareFinancialFact_PerShareValue_RestatesEachCompanyAcrossItsSplits()
+    [Theory]
+    [InlineData("primary")]
+    [InlineData("unresolved")]
+    [InlineData("foreign")]
+    public async Task CompareFinancialFact_PerShareValue_RestatesEachCompanyAcrossItsSplits(
+        string splitScope
+    )
     {
         EquityIssuer alphabet = AddStock("GOOGL", "Alphabet Inc.");
         var dilutedEps = new FinancialConcept
@@ -169,12 +174,29 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
             Label = "Diluted EPS",
         };
         DbContext.Set<FinancialConcept>().Add(dilutedEps);
+        var splitListingId = (Guid?)alphabet.Presentation.EquityListingId;
+        if (splitScope == "unresolved")
+            splitListingId = null;
+        if (splitScope == "foreign")
+        {
+            var foreign = new EquityListing
+            {
+                EquitySecurityId = alphabet.Presentation.Listing.EquitySecurityId,
+                Ticker = "GOOGL",
+                MarketCountryCode = "PT",
+                MarketIdentifierCode = "XLIS",
+            };
+            DbContext.Add(foreign);
+            splitListingId = foreign.Id;
+        }
         DbContext
             .Set<StockSplit>()
             .Add(
                 new StockSplit
                 {
                     EquityIssuerId = alphabet.Id,
+                    EquityListingId = splitListingId,
+                    PriceSeriesTicker = splitScope == "unresolved" ? null : "GOOGL",
                     EffectiveDate = new DateOnly(2022, 7, 18),
                     Numerator = 20m,
                     Denominator = 1m,
@@ -203,9 +225,19 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().CompareFinancialFact("GOOGL", "eps-diluted", 2021);
 
-        result.Should().Contain("| GOOGL | Alphabet Inc. | $1.00 | USD/shares |");
-        result.Should().NotContain("| $20.00 | USD/shares |");
-        result.Should().Contain("Per-share values are split-adjusted");
+        var expected =
+            splitScope == "primary" ? "$1.00"
+            : splitScope == "unresolved" ? "$20.00 (as filed)"
+            : "$20.00";
+        result.Should().Contain($"| GOOGL | Alphabet Inc. | {expected} | USD/shares |");
+        if (splitScope == "primary")
+            result.Should().Contain("Per-share values are split-adjusted");
+        else
+            result.Should().NotContain("Per-share values are split-adjusted");
+        if (splitScope == "unresolved")
+            result.Should().Contain("split attribution is unresolved");
+        else
+            result.Should().NotContain("split attribution is unresolved");
     }
 
     [Fact]

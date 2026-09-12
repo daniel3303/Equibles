@@ -113,8 +113,13 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("No 'revenue' data has been ingested for AAPL");
     }
 
-    [Fact]
-    public async Task GetFinancialFact_PerShareHistory_RestatesValuesFiledBeforeSplit()
+    [Theory]
+    [InlineData("primary")]
+    [InlineData("unresolved")]
+    [InlineData("foreign")]
+    public async Task GetFinancialFact_PerShareHistory_RestatesValuesFiledBeforeSplit(
+        string splitScope
+    )
     {
         EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
             Id: Guid.NewGuid(),
@@ -124,14 +129,29 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
         );
         var dilutedEps = AddConcept("EarningsPerShareDiluted");
         DbContext.Set<EquityIssuer>().Add(stock);
+        var splitListingId = (Guid?)stock.Presentation.EquityListingId;
+        if (splitScope == "unresolved")
+            splitListingId = null;
+        if (splitScope == "foreign")
+        {
+            var foreign = new EquityListing
+            {
+                EquitySecurityId = stock.Presentation.Listing.EquitySecurityId,
+                Ticker = "GOOGL",
+                MarketCountryCode = "PT",
+                MarketIdentifierCode = "XLIS",
+            };
+            DbContext.Add(foreign);
+            splitListingId = foreign.Id;
+        }
         DbContext
             .Set<StockSplit>()
             .Add(
                 new StockSplit
                 {
                     EquityIssuerId = stock.Id,
-                    EquityListingId = stock.Presentation.EquityListingId,
-                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
+                    EquityListingId = splitListingId,
+                    PriceSeriesTicker = splitScope == "unresolved" ? null : "GOOGL",
                     EffectiveDate = new DateOnly(2022, 7, 18),
                     Numerator = 20m,
                     Denominator = 1m,
@@ -175,12 +195,20 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetFinancialFact("GOOGL", "eps-diluted");
 
-        result
-            .Should()
-            .Contain("| $1.23 | USD/shares |", "24.62 is restated across the 20:1 split");
         result.Should().Contain("| $1.06 | USD/shares |", "the post-split filing stays unchanged");
-        result.Should().NotContain("| $24.62 | USD/shares |");
-        result.Should().Contain("Per-share values are split-adjusted");
+        var expected =
+            splitScope == "primary" ? "$1.23"
+            : splitScope == "unresolved" ? "$24.62 (as filed)"
+            : "$24.62";
+        result.Should().Contain($"| {expected} | USD/shares |");
+        if (splitScope == "primary")
+            result.Should().Contain("Per-share values are split-adjusted");
+        else
+            result.Should().NotContain("Per-share values are split-adjusted");
+        if (splitScope == "unresolved")
+            result.Should().Contain("split attribution is unresolved");
+        else
+            result.Should().NotContain("split attribution is unresolved");
     }
 
     [Fact]

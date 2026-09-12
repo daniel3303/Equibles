@@ -50,6 +50,20 @@ public static class PriceSeriesSplitScope
 
     public static bool HasUnresolvedBasis(
         IEnumerable<StockSplit> splits,
+        Guid listingId,
+        DateOnly asOf
+    )
+    {
+        var after = splits?.Where(split => split.EffectiveDate > asOf).ToList() ?? [];
+        if (after.Any(split => split.EquityListingId == null))
+            return true;
+        var matching = ForListing(after, listingId);
+        return matching.Any(split => split.Numerator <= 0 || split.Denominator <= 0)
+            || matching.GroupBy(split => split.EffectiveDate).Any(group => group.Count() > 1);
+    }
+
+    public static bool HasUnresolvedBasis(
+        IEnumerable<StockSplit> splits,
         string listedTicker,
         DateOnly asOf
     )
