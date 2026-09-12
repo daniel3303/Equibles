@@ -195,7 +195,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
                     [
                         new EquityDailyStockPriceRepository(writer),
                         new EquityIssuerRepository(writer),
-                        new PriceSeriesTarget("AAPL", stockId, IsPrimary: true),
+                        new PriceSeriesTarget("AAPL", stockId, listingId, IsPrimary: true),
                         firstDate,
                         firstDate.AddDays(501),
                         freshRows,
@@ -254,6 +254,17 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
                 }
             );
             await seed.SaveChangesAsync();
+        }
+
+        // The native queue requires the exact attribution established before writer cutover.
+        await using (var attribution = _fixture.CreateDbContext())
+        {
+            var split = await attribution.Set<StockSplit>().SingleAsync(row => row.Id == splitId);
+            split.EquityListingId = await new EquityIssuerRepository(
+                attribution
+            ).GetEquityListingId(stockId, "GOOGL");
+            split.EquityListingId.Should().NotBeNull();
+            await attribution.SaveChangesAsync();
         }
 
         PendingPriceReconciliationSeries selected;

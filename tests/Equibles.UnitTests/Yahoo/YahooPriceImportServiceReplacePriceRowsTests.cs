@@ -45,7 +45,18 @@ public class YahooPriceImportServiceReplacePriceRowsTests
                 [
                     new EquityDailyStockPriceRepository(db),
                     new EquityIssuerRepository(db),
-                    new PriceSeriesTarget(ticker, commonStockId, isPrimary),
+                    new PriceSeriesTarget(
+                        ticker,
+                        commonStockId,
+                        db.Set<EquityListing>()
+                            .Where(listing =>
+                                listing.Security.EquityIssuerId == commonStockId
+                                && listing.Ticker == ticker
+                            )
+                            .Select(listing => listing.Id)
+                            .SingleOrDefault(),
+                        isPrimary
+                    ),
                     floor,
                     today,
                     freshRows,

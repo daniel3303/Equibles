@@ -24,23 +24,6 @@ using Microsoft.Extensions.Options;
 
 namespace Equibles.Yahoo.HostedService.Services;
 
-internal readonly record struct PriceSeriesKey(Guid CommonStockId, string ListedTicker);
-
-internal readonly record struct PriceSeriesTarget(
-    string Ticker,
-    Guid CommonStockId,
-    bool IsPrimary,
-    bool RequiresFullHistory = false,
-    DateTime? YahooEnrichmentAttemptedAt = null,
-    bool IsHistorical = false,
-    DateOnly? HistoryEndDate = null,
-    Guid? HistoricalListingId = null,
-    Guid? EquityListingId = null
-)
-{
-    public PriceSeriesKey Key => new(CommonStockId, Ticker);
-}
-
 internal readonly record struct LockedPriceSeries(
     EquityIssuer Stock,
     bool IsPrimary,
@@ -201,91 +184,60 @@ public class YahooPriceImportService
             .Select(stock => new
             {
                 stock.Id,
-                Ticker = stock.Presentation.Listing.Ticker,
-                SecondaryTickers = stock
-                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
-                    .Where(nativeListing =>
-                        nativeListing.MarketCountryCode == "US"
-                        && (
-                            nativeListing.IsDirectoryListed
-                            && nativeListing.Id != stock.Presentation.EquityListingId
-                        )
-                    )
-                    .Select(nativeListing => nativeListing.Ticker)
+                PrimaryListingId = stock.Presentation.EquityListingId,
+                Listings = stock
+                    .Securities.SelectMany(security => security.Listings)
+                    .Where(listing => listing.MarketCountryCode == "US")
+                    .Select(listing => new
+                    {
+                        listing.Id,
+                        listing.Ticker,
+                        listing.Active,
+                        listing.IsDirectoryListed,
+                        listing.IsReferenceListed,
+                        listing.PriceHistoryBackfilled,
+                        listing.YahooEnrichmentAttemptedAt,
+                    })
                     .ToList(),
-                ReferenceTickers = stock
-                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
-                    .Where(nativeListing =>
-                        nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
-                    )
-                    .Select(nativeListing => nativeListing.Ticker)
-                    .ToList(),
-                PriceHistoryBackfilledTickers = stock
-                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
-                    .Where(nativeListing =>
-                        nativeListing.MarketCountryCode == "US"
-                        && (nativeListing.PriceHistoryBackfilled)
-                    )
-                    .Select(nativeListing => nativeListing.Ticker)
-                    .ToList(),
-                YahooEnrichmentAttemptedAt = stock.Presentation.Listing.YahooEnrichmentAttemptedAt,
             })
             .ToListAsync(cancellationToken);
 
         var targets = new List<PriceSeriesTarget>();
         foreach (var stock in stocks)
         {
-            if (string.IsNullOrWhiteSpace(stock.Ticker))
-                continue;
-
-            var primaryTicker = TickerNormalizer.NormalizePrimary(stock.Ticker);
-            if (primaryTicker == null)
-                continue;
-
-            var referenceTickers = (stock.ReferenceTickers ?? [])
-                .Select(TickerNormalizer.NormalizeListed)
-                .Where(ticker => ticker != null)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var backfilledTickers = (stock.PriceHistoryBackfilledTickers ?? [])
-                .Select(TickerNormalizer.NormalizeListed)
-                .Where(ticker => ticker != null)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var delistedTickers = delistedByStock.GetValueOrDefault(stock.Id) ?? [];
-
-            if (!delistedTickers.Contains(primaryTicker))
-            {
-                targets.Add(
-                    new PriceSeriesTarget(
-                        primaryTicker,
-                        stock.Id,
-                        IsPrimary: true,
-                        RequiresFullHistory: referenceTickers.Contains(primaryTicker)
-                            && !backfilledTickers.Contains(primaryTicker),
-                        YahooEnrichmentAttemptedAt: stock.YahooEnrichmentAttemptedAt
-                    )
-                );
-            }
-
+            // The U.S. adapter has no venue-qualified provider symbol. Two native claims
+            // for the same symbol must remain unresolved, even within one issuer.
             foreach (
-                var secondaryTicker in (stock.SecondaryTickers ?? [])
-                    .Concat(stock.ReferenceTickers ?? [])
-                    .Where(ticker => !string.IsNullOrWhiteSpace(ticker))
-                    .Select(TickerNormalizer.NormalizeListed)
-                    .Where(ticker =>
-                        ticker != null
-                        && ticker != primaryTicker
-                        && !delistedTickers.Contains(ticker)
-                    )
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                var group in stock.Listings.GroupBy(
+                    listing => listing.Ticker,
+                    StringComparer.OrdinalIgnoreCase
+                )
             )
             {
+                if (group.Count() != 1)
+                    continue;
+                var listing = group.Single();
+                var isPrimary = listing.Id == stock.PrimaryListingId;
+                if (
+                    !listing.Active
+                    || !(isPrimary || listing.IsDirectoryListed || listing.IsReferenceListed)
+                )
+                    continue;
+                var ticker = TickerNormalizer.NormalizeListed(listing.Ticker);
+                if (ticker == null || delistedTickers.Contains(ticker))
+                    continue;
                 targets.Add(
                     new PriceSeriesTarget(
-                        secondaryTicker,
+                        ticker,
                         stock.Id,
-                        IsPrimary: false,
-                        RequiresFullHistory: referenceTickers.Contains(secondaryTicker)
-                            && !backfilledTickers.Contains(secondaryTicker)
+                        listing.Id,
+                        IsPrimary: isPrimary,
+                        RequiresFullHistory: listing.IsReferenceListed
+                            && !listing.PriceHistoryBackfilled,
+                        YahooEnrichmentAttemptedAt: isPrimary
+                            ? listing.YahooEnrichmentAttemptedAt
+                            : null
                     )
                 );
             }
@@ -306,34 +258,50 @@ public class YahooPriceImportService
         );
         var historyFloor = PriceHistoryFloor();
 
-        return await stockRepository
+        var listings = stockRepository
+            .GetAll()
+            .SelectMany(issuer => issuer.Securities)
+            .SelectMany(security => security.Listings)
+            .Where(listing => listing.MarketCountryCode == "US");
+        var candidates = stockRepository
             .GetDelistedListings()
-            .Where(listing =>
-                listing.DelistedOn >= historyFloor
-                && !stockRepository
-                    .GetCompletedPriceSeries()
-                    .Any(mapping =>
-                        mapping.Security.EquityIssuerId == listing.EquityIssuerId
-                        && mapping.Ticker == listing.ListedTicker
-                    )
+            .Where(evidence =>
+                evidence.DelistedOn >= historyFloor
                 && (
-                    listing.HistoricalPriceBackfillAttemptedAt == null
-                    || listing.HistoricalPriceBackfillAttemptedAt <= retryBefore
+                    evidence.HistoricalPriceBackfillAttemptedAt == null
+                    || evidence.HistoricalPriceBackfillAttemptedAt <= retryBefore
                 )
+                && listings.Count(listing =>
+                    listing.Security.EquityIssuerId == evidence.EquityIssuerId
+                    && listing.Ticker == evidence.ListedTicker
+                ) == 1
             )
-            .OrderBy(listing => listing.HistoricalPriceBackfillAttemptedAt ?? DateTime.MinValue)
-            .ThenBy(listing => listing.DelistedOn)
-            .ThenBy(listing => listing.ListedTicker)
+            .SelectMany(
+                evidence =>
+                    listings.Where(listing =>
+                        listing.Security.EquityIssuerId == evidence.EquityIssuerId
+                        && listing.Ticker == evidence.ListedTicker
+                        && !listing.Active
+                        && listing.DelistedOn == evidence.DelistedOn
+                        && !listing.PriceHistoryBackfilled
+                    ),
+                (evidence, listing) => new { Evidence = evidence, Listing = listing }
+            );
+        return await candidates
+            .OrderBy(row => row.Evidence.HistoricalPriceBackfillAttemptedAt ?? DateTime.MinValue)
+            .ThenBy(row => row.Evidence.DelistedOn)
+            .ThenBy(row => row.Evidence.ListedTicker)
             .Take(Math.Max(1, _scraperOptions.HistoricalBackfillBatchSize))
-            .Select(listing => new PriceSeriesTarget(
-                listing.ListedTicker,
-                listing.EquityIssuerId,
-                IsPrimary: listing.ListedTicker == listing.Issuer.Presentation.Listing.Ticker,
+            .Select(row => new PriceSeriesTarget(
+                row.Listing.Ticker,
+                row.Evidence.EquityIssuerId,
+                row.Listing.Id,
+                IsPrimary: row.Listing.Id == row.Evidence.Issuer.Presentation.EquityListingId,
                 RequiresFullHistory: true,
                 YahooEnrichmentAttemptedAt: null,
                 IsHistorical: true,
-                HistoryEndDate: listing.DelistedOn,
-                HistoricalListingId: listing.Id
+                HistoryEndDate: row.Evidence.DelistedOn,
+                HistoricalEvidenceId: row.Evidence.Id
             ))
             .ToListAsync(cancellationToken);
     }
@@ -345,38 +313,42 @@ public class YahooPriceImportService
     )
     {
         EquityIssuer stock = await stockRepository.GetForUpdate(
-            target.CommonStockId,
+            target.EquityIssuerId,
             cancellationToken
         );
         if (
             stock == null
-            || target.EquityListingId.HasValue
-                && !stock
-                    .Securities.SelectMany(security => security.Listings)
-                    .Any(listing =>
-                        listing.Id == target.EquityListingId.Value
-                        && listing.Ticker == target.Ticker
-                        && listing.MarketCountryCode == "US"
-                        && (
-                            target.IsHistorical
-                                ? !listing.Active && listing.DelistedOn == target.HistoryEndDate
-                                : listing.Active
-                        )
+            || !stock
+                .Securities.SelectMany(security => security.Listings)
+                .Any(listing =>
+                    listing.Id == target.EquityListingId
+                    && listing.Ticker == target.Ticker
+                    && listing.MarketCountryCode == "US"
+                    && (
+                        target.IsHistorical
+                            ? !listing.Active && listing.DelistedOn == target.HistoryEndDate
+                            : listing.Active
                     )
+                )
+        )
+            return null;
+        if (
+            await stockRepository.GetEquityListingId(target.EquityIssuerId, target.Ticker)
+            != target.EquityListingId
         )
             return null;
         EquityListingRetirementEvidence historicalListing = null;
         if (target.IsHistorical)
         {
-            if (target.HistoricalListingId == null)
+            if (target.HistoricalEvidenceId == null)
                 return null;
             historicalListing = await stockRepository.GetDelistedListingForUpdate(
-                target.HistoricalListingId.Value,
+                target.HistoricalEvidenceId.Value,
                 cancellationToken
             );
             if (
                 historicalListing == null
-                || historicalListing.EquityIssuerId != target.CommonStockId
+                || historicalListing.EquityIssuerId != target.EquityIssuerId
                 || historicalListing.DelistedOn != target.HistoryEndDate
                 || !string.Equals(
                     historicalListing.ListedTicker,
@@ -386,7 +358,7 @@ public class YahooPriceImportService
             )
                 return null;
         }
-        if (!target.IsHistorical && !stock.Presentation.Listing.Active)
+        if (!target.IsHistorical && stock.Presentation?.Listing?.Active != true)
             return null;
 
         var resolvedTicker =
@@ -400,11 +372,7 @@ public class YahooPriceImportService
 
         return new LockedPriceSeries(
             stock,
-            string.Equals(
-                resolvedTicker,
-                stock.Presentation.Listing.Ticker,
-                StringComparison.OrdinalIgnoreCase
-            ),
+            stock.Presentation?.EquityListingId == target.EquityListingId,
             historicalListing
         );
     }
@@ -573,7 +541,7 @@ public class YahooPriceImportService
             )
             .OrderBy(target => target.YahooEnrichmentAttemptedAt ?? DateTime.MinValue)
             .ThenBy(target => target.Ticker, StringComparer.Ordinal)
-            .ThenBy(target => target.CommonStockId)
+            .ThenBy(target => target.EquityIssuerId)
             .ToList();
         var batch = due.Take(Math.Max(1, batchSize)).ToList();
         return (batch, due.Count - batch.Count);
@@ -629,7 +597,7 @@ public class YahooPriceImportService
         if (
             !await SaveStockChanges(
                 stockRepo,
-                target.CommonStockId,
+                target.EquityIssuerId,
                 target.Ticker,
                 cancellationToken
             )
@@ -693,22 +661,10 @@ public class YahooPriceImportService
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
         var rows = await priceRepo
             .GetUsSeries()
-            .GroupBy(p => new
-            {
-                CommonStockId = p.Listing.Security.EquityIssuerId,
-                ListedTicker = p.SourceTicker,
-            })
-            .Select(group => new
-            {
-                group.Key.CommonStockId,
-                group.Key.ListedTicker,
-                LastDate = group.Max(p => p.Date),
-            })
+            .GroupBy(p => p.EquityListingId)
+            .Select(group => new { EquityListingId = group.Key, LastDate = group.Max(p => p.Date) })
             .ToListAsync(cancellationToken);
-        var lastDates = rows.ToDictionary(
-            row => new PriceSeriesKey(row.CommonStockId, row.ListedTicker),
-            row => row.LastDate
-        );
+        var lastDates = rows.ToDictionary(row => row.EquityListingId, row => row.LastDate);
 
         return BuildCrawlOrder(targets, lastDates, DateOnly.FromDateTime(DateTime.UtcNow));
     }
@@ -716,7 +672,7 @@ public class YahooPriceImportService
     // Pure so the priority rule is pinnable in tests without a database.
     internal static List<PriceSeriesTarget> BuildCrawlOrder(
         IReadOnlyCollection<PriceSeriesTarget> targets,
-        IReadOnlyDictionary<PriceSeriesKey, DateOnly> lastDates,
+        IReadOnlyDictionary<Guid, DateOnly> lastDates,
         DateOnly today
     )
     {
@@ -726,7 +682,7 @@ public class YahooPriceImportService
             .Select(target => new
             {
                 Target = target,
-                LastDate = lastDates.TryGetValue(target.Key, out var lastDate)
+                LastDate = lastDates.TryGetValue(target.EquityListingId, out var lastDate)
                     ? lastDate
                     : DateOnly.MinValue,
             })
@@ -736,7 +692,7 @@ public class YahooPriceImportService
             .ThenBy(x => x.LastDate < activeSince)
             .ThenBy(x => x.LastDate)
             .ThenBy(x => x.Target.Ticker, StringComparer.Ordinal)
-            .ThenBy(x => x.Target.CommonStockId)
+            .ThenBy(x => x.Target.EquityListingId)
             .Select(x => x.Target)
             .ToList();
     }
@@ -875,7 +831,7 @@ public class YahooPriceImportService
                 ),
                 IsHistorical: delistedListing != null,
                 HistoryEndDate: delistedListing?.DelistedOn,
-                HistoricalListingId: delistedListing?.Id,
+                HistoricalEvidenceId: delistedListing?.Id,
                 EquityListingId: selectedSeries.EquityListingId
             );
         }
@@ -969,7 +925,7 @@ public class YahooPriceImportService
                 capturedDividends,
                 settledBefore,
                 DateTime.UtcNow,
-                target.HistoricalListingId!.Value,
+                target.HistoricalEvidenceId!.Value,
                 target.HistoryEndDate!.Value,
                 cancellationToken
             )
@@ -1004,7 +960,7 @@ public class YahooPriceImportService
             .GetAll()
             .Where(split =>
                 split.PriceAdjustmentAppliedTime >= appliedSince
-                && split.PriceSeriesTicker != null
+                && split.EquityListingId != null
                 && split.EffectiveDate < today
                 && split.Numerator > 0m
                 && split.Denominator > 0m
@@ -1021,8 +977,7 @@ public class YahooPriceImportService
                 priceRepository
                     .GetUsSeries()
                     .Where(price =>
-                        price.Listing.Security.EquityIssuerId == split.EquityIssuerId
-                        && price.SourceTicker == split.PriceSeriesTicker
+                        price.EquityListingId == split.EquityListingId
                         && price.Date < split.EffectiveDate
                     )
                     .OrderByDescending(price => price.Date)
@@ -1031,8 +986,7 @@ public class YahooPriceImportService
                 priceRepository
                     .GetUsSeries()
                     .Where(price =>
-                        price.Listing.Security.EquityIssuerId == split.EquityIssuerId
-                        && price.SourceTicker == split.PriceSeriesTicker
+                        price.EquityListingId == split.EquityListingId
                         && price.Date >= split.EffectiveDate
                     )
                     .OrderBy(price => price.Date)
@@ -1311,19 +1265,19 @@ public class YahooPriceImportService
             {
                 await transaction.RollbackAsync(cancellationToken);
                 _logger.LogWarning(
-                    "Skipping full-history replacement for {Ticker}: it no longer belongs to CommonStock {Id}",
+                    "Skipping full-history replacement for {Ticker}: it no longer belongs to EquityIssuer {Id}",
                     target.Ticker,
-                    target.CommonStockId
+                    target.EquityIssuerId
                 );
                 return false;
             }
 
             var recordedSymbolListingId = await stockRepo.GetEquityListingId(
-                target.CommonStockId,
+                target.EquityIssuerId,
                 target.Ticker
             );
-            var priceListingId = recordedSymbolListingId;
-            if (priceListingId == null)
+            var priceListingId = target.EquityListingId;
+            if (recordedSymbolListingId != priceListingId)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return false;
@@ -1331,7 +1285,7 @@ public class YahooPriceImportService
             var firstPriceDate = prices.Min(price => price.Date);
             if (
                 await splitRepo
-                    .GetEffectiveByStock(target.CommonStockId, settledBefore)
+                    .GetEffectiveByStock(target.EquityIssuerId, settledBefore)
                     .AnyAsync(
                         split =>
                             split.PriceSeriesTicker == null && split.EffectiveDate > firstPriceDate,
@@ -1347,7 +1301,7 @@ public class YahooPriceImportService
                 return false;
             }
             var capturedBoundaries = await splitRepo
-                .GetEffectiveByStock(target.CommonStockId, settledBefore)
+                .GetEffectiveByStock(target.EquityIssuerId, settledBefore)
                 .Where(split =>
                     split.EquityListingId == priceListingId
                     || split.EquityListingId == null
@@ -1380,10 +1334,7 @@ public class YahooPriceImportService
             }
 
             var freshRows = MapFreshRows(
-                await stockRepo.GetEquityListingId(target.CommonStockId, target.Ticker)
-                    ?? throw new InvalidOperationException(
-                        "The locked price series has no native listing identity."
-                    ),
+                target.EquityListingId,
                 prices,
                 target.Ticker,
                 settledBefore
@@ -1488,7 +1439,7 @@ public class YahooPriceImportService
             return;
         }
 
-        var recycledRows = await repo.GetUsSeries(target.CommonStockId, target.Ticker)
+        var recycledRows = await repo.GetByListing(target.EquityListingId)
             .Where(price => price.Date > target.HistoryEndDate!.Value)
             .ToListAsync(cancellationToken);
         if (recycledRows.Count > 0)
@@ -1564,11 +1515,7 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        var listingId =
-            await stockRepo.GetEquityListingId(target.CommonStockId, target.Ticker)
-            ?? throw new InvalidOperationException(
-                "The locked price series has no native listing identity."
-            );
+        var listingId = target.EquityListingId;
         if (
             freshRows.Any(price =>
                 price.EquityListingId != listingId || price.SourceTicker != target.Ticker
@@ -1602,9 +1549,7 @@ public class YahooPriceImportService
         {
             var completedListing = lockedSeries
                 .Stock.Securities.SelectMany(security => security.Listings)
-                .Single(listing =>
-                    listing.MarketCountryCode == "US" && listing.Ticker == target.Ticker
-                );
+                .Single(listing => listing.Id == target.EquityListingId);
             completedListing.PriceHistoryBackfilled = true;
             await stockRepo.SaveChanges();
         }
@@ -1627,7 +1572,7 @@ public class YahooPriceImportService
         if (
             !await YahooQuotationIdentity.Capture(
                 repository,
-                target.CommonStockId,
+                target.EquityIssuerId,
                 target.Ticker,
                 identity,
                 cancellationToken,
@@ -1637,17 +1582,6 @@ public class YahooPriceImportService
             _logger.LogWarning(
                 "Quotation identity conflicts with the current U.S. listing for {Ticker}",
                 target.Ticker
-            );
-    }
-
-    private async Task<Guid> RequireListingId(Guid issuerId, string ticker)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        return await scope
-                .ServiceProvider.GetRequiredService<EquityIssuerRepository>()
-                .GetEquityListingId(issuerId, ticker)
-            ?? throw new InvalidOperationException(
-                "The price series has no native listing identity."
             );
     }
 
@@ -1737,12 +1671,11 @@ public class YahooPriceImportService
             var repository =
                 identityScope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
             var listingId = await repository.GetEquityListingId(
-                target.CommonStockId,
+                target.EquityIssuerId,
                 target.Ticker
             );
-            if (!listingId.HasValue)
+            if (listingId != target.EquityListingId)
                 return NoFetchNeeded;
-            target = target with { EquityListingId = listingId.Value };
         }
         var chartEnd = target.HistoryEndDate is { } delisted && delisted < today ? delisted : today;
         var settledAsOf = target.IsHistorical ? chartEnd.AddDays(1) : today;
@@ -1950,15 +1883,7 @@ public class YahooPriceImportService
         if (prices.Count == 0)
             return 0;
 
-        var freshRows = MapFreshRows(
-            target.EquityListingId
-                ?? throw new InvalidOperationException(
-                    "The price response has no pre-fetch listing identity."
-                ),
-            prices,
-            target.Ticker,
-            today
-        );
+        var freshRows = MapFreshRows(target.EquityListingId, prices, target.Ticker, today);
         if (freshRows.Count == 0)
             return 0;
 
@@ -2008,8 +1933,7 @@ public class YahooPriceImportService
         using var scope = _scopeFactory.CreateScope();
         EquityDailyStockPriceRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
-        return await repo.GetUsSeries(target.CommonStockId, target.Ticker)
-            .AnyAsync(cancellationToken);
+        return await repo.GetByListing(target.EquityListingId).AnyAsync(cancellationToken);
     }
 
     // Corrects stored bars that were captured before the feed settled them.
@@ -2057,13 +1981,13 @@ public class YahooPriceImportService
         {
             await transaction.RollbackAsync(cancellationToken);
             _logger.LogWarning(
-                "Skipping settled-bar repair for {Ticker}: it no longer belongs to CommonStock {Id}",
+                "Skipping settled-bar repair for {Ticker}: it no longer belongs to EquityIssuer {Id}",
                 target.Ticker,
-                target.CommonStockId
+                target.EquityIssuerId
             );
             return 0;
         }
-        var stored = await repo.GetUsSeries(target.CommonStockId, target.Ticker)
+        var stored = await repo.GetByListing(target.EquityListingId)
             .Where(p => p.Date >= windowStart && p.Date < today)
             .ToListAsync(cancellationToken);
 
@@ -2174,7 +2098,8 @@ public class YahooPriceImportService
                 .Select(p => new InvalidOhlcTarget(
                     p.Id,
                     p.Listing.Security.EquityIssuerId,
-                    p.SourceTicker,
+                    p.EquityListingId,
+                    p.Listing.Ticker,
                     p.Date
                 ))
                 .ToListAsync(cancellationToken);
@@ -2184,9 +2109,16 @@ public class YahooPriceImportService
             return true;
 
         var replacements = new Dictionary<Guid, EquityDailyStockPrice>();
-        var deferredSeries = new HashSet<PriceSeriesKey>();
+        var deferredSeries = new HashSet<Guid>();
 
-        foreach (var group in targets.GroupBy(t => new { t.CommonStockId, t.Ticker }))
+        foreach (
+            var group in targets.GroupBy(t => new
+            {
+                t.EquityIssuerId,
+                t.EquityListingId,
+                t.Ticker,
+            })
+        )
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -2199,7 +2131,7 @@ public class YahooPriceImportService
                 var endDate = group.Max(t => t.Date);
                 var chartData = await _yahooClient.GetChart(group.Key.Ticker, startDate, endDate);
                 var fetchedByDate = MapFreshRows(
-                        await RequireListingId(group.Key.CommonStockId, group.Key.Ticker),
+                        group.Key.EquityListingId,
                         chartData.Prices,
                         group.Key.Ticker,
                         endDate.AddDays(1)
@@ -2220,7 +2152,7 @@ public class YahooPriceImportService
             }
             catch (HttpRequestException ex)
             {
-                deferredSeries.Add(new PriceSeriesKey(group.Key.CommonStockId, group.Key.Ticker));
+                deferredSeries.Add(group.Key.EquityListingId);
                 _logger.LogWarning(
                     ex,
                     "Failed to fetch OHLC repair data for {Ticker}; deferring its invalid rows",
@@ -2242,25 +2174,23 @@ public class YahooPriceImportService
                 cancellationToken
             );
             var targetIds = targets.Select(t => t.PriceId).ToList();
-            var seriesByPriceId = targets.ToDictionary(
-                target => target.PriceId,
-                target => new PriceSeriesKey(target.CommonStockId, target.Ticker)
-            );
-            var validSeries = new HashSet<PriceSeriesKey>();
+            var targetsByPriceId = targets.ToDictionary(target => target.PriceId);
+            var validSeries = new HashSet<Guid>();
             foreach (
-                var series in seriesByPriceId
-                    .Values.Distinct()
-                    .OrderBy(series => series.CommonStockId)
-                    .ThenBy(series => series.ListedTicker, StringComparer.Ordinal)
+                var series in targets
+                    .DistinctBy(target => target.EquityListingId)
+                    .OrderBy(target => target.EquityIssuerId)
+                    .ThenBy(target => target.EquityListingId)
             )
             {
                 var target = new PriceSeriesTarget(
-                    series.ListedTicker,
-                    series.CommonStockId,
+                    series.Ticker,
+                    series.EquityIssuerId,
+                    series.EquityListingId,
                     IsPrimary: false
                 );
                 if (await LockPriceSeries(stockRepo, target, cancellationToken) != null)
-                    validSeries.Add(series);
+                    validSeries.Add(series.EquityListingId);
             }
             var storedRows = await repo.GetUsSeries()
                 .Where(p => targetIds.Contains(p.Id))
@@ -2268,8 +2198,13 @@ public class YahooPriceImportService
 
             foreach (EquityDailyStockPrice row in storedRows)
             {
-                var series = seriesByPriceId[row.Id];
-                if (deferredSeries.Contains(series) || !validSeries.Contains(series))
+                var selected = targetsByPriceId[row.Id];
+                if (
+                    row.EquityListingId != selected.EquityListingId
+                    || row.Date != selected.Date
+                    || deferredSeries.Contains(selected.EquityListingId)
+                    || !validSeries.Contains(selected.EquityListingId)
+                )
                     continue;
 
                 if (
@@ -2310,7 +2245,8 @@ public class YahooPriceImportService
 
     private sealed record InvalidOhlcTarget(
         Guid PriceId,
-        Guid CommonStockId,
+        Guid EquityIssuerId,
+        Guid EquityListingId,
         string Ticker,
         DateOnly Date
     );
@@ -2401,21 +2337,19 @@ public class YahooPriceImportService
         using var scope = _scopeFactory.CreateScope();
         var captureManager = scope.ServiceProvider.GetRequiredService<StockSplitCaptureManager>();
         var nativeListingId = target.EquityListingId;
-        if (nativeListingId == null)
-            return;
         var count =
             target.IsHistorical && target.HistoryEndDate.HasValue
                 ? await captureManager.CaptureForHistoricalListing(
-                    target.CommonStockId,
-                    nativeListingId.Value,
+                    target.EquityIssuerId,
+                    nativeListingId,
                     target.Ticker,
                     target.HistoryEndDate.Value,
                     captured,
                     cancellationToken
                 )
                 : await captureManager.CaptureForListing(
-                    target.CommonStockId,
-                    nativeListingId.Value,
+                    target.EquityIssuerId,
+                    nativeListingId,
                     target.Ticker,
                     captured,
                     cancellationToken
@@ -2425,7 +2359,7 @@ public class YahooPriceImportService
                 "Captured {Count} stock split(s) for {Ticker} on {StockId}",
                 count,
                 target.Ticker,
-                target.CommonStockId
+                target.EquityIssuerId
             );
     }
 
@@ -2462,21 +2396,19 @@ public class YahooPriceImportService
         using var scope = _scopeFactory.CreateScope();
         var captureManager = scope.ServiceProvider.GetRequiredService<CashDividendCaptureManager>();
         var listingId = target.EquityListingId;
-        if (!listingId.HasValue)
-            return [];
         var count =
             target.IsHistorical && target.HistoryEndDate.HasValue
                 ? await captureManager.CaptureForHistoricalListing(
-                    target.CommonStockId,
-                    listingId.Value,
+                    target.EquityIssuerId,
+                    listingId,
                     target.Ticker,
                     target.HistoryEndDate.Value,
                     captured,
                     cancellationToken
                 )
                 : await captureManager.CaptureForListing(
-                    target.CommonStockId,
-                    listingId.Value,
+                    target.EquityIssuerId,
+                    listingId,
                     target.Ticker,
                     captured,
                     cancellationToken
@@ -2486,7 +2418,7 @@ public class YahooPriceImportService
                 "Captured {Count} cash dividend(s) for {Ticker} on {StockId}",
                 count,
                 target.Ticker,
-                target.CommonStockId
+                target.EquityIssuerId
             );
 
         return captured;
@@ -2515,7 +2447,7 @@ public class YahooPriceImportService
         var identity = await repo.GetUsListingReference(first.EquityListingId)
             .Select(listing => new
             {
-                CommonStockId = listing.Security.EquityIssuerId,
+                EquityIssuerId = listing.Security.EquityIssuerId,
                 ListedTicker = listing.Ticker,
             })
             .SingleAsync();
@@ -2529,7 +2461,7 @@ public class YahooPriceImportService
         // validation and insert atomic with a concurrent CompanySync designation change.
         var target = new PriceSeriesTarget(
             first.SourceTicker,
-            identity.CommonStockId,
+            identity.EquityIssuerId,
             IsPrimary: false,
             EquityListingId: first.EquityListingId
         );
@@ -2537,10 +2469,10 @@ public class YahooPriceImportService
         {
             await transaction.RollbackAsync();
             _logger.LogWarning(
-                "Skipping {Count} prices for {Ticker}: it no longer belongs to CommonStock {Id}",
+                "Skipping {Count} prices for {Ticker}: it no longer belongs to EquityIssuer {Id}",
                 batch.Count,
                 first.SourceTicker,
-                identity.CommonStockId
+                identity.EquityIssuerId
             );
             return;
         }
@@ -2592,9 +2524,9 @@ public class YahooPriceImportService
         {
             await transaction.RollbackAsync(cancellationToken);
             _logger.LogWarning(
-                "Skipping key statistics for {Ticker}: it is no longer the primary listing on CommonStock {Id}",
+                "Skipping key statistics for {Ticker}: it is no longer the primary listing on EquityIssuer {Id}",
                 ticker,
-                target.CommonStockId
+                target.EquityIssuerId
             );
             return;
         }
@@ -2731,7 +2663,7 @@ public class YahooPriceImportService
             await transaction.CommitAsync(cancellationToken);
             return;
         }
-        if (!await SaveStockChanges(stockRepo, target.CommonStockId, ticker, cancellationToken))
+        if (!await SaveStockChanges(stockRepo, target.EquityIssuerId, ticker, cancellationToken))
             return;
         await transaction.CommitAsync(cancellationToken);
 
@@ -2822,9 +2754,9 @@ public class YahooPriceImportService
         {
             await transaction.RollbackAsync(cancellationToken);
             _logger.LogWarning(
-                "Skipping company profile for {Ticker}: it is no longer the primary listing on CommonStock {Id}",
+                "Skipping company profile for {Ticker}: it is no longer the primary listing on EquityIssuer {Id}",
                 ticker,
-                target.CommonStockId
+                target.EquityIssuerId
             );
             return;
         }
@@ -2848,7 +2780,7 @@ public class YahooPriceImportService
         }
 
         stock.IndustryId = industry.Id;
-        if (!await SaveStockChanges(stockRepo, target.CommonStockId, ticker, cancellationToken))
+        if (!await SaveStockChanges(stockRepo, target.EquityIssuerId, ticker, cancellationToken))
             return;
         await transaction.CommitAsync(cancellationToken);
 
@@ -2882,7 +2814,7 @@ public class YahooPriceImportService
                 throw;
 
             _logger.LogWarning(
-                "Skipping enrichment save for {Ticker}: CommonStock {Id} was removed during the write",
+                "Skipping enrichment save for {Ticker}: EquityIssuer {Id} was removed during the write",
                 ticker,
                 commonStockId
             );
@@ -2999,14 +2931,14 @@ public class YahooPriceImportService
         {
             EquityDailyStockPriceRepository repo =
                 scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
-            storedDates = await repo.GetUsSeries(target.CommonStockId, target.Ticker)
+            storedDates = await repo.GetByListing(target.EquityListingId)
                 .Where(p => p.Date >= windowStart && p.Date < today)
                 .Select(p => p.Date)
                 .ToListAsync(cancellationToken);
             // The stock's first bar EVER, not first-in-window: the discriminator between "listed
             // mid-window" and "the feed failed to serve the window's leading edge" (see
-            // FindEarliestGap). An aggregate on the (CommonStockId, Date) index.
-            earliestStored = await repo.GetUsSeries(target.CommonStockId, target.Ticker)
+            // FindEarliestGap). An aggregate on the (EquityListingId, Date) index.
+            earliestStored = await repo.GetByListing(target.EquityListingId)
                 .MinAsync(p => (DateOnly?)p.Date, cancellationToken);
         }
 
@@ -3062,7 +2994,7 @@ public class YahooPriceImportService
             _scopeFactory,
             _workerOptions,
             repo =>
-                repo.GetUsSeries(target.CommonStockId, target.Ticker)
+                repo.GetByListing(target.EquityListingId)
                     .Select(p => p.Date)
                     .OrderByDescending(d => d),
             cancellationToken
@@ -3149,7 +3081,7 @@ public class YahooPriceImportService
         EquityDailyStockPriceRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
 
-        var dates = await repo.GetUsSeries(target.CommonStockId, target.Ticker)
+        var dates = await repo.GetByListing(target.EquityListingId)
             .Where(p => p.Date >= startDate && p.Date <= endDate)
             .Select(p => p.Date)
             .ToListAsync(cancellationToken);

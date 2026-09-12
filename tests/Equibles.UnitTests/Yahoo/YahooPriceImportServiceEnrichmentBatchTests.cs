@@ -67,5 +67,12 @@ public class YahooPriceImportServiceEnrichmentBatchTests
         string ticker,
         DateTime? attemptedAt,
         bool isPrimary = true
-    ) => new(ticker, Guid.NewGuid(), IsPrimary: isPrimary, YahooEnrichmentAttemptedAt: attemptedAt);
+    ) =>
+        new(
+            ticker,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            IsPrimary: isPrimary,
+            YahooEnrichmentAttemptedAt: attemptedAt
+        );
 }
