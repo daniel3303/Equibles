@@ -38,4 +38,7 @@
       Link="Helpers/ImmutableEvidenceTestReset.cs"
     />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/LegacyEquity/*.cs" Link="Helpers/LegacyEquity/%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>

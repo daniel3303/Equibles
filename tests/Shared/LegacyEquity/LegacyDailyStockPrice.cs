@@ -3,11 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Yahoo.Data.Models;
 
-/// <summary>
-/// Schema-only compatibility mapping for the pre-listing price table. Current price paths must
-/// use <see cref="EquityDailyStockPrice"/>; retaining this model prevents future migrations from
-/// treating the untouched legacy table as orphaned storage.
-/// </summary>
+// Original unattributed price shape, used only by historical migration fixtures.
 public class LegacyDailyStockPrice
 {
     public Guid Id { get; set; }

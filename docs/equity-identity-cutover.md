@@ -312,3 +312,10 @@
 - The native issuer's nullable original-directory link may clear because the issuer and archived source identity survive; other ownership links must be retargeted first.
 - After references move to restrictive native issuer ownership, original directory retirement preserves every attached observation and source version.
 - Verify `scripts/verify-original-directory-evidence.sql` and the temporary guard before rollout; remove the guard with the original directory at final cutover while retaining immutable source evidence.
+
+## Native application model
+
+- Production assemblies and EF models no longer contain the four retired stock, legacy-listing, or original-price entity types, or the issuer's old directory navigation and key.
+- Historical migration fixtures retain the original shapes under `tests/Shared/LegacyEquity`; current native fixtures use the actual issuer/security/listing graph.
+- Fixture-only legacy mappings cannot satisfy the production migration snapshot: fixture startup migrates using the native model, and a separate guard checks for pending native model changes.
+- `DetachRetiredEquityStorageModel` changes the model snapshot without dropping physical storage during rolling application replacement; final verified storage retirement remains required.

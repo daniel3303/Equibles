@@ -14,7 +14,7 @@ namespace Equibles.Sec.FinancialFacts.Data.Models;
 /// mentioned the symbol. Rows whose symbol left the newest filing (a delisted
 /// note) are kept — they remain the latest authoritative statement about that
 /// symbol. Source of the per-ticker classification materialized on
-/// <see cref="CommonStock.ListedSecurityType"/>.
+/// <see cref="EquitySecurity.RegistrationType"/>.
 /// </summary>
 [Index(nameof(EquityIssuerId), nameof(TradingSymbol), IsUnique = true)]
 public class IssuerSecurityRegistration

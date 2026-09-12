@@ -93,8 +93,8 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         };
         DbContext.AddRange(exact, unknown);
         await DbContext.SaveChangesAsync();
-        var listing = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(stock.Id, "CLASS-B")
+        var listing = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, stock.Id, "CLASS-B")
             .SingleAsync();
         var native = await new EquityDailyStockPriceRepository(DbContext)
             .GetByListing(listing.Id)
@@ -259,8 +259,8 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         var stock = new CommonStock { Ticker = "OLD" };
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
-        var listing = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(stock.Id, "OLD")
+        var listing = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, stock.Id, "OLD")
             .SingleAsync();
         listing.Ticker = "NEW";
         await DbContext.SaveChangesAsync();
@@ -298,8 +298,8 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         var stock = new CommonStock { Ticker = "RETAIN" };
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
-        var listing = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(stock.Id, "RETAIN")
+        var listing = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, stock.Id, "RETAIN")
             .SingleAsync();
         var native = new EquityDailyStockPrice
         {
@@ -367,8 +367,8 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         var stock = new CommonStock { Ticker = "KNOWN" };
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
-        var listing = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(stock.Id, "KNOWN")
+        var listing = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, stock.Id, "KNOWN")
             .SingleAsync();
         DbContext.Add(
             new EquityDailyStockPrice

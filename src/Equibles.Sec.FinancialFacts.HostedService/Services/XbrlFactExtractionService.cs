@@ -124,7 +124,7 @@ public class XbrlFactExtractionService
     /// Parses the document's captured envelope and upserts its dimensional
     /// facts. Returns the number of facts persisted. Expects
     /// <c>document.XbrlContent</c> (and its content bytes) to be loadable and
-    /// <c>document.CommonStock</c> to be set.
+    /// <c>document.Issuer</c> to be set.
     /// </summary>
     public async Task<int> Extract(Document document, CancellationToken cancellationToken)
     {
@@ -598,7 +598,7 @@ public class XbrlFactExtractionService
     /// Upserts the filing's cover-page 12(b) rows into <see cref="IssuerSecurityRegistration"/>
     /// (per-symbol, newer filing wins — the historical drain visits old filings
     /// after new ones, so an older statement never overwrites a newer row) and
-    /// re-materializes the stock's <see cref="CommonStock.ListedSecurityType"/>
+    /// re-materializes the stock's <see cref="EquitySecurity.RegistrationType"/>
     /// from the row matching its ticker. A filing with no usable 12(b) rows
     /// leaves both untouched: absence of the table is not evidence the
     /// previously-stated rows stopped being true (many report types omit the

@@ -4,8 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Data.Models;
 
-// Independent of SEC registration. The optional bridge leaves legacy readers untouched.
-[Index(nameof(CommonStockId), IsUnique = true)]
+// Legal issuer identity is independent of its securities and exchange listings.
 [Index(nameof(LegalEntityIdentifier), IsUnique = true)]
 public class EquityIssuer
 {
@@ -46,9 +45,6 @@ public class EquityIssuer
     public virtual Industry Industry { get; set; }
     public virtual List<EquitySecurity> Securities { get; set; } = [];
     public virtual EquityIssuerPresentation Presentation { get; set; }
-
-    public Guid? CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
 
     [MaxLength(2000)]
     public string IdentitySourceUrl { get; set; }

@@ -22,8 +22,8 @@ public class NativeEquityProfileTests : ParadeDbMcpTestBase
         };
         DbContext.Add(source);
         await DbContext.SaveChangesAsync();
-        var listing = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(source.Id, source.Ticker)
+        var listing = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, source.Id, source.Ticker)
             .SingleAsync();
         listing.Active.Should().BeFalse();
         listing.DelistedOn.Should().Be(source.DelistedOn);
@@ -41,8 +41,8 @@ public class NativeEquityProfileTests : ParadeDbMcpTestBase
         var source = new CommonStock { Ticker = "VERIFIED" };
         DbContext.Add(source);
         await DbContext.SaveChangesAsync();
-        var listing = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(source.Id, source.Ticker)
+        var listing = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, source.Id, source.Ticker)
             .SingleAsync();
         listing.MarketIdentifierCode = "XNYS";
         listing.TradingCurrency = "USD";
@@ -121,19 +121,23 @@ public class NativeEquityProfileTests : ParadeDbMcpTestBase
         primary.Security.RegistrationTitle.Should().Be(source.ListedSecurityTitle);
         primary.Security.RegistrationType.Should().Be(source.ListedSecurityType);
         primary.Security.SecurityType.Should().Be(EquitySecurityKind.Unknown);
-        var secondary = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(source.Id, "SECONDARY")
+        var secondary = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, source.Id, "SECONDARY")
             .SingleAsync();
         secondary.PriceHistoryBackfilled.Should().BeTrue();
-        var historical = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(source.Id, "HISTORICAL-ONLY")
+        var historical = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(
+                DbContext,
+                source.Id,
+                "HISTORICAL-ONLY"
+            )
             .SingleAsync();
         historical.PriceHistoryBackfilled.Should().BeTrue();
         historical.Active.Should().BeFalse();
         secondary.Security.SharesOutstanding.Should().Be(0);
         secondary.Security.Cusip.Should().BeNull();
-        var fund = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(source.Id, "FUND")
+        var fund = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, source.Id, "FUND")
             .SingleAsync();
         fund.IsReferenceListed.Should().BeTrue();
         primary.IsReferenceListed.Should().BeFalse();

@@ -178,7 +178,11 @@ public class NativeIssuerHoldingsTests(ParadeDbFixture fixture) : ParadeDbMcpTes
                 .Set<EquityIssuer>()
                 .SingleAsync(row => row.Id == orphanId);
             retained.Name.Should().BeNull();
-            retained.CommonStockId.Should().BeNull();
+            DbContext
+                .Entry(retained)
+                .Property<Guid?>("CommonStockId")
+                .CurrentValue.Should()
+                .BeNull();
             await DbContext.Database.ExecuteSqlInterpolatedAsync(
                 $"""
                 UPDATE "EquityIssuer" SET "CommonStockId" = NULL WHERE "Id" = {issuer.Id};

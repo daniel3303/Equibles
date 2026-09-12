@@ -102,7 +102,11 @@ public class EquityIdentityFoundationTests : ParadeDbMcpTestBase
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
         await DbContext.Set<CommonStock>().Where(row => row.Id == stock.Id).ExecuteDeleteAsync();
-        (await DbContext.Set<EquityIssuer>().SingleAsync()).CommonStockId.Should().BeNull();
+        DbContext
+            .Entry(await DbContext.Set<EquityIssuer>().SingleAsync())
+            .Property<Guid?>("CommonStockId")
+            .CurrentValue.Should()
+            .BeNull();
         (await DbContext.Set<EquityListing>().CountAsync()).Should().Be(1);
     }
 

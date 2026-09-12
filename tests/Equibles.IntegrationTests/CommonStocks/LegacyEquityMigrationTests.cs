@@ -146,15 +146,19 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
                 .Should()
                 .BeFalse();
             (
-                await new EquityListingRepository(context)
-                    .GetByLegacyKey(stock.Id, "ACTIVITY-OLD")
+                await Equibles
+                    .TestSupport.LegacyEquityTestMappings.GetListing(
+                        context,
+                        stock.Id,
+                        "ACTIVITY-OLD"
+                    )
                     .CountAsync()
             )
                 .Should()
                 .Be(1);
             (
-                await new EquityListingRepository(context)
-                    .GetByLegacyKey(stock.Id, "SHORT-OLD")
+                await Equibles
+                    .TestSupport.LegacyEquityTestMappings.GetListing(context, stock.Id, "SHORT-OLD")
                     .CountAsync()
             )
                 .Should()
@@ -177,8 +181,8 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
                     && row.TradingCurrency == null
                     && row.QuoteUnitMultiplier == null
                 );
-            var old = await new EquityListingRepository(context)
-                .GetByLegacyKey(stock.Id, "OLD")
+            var old = await Equibles
+                .TestSupport.LegacyEquityTestMappings.GetListing(context, stock.Id, "OLD")
                 .Select(listing => new { listing.Id })
                 .SingleAsync();
             (await new EquityDailyStockPriceRepository(context).GetByListing(old.Id).SingleAsync())
@@ -223,14 +227,14 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
         DbContext.Add(stock);
         DbContext.Add(Price(stock, "OLD", 1));
         await DbContext.SaveChangesAsync();
-        var old = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(stock.Id, "OLD")
+        var old = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, stock.Id, "OLD")
             .SingleAsync();
         stock.Ticker = "NEW";
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
-        var retained = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(stock.Id, "OLD")
+        var retained = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, stock.Id, "OLD")
             .SingleAsync();
         retained.Id.Should().Be(old.Id);
         retained.Active.Should().BeFalse();
@@ -264,8 +268,8 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
             await context.SaveChangesAsync();
         }
         await Task.WhenAll(Write(1), Write(2));
-        var listing = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(stock.Id, "HISTORICAL")
+        var listing = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, stock.Id, "HISTORICAL")
             .SingleAsync();
         (await new EquityDailyStockPriceRepository(DbContext).GetByListing(listing.Id).CountAsync())
             .Should()
@@ -279,8 +283,8 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
         var stock = new CommonStock { Ticker = "SAME" };
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
-        var listing = await new EquityListingRepository(DbContext)
-            .GetByLegacyKey(stock.Id, "SAME")
+        var listing = await Equibles
+            .TestSupport.LegacyEquityTestMappings.GetListing(DbContext, stock.Id, "SAME")
             .SingleAsync();
         listing.IdentityState = EquityIdentityState.Verified;
         Func<Task> save = () => DbContext.SaveChangesAsync();

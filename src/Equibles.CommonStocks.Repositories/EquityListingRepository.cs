@@ -117,12 +117,6 @@ public class EquityListingRepository : BaseRepository<EquityListing>
         return true;
     }
 
-    public IQueryable<EquityListing> GetByLegacyKey(Guid stockId, string ticker) =>
-        DbContext
-            .Set<LegacyEquityListing>()
-            .Where(row => row.CommonStockId == stockId && row.ListedTicker == ticker)
-            .Select(row => row.Listing);
-
     public IQueryable<EquityListing> GetByRecordedUsSymbol(Guid issuerId, string ticker) =>
         GetAll()
             .Where(listing =>

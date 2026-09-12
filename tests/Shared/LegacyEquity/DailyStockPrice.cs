@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Yahoo.Data.Models;
 
-// Schema-only mapping for retiring binaries; current price paths use EquityDailyStockPrice.
+// Original exact-symbol price shape, used only by historical migration fixtures.
 public class DailyStockPrice
 {
     public Guid Id { get; set; } = Guid.NewGuid();

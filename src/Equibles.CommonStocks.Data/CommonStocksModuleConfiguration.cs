@@ -8,13 +8,6 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {
-        var commonStock = builder.Entity<CommonStock>();
-        commonStock.Property(stock => stock.Active).HasDefaultValue(true);
-        commonStock
-            .Property(stock => stock.ReferenceTickers)
-            .IsRequired()
-            .HasDefaultValueSql("'{}'::text[]");
-        commonStock.HasIndex(stock => stock.Ticker).IsUnique().HasFilter("\"Active\"");
         builder
             .Entity<EquityIssuerCusipAlias>()
             .HasOne(row => row.Issuer)
@@ -77,12 +70,6 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<EquitySecurity>().Property(security => security.Id).ValueGeneratedNever();
         builder.Entity<EquityListing>().Property(listing => listing.Id).ValueGeneratedNever();
         builder
-            .Entity<EquityIssuer>()
-            .HasOne(row => row.CommonStock)
-            .WithOne()
-            .HasForeignKey<EquityIssuer>(row => row.CommonStockId)
-            .OnDelete(DeleteBehavior.SetNull);
-        builder
             .Entity<EquitySecurity>()
             .HasOne(row => row.Issuer)
             .WithMany(row => row.Securities)
@@ -102,12 +89,6 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
                 .HasForeignKey(row => row.EquityListingId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
-        builder
-            .Entity<LegacyEquityListing>()
-            .HasOne(row => row.Listing)
-            .WithOne()
-            .HasForeignKey<LegacyEquityListing>(row => row.EquityListingId)
-            .OnDelete(DeleteBehavior.Restrict);
         builder
             .Entity<EquityListingTickerAlias>()
             .HasOne(alias => alias.Listing)
