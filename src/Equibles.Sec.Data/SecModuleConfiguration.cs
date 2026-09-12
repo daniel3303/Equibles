@@ -74,6 +74,10 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<FormDRelatedPerson>();
         builder.Entity<FundSeries>(b =>
         {
+            b.HasOne(row => row.Issuer)
+                .WithMany()
+                .HasForeignKey(row => row.EquityIssuerId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(e => e.ClassTickers)
                 .HasDatabaseName("IX_FundSeries_ClassTickers_Gin")
                 .HasMethod("gin");

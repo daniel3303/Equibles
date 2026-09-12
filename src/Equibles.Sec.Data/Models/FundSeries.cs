@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Sec.Data.Models;
@@ -18,7 +19,7 @@ namespace Equibles.Sec.Data.Models;
 /// by the <see cref="ComputedAt"/> watermark.
 ///
 /// Series identity never compares name text. Exactly one of the two populations applies per row:
-/// an issuer-feed filing is scoped by <see cref="CommonStockId"/> plus its non-empty
+/// an issuer-feed filing is scoped by <see cref="EquityIssuerId"/> plus its non-empty
 /// <see cref="SeriesId"/> (or by stock alone for an id-less standalone fund); a fund-family trust
 /// series discovered by the daily-index sweep is scoped by <see cref="RegistrantCik"/> plus
 /// <see cref="SeriesId"/>. If a series has filings in both populations, the newest filing decides
@@ -30,7 +31,7 @@ namespace Equibles.Sec.Data.Models;
 [Index(nameof(IdentityKey), IsUnique = true)]
 [Index(nameof(Slug), IsUnique = true)]
 [Index(nameof(LatestNportFilingId), IsUnique = true)]
-[Index(nameof(CommonStockId))]
+[Index(nameof(EquityIssuerId))]
 [Index(nameof(RegistrantCik), nameof(SeriesId))]
 public class FundSeries
 {
@@ -40,8 +41,8 @@ public class FundSeries
 
     /// <summary>
     /// Stable canonical identity and upsert conflict target. Derived from whichever identity
-    /// population applies, never from name text: <c>cs:{CommonStockId}</c> for an id-less tracked
-    /// fund, <c>cs:{CommonStockId}:{SeriesId}</c> for a tracked multi-series registrant, and
+    /// population applies, never from name text: <c>cs:{EquityIssuerId}</c> for an id-less tracked
+    /// fund, <c>cs:{EquityIssuerId}:{SeriesId}</c> for a tracked multi-series registrant, and
     /// <c>rc:{RegistrantCik}:{SeriesId}</c> for a sweep-discovered trust series (an id-less
     /// registrant collapses to <c>rc:{RegistrantCik}:</c>).
     /// </summary>
@@ -59,7 +60,9 @@ public class FundSeries
     public string Slug { get; set; }
 
     /// <summary>The stock whose issuer feed supplied the filing; series id completes identity for multi-series registrants.</summary>
-    public Guid? CommonStockId { get; set; }
+    [Column("CommonStockId")]
+    public Guid? EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     /// <summary>The sweep-discovered trust's registrant CIK; null for tracked funds.</summary>
     [MaxLength(16)]

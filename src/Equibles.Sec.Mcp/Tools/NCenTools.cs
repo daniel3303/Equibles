@@ -65,31 +65,34 @@ public class NCenTools
                     .ResolveIdentifier(fund)
                     .OrderByDescending(f => f.NetAssets)
                     .FirstOrDefaultAsync();
-                CommonStock stock = null;
+                Guid issuerId;
+                string issuerName;
+                string displayTicker;
                 if (series != null)
                 {
-                    if (series.CommonStockId == null)
+                    if (series.EquityIssuerId == null)
                     {
                         return $"'{safeFund}' resolves to {MarkdownText(series.SeriesName ?? series.RegistrantName)}"
                             + (series.Ticker == null ? "" : $" ({MarkdownText(series.Ticker)})")
                             + $", a series of {MarkdownText(series.RegistrantName) ?? "its registered-fund trust"}. Form N-CEN is filed at registrant level, but this dataset currently ingests N-CEN through tracked issuer feeds and has no registrant-level report on record for this untracked multi-series trust. This is a coverage result, not an identifier-resolution failure.";
                     }
 
-                    stock = await _commonStockRepository
-                        .GetByIds([series.CommonStockId.Value])
-                        .FirstOrDefaultAsync();
-                    if (stock == null)
-                        return $"'{safeFund}' resolves to {MarkdownText(series.SeriesName ?? series.RegistrantName)}, but its linked tracked issuer is no longer available; no Form N-CEN report can be selected. This is a coverage result, not evidence that the fund has no N-CEN filing.";
+                    issuerId = series.EquityIssuerId.Value;
+                    issuerName = series.RegistrantName ?? series.SeriesName ?? fund;
+                    displayTicker = series.Ticker ?? fund;
                 }
                 else
                 {
-                    (stock, _) = await _commonStockRepository.ResolveByTicker(fund);
+                    var (stock, _) = await _commonStockRepository.ResolveByTicker(fund);
                     if (stock == null)
                         return $"No registered fund found for '{safeFund}' in the tracked Form NPORT-P/N-CEN datasets. Use SearchFunds to find an exact profile id. Registered management investment companies and ETFs are in scope; vehicles outside those filing regimes may be absent, and fixed-income-only series can be missing from the tracked NPORT-P directory. This is a coverage result, not evidence that the fund does not exist.";
+                    issuerId = stock.Id;
+                    issuerName = stock.Name;
+                    displayTicker = stock.Ticker;
                 }
 
                 var filings = await _nCenRepository
-                    .GetByIssuerId((stock).Id)
+                    .GetByIssuerId(issuerId)
                     .Include(f => f.ServiceProviders)
                     .OrderByDescending(f => f.FilingDate)
                     .ThenByDescending(f => f.IsAmendment)
@@ -99,10 +102,10 @@ public class NCenTools
                     .ToListAsync();
 
                 if (filings.Count == 0)
-                    return $"No Form N-CEN annual reports found for {MarkdownText(series?.SeriesName ?? stock.Name)} ({MarkdownText(stock.Ticker)}). Form N-CEN is registrant-level and this dataset currently ingests it through tracked issuer feeds. This is a coverage result, not evidence that the fund has no N-CEN filing.";
+                    return $"No Form N-CEN annual reports found for {MarkdownText(series?.SeriesName ?? issuerName)} ({MarkdownText(displayTicker)}). Form N-CEN is registrant-level and this dataset currently ingests it through tracked issuer feeds. This is a coverage result, not evidence that the fund has no N-CEN filing.";
 
                 var result = MarkdownTable.Start(
-                    $"Form N-CEN annual reports for {MarkdownText(stock.Name)} ({safeFund}) — showing {filings.Count} most recent:",
+                    $"Form N-CEN annual reports for {MarkdownText(issuerName)} ({safeFund}) — showing {filings.Count} most recent:",
                     "| Filed | Period End | Type | File Number | Amendment | First Filing | Last Filing |",
                     "|-------|------------|------|-------------|-----------|--------------|-------------|"
                 );

@@ -78,3 +78,11 @@
 - The real-schema graph test compares every stored column across documents, binary files, images, artifacts, chunks, embeddings, facts, statements, fund filings and their child rows before and after legacy owner removal.
 - That graph test does not authorize deleting legacy owners in production: other unmigrated relationships and price mirroring still require the final contract migration.
 - `scripts/verify-native-issuer-filings.sql` checks orphan attribution and validated restrictive native foreign keys after migration.
+
+## Fund-series ownership
+
+- FundSeries now references EquityIssuer through a restrictive foreign key; its previous owner identifier was an unconstrained scalar.
+- The migration adds only that foreign key; existing IDs, every stored field, identity-key bytes and public slugs remain unchanged.
+- Preserve the historical `cs:` identity-key prefix with the same issuer GUID; renaming an internal model must not create a second fund or replace a URL.
+- Native-only issuer materialization is covered through PostgreSQL upsert and two rebuilds; migration coverage compares every stored field and rejects owner deletion.
+- `scripts/verify-native-issuer-fund-series.sql` is the read-only completion query; unresolved owners must be zero and the restrictive FK validated before legacy storage retirement.

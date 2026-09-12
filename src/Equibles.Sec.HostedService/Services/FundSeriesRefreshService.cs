@@ -69,7 +69,7 @@ public class FundSeriesRefreshService
             .Select(f => new FundSeriesAggregate
             {
                 LatestNportFilingId = f.Id,
-                CommonStockId = f.EquityIssuerId,
+                EquityIssuerId = f.EquityIssuerId,
                 RegistrantCik = f.RegistrantCik,
                 SeriesId = f.SeriesId,
                 SeriesName = f.SeriesName,
@@ -87,13 +87,13 @@ public class FundSeriesRefreshService
             })
             .ToListAsync(cancellationToken);
 
-        var fundTypeByStock = await LoadFundTypesByStock(dbContext, cancellationToken);
+        var fundTypeByIssuer = await LoadFundTypesByIssuer(dbContext, cancellationToken);
         var tickerDirectory = await LoadSeriesTickers(scope.ServiceProvider, cancellationToken);
 
         var computedAt = DateTime.UtcNow;
         var rows = aggregates
-            .Where(a => a.CommonStockId != null || !string.IsNullOrEmpty(a.RegistrantCik))
-            .Select(a => BuildRow(a, fundTypeByStock, tickerDirectory.TickersBySeries, computedAt))
+            .Where(a => a.EquityIssuerId != null || !string.IsNullOrEmpty(a.RegistrantCik))
+            .Select(a => BuildRow(a, fundTypeByIssuer, tickerDirectory.TickersBySeries, computedAt))
             .ToList();
 
         if (!tickerDirectory.Available && rows.Count > 0)
@@ -187,7 +187,7 @@ public class FundSeriesRefreshService
                         new FundSeries
                         {
                             Slug = incoming.Slug,
-                            CommonStockId = incoming.CommonStockId,
+                            EquityIssuerId = incoming.EquityIssuerId,
                             RegistrantCik = incoming.RegistrantCik,
                             SeriesId = incoming.SeriesId,
                             SeriesName = incoming.SeriesName,
@@ -223,9 +223,9 @@ public class FundSeriesRefreshService
     }
 
     // Latest N-CEN registration type per tracked fund. N-CEN is filed only by tracked funds
-    // (keyed by CommonStockId), so trusts get no type. The table is small (annual filings), so it
+    // (keyed by EquityIssuerId), so trusts get no type. The table is small (annual filings), so it
     // is read whole and folded in memory.
-    private static async Task<Dictionary<Guid, string>> LoadFundTypesByStock(
+    private static async Task<Dictionary<Guid, string>> LoadFundTypesByIssuer(
         EquiblesFinancialDbContext dbContext,
         CancellationToken cancellationToken
     )
@@ -340,16 +340,16 @@ public class FundSeriesRefreshService
 
     private static FundSeries BuildRow(
         FundSeriesAggregate a,
-        Dictionary<Guid, string> fundTypeByStock,
+        Dictionary<Guid, string> fundTypeByIssuer,
         Dictionary<string, List<string>> tickersBySeries,
         DateTime computedAt
     )
     {
         var seriesId = a.SeriesId ?? string.Empty;
-        var isTracked = a.CommonStockId != null;
+        var isTracked = a.EquityIssuerId != null;
 
         var identityKey = isTracked
-            ? BuildTrackedIdentityKey(a.CommonStockId.Value, seriesId)
+            ? BuildTrackedIdentityKey(a.EquityIssuerId.Value, seriesId)
             : $"rc:{a.RegistrantCik}:{seriesId}";
 
         var displayName = !string.IsNullOrWhiteSpace(a.SeriesName)
@@ -358,13 +358,13 @@ public class FundSeriesRefreshService
 
         var discriminator =
             !string.IsNullOrEmpty(seriesId) ? seriesId
-            : isTracked ? (!string.IsNullOrEmpty(a.Ticker) ? a.Ticker : a.CommonStockId.ToString())
+            : isTracked ? (!string.IsNullOrEmpty(a.Ticker) ? a.Ticker : a.EquityIssuerId.ToString())
             : $"cik{a.RegistrantCik}";
 
         string fundType = null;
         if (isTracked)
         {
-            fundTypeByStock.TryGetValue(a.CommonStockId.Value, out fundType);
+            fundTypeByIssuer.TryGetValue(a.EquityIssuerId.Value, out fundType);
         }
 
         // A series-bearing filing can share its issuer-feed stock with hundreds of sibling series,
@@ -388,7 +388,7 @@ public class FundSeriesRefreshService
         {
             IdentityKey = identityKey,
             Slug = BuildSlug(displayName, discriminator),
-            CommonStockId = a.CommonStockId,
+            EquityIssuerId = a.EquityIssuerId,
             RegistrantCik = a.RegistrantCik,
             SeriesId = seriesId,
             SeriesName = a.SeriesName,
@@ -407,8 +407,8 @@ public class FundSeriesRefreshService
         };
     }
 
-    internal static string BuildTrackedIdentityKey(Guid commonStockId, string seriesId) =>
-        string.IsNullOrEmpty(seriesId) ? $"cs:{commonStockId}" : $"cs:{commonStockId}:{seriesId}";
+    internal static string BuildTrackedIdentityKey(Guid issuerId, string seriesId) =>
+        string.IsNullOrEmpty(seriesId) ? $"cs:{issuerId}" : $"cs:{issuerId}:{seriesId}";
 
     // "{name-slug}-{discriminator}". The discriminator (unique per series) is preserved whole; only
     // the name part is trimmed to fit, so the slug stays unique under truncation.
@@ -458,7 +458,7 @@ public class FundSeriesRefreshService
     private class FundSeriesAggregate
     {
         public Guid LatestNportFilingId { get; set; }
-        public Guid? CommonStockId { get; set; }
+        public Guid? EquityIssuerId { get; set; }
         public string RegistrantCik { get; set; }
         public string SeriesId { get; set; }
         public string SeriesName { get; set; }

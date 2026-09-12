@@ -128,7 +128,7 @@ public class FundDirectoryTools
 
                 var latest = await _nportRepository
                     .GetSeriesReportsByPeriod(
-                        series.CommonStockId,
+                        series.EquityIssuerId,
                         series.RegistrantCik,
                         series.SeriesId,
                         DateOnly.MinValue

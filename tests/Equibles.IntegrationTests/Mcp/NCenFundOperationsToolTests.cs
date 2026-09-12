@@ -47,6 +47,36 @@ public class NCenFundOperationsToolTests : IDisposable
     }
 
     [Fact]
+    public async Task GetFundNcenReports_NativeIssuerSeries_ReturnsStoredReportsWithoutLegacyStock()
+    {
+        var issuer = new EquityIssuer { Name = "Native registrant", Cik = "0000000094" };
+        _dbContext.Add(issuer);
+        _dbContext.Add(
+            new FundSeries
+            {
+                Issuer = issuer,
+                EquityIssuerId = issuer.Id,
+                IdentityKey = $"cs:{issuer.Id}:S000009400",
+                Slug = "native-fund-s000009400",
+                SeriesId = "S000009400",
+                SeriesName = "Native fund",
+                RegistrantName = issuer.Name,
+                LatestNportFilingId = Guid.NewGuid(),
+            }
+        );
+        _dbContext.Add(MakeFiling(issuer.Id, "native-report", new DateOnly(2026, 7, 31)));
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _tools.GetFundNcenReports("S000009400");
+
+        result.Should().Contain("Native registrant");
+        result.Should().Contain("2026-07-31");
+        result.Should().Contain("811-02409");
+        result.Should().NotContain("no longer available");
+        _dbContext.Set<CommonStock>().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task GetFundNcenReports_StockNotFound_ReturnsNotFoundMessage()
     {
         var result = await _tools.GetFundNcenReports("ZZZZ");
