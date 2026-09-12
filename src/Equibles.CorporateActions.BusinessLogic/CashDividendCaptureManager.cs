@@ -2,6 +2,8 @@ using System.Data;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
+using Equibles.CommonStocks.Repositories.Extensions;
+using Equibles.CommonStocks.Repositories.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
@@ -37,9 +39,17 @@ public class CashDividendCaptureManager
         Guid equityListingId,
         string sourceTicker,
         IReadOnlyCollection<CapturedDividend> dividends,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        EquityListingSourceBinding expectedSourceBinding = null
     ) =>
-        CaptureListing(equityIssuerId, equityListingId, sourceTicker, dividends, cancellationToken);
+        CaptureListing(
+            equityIssuerId,
+            equityListingId,
+            sourceTicker,
+            dividends,
+            cancellationToken,
+            expectedSourceBinding: expectedSourceBinding
+        );
 
     public Task<int> CaptureForHistoricalListing(
         Guid equityIssuerId,
@@ -64,7 +74,8 @@ public class CashDividendCaptureManager
         string listedTicker,
         IReadOnlyCollection<CapturedDividend> dividends,
         CancellationToken cancellationToken,
-        DateOnly? expectedDelistedOn = null
+        DateOnly? expectedDelistedOn = null,
+        EquityListingSourceBinding expectedSourceBinding = null
     )
     {
         if (dividends == null || dividends.Count == 0)
@@ -105,6 +116,23 @@ public class CashDividendCaptureManager
             listing == null
             || listing.TradingCurrency == null
             || (!listingId.HasValue && listing.Id != stock.Presentation?.EquityListingId)
+        )
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return 0;
+        }
+
+        if (
+            expectedSourceBinding != null
+            && (
+                expectedSourceBinding.EquityListingId != listing.Id
+                || expectedSourceBinding.EquityIssuerId != stock.Id
+                || !await _stockRepository
+                    .GetSecurities()
+                    .SelectMany(security => security.Listings)
+                    .ForVerifiedSource(expectedSourceBinding)
+                    .AnyAsync(cancellationToken)
+            )
         )
         {
             await transaction.RollbackAsync(cancellationToken);

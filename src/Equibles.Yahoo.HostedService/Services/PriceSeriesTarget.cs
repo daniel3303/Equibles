@@ -9,5 +9,12 @@ internal readonly record struct PriceSeriesTarget(
     DateTime? YahooEnrichmentAttemptedAt = null,
     bool IsHistorical = false,
     DateOnly? HistoryEndDate = null,
-    Guid? HistoricalEvidenceId = null
-);
+    Guid? HistoricalEvidenceId = null,
+    string MarketCountryCode = "US",
+    string MarketIdentifierCode = null,
+    string Isin = null
+)
+{
+    public bool IsUs => MarketCountryCode == "US";
+    public string ProviderSymbol => YahooListingSource.ProviderSymbol(this);
+}

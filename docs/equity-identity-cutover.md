@@ -207,7 +207,20 @@
 - A renamed symbol invalidates an in-flight response; a later request follows the same listing ID under its current symbol. Historical capture and stamping revalidate the exact retirement cutoff.
 - Current dividend history and derived dividend inputs read only the requested/presentation listing's attributed USD payments. Preserve the original issuer-only rows as evidence; complete source replay and coverage/value comparison before deploying these readers.
 - `KeyCorporateActionCursorByListing` adds the native cursor without removing old fields; retire their physical columns with the final contract only after the retiring worker is gone.
-- The remaining historical reconciliation target still carries its original retirement-evidence ID; the worker independently resolves and compares the native listing ID before fetching. Foreign price dispatch and final retirement-target cleanup remain required before the complete cutover.
+- Historical reconciliation targets carry native listing IDs and retain the retirement-evidence ID separately; exact lifecycle and cutoff checks guard the selected series before fetching and writing.
 
 - Yahoo price targets retain the pre-fetch native listing ID through quotation evidence, action capture, and price-write revalidation; a ticker reassignment during the request cannot attach the old response to its new owner.
 - Existing-payment currency conflicts fail without changing the original amount, source, or reconciliation markers.
+
+## Verified Lisbon daily prices
+
+- Queue active verified PT listings on XLIS, ENXL or ALXL with explicit EUR major units and an ISIN.
+- Yahoo's published `.LS` suffix supplies only a candidate; exact returned symbol, EUR, LIS, EQUITY and Europe/Lisbon metadata gate prices and actions.
+- A competing active ticker claim in any of the three source MICs blocks capture, including unverified claims.
+- Retain immutable `yahoo-lisbon-chart-v1` metadata evidence and revalidate native identity, ISIN, MIC and units under the directory lock.
+- Incremental writes and full-history corporate-action reconciliation retain native listing IDs without requiring issuer presentation or legacy stock rows.
+- Returned settled dates establish observations; no U.S. holidays, inferred Lisbon sessions or synthetic gap bars apply.
+- Explicit worker filters use `MIC:TICKER` for Lisbon; unqualified filters remain U.S.-only.
+- Captured-source replay queued 44 verified listings, retained 165 bars across 41 listings with exact parsed OHLCV values, and retained 44 source captures. A second import preserved all IDs and values, and the existing U.S. ADR stayed unchanged.
+- The source replay used an isolated PostgreSQL database; production rollout and final legacy-table retirement remain pending.
+- Each split/dividend transaction revalidates the complete pre-fetch source binding under its own directory lock; an earlier quotation check cannot authorize a later action write.

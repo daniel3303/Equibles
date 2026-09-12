@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data.Models;
+using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.CommonStocks.Repositories.Models;
 using Equibles.Data;
 using Microsoft.EntityFrameworkCore;
@@ -78,6 +79,40 @@ public class EquityListingRepository : BaseRepository<EquityListing>
             );
         if (updated != 1)
             return false;
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    // A provider observation corroborates an already-verified venue identity; it cannot
+    // promote an unknown listing, change denomination, or move a retained instrument.
+    public async Task<bool> RecordVerifiedQuotation(
+        EquityListingQuotationEvidence evidence,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (DbContext.Database.CurrentTransaction != null)
+            throw new InvalidOperationException(
+                "Quotation capture requires an independent transaction."
+            );
+        await using var transaction = await DbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
+        await DbContext.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock(1163282519, 7457)",
+            cancellationToken
+        );
+        var matches = await GetAll()
+            .ForVerifiedSource(evidence.Binding)
+            .AnyAsync(cancellationToken);
+        if (!matches)
+            return false;
+        await EquityDirectorySourceRecordRepository.Append(
+            DbContext,
+            evidence.Source,
+            evidence.Binding.EquityListingId.ToString(),
+            evidence.PayloadJson,
+            cancellationToken
+        );
         await transaction.CommitAsync(cancellationToken);
         return true;
     }

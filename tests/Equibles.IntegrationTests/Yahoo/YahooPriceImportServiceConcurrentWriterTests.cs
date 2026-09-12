@@ -72,7 +72,11 @@ public class YahooPriceImportServiceConcurrentWriterTests : ParadeDbMcpTestBase
         var writerPid = ((NpgsqlConnection)concurrentWriter.Database.GetDbConnection()).ProcessID;
 
         var service = BuildService(flushContext);
-        var flushTask = (Task)FlushPriceBatchMethod.Invoke(service, [staleBatch])!;
+        var flushTask = (Task)
+            FlushPriceBatchMethod.Invoke(
+                service,
+                [new PriceSeriesTarget("RACE", stock.Id, listingId, IsPrimary: true), staleBatch]
+            )!;
         await WaitUntilBlockedBy(writerPid);
         await writerTransaction.CommitAsync();
         await flushTask;
