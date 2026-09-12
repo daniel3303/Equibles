@@ -1,3 +1,4 @@
+using Equibles.Migrations.Infrastructure;
 ﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -10,41 +11,15 @@ namespace Equibles.Migrations.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_CompanyFilingSyncState_CommonStock_CommonStockId",
-                table: "CompanyFilingSyncState");
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_FinancialFactsSyncStatus_CommonStock_CommonStockId",
-                table: "FinancialFactsSyncStatus");
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "CompanyFilingSyncState", "CommonStockId", "FK_CompanyFilingSyncState_EquityIssuer_CommonStockId", "FK_CompanyFilingSyncState_CommonStock_CommonStockId");
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_TranscriptCheckStatuses_CommonStock_CommonStockId",
-                table: "TranscriptCheckStatuses");
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "FinancialFactsSyncStatus", "CommonStockId", "FK_FinancialFactsSyncStatus_EquityIssuer_CommonStockId", "FK_FinancialFactsSyncStatus_CommonStock_CommonStockId");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_CompanyFilingSyncState_EquityIssuer_CommonStockId",
-                table: "CompanyFilingSyncState",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_FinancialFactsSyncStatus_EquityIssuer_CommonStockId",
-                table: "FinancialFactsSyncStatus",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_TranscriptCheckStatuses_EquityIssuer_CommonStockId",
-                table: "TranscriptCheckStatuses",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "TranscriptCheckStatuses", "CommonStockId", "FK_TranscriptCheckStatuses_EquityIssuer_CommonStockId", "FK_TranscriptCheckStatuses_CommonStock_CommonStockId");
         }
 
         /// <inheritdoc />

@@ -1,3 +1,4 @@
+using Equibles.Migrations.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -10,29 +11,12 @@ namespace Equibles.Migrations.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_CashDividend_CommonStock_CommonStockId",
-                table: "CashDividend");
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_StockSplit_CommonStock_CommonStockId",
-                table: "StockSplit");
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "CashDividend", "CommonStockId", "FK_CashDividend_EquityIssuer_CommonStockId", "FK_CashDividend_CommonStock_CommonStockId");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_CashDividend_EquityIssuer_CommonStockId",
-                table: "CashDividend",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_StockSplit_EquityIssuer_CommonStockId",
-                table: "StockSplit",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "StockSplit", "CommonStockId", "FK_StockSplit_EquityIssuer_CommonStockId", "FK_StockSplit_CommonStock_CommonStockId");
         }
 
         /// <inheritdoc />

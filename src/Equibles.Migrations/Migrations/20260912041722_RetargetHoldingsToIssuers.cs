@@ -1,3 +1,4 @@
+using Equibles.Migrations.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -24,41 +25,17 @@ namespace Equibles.Migrations.Migrations
                 ON CONFLICT ("Id") DO NOTHING;
                 """);
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_InstitutionalHolding_CommonStock_CommonStockId",
-                table: "InstitutionalHolding");
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "InstitutionalHolding", "CommonStockId", "FK_InstitutionalHolding_EquityIssuer_CommonStockId", "FK_InstitutionalHolding_CommonStock_CommonStockId");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_InstitutionalHolding_EquityIssuer_CommonStockId",
-                table: "InstitutionalHolding",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "StockQuarterlyActivity", "CommonStockId", "FK_StockQuarterlyActivity_EquityIssuer_CommonStockId", null);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_StockQuarterlyActivity_EquityIssuer_CommonStockId",
-                table: "StockQuarterlyActivity",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "StockQuarterlyActivityCombined", "CommonStockId", "FK_StockQuarterlyActivityCombined_EquityIssuer_CommonStockId", null);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_StockQuarterlyActivityCombined_EquityIssuer_CommonStockId",
-                table: "StockQuarterlyActivityCombined",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_StockQuarterlyListingActivity_EquityIssuer_CommonStockId",
-                table: "StockQuarterlyListingActivity",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "StockQuarterlyListingActivity", "CommonStockId", "FK_StockQuarterlyListingActivity_EquityIssuer_CommonStockId", null);
         }
 
         /// <inheritdoc />

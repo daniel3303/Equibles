@@ -1,3 +1,4 @@
+using Equibles.Migrations.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -10,49 +11,18 @@ namespace Equibles.Migrations.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_Form144Filing_CommonStock_CommonStockId",
-                table: "Form144Filing");
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_GovernmentContract_CommonStock_CommonStockId",
-                table: "GovernmentContract");
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "FdaCatalyst", "CommonStockId", "FK_FdaCatalyst_EquityIssuer_CommonStockId", null);
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_InsiderTransaction_CommonStock_CommonStockId",
-                table: "InsiderTransaction");
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "Form144Filing", "CommonStockId", "FK_Form144Filing_EquityIssuer_CommonStockId", "FK_Form144Filing_CommonStock_CommonStockId");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_FdaCatalyst_EquityIssuer_CommonStockId",
-                table: "FdaCatalyst",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "GovernmentContract", "CommonStockId", "FK_GovernmentContract_EquityIssuer_CommonStockId", "FK_GovernmentContract_CommonStock_CommonStockId");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Form144Filing_EquityIssuer_CommonStockId",
-                table: "Form144Filing",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_GovernmentContract_EquityIssuer_CommonStockId",
-                table: "GovernmentContract",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_InsiderTransaction_EquityIssuer_CommonStockId",
-                table: "InsiderTransaction",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "InsiderTransaction", "CommonStockId", "FK_InsiderTransaction_EquityIssuer_CommonStockId", "FK_InsiderTransaction_CommonStock_CommonStockId");
         }
 
         /// <inheritdoc />

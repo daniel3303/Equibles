@@ -1,3 +1,4 @@
+using Equibles.Migrations.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -10,13 +11,8 @@ namespace Equibles.Migrations.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddForeignKey(
-                name: "FK_FundSeries_EquityIssuer_CommonStockId",
-                table: "FundSeries",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "FundSeries", "CommonStockId", "FK_FundSeries_EquityIssuer_CommonStockId", null);
         }
 
         /// <inheritdoc />

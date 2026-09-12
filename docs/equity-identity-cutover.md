@@ -276,3 +276,10 @@
 - The transaction briefly blocks writes to that evidence table while copying and installing two-way row mirrors; reads remain available. The largest current cohort is approximately 603,000 ticker-evidence rows, 155 MB including indexes; measure this copy on the restored production database before rollout.
 - Existing and native writers retain real tables and unique indexes for their upserts. Unchanged mirrored rows do not recurse; IDs, source payloads, nulls, arrays and repair state remain intact.
 - Run `scripts/verify-native-equity-evidence.sql` during the compatibility window. Retire the old six tables and their temporary mirror functions after all writers use native storage and final reconciliation passes.
+
+## Issuer foreign-key rollout
+
+- The unshipped issuer-retarget migrations atomically replace each old owner constraint with an enforced `NOT VALID` native constraint, then commit metadata locks before validating existing rows.
+- Validation allows ordinary issuer and observation reads/writes; an interrupted validation reuses the same checked constraint definition and preserves every original row.
+- The retiring directory can no longer cascade-delete observations after metadata commit; native issuer ownership already protects those rows before the validation scan finishes.
+- Applied production migration history is unchanged; this transaction-boundary correction belongs only to the new international-identity migration sequence.

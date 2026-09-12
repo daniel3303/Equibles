@@ -1,3 +1,4 @@
+using Equibles.Migrations.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -10,29 +11,12 @@ namespace Equibles.Migrations.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_CommonStockTickerEvidence_CommonStock_CommonStockId",
-                table: "CommonStockTickerEvidence");
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_ListedSecurity_CommonStock_CommonStockId",
-                table: "ListedSecurity");
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "CommonStockTickerEvidence", "CommonStockId", "FK_CommonStockTickerEvidence_EquityIssuer_CommonStockId", "FK_CommonStockTickerEvidence_CommonStock_CommonStockId");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_CommonStockTickerEvidence_EquityIssuer_CommonStockId",
-                table: "CommonStockTickerEvidence",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_ListedSecurity_EquityIssuer_CommonStockId",
-                table: "ListedSecurity",
-                column: "CommonStockId",
-                principalTable: "EquityIssuer",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            NativeIssuerForeignKeyRetarget20260912.Apply(migrationBuilder,
+                "ListedSecurity", "CommonStockId", "FK_ListedSecurity_EquityIssuer_CommonStockId", "FK_ListedSecurity_CommonStock_CommonStockId");
         }
 
         /// <inheritdoc />
