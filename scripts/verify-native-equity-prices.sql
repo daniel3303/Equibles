@@ -3,6 +3,13 @@
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 DO $audit$
 BEGIN
+    IF to_regclass('"EquityListingTickerAlias"') IS NULL THEN
+        IF EXISTS (SELECT 1 FROM "EquityDailyStockPrice" p
+            JOIN "LegacyEquityListing" mapping ON mapping."EquityListingId" = p."EquityListingId"
+            WHERE p."SourceTicker" IS DISTINCT FROM mapping."ListedTicker") THEN
+            RAISE EXCEPTION 'Initial native price source differs from its original series key';
+        END IF;
+    ELSE
     IF EXISTS (
         SELECT 1 FROM "EquityDailyStockPrice" p
         JOIN "LegacyEquityListing" mapping ON mapping."EquityListingId" = p."EquityListingId"
@@ -13,6 +20,7 @@ BEGIN
               WHERE alias."EquityListingId" = p."EquityListingId" AND alias."Ticker" = p."SourceTicker")
     ) THEN
         RAISE EXCEPTION 'Native price source symbol has no retained listing identity';
+    END IF;
     END IF;
     IF EXISTS ((SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."CommonStockId" FROM "DailyStockPrice" p) EXCEPT ALL (SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."EquityIssuerId" FROM "UnattributedDailyStockPrice" p JOIN "CommonStock" owner ON owner."Id" = p."EquityIssuerId"))
        OR EXISTS ((SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."EquityIssuerId" FROM "UnattributedDailyStockPrice" p JOIN "CommonStock" owner ON owner."Id" = p."EquityIssuerId") EXCEPT ALL (SELECT p."Id", p."Date", p."Open", p."High", p."Low", p."Close", p."AdjustedClose", p."Volume", p."CreationTime", p."CommonStockId" FROM "DailyStockPrice" p)) THEN

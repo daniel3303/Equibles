@@ -121,8 +121,13 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
                     CreationTime = new DateTime(2002, 3, 4, 5, 6, 7, DateTimeKind.Utc),
                 }
             );
-            context.Add(Activity(stock, "ACTIVITY-OLD"));
             await context.SaveChangesAsync();
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO "StockQuarterlyListingActivity" ("CommonStockId", "ReportDate", "IsCombined", "PriceSeriesTicker", "CurrentShares", "PreviousShares", "ComputedAt")
+                VALUES ({stock.Id}, DATE '2025-03-31', false, 'ACTIVITY-OLD', 123456, 654321, CURRENT_TIMESTAMP);
+                """
+            );
             await SeedLegacyShortVolume(context, stock, "SHORT-OLD", 1);
             await SeedLegacyShortVolume(context, stock, "", 2);
             var before = await LegacySnapshot(context);

@@ -256,3 +256,14 @@
 - Native bars accept the current exact ticker or a retained alias while the temporary mirror preserves the original legacy series key.
 - A legacy directory deletion cannot cascade into either native price archive; direct price replacements still synchronize while the owner exists.
 - Full-row reconciliation reports retained histories without a legacy owner separately; compare that cohort against the immutable pre-cutover export rather than treating its absent counterpart as proof.
+
+## Canonical physical owner columns
+
+- Issuer owners now map to physical `EquityIssuerId` columns: 27 OSS financial tables, 53 commercial financial tables including those OSS tables, and 34 customer tables.
+- This is an additive transition; the older ownership columns, indexes and foreign keys remain synchronized until all binaries use canonical storage. A direct rename before rollout would break running readers.
+- A transaction-local mirror rejects conflicting dual-owner writes and updates both column generations before existing write-time guards run. Existing column-specific update triggers watch both owner columns during the transition.
+- The finite backfill commits 10,000-key batches with its `EquityOwnerMigrationProgress` cursor; interrupted batches roll back together and committed batches are not repeated.
+- New indexes build concurrently under distinct names; retries retain valid builds and repair only interrupted invalid builds. Old indexes remain usable until final retirement. Canonical constraints are added and committed before separate validation scans, releasing the addition locks before scanning. Table expansion commits separately with a five-second lock timeout.
+- Run the matching `verify-canonical-equity-owners*.sql` script for exact owner equivalence, valid indexes, validated constraints and every completion checkpoint. Full original-row exports remain a separate conservation gate.
+- Apply through the migration runner or an exact non-idempotent migration range; a generic idempotent SQL wrapper cannot enclose the backfill's batch commits. The operations themselves resume an interrupted run.
+- Retire both owner generations' mirrors and checkpoints only after those queries pass, all consumers use canonical names, and full restored-data plus production verification passes.

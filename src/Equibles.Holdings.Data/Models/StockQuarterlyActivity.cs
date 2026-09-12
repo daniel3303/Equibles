@@ -20,7 +20,6 @@ namespace Equibles.Holdings.Data.Models;
 [Index(nameof(ReportDate))]
 public class StockQuarterlyActivity
 {
-    [Column("CommonStockId")]
     public Guid EquityIssuerId { get; set; }
 
     public DateOnly ReportDate { get; set; }

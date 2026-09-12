@@ -23,7 +23,6 @@ public class NCenFiling : IIssuerFiling
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    [Column("CommonStockId")]
     public Guid EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
 

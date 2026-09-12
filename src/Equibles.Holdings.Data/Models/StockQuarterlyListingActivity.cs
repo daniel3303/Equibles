@@ -17,7 +17,6 @@ namespace Equibles.Holdings.Data.Models;
 [Index(nameof(ReportDate), nameof(IsCombined))]
 public class StockQuarterlyListingActivity
 {
-    [Column("CommonStockId")]
     public Guid EquityIssuerId { get; set; }
 
     public DateOnly ReportDate { get; set; }

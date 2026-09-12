@@ -35,7 +35,6 @@ public class CongressionalTrade
 
     // Derived from the immutable filed ticker and authoritative dated issuer evidence. Null is
     // preferable to attaching a reused symbol to the wrong company.
-    [Column("CommonStockId")]
     public Guid? EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
 

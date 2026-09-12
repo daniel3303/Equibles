@@ -56,7 +56,6 @@ public class FdaCatalyst
     // authoritatively (CIK / ticker), and left null otherwise — many meetings concern
     // private, pre-IPO, or foreign sponsors that fall outside the tracked equity
     // universe, so nullable attribution retains catalysts whose issuer remains unresolved.
-    [Column("CommonStockId")]
     public Guid? EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
 

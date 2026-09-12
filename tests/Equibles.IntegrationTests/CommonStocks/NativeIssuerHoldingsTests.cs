@@ -155,7 +155,7 @@ public class NativeIssuerHoldingsTests(ParadeDbFixture fixture) : ParadeDbMcpTes
             );
             foreach (var table in SummaryTables)
                 await DbContext.Database.ExecuteSqlRawAsync(
-                    $"""ALTER TABLE "{table}" DROP CONSTRAINT "FK_{table}_EquityIssuer_CommonStockId";"""
+                    $"""ALTER TABLE "{table}" DROP CONSTRAINT "FK_{table}_EquityIssuer_CommonStockId"; ALTER TABLE "{table}" DROP CONSTRAINT "FK_{table}_EquityIssuer_EquityIssuerId";"""
                 );
             await DbContext.Database.ExecuteSqlInterpolatedAsync(
                 $"""

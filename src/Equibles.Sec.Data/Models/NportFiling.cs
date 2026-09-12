@@ -48,7 +48,6 @@ public class NportFiling
     /// daily-index sweep, whose registrant is a fund-family trust that is not a tracked stock —
     /// those are identified by <see cref="RegistrantCik"/> instead.
     /// </summary>
-    [Column("CommonStockId")]
     public Guid? EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
 

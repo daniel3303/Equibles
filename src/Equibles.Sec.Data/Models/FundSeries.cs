@@ -60,7 +60,6 @@ public class FundSeries
     public string Slug { get; set; }
 
     /// <summary>The stock whose issuer feed supplied the filing; series id completes identity for multi-series registrants.</summary>
-    [Column("CommonStockId")]
     public Guid? EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
 

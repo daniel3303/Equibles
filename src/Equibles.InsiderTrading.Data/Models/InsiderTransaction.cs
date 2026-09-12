@@ -50,7 +50,6 @@ public class InsiderTransaction
     public Guid InsiderOwnerId { get; set; }
     public virtual InsiderOwner InsiderOwner { get; set; }
 
-    [Column("CommonStockId")]
     public Guid EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
 

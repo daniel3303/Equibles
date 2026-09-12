@@ -25,7 +25,6 @@ public class InstitutionalHolding
     public Guid InstitutionalHolderId { get; set; }
     public virtual InstitutionalHolder InstitutionalHolder { get; set; }
 
-    [Column("CommonStockId")]
     public Guid EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
 

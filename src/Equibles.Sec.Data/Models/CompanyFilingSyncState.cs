@@ -18,7 +18,6 @@ public class CompanyFilingSyncState
 {
     [Key]
     // Retain the deployed column name until every older binary has retired.
-    [Column("CommonStockId")]
     public Guid EquityIssuerId { get; set; }
 
     [ForeignKey(nameof(EquityIssuerId))]

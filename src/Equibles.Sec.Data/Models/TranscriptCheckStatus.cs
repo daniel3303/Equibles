@@ -13,7 +13,6 @@ public class TranscriptCheckStatus
     public Guid Id { get; set; } = Guid.NewGuid();
 
     // Retain the deployed column name until every older binary has retired.
-    [Column("CommonStockId")]
     public Guid EquityIssuerId { get; set; }
     public virtual EquityIssuer Issuer { get; set; }
 
