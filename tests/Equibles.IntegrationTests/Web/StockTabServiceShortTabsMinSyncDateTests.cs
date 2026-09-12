@@ -19,6 +19,7 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Equibles.Web.Services;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Repositories;
@@ -95,7 +96,9 @@ public class StockTabServiceShortTabsMinSyncDateTests : IDisposable
                 .Add(
                     new FailToDeliver
                     {
-                        CommonStockId = _stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(_dbContext, _stock).Id,
+
+                        ListedTicker = _stock.Ticker,
                         SettlementDate = date,
                         Quantity = 50_000,
                         Price = 150.25m,

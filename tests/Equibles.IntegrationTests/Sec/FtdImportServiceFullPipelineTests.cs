@@ -15,6 +15,7 @@ using Equibles.Messaging.Contracts.CommonStocks;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Equibles.Worker;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -91,6 +92,8 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
+                sp.GetService(typeof(EquityListingRepository))
+                    .Returns(new EquityListingRepository(ctx));
                 sp.GetService(typeof(CommonStockRepository))
                     .Returns(new CommonStockRepository(ctx));
                 sp.GetService(typeof(CommonStockManager))
@@ -133,7 +136,9 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
                 .Add(
                     new FailToDeliver
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
+
+                        ListedTicker = stock.Ticker,
                         SettlementDate = latestSettledDate,
                         Quantity = 777,
                         Price = 52.00m,
@@ -245,7 +250,9 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
                 .Add(
                     new FailToDeliver
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
+
+                        ListedTicker = stock.Ticker,
                         SettlementDate = latestSettledDate,
                         Quantity = 777,
                         Price = 52.00m,
@@ -400,7 +407,7 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
         var ftdRow = await verify
             .Set<FailToDeliver>()
             .SingleOrDefaultAsync(f =>
-                f.CommonStockId == apple.Id && f.SettlementDate == settlementDate
+                f.Listing.Security.EquityIssuerId == apple.Id && f.SettlementDate == settlementDate
             );
         ftdRow
             .Should()
@@ -445,7 +452,9 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
                 .Add(
                     new FailToDeliver
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
+
+                        ListedTicker = stock.Ticker,
                         SettlementDate = oldDate,
                         Quantity = 777,
                         Price = 180m,
@@ -540,7 +549,7 @@ public class FtdImportServiceFullPipelineTests : IAsyncLifetime
 
         await using var verify = _fixture.CreateDbContext();
         var stored = await verify.Set<FailToDeliver>().SingleAsync();
-        stored.CommonStockId.Should().Be(stock.Id);
+        stored.Listing.Security.EquityIssuerId.Should().Be(stock.Id);
         stored.SettlementDate.Should().Be(settlementDate);
         stored.Quantity.Should().Be(12345);
         var report = await verify.Set<Error>().SingleAsync();

@@ -10,27 +10,23 @@ public class FailToDeliverRepository : BaseRepository<FailToDeliver>
     public FailToDeliverRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<FailToDeliver> GetByStock(CommonStock stock)
-    {
-        return GetAll()
-            .Where(f =>
-                f.CommonStockId == stock.Id
-                && (f.ListedTicker == stock.Ticker || f.ListedTicker == "")
+    public IQueryable<FailToDeliver> GetByListingId(Guid listingId) =>
+        GetAll().Where(row => row.EquityListingId == listingId);
+
+    public IQueryable<FailToDeliver> GetByStock(CommonStock stock) =>
+        GetAll()
+            .Where(row =>
+                row.EquityListingId == row.Listing.Security.Issuer.Presentation.EquityListingId
+                && row.Listing.Security.EquityIssuerId == stock.Id
             );
-    }
 
     public IQueryable<FailToDeliver> GetByListing(CommonStock stock, string listedTicker)
     {
-        var isPrimary = string.Equals(
-            listedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
-        return GetAll()
-            .Where(f =>
-                f.CommonStockId == stock.Id
-                && (f.ListedTicker == listedTicker || (isPrimary && f.ListedTicker == ""))
-            );
+        var listingIds = DbContext
+            .Set<LegacyEquityListing>()
+            .Where(row => row.CommonStockId == stock.Id && row.ListedTicker == listedTicker)
+            .Select(row => row.EquityListingId);
+        return GetAll().Where(row => listingIds.Contains(row.EquityListingId));
     }
 
     public IQueryable<DateOnly> GetLatestDate()

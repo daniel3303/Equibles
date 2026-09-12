@@ -1197,6 +1197,8 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
                 var repository = new CommonStockRepository(ctx);
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(CommonStockRepository)).Returns(repository);
+                sp.GetService(typeof(EquityListingRepository))
+                    .Returns(new EquityListingRepository(ctx));
                 sp.GetService(typeof(CommonStockManager))
                     .Returns(new CommonStockManager(repository, bus));
                 var scope = Substitute.For<IServiceScope>();

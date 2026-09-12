@@ -24,6 +24,7 @@ using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Equibles.Web.Services;
 using Equibles.Web.ViewModels.Stocks;
 using Equibles.Yahoo.Data;
@@ -370,21 +371,27 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 2),
                     Quantity = 50_000,
                     Price = 150.25m,
                 },
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 3),
                     Quantity = 30_000,
                     Price = 151.50m,
                 },
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 6),
                     Quantity = 45_000,
                     Price = 149.75m,
@@ -423,7 +430,9 @@ public class StockTabServiceTests : IDisposable
                 .Add(
                     new FailToDeliver
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                        ListedTicker = stock.Ticker,
                         SettlementDate = new DateOnly(2025, 1, 1).AddDays(i),
                         Quantity = 10_000 + i,
                         Price = 150m,

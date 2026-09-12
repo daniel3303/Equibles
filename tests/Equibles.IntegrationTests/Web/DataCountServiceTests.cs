@@ -24,6 +24,7 @@ using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Equibles.Web.Services;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
@@ -423,14 +424,18 @@ public class DataCountServiceTests : IDisposable
             .AddRange(
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 2),
                     Quantity = 50_000,
                     Price = 150.25m,
                 },
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 3),
                     Quantity = 30_000,
                     Price = 151.50m,

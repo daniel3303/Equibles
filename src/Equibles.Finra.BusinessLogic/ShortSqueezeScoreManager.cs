@@ -468,12 +468,12 @@ public class ShortSqueezeScoreManager
             .Where(f =>
                 f.SettlementDate > windowStart
                 && f.SettlementDate <= latestDate
-                && stockIds.Contains(f.CommonStockId)
-                && (f.ListedTicker == f.CommonStock.Ticker || f.ListedTicker == "")
+                && stockIds.Contains(f.Listing.Security.EquityIssuerId)
+                && f.EquityListingId == f.Listing.Security.Issuer.Presentation.EquityListingId
             )
             .Select(f => new
             {
-                f.CommonStockId,
+                CommonStockId = f.Listing.Security.EquityIssuerId,
                 f.SettlementDate,
                 f.Quantity,
             })

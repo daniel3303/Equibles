@@ -6,6 +6,7 @@ using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using File = Equibles.Media.Data.Models.File;
 
@@ -131,8 +132,9 @@ public class SecRepositoryTests : IDisposable
         return new FailToDeliver
         {
             Id = Guid.NewGuid(),
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+
+            EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+            ListedTicker = stock.Ticker,
             SettlementDate = settlementDate ?? new DateOnly(2025, 3, 1),
             Quantity = quantity,
             Price = price,
@@ -460,7 +462,7 @@ public class SecRepositoryTests : IDisposable
         var result = await _ftdRepo.GetByStock(apple).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Should().AllSatisfy(f => f.CommonStockId.Should().Be(apple.Id));
+        result.Should().AllSatisfy(f => f.Listing.Security.EquityIssuerId.Should().Be(apple.Id));
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 
@@ -49,8 +50,8 @@ public class FailToDeliverToolsStrictDatesAndTruncationTests : ParadeDbMcpTestBa
             .Add(
                 new FailToDeliver
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = settlementDate,
                     Quantity = 100_000,
                     Price = 25.50m,

@@ -62,7 +62,12 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
             .WithMany()
             .HasForeignKey(state => state.EquityIssuerId)
             .OnDelete(DeleteBehavior.Restrict);
-        builder.Entity<FailToDeliver>();
+        builder
+            .Entity<FailToDeliver>()
+            .HasOne(row => row.Listing)
+            .WithMany()
+            .HasForeignKey(row => row.EquityListingId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<FailedFilingIngest>();
         builder.Entity<FormAdvAdviser>();
         builder

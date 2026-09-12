@@ -6,6 +6,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -39,7 +40,9 @@ public class FailToDeliverToolsCoverageFloorTests
             seed.Add(
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
+
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 2),
                     Quantity = 1000,
                     Price = 10m,
@@ -59,7 +62,9 @@ public class FailToDeliverToolsCoverageFloorTests
             seed.Add(
                 new FailToDeliver
                 {
-                    CommonStockId = other.Id,
+                    EquityListingId = NativeListingSeed.ForStock(seed, other).Id,
+
+                    ListedTicker = other.Ticker,
                     SettlementDate = new DateOnly(2026, 1, 15),
                     Quantity = 5,
                     Price = 1m,
@@ -70,7 +75,9 @@ public class FailToDeliverToolsCoverageFloorTests
                 seed.Add(
                     new FailToDeliver
                     {
-                        CommonStockId = other.Id,
+                        EquityListingId = NativeListingSeed.ForStock(seed, other).Id,
+
+                        ListedTicker = other.Ticker,
                         SettlementDate = new DateOnly(2026, 3, 2),
                         Quantity = 10 + i,
                         Price = 1m,
@@ -127,7 +134,9 @@ public class FailToDeliverToolsCoverageFloorTests
                 seed.Add(
                     new FailToDeliver
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
+
+                        ListedTicker = stock.Ticker,
                         SettlementDate = new DateOnly(2025, 6, 2),
                         Quantity = i + 1,
                         Price = 1m,
@@ -140,7 +149,9 @@ public class FailToDeliverToolsCoverageFloorTests
                 seed.Add(
                     new FailToDeliver
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(seed, stock).Id,
+
+                        ListedTicker = stock.Ticker,
                         SettlementDate = new DateOnly(2026, 3, 2),
                         Quantity = i + 1,
                         Price = 1m,

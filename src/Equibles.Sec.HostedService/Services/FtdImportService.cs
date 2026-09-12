@@ -1753,9 +1753,18 @@ public class FtdImportService
         CancellationToken cancellationToken
     )
     {
-        // Group by stock+date, keeping the latest record per day (FTD is cumulative)
-        var grouped =
-            new Dictionary<(Guid StockId, string ListedTicker, DateOnly Date), FailToDeliver>();
+        // The source reports a cumulative balance; retain its last observation per listing/date.
+        using var scope = _scopeFactory.CreateScope();
+        var listingRepository = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
+        var issuerIds = tickerMap.Values.Select(key => key.CommonStockId).Distinct().ToList();
+        var mappings = await listingRepository
+            .GetLegacyMappings(issuerIds)
+            .ToDictionaryAsync(
+                row => new ListedSecurityKey(row.CommonStockId, row.ListedTicker),
+                row => row.EquityListingId,
+                cancellationToken
+            );
+        var grouped = new Dictionary<(Guid ListingId, DateOnly Date), FailToDeliver>();
 
         var strippedAliases = BuildStrippedTickerAliases(tickerMap.Keys);
         foreach (var record in records)
@@ -1769,10 +1778,15 @@ public class FtdImportService
                 continue;
             }
 
-            var key = (listing.CommonStockId, listing.ListedTicker, record.SettlementDate);
+            if (!mappings.TryGetValue(listing, out var listingId))
+                throw new InvalidOperationException(
+                    $"No native listing identity for {listing.CommonStockId}/{listing.ListedTicker}."
+                );
+
+            var key = (listingId, record.SettlementDate);
             grouped[key] = new FailToDeliver
             {
-                CommonStockId = listing.CommonStockId,
+                EquityListingId = listingId,
                 ListedTicker = listing.ListedTicker,
                 SettlementDate = record.SettlementDate,
                 Quantity = record.Quantity,
@@ -1787,21 +1801,20 @@ public class FtdImportService
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-
-        // Guards GH-1591: CompanySync can delete a CommonStock between BuildTickerMap and
-        // this flush. Without filtering, one stale CommonStockId trips
-        // FK_FailToDeliver_CommonStock_CommonStockId and rolls back the entire UpsertRange —
-        // dropping rows for surviving stocks alongside the orphan.
-        var safeItems = await stockRepo.FilterByExistingStocks(items, i => i.CommonStockId);
+        var listingIds = items.Select(row => row.EquityListingId).Distinct().ToList();
+        var existingIds = await dbContext
+            .Set<EquityListing>()
+            .Where(row => listingIds.Contains(row.Id))
+            .Select(row => row.Id)
+            .ToListAsync();
+        var existing = existingIds.ToHashSet();
+        var safeItems = items.Where(row => existing.Contains(row.EquityListingId)).ToList();
         var skipped = items.Count - safeItems.Count;
         if (skipped > 0)
-        {
             _logger.LogWarning(
-                "FTD batch: skipping {Count} rows whose parent CommonStock was removed before flush",
+                "FTD batch: skipping {Count} rows whose listing was removed before flush",
                 skipped
             );
-        }
         if (safeItems.Count == 0)
         {
             return;
@@ -1810,12 +1823,7 @@ public class FtdImportService
         await dbContext
             .Set<FailToDeliver>()
             .UpsertRange(safeItems)
-            .On(f => new
-            {
-                f.CommonStockId,
-                f.ListedTicker,
-                f.SettlementDate,
-            })
+            .On(f => new { f.EquityListingId, f.SettlementDate })
             .WhenMatched(
                 (existing, incoming) =>
                     new FailToDeliver { Quantity = incoming.Quantity, Price = incoming.Price }

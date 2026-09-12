@@ -93,3 +93,12 @@
 - Source-stated security titles, transaction economics, amendment identity, source notes, prior sales, provider keys and retry state remain unchanged; an issuer association does not assert a security or venue.
 - Unresolved FDA events retain null issuer attribution; the migration adds no inferred identity.
 - The migration changes ownership constraints only; `scripts/verify-native-issuer-disclosures.sql` requires zero missing owners and four validated restrictive constraints before legacy storage retirement.
+
+### Fails-to-deliver observations
+
+- `FailToDeliver` now owns a stable `EquityListingId` and retains `ListedTicker` as source evidence; the native unique key is listing/settlement date.
+- The paired migration uses exact legacy mappings and refuses unresolved rows before committing. Observation GUIDs, source tickers, quantities, prices, settlement dates and creation timestamps stay unchanged.
+- The old physical owner column and unique index remain only for retiring binaries. Native-only listings have no old owner value, which prevents same-symbol venues from colliding in that temporary index.
+- Final cutover removes `equity_ftd_listing_bridge`, `eq_bridge_ftd_listing`, the unmapped `CommonStockId` column and its old unique index together, after all stock-facing readers and writers move to native identities.
+- The importer resolves native listing IDs before upsert; native rows survive removal of a legacy stock. Never delete a native listing that retains observations.
+- `NativeListingFailsToDeliverTests` verifies full-row preservation, refusal without mutation for unresolved history, same-symbol venue isolation, restrictive deletion, and old/new writer coexistence against PostgreSQL.

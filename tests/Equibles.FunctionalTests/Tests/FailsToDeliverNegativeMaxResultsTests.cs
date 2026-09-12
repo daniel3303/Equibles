@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.FunctionalTests.Fixtures;
 using Equibles.Sec.Data.Models;
+using Equibles.TestSupport;
 using FluentAssertions;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -67,8 +68,8 @@ public class FailsToDeliverNegativeMaxResultsTests
                 .Add(
                     new FailToDeliver
                     {
-                        CommonStock = stock,
-                        CommonStockId = stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(db, stock).Id,
+                        ListedTicker = stock.Ticker,
                         SettlementDate = new DateOnly(2026, 4, 1),
                         Quantity = 100_000,
                         Price = 25.50m,

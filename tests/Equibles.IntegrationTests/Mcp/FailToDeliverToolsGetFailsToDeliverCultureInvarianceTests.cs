@@ -5,6 +5,7 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 
@@ -41,15 +42,15 @@ public class FailToDeliverToolsGetFailsToDeliverCultureInvarianceTests : ParadeD
             Name = "GameStop Corp",
             Cik = "0001326380",
         };
+        DbContext.Set<CommonStock>().Add(stock);
         var ftd = new FailToDeliver
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+            ListedTicker = stock.Ticker,
             SettlementDate = new DateOnly(2026, 3, 15),
             Quantity = 1_234_567,
             Price = 25.50m,
         };
-        DbContext.Set<CommonStock>().Add(stock);
         DbContext.Set<FailToDeliver>().Add(ftd);
         await DbContext.SaveChangesAsync();
 

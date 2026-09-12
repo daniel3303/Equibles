@@ -11,6 +11,7 @@ using Equibles.Finra.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.Repositories;
@@ -267,14 +268,18 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             .AddRange(
                 new FailToDeliver
                 {
-                    CommonStockId = fails.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, fails).Id,
+
+                    ListedTicker = fails.Ticker,
                     SettlementDate = SettlementDate.AddDays(-3),
                     Quantity = 50_000,
                     Price = 10m,
                 },
                 new FailToDeliver
                 {
-                    CommonStockId = fails.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, fails).Id,
+
+                    ListedTicker = fails.Ticker,
                     SettlementDate = SettlementDate.AddDays(-10),
                     Quantity = 20_000,
                     Price = 10m,

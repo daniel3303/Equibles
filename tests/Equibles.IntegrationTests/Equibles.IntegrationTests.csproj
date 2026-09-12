@@ -114,4 +114,7 @@
     <ProjectReference Include="..\..\src\Equibles.Mcp.Server\Equibles.Mcp.Server.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Messaging\Equibles.Messaging.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/NativeListingSeed.cs" Link="Helpers/NativeListingSeed.cs" />
+  </ItemGroup>
 </Project>

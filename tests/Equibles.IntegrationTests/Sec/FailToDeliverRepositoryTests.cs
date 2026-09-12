@@ -4,6 +4,7 @@ using Equibles.Data;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.IntegrationTests.Sec;
@@ -47,7 +48,9 @@ public class FailToDeliverRepositoryTests : IDisposable
         _repository.Add(
             new FailToDeliver
             {
-                CommonStockId = target.Id,
+                EquityListingId = NativeListingSeed.ForStock(_dbContext, target).Id,
+
+                ListedTicker = target.Ticker,
                 SettlementDate = new DateOnly(2025, 10, 1),
                 Quantity = 100,
                 Price = 150m,
@@ -56,7 +59,9 @@ public class FailToDeliverRepositoryTests : IDisposable
         _repository.Add(
             new FailToDeliver
             {
-                CommonStockId = target.Id,
+                EquityListingId = NativeListingSeed.ForStock(_dbContext, target).Id,
+
+                ListedTicker = target.Ticker,
                 SettlementDate = new DateOnly(2025, 10, 2),
                 Quantity = 200,
                 Price = 151m,
@@ -65,7 +70,9 @@ public class FailToDeliverRepositoryTests : IDisposable
         _repository.Add(
             new FailToDeliver
             {
-                CommonStockId = other.Id,
+                EquityListingId = NativeListingSeed.ForStock(_dbContext, other).Id,
+
+                ListedTicker = other.Ticker,
                 SettlementDate = new DateOnly(2025, 10, 1),
                 Quantity = 999,
                 Price = 400m,
@@ -76,6 +83,6 @@ public class FailToDeliverRepositoryTests : IDisposable
         var results = await _repository.GetByStock(target).ToListAsync();
 
         results.Should().HaveCount(2);
-        results.Should().OnlyContain(f => f.CommonStockId == target.Id);
+        results.Should().OnlyContain(f => f.Listing.Security.EquityIssuerId == target.Id);
     }
 }

@@ -4,6 +4,7 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 
@@ -64,16 +65,16 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
             .AddRange(
                 new FailToDeliver
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2026, 4, 1),
                     Quantity = 100_000,
                     Price = 25.50m,
                 },
                 new FailToDeliver
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2026, 4, 2),
                     Quantity = 200_000,
                     Price = 26.00m,
@@ -104,16 +105,16 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
             .AddRange(
                 new FailToDeliver
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2026, 1, 15),
                     Quantity = 99_999,
                     Price = 1m,
                 },
                 new FailToDeliver
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2026, 4, 15),
                     Quantity = 200_000,
                     Price = 1m,
@@ -137,8 +138,8 @@ public class FailToDeliverToolsTests : ParadeDbMcpTestBase
             .Range(1, 5)
             .Select(i => new FailToDeliver
             {
-                CommonStock = stock,
-                CommonStockId = stock.Id,
+                EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+                ListedTicker = stock.Ticker,
                 SettlementDate = new DateOnly(2026, 4, i),
                 Quantity = 10_000 * i,
                 Price = 25.00m,
