@@ -869,6 +869,7 @@ public class YahooPriceImportService
 
         var settledBefore = target.IsHistorical ? historyEndDate.AddDays(1) : today;
         var chartData = await _yahooClient.GetChart(target.Ticker, floor, historyEndDate);
+        await CaptureQuotationBasis(target, chartData.SourceIdentity, cancellationToken);
         await CaptureSplits(target, chartData.Splits, cancellationToken);
 
         // A delisted/unresolved ticker returns no prices. Do NOT wipe the existing series in that
@@ -1562,6 +1563,35 @@ public class YahooPriceImportService
         }
     }
 
+    private async Task CaptureQuotationBasis(
+        PriceSeriesTarget target,
+        YahooChartSourceIdentity identity,
+        CancellationToken cancellationToken
+    )
+    {
+        // A current quote cannot establish the denomination of a retired symbol's history.
+        if (
+            target.IsHistorical
+            || !YahooQuotationIdentity.HasUsDollarEvidence(target.Ticker, identity)
+        )
+            return;
+        using var scope = _scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
+        if (
+            !await YahooQuotationIdentity.Capture(
+                repository,
+                target.CommonStockId,
+                target.Ticker,
+                identity,
+                cancellationToken
+            )
+        )
+            _logger.LogWarning(
+                "Quotation identity conflicts with the current U.S. listing for {Ticker}",
+                target.Ticker
+            );
+    }
+
     private async Task<Guid> RequireListingId(Guid issuerId, string ticker)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -1666,6 +1696,7 @@ public class YahooPriceImportService
         // events for the window — capture both off the same response, no extra
         // HTTP.
         var chartData = await _yahooClient.GetChart(target.Ticker, startDate, chartEnd);
+        await CaptureQuotationBasis(target, chartData.SourceIdentity, cancellationToken);
         if (target.IsHistorical)
             await StampHistoricalBackfillAttempt(target, cancellationToken);
 
@@ -1748,6 +1779,7 @@ public class YahooPriceImportService
         {
             await CaptureSplits(target, chartData.Splits, cancellationToken);
             var fullChart = await _yahooClient.GetChart(target.Ticker, floor, today);
+            await CaptureQuotationBasis(target, fullChart.SourceIdentity, cancellationToken);
             await CaptureSplits(target, fullChart.Splits, cancellationToken);
             if (fullChart.Prices.Count == 0)
             {

@@ -42,3 +42,10 @@
 - Follow only the supplied official product URL whose ISIN and MIC match the directory record.
 - Read issuer code from the product's `custom.instrument` record after matching ISIN, MIC, ticker, product key, and source type; unrelated global settings are not identity evidence.
 - Retain the exact instrument JSON and source URL; Euronext's broad `STOCK` type does not establish ordinary-share or receipt form.
+
+## Native quotation basis
+
+- Yahoo chart capture can fill an unknown USD major-unit basis only after exact returned-symbol and unique current U.S. listing ownership checks.
+- Preserve source metadata as immutable directory evidence; serialize capture with directory writes and refuse conflicting currency or scale.
+- Currency evidence does not verify a MIC or classify the security; current metadata never establishes retired-symbol denomination.
+- Capture rides existing chart requests; a finite source-metadata backfill remains a rollout prerequisite for consumers requiring explicit units.

@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories.Models;
 using Equibles.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Repositories;
 
@@ -9,14 +10,100 @@ public class EquityListingRepository : BaseRepository<EquityListing>
     public EquityListingRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
+    // The caller supplies source-validated USD evidence; the database revalidates exact
+    // current U.S. ownership under the same lock used by directory writers.
+    public async Task<bool> RecordUsDollarQuotation(
+        Guid issuerId,
+        string ticker,
+        string source,
+        string payloadJson,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (DbContext.Database.CurrentTransaction != null)
+            throw new InvalidOperationException(
+                "Quotation capture requires an independent transaction."
+            );
+        await using var transaction = await DbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
+        await DbContext.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock(1163282519, 7457)",
+            cancellationToken
+        );
+        var candidates = await GetUsByTicker(ticker)
+            .AsNoTracking()
+            .Select(row => new
+            {
+                row.Id,
+                row.Security.EquityIssuerId,
+                row.TradingCurrency,
+                row.QuoteUnitMultiplier,
+            })
+            .Take(2)
+            .ToListAsync(cancellationToken);
+        if (candidates.Count != 1 || candidates[0].EquityIssuerId != issuerId)
+            return false;
+        var listing = candidates[0];
+        if (
+            listing.TradingCurrency is not (null or "USD")
+            || listing.QuoteUnitMultiplier is not (null or 1m)
+        )
+            return false;
+        var id = Guid.NewGuid();
+        var key = listing.Id.ToString();
+        await DbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO "EquityDirectorySourceRecord"
+                ("Id", "Source", "SourceRecordKey", "PayloadHash", "PayloadJson", "CapturedAt")
+            SELECT {id}, {source}, {key},
+                encode(sha256(convert_to({payloadJson}::jsonb::text, 'UTF8')), 'hex'),
+                {payloadJson}::jsonb, now()
+            ON CONFLICT ("Source", "SourceRecordKey", "PayloadHash") DO NOTHING
+            """,
+            cancellationToken
+        );
+        var exactEvidence = await DbContext
+            .Database.SqlQuery<bool>(
+                $"""
+                SELECT EXISTS (
+                    SELECT 1 FROM "EquityDirectorySourceRecord"
+                    WHERE "Source" = {source} AND "SourceRecordKey" = {key}
+                        AND "PayloadHash" = encode(sha256(convert_to({payloadJson}::jsonb::text, 'UTF8')), 'hex')
+                        AND "PayloadJson" = {payloadJson}::jsonb
+                ) AS "Value"
+                """
+            )
+            .SingleAsync(cancellationToken);
+        if (!exactEvidence)
+            throw new InvalidDataException(
+                "Quotation evidence hash conflicts with its stored payload."
+            );
+        var updated = await GetUsByTicker(ticker)
+            .Where(row =>
+                row.Id == listing.Id
+                && row.Security.EquityIssuerId == issuerId
+                && (row.TradingCurrency == null || row.TradingCurrency == "USD")
+                && (row.QuoteUnitMultiplier == null || row.QuoteUnitMultiplier == 1m)
+            )
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters
+                        .SetProperty(row => row.TradingCurrency, "USD")
+                        .SetProperty(row => row.QuoteUnitMultiplier, 1m),
+                cancellationToken
+            );
+        if (updated != 1)
+            return false;
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public IQueryable<EquityListing> GetByLegacyKey(Guid stockId, string ticker) =>
         DbContext
             .Set<LegacyEquityListing>()
             .Where(row => row.CommonStockId == stockId && row.ListedTicker == ticker)
             .Select(row => row.Listing);
-
-    public IQueryable<LegacyEquityListing> GetLegacyMappings(IEnumerable<Guid> issuerIds) =>
-        DbContext.Set<LegacyEquityListing>().Where(row => issuerIds.Contains(row.CommonStockId));
 
     public IQueryable<EquityListing> GetByRecordedUsSymbol(Guid issuerId, string ticker) =>
         GetAll()
