@@ -54,7 +54,9 @@ public class ShortInterestImportServiceFilteredFetchTests : ParadeDbMcpTestBase
         DbContext.Add(
             new ShortInterest
             {
-                CommonStockId = have.Id,
+                EquityListingId = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, have, have.Ticker)
+                    .Id,
                 ListedTicker = have.Ticker,
                 SettlementDate = settlementDate,
                 CurrentShortPosition = 1,
@@ -88,6 +90,7 @@ public class ShortInterestImportServiceFilteredFetchTests : ParadeDbMcpTestBase
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(ShortInterestRepository), new ShortInterestRepository(DbContext))
         );
         var sut = new ShortInterestImportService(
@@ -116,7 +119,8 @@ public class ShortInterestImportServiceFilteredFetchTests : ParadeDbMcpTestBase
             .Set<ShortInterest>()
             .AsNoTracking()
             .SingleOrDefaultAsync(s =>
-                s.CommonStockId == missing.Id && s.SettlementDate == settlementDate
+                s.Listing.Security.EquityIssuerId == missing.Id
+                && s.SettlementDate == settlementDate
             );
         missRow.Should().NotBeNull("the symbol-scoped fetch must persist the missing stock");
         missRow!.CurrentShortPosition.Should().Be(750_000);

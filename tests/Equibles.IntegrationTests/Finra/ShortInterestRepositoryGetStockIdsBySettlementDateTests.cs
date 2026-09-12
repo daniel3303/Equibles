@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Finra.Data;
 using Equibles.Finra.Data.Models;
@@ -36,6 +37,16 @@ public class ShortInterestRepositoryGetStockIdsBySettlementDateTests : IDisposab
         var target = new DateOnly(2024, 6, 15);
         var other = new DateOnly(2024, 5, 31);
 
+        foreach (var id in new[] { onDateA, onDateB, otherDateOnly })
+            _dbContext.Add(
+                new CommonStock
+                {
+                    Id = id,
+                    Ticker = id.ToString("N"),
+                    Name = "Fixture issuer",
+                }
+            );
+
         _dbContext
             .Set<ShortInterest>()
             .AddRange(
@@ -53,10 +64,19 @@ public class ShortInterestRepositoryGetStockIdsBySettlementDateTests : IDisposab
         ids.Should().NotContain(otherDateOnly);
     }
 
-    private static ShortInterest ShortInterest(Guid stockId, DateOnly settlementDate) =>
+    private ShortInterest ShortInterest(Guid stockId, DateOnly settlementDate) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStockId(
+                    _dbContext,
+                    stockId,
+                    Equibles.TestSupport.NativeListingSeed.ForStockId(_dbContext, stockId).Ticker
+                )
+                .Id,
+            ListedTicker = Equibles
+                .TestSupport.NativeListingSeed.ForStockId(_dbContext, stockId)
+                .Ticker,
             SettlementDate = settlementDate,
             CurrentShortPosition = 1000,
         };

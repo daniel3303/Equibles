@@ -69,8 +69,10 @@ public class ShortDataToolsGetShortInterestSnapshotNoResultsCultureInvarianceTes
             .Add(
                 new ShortInterest
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 15),
                     CurrentShortPosition = 1_000,
                     PreviousShortPosition = 1_000,

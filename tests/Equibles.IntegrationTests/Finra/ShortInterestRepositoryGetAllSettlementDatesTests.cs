@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Finra.Data;
 using Equibles.Finra.Data.Models;
@@ -49,11 +50,30 @@ public class ShortInterestRepositoryGetAllSettlementDatesTests : IDisposable
         dates.Should().Equal(june, may, april);
     }
 
-    private static ShortInterest ShortInterest(Guid stockId, DateOnly settlementDate) =>
-        new()
+    private ShortInterest ShortInterest(Guid stockId, DateOnly settlementDate)
+    {
+        _dbContext.Add(
+            new CommonStock
+            {
+                Id = stockId,
+                Ticker = stockId.ToString("N"),
+                Name = "Fixture issuer",
+            }
+        );
+        return new()
         {
-            CommonStockId = stockId,
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStockId(
+                    _dbContext,
+                    stockId,
+                    Equibles.TestSupport.NativeListingSeed.ForStockId(_dbContext, stockId).Ticker
+                )
+                .Id,
+            ListedTicker = Equibles
+                .TestSupport.NativeListingSeed.ForStockId(_dbContext, stockId)
+                .Ticker,
             SettlementDate = settlementDate,
             CurrentShortPosition = 1000,
         };
+    }
 }

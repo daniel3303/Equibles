@@ -54,7 +54,10 @@ public class ShortInterestImportServiceBulkFetchThresholdTests : ParadeDbMcpTest
         DbContext.Add(
             new ShortInterest
             {
-                CommonStockId = stocks[0].Id,
+                EquityListingId = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stocks[0], stocks[0].Ticker)
+                    .Id,
+                ListedTicker = stocks[0].Ticker,
                 SettlementDate = settlementDate,
                 CurrentShortPosition = 1,
             }
@@ -70,6 +73,7 @@ public class ShortInterestImportServiceBulkFetchThresholdTests : ParadeDbMcpTest
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(ShortInterestRepository), new ShortInterestRepository(DbContext))
         );
         var sut = new ShortInterestImportService(

@@ -49,6 +49,7 @@ public class FinraScraperWorkerDoWorkTests : ParadeDbMcpTestBase
         // services and TickerMapService resolve from their own nested scopes.
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(DbContext)),
             (typeof(OffExchangeVolumeRepository), new OffExchangeVolumeRepository(DbContext))
         );

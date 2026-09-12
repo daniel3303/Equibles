@@ -66,8 +66,10 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
             .Add(
                 new DailyShortVolume
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     Date = date,
                     ShortVolume = 1_000_000,
                     ShortExemptVolume = 0,
@@ -88,8 +90,9 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
             .Add(
                 new ShortInterest
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .Id,
                     ListedTicker = stock.Ticker,
                     SettlementDate = settlementDate,
                     CurrentShortPosition = position,
@@ -272,8 +275,10 @@ public class ShortDataToolsHistoryOutputNotesTests : ParadeDbMcpTestBase
             .Add(
                 new ShortInterest
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2026, 3, 13),
                     CurrentShortPosition = 1_000,
                     ChangeInShortPosition = 0,

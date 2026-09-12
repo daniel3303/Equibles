@@ -49,8 +49,10 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
             .Add(
                 new OffExchangeVolume
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     WeekStartDate = weekStart,
                     AtsVolume = 5_000_000,
                     AtsTradeCount = 11_111,

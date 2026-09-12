@@ -47,13 +47,19 @@ public class DailyShortVolumeRepositoryTests : IDisposable
         long shortExemptVolume = 5_000,
         long totalVolume = 5_000_000,
         string market = "TRF",
-        string listedTicker = ""
+        string listedTicker = null
     )
     {
         return new DailyShortVolume
         {
-            CommonStockId = stock.Id,
-            ListedTicker = listedTicker,
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStock(
+                    _dbContext,
+                    stock,
+                    listedTicker ?? stock.Ticker
+                )
+                .Id,
+            ListedTicker = listedTicker ?? stock.Ticker,
             Date = date,
             ShortVolume = shortVolume,
             ShortExemptVolume = shortExemptVolume,
@@ -80,7 +86,7 @@ public class DailyShortVolumeRepositoryTests : IDisposable
         var result = await _repository.GetHistoryByStock(stock).ToListAsync();
 
         result.Should().HaveCount(3);
-        result.Should().OnlyContain(v => v.CommonStockId == stock.Id);
+        result.Should().OnlyContain(v => v.Listing.Security.EquityIssuerId == stock.Id);
     }
 
     [Fact]
@@ -113,7 +119,7 @@ public class DailyShortVolumeRepositoryTests : IDisposable
 
         var result = await _repository.GetHistoryByStock(apple).ToListAsync();
 
-        result.Should().ContainSingle().Which.CommonStockId.Should().Be(apple.Id);
+        result.Should().ContainSingle().Which.Listing.Security.EquityIssuerId.Should().Be(apple.Id);
     }
 
     [Fact]
@@ -249,7 +255,10 @@ public class DailyShortVolumeRepositoryTests : IDisposable
         var result = await _repository.GetByDate(date).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Select(v => v.CommonStockId).Should().Contain(new[] { apple.Id, msft.Id });
+        result
+            .Select(v => v.Listing.Security.EquityIssuerId)
+            .Should()
+            .Contain(new[] { apple.Id, msft.Id });
     }
 
     [Fact]
@@ -304,13 +313,19 @@ public class ShortInterestRepositoryTests : IDisposable
         long changeInShortPosition = 500_000,
         long? averageDailyVolume = 3_000_000,
         decimal? daysToCover = 3.3m,
-        string listedTicker = ""
+        string listedTicker = null
     )
     {
         return new ShortInterest
         {
-            CommonStockId = stock.Id,
-            ListedTicker = listedTicker,
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStock(
+                    _dbContext,
+                    stock,
+                    listedTicker ?? stock.Ticker
+                )
+                .Id,
+            ListedTicker = listedTicker ?? stock.Ticker,
             SettlementDate = settlementDate,
             CurrentShortPosition = currentShortPosition,
             PreviousShortPosition = previousShortPosition,
@@ -338,7 +353,7 @@ public class ShortInterestRepositoryTests : IDisposable
         var result = await _repository.GetHistoryByStock(stock).ToListAsync();
 
         result.Should().HaveCount(3);
-        result.Should().OnlyContain(s => s.CommonStockId == stock.Id);
+        result.Should().OnlyContain(s => s.Listing.Security.EquityIssuerId == stock.Id);
     }
 
     [Fact]
@@ -371,7 +386,7 @@ public class ShortInterestRepositoryTests : IDisposable
 
         var result = await _repository.GetHistoryByStock(apple).ToListAsync();
 
-        result.Should().ContainSingle().Which.CommonStockId.Should().Be(apple.Id);
+        result.Should().ContainSingle().Which.Listing.Security.EquityIssuerId.Should().Be(apple.Id);
     }
 
     [Fact]
@@ -507,7 +522,10 @@ public class ShortInterestRepositoryTests : IDisposable
         var result = await _repository.GetBySettlementDate(date).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Select(s => s.CommonStockId).Should().Contain(new[] { apple.Id, msft.Id });
+        result
+            .Select(s => s.Listing.Security.EquityIssuerId)
+            .Should()
+            .Contain(new[] { apple.Id, msft.Id });
     }
 
     [Fact]

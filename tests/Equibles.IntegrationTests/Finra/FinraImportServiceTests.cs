@@ -60,7 +60,8 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyShortVolumeRepository), _volumeRepo),
-            (typeof(CommonStockRepository), _stockRepo)
+            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(EquityListingRepository), new EquityListingRepository(_dbContext))
         );
 
         var tickerMapService = new TickerMapService(scopeFactory);
@@ -99,6 +100,13 @@ public class ShortVolumeImportServiceTests : IDisposable
     private async Task SeedStocks(params CommonStock[] stocks)
     {
         _stockRepo.AddRange(stocks);
+        foreach (var owner in _dbContext.Set<CommonStock>().Local.ToList())
+        foreach (
+            var ticker in new[] { owner.Ticker }
+                .Concat(owner.ReferenceTickers)
+                .Concat(owner.SecondaryTickers)
+        )
+            Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner, ticker);
         await _stockRepo.SaveChanges();
     }
 
@@ -109,7 +117,9 @@ public class ShortVolumeImportServiceTests : IDisposable
             .Add(
                 new DailyShortVolume
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
                     ListedTicker = stock.Ticker,
                     Date = date,
                     ShortVolume = shortVolume,
@@ -193,7 +203,7 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetAll().ToList();
         volumes.Should().ContainSingle();
-        volumes[0].CommonStockId.Should().Be(apple.Id);
+        volumes[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
         volumes[0].Date.Should().Be(new DateOnly(2026, 3, 25));
         volumes[0].ShortVolume.Should().Be(500_000);
         volumes[0].ShortExemptVolume.Should().Be(10_000);
@@ -222,8 +232,14 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetAll().ToList();
         volumes.Should().HaveCount(2);
-        volumes.Should().Contain(v => v.CommonStockId == apple.Id && v.ShortVolume == 500_000);
-        volumes.Should().Contain(v => v.CommonStockId == msft.Id && v.ShortVolume == 300_000);
+        volumes
+            .Should()
+            .Contain(v =>
+                v.Listing.Security.EquityIssuerId == apple.Id && v.ShortVolume == 500_000
+            );
+        volumes
+            .Should()
+            .Contain(v => v.Listing.Security.EquityIssuerId == msft.Id && v.ShortVolume == 300_000);
     }
 
     // ── Aggregates across markets ────────────────────────────────────
@@ -369,8 +385,20 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetByDate(existingDate).ToList();
         volumes.Should().HaveCount(2);
-        volumes.Should().Contain(v => v.CommonStockId == apple.Id && v.ShortVolume == 200_000);
-        volumes.Should().Contain(v => v.CommonStockId == microsoft.Id && v.ShortVolume == 300_000);
+        volumes
+            .Should()
+            .Contain(v =>
+                v.EquityListingId
+                    == Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, apple).Id
+                && v.ShortVolume == 200_000
+            );
+        volumes
+            .Should()
+            .Contain(v =>
+                v.EquityListingId
+                    == Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, microsoft).Id
+                && v.ShortVolume == 300_000
+            );
         _partitionRepo
             .GetPartition(
                 "daily-short-volume-files-v3",
@@ -413,7 +441,8 @@ public class ShortVolumeImportServiceTests : IDisposable
             .GetByDate(historicalDate)
             .Should()
             .ContainSingle(volume =>
-                volume.CommonStockId == microsoft.Id && volume.ShortVolume == 300_000
+                volume.Listing.Security.EquityIssuerId == microsoft.Id
+                && volume.ShortVolume == 300_000
             );
     }
 
@@ -485,7 +514,7 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetAll().ToList();
         volumes.Should().ContainSingle();
-        volumes[0].CommonStockId.Should().Be(apple.Id);
+        volumes[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
     }
 
     [Fact]
@@ -527,7 +556,7 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetAll().ToList();
         volumes.Should().ContainSingle();
-        volumes[0].CommonStockId.Should().Be(apple.Id);
+        volumes[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
     }
 
     // ── Null volume fields default to zero ────────────────────────────
@@ -766,7 +795,8 @@ public class ShortInterestImportServiceTests : IDisposable
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(ShortInterestRepository), _interestRepo),
-            (typeof(CommonStockRepository), _stockRepo)
+            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(EquityListingRepository), new EquityListingRepository(_dbContext))
         );
 
         var tickerMapService = new TickerMapService(scopeFactory);
@@ -802,6 +832,13 @@ public class ShortInterestImportServiceTests : IDisposable
     private async Task SeedStocks(params CommonStock[] stocks)
     {
         _stockRepo.AddRange(stocks);
+        foreach (var owner in _dbContext.Set<CommonStock>().Local.ToList())
+        foreach (
+            var ticker in new[] { owner.Ticker }
+                .Concat(owner.ReferenceTickers)
+                .Concat(owner.SecondaryTickers)
+        )
+            Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner, ticker);
         await _stockRepo.SaveChanges();
     }
 
@@ -816,7 +853,9 @@ public class ShortInterestImportServiceTests : IDisposable
             .Add(
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
                     ListedTicker = stock.Ticker,
                     SettlementDate = settlementDate,
                     CurrentShortPosition = currentShort,
@@ -874,7 +913,7 @@ public class ShortInterestImportServiceTests : IDisposable
 
         var interests = _interestRepo.GetAll().ToList();
         interests.Should().ContainSingle();
-        interests[0].CommonStockId.Should().Be(apple.Id);
+        interests[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
         interests[0].SettlementDate.Should().Be(settlementDate);
         interests[0].CurrentShortPosition.Should().Be(15_000_000);
         interests[0].PreviousShortPosition.Should().Be(14_000_000);
@@ -907,10 +946,15 @@ public class ShortInterestImportServiceTests : IDisposable
         interests.Should().HaveCount(2);
         interests
             .Should()
-            .Contain(i => i.CommonStockId == apple.Id && i.CurrentShortPosition == 15_000_000);
+            .Contain(i =>
+                i.Listing.Security.EquityIssuerId == apple.Id
+                && i.CurrentShortPosition == 15_000_000
+            );
         interests
             .Should()
-            .Contain(i => i.CommonStockId == msft.Id && i.CurrentShortPosition == 8_000_000);
+            .Contain(i =>
+                i.Listing.Security.EquityIssuerId == msft.Id && i.CurrentShortPosition == 8_000_000
+            );
     }
 
     [Fact]
@@ -1091,7 +1135,7 @@ public class ShortInterestImportServiceTests : IDisposable
 
         var interests = _interestRepo.GetAll().ToList();
         interests.Should().ContainSingle();
-        interests[0].CommonStockId.Should().Be(apple.Id);
+        interests[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
     }
 
     [Fact]
@@ -1123,7 +1167,7 @@ public class ShortInterestImportServiceTests : IDisposable
 
         var interests = _interestRepo.GetAll().ToList();
         interests.Should().ContainSingle();
-        interests[0].CommonStockId.Should().Be(apple.Id);
+        interests[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
     }
 
     // ── Null fields default to zero or null ───────────────────────────

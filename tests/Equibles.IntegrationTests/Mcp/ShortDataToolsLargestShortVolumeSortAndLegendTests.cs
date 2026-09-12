@@ -68,8 +68,10 @@ public class ShortDataToolsLargestShortVolumeSortAndLegendTests : ParadeDbMcpTes
             .Add(
                 new DailyShortVolume
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     Date = Day,
                     ShortVolume = shortVolume,
                     ShortExemptVolume = 0,

@@ -102,3 +102,15 @@
 - Final cutover removes `equity_ftd_listing_bridge`, `eq_bridge_ftd_listing`, the unmapped `CommonStockId` column and its old unique index together, after all stock-facing readers and writers move to native identities.
 - The importer resolves native listing IDs before upsert; native rows survive removal of a legacy stock. Never delete a native listing that retains observations.
 - `NativeListingFailsToDeliverTests` verifies full-row preservation, refusal without mutation for unresolved history, same-symbol venue isolation, restrictive deletion, and old/new writer coexistence against PostgreSQL.
+
+
+## Native FINRA observations
+
+- `DailyShortVolume`, `ShortInterest`, and `OffExchangeVolume` now reference exact native listings with restrictive deletion and listing/date uniqueness.
+- Backfill resolves each original issuer/ticker pair; unresolved history aborts the transaction without changing observations.
+- Preserve original IDs, source ticker spelling, all quantities/precision, market attribution, timestamps, and every `FinraImportPartition` marker.
+- Source-universe hashes keep their existing payload; consumers filter the resolved native listing IDs, and issuer-model inputs require the issuer's primary listing to be a scope member.
+- Case-fold repair also requires an exact match with the observation's source ticker, protecting history from a former symbol after a rename.
+- Run `scripts/verify-native-finra-listings.sql`; missing identities, mismatches, and duplicate native listing/date groups must be zero, with all three native foreign keys validated and restrictive.
+- The unmapped `CommonStockId` columns, old unique indexes, `equity_finra_listing_bridge` triggers and `eq_bridge_finra_listing` function exist only through the retiring-binary window; remove them together in the final contract migration after old consumers stop.
+- Completion requires full row reconciliation and the retirement of these bridges; this stage does not complete the database cutover.

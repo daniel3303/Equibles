@@ -36,7 +36,16 @@ public class ShortVolumeIndexViewRenderingTests
             db.Add(
                 new DailyShortVolume
                 {
-                    CommonStockId = stockId,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStockId(
+                            db,
+                            stockId,
+                            Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId).Ticker
+                        )
+                        .Id,
+                    ListedTicker = Equibles
+                        .TestSupport.NativeListingSeed.ForStockId(db, stockId)
+                        .Ticker,
                     Date = day,
                     ShortVolume = 600,
                     ShortExemptVolume = 25,

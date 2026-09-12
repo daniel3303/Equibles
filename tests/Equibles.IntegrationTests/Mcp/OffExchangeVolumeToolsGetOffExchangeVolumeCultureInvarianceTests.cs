@@ -46,8 +46,10 @@ public class OffExchangeVolumeToolsGetOffExchangeVolumeCultureInvarianceTests : 
             .Add(
                 new OffExchangeVolume
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     WeekStartDate = new DateOnly(2026, 3, 16),
                     AtsVolume = 5_000_000,
                     AtsTradeCount = 11_111,

@@ -63,8 +63,10 @@ public class ShortDataToolsGetLargestShortVolumeCultureInvarianceTests : ParadeD
             .Add(
                 new DailyShortVolume
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     Date = new DateOnly(2026, 4, 2),
                     ShortVolume = 5_000_000,
                     ShortExemptVolume = 0,

@@ -52,7 +52,9 @@ public class ShortVolumeImportServiceCollisionRowHealTests : ParadeDbMcpTestBase
         DbContext.Add(
             new DailyShortVolume
             {
-                CommonStockId = _stock.Id,
+                EquityListingId = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, _stock, _stock.Ticker)
+                    .Id,
                 ListedTicker = _stock.Ticker,
                 Date = _corruptDate,
                 ShortVolume = 5_000,
@@ -84,6 +86,7 @@ public class ShortVolumeImportServiceCollisionRowHealTests : ParadeDbMcpTestBase
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(DbContext))
         );
         return new ShortVolumeImportService(
@@ -132,8 +135,69 @@ public class ShortVolumeImportServiceCollisionRowHealTests : ParadeDbMcpTestBase
         var remaining = await verify
             .Set<DailyShortVolume>()
             .AsNoTracking()
-            .AnyAsync(v => v.CommonStockId == _stock.Id && v.Date == _corruptDate);
+            .AnyAsync(v =>
+                v.Listing.Security.EquityIssuerId == _stock.Id && v.Date == _corruptDate
+            );
         remaining.Should().BeFalse("the row's only source was the case-folded sibling security");
+    }
+
+    [Theory]
+    [InlineData("TESTw")]
+    [InlineData("TESTW")]
+    public async Task Import_CurrentSymbolCollision_PreservesObservationFromFormerSymbol(
+        string incomingTicker
+    )
+    {
+        await SeedStockAndCorruptRow();
+        // A native observation can retain a former source symbol after the listing is renamed.
+        await DbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            UPDATE "DailyShortVolume" SET "CommonStockId" = NULL, "ListedTicker" = 'FORMER'
+            WHERE "Date" = {_corruptDate}
+            """
+        );
+        var original = await DbContext.Set<DailyShortVolume>().AsNoTracking().SingleAsync();
+        var finraClient = Substitute.For<IFinraClient>();
+        finraClient
+            .GetDailyShortVolume(Arg.Any<DateOnly>())
+            .Returns(
+                new List<ShortVolumeRecord>
+                {
+                    new()
+                    {
+                        Symbol = incomingTicker,
+                        ShortVolume = 8888,
+                        TotalVolume = 9999,
+                        MarketCode = "Q",
+                    },
+                }
+            );
+
+        await BuildService(finraClient).Import(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var retained = await verify
+            .Set<DailyShortVolume>()
+            .AsNoTracking()
+            .SingleAsync(row => row.Id == original.Id);
+        retained.Id.Should().Be(original.Id);
+        retained.EquityListingId.Should().Be(original.EquityListingId);
+        retained.ListedTicker.Should().Be("FORMER");
+        retained.ShortVolume.Should().Be(original.ShortVolume);
+        retained.TotalVolume.Should().Be(original.TotalVolume);
+        retained.CreationTime.Should().Be(original.CreationTime);
+        retained.Market.Should().Be(original.Market);
+        if (incomingTicker == "TESTW")
+            (
+                await verify
+                    .Set<FinraImportPartition>()
+                    .AnyAsync(row =>
+                        row.Dataset == "daily-short-volume-files-v3"
+                        && row.PartitionDate == _corruptDate
+                    )
+            )
+                .Should()
+                .BeFalse();
     }
 
     [Fact]
@@ -162,7 +226,9 @@ public class ShortVolumeImportServiceCollisionRowHealTests : ParadeDbMcpTestBase
         var remaining = await verify
             .Set<DailyShortVolume>()
             .AsNoTracking()
-            .AnyAsync(v => v.CommonStockId == _stock.Id && v.Date == _corruptDate);
+            .AnyAsync(v =>
+                v.Listing.Security.EquityIssuerId == _stock.Id && v.Date == _corruptDate
+            );
         remaining
             .Should()
             .BeTrue("absence from one day's file is not evidence the row was a collision");
@@ -200,7 +266,9 @@ public class ShortVolumeImportServiceCollisionRowHealTests : ParadeDbMcpTestBase
         var row = await verify
             .Set<DailyShortVolume>()
             .AsNoTracking()
-            .SingleAsync(v => v.CommonStockId == _stock.Id && v.Date == _corruptDate);
+            .SingleAsync(v =>
+                v.Listing.Security.EquityIssuerId == _stock.Id && v.Date == _corruptDate
+            );
         row.ShortVolume.Should().Be(90_492, "the upsert replaces the corrupted sum");
         row.TotalVolume.Should().Be(117_265);
     }

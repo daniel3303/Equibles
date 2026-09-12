@@ -49,6 +49,7 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(ShortInterestRepository), new ShortInterestRepository(DbContext))
         );
         return new ShortInterestImportService(
@@ -99,7 +100,9 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
         var rows = await verify
             .Set<ShortInterest>()
             .AsNoTracking()
-            .Where(s => s.CommonStockId == _stock.Id && s.SettlementDate == settlementDate)
+            .Where(s =>
+                s.Listing.Security.EquityIssuerId == _stock.Id && s.SettlementDate == settlementDate
+            )
             .ToListAsync();
         rows.Should().ContainSingle("the tracked stock's short interest must be persisted");
         rows[0].CurrentShortPosition.Should().Be(500_000);
@@ -147,8 +150,12 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
             .Where(s => s.SettlementDate == settlementDate)
             .ToListAsync();
         rows.Should().HaveCount(2);
-        rows.Single(row => row.CommonStockId == common.Id).CurrentShortPosition.Should().Be(100);
-        rows.Single(row => row.CommonStockId == preferred.Id).CurrentShortPosition.Should().Be(200);
+        rows.Single(row => row.Listing.Security.EquityIssuerId == common.Id)
+            .CurrentShortPosition.Should()
+            .Be(100);
+        rows.Single(row => row.Listing.Security.EquityIssuerId == preferred.Id)
+            .CurrentShortPosition.Should()
+            .Be(200);
     }
 
     [Fact]
@@ -192,10 +199,10 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
             .Where(s => s.SettlementDate == settlementDate)
             .ToListAsync();
         rows.Should().HaveCount(2);
-        rows.Single(row => row.CommonStockId == commonClass.Id)
+        rows.Single(row => row.Listing.Security.EquityIssuerId == commonClass.Id)
             .CurrentShortPosition.Should()
             .Be(300);
-        rows.Single(row => row.CommonStockId == preferredClass.Id)
+        rows.Single(row => row.Listing.Security.EquityIssuerId == preferredClass.Id)
             .CurrentShortPosition.Should()
             .Be(400);
     }

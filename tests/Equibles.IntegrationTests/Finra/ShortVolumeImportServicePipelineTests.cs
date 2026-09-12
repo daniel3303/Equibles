@@ -48,7 +48,10 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
         DbContext.Add(
             new DailyShortVolume
             {
-                CommonStockId = _stock.Id,
+                EquityListingId = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, _stock, _stock.Ticker)
+                    .Id,
+                ListedTicker = _stock.Ticker,
                 Date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-3),
                 ShortVolume = 1,
                 TotalVolume = 1,
@@ -62,6 +65,7 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(DbContext))
         );
         return new ShortVolumeImportService(
@@ -128,7 +132,7 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
         var aggregated = await verify
             .Set<DailyShortVolume>()
             .AsNoTracking()
-            .Where(v => v.CommonStockId == _stock.Id && v.ShortVolume == 150)
+            .Where(v => v.Listing.Security.EquityIssuerId == _stock.Id && v.ShortVolume == 150)
             .ToListAsync();
         aggregated.Should().NotBeEmpty("the two per-market rows must aggregate to ShortVolume 150");
         aggregated.Should().OnlyContain(v => v.TotalVolume == 260);
@@ -150,7 +154,7 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
         var hasAggregate = await verify
             .Set<DailyShortVolume>()
             .AsNoTracking()
-            .AnyAsync(v => v.CommonStockId == _stock.Id && v.ShortVolume == 150);
+            .AnyAsync(v => v.Listing.Security.EquityIssuerId == _stock.Id && v.ShortVolume == 150);
         hasAggregate.Should().BeFalse("every fetch failed, so nothing new was persisted");
     }
 }

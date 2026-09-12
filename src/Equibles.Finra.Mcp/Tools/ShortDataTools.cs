@@ -322,7 +322,7 @@ public class ShortDataTools
 
                 var query = _shortInterestRepository
                     .GetBySettlementDate(latestDate)
-                    .Include(s => s.CommonStock)
+                    .Include(s => s.Listing.Security.Issuer)
                     .Where(s => s.DaysToCover != null)
                     .Where(s => s.AverageDailyVolume != null && s.AverageDailyVolume > 0);
 
@@ -352,13 +352,16 @@ public class ShortDataTools
                     .Where(row =>
                         validListings.Contains(
                             new ListedSecurityKey(
-                                row.CommonStockId,
-                                ListingTicker(row.CommonStock, row.ListedTicker)
+                                row.Listing.Security.EquityIssuerId,
+                                row.ListedTicker
                             )
                         )
                     )
                     .ToList();
-                var stockIds = rawRecords.Select(row => row.CommonStockId).Distinct().ToList();
+                var stockIds = rawRecords
+                    .Select(row => row.Listing.Security.EquityIssuerId)
+                    .Distinct()
+                    .ToList();
                 var splitRows = await _stockSplitRepository
                     .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                     .Where(split => stockIds.Contains(split.CommonStockId))
@@ -371,10 +374,12 @@ public class ShortDataTools
                 var adjusted = rawRecords
                     .Select(row =>
                     {
-                        var listedTicker = ListingTicker(row.CommonStock, row.ListedTicker);
+                        var listedTicker = row.ListedTicker;
                         var scoped = PriceSeriesSplitScope.ForListing(
-                            splitRows.Where(split => split.CommonStockId == row.CommonStockId),
-                            row.CommonStock.Ticker,
+                            splitRows.Where(split =>
+                                split.CommonStockId == row.Listing.Security.EquityIssuerId
+                            ),
+                            row.Listing.Security.Issuer.Presentation.Listing.Ticker,
                             listedTicker
                         );
                         var factor = SplitAdjustment.ShareCountFactor(latestDate, scoped);
@@ -492,7 +497,7 @@ public class ShortDataTools
 
                 var query = _shortVolumeRepository
                     .GetByDate(tradingDay)
-                    .Include(d => d.CommonStock)
+                    .Include(d => d.Listing.Security.Issuer)
                     .Where(d => d.TotalVolume > 0);
 
                 var sortKey = string.IsNullOrWhiteSpace(sortBy) ? "shortVolume" : sortBy.Trim();
@@ -511,13 +516,16 @@ public class ShortDataTools
                     .Where(row =>
                         validListings.Contains(
                             new ListedSecurityKey(
-                                row.CommonStockId,
-                                ListingTicker(row.CommonStock, row.ListedTicker)
+                                row.Listing.Security.EquityIssuerId,
+                                row.ListedTicker
                             )
                         )
                     )
                     .ToList();
-                var stockIds = rawRecords.Select(row => row.CommonStockId).Distinct().ToList();
+                var stockIds = rawRecords
+                    .Select(row => row.Listing.Security.EquityIssuerId)
+                    .Distinct()
+                    .ToList();
                 var splitRows = await _stockSplitRepository
                     .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                     .Where(split => stockIds.Contains(split.CommonStockId))
@@ -525,10 +533,12 @@ public class ShortDataTools
                 var adjusted = rawRecords
                     .Select(row =>
                     {
-                        var listedTicker = ListingTicker(row.CommonStock, row.ListedTicker);
+                        var listedTicker = row.ListedTicker;
                         var scoped = PriceSeriesSplitScope.ForListing(
-                            splitRows.Where(split => split.CommonStockId == row.CommonStockId),
-                            row.CommonStock.Ticker,
+                            splitRows.Where(split =>
+                                split.CommonStockId == row.Listing.Security.EquityIssuerId
+                            ),
+                            row.Listing.Security.Issuer.Presentation.Listing.Ticker,
                             listedTicker
                         );
                         var factor = SplitAdjustment.ShareCountFactor(row.Date, scoped);
@@ -572,7 +582,7 @@ public class ShortDataTools
                     // renderer splices it in front of the volume cells verbatim.
                     r =>
                         RenderShortVolumeRow(
-                            $"{r.ListedTicker} | {ListingCompany(r.Row.CommonStock, r.ListedTicker)}",
+                            $"{r.ListedTicker} | {ListingCompany(r.Row.Listing, r.ListedTicker)}",
                             r.Row,
                             r.Factor
                         )
@@ -606,13 +616,11 @@ public class ShortDataTools
         return $"| {leadCell} | {McpFormat.WholeNumber(shortVolume)} | {McpFormat.WholeNumber(exemptVolume)} | {McpFormat.WholeNumber(totalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
     }
 
-    private static string ListingTicker(CommonStock stock, string listedTicker) =>
-        string.IsNullOrWhiteSpace(listedTicker) ? stock.Ticker : listedTicker;
-
-    private static string ListingCompany(CommonStock stock, string listedTicker) =>
-        SecondaryTickerPolicy.RequiresExactListingScope(stock, ListingTicker(stock, listedTicker))
-            ? "-"
-            : stock.Name;
+    private static string ListingCompany(EquityListing listing, string listedTicker) =>
+        !listing.IsReferenceListed
+        && listing.Id == listing.Security.Issuer.Presentation?.EquityListingId
+            ? listing.Security.Issuer.Name
+            : "-";
 
     // Render with InvariantCulture so the MCP markdown does not fork the separators by host
     // locale (e.g. de-DE would render 1.234.567 / 12,3). `shareFactor` restates the share

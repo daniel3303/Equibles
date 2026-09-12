@@ -76,8 +76,10 @@ public class ShortDataToolsSnapshotSentinelTests : ParadeDbMcpTestBase
             .Add(
                 new ShortInterest
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = Settlement,
                     CurrentShortPosition = position,
                     ChangeInShortPosition = change,

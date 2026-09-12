@@ -72,8 +72,10 @@ public class ShortInterestSnapshotNegativeMaxResultsTests
                 .Add(
                     new ShortInterest
                     {
-                        CommonStock = stock,
-                        CommonStockId = stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(db, stock, stock.Ticker)
+                            .Id,
+                        ListedTicker = stock.Ticker,
                         SettlementDate = new DateOnly(2026, 4, 15),
                         CurrentShortPosition = 50_000_000,
                         PreviousShortPosition = 49_000_000,

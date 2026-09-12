@@ -49,7 +49,7 @@ public class ShortInterestImportService
         // Above this, bulk-fetch all symbols (cheaper than a huge domainFilters payload with unknown API limits)
         const int filteredFetchThreshold = 500;
 
-        var tickerMap = await _tickerMapService.BuildListed(
+        var tickerMap = await _tickerMapService.BuildNativeListed(
             _workerOptions.TickersToSync,
             cancellationToken,
             StringComparer.Ordinal
@@ -60,9 +60,9 @@ public class ShortInterestImportService
             return;
         }
 
-        var trackedListings = tickerMap.Values.ToHashSet();
+        var trackedListings = tickerMap.Values.Select(row => row.EquityListingId).ToHashSet();
         var reverseMap = tickerMap
-            .GroupBy(kvp => kvp.Value)
+            .GroupBy(kvp => kvp.Value.EquityListingId)
             .ToDictionary(
                 group => group.Key,
                 group => group.Select(kvp => kvp.Key).Distinct(StringComparer.Ordinal).ToList()
@@ -183,21 +183,21 @@ public class ShortInterestImportService
     /// <returns>Number of records imported, or -1 if the date was already complete.</returns>
     private async Task<int> ImportDate(
         DateOnly date,
-        Dictionary<string, ListedSecurityKey> tickerMap,
-        Dictionary<string, ListedSecurityKey> compressedIndex,
-        Dictionary<ListedSecurityKey, List<string>> reverseMap,
-        HashSet<ListedSecurityKey> trackedListings,
+        Dictionary<string, EquityListingReference> tickerMap,
+        Dictionary<string, EquityListingReference> compressedIndex,
+        Dictionary<Guid, List<string>> reverseMap,
+        HashSet<Guid> trackedListings,
         int filteredFetchThreshold,
         CancellationToken cancellationToken
     )
     {
         try
         {
-            HashSet<ListedSecurityKey> existingListings;
+            HashSet<Guid> existingListings;
             using (var scope = _scopeFactory.CreateScope())
             {
                 var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
-                var ids = await repo.GetListingKeysBySettlementDate(date)
+                var ids = await repo.GetListingIdsBySettlementDate(date)
                     .ToListAsync(cancellationToken);
                 existingListings = ids.ToHashSet();
             }
@@ -231,14 +231,16 @@ public class ShortInterestImportService
                             r.Symbol,
                             out var listing
                         )
-                            ? (ListedSecurityKey?)listing
+                            ? (EquityListingReference?)listing
                             : null
                     )
                 )
-                .Where(x => x.Listing is { } listing && missingListings.Contains(listing))
+                .Where(x =>
+                    x.Listing is { } listing && missingListings.Contains(listing.EquityListingId)
+                )
                 .Select(x => new ShortInterest
                 {
-                    CommonStockId = x.Listing.Value.CommonStockId,
+                    EquityListingId = x.Listing.Value.EquityListingId,
                     ListedTicker = x.Listing.Value.ListedTicker,
                     SettlementDate = date,
                     CurrentShortPosition = x.Record.CurrentShortPosition ?? 0,
@@ -285,9 +287,9 @@ public class ShortInterestImportService
     // stocks are missing, or a symbol-filtered request when only a few need backfilling.
     private Task<List<ShortInterestRecord>> FetchMissingRecords(
         DateOnly date,
-        HashSet<ListedSecurityKey> missingListings,
-        HashSet<ListedSecurityKey> trackedListings,
-        Dictionary<ListedSecurityKey, List<string>> reverseMap,
+        HashSet<Guid> missingListings,
+        HashSet<Guid> trackedListings,
+        Dictionary<Guid, List<string>> reverseMap,
         int filteredFetchThreshold
     )
     {
@@ -311,10 +313,7 @@ public class ShortInterestImportService
         return _finraClient.GetShortInterest(date, missingSymbols);
     }
 
-    // tickerMap was built at the start of Import and goes stale if CompanySyncService
-    // hard-deletes a stock in parallel (PR #5's ReplaceObsoleteStock path). Re-validate
-    // each batch against the current set of CommonStockIds so dangling-FK inserts can't
-    // poison the whole batch.
+    // Revalidate captured listing IDs before writing a batch from the source snapshot.
     private async Task ValidateAndPersistBatch(
         List<ShortInterest> batch,
         DateOnly date,
@@ -322,19 +321,23 @@ public class ShortInterestImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var listingRepo = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
         var repo = scope.ServiceProvider.GetRequiredService<ShortInterestRepository>();
 
-        var validBatch = await stockRepo.FilterByExistingStocks(
-            batch,
-            b => b.CommonStockId,
-            cancellationToken
-        );
+        var listingIds = batch.Select(row => row.EquityListingId).Distinct().ToList();
+        var retainedIds = (
+            await listingRepo
+                .GetAll()
+                .Where(row => listingIds.Contains(row.Id))
+                .Select(row => row.Id)
+                .ToListAsync(cancellationToken)
+        ).ToHashSet();
+        var validBatch = batch.Where(row => retainedIds.Contains(row.EquityListingId)).ToList();
         var dropped = batch.Count - validBatch.Count;
         if (dropped > 0)
         {
             _logger.LogWarning(
-                "Dropped {Dropped} short interest rows for {Date} referencing CommonStockIds no longer in the database",
+                "Dropped {Dropped} short interest rows for {Date} referencing listing IDs no longer in the database",
                 dropped,
                 date
             );

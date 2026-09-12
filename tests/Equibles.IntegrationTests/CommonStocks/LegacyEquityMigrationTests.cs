@@ -315,10 +315,12 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
             PreviousShares = 654321,
         };
 
-    private static DailyShortVolume ShortVolume(CommonStock stock, string ticker, int day) =>
+    private DailyShortVolume ShortVolume(CommonStock stock, string ticker, int day) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock, ticker)
+                .Id,
             ListedTicker = ticker,
             Date = new DateOnly(2025, 1, day),
             ShortVolume = 123.456789m,

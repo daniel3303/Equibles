@@ -161,7 +161,10 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new DailyShortVolume
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     Date = new DateOnly(2025, 3, 10),
                     ShortVolume = 500_000,
                     ShortExemptVolume = 1_000,
@@ -170,7 +173,10 @@ public class StockTabServiceTests : IDisposable
                 },
                 new DailyShortVolume
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     Date = new DateOnly(2025, 3, 11),
                     ShortVolume = 600_000,
                     ShortExemptVolume = 1_500,
@@ -179,7 +185,10 @@ public class StockTabServiceTests : IDisposable
                 },
                 new DailyShortVolume
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     Date = new DateOnly(2025, 3, 12),
                     ShortVolume = 550_000,
                     ShortExemptVolume = 1_200,
@@ -220,7 +229,10 @@ public class StockTabServiceTests : IDisposable
                 .Add(
                     new DailyShortVolume
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                            .Id,
+                        ListedTicker = stock.Ticker,
                         Date = new DateOnly(2025, 1, 1).AddDays(i),
                         ShortVolume = 100_000 + i,
                         ShortExemptVolume = 100,
@@ -249,7 +261,10 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new DailyShortVolume
                 {
-                    CommonStockId = apple.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, apple, apple.Ticker)
+                        .Id,
+                    ListedTicker = apple.Ticker,
                     Date = new DateOnly(2025, 3, 10),
                     ShortVolume = 500_000,
                     TotalVolume = 1_200_000,
@@ -257,7 +272,10 @@ public class StockTabServiceTests : IDisposable
                 },
                 new DailyShortVolume
                 {
-                    CommonStockId = msft.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, msft, msft.Ticker)
+                        .Id,
+                    ListedTicker = msft.Ticker,
                     Date = new DateOnly(2025, 3, 10),
                     ShortVolume = 300_000,
                     TotalVolume = 900_000,
@@ -283,7 +301,10 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 15),
                     CurrentShortPosition = 10_000_000,
                     PreviousShortPosition = 9_500_000,
@@ -293,7 +314,10 @@ public class StockTabServiceTests : IDisposable
                 },
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 31),
                     CurrentShortPosition = 10_500_000,
                     PreviousShortPosition = 10_000_000,
@@ -303,7 +327,10 @@ public class StockTabServiceTests : IDisposable
                 },
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = new DateOnly(2025, 2, 14),
                     CurrentShortPosition = 11_000_000,
                     PreviousShortPosition = 10_500_000,
@@ -345,7 +372,10 @@ public class StockTabServiceTests : IDisposable
                 .Add(
                     new ShortInterest
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                            .Id,
+                        ListedTicker = stock.Ticker,
                         SettlementDate = new DateOnly(2024, 1, 15).AddDays(i * 15),
                         CurrentShortPosition = 10_000_000 + i * 100_000,
                         PreviousShortPosition = 10_000_000 + (i - 1) * 100_000,

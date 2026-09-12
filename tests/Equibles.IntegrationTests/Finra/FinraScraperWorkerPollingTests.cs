@@ -90,6 +90,8 @@ public class FinraScraperWorkerPollingTests : IDisposable
                 Cik = "CIK-AAPL",
             },
         ]);
+        foreach (var owner in _dbContext.Set<CommonStock>().Local.ToList())
+            Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner);
         await _stockRepo.SaveChanges();
     }
 
@@ -101,7 +103,18 @@ public class FinraScraperWorkerPollingTests : IDisposable
             .Add(
                 new DailyShortVolume
                 {
-                    CommonStockId = stockId,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStockId(
+                            _dbContext,
+                            stockId,
+                            Equibles
+                                .TestSupport.NativeListingSeed.ForStockId(_dbContext, stockId)
+                                .Ticker
+                        )
+                        .Id,
+                    ListedTicker = Equibles
+                        .TestSupport.NativeListingSeed.ForStockId(_dbContext, stockId)
+                        .Ticker,
                     Date = date,
                     ShortVolume = 1,
                     TotalVolume = 1,
@@ -119,6 +132,7 @@ public class FinraScraperWorkerPollingTests : IDisposable
         // The importers resolve repositories from this scope factory.
         var importScopeFactory = ServiceScopeSubstitute.Create(
             (typeof(CommonStockRepository), new CommonStockRepository(_dbContext)),
+            (typeof(EquityListingRepository), new EquityListingRepository(_dbContext)),
             (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(_dbContext)),
             (typeof(ShortInterestRepository), new ShortInterestRepository(_dbContext)),
             (typeof(OffExchangeVolumeRepository), new OffExchangeVolumeRepository(_dbContext))
@@ -268,7 +282,18 @@ public class FinraScraperWorkerPollingTests : IDisposable
             .Add(
                 new ShortInterest
                 {
-                    CommonStockId = stockId,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStockId(
+                            _dbContext,
+                            stockId,
+                            Equibles
+                                .TestSupport.NativeListingSeed.ForStockId(_dbContext, stockId)
+                                .Ticker
+                        )
+                        .Id,
+                    ListedTicker = Equibles
+                        .TestSupport.NativeListingSeed.ForStockId(_dbContext, stockId)
+                        .Ticker,
                     SettlementDate = settlementDate,
                     CurrentShortPosition = 1,
                 }

@@ -225,10 +225,10 @@ public class ShortSqueezeScoreManager
         // FINRA omits days-to-cover.
         var shortInterests = await _shortInterestRepository
             .GetBySettlementDate(settlementDate)
-            .Where(s => s.ListedTicker == s.CommonStock.Ticker || s.ListedTicker == "")
+            .Where(s => s.EquityListingId == s.Listing.Security.Issuer.Presentation.EquityListingId)
             .Select(s => new
             {
-                s.CommonStockId,
+                CommonStockId = s.Listing.Security.EquityIssuerId,
                 s.CurrentShortPosition,
                 s.PreviousShortPosition,
                 s.AverageDailyVolume,
@@ -410,10 +410,16 @@ public class ShortSqueezeScoreManager
         var windows = await _dailyShortVolumeRepository
             .GetAll()
             .Where(v =>
-                v.Date > farCutoff && v.Date <= settlementDate && stockIds.Contains(v.CommonStockId)
+                v.Date > farCutoff
+                && v.Date <= settlementDate
+                && stockIds.Contains(v.Listing.Security.EquityIssuerId)
             )
-            .Where(v => v.ListedTicker == v.CommonStock.Ticker || v.ListedTicker == "")
-            .GroupBy(v => new { v.CommonStockId, Recent = v.Date > midCutoff })
+            .Where(v => v.EquityListingId == v.Listing.Security.Issuer.Presentation.EquityListingId)
+            .GroupBy(v => new
+            {
+                CommonStockId = v.Listing.Security.EquityIssuerId,
+                Recent = v.Date > midCutoff,
+            })
             .Select(g => new
             {
                 g.Key.CommonStockId,

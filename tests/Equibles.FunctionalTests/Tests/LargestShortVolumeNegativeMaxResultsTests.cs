@@ -70,8 +70,10 @@ public class LargestShortVolumeNegativeMaxResultsTests
                 .Add(
                     new DailyShortVolume
                     {
-                        CommonStock = stock,
-                        CommonStockId = stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(db, stock, stock.Ticker)
+                            .Id,
+                        ListedTicker = stock.Ticker,
                         Date = new DateOnly(2026, 4, 1),
                         ShortVolume = 1_200_000,
                         ShortExemptVolume = 50_000,

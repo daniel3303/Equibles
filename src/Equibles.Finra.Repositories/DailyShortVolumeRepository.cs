@@ -10,56 +10,38 @@ public class DailyShortVolumeRepository : BaseRepository<DailyShortVolume>
     public DailyShortVolumeRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<DailyShortVolume> GetByStock(CommonStock stock, DateOnly date)
-    {
-        return GetAll()
-            .Where(d =>
-                d.CommonStockId == stock.Id
-                && (d.ListedTicker == stock.Ticker || d.ListedTicker == "")
-                && d.Date == date
-            );
-    }
+    public IQueryable<DailyShortVolume> GetByListingId(Guid listingId, DateOnly date) =>
+        GetHistoryByListingId(listingId).Where(row => row.Date == date);
+
+    public IQueryable<DailyShortVolume> GetHistoryByListingId(Guid listingId) =>
+        GetAll().Where(row => row.EquityListingId == listingId);
+
+    public IQueryable<DailyShortVolume> GetByStock(CommonStock stock, DateOnly date) =>
+        GetHistoryByStock(stock).Where(row => row.Date == date);
 
     public IQueryable<DailyShortVolume> GetByListing(
         CommonStock stock,
         string listedTicker,
         DateOnly date
+    ) => GetHistoryByListing(stock, listedTicker).Where(row => row.Date == date);
+
+    public IQueryable<DailyShortVolume> GetHistoryByStock(CommonStock stock) =>
+        GetAll()
+            .Where(row =>
+                row.Listing.Security.EquityIssuerId == stock.Id
+                && row.EquityListingId == row.Listing.Security.Issuer.Presentation.EquityListingId
+            );
+
+    public virtual IQueryable<DailyShortVolume> GetHistoryByListing(
+        CommonStock stock,
+        string listedTicker
     )
     {
-        var isPrimary = string.Equals(
-            listedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
-        return GetAll()
-            .Where(d =>
-                d.CommonStockId == stock.Id
-                && (d.ListedTicker == listedTicker || (isPrimary && d.ListedTicker == ""))
-                && d.Date == date
-            );
-    }
-
-    public IQueryable<DailyShortVolume> GetHistoryByStock(CommonStock stock)
-    {
-        return GetAll()
-            .Where(d =>
-                d.CommonStockId == stock.Id
-                && (d.ListedTicker == stock.Ticker || d.ListedTicker == "")
-            );
-    }
-
-    public IQueryable<DailyShortVolume> GetHistoryByListing(CommonStock stock, string listedTicker)
-    {
-        var isPrimary = string.Equals(
-            listedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
-        return GetAll()
-            .Where(d =>
-                d.CommonStockId == stock.Id
-                && (d.ListedTicker == listedTicker || (isPrimary && d.ListedTicker == ""))
-            );
+        var listingIds = DbContext
+            .Set<LegacyEquityListing>()
+            .Where(row => row.CommonStockId == stock.Id && row.ListedTicker == listedTicker)
+            .Select(row => row.EquityListingId);
+        return GetAll().Where(row => listingIds.Contains(row.EquityListingId));
     }
 
     public IQueryable<DateOnly> GetLatestDate()

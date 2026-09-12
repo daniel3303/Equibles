@@ -51,7 +51,8 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(OffExchangeVolumeRepository), _volumeRepo),
-            (typeof(CommonStockRepository), _stockRepo)
+            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(EquityListingRepository), new EquityListingRepository(_dbContext))
         );
 
         _service = new OffExchangeVolumeImportService(
@@ -80,6 +81,50 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
         date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
 
     [Fact]
+    public async Task Import_CurrentSymbolCannotOverwriteFormerSymbol_LeavesPartitionUnmarked()
+    {
+        var stock = new CommonStock
+        {
+            Ticker = "AAPL",
+            Name = "Fixture issuer",
+            Cik = "0000000001",
+        };
+        var listing = Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
+        var week = WeekStart(DateOnly.FromDateTime(Now.UtcDateTime)).AddDays(-14);
+        var original = new OffExchangeVolume
+        {
+            EquityListingId = listing.Id,
+            ListedTicker = "FORMER",
+            WeekStartDate = week,
+            AtsVolume = 123,
+            AtsTradeCount = 456,
+            NonAtsOtcVolume = 789,
+            NonAtsOtcTradeCount = 987,
+        };
+        _dbContext.Add(original);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        _workerOptions.MinSyncDate = week.ToDateTime(TimeOnly.MinValue);
+        _finraClient
+            .GetWeeklyOffExchangeVolume(Arg.Any<DateOnly>())
+            .Returns(new List<OffExchangeWeeklyRecord>());
+        _finraClient.GetWeeklyOffExchangeVolume(week).Returns(MakeRecords(ats: 5000, otc: 3000));
+
+        await _service.Import(CancellationToken.None);
+
+        var retained = _volumeRepo.GetAll().Single();
+        retained.Id.Should().Be(original.Id);
+        retained.EquityListingId.Should().Be(listing.Id);
+        retained.ListedTicker.Should().Be("FORMER");
+        retained.AtsVolume.Should().Be(123);
+        retained.AtsTradeCount.Should().Be(456);
+        retained.NonAtsOtcVolume.Should().Be(789);
+        retained.NonAtsOtcTradeCount.Should().Be(987);
+        retained.CreationTime.Should().Be(original.CreationTime);
+        _partitionRepo.GetAll().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Import_StoredWeekBetweenFloorAndToday_BackfillsEarlierSkipsStoredAndFetchesForward()
     {
         var apple = new CommonStock
@@ -90,6 +135,13 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
             Cik = "CIK-AAPL",
         };
         _stockRepo.AddRange([apple]);
+        foreach (var owner in _dbContext.Set<CommonStock>().Local.ToList())
+        foreach (
+            var ticker in new[] { owner.Ticker }
+                .Concat(owner.ReferenceTickers)
+                .Concat(owner.SecondaryTickers)
+        )
+            Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner, ticker);
         await _stockRepo.SaveChanges();
 
         var currentWeek = WeekStart(DateOnly.FromDateTime(Now.UtcDateTime));
@@ -102,7 +154,9 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
             .Add(
                 new OffExchangeVolume
                 {
-                    CommonStockId = apple.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, apple, apple.Ticker)
+                        .Id,
                     ListedTicker = apple.Ticker,
                     WeekStartDate = storedWeek,
                     AtsVolume = 1,
@@ -131,7 +185,10 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
         await _finraClient.Received().GetWeeklyOffExchangeVolume(backfillWeek);
         await _finraClient.Received().GetWeeklyOffExchangeVolume(forwardWeek);
 
-        var rows = _volumeRepo.GetAll().Where(v => v.CommonStockId == apple.Id).ToList();
+        var rows = _volumeRepo
+            .GetAll()
+            .Where(v => v.Listing.Security.EquityIssuerId == apple.Id)
+            .ToList();
         rows.Should().Contain(v => v.WeekStartDate == backfillWeek && v.AtsVolume == 5_000);
         rows.Should().Contain(v => v.WeekStartDate == forwardWeek && v.AtsVolume == 7_000);
     }
@@ -147,6 +204,13 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
             Cik = "CIK-AAPL",
         };
         _stockRepo.AddRange([apple]);
+        foreach (var owner in _dbContext.Set<CommonStock>().Local.ToList())
+        foreach (
+            var ticker in new[] { owner.Ticker }
+                .Concat(owner.ReferenceTickers)
+                .Concat(owner.SecondaryTickers)
+        )
+            Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner, ticker);
         await _stockRepo.SaveChanges();
 
         var week = WeekStart(DateOnly.FromDateTime(Now.UtcDateTime)).AddDays(-28);
@@ -168,7 +232,9 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        var row = _volumeRepo.GetByWeek(week).Single(v => v.CommonStockId == apple.Id);
+        var row = _volumeRepo
+            .GetByWeek(week)
+            .Single(v => v.Listing.Security.EquityIssuerId == apple.Id);
         row.AtsVolume.Should().Be(5_000);
         row.NonAtsOtcVolume.Should().Be(3_000);
         _partitionRepo
@@ -192,6 +258,13 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
             Cik = "CIK-AAPL",
         };
         _stockRepo.AddRange([apple]);
+        foreach (var owner in _dbContext.Set<CommonStock>().Local.ToList())
+        foreach (
+            var ticker in new[] { owner.Ticker }
+                .Concat(owner.ReferenceTickers)
+                .Concat(owner.SecondaryTickers)
+        )
+            Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner, ticker);
         await _stockRepo.SaveChanges();
 
         var week = WeekStart(DateOnly.FromDateTime(Now.UtcDateTime)).AddDays(-28);
@@ -202,7 +275,9 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
             .Add(
                 new OffExchangeVolume
                 {
-                    CommonStockId = apple.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, apple, apple.Ticker)
+                        .Id,
                     ListedTicker = apple.Ticker,
                     WeekStartDate = week,
                     AtsVolume = 9_000,
@@ -224,7 +299,9 @@ public class OffExchangeVolumeImportServiceBackfillTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        var row = _volumeRepo.GetByWeek(week).Single(v => v.CommonStockId == apple.Id);
+        var row = _volumeRepo
+            .GetByWeek(week)
+            .Single(v => v.Listing.Security.EquityIssuerId == apple.Id);
         row.AtsVolume.Should().Be(9_000);
         row.AtsTradeCount.Should().Be(90);
         row.NonAtsOtcVolume.Should().Be(4_000);

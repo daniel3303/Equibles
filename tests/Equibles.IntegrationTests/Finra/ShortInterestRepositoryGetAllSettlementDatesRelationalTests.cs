@@ -45,10 +45,17 @@ public class ShortInterestRepositoryGetAllSettlementDatesRelationalTests : Parad
 
     // Each row gets its own CommonStock parent so the FK_ShortInterest_CommonStock constraint
     // (enforced on the real provider, ignored in-memory) is satisfied.
-    private static ShortInterest Row(string ticker, DateOnly settlementDate) =>
+    private ShortInterest Row(string ticker, DateOnly settlementDate) =>
         new()
         {
-            CommonStock = new CommonStock { Ticker = ticker, Name = ticker },
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStock(
+                    DbContext,
+                    new CommonStock { Ticker = ticker, Name = ticker },
+                    new CommonStock { Ticker = ticker, Name = ticker }.Ticker
+                )
+                .Id,
+            ListedTicker = new CommonStock { Ticker = ticker, Name = ticker }.Ticker,
             SettlementDate = settlementDate,
             CurrentShortPosition = 1000,
         };

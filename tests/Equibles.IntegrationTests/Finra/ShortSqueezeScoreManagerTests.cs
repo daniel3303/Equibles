@@ -115,7 +115,10 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             .Add(
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = SettlementDate,
                     CurrentShortPosition = 120_000,
                     AverageDailyVolume = 40_000,
@@ -143,7 +146,10 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             .Add(
                 new ShortInterest
                 {
-                    CommonStockId = shell.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, shell, shell.Ticker)
+                        .Id,
+                    ListedTicker = shell.Ticker,
                     SettlementDate = SettlementDate,
                     CurrentShortPosition = 200_000,
                     AverageDailyVolume = 0,
@@ -323,13 +329,19 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             .AddRange(
                 new ShortInterest
                 {
-                    CommonStockId = build.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, build, build.Ticker)
+                        .Id,
+                    ListedTicker = build.Ticker,
                     SettlementDate = SettlementDate.AddDays(-14),
                     CurrentShortPosition = 100_000,
                 },
                 new ShortInterest
                 {
-                    CommonStockId = shrink.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, shrink, shrink.Ticker)
+                        .Id,
+                    ListedTicker = shrink.Ticker,
                     SettlementDate = SettlementDate.AddDays(-14),
                     CurrentShortPosition = 200_000,
                 }
@@ -624,7 +636,10 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             .Add(
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     SettlementDate = SettlementDate,
                     CurrentShortPosition = shortPosition,
                     PreviousShortPosition = previousPosition,
@@ -642,7 +657,10 @@ public class ShortSqueezeScoreManagerTests : IDisposable
             .AddRange(
                 new DailyShortVolume
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     Date = SettlementDate.AddDays(-20),
                     ShortVolume = priorShort,
                     TotalVolume = 1000,
@@ -650,7 +668,10 @@ public class ShortSqueezeScoreManagerTests : IDisposable
                 },
                 new DailyShortVolume
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(_dbContext, stock, stock.Ticker)
+                        .Id,
+                    ListedTicker = stock.Ticker,
                     Date = SettlementDate.AddDays(-5),
                     ShortVolume = recentShort,
                     TotalVolume = 1000,

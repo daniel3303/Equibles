@@ -173,7 +173,16 @@ public class ShortActivityControllerTests
         db.Add(
             new ShortInterest
             {
-                CommonStockId = stockId,
+                EquityListingId = Equibles
+                    .TestSupport.NativeListingSeed.ForStockId(
+                        db,
+                        stockId,
+                        Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId).Ticker
+                    )
+                    .Id,
+                ListedTicker = Equibles
+                    .TestSupport.NativeListingSeed.ForStockId(db, stockId)
+                    .Ticker,
                 SettlementDate = settlementDate,
                 CurrentShortPosition = currentShort,
                 PreviousShortPosition = currentShort / 2,

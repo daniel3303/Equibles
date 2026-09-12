@@ -131,4 +131,44 @@ public class TickerMapService
             comparer ?? StringComparer.OrdinalIgnoreCase
         );
     }
+
+    public async Task<Dictionary<string, EquityListingReference>> BuildNativeListed(
+        List<string> tickersToSync,
+        CancellationToken cancellationToken,
+        StringComparer comparer = null
+    )
+    {
+        var source = await BuildListed(tickersToSync, cancellationToken, comparer);
+        using var scope = _scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
+        var issuerIds = source.Values.Select(row => row.CommonStockId).Distinct().ToList();
+        var mappings = await repository
+            .GetLegacyMappings(issuerIds)
+            .Select(row => new
+            {
+                row.CommonStockId,
+                row.ListedTicker,
+                row.EquityListingId,
+                row.Listing.Security.EquityIssuerId,
+            })
+            .ToDictionaryAsync(
+                row => new ListedSecurityKey(row.CommonStockId, row.ListedTicker),
+                row => new EquityListingReference(
+                    row.EquityListingId,
+                    row.EquityIssuerId,
+                    row.ListedTicker
+                ),
+                cancellationToken
+            );
+        return source.ToDictionary(
+            row => row.Key,
+            row =>
+                mappings.TryGetValue(row.Value, out var listing)
+                    ? listing
+                    : throw new InvalidOperationException(
+                        $"No native identity for {row.Value.CommonStockId}/{row.Value.ListedTicker}."
+                    ),
+            comparer ?? StringComparer.OrdinalIgnoreCase
+        );
+    }
 }

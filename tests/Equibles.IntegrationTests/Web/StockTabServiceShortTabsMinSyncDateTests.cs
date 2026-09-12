@@ -69,7 +69,14 @@ public class StockTabServiceShortTabsMinSyncDateTests : IDisposable
                 .Add(
                     new DailyShortVolume
                     {
-                        CommonStockId = _stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(
+                                _dbContext,
+                                _stock,
+                                _stock.Ticker
+                            )
+                            .Id,
+                        ListedTicker = _stock.Ticker,
                         Date = date,
                         ShortVolume = 500_000,
                         ShortExemptVolume = 1_000,
@@ -82,7 +89,14 @@ public class StockTabServiceShortTabsMinSyncDateTests : IDisposable
                 .Add(
                     new ShortInterest
                     {
-                        CommonStockId = _stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(
+                                _dbContext,
+                                _stock,
+                                _stock.Ticker
+                            )
+                            .Id,
+                        ListedTicker = _stock.Ticker,
                         SettlementDate = date,
                         CurrentShortPosition = 10_000_000,
                         PreviousShortPosition = 9_500_000,
