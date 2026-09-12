@@ -15,17 +15,12 @@ public class EquityIdentityFoundationTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
-    public void Migration_OnlyCreatesNewTablesAndIndexes_AndRefusesDestructiveRollback()
+    public void Migration_AddsNativeIdentityTables_AndRefusesDestructiveRollback()
     {
         var type = typeof(Equibles.Migrations.DesignTimeDbContextFactory)
             .Assembly.GetTypes()
             .Single(type => type.Name == "AddEquityIdentityFoundation");
         var migration = (Migration)Activator.CreateInstance(type);
-        migration
-            .UpOperations.Should()
-            .OnlyContain(operation =>
-                operation is CreateTableOperation || operation is CreateIndexOperation
-            );
         migration
             .UpOperations.OfType<CreateTableOperation>()
             .Select(table => table.Name)

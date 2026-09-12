@@ -303,3 +303,12 @@
 - Source updates and deletes serialize with their copied batch; other source rows remain writable and inserts behind the cursor are mirrored immediately.
 - Run `scripts/verify-native-price-rollout.sql` for both completed checkpoints and validated restrictive source-owner constraints, then `scripts/verify-native-equity-prices.sql` for full-row conservation.
 - Retire both original stores, temporary price mirrors and copy checkpoints after complete restored-data and production reconciliation and retirement of every original writer.
+
+## Protection before long backfills
+
+- The first identity expansion archives complete original directory rows and installs version capture before any long copy or ownership backfill.
+- Changes during rollout retain their original and updated payloads; later directory-evidence migration reuses those same immutable records.
+- A temporary directory-deletion guard inspects actual foreign keys and refuses deletion while any cascading, nulling or defaulting reference still has unmigrated history.
+- The native issuer's nullable original-directory link may clear because the issuer and archived source identity survive; other ownership links must be retargeted first.
+- After references move to restrictive native issuer ownership, original directory retirement preserves every attached observation and source version.
+- Verify `scripts/verify-original-directory-evidence.sql` and the temporary guard before rollout; remove the guard with the original directory at final cutover while retaining immutable source evidence.

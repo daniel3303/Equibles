@@ -1,4 +1,5 @@
-﻿using System;
+using Equibles.Migrations.Infrastructure;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -11,6 +12,7 @@ namespace Equibles.Migrations.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            NativeDirectoryEvidenceExpansion20260912.Apply(migrationBuilder);
             migrationBuilder.CreateTable(
                 name: "EquityIssuer",
                 columns: table => new
