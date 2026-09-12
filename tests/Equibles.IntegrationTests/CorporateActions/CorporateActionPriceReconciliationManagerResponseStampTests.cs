@@ -31,16 +31,26 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Add(Equibles.TestSupport.EquityIssuerSeed.Create(Id: stockId, Ticker: "GRTUF"));
+            seed.ChangeTracker.Entries<EquityListing>()
+                .ToList()
+                .ForEach(entry => entry.Entity.TradingCurrency = "USD");
             await seed.SaveChangesAsync();
             seed.Add(
                 new CashDividend
                 {
                     EquityIssuerId = stockId,
+                    EquityListingId = seed.Set<EquityIssuer>()
+                        .Local.Single()
+                        .Presentation.EquityListingId,
+                    Currency = "USD",
                     ExDate = exDate,
                     AmountPerShare = 0.21222556m,
                     Source = CashDividendSource.External,
                 }
             );
+            seed.ChangeTracker.Entries<EquityListing>()
+                .ToList()
+                .ForEach(entry => entry.Entity.TradingCurrency = "USD");
             await seed.SaveChangesAsync();
         }
 
@@ -63,6 +73,7 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
                 [
                     new CapturedDividend
                     {
+                        Currency = "USD",
                         ExDate = exDate,
                         AmountPerShare = 0.21219057m,
                         Source = CashDividendSource.Yahoo,
@@ -81,6 +92,7 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
                     [
                         new CapturedDividend
                         {
+                            Currency = "USD",
                             ExDate = exDate,
                             AmountPerShare = 0.21219057m,
                             Source = CashDividendSource.Yahoo,
@@ -108,6 +120,7 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
             [
                 new CapturedDividend
                 {
+                    Currency = "USD",
                     ExDate = exDate,
                     AmountPerShare = 0.21222556m,
                     Source = CashDividendSource.External,

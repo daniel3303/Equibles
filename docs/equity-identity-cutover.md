@@ -196,3 +196,18 @@
 - Only one exact recorded U.S. listing may receive previously missing source attribution; unresolved original events remain separate and unchanged.
 - An unknown historical split prevents price comparisons or history replacement across its date; it never supplies a restatement ratio.
 - Full native reconciliation and dividend capture must precede foreign price writers.
+
+## Native dividend capture and action reconciliation
+
+- New cash dividends carry the exact native listing and an explicit major-unit currency; capture locks directory ownership and validates the current symbol, denomination, and lifecycle.
+- Historical issuer-only dividends retain every original field and marker. A source recapture creates a separate native observation; no issuer/ex-date match can claim the original row.
+- Same-date components require one currency and positive amounts throughout; a partial or conflicting group is refused as a whole.
+- The U.S. Yahoo boundary requires the returned exact symbol plus USD/exchange/timezone metadata. The U.S. reference adapter supplies explicitly USD amounts. Neither boundary guesses foreign dividend units.
+- Native reconciliation selects both action types by stable listing ID and advances a durable listing-ID cursor. Currency and identity are part of the selected dividend snapshot; primary designation never transfers the payment or its marker.
+- A renamed symbol invalidates an in-flight response; a later request follows the same listing ID under its current symbol. Historical capture and stamping revalidate the exact retirement cutoff.
+- Current dividend history and derived dividend inputs read only the requested/presentation listing's attributed USD payments. Preserve the original issuer-only rows as evidence; complete source replay and coverage/value comparison before deploying these readers.
+- `KeyCorporateActionCursorByListing` adds the native cursor without removing old fields; retire their physical columns with the final contract only after the retiring worker is gone.
+- The remaining historical reconciliation target still carries its original retirement-evidence ID; the worker independently resolves and compares the native listing ID before fetching. Foreign price dispatch and final retirement-target cleanup remain required before the complete cutover.
+
+- Yahoo price targets retain the pre-fetch native listing ID through quotation evidence, action capture, and price-write revalidation; a ticker reassignment during the request cannot attach the old response to its new owner.
+- Existing-payment currency conflicts fail without changing the original amount, source, or reconciliation markers.

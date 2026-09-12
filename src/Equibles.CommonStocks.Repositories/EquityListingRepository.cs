@@ -17,7 +17,8 @@ public class EquityListingRepository : BaseRepository<EquityListing>
         string ticker,
         string source,
         string payloadJson,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? expectedListingId = null
     )
     {
         if (DbContext.Database.CurrentTransaction != null)
@@ -42,7 +43,11 @@ public class EquityListingRepository : BaseRepository<EquityListing>
             })
             .Take(2)
             .ToListAsync(cancellationToken);
-        if (candidates.Count != 1 || candidates[0].EquityIssuerId != issuerId)
+        if (
+            candidates.Count != 1
+            || candidates[0].EquityIssuerId != issuerId
+            || expectedListingId.HasValue && candidates[0].Id != expectedListingId.Value
+        )
             return false;
         var listing = candidates[0];
         if (

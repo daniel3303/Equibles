@@ -59,6 +59,7 @@ public class CashDividendBackfillManagerTests
             Id: Guid.NewGuid(),
             Ticker: "AAPL"
         );
+        stock.Presentation.Listing.TradingCurrency = "USD";
         db.Add(stock);
         await db.SaveChangesAsync();
         return stock;
@@ -69,7 +70,19 @@ public class CashDividendBackfillManagerTests
         var client = Substitute.For<IYahooFinanceClient>();
         client
             .GetChart(Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(new YahooChartData { Dividends = dividends.ToList() });
+            .Returns(
+                new YahooChartData
+                {
+                    Dividends = dividends.ToList(),
+                    SourceIdentity = new()
+                    {
+                        Symbol = "AAPL",
+                        Currency = "USD",
+                        ExchangeCode = "NMS",
+                        ExchangeTimeZone = "America/New_York",
+                    },
+                }
+            );
         return client;
     }
 

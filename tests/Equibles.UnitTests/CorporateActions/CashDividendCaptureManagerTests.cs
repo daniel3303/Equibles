@@ -50,6 +50,7 @@ public class CashDividendCaptureManagerTests
             Id: Guid.NewGuid(),
             Ticker: ticker
         );
+        stock.Presentation.Listing.TradingCurrency = "USD";
         context.Add(stock);
         await context.SaveChangesAsync();
         return stock;
@@ -64,8 +65,42 @@ public class CashDividendCaptureManagerTests
         {
             ExDate = exDate,
             AmountPerShare = amount,
+            Currency = "USD",
             Source = source,
         };
+
+    [Fact]
+    public async Task Capture_StoredCurrencyConflict_PreservesAmountSourceAndMarkers()
+    {
+        await using var db = NewDb();
+        var stock = await AddStock(db);
+        var listing = stock.Presentation.Listing;
+        listing.TradingCurrency = "EUR";
+        var applied = DateTime.UtcNow;
+        var original = new CashDividend
+        {
+            EquityIssuerId = stock.Id,
+            EquityListingId = listing.Id,
+            Currency = "USD",
+            ExDate = new(2025, 1, 2),
+            AmountPerShare = 1m,
+            Source = CashDividendSource.External,
+            PriceAdjustmentAppliedAmountPerShare = 1m,
+            PriceAdjustmentAppliedTime = applied,
+        };
+        db.Add(original);
+        await db.SaveChangesAsync();
+        var incoming = Dividend(original.ExDate, 99m);
+        incoming.Currency = "EUR";
+        (await NewManager(db).CaptureForListing(stock.Id, listing.Id, listing.Ticker, [incoming]))
+            .Should()
+            .Be(0);
+        original.Currency.Should().Be("USD");
+        original.AmountPerShare.Should().Be(1m);
+        original.Source.Should().Be(CashDividendSource.External);
+        original.PriceAdjustmentAppliedAmountPerShare.Should().Be(1m);
+        original.PriceAdjustmentAppliedTime.Should().Be(applied);
+    }
 
     [Fact]
     public async Task Capture_NewDividends_InsertsOneRowPerExDate()
@@ -138,6 +173,7 @@ public class CashDividendCaptureManagerTests
             {
                 ExDate = exDate,
                 AmountPerShare = 0.775m,
+                Currency = "USD",
                 Source = CashDividendSource.External,
             },
         };
@@ -317,6 +353,7 @@ public class CashDividendCaptureManagerTests
             Ticker: "GOOG",
             SecondaryTickers: ["GOOGL"]
         );
+        stock.Presentation.Listing.TradingCurrency = "USD";
         db.Add(stock);
         await db.SaveChangesAsync();
 

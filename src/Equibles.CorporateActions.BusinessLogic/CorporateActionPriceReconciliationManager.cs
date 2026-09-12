@@ -34,7 +34,7 @@ public class CorporateActionPriceReconciliationManager
 
     /// <summary>
     /// Returns distinct exact listed series with at least one unreconciled corporate action.
-    /// Splits retain their captured series; stock-level dividends target the current primary.
+    /// Both action types retain their exact captured listing; unknown ownership remains unresolved.
     /// Actions stay pending through their effective date so the provider history is not stamped
     /// before that session has settled and incorporated the adjustment.
     /// </summary>
@@ -54,13 +54,13 @@ public class CorporateActionPriceReconciliationManager
         var pendingSeries = splits
             .Keys.Concat(dividends.Keys)
             .Distinct()
-            .OrderBy(key => key.CommonStockId)
-            .ThenBy(key => key.ListedTicker, StringComparer.Ordinal)
+            .OrderBy(key => key.EquityListingId)
             .Select(key => new PendingPriceReconciliationSeries(
-                key.CommonStockId,
+                key.EquityIssuerId,
                 key.ListedTicker,
                 splits.TryGetValue(key, out var pendingSplits) ? pendingSplits : [],
-                dividends.TryGetValue(key, out var pendingDividends) ? pendingDividends : []
+                dividends.TryGetValue(key, out var pendingDividends) ? pendingDividends : [],
+                key.EquityListingId
             ))
             .ToList();
         var fairOrder = RotateAfterCursor(pendingSeries, cursor);
@@ -69,7 +69,8 @@ public class CorporateActionPriceReconciliationManager
         if (selected.Count > 0)
         {
             var last = selected[^1];
-            cursor.LastCommonStockId = last.CommonStockId;
+            cursor.LastEquityListingId = last.EquityListingId;
+            cursor.LastCommonStockId = last.EquityIssuerId;
             cursor.LastListedTicker = last.ListedTicker;
             cursor.UpdatedAt = DateTime.UtcNow;
             await _cursorRepository.SaveChanges();
@@ -109,43 +110,17 @@ public class CorporateActionPriceReconciliationManager
         CorporateActionPriceReconciliationCursor cursor
     )
     {
-        if (
-            pendingSeries.Count == 0
-            || cursor.LastCommonStockId == null
-            || cursor.LastListedTicker == null
-        )
+        if (pendingSeries.Count == 0 || cursor.LastEquityListingId == null)
             return pendingSeries.ToList();
-
-        var cursorKey = new PriceReconciliationKey(
-            cursor.LastCommonStockId.Value,
-            cursor.LastListedTicker
-        );
         var start =
             pendingSeries
-                .Select(
-                    (series, index) =>
-                        new
-                        {
-                            Key = new PriceReconciliationKey(
-                                series.CommonStockId,
-                                series.ListedTicker
-                            ),
-                            Index = index,
-                        }
+                .Select((series, index) => new { Series = series, Index = index })
+                .FirstOrDefault(item =>
+                    item.Series.EquityListingId.CompareTo(cursor.LastEquityListingId.Value) > 0
                 )
-                .FirstOrDefault(item => Compare(item.Key, cursorKey) > 0)
                 ?.Index
             ?? 0;
-
         return pendingSeries.Skip(start).Concat(pendingSeries.Take(start)).ToList();
-    }
-
-    private static int Compare(PriceReconciliationKey left, PriceReconciliationKey right)
-    {
-        var stockComparison = left.CommonStockId.CompareTo(right.CommonStockId);
-        return stockComparison != 0
-            ? stockComparison
-            : string.Compare(left.ListedTicker, right.ListedTicker, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -289,25 +264,42 @@ public class CorporateActionPriceReconciliationManager
             IsolationLevel.ReadCommitted,
             cancellationToken
         );
+        await _stockRepository.BeginDirectoryIdentityWrite(cancellationToken);
         EquityIssuer stock = await _stockRepository.GetForUpdate(
-            selectedSeries.CommonStockId,
+            selectedSeries.EquityIssuerId,
             cancellationToken
         );
-        if (stock == null)
+        var listing = stock
+            ?.Securities.SelectMany(security => security.Listings)
+            .SingleOrDefault(candidate => candidate.Id == selectedSeries.EquityListingId);
+        if (
+            listing == null
+            || listing.Ticker != selectedSeries.ListedTicker
+            || (
+                expectedActive.HasValue
+                && (
+                    listing.Active != expectedActive.Value
+                    || listing.DelistedOn != expectedDelistedOn
+                )
+            )
+        )
         {
             await transaction.RollbackAsync(cancellationToken);
             return 0;
         }
-        if (expectedHistoricalListingId != null)
+        if (expectedHistoricalListingId.HasValue)
         {
-            var listing = await _stockRepository.GetDelistedListingForUpdate(
+            // The retiring history queue still carries the original delisting evidence ID.
+            var historical = await _stockRepository.GetDelistedListingForUpdate(
                 expectedHistoricalListingId.Value,
                 cancellationToken
             );
             if (
-                listing == null
-                || listing.EquityIssuerId != stock.Id
-                || listing.ListedTicker != selectedSeries.ListedTicker
+                historical == null
+                || historical.EquityIssuerId != stock.Id
+                || historical.ListedTicker != listing.Ticker
+                || listing.Active
+                || historical.DelistedOn != expectedDelistedOn
                 || listing.DelistedOn != expectedDelistedOn
             )
             {
@@ -315,33 +307,15 @@ public class CorporateActionPriceReconciliationManager
                 return 0;
             }
         }
-        else if (
-            expectedActive != null
-            && (
-                stock.Presentation.Listing.Active != expectedActive.Value
-                || stock.Presentation.Listing.DelistedOn != expectedDelistedOn
-            )
-        )
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            return 0;
-        }
-
         var unchangedSplits = await LoadUnchangedSplits(selectedSeries, cancellationToken);
-        var isStillPrimary = string.Equals(
-            stock.Presentation.Listing.Ticker,
-            selectedSeries.ListedTicker,
-            StringComparison.OrdinalIgnoreCase
-        );
         var dividendsToStamp = requirePriceSeriesDividendMatch
             ? await LoadResponseMatchedDividends(
                 selectedSeries,
                 priceSeriesDividends,
                 settledBefore,
-                isStillPrimary,
                 cancellationToken
             )
-            : await LoadUnchangedDividends(selectedSeries, isStillPrimary, cancellationToken);
+            : await LoadUnchangedDividends(selectedSeries, cancellationToken);
         ApplyMarkers(unchangedSplits, dividendsToStamp, appliedTime);
 
         var stamped = unchangedSplits.Count + dividendsToStamp.Count;
@@ -358,17 +332,12 @@ public class CorporateActionPriceReconciliationManager
     {
         var rows = await _splitRepository
             .GetPendingPriceAdjustment()
-            .Where(split => split.PriceSeriesTicker != null && split.EffectiveDate < settledBefore)
-            .Where(split =>
-                split.EquityListingId == null || split.Listing.MarketCountryCode == "US"
-            )
+            .Where(split => split.EquityListingId != null && split.EffectiveDate < settledBefore)
             .Select(split => new
             {
                 split.Id,
                 split.EquityIssuerId,
-                PriceSeriesTicker = split.EquityListingId == null
-                    ? split.PriceSeriesTicker
-                    : split.Listing.Ticker,
+                PriceSeriesTicker = split.Listing.Ticker,
                 split.EquityListingId,
                 split.EffectiveDate,
                 split.Numerator,
@@ -379,7 +348,8 @@ public class CorporateActionPriceReconciliationManager
 
         return rows.GroupBy(row => new PriceReconciliationKey(
                 row.EquityIssuerId,
-                row.PriceSeriesTicker
+                row.PriceSeriesTicker,
+                row.EquityListingId.Value
             ))
             .ToDictionary(
                 group => group.Key,
@@ -406,29 +376,27 @@ public class CorporateActionPriceReconciliationManager
     {
         var rows = await _dividendRepository
             .GetPendingPriceAdjustment()
-            .Where(dividend => dividend.ExDate < settledBefore)
+            .Where(dividend =>
+                dividend.EquityListingId != null
+                && dividend.Currency != null
+                && dividend.ExDate < settledBefore
+            )
             .Select(dividend => new
             {
                 dividend.Id,
                 dividend.EquityIssuerId,
+                dividend.EquityListingId,
+                dividend.Currency,
+                ListedTicker = dividend.Listing.Ticker,
                 dividend.ExDate,
                 dividend.AmountPerShare,
                 dividend.Source,
             })
             .ToListAsync(cancellationToken);
-        if (rows.Count == 0)
-            return [];
-
-        var stockIds = rows.Select(row => row.EquityIssuerId).Distinct().ToList();
-        var primaryTickers = await _stockRepository
-            .GetCurrentUsDirectoryByIds(stockIds)
-            .Select(stock => new { stock.Id, Ticker = stock.Presentation.Listing.Ticker })
-            .ToDictionaryAsync(stock => stock.Id, stock => stock.Ticker, cancellationToken);
-
-        return rows.Where(row => primaryTickers.ContainsKey(row.EquityIssuerId))
-            .GroupBy(row => new PriceReconciliationKey(
+        return rows.GroupBy(row => new PriceReconciliationKey(
                 row.EquityIssuerId,
-                primaryTickers[row.EquityIssuerId]
+                row.ListedTicker,
+                row.EquityListingId.Value
             ))
             .ToDictionary(
                 group => group.Key,
@@ -441,7 +409,9 @@ public class CorporateActionPriceReconciliationManager
                                 row.Id,
                                 row.ExDate,
                                 row.AmountPerShare,
-                                row.Source
+                                row.Source,
+                                row.EquityListingId.Value,
+                                row.Currency
                             ))
                             .ToList()
             );
@@ -457,13 +427,8 @@ public class CorporateActionPriceReconciliationManager
 
         return locked
             .Where(split =>
-                split.EquityIssuerId == selectedSeries.CommonStockId
-                && (
-                    split.EquityListingId == null
-                        ? split.PriceSeriesTicker == selectedSeries.ListedTicker
-                        : split.Listing.MarketCountryCode == "US"
-                            && split.Listing.Ticker == selectedSeries.ListedTicker
-                )
+                split.EquityIssuerId == selectedSeries.EquityIssuerId
+                && split.EquityListingId == selectedSeries.EquityListingId
                 // Keep the selection and stamping predicates identical so a legacy premature
                 // marker can be replaced with a post-effective marker after the provider fetch.
                 && !split.IsPriceAdjustmentApplied()
@@ -484,19 +449,16 @@ public class CorporateActionPriceReconciliationManager
 
     private async Task<List<CashDividend>> LoadUnchangedDividends(
         PendingPriceReconciliationSeries selectedSeries,
-        bool isStillPrimary,
         CancellationToken cancellationToken
     )
     {
-        if (!isStillPrimary)
-            return [];
-
         var selectedById = selectedSeries.Dividends.ToDictionary(dividend => dividend.Id);
         var locked = await _dividendRepository.GetForUpdate(selectedById.Keys, cancellationToken);
 
         return locked
             .Where(dividend =>
-                dividend.EquityIssuerId == selectedSeries.CommonStockId
+                dividend.EquityIssuerId == selectedSeries.EquityIssuerId
+                && dividend.EquityListingId == selectedSeries.EquityListingId
                 && (
                     dividend.PriceAdjustmentAppliedTime == null
                     || dividend.PriceAdjustmentAppliedAmountPerShare != dividend.AmountPerShare
@@ -509,7 +471,9 @@ public class CorporateActionPriceReconciliationManager
 
                 return dividend.ExDate == selected.ExDate
                     && dividend.AmountPerShare == selected.AmountPerShare
-                    && dividend.Source == selected.Source;
+                    && dividend.Source == selected.Source
+                    && dividend.EquityListingId == selected.EquityListingId
+                    && dividend.Currency == selected.Currency;
             })
             .ToList();
     }
@@ -518,23 +482,22 @@ public class CorporateActionPriceReconciliationManager
         PendingPriceReconciliationSeries selectedSeries,
         IReadOnlyCollection<CapturedDividend> priceSeriesDividends,
         DateOnly settledBefore,
-        bool isStillPrimary,
         CancellationToken cancellationToken
     )
     {
-        if (!isStillPrimary || priceSeriesDividends.Count == 0)
+        if (priceSeriesDividends.Count == 0)
             return [];
 
         var expectedByDate = CashDividendCaptureManager
             .CombineSameDateDividends(priceSeriesDividends)
             .Where(dividend => dividend.ExDate < settledBefore)
-            .ToDictionary(dividend => dividend.ExDate, dividend => dividend.AmountPerShare);
+            .ToDictionary(dividend => dividend.ExDate);
         if (expectedByDate.Count == 0)
             return [];
 
         var expectedDates = expectedByDate.Keys.ToList();
         var candidateIds = await _dividendRepository
-            .GetByStock(selectedSeries.CommonStockId)
+            .GetByListing(selectedSeries.EquityListingId)
             .Where(dividend => expectedDates.Contains(dividend.ExDate))
             .Select(dividend => dividend.Id)
             .ToListAsync(cancellationToken);
@@ -546,8 +509,10 @@ public class CorporateActionPriceReconciliationManager
                 || dividend.PriceAdjustmentAppliedAmountPerShare != dividend.AmountPerShare
             )
             .Where(dividend =>
-                expectedByDate.TryGetValue(dividend.ExDate, out var expectedAmount)
-                && dividend.AmountPerShare == expectedAmount
+                dividend.EquityListingId == selectedSeries.EquityListingId
+                && expectedByDate.TryGetValue(dividend.ExDate, out var expected)
+                && dividend.AmountPerShare == expected.AmountPerShare
+                && dividend.Currency == expected.Currency
             )
             .ToList();
     }

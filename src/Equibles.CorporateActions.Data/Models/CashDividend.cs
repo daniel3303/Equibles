@@ -9,8 +9,8 @@ namespace Equibles.CorporateActions.Data.Models;
 /// An as-reported cash dividend for a <see cref="Issuer"/>.
 /// <see cref="ExDate"/> is the ex-dividend date (the first trading day the
 /// stock trades without the dividend) and <see cref="AmountPerShare"/> is the
-/// declared cash amount per share. The (stock, ex-date) pair is unique — it is
-/// the idempotency guard for the capture upsert.
+/// declared cash amount in major currency units per share. Attributed observations are unique
+/// per listing and ex-date; earlier issuer-only observations retain their separate identity.
 /// </summary>
 [Index(nameof(PriceAdjustmentAppliedTime))]
 public class CashDividend
@@ -45,7 +45,7 @@ public class CashDividend
 
     /// <summary>
     /// Null while this dividend still requires a full provider-history reconciliation of the
-    /// stock's current primary listed series.
+    /// captured listing's price series.
     /// </summary>
     public DateTime? PriceAdjustmentAppliedTime { get; set; }
 }

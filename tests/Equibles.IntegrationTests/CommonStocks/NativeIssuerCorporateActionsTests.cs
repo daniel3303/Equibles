@@ -105,7 +105,7 @@ public class NativeIssuerCorporateActionsTests(ParadeDbFixture fixture)
             .PriceAdjustmentAppliedTime.Should()
             .BeNull();
         var dividends = new CashDividendRepository(DbContext);
-        (await dividends.GetHistory(issuer.Id).SingleAsync())
+        (await dividends.GetByStock(issuer.Id).SingleAsync())
             .AmountPerShare.Should()
             .Be(123.456789m);
         (await dividends.GetPendingPriceAdjustment().CountAsync()).Should().Be(1);

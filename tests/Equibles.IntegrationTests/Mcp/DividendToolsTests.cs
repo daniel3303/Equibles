@@ -35,6 +35,7 @@ public class DividendToolsTests : ParadeDbMcpTestBase
             Cik: Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
             SecondaryTickers: secondaryTickers.ToList()
         );
+        stock.Presentation.Listing.TradingCurrency = "USD";
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
         return stock;
@@ -51,6 +52,8 @@ public class DividendToolsTests : ParadeDbMcpTestBase
             new CashDividend
             {
                 EquityIssuerId = stock.Id,
+                EquityListingId = stock.Presentation.EquityListingId,
+                Currency = "USD",
                 ExDate = exDate,
                 AmountPerShare = amount,
                 Source = source,

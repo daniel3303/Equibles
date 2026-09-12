@@ -219,7 +219,7 @@ public class NativeSplitCaptureTests(ParadeDbFixture fixture) : ParadeDbMcpTestB
     }
 
     [Fact]
-    public async Task EqualVenueSymbols_RequireExactListing_AndForeignEventsStayOutOfUsReconciliation()
+    public async Task EqualVenueSymbols_RequireExactListing_AndQueueSeparately()
     {
         var issuer = Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "SAME");
         var foreign = new EquityListing
@@ -236,11 +236,9 @@ public class NativeSplitCaptureTests(ParadeDbFixture fixture) : ParadeDbMcpTestB
             .Should()
             .Be(1);
         (await Reconcile().SelectPendingSeries(10, new DateOnly(2025, 1, 3)))
-            .Series.Should()
-            .ContainSingle()
-            .Which.Splits.Single()
-            .EquityListingId.Should()
-            .Be(issuer.Presentation.EquityListingId);
+            .Series.Select(series => series.EquityListingId)
+            .Should()
+            .BeEquivalentTo(new Guid[] { issuer.Presentation.EquityListingId, foreign.Id });
         DbContext.Add(
             new EquityListing
             {

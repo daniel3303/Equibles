@@ -35,6 +35,9 @@ public class CashDividendCaptureManagerDesignationRaceTests : IAsyncLifetime
                     SecondaryTickers: ["GOOG"]
                 )
             );
+            seed.ChangeTracker.Entries<EquityListing>()
+                .ToList()
+                .ForEach(entry => entry.Entity.TradingCurrency = "USD");
             await seed.SaveChangesAsync();
         }
 
@@ -46,8 +49,11 @@ public class CashDividendCaptureManagerDesignationRaceTests : IAsyncLifetime
         await using (var designation = _fixture.CreateDbContext())
         {
             EquityIssuer currentStock = await designation.Set<EquityIssuer>().SingleAsync();
-            currentStock.Presentation.Listing.Ticker = "GOOG";
-            Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(currentStock, ["GOOGL"]);
+            var next = currentStock
+                .Securities.SelectMany(security => security.Listings)
+                .Single(listing => listing.Ticker == "GOOG");
+            currentStock.Presentation.Listing = next;
+            currentStock.Presentation.EquityListingId = next.Id;
             await designation.SaveChangesAsync();
         }
 
@@ -62,6 +68,7 @@ public class CashDividendCaptureManagerDesignationRaceTests : IAsyncLifetime
         {
             ExDate = new DateOnly(2026, 8, 8),
             AmountPerShare = 0.25m,
+            Currency = "USD",
             Source = CashDividendSource.External,
         };
 

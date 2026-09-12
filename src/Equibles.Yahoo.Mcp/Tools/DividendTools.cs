@@ -82,7 +82,9 @@ public class DividendTools
                 maxResults = McpLimit.Clamp(maxResults);
                 offset = McpLimit.ClampOffset(offset);
 
-                var query = _cashDividendRepository.GetHistory(stock.Id, start, end);
+                var query = _cashDividendRepository
+                    .GetHistoryByListing(stock.Presentation.EquityListingId, start, end)
+                    .Where(dividend => dividend.Currency == "USD");
                 var total = await query.CountAsync();
                 var dividends = await query.Skip(offset).Take(maxResults).ToListAsync();
 

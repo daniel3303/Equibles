@@ -20,7 +20,8 @@ internal static class YahooQuotationIdentity
         Guid issuerId,
         string ticker,
         YahooChartSourceIdentity identity,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? expectedListingId = null
     )
     {
         if (!HasUsDollarEvidence(ticker, identity))
@@ -40,7 +41,8 @@ internal static class YahooQuotationIdentity
             ticker,
             Source,
             payload,
-            cancellationToken
+            cancellationToken,
+            expectedListingId
         );
     }
 }

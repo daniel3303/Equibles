@@ -83,6 +83,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
             EquityIssuerId = stockId,
             ExDate = exDate,
             AmountPerShare = amount,
+            Currency = "USD",
             Source = CashDividendSource.Yahoo,
         };
 
@@ -91,8 +92,42 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         {
             ExDate = exDate,
             AmountPerShare = amount,
+            Currency = "USD",
             Source = CashDividendSource.Yahoo,
         };
+
+    // These fixtures explicitly represent known primary payments and named split observations.
+    private static async Task SaveFixture(EquiblesFinancialDbContext db)
+    {
+        foreach (
+            var entry in db
+                .ChangeTracker.Entries<CashDividend>()
+                .Where(entry => entry.State == EntityState.Added)
+        )
+        {
+            var issuer = db.Set<EquityIssuer>()
+                .Local.Single(stock => stock.Id == entry.Entity.EquityIssuerId);
+            entry.Entity.Listing = issuer.Presentation.Listing;
+            entry.Entity.EquityListingId = issuer.Presentation.EquityListingId;
+            entry.Entity.Listing.TradingCurrency = "USD";
+        }
+        foreach (
+            var entry in db
+                .ChangeTracker.Entries<StockSplit>()
+                .Where(entry =>
+                    entry.State == EntityState.Added && entry.Entity.PriceSeriesTicker != null
+                )
+        )
+        {
+            var issuer = db.Set<EquityIssuer>()
+                .Local.Single(stock => stock.Id == entry.Entity.EquityIssuerId);
+            entry.Entity.Listing = issuer
+                .Securities.SelectMany(security => security.Listings)
+                .Single(listing => listing.Ticker == entry.Entity.PriceSeriesTicker);
+            entry.Entity.EquityListingId = entry.Entity.Listing.Id;
+        }
+        await db.SaveChangesAsync();
+    }
 
     [Fact]
     public async Task RequeueAppliedSplits_ClearsOnlySelectedAppliedMarkers()
@@ -106,7 +141,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         untouched.PriceAdjustmentAppliedTime = appliedAt;
         db.Add(Stock(stockId));
         db.AddRange(selected, untouched);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var count = await NewManager(db)
             .RequeueAppliedSplits([new AppliedSplitMarkerSnapshot(selected.Id, appliedAt)]);
@@ -127,7 +162,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         split.PriceAdjustmentAppliedTime = restampedAt;
         db.Add(Stock(stockId));
         db.Add(split);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var count = await NewManager(db)
             .RequeueAppliedSplits([new AppliedSplitMarkerSnapshot(split.Id, auditedAt)]);
@@ -149,11 +184,11 @@ public class CorporateActionPriceReconciliationManagerStampingTests
             PendingDividend(stockId, new DateOnly(2024, 5, 9), 0.25m),
             PendingDividend(otherId, new DateOnly(2024, 5, 9), 0.75m)
         );
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single(
-            series => series.CommonStockId == stockId && series.ListedTicker == "AAPL"
+            series => series.EquityIssuerId == stockId && series.ListedTicker == "AAPL"
         );
         var appliedTime = new DateTime(2026, 6, 30, 12, 0, 0, DateTimeKind.Utc);
 
@@ -177,7 +212,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         var stockId = Guid.NewGuid();
         db.Add(Stock(stockId));
         db.Add(PendingDividend(stockId, new DateOnly(2024, 5, 9)));
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
@@ -200,14 +235,14 @@ public class CorporateActionPriceReconciliationManagerStampingTests
             PendingSplit(stockId, new DateOnly(2024, 6, 10)),
             PendingDividend(stockId, new DateOnly(2024, 5, 9))
         );
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
         var newSplit = PendingSplit(stockId, new DateOnly(2025, 1, 2));
         var newDividend = PendingDividend(stockId, new DateOnly(2025, 2, 7), 0.26m);
         db.AddRange(newSplit, newDividend);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var stamped = await manager.StampApplied(selected, DateTime.UtcNow);
 
@@ -231,13 +266,13 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         var split = PendingSplit(stockId, new DateOnly(2024, 6, 10));
         var dividend = PendingDividend(stockId, new DateOnly(2024, 5, 9), 0.25m);
         db.AddRange(split, dividend);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
         split.Numerator = 3m;
         dividend.AmountPerShare = 0.26m;
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var stamped = await manager.StampApplied(selected, DateTime.UtcNow);
 
@@ -259,12 +294,12 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         var dividend = PendingDividend(stockId, exDate, 0.25m);
         dividend.Source = CashDividendSource.External;
         db.Add(dividend);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
         dividend.AmountPerShare = 0.26m;
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
         var appliedTime = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc);
 
         var stamped = await manager.StampApplied(
@@ -289,12 +324,12 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         db.Add(Stock(stockId));
         var dividend = PendingDividend(stockId, exDate, 0.25m);
         db.Add(dividend);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
         dividend.AmountPerShare = 0.27m;
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var stamped = await manager.StampApplied(
             selected,
@@ -322,7 +357,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         var dividend = PendingDividend(stockId, exDate, 0.25m);
         db.Add(Stock(stockId));
         db.AddRange(split, dividend);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
@@ -350,13 +385,13 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         var discoveredExDate = new DateOnly(2025, 2, 7);
         db.Add(Stock(stockId));
         db.Add(PendingDividend(stockId, selectedExDate));
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
         var discovered = PendingDividend(stockId, discoveredExDate, 0.26m);
         db.Add(discovered);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var stamped = await manager.StampApplied(
             selected,
@@ -382,13 +417,13 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         var selectedExDate = new DateOnly(2024, 5, 9);
         db.Add(Stock(stockId));
         db.Add(PendingDividend(stockId, selectedExDate));
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
         var unsettled = PendingDividend(stockId, SettledBefore, 0.26m);
         db.Add(unsettled);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var stamped = await manager.StampApplied(
             selected,
@@ -409,13 +444,13 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         EquityIssuer stock = Stock(stockId);
         db.Add(stock);
         db.Add(PendingDividend(stockId, new DateOnly(2024, 5, 9)));
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
         stock.Presentation.Listing.Ticker = "MSFT";
         Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["AAPL"]);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var stamped = await manager.StampApplied(selected, DateTime.UtcNow);
 
@@ -439,7 +474,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         var split = PendingSplit(stockId, new DateOnly(2026, 7, 15));
         db.Add(stock);
         db.Add(split);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
@@ -468,7 +503,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         var split = PendingSplit(stockId, new DateOnly(2026, 7, 15));
         db.Add(stock);
         db.Add(split);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();
@@ -491,7 +526,12 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         await using var db = NewDb();
         var stockId = Guid.NewGuid();
         var delistedOn = new DateOnly(2026, 7, 31);
-        EquityIssuer stock = Stock(stockId, "LIVE");
+        EquityIssuer stock = Stock(stockId, "LIVE", ["OLD"]);
+        var retired = stock
+            .Securities.SelectMany(security => security.Listings)
+            .Single(row => row.Ticker == "OLD");
+        retired.Active = false;
+        retired.DelistedOn = delistedOn;
         var listing = new EquityListingRetirementEvidence
         {
             EquityIssuerId = stockId,
@@ -500,7 +540,7 @@ public class CorporateActionPriceReconciliationManagerStampingTests
         };
         var split = PendingSplit(stockId, new DateOnly(2026, 7, 15), "OLD");
         db.AddRange(stock, listing, split);
-        await db.SaveChangesAsync();
+        await SaveFixture(db);
 
         var manager = NewManager(db);
         var selected = (await manager.SelectPendingSeries(50, SettledBefore)).Series.Single();

@@ -38,14 +38,21 @@ public class CashDividendBackfillManager
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        var listing = stock.Presentation.Listing;
+        var ticker = listing.Ticker;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var chartData = await _yahooClient.GetChart(
-            stock.Presentation.Listing.Ticker,
-            since,
-            today
-        );
+        var chartData = await _yahooClient.GetChart(ticker, since, today);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (
+            chartData.SourceIdentity is not { Currency: "USD" } identity
+            || !string.Equals(identity.Symbol, ticker, StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(identity.ExchangeCode)
+            || string.IsNullOrWhiteSpace(identity.ExchangeTimeZone)
+            || listing.MarketCountryCode != "US"
+        )
+            return 0;
 
         // Map Yahoo's dividend shape onto the source-neutral capture DTO at this
         // boundary (mirrors the price sync's CaptureDividends), so the capture
@@ -55,13 +62,15 @@ public class CashDividendBackfillManager
             {
                 ExDate = d.Date,
                 AmountPerShare = d.Amount,
+                Currency = identity.Currency,
                 Source = CashDividendSource.Yahoo,
             })
             .ToList();
 
-        return await _captureManager.Capture(
+        return await _captureManager.CaptureForListing(
             stock.Id,
-            stock.Presentation.Listing.Ticker,
+            listing.Id,
+            ticker,
             captured,
             cancellationToken
         );

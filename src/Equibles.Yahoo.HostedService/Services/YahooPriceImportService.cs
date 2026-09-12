@@ -34,7 +34,8 @@ internal readonly record struct PriceSeriesTarget(
     DateTime? YahooEnrichmentAttemptedAt = null,
     bool IsHistorical = false,
     DateOnly? HistoryEndDate = null,
-    Guid? HistoricalListingId = null
+    Guid? HistoricalListingId = null,
+    Guid? EquityListingId = null
 )
 {
     public PriceSeriesKey Key => new(CommonStockId, Ticker);
@@ -347,7 +348,22 @@ public class YahooPriceImportService
             target.CommonStockId,
             cancellationToken
         );
-        if (stock == null)
+        if (
+            stock == null
+            || target.EquityListingId.HasValue
+                && !stock
+                    .Securities.SelectMany(security => security.Listings)
+                    .Any(listing =>
+                        listing.Id == target.EquityListingId.Value
+                        && listing.Ticker == target.Ticker
+                        && listing.MarketCountryCode == "US"
+                        && (
+                            target.IsHistorical
+                                ? !listing.Active && listing.DelistedOn == target.HistoryEndDate
+                                : listing.Active
+                        )
+                    )
+        )
             return null;
         EquityListingRetirementEvidence historicalListing = null;
         if (target.IsHistorical)
@@ -816,10 +832,14 @@ public class YahooPriceImportService
             EquityIssuer stock = await stockRepository
                 .GetAll()
                 .FirstOrDefaultAsync(
-                    candidate => candidate.Id == selectedSeries.CommonStockId,
+                    candidate => candidate.Id == selectedSeries.EquityIssuerId,
                     cancellationToken
                 );
-            if (stock == null)
+            if (
+                stock == null
+                || await stockRepository.GetEquityListingId(stock.Id, selectedSeries.ListedTicker)
+                    != selectedSeries.EquityListingId
+            )
                 return;
 
             var delistedListing = await stockRepository
@@ -847,7 +867,7 @@ public class YahooPriceImportService
 
             target = new PriceSeriesTarget(
                 selectedSeries.ListedTicker,
-                selectedSeries.CommonStockId,
+                selectedSeries.EquityIssuerId,
                 IsPrimary: string.Equals(
                     resolvedTicker,
                     stock.Presentation.Listing.Ticker,
@@ -855,7 +875,8 @@ public class YahooPriceImportService
                 ),
                 IsHistorical: delistedListing != null,
                 HistoryEndDate: delistedListing?.DelistedOn,
-                HistoricalListingId: delistedListing?.Id
+                HistoricalListingId: delistedListing?.Id,
+                EquityListingId: selectedSeries.EquityListingId
             );
         }
 
@@ -911,11 +932,7 @@ public class YahooPriceImportService
 
         // Dividends that still exactly match this response can be marked from the same fetch; a
         // concurrent restatement remains pending because the manager revalidates the locked row.
-        var capturedDividends = await CaptureDividends(
-            target,
-            chartData.Dividends,
-            cancellationToken
-        );
+        var capturedDividends = await CaptureDividends(target, chartData, cancellationToken);
 
         // A serve whose last bar predates a split's effective date passed the boundary check
         // vacuously (no post-effective close to compare), so it cannot certify that split's basis:
@@ -1613,7 +1630,8 @@ public class YahooPriceImportService
                 target.CommonStockId,
                 target.Ticker,
                 identity,
-                cancellationToken
+                cancellationToken,
+                expectedListingId: target.EquityListingId
             )
         )
             _logger.LogWarning(
@@ -1714,6 +1732,18 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
+        using (var identityScope = _scopeFactory.CreateScope())
+        {
+            var repository =
+                identityScope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+            var listingId = await repository.GetEquityListingId(
+                target.CommonStockId,
+                target.Ticker
+            );
+            if (!listingId.HasValue)
+                return NoFetchNeeded;
+            target = target with { EquityListingId = listingId.Value };
+        }
         var chartEnd = target.HistoryEndDate is { } delisted && delisted < today ? delisted : today;
         var settledAsOf = target.IsHistorical ? chartEnd.AddDays(1) : today;
         if (target.IsHistorical)
@@ -1761,7 +1791,7 @@ public class YahooPriceImportService
                     "Replaced grouped bootstrap rows with full Yahoo history for reference listing {Ticker}",
                     target.Ticker
                 );
-                await CaptureDividends(target, chartData.Dividends, cancellationToken);
+                await CaptureDividends(target, chartData, cancellationToken);
             }
             return new TickerImportResult(
                 Fetched: true,
@@ -1772,8 +1802,7 @@ public class YahooPriceImportService
         // Every exact listing needs a full-history rebase when its chart reports a split: Yahoo
         // retroactively adjusts old bars while the ordinary importer only appends. Doing this for
         // both the snapshotted primary and secondaries makes a concurrent designation change
-        // harmless. Issuer-level action capture below independently locks and requires whichever
-        // listing is primary at write time.
+        // harmless. Each action capture independently locks and revalidates its exact listing.
         var floor = PriceHistoryFloor();
         if (startDate == floor)
         {
@@ -1797,7 +1826,7 @@ public class YahooPriceImportService
                     "Reconciled {Ticker}: replaced its full listed price history",
                     target.Ticker
                 );
-                await CaptureDividends(target, chartData.Dividends, cancellationToken);
+                await CaptureDividends(target, chartData, cancellationToken);
             }
             return new TickerImportResult(
                 Fetched: true,
@@ -1841,7 +1870,7 @@ public class YahooPriceImportService
                     "Reconciled {Ticker}: replaced its full listed price history",
                     target.Ticker
                 );
-                await CaptureDividends(target, chartData.Dividends, cancellationToken);
+                await CaptureDividends(target, fullChart, cancellationToken);
             }
             return new TickerImportResult(Fetched: true, Inserted: 0);
         }
@@ -1858,10 +1887,9 @@ public class YahooPriceImportService
             cancellationToken
         );
 
-        // The capture paths lock and revalidate the current primary. A stale crawl target can
-        // therefore keep its exact prices but cannot write issuer-level actions.
+        // Action capture independently locks and revalidates the exact source listing.
         await CaptureSplits(target, chartData.Splits, cancellationToken);
-        await CaptureDividends(target, chartData.Dividends, cancellationToken);
+        await CaptureDividends(target, chartData, cancellationToken);
 
         return new TickerImportResult(Fetched: true, Inserted: inserted);
     }
@@ -1923,7 +1951,10 @@ public class YahooPriceImportService
             return 0;
 
         var freshRows = MapFreshRows(
-            await RequireListingId(target.CommonStockId, target.Ticker),
+            target.EquityListingId
+                ?? throw new InvalidOperationException(
+                    "The price response has no pre-fetch listing identity."
+                ),
             prices,
             target.Ticker,
             today
@@ -2369,11 +2400,7 @@ public class YahooPriceImportService
 
         using var scope = _scopeFactory.CreateScope();
         var captureManager = scope.ServiceProvider.GetRequiredService<StockSplitCaptureManager>();
-        var stockRepository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
-        var nativeListingId = await stockRepository.GetEquityListingId(
-            target.CommonStockId,
-            target.Ticker
-        );
+        var nativeListingId = target.EquityListingId;
         if (nativeListingId == null)
             return;
         var count =
@@ -2386,8 +2413,9 @@ public class YahooPriceImportService
                     captured,
                     cancellationToken
                 )
-                : await captureManager.Capture(
+                : await captureManager.CaptureForListing(
                     target.CommonStockId,
+                    nativeListingId.Value,
                     target.Ticker,
                     captured,
                     cancellationToken
@@ -2407,33 +2435,52 @@ public class YahooPriceImportService
     // the common no-dividend path costs nothing.
     private async Task<IReadOnlyCollection<CapturedDividend>> CaptureDividends(
         PriceSeriesTarget target,
-        IReadOnlyCollection<CashDividendEvent> dividends,
+        YahooChartData chartData,
         CancellationToken cancellationToken
     )
     {
-        if (dividends.Count == 0)
+        // The current provider boundary is U.S./USD; foreign adapters must establish their own units.
+        if (
+            chartData.Dividends.Count == 0
+            || !YahooQuotationIdentity.HasUsDollarEvidence(target.Ticker, chartData.SourceIdentity)
+        )
             return [];
 
         // Map Yahoo's dividend shape onto the source-neutral capture DTO at the
         // worker boundary, stamping Yahoo as the source, so the domain manager
         // stays decoupled from this integration.
-        var captured = dividends
-            .Select(d => new CapturedDividend
+        var captured = chartData
+            .Dividends.Select(d => new CapturedDividend
             {
                 ExDate = d.Date,
                 AmountPerShare = d.Amount,
+                Currency = chartData.SourceIdentity.Currency,
                 Source = CashDividendSource.Yahoo,
             })
             .ToList();
 
         using var scope = _scopeFactory.CreateScope();
         var captureManager = scope.ServiceProvider.GetRequiredService<CashDividendCaptureManager>();
-        var count = await captureManager.Capture(
-            target.CommonStockId,
-            target.Ticker,
-            captured,
-            cancellationToken
-        );
+        var listingId = target.EquityListingId;
+        if (!listingId.HasValue)
+            return [];
+        var count =
+            target.IsHistorical && target.HistoryEndDate.HasValue
+                ? await captureManager.CaptureForHistoricalListing(
+                    target.CommonStockId,
+                    listingId.Value,
+                    target.Ticker,
+                    target.HistoryEndDate.Value,
+                    captured,
+                    cancellationToken
+                )
+                : await captureManager.CaptureForListing(
+                    target.CommonStockId,
+                    listingId.Value,
+                    target.Ticker,
+                    captured,
+                    cancellationToken
+                );
         if (count > 0)
             _logger.LogInformation(
                 "Captured {Count} cash dividend(s) for {Ticker} on {StockId}",
@@ -2483,7 +2530,8 @@ public class YahooPriceImportService
         var target = new PriceSeriesTarget(
             first.SourceTicker,
             identity.CommonStockId,
-            IsPrimary: false
+            IsPrimary: false,
+            EquityListingId: first.EquityListingId
         );
         if (await LockPriceSeries(stockRepo, target, CancellationToken.None) == null)
         {

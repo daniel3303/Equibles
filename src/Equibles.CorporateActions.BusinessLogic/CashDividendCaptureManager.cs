@@ -9,12 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CorporateActions.BusinessLogic;
 
-// Upserts captured cash-dividend events into CashDividend. The manager locks and
-// revalidates the exact current primary listing before writing, so a company-sync
-// reorder cannot attach one security's action to another. Idempotent by (stock,
-// ExDate): same-day cash components are summed into that one row, a re-run with
-// the same events writes nothing, and a changed total for an existing ex-date is
-// updated in place (providers occasionally restate a dividend after declaration).
+// Captures exact listing payments; earlier issuer-only observations remain independent evidence.
 [Service]
 public class CashDividendCaptureManager
 {
@@ -30,11 +25,46 @@ public class CashDividendCaptureManager
         _stockRepository = stockRepository;
     }
 
-    public async Task<int> Capture(
+    public Task<int> Capture(
         Guid commonStockId,
         string listedTicker,
         IReadOnlyCollection<CapturedDividend> dividends,
         CancellationToken cancellationToken = default
+    ) => CaptureListing(commonStockId, null, listedTicker, dividends, cancellationToken);
+
+    public Task<int> CaptureForListing(
+        Guid equityIssuerId,
+        Guid equityListingId,
+        string sourceTicker,
+        IReadOnlyCollection<CapturedDividend> dividends,
+        CancellationToken cancellationToken = default
+    ) =>
+        CaptureListing(equityIssuerId, equityListingId, sourceTicker, dividends, cancellationToken);
+
+    public Task<int> CaptureForHistoricalListing(
+        Guid equityIssuerId,
+        Guid equityListingId,
+        string sourceTicker,
+        DateOnly expectedDelistedOn,
+        IReadOnlyCollection<CapturedDividend> dividends,
+        CancellationToken cancellationToken = default
+    ) =>
+        CaptureListing(
+            equityIssuerId,
+            equityListingId,
+            sourceTicker,
+            dividends,
+            cancellationToken,
+            expectedDelistedOn
+        );
+
+    private async Task<int> CaptureListing(
+        Guid commonStockId,
+        Guid? listingId,
+        string listedTicker,
+        IReadOnlyCollection<CapturedDividend> dividends,
+        CancellationToken cancellationToken,
+        DateOnly? expectedDelistedOn = null
     )
     {
         if (dividends == null || dividends.Count == 0)
@@ -48,15 +78,33 @@ public class CashDividendCaptureManager
             IsolationLevel.ReadCommitted,
             cancellationToken
         );
+        await _stockRepository.BeginDirectoryIdentityWrite(cancellationToken);
         EquityIssuer stock = await _stockRepository.GetForUpdate(commonStockId, cancellationToken);
-        var resolvedTicker = SecondaryTickerPolicy.ResolveListedTicker(stock, listedTicker);
+        var requestedTicker = TickerNormalizer.NormalizeListed(listedTicker);
+        var candidates =
+            stock
+                ?.Securities.SelectMany(security => security.Listings)
+                .Where(listing =>
+                    (
+                        expectedDelistedOn.HasValue
+                            ? !listing.Active && listing.DelistedOn == expectedDelistedOn
+                            : listing.Active
+                    )
+                    && listing.Ticker == requestedTicker
+                    && (
+                        listingId.HasValue
+                            ? listing.Id == listingId.Value
+                            : listing.MarketCountryCode == "US"
+                    )
+                )
+                .Take(2)
+                .ToList()
+            ?? [];
+        var listing = candidates.Count == 1 ? candidates[0] : null;
         if (
-            resolvedTicker == null
-            || !string.Equals(
-                resolvedTicker,
-                stock.Presentation.Listing.Ticker,
-                StringComparison.OrdinalIgnoreCase
-            )
+            listing == null
+            || listing.TradingCurrency == null
+            || (!listingId.HasValue && listing.Id != stock.Presentation?.EquityListingId)
         )
         {
             await transaction.RollbackAsync(cancellationToken);
@@ -64,19 +112,26 @@ public class CashDividendCaptureManager
         }
 
         var existing = await _dividendRepository
-            .GetByStock(stock.Id)
+            .GetByListing(listing.Id)
             .ToListAsync(cancellationToken);
         var changes = 0;
 
         foreach (var dividend in combinedDividends)
         {
-            var match = existing.FirstOrDefault(d => d.ExDate == dividend.ExDate);
+            if (
+                dividend.Currency != listing.TradingCurrency
+                || expectedDelistedOn.HasValue && dividend.ExDate > expectedDelistedOn.Value
+            )
+                continue;
+            var match = existing.SingleOrDefault(d => d.ExDate == dividend.ExDate);
             if (match == null)
             {
                 _dividendRepository.Add(
                     new CashDividend
                     {
                         EquityIssuerId = stock.Id,
+                        EquityListingId = listing.Id,
+                        Currency = dividend.Currency,
                         ExDate = dividend.ExDate,
                         AmountPerShare = dividend.AmountPerShare,
                         Source = dividend.Source,
@@ -84,7 +139,10 @@ public class CashDividendCaptureManager
                 );
                 changes++;
             }
-            else if (CanSupersede(match.Source, dividend.Source))
+            else if (
+                match.Currency == dividend.Currency
+                && CanSupersede(match.Source, dividend.Source)
+            )
             {
                 var amountChanged = match.AmountPerShare != dividend.AmountPerShare;
                 var sourceChanged = match.Source != dividend.Source;
@@ -132,8 +190,18 @@ public class CashDividendCaptureManager
         IReadOnlyCollection<CapturedDividend> dividends
     ) =>
         dividends
-            .Where(dividend => dividend.AmountPerShare > 0)
             .GroupBy(dividend => dividend.ExDate)
+            .Where(group =>
+                group.All(dividend =>
+                    dividend.AmountPerShare > 0
+                    && dividend.Currency is { Length: 3 }
+                    && dividend.Currency.All(character => character is >= 'A' and <= 'Z')
+                )
+                && group
+                    .Select(dividend => dividend.Currency)
+                    .Distinct(StringComparer.Ordinal)
+                    .Count() == 1
+            )
             .Select(CombineSameDateDividend)
             .ToList();
 
@@ -154,6 +222,7 @@ public class CashDividendCaptureManager
             ExDate = dividends.Key,
             AmountPerShare = dividends.Sum(dividend => dividend.AmountPerShare),
             Source = sources[0],
+            Currency = dividends.First().Currency,
         };
     }
 }
