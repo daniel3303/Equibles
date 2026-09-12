@@ -19,7 +19,12 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<CommonStockDelistedListing>();
         builder.Entity<CommonStockListedCusip>();
         builder.Entity<CommonStockTickerAlias>();
-        builder.Entity<CommonStockTickerEvidence>();
+        builder
+            .Entity<EquityIssuerTickerEvidence>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         ConfigureEquityIdentity(builder);
         builder.Entity<Industry>();
         builder.Entity<Sector>();

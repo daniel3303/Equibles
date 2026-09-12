@@ -5,25 +5,25 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CommonStocks.Repositories;
 
-public class CommonStockTickerEvidenceRepository : BaseRepository<CommonStockTickerEvidence>
+public class EquityIssuerTickerEvidenceRepository : BaseRepository<EquityIssuerTickerEvidence>
 {
-    public CommonStockTickerEvidenceRepository(EquiblesFinancialDbContext dbContext)
+    public EquityIssuerTickerEvidenceRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<CommonStockTickerEvidence> GetByTickers(IEnumerable<string> tickers)
+    public IQueryable<EquityIssuerTickerEvidence> GetByTickers(IEnumerable<string> tickers)
     {
         return GetAll().Where(evidence => tickers.Contains(evidence.Ticker));
     }
 
     public Task UpsertRange(
-        IEnumerable<CommonStockTickerEvidence> evidence,
+        IEnumerable<EquityIssuerTickerEvidence> evidence,
         CancellationToken cancellationToken = default
     ) =>
         GetDbSet()
             .UpsertRange(evidence)
             .On(row => new
             {
-                row.CommonStockId,
+                row.EquityIssuerId,
                 row.Ticker,
                 row.SourceDocumentId,
             })

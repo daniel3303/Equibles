@@ -16,11 +16,11 @@ namespace Equibles.Congress.HostedService.Services;
 [Service]
 public class CongressionalTradeIssuerResolver
 {
-    private readonly CommonStockTickerEvidenceRepository _evidenceRepository;
+    private readonly EquityIssuerTickerEvidenceRepository _evidenceRepository;
     private readonly EquiblesFinancialDbContext _dbContext;
 
     public CongressionalTradeIssuerResolver(
-        CommonStockTickerEvidenceRepository evidenceRepository,
+        EquityIssuerTickerEvidenceRepository evidenceRepository,
         EquiblesFinancialDbContext dbContext
     )
     {
@@ -35,7 +35,7 @@ public class CongressionalTradeIssuerResolver
     /// </summary>
     public virtual async Task<int> RelinkUnresolved(CancellationToken cancellationToken)
     {
-        var evidence = _dbContext.Set<CommonStockTickerEvidence>();
+        var evidence = _dbContext.Set<EquityIssuerTickerEvidence>();
         var unresolved = await _dbContext
             .Set<CongressionalTrade>()
             .Where(trade =>
@@ -115,7 +115,7 @@ public class CongressionalTradeIssuerResolver
     }
 
     internal static Guid? ResolveAtDate(
-        IReadOnlyCollection<CommonStockTickerEvidence> evidence,
+        IReadOnlyCollection<EquityIssuerTickerEvidence> evidence,
         DateOnly transactionDate
     )
     {
@@ -140,7 +140,7 @@ public class CongressionalTradeIssuerResolver
     }
 
     private static Guid? UniqueIssuerAt(
-        IEnumerable<CommonStockTickerEvidence> evidence,
+        IEnumerable<EquityIssuerTickerEvidence> evidence,
         DateOnly filedDate
     )
     {
@@ -149,12 +149,12 @@ public class CongressionalTradeIssuerResolver
     }
 
     private static List<Guid> IssuersAt(
-        IEnumerable<CommonStockTickerEvidence> evidence,
+        IEnumerable<EquityIssuerTickerEvidence> evidence,
         DateOnly filedDate
     ) =>
         evidence
             .Where(row => row.FiledDate == filedDate)
-            .Select(row => row.CommonStockId)
+            .Select(row => row.EquityIssuerId)
             .Distinct()
             .Take(2)
             .ToList();

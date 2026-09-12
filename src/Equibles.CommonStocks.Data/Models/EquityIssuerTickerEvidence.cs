@@ -10,8 +10,9 @@ namespace Equibles.CommonStocks.Data.Models;
 /// reassigned or collapsed when an exchange later reuses the symbol for another issuer.
 /// </summary>
 [Index(nameof(Ticker), nameof(FiledDate))]
-[Index(nameof(CommonStockId), nameof(Ticker), nameof(SourceDocumentId), IsUnique = true)]
-public class CommonStockTickerEvidence
+[Index(nameof(EquityIssuerId), nameof(Ticker), nameof(SourceDocumentId), IsUnique = true)]
+[Table("CommonStockTickerEvidence")]
+public class EquityIssuerTickerEvidence
 {
     // The XBRL extractor version that first preserves this evidence. Congress replay must not
     // activate until the processable captured corpus reaches this version.
@@ -20,8 +21,9 @@ public class CommonStockTickerEvidence
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     [Required]
     [MaxLength(32)]

@@ -45,6 +45,11 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
             .HasForeignKey(state => state.EquityIssuerId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.Entity<ListedSecurity>();
+        builder
+            .Entity<IssuerSecurityRegistration>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,13 +17,15 @@ namespace Equibles.Sec.FinancialFacts.Data.Models;
 /// symbol. Source of the per-ticker classification materialized on
 /// <see cref="CommonStock.ListedSecurityType"/>.
 /// </summary>
-[Index(nameof(CommonStockId), nameof(TradingSymbol), IsUnique = true)]
-public class ListedSecurity
+[Index(nameof(EquityIssuerId), nameof(TradingSymbol), IsUnique = true)]
+[Table("ListedSecurity")]
+public class IssuerSecurityRegistration
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     /// <summary>
     /// The filed <c>dei:TradingSymbol</c>, normalized for matching (uppercase,

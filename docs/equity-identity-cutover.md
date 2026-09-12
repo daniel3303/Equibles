@@ -130,3 +130,11 @@
 - Preserve the filed ticker, complete or partial source-row identity, original trade GUID, all filed amounts and metadata, timestamps, and import/filing ledgers without replay or reclassification.
 - Dated SEC evidence continues to decide issuer resolution; present-day ticker spelling never fills an unresolved association.
 - The physical `CommonStockId` column remains only through the retiring-binary window and is renamed, without changing values, in the final contract migration.
+
+## Native issuer identity evidence
+
+- `EquityIssuerTickerEvidence` preserves immutable dated SEC symbol observations; `IssuerSecurityRegistration` preserves the latest filed title/symbol/exchange statement for each issuer and normalized symbol.
+- Both reference native issuers restrictively and retain original IDs, source document IDs, accession numbers, dates, text, and existing unique keys.
+- A filing can capture evidence and registrations after its legacy company row is retired; classification updates only the native issuer's explicitly selected security.
+- Dated ticker resolution, normalization, extraction versions, registration freshness, and no-update evidence upserts remain unchanged.
+- Physical table names `CommonStockTickerEvidence` and `ListedSecurity`, and their `CommonStockId` columns, remain only for retiring binaries; rename them without copying or deleting source rows during the final contract migration.

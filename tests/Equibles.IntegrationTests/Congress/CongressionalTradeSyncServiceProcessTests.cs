@@ -46,7 +46,9 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         foreach (var stock in stocks)
         {
             if (
-                DbContext.Set<CommonStockTickerEvidence>().Any(row => row.CommonStockId == stock.Id)
+                DbContext
+                    .Set<EquityIssuerTickerEvidence>()
+                    .Any(row => row.EquityIssuerId == stock.Id)
             )
                 continue;
             DbContext.AddRange(
@@ -57,7 +59,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         DbContext.SaveChanges();
         DbContext.ChangeTracker.Clear();
 
-        var evidenceRepository = new CommonStockTickerEvidenceRepository(DbContext);
+        var evidenceRepository = new EquityIssuerTickerEvidenceRepository(DbContext);
         var issuerResolver = new CongressionalTradeIssuerResolver(evidenceRepository, DbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(EquiblesFinancialDbContext), DbContext),
@@ -68,7 +70,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
                     Substitute.For<ILogger<CongressMemberIdentityService>>()
                 )
             ),
-            (typeof(CommonStockTickerEvidenceRepository), evidenceRepository),
+            (typeof(EquityIssuerTickerEvidenceRepository), evidenceRepository),
             (typeof(CongressionalTradeIssuerResolver), issuerResolver)
         );
         return new CongressionalTradeSyncService(
@@ -86,10 +88,10 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         );
     }
 
-    private static CommonStockTickerEvidence Evidence(CommonStock stock, DateOnly filedDate) =>
+    private static EquityIssuerTickerEvidence Evidence(CommonStock stock, DateOnly filedDate) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             Ticker = stock.Ticker,
             FiledDate = filedDate,
             SourceDocumentId = Guid.NewGuid(),
@@ -479,7 +481,7 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         await DbContext.SaveChangesAsync();
 
         var resolver = new CongressionalTradeIssuerResolver(
-            new CommonStockTickerEvidenceRepository(DbContext),
+            new EquityIssuerTickerEvidenceRepository(DbContext),
             DbContext
         );
         (await resolver.RelinkUnresolved(CancellationToken.None)).Should().Be(0);
@@ -499,25 +501,31 @@ public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
         var member = new CongressMember { Name = "Jane Doe", Position = CongressPosition.Senator };
         DbContext.AddRange(historicalIssuer, currentIssuer, member);
         DbContext.AddRange(
-            new CommonStockTickerEvidence
+            new EquityIssuerTickerEvidence
             {
-                CommonStock = historicalIssuer,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, historicalIssuer)
+                    .Security.Issuer,
                 Ticker = "GOLD",
                 FiledDate = new DateOnly(2020, 2, 1),
                 SourceDocumentId = Guid.NewGuid(),
                 AccessionNumber = "historical-before",
             },
-            new CommonStockTickerEvidence
+            new EquityIssuerTickerEvidence
             {
-                CommonStock = historicalIssuer,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, historicalIssuer)
+                    .Security.Issuer,
                 Ticker = "GOLD",
                 FiledDate = new DateOnly(2022, 2, 1),
                 SourceDocumentId = Guid.NewGuid(),
                 AccessionNumber = "historical-after",
             },
-            new CommonStockTickerEvidence
+            new EquityIssuerTickerEvidence
             {
-                CommonStock = currentIssuer,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, currentIssuer)
+                    .Security.Issuer,
                 Ticker = "GOLD",
                 FiledDate = new DateOnly(2025, 2, 1),
                 SourceDocumentId = Guid.NewGuid(),

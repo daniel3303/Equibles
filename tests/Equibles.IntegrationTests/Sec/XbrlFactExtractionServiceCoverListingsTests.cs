@@ -50,8 +50,8 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
         await BuildSut().Extract(document, CancellationToken.None);
 
         var rows = await DbContext
-            .Set<ListedSecurity>()
-            .Where(r => r.CommonStockId == stock.Id)
+            .Set<IssuerSecurityRegistration>()
+            .Where(r => r.EquityIssuerId == stock.Id)
             .OrderBy(r => r.TradingSymbol)
             .ToListAsync(CancellationToken.None);
 
@@ -63,8 +63,8 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
         rows[0].FiledDate.Should().Be(new DateOnly(2026, 5, 15));
         rows[1].TradingSymbol.Should().Be("QVCGA");
         var evidence = await DbContext
-            .Set<CommonStockTickerEvidence>()
-            .Where(row => row.CommonStockId == stock.Id)
+            .Set<EquityIssuerTickerEvidence>()
+            .Where(row => row.EquityIssuerId == stock.Id)
             .OrderBy(row => row.Ticker)
             .ToListAsync(CancellationToken.None);
         evidence.Select(row => row.Ticker).Should().Equal("QVCC", "QVCGA");
@@ -98,8 +98,8 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
 
         var row = (
             await DbContext
-                .Set<ListedSecurity>()
-                .Where(r => r.CommonStockId == stock.Id)
+                .Set<IssuerSecurityRegistration>()
+                .Where(r => r.EquityIssuerId == stock.Id)
                 .ToListAsync(CancellationToken.None)
         )
             .Should()
@@ -109,8 +109,8 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
         row.FiledDate.Should().Be(new DateOnly(2026, 4, 15));
 
         var evidenceDates = await DbContext
-            .Set<CommonStockTickerEvidence>()
-            .Where(evidence => evidence.CommonStockId == stock.Id)
+            .Set<EquityIssuerTickerEvidence>()
+            .Where(evidence => evidence.EquityIssuerId == stock.Id)
             .OrderBy(evidence => evidence.FiledDate)
             .Select(evidence => evidence.FiledDate)
             .ToListAsync(CancellationToken.None);
@@ -155,7 +155,9 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
 
         await BuildSut().Extract(document, CancellationToken.None);
 
-        (await DbContext.Set<ListedSecurity>().CountAsync(CancellationToken.None)).Should().Be(0);
+        (await DbContext.Set<IssuerSecurityRegistration>().CountAsync(CancellationToken.None))
+            .Should()
+            .Be(0);
         var reloaded = await ReloadStock(stock);
         reloaded.ListedSecurityType.Should().Be(ListedSecurityType.Unknown);
         reloaded.ListedSecurityTitle.Should().BeNull();
@@ -178,11 +180,41 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
 
         (
             await DbContext
-                .Set<ListedSecurity>()
-                .CountAsync(r => r.CommonStockId == stock.Id, CancellationToken.None)
+                .Set<IssuerSecurityRegistration>()
+                .CountAsync(r => r.EquityIssuerId == stock.Id, CancellationToken.None)
         )
             .Should()
             .Be(1);
+    }
+
+    [Fact]
+    public async Task Extract_AfterLegacyOwnerRetirement_PersistsNativeEvidenceAndClassification()
+    {
+        var stock = SeedStock("NATIVE");
+        var document = await SeedDocument(
+            stock,
+            CoverEnvelope(("C1", "Class A Common Stock", "NATIVE", "NYSE")),
+            "0000000001-26-000010",
+            new DateOnly(2026, 6, 1)
+        );
+        DbContext.Remove(stock);
+        await DbContext.SaveChangesAsync();
+        DbContext.ChangeTracker.Clear();
+
+        await BuildSut().Extract(document, CancellationToken.None);
+
+        (await DbContext.Set<CommonStock>().CountAsync()).Should().Be(0);
+        (await DbContext.Set<EquityIssuerTickerEvidence>().SingleAsync())
+            .EquityIssuerId.Should()
+            .Be(stock.Id);
+        var registration = await DbContext.Set<IssuerSecurityRegistration>().SingleAsync();
+        registration.Title.Should().Be("Class A Common Stock");
+        registration.EquityIssuerId.Should().Be(stock.Id);
+        var security = await DbContext
+            .Set<EquitySecurity>()
+            .SingleAsync(row => row.EquityIssuerId == stock.Id);
+        security.RegistrationType.Should().Be(ListedSecurityType.CommonShares);
+        security.RegistrationTitle.Should().Be(registration.Title);
     }
 
     private XbrlFactExtractionService BuildSut()
@@ -191,11 +223,15 @@ public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
             (typeof(EquiblesFinancialDbContext), DbContext),
             (typeof(FinancialConceptRepository), new FinancialConceptRepository(DbContext)),
             (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockTickerEvidenceRepository),
-                new CommonStockTickerEvidenceRepository(DbContext)
+                typeof(EquityIssuerTickerEvidenceRepository),
+                new EquityIssuerTickerEvidenceRepository(DbContext)
             ),
-            (typeof(ListedSecurityRepository), new ListedSecurityRepository(DbContext))
+            (
+                typeof(IssuerSecurityRegistrationRepository),
+                new IssuerSecurityRegistrationRepository(DbContext)
+            )
         );
         var fileManager = Substitute.For<IFileManager>();
         fileManager.GetContent(Arg.Any<File>()).Returns(ci => ((File)ci[0]).FileContent.Bytes);
