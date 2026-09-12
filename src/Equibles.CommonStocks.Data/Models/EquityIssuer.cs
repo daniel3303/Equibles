@@ -6,6 +6,7 @@ namespace Equibles.CommonStocks.Data.Models;
 
 // Independent of SEC registration. The optional bridge leaves legacy readers untouched.
 [Index(nameof(CommonStockId), IsUnique = true)]
+[Index(nameof(LegalEntityIdentifier), IsUnique = true)]
 public class EquityIssuer
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -18,6 +19,9 @@ public class EquityIssuer
 
     [MaxLength(16)]
     public string Cik { get; set; }
+
+    [MaxLength(20)]
+    public string LegalEntityIdentifier { get; set; }
 
     public List<string> SecondaryCiks
     {

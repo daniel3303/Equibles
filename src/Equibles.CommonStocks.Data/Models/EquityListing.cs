@@ -14,6 +14,10 @@ public class EquityListing : IActivable
     [MaxLength(4)]
     public string MarketIdentifierCode { get; set; }
 
+    // The venue's country, independently of the issuer's domicile or quotation currency.
+    [MaxLength(2)]
+    public string MarketCountryCode { get; set; }
+
     [Required, MaxLength(32)]
     public string Ticker { get; set; }
 

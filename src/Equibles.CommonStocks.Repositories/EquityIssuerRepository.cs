@@ -12,4 +12,7 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
         GetAll().Where(row => row.CommonStockId == stockId);
 
     public IQueryable<EquityIssuer> GetByCik(string cik) => GetAll().Where(row => row.Cik == cik);
+
+    public IQueryable<EquityIssuer> GetByLegalEntityIdentifier(string lei) =>
+        GetAll().Where(row => row.LegalEntityIdentifier == lei);
 }

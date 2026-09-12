@@ -166,3 +166,13 @@
 - `scripts/verify-native-directory-evidence.sql` requires zero missing issuers and four validated restrictive constraints.
 - Historical price completion reads the exact native listing checkpoint; another venue's matching symbol cannot complete the source series.
 - Physical legacy table/column names and compatibility triggers retire with the final directory cutover; source evidence and URL aliases remain preserved in native storage.
+
+## Native market and issuer directory keys
+
+- `EquityListing.MarketCountryCode` identifies the trading venue's country independently of issuer domicile and quotation currency.
+- `AddNativeDirectoryIdentity` backfills only exact pre-international U.S. mappings; native-only foreign listings remain untouched.
+- Unqualified ticker queries use explicit U.S. listings; multiple matches remain visible for the resolver to reject ambiguity.
+- The temporary mapping trigger maintains country for retiring U.S. writers and rejects adoption of a foreign listing under their identity.
+- `EquityIssuer.LegalEntityIdentifier` stores optional source-backed issuer identity; a ticker, name, or currency cannot establish that identity.
+- Finite completion query: `scripts/verify-native-directory-identity.sql` requires `missing_listings = 0` and `wrong_market = 0`.
+- Retire the country backfill trigger and legacy mapping after native directory writers replace every old writer; preserve the native keys and source evidence.

@@ -86,6 +86,7 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
             .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<EquityListing>(listing =>
         {
+            listing.HasIndex(row => new { row.MarketCountryCode, row.Ticker });
             listing
                 .HasOne(row => row.Security)
                 .WithMany(row => row.Listings)
@@ -106,6 +107,10 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
                     table.HasCheckConstraint(
                         "CK_EquityListing_Mic",
                         "\"MarketIdentifierCode\" ~ '^[A-Z0-9]{4}$'"
+                    );
+                    table.HasCheckConstraint(
+                        "CK_EquityListing_MarketCountryCode",
+                        "\"MarketCountryCode\" ~ '^[A-Z]{2}$'"
                     );
                     table.HasCheckConstraint(
                         "CK_EquityListing_Currency",

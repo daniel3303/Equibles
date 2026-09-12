@@ -25,4 +25,10 @@ public class EquityListingRepository : BaseRepository<EquityListing>
                 && row.MarketIdentifierCode == mic
                 && row.Ticker == ticker
             );
+
+    public IQueryable<EquityListing> GetActiveUsListings() =>
+        GetAll().Where(listing => listing.Active && listing.MarketCountryCode == "US");
+
+    public IQueryable<EquityListing> GetUsByTicker(string ticker) =>
+        GetActiveUsListings().Where(listing => listing.Ticker == ticker);
 }
