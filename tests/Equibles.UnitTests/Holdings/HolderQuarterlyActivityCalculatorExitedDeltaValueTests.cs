@@ -27,8 +27,10 @@ public class HolderQuarterlyActivityCalculatorExitedDeltaValueTests
             [
                 new InstitutionalHolding
                 {
-                    CommonStockId = aapl.Id,
-                    CommonStock = aapl,
+                    EquityIssuerId = aapl.Id,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(null, aapl)
+                        .Security.Issuer,
                     InstitutionalHolderId = Guid.NewGuid(),
                     FilingDate = new DateOnly(2024, 11, 14),
                     ReportDate = new DateOnly(2024, 9, 30),

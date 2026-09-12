@@ -104,7 +104,7 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
 
         await using var read = FreshContext();
         var row = await read.Set<StockQuarterlyActivityCombined>()
-            .SingleAsync(s => s.CommonStockId == aapl.Id && s.ReportDate == OpenCur);
+            .SingleAsync(s => s.EquityIssuerId == aapl.Id && s.ReportDate == OpenCur);
 
         row.PreviousReportDate.Should().Be(OpenPrev);
         // MakeHolding stores Shares = value / 100.
@@ -120,7 +120,7 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
             .Be(1, "D filed this quarter without AAPL — a proven exit; B is assumed to hold");
         var listing = await read.Set<StockQuarterlyListingActivity>()
             .SingleAsync(snapshot =>
-                snapshot.CommonStockId == aapl.Id
+                snapshot.EquityIssuerId == aapl.Id
                 && snapshot.ReportDate == OpenCur
                 && snapshot.IsCombined
             );
@@ -158,11 +158,11 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
         await using var read = FreshContext();
         var row = await read.Set<StockQuarterlyActivityCombined>()
             .SingleAsync(snapshot =>
-                snapshot.CommonStockId == stock.Id && snapshot.ReportDate == OpenCur
+                snapshot.EquityIssuerId == stock.Id && snapshot.ReportDate == OpenCur
             );
         var listing = await read.Set<StockQuarterlyListingActivity>()
             .SingleAsync(snapshot =>
-                snapshot.CommonStockId == stock.Id
+                snapshot.EquityIssuerId == stock.Id
                 && snapshot.ReportDate == OpenCur
                 && snapshot.IsCombined
             );
@@ -217,14 +217,14 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
 
         await using var rebuilt = FreshContext();
         var rows = await rebuilt.Set<StockQuarterlyActivityCombined>().ToListAsync();
-        rows.Should().ContainSingle(row => row.CommonStockId == active.Id);
-        rows.Should().NotContain(row => row.CommonStockId == inactive.Id);
+        rows.Should().ContainSingle(row => row.EquityIssuerId == active.Id);
+        rows.Should().NotContain(row => row.EquityIssuerId == inactive.Id);
         var listings = await rebuilt
             .Set<StockQuarterlyListingActivity>()
             .Where(row => row.IsCombined)
             .ToListAsync();
-        listings.Should().ContainSingle(row => row.CommonStockId == active.Id);
-        listings.Should().NotContain(row => row.CommonStockId == inactive.Id);
+        listings.Should().ContainSingle(row => row.EquityIssuerId == active.Id);
+        listings.Should().NotContain(row => row.EquityIssuerId == inactive.Id);
     }
 
     [Fact]
@@ -241,7 +241,7 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
             // a rebuild after the window closed.
             new StockQuarterlyActivityCombined
             {
-                CommonStockId = aapl.Id,
+                EquityIssuerId = aapl.Id,
                 ReportDate = ClosedCur,
                 PreviousReportDate = ClosedCur.AddDays(-92),
                 CurrentShares = 1,
@@ -274,7 +274,7 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
             // closed window) may touch it.
             new StockQuarterlyActivityCombined
             {
-                CommonStockId = aapl.Id,
+                EquityIssuerId = aapl.Id,
                 ReportDate = OpenOld,
                 PreviousReportDate = OpenOld.AddDays(-92),
                 CurrentShares = 42,
@@ -295,7 +295,7 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
         await using var read2 = FreshContext();
         var rows = await read2.Set<StockQuarterlyActivityCombined>().ToListAsync();
         rows.Should().OnlyContain(r => r.ReportDate == OpenCur);
-        rows.Should().ContainSingle(r => r.CommonStockId == aapl.Id);
+        rows.Should().ContainSingle(r => r.EquityIssuerId == aapl.Id);
     }
 
     [Fact]
@@ -330,7 +330,7 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
                 .CountAsync(row => row.ReportDate == OpenCur);
             var visibleActivity = await during
                 .Set<StockQuarterlyActivityCombined>()
-                .SingleAsync(row => row.CommonStockId == stock.Id && row.ReportDate == OpenCur);
+                .SingleAsync(row => row.EquityIssuerId == stock.Id && row.ReportDate == OpenCur);
 
             visibleHolders.Should().Be(1, "the new holder generation is still uncommitted");
             visibleActivity
@@ -350,7 +350,7 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
         (
             await after
                 .Set<StockQuarterlyActivityCombined>()
-                .SingleAsync(row => row.CommonStockId == stock.Id && row.ReportDate == OpenCur)
+                .SingleAsync(row => row.EquityIssuerId == stock.Id && row.ReportDate == OpenCur)
         )
             .CurrentFilerCount.Should()
             .Be(2);
@@ -413,7 +413,7 @@ public class HoldingsAggregateRefreshServiceCombinedLaneTests : IAsyncLifetime
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

@@ -59,7 +59,7 @@ public class InstitutionalHoldingRepositoryFilingActivityTests : IAsyncLifetime
         seed.AddRange(
             new InstitutionalHolding
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InstitutionalHolderId = holder.Id,
                 FilingDate = filingDate,
                 ReportDate = new DateOnly(2025, 3, 31),
@@ -71,7 +71,7 @@ public class InstitutionalHoldingRepositoryFilingActivityTests : IAsyncLifetime
             },
             new InstitutionalHolding
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InstitutionalHolderId = holder.Id,
                 FilingDate = filingDate,
                 ReportDate = new DateOnly(2025, 3, 31),

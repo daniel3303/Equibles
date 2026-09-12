@@ -13,7 +13,7 @@ public static class StockActivitySnapshotMapping
     public static MarketWideStockActivity ToActivity(this StockQuarterlyActivity s) =>
         new()
         {
-            CommonStockId = s.CommonStockId,
+            CommonStockId = s.EquityIssuerId,
             CurrentShares = s.CurrentShares,
             PreviousShares = s.PreviousShares,
             CurrentValue = s.CurrentValue,
@@ -26,7 +26,7 @@ public static class StockActivitySnapshotMapping
     public static MarketWideStockChurn ToChurn(this StockQuarterlyActivity s) =>
         new()
         {
-            CommonStockId = s.CommonStockId,
+            CommonStockId = s.EquityIssuerId,
             NewFilerCount = s.NewFilerCount,
             SoldOutFilerCount = s.SoldOutFilerCount,
         };
@@ -34,7 +34,7 @@ public static class StockActivitySnapshotMapping
     public static MarketWideStockActivity ToActivity(this StockQuarterlyActivityCombined s) =>
         new()
         {
-            CommonStockId = s.CommonStockId,
+            CommonStockId = s.EquityIssuerId,
             CurrentShares = s.CurrentShares,
             PreviousShares = s.PreviousShares,
             CurrentValue = s.CurrentValue,
@@ -47,7 +47,7 @@ public static class StockActivitySnapshotMapping
     public static MarketWideStockChurn ToChurn(this StockQuarterlyActivityCombined s) =>
         new()
         {
-            CommonStockId = s.CommonStockId,
+            CommonStockId = s.EquityIssuerId,
             NewFilerCount = s.NewFilerCount,
             SoldOutFilerCount = s.SoldOutFilerCount,
         };

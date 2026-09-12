@@ -202,7 +202,7 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
         DbContext.Add(
             new InstitutionalHolding
             {
-                CommonStockId = tesla.Id,
+                EquityIssuerId = tesla.Id,
                 InstitutionalHolderId = holder.Id,
                 FilingDate = quarterEnd.AddDays(45),
                 ReportDate = quarterEnd,
@@ -250,7 +250,7 @@ public class InstitutionalHoldingsToolsGetInstitutionSummaryTests : ParadeDbMcpT
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

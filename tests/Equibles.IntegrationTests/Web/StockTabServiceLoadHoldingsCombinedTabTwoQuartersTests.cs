@@ -82,6 +82,7 @@ public class StockTabServiceLoadHoldingsCombinedTabTwoQuartersTests : IDisposabl
             Cik = "0000320193",
         };
         _dbContext.Set<CommonStock>().Add(stock);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
 
         var refiled = new InstitutionalHolder
         {
@@ -139,7 +140,7 @@ public class StockTabServiceLoadHoldingsCombinedTabTwoQuartersTests : IDisposabl
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

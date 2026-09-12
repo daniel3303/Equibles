@@ -28,7 +28,7 @@ public class PrincipalValueRepairTransactionTests(ParadeDbFixture fixture) : IAs
         var holder = new InstitutionalHolder { Cik = "0001900923", Name = "Principal filer" };
         var holding = new InstitutionalHolding
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InstitutionalHolder = holder,
             ReportDate = date,
             FilingDate = date.AddDays(40),
@@ -50,6 +50,9 @@ public class PrincipalValueRepairTransactionTests(ParadeDbFixture fixture) : IAs
         };
         await using (var seed = fixture.CreateDbContext())
         {
+            holding.Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(seed, stock)
+                .Security.Issuer;
             seed.Add(holding);
             await seed.SaveChangesAsync();
         }

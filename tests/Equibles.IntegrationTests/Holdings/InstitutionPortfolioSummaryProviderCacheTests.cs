@@ -147,7 +147,7 @@ public class InstitutionPortfolioSummaryProviderCacheTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

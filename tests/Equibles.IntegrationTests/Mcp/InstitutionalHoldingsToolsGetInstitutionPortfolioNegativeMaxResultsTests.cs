@@ -59,8 +59,10 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioNegativeMaxResults
             .Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                        .Security.Issuer,
                     InstitutionalHolderId = holder.Id,
                     InstitutionalHolder = holder,
                     ReportDate = new DateOnly(2024, 3, 31),

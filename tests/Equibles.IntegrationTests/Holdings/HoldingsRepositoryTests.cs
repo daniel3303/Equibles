@@ -233,7 +233,7 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
         };
     }
 
-    private static InstitutionalHolding CreateHolding(
+    private InstitutionalHolding CreateHolding(
         CommonStock stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
@@ -246,8 +246,10 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
         return new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(_dbContext, stock)
+                .Security.Issuer,
             InstitutionalHolderId = holder.Id,
             InstitutionalHolder = holder,
             ReportDate = reportDate,
@@ -363,7 +365,7 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
 
         var result = await _repository.GetByStock(apple, reportDate).ToListAsync();
 
-        result.Should().ContainSingle().Which.CommonStockId.Should().Be(apple.Id);
+        result.Should().ContainSingle().Which.EquityIssuerId.Should().Be(apple.Id);
     }
 
     // ── GetHistoryByStock ───────────────────────────────────────────────
@@ -445,7 +447,7 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
 
         var result = await _repository.GetHistoryByStock(apple).ToListAsync();
 
-        result.Should().ContainSingle().Which.CommonStockId.Should().Be(apple.Id);
+        result.Should().ContainSingle().Which.EquityIssuerId.Should().Be(apple.Id);
     }
 
     // ── GetByHolder ─────────────────────────────────────────────────────
@@ -461,7 +463,7 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
 
         var result = await _repository.GetByHolder(holder, reportDate).ToListAsync();
 
-        result.Should().ContainSingle().Which.CommonStockId.Should().Be(stock.Id);
+        result.Should().ContainSingle().Which.EquityIssuerId.Should().Be(stock.Id);
     }
 
     [Fact]
@@ -752,7 +754,7 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
         var result = await _repository.GetByAccessionNumber(accession).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Select(h => h.CommonStockId).Should().BeEquivalentTo([apple.Id, msft.Id]);
+        result.Select(h => h.EquityIssuerId).Should().BeEquivalentTo([apple.Id, msft.Id]);
     }
 
     [Fact]

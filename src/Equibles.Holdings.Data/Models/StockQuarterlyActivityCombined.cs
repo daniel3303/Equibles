@@ -17,11 +17,12 @@ namespace Equibles.Holdings.Data.Models;
 // the plain snapshot, since every 13F arriving during the window dirties the open
 // quarter. Consumers read this instead of running the live combined aggregation
 // (GROUP BY over ~3.4M rows + correlated NOT-EXISTS probes, ~30s cold) per request.
-[PrimaryKey(nameof(CommonStockId), nameof(ReportDate))]
+[PrimaryKey(nameof(EquityIssuerId), nameof(ReportDate))]
 [Index(nameof(ReportDate))]
 public class StockQuarterlyActivityCombined
 {
-    public Guid CommonStockId { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
 
     public DateOnly ReportDate { get; set; }
 

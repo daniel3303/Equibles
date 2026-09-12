@@ -205,7 +205,7 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
         using var verify = FreshContext();
         var appleHoldings = await verify
             .Set<InstitutionalHolding>()
-            .Where(h => h.CommonStockId == apple.Id)
+            .Where(h => h.EquityIssuerId == apple.Id)
             .ToListAsync();
 
         // Both AAPL rows share one upsert key — exactly one persisted row.

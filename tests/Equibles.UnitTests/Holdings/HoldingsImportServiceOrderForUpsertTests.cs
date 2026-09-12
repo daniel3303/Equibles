@@ -14,13 +14,13 @@ public class HoldingsImportServiceOrderForUpsertTests
         {
             new InstitutionalHolding
             {
-                CommonStockId = secondStock,
+                EquityIssuerId = secondStock,
                 InstitutionalHolderId = Guid.NewGuid(),
                 AccessionNumber = "second",
             },
             new InstitutionalHolding
             {
-                CommonStockId = firstStock,
+                EquityIssuerId = firstStock,
                 InstitutionalHolderId = Guid.NewGuid(),
                 AccessionNumber = "first",
             },
@@ -28,6 +28,6 @@ public class HoldingsImportServiceOrderForUpsertTests
 
         var ordered = HoldingsImportService.OrderForUpsert(holdings);
 
-        Assert.Equal([firstStock, secondStock], ordered.Select(holding => holding.CommonStockId));
+        Assert.Equal([firstStock, secondStock], ordered.Select(holding => holding.EquityIssuerId));
     }
 }

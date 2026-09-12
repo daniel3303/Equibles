@@ -55,7 +55,7 @@ public class InstitutionsBacktestReportDateOverflowTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InstitutionalHolderId = filer.Id,
                     // ReportDate within 45 days of DateOnly.MaxValue: ReportDate.AddDays(45)
                     // pushes past 9999-12-31 and throws ArgumentOutOfRangeException unless clamped.

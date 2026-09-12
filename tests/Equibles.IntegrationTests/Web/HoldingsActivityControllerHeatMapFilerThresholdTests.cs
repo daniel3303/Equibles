@@ -93,7 +93,7 @@ public class HoldingsActivityControllerHeatMapFilerThresholdTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             ReportDate = reportDate,
             PreviousReportDate = previousReportDate,
             CurrentShares = 100 * filerCount,
@@ -115,7 +115,7 @@ public class HoldingsActivityControllerHeatMapFilerThresholdTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

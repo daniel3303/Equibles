@@ -51,7 +51,7 @@ public class StocksHoldingsOwnershipTrendSeededTests
                 db.Add(
                     new InstitutionalHolding
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         InstitutionalHolder = holder,
                         ReportDate = reportDate,
                         FilingDate = reportDate.AddDays(45),

@@ -57,6 +57,7 @@ public class InstitutionalHoldingRepositoryDoubleDownThresholdBoundaryTests : ID
         var current = new DateOnly(2024, 12, 31);
 
         _dbContext.Set<CommonStock>().Add(stock);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(atThreshold, belowThreshold);
         _dbContext
             .Set<InstitutionalHolding>()
@@ -90,7 +91,7 @@ public class InstitutionalHoldingRepositoryDoubleDownThresholdBoundaryTests : ID
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

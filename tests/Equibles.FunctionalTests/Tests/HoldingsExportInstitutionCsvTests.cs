@@ -52,7 +52,7 @@ public class HoldingsExportInstitutionCsvTests
             db.AddRange(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = holder.Id,
                     ReportDate = reportDate,
                     FilingDate = reportDate.AddDays(45),
@@ -63,7 +63,7 @@ public class HoldingsExportInstitutionCsvTests
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = msftId,
+                    EquityIssuerId = msftId,
                     InstitutionalHolderId = holder.Id,
                     ReportDate = reportDate,
                     FilingDate = reportDate.AddDays(45),

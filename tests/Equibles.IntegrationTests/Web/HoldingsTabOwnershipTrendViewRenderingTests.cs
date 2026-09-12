@@ -89,7 +89,7 @@ public class HoldingsTabOwnershipTrendViewRenderingTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolder = holder,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

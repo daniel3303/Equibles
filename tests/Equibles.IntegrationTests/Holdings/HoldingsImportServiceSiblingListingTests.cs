@@ -204,14 +204,14 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         holdings.Should().HaveCount(2, "the two classes are two securities, never one row");
 
         var primary = holdings.Single(h => h.ListedTicker == null);
-        primary.CommonStockId.Should().Be(stock.Id);
+        primary.EquityIssuerId.Should().Be(stock.Id);
         primary.Cusip.Should().Be("02079K305");
         primary.Shares.Should().Be(1000);
         primary.Value.Should().Be(170_000L);
         primary.ValuePending.Should().BeFalse();
 
         var classC = holdings.Single(h => h.ListedTicker == "GOOG");
-        classC.CommonStockId.Should().Be(stock.Id);
+        classC.EquityIssuerId.Should().Be(stock.Id);
         classC.Cusip.Should().Be("02079K107");
         classC.Shares.Should().Be(500);
         classC.Value.Should().Be(86_000L, "the Class C row prices at ITS class's close");
@@ -359,7 +359,7 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
 
         using var verify = FreshContext();
         var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
-        holding.CommonStockId.Should().Be(owner.Id);
+        holding.EquityIssuerId.Should().Be(owner.Id);
         holding.ListedTicker.Should().BeNull();
     }
 }

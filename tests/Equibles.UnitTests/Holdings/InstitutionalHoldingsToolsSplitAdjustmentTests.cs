@@ -89,6 +89,8 @@ public class InstitutionalHoldingsToolsSplitAdjustmentTests
         };
         var holder = new InstitutionalHolder { Cik = "1", Name = "Fund One" };
         db.AddRange(apple, microsoft, holder);
+        Equibles.TestSupport.NativeListingSeed.ForStock(db, apple);
+        Equibles.TestSupport.NativeListingSeed.ForStock(db, microsoft);
 
         // Apple did a 2:1 split between the quarters; the fund's economic position is flat
         // (1,000 pre-split → 2,000 post-split) with a flat dollar value.
@@ -134,7 +136,7 @@ public class InstitutionalHoldingsToolsSplitAdjustmentTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

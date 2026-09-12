@@ -58,7 +58,7 @@ public class InstitutionsControllerFilingTypeFilterTests
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = activistId,
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     FilingDate = reportDate,
                     ReportDate = reportDate,
                     Shares = 1_000_000,
@@ -72,7 +72,7 @@ public class InstitutionsControllerFilingTypeFilterTests
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = quantId,
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     FilingDate = reportDate,
                     ReportDate = reportDate,
                     Shares = 500,

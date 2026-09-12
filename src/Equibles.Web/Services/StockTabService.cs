@@ -235,7 +235,7 @@ public class StockTabService
 
         var allCombined = await _institutionalHoldingRepository
             .GetCombinedQuarter(current, previous)
-            .Where(h => h.CommonStockId == stock.Id)
+            .Where(h => h.EquityIssuerId == stock.Id)
             .Include(h => h.InstitutionalHolder)
             .ToListAsync();
 

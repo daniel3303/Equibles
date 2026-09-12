@@ -39,7 +39,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
             MakeHolding(stock, holder, current, shares: 200, value: 200_000),
             new StockQuarterlyActivity
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = current,
                 PreviousReportDate = prior,
                 CurrentShares = 200,
@@ -52,7 +52,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
             },
             new StockQuarterlyListingActivity
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = current,
                 PriceSeriesTicker = stock.Ticker,
                 CurrentShares = 200,
@@ -114,7 +114,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
             MakeHolding(stock, holder, current, shares: 200, value: 200_000),
             new StockQuarterlyActivity
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = current,
                 PreviousReportDate = prior,
                 CurrentShares = 200,
@@ -127,7 +127,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
             },
             new StockQuarterlyListingActivity
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = current,
                 PriceSeriesTicker = stock.Ticker,
                 CurrentShares = 200,
@@ -183,7 +183,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
             MakeHolding(stock, holder, current, shares: 200, value: 200_000),
             new StockQuarterlyActivity
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = current,
                 PreviousReportDate = prior,
                 CurrentShares = 200,
@@ -196,7 +196,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
             },
             new StockQuarterlyListingActivity
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = current,
                 PriceSeriesTicker = stock.Ticker,
                 CurrentShares = 200,
@@ -278,7 +278,7 @@ public class InstitutionalHoldingsToolsMarketActivityCacheTests : ParadeDbMcpTes
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

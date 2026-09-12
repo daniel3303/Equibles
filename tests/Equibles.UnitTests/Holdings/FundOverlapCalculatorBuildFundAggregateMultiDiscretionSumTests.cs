@@ -28,15 +28,19 @@ public class FundOverlapCalculatorBuildFundAggregateMultiDiscretionSumTests
         {
             new()
             {
-                CommonStockId = stockId,
-                CommonStock = stock,
+                EquityIssuerId = stockId,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(null, stock)
+                    .Security.Issuer,
                 Shares = 100,
                 Value = 1_000,
             },
             new()
             {
-                CommonStockId = stockId,
-                CommonStock = stock,
+                EquityIssuerId = stockId,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(null, stock)
+                    .Security.Issuer,
                 Shares = 200,
                 Value = 2_000,
             },

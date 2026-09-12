@@ -11,11 +11,7 @@ public static class IndustryAllocationCalculator
     public static List<IndustryAllocationSlice> Calculate(
         IReadOnlyList<InstitutionalHolding> currentQuarterHoldings
     ) =>
-        Calculate(
-            currentQuarterHoldings,
-            h => h.CommonStock?.IndustryId,
-            h => h.CommonStock?.Industry?.Name
-        );
+        Calculate(currentQuarterHoldings, h => h.Issuer?.IndustryId, h => h.Issuer?.Industry?.Name);
 
     // Broad-sector rollup of the same allocation: groups by the industry's Sector instead of
     // the fine industry taxonomy, so "is this fund concentrated in tech?" is answered in one
@@ -27,8 +23,8 @@ public static class IndustryAllocationCalculator
     ) =>
         Calculate(
             currentQuarterHoldings,
-            h => h.CommonStock?.Industry?.SectorId,
-            h => h.CommonStock?.Industry?.Sector?.Name
+            h => h.Issuer?.Industry?.SectorId,
+            h => h.Issuer?.Industry?.Sector?.Name
         );
 
     private static List<IndustryAllocationSlice> Calculate(
@@ -54,7 +50,7 @@ public static class IndustryAllocationCalculator
                     group.Select(groupName).FirstOrDefault(n => n != null)
                     ?? IndustryAllocationSlice.UnclassifiedName;
                 var perStock = group
-                    .GroupBy(h => h.CommonStockId)
+                    .GroupBy(h => h.EquityIssuerId)
                     .Select(stockGroup => new { Value = stockGroup.Sum(h => h.Value) })
                     .ToList();
                 var groupValue = perStock.Sum(p => p.Value);

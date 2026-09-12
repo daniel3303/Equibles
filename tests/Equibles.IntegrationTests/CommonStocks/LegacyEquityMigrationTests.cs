@@ -308,7 +308,7 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
     private static StockQuarterlyListingActivity Activity(CommonStock stock, string ticker) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ReportDate = new DateOnly(2025, 3, 31),
             PriceSeriesTicker = ticker,
             CurrentShares = 123456,

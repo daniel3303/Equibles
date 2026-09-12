@@ -250,7 +250,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                 seed.Add(
                     new StockQuarterlyActivity
                     {
-                        CommonStockId = aapl.Id,
+                        EquityIssuerId = aapl.Id,
                         ReportDate = quarter,
                         CurrentShares = 1_000,
                         CurrentValue = 100_000,
@@ -260,7 +260,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                 seed.Add(
                     new StockQuarterlyListingActivity
                     {
-                        CommonStockId = aapl.Id,
+                        EquityIssuerId = aapl.Id,
                         ReportDate = quarter,
                         PriceSeriesTicker = aapl.Ticker,
                         CurrentShares = 1_000,
@@ -337,7 +337,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                     },
                     new StockQuarterlyActivity
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         ReportDate = quarter,
                         CurrentShares = 1_000,
                         CurrentValue = 100_000,
@@ -368,14 +368,14 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
         await worker.StartAsync(cts.Token);
         await WaitForSnapshots(async ctx =>
             await ctx.Set<StockQuarterlyListingActivity>()
-                .CountAsync(row => row.CommonStockId == stock.Id && !row.IsCombined)
+                .CountAsync(row => row.EquityIssuerId == stock.Id && !row.IsCombined)
             >= quarters.Count
         );
         await worker.StopAsync(CancellationToken.None);
 
         await using var read = FreshContext();
         var listingQuarters = await read.Set<StockQuarterlyListingActivity>()
-            .Where(row => row.CommonStockId == stock.Id && !row.IsCombined)
+            .Where(row => row.EquityIssuerId == stock.Id && !row.IsCombined)
             .Select(row => row.ReportDate)
             .OrderBy(date => date)
             .ToListAsync();
@@ -436,7 +436,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                 seed.Add(
                     new StockQuarterlyActivity
                     {
-                        CommonStockId = aapl.Id,
+                        EquityIssuerId = aapl.Id,
                         ReportDate = quarter,
                         CurrentShares = 1_000,
                         CurrentValue = 100_000,
@@ -457,7 +457,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
                 seed.Add(
                     new StockQuarterlyListingActivity
                     {
-                        CommonStockId = aapl.Id,
+                        EquityIssuerId = aapl.Id,
                         ReportDate = quarter,
                         PriceSeriesTicker = aapl.Ticker,
                         CurrentShares = 1_000,
@@ -576,7 +576,7 @@ public class AumSnapshotRebuildWorkerTests : IAsyncLifetime
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingType = filingType,
             FilingDate = reportDate.AddDays(45),

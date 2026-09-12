@@ -80,8 +80,8 @@ public class ProfilesController : BaseController
             .TakeMostRecent(holding => holding.ReportDate, RecentRowLimit)
             .Select(holding => new HoldingRowViewModel
             {
-                Ticker = holding.CommonStock.Ticker,
-                Company = holding.CommonStock.Name,
+                Ticker = holding.Issuer.Presentation.Listing.Ticker,
+                Company = holding.Issuer.Name,
                 ReportDate = holding.ReportDate,
                 Shares = holding.Shares,
                 Value = holding.Value,
@@ -213,7 +213,7 @@ public class ProfilesController : BaseController
         // reads grouped scalar projections and no longer materializes current + prior holdings.
         var currentHoldingsWithIndustry = await _institutionalHoldingRepository
             .Get13FByHolder(holder, latest)
-            .Include(h => h.CommonStock)
+            .Include(h => h.Issuer)
                 .ThenInclude(s => s.Industry)
             .ToListAsync();
         var allocation = IndustryAllocationCalculator.Calculate(currentHoldingsWithIndustry);

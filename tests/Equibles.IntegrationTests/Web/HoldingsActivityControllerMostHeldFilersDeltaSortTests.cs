@@ -92,7 +92,7 @@ public class HoldingsActivityControllerMostHeldFilersDeltaSortTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

@@ -77,7 +77,7 @@ public class StocksHoldingsSeededTests
                     db.Add(
                         new InstitutionalHolding
                         {
-                            CommonStockId = stockId,
+                            EquityIssuerId = stockId,
                             InstitutionalHolderId = holders[i].Id,
                             ReportDate = reportDate,
                             FilingDate = reportDate.AddDays(45),
@@ -209,7 +209,7 @@ public class StocksHoldingsSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = anchorStockId,
+                    EquityIssuerId = anchorStockId,
                     InstitutionalHolderId = holders[2].Id,
                     ReportDate = latest,
                     FilingDate = latest.AddDays(45),
@@ -226,7 +226,7 @@ public class StocksHoldingsSeededTests
                 db.Add(
                     new InstitutionalHolding
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         InstitutionalHolderId = holders[i].Id,
                         ReportDate = prior,
                         FilingDate = prior.AddDays(45),
@@ -254,7 +254,7 @@ public class StocksHoldingsSeededTests
                 db.Add(
                     new InstitutionalHolding
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         InstitutionalHolderId = holders[i].Id,
                         ReportDate = latest,
                         FilingDate = latest.AddDays(45),

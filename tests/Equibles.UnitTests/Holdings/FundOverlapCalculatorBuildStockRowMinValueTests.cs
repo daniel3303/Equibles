@@ -30,8 +30,10 @@ public class FundOverlapCalculatorBuildStockRowMinValueTests
             [
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
-                    CommonStock = stock,
+                    EquityIssuerId = stockId,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(null, stock)
+                        .Security.Issuer,
                     Shares = 100,
                     Value = 100,
                 },
@@ -42,8 +44,10 @@ public class FundOverlapCalculatorBuildStockRowMinValueTests
             [
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
-                    CommonStock = stock,
+                    EquityIssuerId = stockId,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(null, stock)
+                        .Security.Issuer,
                     Shares = 300,
                     Value = 300,
                 },

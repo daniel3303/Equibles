@@ -138,3 +138,13 @@
 - A filing can capture evidence and registrations after its legacy company row is retired; classification updates only the native issuer's explicitly selected security.
 - Dated ticker resolution, normalization, extraction versions, registration freshness, and no-update evidence upserts remain unchanged.
 - Physical table names `CommonStockTickerEvidence` and `ListedSecurity`, and their `CommonStockId` columns, remain only for retiring binaries; rename them without copying or deleting source rows during the final contract migration.
+
+## Native holdings issuers
+
+- Institutional holdings and all three quarterly activity stores reference native issuers restrictively, preserving original owner GUIDs.
+- Every holding field, manager allocation, original CUSIP/listed ticker, valuation and retry marker remains unchanged; no parser replay is used for migration.
+- Previously unconstrained summary rows retain an absent owner's original GUID in an issuer record with unknown metadata.
+- Batch writes validate native issuer existence; retiring a legacy directory entry after source resolution cannot silently drop its position.
+- PostgreSQL preservation tests compare every column in holdings, manager legs, and all summary stores across migration and legacy-owner retirement.
+- `scripts/verify-native-issuer-holdings.sql` requires zero missing issuers and four validated restrictive ownership constraints; exact attribution and final directory retirement remain separate completion requirements.
+- Exact security/listing attribution and remaining legacy directory consumers still require migration before final storage retirement.

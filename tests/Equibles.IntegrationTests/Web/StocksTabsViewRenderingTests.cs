@@ -40,7 +40,7 @@ public class StocksTabsViewRenderingTests
             db.AddRange(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2026, 1, 31),
                     ReportDate = new DateOnly(2025, 12, 31),
@@ -49,7 +49,7 @@ public class StocksTabsViewRenderingTests
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 10, 31),
                     ReportDate = new DateOnly(2025, 9, 30),

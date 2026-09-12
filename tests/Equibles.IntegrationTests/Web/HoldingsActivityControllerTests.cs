@@ -63,7 +63,7 @@ public class HoldingsActivityControllerTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InstitutionalHolderId = holderId,
                     ReportDate = only,
                     FilingDate = only.AddDays(45),
@@ -166,7 +166,7 @@ public class HoldingsActivityControllerTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

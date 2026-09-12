@@ -248,7 +248,7 @@ public class InstitutionsControllerRangeFilterTests
     private static InstitutionalHolding MakeHolding(Guid stockId, Guid holderId, long value) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = Quarter,
             FilingDate = Quarter.AddDays(45),

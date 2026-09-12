@@ -304,7 +304,7 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
                 new AumQuarterlySnapshot { ReportDate = missingDate, DirtyAt = dirtyAt },
                 new StockQuarterlyListingActivity
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     ReportDate = Q4,
                     PriceSeriesTicker = "AAPL",
                     CurrentShares = 1,
@@ -632,7 +632,7 @@ public class AumSnapshotDrainWorkerTests : IAsyncLifetime
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

@@ -122,7 +122,7 @@ public class HoldingsCloneBacktestProvider
             .Where(h => relevant.Contains(h.ReportDate))
             .Select(h => new BacktestHoldingRow(
                 h.ReportDate,
-                h.CommonStockId,
+                h.EquityIssuerId,
                 h.ListedTicker,
                 h.Shares,
                 h.Value,

@@ -63,7 +63,7 @@ public class HoldingsBacktestServiceNoRebalanceInWindowTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = holderId,
                     ReportDate = new DateOnly(2026, 1, 1),
                     FilingDate = new DateOnly(2026, 2, 15),

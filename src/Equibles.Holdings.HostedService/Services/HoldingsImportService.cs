@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
@@ -1457,7 +1458,7 @@ public class HoldingsImportService
                     // security, at most a handful. A null listing compares as IS NULL.
                     deleted += await existingQuery
                         .Where(h =>
-                            h.CommonStockId == target.CommonStockId
+                            h.EquityIssuerId == target.CommonStockId
                             && h.ListedTicker == target.ListedTicker
                         )
                         .ExecuteDeleteAsync(cancellationToken);
@@ -1916,7 +1917,7 @@ public class HoldingsImportService
         var holding = new InstitutionalHolding
         {
             InstitutionalHolderId = holderId,
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             FilingDate = filingDate,
             ReportDate = reportDate,
             Value = value,
@@ -1952,29 +1953,29 @@ public class HoldingsImportService
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-
-        // CompanySync can replace a CommonStock after BuildCusipMapping cached its id. Remove
-        // those stale children immediately before the write so one dangling FK cannot roll back
-        // every valid position in the accession. The caller leaves the data set unprocessed when
-        // any row is skipped, allowing the replacement stock to resolve on the next pass.
-        var safeHoldings = await stockRepo.FilterByExistingStocks(
-            holdings,
-            h => h.CommonStockId,
-            cancellationToken
-        );
+        // Validate the stable issuer owner immediately before writing. Removing a legacy
+        // directory row must not discard an otherwise valid historical position.
+        var issuerIds = holdings.Select(row => row.EquityIssuerId).Distinct().ToArray();
+        var existingIssuerIds = await dbContext
+            .Set<EquityIssuer>()
+            .Where(row => issuerIds.Contains(row.Id))
+            .Select(row => row.Id)
+            .ToHashSetAsync(cancellationToken);
+        var safeHoldings = holdings
+            .Where(row => existingIssuerIds.Contains(row.EquityIssuerId))
+            .ToList();
         var skipped = holdings.Count - safeHoldings.Count;
         if (skipped > 0)
         {
             _logger.LogWarning(
-                "Holdings batch: skipping {Count} rows whose parent CommonStock was removed before flush",
+                "Holdings batch: skipping {Count} rows whose issuer was removed before flush",
                 skipped
             );
         }
         if (safeHoldings.Count == 0)
             return new HoldingsFlushResult(0, SkippedStaleParent: skipped > 0);
 
-        // PostgreSQL takes a KEY SHARE lock on each CommonStock while checking the holding FK.
+        // PostgreSQL takes a KEY SHARE lock on each issuer while checking the holding FK.
         // Bulk and realtime imports can flush overlapping stocks concurrently; one shared parent
         // order prevents the two multi-row upserts from forming a circular lock dependency.
         safeHoldings = OrderForUpsert(safeHoldings);
@@ -1991,7 +1992,7 @@ public class HoldingsImportService
             .UpsertRange(safeHoldings)
             .On(h => new
             {
-                h.CommonStockId,
+                h.EquityIssuerId,
                 h.InstitutionalHolderId,
                 h.ReportDate,
                 h.ShareType,
@@ -2067,7 +2068,7 @@ public class HoldingsImportService
         IEnumerable<InstitutionalHolding> holdings
     ) =>
         holdings
-            .OrderBy(holding => holding.CommonStockId)
+            .OrderBy(holding => holding.EquityIssuerId)
             .ThenBy(holding => holding.InstitutionalHolderId)
             .ThenBy(holding => holding.ReportDate)
             .ThenBy(holding => holding.AccessionNumber, StringComparer.Ordinal)
@@ -2302,7 +2303,7 @@ public class HoldingsImportService
 
     private static string BuildHoldingKey(InstitutionalHolding h) =>
         BuildHoldingKey(
-            h.CommonStockId,
+            h.EquityIssuerId,
             h.InstitutionalHolderId,
             h.ReportDate,
             h.ShareType,

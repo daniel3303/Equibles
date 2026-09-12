@@ -26,7 +26,8 @@ public class Corrupt13FShareCountRepairerRepairValueOverflowTests
         var rows = new List<BufferedHoldingRow> { row };
         var prices = new Dictionary<(Guid, string, DateOnly), decimal>
         {
-            [(row.Holding.CommonStockId, row.Holding.ListedTicker, row.Holding.ReportDate)] = 0.50m,
+            [(row.Holding.EquityIssuerId, row.Holding.ListedTicker, row.Holding.ReportDate)] =
+                0.50m,
         };
 
         var act = () => Corrupt13FShareCountRepairer.Repair(rows, prices);
@@ -41,7 +42,7 @@ public class Corrupt13FShareCountRepairerRepairValueOverflowTests
     {
         var holding = new InstitutionalHolding
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             InstitutionalHolderId = Guid.NewGuid(),
             FilingDate = new DateOnly(2026, 4, 15),
             ReportDate = new DateOnly(2026, 3, 31),

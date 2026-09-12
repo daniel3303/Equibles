@@ -80,7 +80,7 @@ public class GetTopHoldersNegativeMaxResultsTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InstitutionalHolderId = holder.Id,
                     ReportDate = reportDate,
                     FilingDate = reportDate.AddDays(45),

@@ -16,8 +16,8 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
         var holder = new InstitutionalHolder { Name = "Principal holder", Cik = "123" };
         var holding = new InstitutionalHolding
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(null, stock).Security.Issuer,
+            EquityIssuerId = stock.Id,
             Shares = 123_456,
             Value = 123_456,
             ShareType = ShareType.Principal,
@@ -99,7 +99,9 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioCultureInvarian
         {
             new()
             {
-                CommonStock = stock,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(null, stock)
+                    .Security.Issuer,
                 Shares = 1_234_567,
                 Value = 1_234_567_890L,
             },

@@ -184,7 +184,7 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
 
         using var verify = FreshContext();
         var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
-        holding.CommonStockId.Should().Be(stock.Id);
+        holding.EquityIssuerId.Should().Be(stock.Id);
         holding.Cusip.Should().Be("11259V106");
         holding.Shares.Should().Be(921231);
     }
@@ -235,7 +235,7 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         result.IsComplete.Should().BeTrue();
         using var verify = FreshContext();
         var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
-        holding.CommonStockId.Should().Be(stock.Id);
+        holding.EquityIssuerId.Should().Be(stock.Id);
         holding.Shares.Should().Be(2500);
     }
 
@@ -303,6 +303,6 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
 
         using var verify = FreshContext();
         var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
-        holding.CommonStockId.Should().Be(stockA.Id);
+        holding.EquityIssuerId.Should().Be(stockA.Id);
     }
 }

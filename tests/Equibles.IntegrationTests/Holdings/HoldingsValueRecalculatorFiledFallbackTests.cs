@@ -115,7 +115,7 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
         var holding = new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(30),

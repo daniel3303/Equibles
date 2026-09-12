@@ -306,7 +306,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
             },
             new StockQuarterlyActivityCombined
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = Current,
                 PreviousReportDate = Prior,
                 CurrentShares = 200,
@@ -371,7 +371,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
         seed.Add(
             new StockQuarterlyActivityCombined
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = Current,
                 PreviousReportDate = Prior,
                 CurrentShares = 0,
@@ -401,7 +401,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
         seed.AddRange(
             new StockQuarterlyActivity
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = Current,
                 PreviousReportDate = Prior,
                 CurrentShares = 1_200,
@@ -414,7 +414,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
             },
             new StockQuarterlyListingActivity
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = Current,
                 PriceSeriesTicker = stock.Ticker,
                 CurrentShares = 1_200,
@@ -475,7 +475,7 @@ public class InstitutionalHoldingRepositoryMostHeldTests : IAsyncLifetime
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

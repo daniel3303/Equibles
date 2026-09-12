@@ -315,12 +315,12 @@ public class HoldingValueFallbackRepairService
             return 0;
         }
 
-        var pairs = rows.Select(h => (h.CommonStockId, h.ListedTicker, h.ReportDate))
+        var pairs = rows.Select(h => (h.EquityIssuerId, h.ListedTicker, h.ReportDate))
             .Distinct()
             .ToList();
         var prices = await _stockPriceProvider.GetClosingPrices(pairs, cancellationToken);
 
-        var stockIds = rows.Select(h => h.CommonStockId).Distinct().ToList();
+        var stockIds = rows.Select(h => h.EquityIssuerId).Distinct().ToList();
         var splitsByStock = (
             await dbContext
                 .Set<StockSplit>()
@@ -358,7 +358,7 @@ public class HoldingValueFallbackRepairService
             // a reset row is always one it can republish.
             if (
                 !prices.TryGetValue(
-                    (holding.CommonStockId, holding.ListedTicker, holding.ReportDate),
+                    (holding.EquityIssuerId, holding.ListedTicker, holding.ReportDate),
                     out var closePrice
                 )
                 || closePrice <= 0
@@ -369,9 +369,9 @@ public class HoldingValueFallbackRepairService
                 continue;
             }
 
-            splitsByStock.TryGetValue(holding.CommonStockId, out var splits);
-            primaryTickers.TryGetValue(holding.CommonStockId, out var primaryTicker);
-            secondaryTickers.TryGetValue(holding.CommonStockId, out var listedSecondaries);
+            splitsByStock.TryGetValue(holding.EquityIssuerId, out var splits);
+            primaryTickers.TryGetValue(holding.EquityIssuerId, out var primaryTicker);
+            secondaryTickers.TryGetValue(holding.EquityIssuerId, out var listedSecondaries);
             if (
                 !HoldingValueBasis.TryResolveShareCountFactor(
                     holding.ReportDate,

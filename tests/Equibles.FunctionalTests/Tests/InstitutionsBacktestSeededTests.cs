@@ -48,7 +48,7 @@ public class InstitutionsBacktestSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InstitutionalHolderId = filer.Id,
                     ReportDate = reportDate,
                     FilingDate = reportDate.AddDays(45),

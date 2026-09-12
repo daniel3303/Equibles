@@ -109,7 +109,7 @@ public class HoldingsValueRecalculatorTests : IDisposable
         return new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(30),

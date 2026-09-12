@@ -102,7 +102,7 @@ public class StockTabServiceLoadHoldingsCombinedTabFewerThanTwoQuartersTests : I
             .Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = onlyReportDate,

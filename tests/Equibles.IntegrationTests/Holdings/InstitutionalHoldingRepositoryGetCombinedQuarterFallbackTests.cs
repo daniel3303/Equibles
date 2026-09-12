@@ -57,6 +57,7 @@ public class InstitutionalHoldingRepositoryGetCombinedQuarterFallbackTests : IDi
         var current = new DateOnly(2024, 6, 30);
 
         _dbContext.Set<CommonStock>().Add(stock);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(filer, nonFiler);
         _dbContext
             .Set<InstitutionalHolding>()
@@ -96,7 +97,7 @@ public class InstitutionalHoldingRepositoryGetCombinedQuarterFallbackTests : IDi
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

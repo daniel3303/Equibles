@@ -362,7 +362,7 @@ public class DataCountServiceTests : IDisposable
             .AddRange(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 2, 14),
                     ReportDate = new DateOnly(2024, 12, 31),
@@ -374,7 +374,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = new DateOnly(2025, 3, 31),
@@ -386,7 +386,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 8, 14),
                     ReportDate = new DateOnly(2025, 6, 30),

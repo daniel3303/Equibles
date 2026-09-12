@@ -93,7 +93,7 @@ public class InstitutionalHoldingRepositoryGetLatestByStockPerHolderTests : IDis
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

@@ -63,7 +63,7 @@ public class HoldingsValueRecalculatorRetryAnchorTests
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = Guid.NewGuid(),
-                    CommonStockId = commonStockId,
+                    EquityIssuerId = commonStockId,
                     FilingDate = new DateOnly(2024, 11, 14),
                     ReportDate = new DateOnly(2024, 9, 30),
                     Value = 0,

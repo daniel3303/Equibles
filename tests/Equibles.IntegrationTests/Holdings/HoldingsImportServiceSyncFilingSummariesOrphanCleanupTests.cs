@@ -104,7 +104,7 @@ public class HoldingsImportServiceSyncFilingSummariesOrphanCleanupTests : IAsync
         new InstitutionalHolding
         {
             InstitutionalHolderId = holder.Id,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             AccessionNumber = accession,
             FilingDate = new DateOnly(2026, 8, 15),
             ReportDate = reportDate,

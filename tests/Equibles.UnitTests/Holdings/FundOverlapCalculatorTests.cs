@@ -201,8 +201,8 @@ public class FundOverlapCalculatorTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(null, stock).Security.Issuer,
             InstitutionalHolderId = holder.Id,
             InstitutionalHolder = holder,
             FilingDate = Report.AddDays(45),

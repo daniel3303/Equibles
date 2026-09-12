@@ -209,7 +209,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

@@ -618,13 +618,13 @@ public class InstitutionalHoldingsTools
                         // table below renders ROWS — quoting the distinct-stock count as its
                         // denominator once produced "top 39 of 35".
                         Rows = g.Count(),
-                        Positions = g.Select(h => h.CommonStockId).Distinct().Count(),
+                        Positions = g.Select(h => h.EquityIssuerId).Distinct().Count(),
                         Value = g.Sum(h => h.Value),
                         Unvalued = g.Where(h =>
                                 h.Value == 0L
                                 && (h.ValuePending || h.ValueUnavailable || h.FiledValue > 0)
                             )
-                            .Select(h => h.CommonStockId)
+                            .Select(h => h.EquityIssuerId)
                             .Distinct()
                             .Count(),
                     })
@@ -650,7 +650,7 @@ public class InstitutionalHoldingsTools
                 // rows between pages.
                 var holdings = await allHoldings
                     .OrderByDescending(h => h.Value)
-                    .ThenBy(h => h.CommonStockId)
+                    .ThenBy(h => h.EquityIssuerId)
                     .ThenBy(h => h.Id)
                     .Skip(offset)
                     .Take(McpLimit.Clamp(maxResults))
@@ -665,7 +665,7 @@ public class InstitutionalHoldingsTools
                 // web and GetTopHolders), so restate each position's share count by its own
                 // stock's post-report-date splits. Value is a paired per-holding dollar figure
                 // and stays as reported.
-                var splitsByStock = await LoadSplitsByStock(holdings.Select(h => h.CommonStockId));
+                var splitsByStock = await LoadSplitsByStock(holdings.Select(h => h.EquityIssuerId));
 
                 return RenderInstitutionPortfolio(
                     holder,
@@ -763,7 +763,7 @@ public class InstitutionalHoldingsTools
             {
                 // The exact listing held: a GOOG position must not render as GOOGL, and a
                 // sibling ETF split must not rescale this row.
-                var listedTicker = h.ListedTicker ?? h.CommonStock.Ticker;
+                var listedTicker = h.ListedTicker ?? h.Issuer?.Presentation?.Listing?.Ticker;
                 var shares =
                     h.ShareType == ShareType.Principal
                         ? h.Shares
@@ -771,15 +771,15 @@ public class InstitutionalHoldingsTools
                             h.Shares,
                             targetDate,
                             PriceSeriesSplitScope.ForListing(
-                                SplitsFor(splitsByStock, h.CommonStockId),
-                                h.CommonStock.Ticker,
+                                SplitsFor(splitsByStock, h.EquityIssuerId),
+                                h.Issuer?.Presentation?.Listing?.Ticker,
                                 listedTicker
                             )
                         );
                 var pct = Percentage.Of(h.Value, totalValue);
                 // Rank is the ABSOLUTE position in the value-ranked rows, so page two
                 // continues 21, 22, … instead of restarting at 1.
-                return $"| {offset + rank} | {listedTicker} | {h.CommonStock.Name} | "
+                return $"| {offset + rank} | {listedTicker ?? "—"} | {h.Issuer.Name} | "
                     + $"{PositionType(h.OptionType, h.ShareType)} | "
                     + $"{McpFormat.WholeNumber(shares)} | "
                     + $"{FormatMillions(h.Value)} | "
@@ -1953,7 +1953,7 @@ public class InstitutionalHoldingsTools
 
                 var holdings = await _holdingRepository
                     .Get13FByHolder(holder, targetDate)
-                    .Include(h => h.CommonStock)
+                    .Include(h => h.Issuer)
                         .ThenInclude(s => s.Industry)
                             .ThenInclude(i => i.Sector)
                     .ToListAsync();

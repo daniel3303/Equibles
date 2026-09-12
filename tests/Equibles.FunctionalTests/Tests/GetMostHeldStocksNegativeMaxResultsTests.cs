@@ -84,7 +84,7 @@ public class GetMostHeldStocksNegativeMaxResultsTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InstitutionalHolderId = holder.Id,
                     ReportDate = current,
                     FilingDate = current.AddDays(45),
@@ -98,7 +98,7 @@ public class GetMostHeldStocksNegativeMaxResultsTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InstitutionalHolderId = holder.Id,
                     ReportDate = prior,
                     FilingDate = prior.AddDays(45),

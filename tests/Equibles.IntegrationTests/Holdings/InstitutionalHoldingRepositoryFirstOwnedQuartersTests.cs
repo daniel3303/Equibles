@@ -95,7 +95,7 @@ public class InstitutionalHoldingRepositoryFirstOwnedQuartersTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

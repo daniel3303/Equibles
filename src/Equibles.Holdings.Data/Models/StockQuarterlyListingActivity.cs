@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Data.Models;
@@ -8,7 +9,7 @@ namespace Equibles.Holdings.Data.Models;
 // attributed to one class must not restate its siblings. Keeping this small breakdown lets
 // request surfaces apply each series' captured splits without returning to the holdings corpus.
 [PrimaryKey(
-    nameof(CommonStockId),
+    nameof(EquityIssuerId),
     nameof(ReportDate),
     nameof(IsCombined),
     nameof(PriceSeriesTicker)
@@ -16,7 +17,8 @@ namespace Equibles.Holdings.Data.Models;
 [Index(nameof(ReportDate), nameof(IsCombined))]
 public class StockQuarterlyListingActivity
 {
-    public Guid CommonStockId { get; set; }
+    [Column("CommonStockId")]
+    public Guid EquityIssuerId { get; set; }
 
     public DateOnly ReportDate { get; set; }
 

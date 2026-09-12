@@ -64,7 +64,7 @@ public class HoldingsLatestFilingsSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = filerA.Id,
                     ReportDate = q1,
                     FilingDate = q1.AddDays(45),
@@ -82,7 +82,7 @@ public class HoldingsLatestFilingsSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = filerA.Id,
                     ReportDate = q2,
                     FilingDate = q2.AddDays(45),
@@ -97,7 +97,7 @@ public class HoldingsLatestFilingsSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = msftId,
+                    EquityIssuerId = msftId,
                     InstitutionalHolderId = filerA.Id,
                     ReportDate = q2,
                     FilingDate = q2.AddDays(45),
@@ -114,7 +114,7 @@ public class HoldingsLatestFilingsSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = filerB.Id,
                     ReportDate = q2,
                     FilingDate = q2.AddDays(50),

@@ -41,7 +41,9 @@ public class ProfilesControllerViewRenderingTests
                 new InstitutionalHolding
                 {
                     InstitutionalHolder = holder,
-                    CommonStock = stock,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(db, stock)
+                        .Security.Issuer,
                     ReportDate = new DateOnly(2024, 9, 30),
                     FilingDate = new DateOnly(2024, 11, 14),
                     Shares = 1000,

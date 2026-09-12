@@ -84,7 +84,7 @@ public class StockTabServiceLoadHolderDetailTests : IDisposable
         InstitutionalHolding Holding(InstitutionalHolder h, DateOnly report, long shares) =>
             new()
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InstitutionalHolderId = h.Id,
                 FilingDate = report.AddDays(30),
                 ReportDate = report,

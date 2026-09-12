@@ -72,8 +72,8 @@ public class FundOverlapCalculatorComputePairwiseOverlapZeroValueTests
         new()
         {
             InstitutionalHolderId = holder.Id,
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(null, stock).Security.Issuer,
             Shares = value,
             Value = value,
         };

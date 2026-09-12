@@ -34,7 +34,7 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
     // Past Current's deadline (Aug 14).
     private static readonly DateOnly AfterWindow = new(2026, 9, 1);
 
-    private static InstitutionalHolding MakeHolding(
+    private InstitutionalHolding MakeHolding(
         CommonStock stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
@@ -43,8 +43,10 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                .Security.Issuer,
             InstitutionalHolderId = holder.Id,
             InstitutionalHolder = holder,
             FilingDate = reportDate.AddDays(20),

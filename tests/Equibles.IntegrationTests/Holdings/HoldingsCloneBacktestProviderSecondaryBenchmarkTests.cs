@@ -50,7 +50,7 @@ public class HoldingsCloneBacktestProviderSecondaryBenchmarkTests : IDisposable
             new InstitutionalHolding
             {
                 InstitutionalHolderId = holder.Id,
-                CommonStockId = held.Id,
+                EquityIssuerId = held.Id,
                 ReportDate = reportDate,
                 FilingDate = from,
                 Shares = 1_000,

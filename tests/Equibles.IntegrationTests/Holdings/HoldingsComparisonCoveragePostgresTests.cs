@@ -58,7 +58,7 @@ public class HoldingsComparisonCoveragePostgresTests(ParadeDbFixture fixture) : 
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = date,
             FilingDate = date.AddDays(40),

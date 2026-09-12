@@ -14,7 +14,7 @@ public static class InstitutionPortfolioSummaryCalculator
     )
     {
         var current = currentQuarterHoldings
-            .GroupBy(h => h.CommonStockId)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new InstitutionPortfolioPosition
             {
                 CommonStockId = g.Key,
@@ -23,7 +23,7 @@ public static class InstitutionPortfolioSummaryCalculator
             })
             .ToList();
         var previous = previousQuarterHoldings
-            .GroupBy(h => h.CommonStockId)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new InstitutionPortfolioPosition
             {
                 CommonStockId = g.Key,

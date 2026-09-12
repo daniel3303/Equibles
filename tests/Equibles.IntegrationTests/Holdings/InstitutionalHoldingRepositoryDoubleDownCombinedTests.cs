@@ -58,6 +58,7 @@ public class InstitutionalHoldingRepositoryDoubleDownCombinedTests : IDisposable
         var current = new DateOnly(2024, 6, 30);
 
         _dbContext.Set<CommonStock>().Add(stock);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(doubler, nonFiler);
         _dbContext
             .Set<InstitutionalHolding>()
@@ -88,7 +89,7 @@ public class InstitutionalHoldingRepositoryDoubleDownCombinedTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

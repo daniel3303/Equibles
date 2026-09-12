@@ -185,7 +185,7 @@ public class HoldingsComparisonCoverageTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = date,
             FilingDate = date.AddDays(45),

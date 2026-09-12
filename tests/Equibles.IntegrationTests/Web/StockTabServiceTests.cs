@@ -1035,7 +1035,7 @@ public class StockTabServiceTests : IDisposable
             .Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = new DateOnly(2025, 3, 31),
@@ -1069,7 +1069,7 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 2, 14),
                     ReportDate = new DateOnly(2024, 12, 31),
@@ -1081,7 +1081,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = new DateOnly(2025, 3, 31),
@@ -1131,7 +1131,7 @@ public class StockTabServiceTests : IDisposable
             .Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 2, 14),
                     ReportDate = new DateOnly(2024, 12, 31),
@@ -1175,7 +1175,7 @@ public class StockTabServiceTests : IDisposable
                 .Add(
                     new InstitutionalHolding
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         InstitutionalHolderId = holder.Id,
                         FilingDate = date.AddMonths(1),
                         ReportDate = date,
@@ -1212,7 +1212,7 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder1.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = reportDate,
@@ -1224,7 +1224,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder2.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = reportDate,

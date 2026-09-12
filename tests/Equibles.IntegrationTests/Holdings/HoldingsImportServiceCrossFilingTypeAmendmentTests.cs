@@ -195,7 +195,7 @@ public class HoldingsImportServiceCrossFilingTypeAmendmentTests : IAsyncLifetime
         using var verify = FreshContext();
         var holdings = await verify
             .Set<InstitutionalHolding>()
-            .Where(h => h.CommonStockId == stock.Id && h.ReportDate == reportDate)
+            .Where(h => h.EquityIssuerId == stock.Id && h.ReportDate == reportDate)
             .OrderBy(h => h.FilingType)
             .ToListAsync();
 

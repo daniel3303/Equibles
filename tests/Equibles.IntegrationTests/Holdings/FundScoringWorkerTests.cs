@@ -168,7 +168,7 @@ public class FundScoringWorkerTests : IDisposable
                     new InstitutionalHolding
                     {
                         InstitutionalHolderId = holder.Id,
-                        CommonStockId = held.Id,
+                        EquityIssuerId = held.Id,
                         ReportDate = reportDate,
                         FilingDate = reportDate.AddDays(45),
                         Shares = 1000,

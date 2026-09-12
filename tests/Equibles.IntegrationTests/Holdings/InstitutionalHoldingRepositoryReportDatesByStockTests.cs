@@ -79,7 +79,7 @@ public class InstitutionalHoldingRepositoryReportDatesByStockTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = Guid.NewGuid(),
             ReportDate = reportDate,
             FilingDate = reportDate,

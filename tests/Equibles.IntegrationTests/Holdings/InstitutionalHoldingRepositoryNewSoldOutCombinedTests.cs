@@ -62,6 +62,8 @@ public class InstitutionalHoldingRepositoryNewSoldOutCombinedTests : IDisposable
         var current = new DateOnly(2024, 6, 30);
 
         _dbContext.Set<CommonStock>().AddRange(stockS, stockT);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stockS);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stockT);
         _dbContext.Set<InstitutionalHolder>().AddRange(dropper, nonFiler);
         _dbContext
             .Set<InstitutionalHolding>()
@@ -92,7 +94,7 @@ public class InstitutionalHoldingRepositoryNewSoldOutCombinedTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

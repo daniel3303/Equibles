@@ -115,7 +115,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
 
         await using var read = FreshContext();
         var row = await read.Set<StockQuarterlyActivity>()
-            .SingleAsync(s => s.CommonStockId == aapl.Id && s.ReportDate == QCur);
+            .SingleAsync(s => s.EquityIssuerId == aapl.Id && s.ReportDate == QCur);
 
         row.PreviousReportDate.Should()
             .Be(QPrev, "the prior quarter is the latest Form 13F date, not the 13D/G event date");
@@ -146,7 +146,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
 
         await using var read = FreshContext();
         var rows = await read.Set<StockQuarterlyListingActivity>()
-            .Where(row => row.CommonStockId == stock.Id && row.ReportDate == QCur)
+            .Where(row => row.EquityIssuerId == stock.Id && row.ReportDate == QCur)
             .OrderBy(row => row.PriceSeriesTicker)
             .ToListAsync();
 
@@ -188,14 +188,14 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
         var activity = await read.Set<StockQuarterlyActivity>()
             .Where(row => row.ReportDate == QCur)
             .ToListAsync();
-        activity.Should().ContainSingle(row => row.CommonStockId == active.Id);
-        activity.Should().NotContain(row => row.CommonStockId == inactive.Id);
+        activity.Should().ContainSingle(row => row.EquityIssuerId == active.Id);
+        activity.Should().NotContain(row => row.EquityIssuerId == inactive.Id);
 
         var listingActivity = await read.Set<StockQuarterlyListingActivity>()
             .Where(row => row.ReportDate == QCur && !row.IsCombined)
             .ToListAsync();
-        listingActivity.Should().ContainSingle(row => row.CommonStockId == active.Id);
-        listingActivity.Should().NotContain(row => row.CommonStockId == inactive.Id);
+        listingActivity.Should().ContainSingle(row => row.EquityIssuerId == active.Id);
+        listingActivity.Should().NotContain(row => row.EquityIssuerId == inactive.Id);
     }
 
     [Fact]
@@ -278,7 +278,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

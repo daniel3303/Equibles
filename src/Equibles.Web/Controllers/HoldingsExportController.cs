@@ -123,8 +123,8 @@ public class HoldingsExportController : BaseController
             .OrderByDescending(h => h.Value)
             .Select(h => new
             {
-                Ticker = h.CommonStock.Ticker,
-                Name = h.CommonStock.Name,
+                Ticker = h.Issuer.Presentation.Listing.Ticker,
+                Name = h.Issuer.Name,
                 h.Shares,
                 h.Value,
                 h.ShareType,

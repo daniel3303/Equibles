@@ -165,7 +165,7 @@ public class SmartMoneyIndexManagerTests : IDisposable
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = first.Id,
-                    CommonStockId = stake.Id,
+                    EquityIssuerId = stake.Id,
                     ReportDate = new DateOnly(2025, 12, 1),
                     FilingDate = new DateOnly(2025, 12, 6),
                     FilingType = FilingType.Schedule13D,
@@ -201,6 +201,7 @@ public class SmartMoneyIndexManagerTests : IDisposable
     {
         var stock = new CommonStock { Ticker = ticker, Name = name };
         _dbContext.Set<CommonStock>().Add(stock);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
         AddPrice(stock, new DateOnly(2025, 11, 1), start);
         AddPrice(stock, AsOf, end);
         _dbContext.SaveChanges();
@@ -224,7 +225,7 @@ public class SmartMoneyIndexManagerTests : IDisposable
                     new InstitutionalHolding
                     {
                         InstitutionalHolderId = holder.Id,
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         ReportDate = ReportDate,
                         FilingDate = ReportDate.AddDays(20),
                         Shares = value,

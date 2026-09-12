@@ -168,12 +168,12 @@ public class SmartMoneyIndexManager
             // composing consensus so null and an explicit primary ticker cannot count twice.
             .GroupBy(h => new
             {
-                h.CommonStockId,
-                ListedTicker = h.ListedTicker ?? h.CommonStock.Ticker,
+                h.EquityIssuerId,
+                ListedTicker = h.ListedTicker ?? h.Issuer.Presentation.Listing.Ticker,
             })
             .Select(g => new
             {
-                StockId = g.Key.CommonStockId,
+                StockId = g.Key.EquityIssuerId,
                 g.Key.ListedTicker,
                 Value = g.Sum(h => h.Value),
             })

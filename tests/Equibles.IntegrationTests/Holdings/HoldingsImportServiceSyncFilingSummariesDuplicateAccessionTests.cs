@@ -90,7 +90,7 @@ public class HoldingsImportServiceSyncFilingSummariesDuplicateAccessionTests : I
         new InstitutionalHolding
         {
             InstitutionalHolderId = holder.Id,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             AccessionNumber = Accession,
             FilingDate = new DateOnly(2026, 5, 15),
             ReportDate = ReportDate,

@@ -61,7 +61,7 @@ public class ImpossiblePositionRepairService
             .Where(h => h.ShareType == ShareType.Shares && !h.ValueUnavailable && h.Shares > 0)
             .Join(
                 dbContext.Set<CommonStock>(),
-                h => h.CommonStockId,
+                h => h.EquityIssuerId,
                 cs => cs.Id,
                 (h, cs) =>
                     new
@@ -85,7 +85,10 @@ public class ImpossiblePositionRepairService
         // basis before the two are comparable. Without this, a holder of a few percent of a company
         // that later ran a 1:50 reverse split reads as owning fifty times the issuer, and its
         // perfectly good value is withdrawn.
-        var candidateStockIds = candidates.Select(c => c.Holding.CommonStockId).Distinct().ToList();
+        var candidateStockIds = candidates
+            .Select(c => c.Holding.EquityIssuerId)
+            .Distinct()
+            .ToList();
         var splitsByStock = (
             await dbContext
                 .Set<StockSplit>()
@@ -98,7 +101,7 @@ public class ImpossiblePositionRepairService
         var repaired = 0;
         foreach (var candidate in candidates)
         {
-            splitsByStock.TryGetValue(candidate.Holding.CommonStockId, out var splits);
+            splitsByStock.TryGetValue(candidate.Holding.EquityIssuerId, out var splits);
             if (
                 !HoldingValueBasis.TryResolveShareCountFactor(
                     candidate.Holding.ReportDate,

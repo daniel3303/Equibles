@@ -168,7 +168,7 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
         await using (var ctx = FreshContext())
         {
             var energyHolding = await ctx.Set<InstitutionalHolding>()
-                .SingleAsync(h => h.CommonStockId == xomId);
+                .SingleAsync(h => h.EquityIssuerId == xomId);
             ctx.Remove(energyHolding);
             await ctx.SaveChangesAsync();
         }
@@ -308,7 +308,7 @@ public class HoldingsAggregateRefreshServiceTests : IAsyncLifetime
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

@@ -124,7 +124,7 @@ public class FundScoringManager
             .Where(h => relevant.Contains(h.ReportDate))
             .Select(h => new HoldingRow(
                 h.ReportDate,
-                h.CommonStockId,
+                h.EquityIssuerId,
                 h.ListedTicker,
                 h.Shares,
                 h.Value,

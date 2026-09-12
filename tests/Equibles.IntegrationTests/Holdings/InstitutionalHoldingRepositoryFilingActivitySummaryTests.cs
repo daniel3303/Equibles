@@ -102,7 +102,7 @@ public class InstitutionalHoldingRepositoryFilingActivitySummaryTests : IAsyncLi
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = filingDate,
             ReportDate = new DateOnly(filingDate.Year - 1, 12, 31),

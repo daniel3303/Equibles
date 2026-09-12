@@ -27,8 +27,8 @@ public class IndustryAllocationCalculatorZeroValueTests
         };
         var holding = new InstitutionalHolding
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(null, stock).Security.Issuer,
             InstitutionalHolderId = Guid.NewGuid(),
             FilingDate = new DateOnly(2025, 1, 15),
             ReportDate = new DateOnly(2024, 12, 31),

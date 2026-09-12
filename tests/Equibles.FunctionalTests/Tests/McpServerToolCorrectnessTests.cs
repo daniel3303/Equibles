@@ -95,8 +95,15 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
             var reportDate = new DateOnly(2024, 3, 31);
             db.Set<InstitutionalHolding>()
                 .AddRange(
-                    BuildHolding(stock, berkshire, reportDate, shares: 10_000, value: 1_500_000),
-                    BuildHolding(stock, blackrock, reportDate, shares: 5_000, value: 750_000)
+                    BuildHolding(
+                        db,
+                        stock,
+                        berkshire,
+                        reportDate,
+                        shares: 10_000,
+                        value: 1_500_000
+                    ),
+                    BuildHolding(db, stock, blackrock, reportDate, shares: 5_000, value: 750_000)
                 );
         });
 
@@ -357,6 +364,7 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
     }
 
     private static InstitutionalHolding BuildHolding(
+        Microsoft.EntityFrameworkCore.DbContext db,
         CommonStock stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
@@ -365,8 +373,8 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(db, stock).Security.Issuer,
             InstitutionalHolderId = holder.Id,
             InstitutionalHolder = holder,
             ReportDate = reportDate,

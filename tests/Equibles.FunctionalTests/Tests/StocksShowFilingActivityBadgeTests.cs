@@ -67,7 +67,7 @@ public class StocksShowFilingActivityBadgeTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = filerA.Id,
                     ReportDate = today.AddDays(-15),
                     FilingDate = today.AddDays(-5),
@@ -83,7 +83,7 @@ public class StocksShowFilingActivityBadgeTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = msftId,
+                    EquityIssuerId = msftId,
                     InstitutionalHolderId = filerA.Id,
                     ReportDate = today.AddDays(-15),
                     FilingDate = today.AddDays(-5),
@@ -99,7 +99,7 @@ public class StocksShowFilingActivityBadgeTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = filerB.Id,
                     ReportDate = today.AddDays(-15),
                     FilingDate = today.AddDays(-3),

@@ -124,7 +124,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         var holding = new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = new DateOnly(2026, 3, 31),
             FilingDate = new DateOnly(2026, 5, 10),
@@ -235,7 +235,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
     }
 
     private void PriceAt(InstitutionalHolding holding, decimal close) =>
-        _prices[(holding.CommonStockId, holding.ListedTicker, holding.ReportDate)] = close;
+        _prices[(holding.EquityIssuerId, holding.ListedTicker, holding.ReportDate)] = close;
 
     // The production signature (SG Americas / AAPL, 2026-06-30): the filer reports the VALUE
     // column in thousands, the close arrived after the publish decision, and every row froze

@@ -54,7 +54,7 @@ public class InstitutionalHoldingRepositoryCombinedCarryForward13GTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(30),
             ReportDate = reportDate,
@@ -80,6 +80,7 @@ public class InstitutionalHoldingRepositoryCombinedCarryForward13GTests
         var carried = new InstitutionalHolder { Cik = "1", Name = "Not-Yet-Filed Capital" };
         var filed = new InstitutionalHolder { Cik = "2", Name = "Early Filer LP" };
         db.AddRange(stock, carried, filed);
+        Equibles.TestSupport.NativeListingSeed.ForStock(db, stock);
 
         // Both held MSFT in the previous quarter.
         db.Add(MakeHolding(stock, carried, Previous, shares: 1_000, value: 400_000));
@@ -128,6 +129,7 @@ public class InstitutionalHoldingRepositoryCombinedCarryForward13GTests
         var realFiler = new InstitutionalHolder { Cik = "1", Name = "Real 13F Filer" };
         var eventOnly = new InstitutionalHolder { Cik = "2", Name = "13G Event Filer" };
         db.AddRange(stock, realFiler, eventOnly);
+        Equibles.TestSupport.NativeListingSeed.ForStock(db, stock);
         db.Add(MakeHolding(stock, realFiler, Current, shares: 100, value: 10_000));
         db.Add(
             MakeHolding(
@@ -161,6 +163,7 @@ public class InstitutionalHoldingRepositoryCombinedCarryForward13GTests
         };
         var holder = new InstitutionalHolder { Cik = "1", Name = "Carried Capital" };
         db.AddRange(stock, holder);
+        Equibles.TestSupport.NativeListingSeed.ForStock(db, stock);
         // Held in the previous quarter; current quarter has only a 13G event row — the fund
         // has NOT filed its 13F yet, so it must not count as a sold-out exit.
         db.Add(MakeHolding(stock, holder, Previous, shares: 1_000, value: 400_000));

@@ -114,13 +114,13 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .AddRange(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = q1,
                     CurrentFilerCount = 1,
                 },
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = q2,
                     CurrentFilerCount = 1,
                 }
@@ -149,7 +149,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .Add(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = snapshotQuarter,
                     CurrentFilerCount = 1,
                 }
@@ -178,13 +178,13 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .AddRange(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = heldQuarter,
                     CurrentFilerCount = 1,
                 },
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = soldOutQuarter,
                     CurrentFilerCount = 0,
                     PreviousFilerCount = 1,
@@ -216,13 +216,13 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .AddRange(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = q1,
                     CurrentFilerCount = 1,
                 },
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = staleSnapshotQuarter,
                     CurrentFilerCount = 1,
                 }
@@ -247,7 +247,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .Add(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = new DateOnly(2024, 9, 30),
                     CurrentFilerCount = 1,
                 }
@@ -407,7 +407,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .AddRange(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = snapshotted,
                     CurrentShares = 100,
                     CurrentValue = 1000,
@@ -416,7 +416,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
                 },
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = staleFuture,
                     CurrentShares = 999,
                     CurrentValue = 9999,
@@ -429,7 +429,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .Add(
                 new StockQuarterlyListingActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = snapshotted,
                     PriceSeriesTicker = stock.Ticker,
                     CurrentShares = 100,
@@ -470,7 +470,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         _dbContext.Add(
             new StockQuarterlyActivityCombined
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = current,
                 PreviousReportDate = previous,
                 CurrentShares = 2_500,
@@ -487,7 +487,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .AddRange(
                 new StockQuarterlyListingActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = current,
                     IsCombined = true,
                     PriceSeriesTicker = stock.Ticker,
@@ -497,7 +497,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
                 },
                 new StockQuarterlyListingActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = current,
                     IsCombined = true,
                     PriceSeriesTicker = "TREND-COMBINED.B",
@@ -593,7 +593,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

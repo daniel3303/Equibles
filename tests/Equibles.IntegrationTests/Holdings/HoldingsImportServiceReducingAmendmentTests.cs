@@ -204,8 +204,8 @@ public class HoldingsImportServiceReducingAmendmentTests : IAsyncLifetime
         var holdings = await verify.Set<InstitutionalHolding>().ToListAsync();
 
         holdings.Should().ContainSingle();
-        holdings[0].CommonStockId.Should().Be(apple.Id);
+        holdings[0].EquityIssuerId.Should().Be(apple.Id);
         holdings[0].AccessionNumber.Should().Be("ACC-AMEND");
-        holdings.Should().NotContain(h => h.CommonStockId == microsoft.Id);
+        holdings.Should().NotContain(h => h.EquityIssuerId == microsoft.Id);
     }
 }

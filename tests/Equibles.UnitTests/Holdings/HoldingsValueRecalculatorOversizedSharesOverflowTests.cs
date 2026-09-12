@@ -95,7 +95,7 @@ public class HoldingsValueRecalculatorOversizedSharesOverflowTests
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = Guid.NewGuid(),
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     FilingDate = new DateOnly(2024, 11, 14),
                     ReportDate = reportDate,
                     Value = 0,

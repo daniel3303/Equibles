@@ -61,7 +61,7 @@ public class HoldingsHeatMapSeededTests
             db.Add(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     ReportDate = latest,
                     PreviousReportDate = prior,
                     CurrentShares = 450,
@@ -113,7 +113,7 @@ public class HoldingsHeatMapSeededTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

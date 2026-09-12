@@ -56,7 +56,7 @@ public class HoldingsValueRecalculator
             .Where(h => h.ValuePending && h.ShareType == ShareType.Shares)
             .Select(h => new
             {
-                h.CommonStockId,
+                h.EquityIssuerId,
                 h.ListedTicker,
                 h.ReportDate,
             })
@@ -75,7 +75,7 @@ public class HoldingsValueRecalculator
         );
 
         var requests = pendingPairs
-            .Select(p => (p.CommonStockId, p.ListedTicker, p.ReportDate))
+            .Select(p => (p.EquityIssuerId, p.ListedTicker, p.ReportDate))
             .ToList();
         var prices = await _stockPriceProvider.GetClosingPrices(requests, cancellationToken);
 
@@ -90,7 +90,7 @@ public class HoldingsValueRecalculator
         // Prices are stored on today's post-split basis, so a pending row's as-filed share count
         // has to be restated before it is priced — the same rule the import applies, and for the
         // same reason (see HoldingValueBasis).
-        var pendingStockIds = pendingPairs.Select(p => p.CommonStockId).Distinct().ToList();
+        var pendingStockIds = pendingPairs.Select(p => p.EquityIssuerId).Distinct().ToList();
         var splitsByStock = (
             await lookupContext
                 .Set<StockSplit>()
@@ -135,7 +135,7 @@ public class HoldingsValueRecalculator
         // been resolved — it must advance the retry ladder like a priceless pair, or it sits at its
         // current retry count forever. That escape once froze 828,603 rows at ValueRetryCount = 1.
         var unresolvedPairs = pendingPairs
-            .Select(p => (p.CommonStockId, p.ListedTicker, p.ReportDate))
+            .Select(p => (p.EquityIssuerId, p.ListedTicker, p.ReportDate))
             .Where(key => !resolvedPairKeys.Contains(key) || deferredPairKeys.Contains(key))
             .ToList();
 
@@ -179,7 +179,7 @@ public class HoldingsValueRecalculator
                 .Where(h =>
                     h.ValuePending
                     && h.ShareType == ShareType.Shares
-                    && h.CommonStockId == pair.CommonStockId
+                    && h.EquityIssuerId == pair.CommonStockId
                     && h.ListedTicker == pair.ListedTicker
                     && h.ReportDate == pair.ReportDate
                 )
@@ -308,7 +308,7 @@ public class HoldingsValueRecalculator
                 .Where(h =>
                     h.ValuePending
                     && h.ShareType == ShareType.Shares
-                    && h.CommonStockId == stockId
+                    && h.EquityIssuerId == stockId
                     && h.ListedTicker == listedTicker
                     && h.ReportDate == reportDate
                 )

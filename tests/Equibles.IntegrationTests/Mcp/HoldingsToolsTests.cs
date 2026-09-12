@@ -59,7 +59,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
         };
     }
 
-    private static InstitutionalHolding CreateHolding(
+    private InstitutionalHolding CreateHolding(
         CommonStock stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
@@ -70,8 +70,10 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
     {
         return new InstitutionalHolding
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                .Security.Issuer,
             InstitutionalHolderId = holder.Id,
             InstitutionalHolder = holder,
             ReportDate = reportDate,
@@ -402,7 +404,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
         DbContext.Add(
             new StockQuarterlyActivity
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = reportDate,
                 CurrentShares = 1_150,
                 CurrentValue = 115_000,
@@ -415,7 +417,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
             .AddRange(
                 new StockQuarterlyListingActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = reportDate,
                     PriceSeriesTicker = stock.Ticker,
                     CurrentShares = 1_000,
@@ -423,7 +425,7 @@ public class InstitutionalHoldingsToolsTests : ParadeDbMcpTestBase
                 },
                 new StockQuarterlyListingActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = reportDate,
                     PriceSeriesTicker = "GOOG",
                     CurrentShares = 150,

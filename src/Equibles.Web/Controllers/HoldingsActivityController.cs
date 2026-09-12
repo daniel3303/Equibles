@@ -543,7 +543,7 @@ public class HoldingsActivityController : BaseController
         var universePct = Percentage.Of(activity.CurrentFilerCount, totalFilers);
 
         return BuildHeatMapPoint(
-            activity.CommonStockId,
+            activity.EquityIssuerId,
             activity.CurrentFilerCount,
             activity.CurrentValue,
             netConviction,

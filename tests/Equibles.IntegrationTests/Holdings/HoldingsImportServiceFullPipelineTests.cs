@@ -217,7 +217,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ImportDataSet_StockReplacedAfterCusipMapping_PersistsSurvivorsAndRetries()
+    public async Task ImportDataSet_LegacyOwnerRetiredAfterCusipMapping_PreservesBothPositions()
     {
         var apple = new CommonStock
         {
@@ -270,6 +270,9 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
                 // the production window while leaving MSFT valid in the same write batch.
                 using var delete = FreshContext();
                 var staleApple = delete.Set<CommonStock>().Single(s => s.Id == apple.Id);
+                delete.Database.ExecuteSqlInterpolated(
+                    $"""UPDATE "EquityIssuer" SET "CommonStockId" = NULL WHERE "Id" = {apple.Id}"""
+                );
                 delete.Remove(staleApple);
                 delete.SaveChanges();
                 return Task.FromResult(
@@ -284,14 +287,14 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         var result = await CreateImporter(priceProvider)
             .ImportDataSet(archive, new DateOnly(2024, 1, 1), CancellationToken.None);
 
-        result.IsComplete.Should().BeFalse();
-        result.InsertedHoldings.Should().Be(1);
+        result.IsComplete.Should().BeTrue();
+        result.InsertedHoldings.Should().Be(2);
 
         using var verify = FreshContext();
         var holdings = await verify.Set<InstitutionalHolding>().AsNoTracking().ToListAsync();
-        holdings.Should().ContainSingle();
-        holdings[0].CommonStockId.Should().Be(microsoft.Id);
-        holdings[0].Shares.Should().Be(2000);
+        holdings.Should().HaveCount(2);
+        holdings.Single(row => row.EquityIssuerId == apple.Id).Shares.Should().Be(1000);
+        holdings.Single(row => row.EquityIssuerId == microsoft.Id).Shares.Should().Be(2000);
     }
 
     [Fact]
@@ -773,7 +776,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         var originalHolding = new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = reportDate,
             FilingDate = new DateOnly(2024, 10, 1),
@@ -870,7 +873,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         var amendedIssuerHolding = new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockAmended.Id,
+            EquityIssuerId = stockAmended.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = eventDate,
             FilingDate = new DateOnly(2025, 1, 10),
@@ -885,7 +888,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         var otherIssuerHolding = new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockOther.Id,
+            EquityIssuerId = stockOther.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = eventDate,
             FilingDate = new DateOnly(2025, 1, 11),
@@ -940,10 +943,10 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             .ToListAsync();
 
         holdings.Should().HaveCount(2, "the 13G/A must replace only its own issuer's stake");
-        var meta = holdings.Single(h => h.CommonStockId == stockAmended.Id);
+        var meta = holdings.Single(h => h.EquityIssuerId == stockAmended.Id);
         meta.Shares.Should().Be(42);
         meta.AccessionNumber.Should().Be("ACC-13G-META-A");
-        var aapl = holdings.Single(h => h.CommonStockId == stockOther.Id);
+        var aapl = holdings.Single(h => h.EquityIssuerId == stockOther.Id);
         aapl.Shares.Should().Be(555, "the other issuer's stake must survive the amendment");
         aapl.AccessionNumber.Should().Be("ACC-13G-AAPL");
     }

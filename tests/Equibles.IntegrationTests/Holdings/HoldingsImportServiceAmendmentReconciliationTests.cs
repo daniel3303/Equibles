@@ -194,7 +194,7 @@ public class HoldingsImportServiceAmendmentReconciliationTests : IAsyncLifetime
         using var verify = FreshContext();
         var holdings = await verify
             .Set<InstitutionalHolding>()
-            .Where(h => h.CommonStockId == stock.Id)
+            .Where(h => h.EquityIssuerId == stock.Id)
             .ToListAsync();
 
         holdings.Should().ContainSingle();

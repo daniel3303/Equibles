@@ -136,7 +136,7 @@ public class SmartMoneyIndexViewTests
     private static InstitutionalHolding MakeHolding(Guid stockId, Guid holderId) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = Quarter,
             FilingDate = Quarter.AddDays(45),

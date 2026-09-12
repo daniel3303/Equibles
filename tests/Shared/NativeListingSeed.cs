@@ -36,7 +36,14 @@ internal static class NativeListingSeed
             var cached = Detached.GetOrCreateValue(stock);
             if (cached.TryGetValue(ticker, out var existing))
                 return existing;
-            var detachedIssuer = new EquityIssuer { Id = stock.Id, Name = stock.Name };
+            var detachedIssuer = new EquityIssuer
+            {
+                Id = stock.Id,
+                Name = stock.Name,
+                Cik = stock.Cik,
+                IndustryId = stock.IndustryId,
+                Industry = stock.Industry,
+            };
             var detachedPrimary = Create(stock, detachedIssuer, stock.Ticker);
             detachedIssuer.Presentation = new EquityIssuerPresentation
             {
@@ -92,7 +99,14 @@ internal static class NativeListingSeed
                     .ThenInclude(row => row.Listing)
                         .ThenInclude(row => row.Security)
                 .SingleOrDefault(row => row.Id == stock.Id)
-            ?? new EquityIssuer { Id = stock.Id, Name = stock.Name };
+            ?? new EquityIssuer
+            {
+                Id = stock.Id,
+                Name = stock.Name,
+                Cik = stock.Cik,
+                IndustryId = stock.IndustryId,
+                Industry = stock.Industry,
+            };
         var primary = issuer.Presentation?.Listing ?? Create(stock, issuer, stock.Ticker);
         primary.Security ??= new EquitySecurity { Issuer = issuer, EquityIssuerId = issuer.Id };
         primary.Security.Issuer = issuer;

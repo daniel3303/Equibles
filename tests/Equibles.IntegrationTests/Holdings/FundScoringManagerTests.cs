@@ -185,7 +185,7 @@ public class FundScoringManagerTests : IDisposable
                     new InstitutionalHolding
                     {
                         InstitutionalHolderId = holder.Id,
-                        CommonStockId = held.Id,
+                        EquityIssuerId = held.Id,
                         ListedTicker = held.Ticker,
                         ReportDate = reportDate,
                         FilingDate = reportDate.AddDays(41),
@@ -225,7 +225,7 @@ public class FundScoringManagerTests : IDisposable
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = holder.Id,
-                    CommonStockId = held.Id,
+                    EquityIssuerId = held.Id,
                     ReportDate = new DateOnly(2022, 9, 30),
                     FilingDate = new DateOnly(2022, 11, 10),
                     Shares = 1000,
@@ -309,7 +309,7 @@ public class FundScoringManagerTests : IDisposable
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = holder.Id,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = eventDate,
                     FilingDate = eventDate.AddDays(5),
                     FilingType = FilingType.Schedule13D,
@@ -350,7 +350,7 @@ public class FundScoringManagerTests : IDisposable
                     new InstitutionalHolding
                     {
                         InstitutionalHolderId = holder.Id,
-                        CommonStockId = held.Id,
+                        EquityIssuerId = held.Id,
                         ReportDate = reportDate,
                         FilingDate = reportDate.AddDays(41),
                         Shares = 1000,
