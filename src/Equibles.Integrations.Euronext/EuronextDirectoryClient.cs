@@ -88,6 +88,19 @@ public class EuronextDirectoryClient(HttpClient httpClient)
         );
     }
 
+    public async Task<EuronextInstrumentIdentity> GetInstrumentIdentity(
+        EuronextEquityListing listing,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var source = EuronextDirectoryParser.ValidateProductUrl(listing);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        using var request = new HttpRequestMessage(HttpMethod.Get, source);
+        var html = await Read(request, timeout.Token);
+        return EuronextDirectoryParser.ReadInstrumentIdentity(listing, html);
+    }
+
     private async Task<string> Read(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*"));

@@ -144,6 +144,92 @@ public static class EuronextDirectoryParser
         return page;
     }
 
+    public static Uri ValidateProductUrl(EuronextEquityListing listing)
+    {
+        if (
+            listing == null
+            || !ValidIsin(listing.Isin)
+            || !LisbonMarkets.Contains(listing.MarketIdentifierCode)
+            || string.IsNullOrWhiteSpace(listing.Symbol)
+            || listing.Symbol.Length > 32
+        )
+            throw new InvalidDataException("A stated Lisbon listing identity is required.");
+        if (listing.SourceUrl is not { IsAbsoluteUri: true })
+            throw new InvalidDataException("An absolute source product URL is required.");
+        var source = SameOrigin(listing.SourceUrl.AbsoluteUri);
+        if (
+            source.AbsolutePath
+                != $"/en/product/equities/{listing.Isin}-{listing.MarketIdentifierCode}"
+            || source.Query.Length != 0
+            || source.Fragment.Length != 0
+        )
+            throw new InvalidDataException(
+                "Euronext product link conflicts with its stated listing."
+            );
+        return source;
+    }
+
+    public static EuronextInstrumentIdentity ReadInstrumentIdentity(
+        EuronextEquityListing listing,
+        string html
+    )
+    {
+        var sourceUrl = ValidateProductUrl(listing);
+        var document = Html(html);
+        var settings = document.DocumentNode.SelectNodes(
+            "//script[@data-drupal-selector='drupal-settings-json']"
+        );
+        if (settings?.Count != 1)
+            throw new InvalidDataException("Expected one Euronext product settings document.");
+        using var json = JsonDocument.Parse(settings[0].InnerHtml);
+        // Other global settings may contain unrelated example instruments; only this node names the product.
+        if (
+            !json.RootElement.TryGetProperty("custom", out var custom)
+            || custom.ValueKind != JsonValueKind.Object
+            || !custom.TryGetProperty("instrument", out var instrument)
+            || instrument.ValueKind != JsonValueKind.Object
+        )
+            throw new InvalidDataException("Euronext product identity is absent.");
+        var isin = RequiredString(instrument, "isin", 12);
+        var mic = RequiredString(instrument, "mic", 4);
+        var symbol = RequiredString(instrument, "symbol", 32);
+        var type = RequiredString(instrument, "type", 32);
+        if (
+            isin != listing.Isin
+            || mic != listing.MarketIdentifierCode
+            || symbol != listing.Symbol
+            || type != "STOCK"
+            || RequiredString(instrument, "product_data", 32) != $"{isin}-{mic}"
+            || RequiredString(instrument, "url_type", 32) != "equities"
+        )
+            throw new InvalidDataException(
+                "Euronext product identity conflicts with the directory record."
+            );
+        return new EuronextInstrumentIdentity
+        {
+            Isin = isin,
+            MarketIdentifierCode = mic,
+            Symbol = symbol,
+            Name = RequiredString(instrument, "name", 500),
+            IssuerCode = RequiredString(instrument, "issuer_code", 128),
+            SourceInstrumentType = type,
+            SourceUrl = sourceUrl,
+            RawInstrumentJson = instrument.GetRawText(),
+        };
+    }
+
+    private static string RequiredString(JsonElement node, string key, int maxLength)
+    {
+        if (
+            !node.TryGetProperty(key, out var value)
+            || value.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(value.GetString())
+            || value.GetString().Length > maxLength
+        )
+            throw new InvalidDataException($"Euronext product identity is missing {key}.");
+        return value.GetString();
+    }
+
     private static Uri SameOrigin(string value)
     {
         if (

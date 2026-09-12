@@ -36,3 +36,9 @@
 - Transitional price triggers preserve inserts, resettlements, and deletes atomically while older writers remain deployed.
 - `scripts/verify-native-equity-prices.sql` compares every original price field in both directions before enabling native-only writers.
 - This is an intermediate implementation: complete financial/customer consumer migration and verified retirement of old tables are required before the task is finished.
+
+## Euronext product identity
+
+- Follow only the supplied official product URL whose ISIN and MIC match the directory record.
+- Read issuer code from the product's `custom.instrument` record after matching ISIN, MIC, ticker, product key, and source type; unrelated global settings are not identity evidence.
+- Retain the exact instrument JSON and source URL; Euronext's broad `STOCK` type does not establish ordinary-share or receipt form.
