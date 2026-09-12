@@ -160,7 +160,10 @@ public class ParadeDbFixture : IAsyncLifetime
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
-        await _respawner.ResetAsync(connection);
+        await Equibles.TestSupport.ImmutableEvidenceTestReset.Run(
+            connection,
+            () => _respawner.ResetAsync(connection)
+        );
         InstitutionalHoldingRepository.ResetProcessWideCaches();
     }
 }

@@ -33,5 +33,6 @@
   <ItemGroup>
     <Compile Include="../Shared/NativeListingSeed.cs" Link="Helpers/NativeListingSeed.cs" />
     <Compile Include="../Shared/EquityIssuerSeed.cs" Link="Helpers/EquityIssuerSeed.cs" />
+    <Compile Include="../Shared/ImmutableEvidenceTestReset.cs" Link="Helpers/ImmutableEvidenceTestReset.cs" />
   </ItemGroup>
 </Project>
