@@ -8,6 +8,9 @@ namespace Equibles.TestSupport;
 // Historical migration fixtures only; current application contexts never register these stores.
 internal sealed class LegacyEquityTestMappings : IModuleConfiguration
 {
+    // AddAllModules scans loaded test assemblies; only historical fixtures may opt into this model.
+    internal LegacyEquityTestMappings() { }
+
     public void ConfigureEntities(ModelBuilder builder)
     {
         var commonStock = builder.Entity<CommonStock>();
