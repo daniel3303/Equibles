@@ -72,7 +72,7 @@ public class NCenFundOperationsToolTests : IDisposable
         result.Should().Contain("2026-07-31");
         result.Should().Contain("811-02409");
         result.Should().NotContain("no longer available");
-        _dbContext.Set<CommonStock>().Should().BeEmpty();
+        _dbContext.Model.FindEntityType(typeof(CommonStock)).Should().BeNull();
     }
 
     [Fact]

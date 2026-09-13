@@ -37,20 +37,18 @@ public class OriginalDirectoryEvidenceTests(ParadeDbFixture fixture) : ParadeDbM
         DbContext.Add(source);
         await DbContext.SaveChangesAsync();
         var original = await SourceJson(source.Id);
-        (await DbContext.Set<EquityDirectorySourceRecord>().SingleAsync())
-            .PayloadJson.Should()
-            .Be(original);
-        var originalId = (await DbContext.Set<EquityDirectorySourceRecord>().SingleAsync()).Id;
+        (await OriginalRecords().SingleAsync()).PayloadJson.Should().Be(original);
+        var originalId = (await OriginalRecords().SingleAsync()).Id;
         source.Name = "Changed source";
         source.HistoricalCusipBackfillCandidates = [];
         await DbContext.SaveChangesAsync();
         var changed = await SourceJson(source.Id);
-        (await DbContext.Set<EquityDirectorySourceRecord>().CountAsync()).Should().Be(2);
+        (await OriginalRecords().CountAsync()).Should().Be(2);
         await DbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""DELETE FROM "CommonStock" WHERE "Id" = {source.Id}"""
         );
         DbContext.ChangeTracker.Clear();
-        var versions = await DbContext.Set<EquityDirectorySourceRecord>().ToListAsync();
+        var versions = await OriginalRecords().ToListAsync();
         versions.Should().HaveCount(2);
         versions.Select(row => row.PayloadJson).Should().BeEquivalentTo([original, changed]);
         versions.Single(row => row.Id == originalId).PayloadJson.Should().Be(original);
@@ -88,10 +86,7 @@ public class OriginalDirectoryEvidenceTests(ParadeDbFixture fixture) : ParadeDbM
         await DbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""UPDATE "CommonStock" SET "Name" = "Name" WHERE "Id" = {source.Id}"""
         );
-        var evidence = await DbContext
-            .Set<EquityDirectorySourceRecord>()
-            .AsNoTracking()
-            .SingleAsync();
+        var evidence = await OriginalRecords().AsNoTracking().SingleAsync();
         evidence.PayloadJson.Should().Be(original);
     }
 
@@ -101,7 +96,7 @@ public class OriginalDirectoryEvidenceTests(ParadeDbFixture fixture) : ParadeDbM
         await using var transaction = await DbContext.Database.BeginTransactionAsync();
         DbContext.Add(new CommonStock { Ticker = "NO-TRUNCATE" });
         await DbContext.SaveChangesAsync();
-        var before = (await DbContext.Set<EquityDirectorySourceRecord>().SingleAsync()).PayloadJson;
+        var before = (await OriginalRecords().SingleAsync()).PayloadJson;
         await transaction.CreateSavepointAsync("before_truncate");
         Func<Task> truncate = () =>
             DbContext.Database.ExecuteSqlRawAsync(
@@ -111,9 +106,7 @@ public class OriginalDirectoryEvidenceTests(ParadeDbFixture fixture) : ParadeDbM
             .Which.SqlState.Should()
             .Be(PostgresErrorCodes.RaiseException);
         await transaction.RollbackToSavepointAsync("before_truncate");
-        (await DbContext.Set<EquityDirectorySourceRecord>().AsNoTracking().SingleAsync())
-            .PayloadJson.Should()
-            .Be(before);
+        (await OriginalRecords().AsNoTracking().SingleAsync()).PayloadJson.Should().Be(before);
     }
 
     [Fact]
@@ -145,9 +138,7 @@ public class OriginalDirectoryEvidenceTests(ParadeDbFixture fixture) : ParadeDbM
         )
             await DbContext.Database.ExecuteSqlRawAsync(operation.Sql);
         (await SourceJson(source.Id)).Should().Be(before);
-        (await DbContext.Set<EquityDirectorySourceRecord>().SingleAsync())
-            .PayloadJson.Should()
-            .Be(before);
+        (await OriginalRecords().SingleAsync()).PayloadJson.Should().Be(before);
     }
 
     [Theory]
@@ -158,7 +149,7 @@ public class OriginalDirectoryEvidenceTests(ParadeDbFixture fixture) : ParadeDbM
         await using var transaction = await DbContext.Database.BeginTransactionAsync();
         DbContext.Add(new CommonStock { Ticker = "IMMUTABLE" });
         await DbContext.SaveChangesAsync();
-        var record = await DbContext.Set<EquityDirectorySourceRecord>().SingleAsync();
+        var record = await OriginalRecords().SingleAsync();
         await transaction.CreateSavepointAsync("before_mutation");
         Func<Task> mutate = delete
             ? () =>
@@ -173,10 +164,13 @@ public class OriginalDirectoryEvidenceTests(ParadeDbFixture fixture) : ParadeDbM
             .Which.SqlState.Should()
             .Be(PostgresErrorCodes.RaiseException);
         await transaction.RollbackToSavepointAsync("before_mutation");
-        (await DbContext.Set<EquityDirectorySourceRecord>().AsNoTracking().SingleAsync())
+        (await OriginalRecords().AsNoTracking().SingleAsync())
             .PayloadJson.Should()
             .Be(record.PayloadJson);
     }
+
+    private IQueryable<EquityDirectorySourceRecord> OriginalRecords() =>
+        DbContext.Set<EquityDirectorySourceRecord>().Where(row => row.Source == "common-stock-v1");
 
     private Task<string> SourceJson(Guid id) =>
         DbContext

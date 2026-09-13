@@ -69,6 +69,7 @@ public class EarlyDirectoryPreservationTests(ParadeDbFixture fixture)
         await migrator.MigrateAsync("20260911164403_AddEquityIdentityFoundation");
         var evidence = await context
             .Set<EquityDirectorySourceRecord>()
+            .Where(row => row.Source == "common-stock-v1")
             .AsNoTracking()
             .SingleAsync();
         evidence.PayloadJson.Should().Be(original);
@@ -92,6 +93,7 @@ public class EarlyDirectoryPreservationTests(ParadeDbFixture fixture)
         (
             await context
                 .Set<EquityDirectorySourceRecord>()
+                .Where(row => row.Source == "common-stock-v1")
                 .Select(row => row.PayloadJson)
                 .ToListAsync()
         )
@@ -114,6 +116,7 @@ public class EarlyDirectoryPreservationTests(ParadeDbFixture fixture)
         await AssertFacts(context);
         var retained = await context
             .Set<EquityDirectorySourceRecord>()
+            .Where(row => row.Source == "common-stock-v1")
             .AsNoTracking()
             .ToListAsync();
         retained.Select(row => row.PayloadJson).Should().BeEquivalentTo(original, updated);

@@ -182,7 +182,11 @@ public class NativeSplitCaptureTests(ParadeDbFixture fixture) : ParadeDbMcpTestB
         DbContext.AddRange(issuer, original);
         await DbContext.SaveChangesAsync();
         var originalId = original.Id;
-        var marker = original.PriceAdjustmentAppliedTime;
+        var marker = await DbContext
+            .Set<StockSplit>()
+            .Where(row => row.Id == originalId)
+            .Select(row => row.PriceAdjustmentAppliedTime)
+            .SingleAsync();
         (await Capture().Capture(issuer.Id, "CURRENT", [Event()])).Should().Be(1);
         DbContext.ChangeTracker.Clear();
         var retained = await DbContext.Set<StockSplit>().SingleAsync(row => row.Id == originalId);

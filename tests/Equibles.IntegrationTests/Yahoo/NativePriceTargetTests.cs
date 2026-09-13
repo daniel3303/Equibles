@@ -354,6 +354,7 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         }
         await DbContext.SaveChangesAsync();
 
+        DbContext.ChangeTracker.Clear();
         var task = (Task)
             typeof(YahooPriceImportService)
                 .GetMethod(
