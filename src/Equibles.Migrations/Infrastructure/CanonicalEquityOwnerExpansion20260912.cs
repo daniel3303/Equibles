@@ -101,7 +101,7 @@ internal static class CanonicalEquityOwnerExpansion20260912
         }
     }
 
-    private static string ExpandTable(EquityOwnerColumnExpansion table) =>
+    internal static string ExpandTable(EquityOwnerColumnExpansion table) =>
         $"""
             DO $expand$
             DECLARE existing_trigger record;
@@ -137,7 +137,7 @@ internal static class CanonicalEquityOwnerExpansion20260912
             END $expand$;
             """;
 
-    private static string MirrorFunction(string previousColumn) =>
+    internal static string MirrorFunction(string previousColumn) =>
         $"""
             CREATE OR REPLACE FUNCTION {Quote(
                 MirrorName(previousColumn)
