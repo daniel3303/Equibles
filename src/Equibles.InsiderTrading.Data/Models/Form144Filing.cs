@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,11 +8,11 @@ namespace Equibles.InsiderTrading.Data.Models;
 /// <summary>
 /// A SEC Form 144 notice — an affiliate's declaration of intent to sell restricted or
 /// control securities. Filed under the issuer's submissions feed, so each notice is
-/// attributed to the issuer's <see cref="CommonStock"/>. Unlike a Form 4, this records a
+/// attributed to the issuer's <see cref="Issuer"/>. Unlike a Form 4, this records a
 /// <em>proposed</em> sale (shares, aggregate market value, approximate sale date), not an
 /// executed transaction.
 /// </summary>
-[Index(nameof(CommonStockId), nameof(FilingDate))]
+[Index(nameof(EquityIssuerId), nameof(FilingDate))]
 [Index(nameof(AccessionNumber), IsUnique = true)]
 [Index(nameof(FilingDate))]
 [Index(nameof(FilerCik), nameof(FilingDate))]
@@ -19,8 +20,8 @@ public class Form144Filing
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     [MaxLength(32)]
     public string AccessionNumber { get; set; }

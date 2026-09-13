@@ -14,7 +14,12 @@ namespace Equibles.UnitTests.Holdings;
 /// </summary>
 public class InstitutionalHoldingsToolsRenderInstitutionPortfolioUnvaluedDisclosureTests
 {
-    private static string Render(int unvaluedPositions, InstitutionalFiling declaringFiling)
+    private static string Render(
+        int unvaluedPositions,
+        InstitutionalFiling declaringFiling,
+        EquityIssuer issuer = null,
+        string listedTicker = null
+    )
     {
         var method = typeof(InstitutionalHoldingsTools).GetMethod(
             "RenderInstitutionPortfolio",
@@ -22,12 +27,18 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioUnvaluedDisclos
         );
 
         var holder = new InstitutionalHolder { Name = "ACME Capital", Cik = "0001234567" };
-        var stock = new CommonStock { Ticker = "NVDA", Name = "Nvidia Corp" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "Nvidia Corp"
+        );
         var holdings = new List<InstitutionalHolding>
         {
             new()
             {
-                CommonStock = stock,
+                Issuer =
+                    issuer
+                    ?? Equibles.TestSupport.NativeListingSeed.ForStock(null, stock).Security.Issuer,
+                ListedTicker = listedTicker,
                 Shares = 1_000,
                 Value = 5_000_000L,
             },
@@ -50,6 +61,20 @@ public class InstitutionalHoldingsToolsRenderInstitutionPortfolioUnvaluedDisclos
                     null,
                 ]
             );
+    }
+
+    [Theory]
+    [InlineData(null, "—")]
+    [InlineData("FORMER", "FORMER")]
+    public void RenderInstitutionPortfolio_NativeIssuerWithoutPresentation_RetainsThePosition(
+        string listedTicker,
+        string expectedTicker
+    )
+    {
+        var issuer = new EquityIssuer { Name = "Unlisted issuer" };
+        var output = Render(0, null, issuer, listedTicker);
+        output.Should().Contain($"| {expectedTicker} | Unlisted issuer |");
+        output.Should().Contain("1,000");
     }
 
     [Fact]

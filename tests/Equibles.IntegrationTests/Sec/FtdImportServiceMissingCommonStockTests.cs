@@ -22,20 +22,15 @@ using NSubstitute;
 namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
-/// Pins the contract from GH-1591: when a CommonStock row is removed between
-/// BuildTickerMap and FlushBatch, FtdImportService must persist rows for the
-/// surviving stocks instead of letting one stale CommonStockId fail the whole
-/// UpsertRange with FK_FailToDeliver_CommonStock_CommonStockId. Without the
-/// guard, Postgres rolls back the entire batch and no FailToDeliver row lands
-/// for any ticker in the same flush.
+/// A retired legacy stock cannot discard observations already assigned to a surviving native listing.
 /// </summary>
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
     private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
-    public FtdImportServiceMissingCommonStockTests(ParadeDbFixture fixture)
+    public FtdImportServiceMissingCommonStockTests(HistoricalEquityDbFixture fixture)
     {
         _fixture = fixture;
     }
@@ -69,12 +64,14 @@ public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
+                sp.GetService(typeof(EquityListingRepository))
+                    .Returns(new EquityListingRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
+                sp.GetService(typeof(EquityIdentityManager))
                     .Returns(
-                        new CommonStockManager(
-                            new CommonStockRepository(ctx),
+                        new EquityIdentityManager(
+                            new EquityIssuerRepository(ctx),
                             Substitute.For<IBus>()
                         )
                     );
@@ -89,12 +86,9 @@ public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Import_CommonStockDeletedBeforeFlush_PersistsRowsForSurvivingStocks()
+    public async Task Import_LegacyOwnerDeletedBeforeFlush_PreservesBothNativeListingObservations()
     {
-        // Two stocks in the same FTD batch. AAPL will be removed mid-import to
-        // simulate the GH-1591 race; MSFT must survive. Pre-fix: Postgres
-        // rejects the whole UpsertRange with FK_FailToDeliver_CommonStock,
-        // rolling MSFT back too. Post-fix: AAPL is filtered out and MSFT lands.
+        // Removing a legacy owner leaves the native issuer/listing and its pending observations intact.
         var apple = new CommonStock
         {
             Id = Guid.NewGuid(),
@@ -118,7 +112,8 @@ public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
             await seed.SaveChangesAsync();
         }
 
-        var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(-1).AddDays(-1);
+        // The current-month floor excludes identity replay, so deletion occurs after the listing map is captured.
+        var settlementDate = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var csv =
             "SETTLEMENT DATE|CUSIP|SYMBOL|QUANTITY (FAILS)|DESCRIPTION|PRICE\n"
             + $"{settlementDate:yyyyMMdd}|037833100|AAPL|12345|APPLE INC|187.50\n"
@@ -136,7 +131,9 @@ public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
                 if (!deletedOnce)
                 {
                     using var deleteCtx = _fixture.CreateDbContext();
-                    var staleApple = deleteCtx.Set<CommonStock>().Single(s => s.Ticker == "AAPL");
+                    CommonStock staleApple = deleteCtx
+                        .Set<CommonStock>()
+                        .Single(s => s.Ticker == "AAPL");
                     deleteCtx.Set<CommonStock>().Remove(staleApple);
                     deleteCtx.SaveChanges();
                     deletedOnce = true;
@@ -167,7 +164,7 @@ public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
         var msftRow = await verify
             .Set<FailToDeliver>()
             .SingleOrDefaultAsync(f =>
-                f.CommonStockId == msft.Id && f.SettlementDate == settlementDate
+                f.Listing.Security.EquityIssuerId == msft.Id && f.SettlementDate == settlementDate
             );
         msftRow
             .Should()
@@ -180,10 +177,9 @@ public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
 
         var appleRow = await verify
             .Set<FailToDeliver>()
-            .SingleOrDefaultAsync(f => f.CommonStockId == apple.Id);
-        appleRow
-            .Should()
-            .BeNull("the deleted AAPL parent must not get an orphan FailToDeliver row");
+            .SingleOrDefaultAsync(f => f.Listing.Security.EquityIssuerId == apple.Id);
+        appleRow.Should().NotBeNull("the native listing survives removal of the legacy stock row");
+        appleRow.Quantity.Should().Be(12345);
     }
 
     private static Stream BuildFtdZipStream(string csvBody)

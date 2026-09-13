@@ -39,6 +39,30 @@ public static class ServiceCollectionExtensions
         // Runs upstream of IR discovery: fills CommonStock.Website from the
         // registered IWebsiteSource implementations (filings, Wikidata, Yahoo, ...).
         services.AddHostedService<WebsiteDiscoveryWorker>();
+        services.AutoWireServicesFrom<Equibles.CommonStocks.BusinessLogic.Directory.EquityDirectoryIdentityImporter>();
+        services
+            .AddHttpClient<Equibles.Integrations.Euronext.EuronextDirectoryClient>(client =>
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Equibles/1.0")
+            )
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new HttpClientHandler
+                {
+                    AllowAutoRedirect = false,
+                    AutomaticDecompression = System.Net.DecompressionMethods.All,
+                }
+            );
+        services
+            .AddHttpClient<Equibles.Integrations.Gleif.GleifIdentityClient>(client =>
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Equibles/1.0")
+            )
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new HttpClientHandler
+                {
+                    AllowAutoRedirect = false,
+                    AutomaticDecompression = System.Net.DecompressionMethods.All,
+                }
+            );
+        services.AddHostedService<LisbonEquityDirectoryWorker>();
 
         // Standalone builds bundle no stealth engine; TryAdd so a host that ships one
         // (registering its own IStealthBrowserClient first) keeps its implementation.

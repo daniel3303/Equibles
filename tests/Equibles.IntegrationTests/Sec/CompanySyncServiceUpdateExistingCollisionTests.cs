@@ -42,10 +42,13 @@ public class CompanySyncServiceUpdateExistingCollisionTests : ParadeDbMcpTestBas
     private CompanySyncService BuildService(ISecEdgarClient secEdgarClient)
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -69,20 +72,18 @@ public class CompanySyncServiceUpdateExistingCollisionTests : ParadeDbMcpTestBas
         // Holder owns ticker "NEW" but its CIK is absent from the SEC payload —
         // it is obsolete and must be removed so the updating company can take
         // the ticker.
-        var obsoleteHolder = new CommonStock
-        {
-            Cik = "0000000001",
-            Ticker = "NEW",
-            Name = "Obsolete Holder Inc.",
-            Description = "Holds the ticker the updater wants",
-        };
-        var updating = new CommonStock
-        {
-            Cik = "0001067983",
-            Ticker = "OLD",
-            Name = "Old Name Inc.",
-            Description = "Will move from OLD to NEW",
-        };
+        EquityIssuer obsoleteHolder = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000001",
+            Ticker: "NEW",
+            Name: "Obsolete Holder Inc.",
+            Description: "Holds the ticker the updater wants"
+        );
+        EquityIssuer updating = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0001067983",
+            Ticker: "OLD",
+            Name: "Old Name Inc.",
+            Description: "Will move from OLD to NEW"
+        );
         DbContext.AddRange(obsoleteHolder, updating);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -106,13 +107,20 @@ public class CompanySyncServiceUpdateExistingCollisionTests : ParadeDbMcpTestBas
         await BuildService(secEdgarClient).SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().HaveCount(2, "the obsolete holder remains as historical identity");
-        var updated = stocks.Should().ContainSingle(stock => stock.Id == updating.Id).Subject;
-        updated.Active.Should().BeTrue();
-        updated.Ticker.Should().Be("NEW");
+        EquityIssuer updated = stocks
+            .Should()
+            .ContainSingle(stock => stock.Id == updating.Id)
+            .Subject;
+        updated.Presentation.Listing.Active.Should().BeTrue();
+        updated.Presentation.Listing.Ticker.Should().Be("NEW");
         updated.Name.Should().Be("Berkshire Hathaway Inc.");
-        stocks.Should().ContainSingle(stock => stock.Id == obsoleteHolder.Id && !stock.Active);
+        stocks
+            .Should()
+            .ContainSingle(stock =>
+                stock.Id == obsoleteHolder.Id && !stock.Presentation.Listing.Active
+            );
     }
 
     [Fact]
@@ -122,20 +130,18 @@ public class CompanySyncServiceUpdateExistingCollisionTests : ParadeDbMcpTestBas
         // is active, keeps the ticker, and the updating company must be skipped.
         // The holder's own payload matches its stored row exactly, exercising
         // the needsUpdate==false early return on its iteration.
-        var activeHolder = new CommonStock
-        {
-            Cik = "0000000001",
-            Ticker = "NEW",
-            Name = "Active Holder Inc.",
-            Description = "Keeps the ticker",
-        };
-        var updating = new CommonStock
-        {
-            Cik = "0001067983",
-            Ticker = "OLD",
-            Name = "Old Name Inc.",
-            Description = "Wants NEW but is blocked",
-        };
+        EquityIssuer activeHolder = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000001",
+            Ticker: "NEW",
+            Name: "Active Holder Inc.",
+            Description: "Keeps the ticker"
+        );
+        EquityIssuer updating = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0001067983",
+            Ticker: "OLD",
+            Name: "Old Name Inc.",
+            Description: "Wants NEW but is blocked"
+        );
         DbContext.AddRange(activeHolder, updating);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -169,18 +175,20 @@ public class CompanySyncServiceUpdateExistingCollisionTests : ParadeDbMcpTestBas
 
         await using var verify = Fixture.CreateDbContext();
         var stocks = await verify
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AsNoTracking()
             .OrderBy(s => s.Cik)
             .ToListAsync();
         stocks.Should().HaveCount(2, "neither row may be deleted");
 
-        var holder = stocks.Single(s => s.Cik == "0000000001");
-        holder.Ticker.Should().Be("NEW");
+        EquityIssuer holder = stocks.Single(s => s.Cik == "0000000001");
+        holder.Presentation.Listing.Ticker.Should().Be("NEW");
         holder.Name.Should().Be("Active Holder Inc.");
 
-        var blocked = stocks.Single(s => s.Cik == "0001067983");
-        blocked.Ticker.Should().Be("OLD", "the update is skipped — ticker is in active use");
+        EquityIssuer blocked = stocks.Single(s => s.Cik == "0001067983");
+        blocked
+            .Presentation.Listing.Ticker.Should()
+            .Be("OLD", "the update is skipped — ticker is in active use");
         blocked.Name.Should().Be("Old Name Inc.");
     }
 }

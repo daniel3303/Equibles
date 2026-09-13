@@ -23,15 +23,15 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     private static readonly Expression<Func<InstitutionalHolding, bool>> Is13F = h =>
         h.FilingType == FilingType.Form13F;
 
-    public IQueryable<InstitutionalHolding> GetByStock(CommonStock stock, DateOnly reportDate)
+    public IQueryable<InstitutionalHolding> GetByStock(EquityIssuer stock, DateOnly reportDate)
     {
-        return GetAll().Where(h => h.CommonStockId == stock.Id && h.ReportDate == reportDate);
+        return GetAll().Where(h => h.EquityIssuerId == stock.Id && h.ReportDate == reportDate);
     }
 
     // Same stock/date filter as GetByStock, with the InstitutionalHolder navigation eagerly
     // loaded for callers that read holder fields (name) while aggregating or rendering rows.
     public IQueryable<InstitutionalHolding> GetByStockWithHolder(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly reportDate
     )
     {
@@ -43,7 +43,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // shares this table, so a per-stock institutional-holders list must exclude it or the
     // filer's 13F holding and its 13D/G stake both render as separate rows, double-counting
     // the filer's ownership (GH-4449).
-    public IQueryable<InstitutionalHolding> Get13FByStock(CommonStock stock, DateOnly reportDate)
+    public IQueryable<InstitutionalHolding> Get13FByStock(EquityIssuer stock, DateOnly reportDate)
     {
         return GetByStock(stock, reportDate).Where(Is13F);
     }
@@ -53,13 +53,13 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     /// secondary ETF and share-class rows carry ListedTicker from the filed CUSIP resolution.
     /// </summary>
     public IQueryable<InstitutionalHolding> Get13FByListing(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
         DateOnly reportDate
     ) => Get13FHistoryByListing(stock, listedTicker).Where(h => h.ReportDate == reportDate);
 
     public IQueryable<InstitutionalHolding> Get13FByListingWithHolder(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
         DateOnly reportDate
     ) => Get13FByListing(stock, listedTicker, reportDate).Include(h => h.InstitutionalHolder);
@@ -67,7 +67,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // Same stock/date 13F-only filter as Get13FByStock, with the InstitutionalHolder navigation
     // eagerly loaded for callers that render holder fields while aggregating rows.
     public IQueryable<InstitutionalHolding> Get13FByStockWithHolder(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly reportDate
     )
     {
@@ -78,14 +78,14 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // implementation materialised every holding entity and holder navigation from both quarters
     // before grouping in memory; popular stocks turned that into thousands of wide rows per call.
     public IQueryable<HolderStockActivity> Get13FHolderActivityByStock(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly currentReportDate,
         DateOnly? previousReportDate
     )
     {
         return GetAll()
             .Where(Is13F)
-            .Where(h => h.CommonStockId == stock.Id)
+            .Where(h => h.EquityIssuerId == stock.Id)
             .Where(h =>
                 h.ReportDate == currentReportDate
                 || (previousReportDate.HasValue && h.ReportDate == previousReportDate.Value)
@@ -115,7 +115,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     public IQueryable<HolderStockActivity> Get13FHolderActivityByListing(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
         DateOnly currentReportDate,
         DateOnly? previousReportDate
@@ -166,7 +166,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly reportDate
     )
     {
-        return GetByHolder(holder, reportDate).Include(h => h.CommonStock);
+        return GetByHolder(holder, reportDate).Include(h => h.Issuer);
     }
 
     // 13F-only holdings for one holder at a quarter end. A holder can file a Schedule 13D/G
@@ -188,7 +188,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         DateOnly reportDate
     )
     {
-        return Get13FByHolder(holder, reportDate).Include(h => h.CommonStock);
+        return Get13FByHolder(holder, reportDate).Include(h => h.Issuer);
     }
 
     // Minimal per-stock projection for portfolio-summary maths. Loading thousands of full
@@ -200,7 +200,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         return Get13FByHolder(holder, reportDate)
-            .GroupBy(h => h.CommonStockId)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new InstitutionPortfolioPosition
             {
                 CommonStockId = g.Key,
@@ -209,10 +209,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             });
     }
 
-    public IQueryable<InstitutionalHolding> GetLatestByStock(CommonStock stock)
+    public IQueryable<InstitutionalHolding> GetLatestByStock(EquityIssuer stock)
     {
         var latestDates = GetAll()
-            .Where(h => h.CommonStockId == stock.Id)
+            .Where(h => h.EquityIssuerId == stock.Id)
             .GroupBy(h => h.InstitutionalHolderId)
             .Select(g => new { HolderId = g.Key, LatestDate = g.Max(h => h.ReportDate) });
 
@@ -223,40 +223,40 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     HolderId = ld.HolderId,
                     Date = ld.LatestDate,
                 }
-            where h.CommonStockId == stock.Id
+            where h.EquityIssuerId == stock.Id
             select h;
     }
 
-    public IQueryable<InstitutionalHolding> GetHistoryByStock(CommonStock stock)
+    public IQueryable<InstitutionalHolding> GetHistoryByStock(EquityIssuer stock)
     {
-        return GetAll().Where(h => h.CommonStockId == stock.Id);
+        return GetAll().Where(h => h.EquityIssuerId == stock.Id);
     }
 
     // 13F-only history of one stock's institutional holders. Schedule 13D/G rows carry a daily
     // event date, not a quarter end, and describe a single disclosed stake; an ownership-trend
     // or report-date series for the stock must exclude them or a 13D/G event date pollutes the
     // quarter axis and its share count inflates the per-quarter total (GH-4449).
-    public IQueryable<InstitutionalHolding> Get13FHistoryByStock(CommonStock stock)
+    public IQueryable<InstitutionalHolding> Get13FHistoryByStock(EquityIssuer stock)
     {
         return GetHistoryByStock(stock).Where(Is13F);
     }
 
     public IQueryable<InstitutionalHolding> Get13FHistoryByListing(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker
     )
     {
         var isPrimary = string.Equals(
             listedTicker,
-            stock.Ticker,
+            stock.Presentation.Listing.Ticker,
             StringComparison.OrdinalIgnoreCase
         );
         return GetAll()
             .Where(Is13F)
-            .Where(h => h.CommonStockId == stock.Id)
+            .Where(h => h.EquityIssuerId == stock.Id)
             .Where(h =>
                 isPrimary
-                    ? h.ListedTicker == null || h.ListedTicker == stock.Ticker
+                    ? h.ListedTicker == null || h.ListedTicker == stock.Presentation.Listing.Ticker
                     : h.ListedTicker == listedTicker
             );
     }
@@ -373,29 +373,32 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     // Latest dates first — see GetAvailableReportDates for the ordering contract.
-    public IQueryable<DateOnly> GetReportDatesByStock(CommonStock stock) =>
+    public IQueryable<DateOnly> GetReportDatesByStock(EquityIssuer stock) =>
         GetHistoryByStock(stock).DistinctReportDatesDescending();
 
     // Latest 13F quarter-end dates first for one stock — see Get13FHistoryByStock for why
     // 13D/G event dates are excluded. The per-stock holders surfaces resolve their target and
     // comparison quarters off this list, so it must stay 13F-only (GH-4449).
-    public IQueryable<DateOnly> Get13FReportDatesByStock(CommonStock stock) =>
+    public IQueryable<DateOnly> Get13FReportDatesByStock(EquityIssuer stock) =>
         Get13FHistoryByStock(stock).DistinctReportDatesDescending();
 
     public IQueryable<DateOnly> Get13FReportDatesByListing(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker
     ) => Get13FHistoryByListing(stock, listedTicker).DistinctReportDatesDescending();
 
     public async Task<List<DateOnly>> Get13FReportDatesByListingSnapshotBacked(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
         CancellationToken cancellationToken = default
     )
     {
         if (
-            string.Equals(listedTicker, stock.Ticker, StringComparison.OrdinalIgnoreCase)
-            && !SecondaryTickerPolicy.IsExchangeTradedListing(stock, listedTicker)
+            string.Equals(
+                listedTicker,
+                stock.Presentation.Listing.Ticker,
+                StringComparison.OrdinalIgnoreCase
+            ) && !SecondaryTickerPolicy.IsExchangeTradedListing(stock, listedTicker)
         )
             return await Get13FReportDatesByStockSnapshotBacked(stock, cancellationToken);
         return await Get13FReportDatesByListing(stock, listedTicker).ToListAsync(cancellationToken);
@@ -413,7 +416,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // with no snapshot rows falls back to the live query so a newly listed company never loses its
     // prior quarters while the aggregate backfill catches up.
     public async Task<List<DateOnly>> Get13FReportDatesByStockSnapshotBacked(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     )
     {
@@ -429,7 +432,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var dates = await DbContext
             .Set<StockQuarterlyActivity>()
             .Where(s =>
-                s.CommonStockId == stock.Id && s.CurrentFilerCount > 0 && s.ReportDate <= latest
+                s.EquityIssuerId == stock.Id && s.CurrentFilerCount > 0 && s.ReportDate <= latest
             )
             .OrderByDescending(s => s.ReportDate)
             .Select(s => s.ReportDate)
@@ -525,7 +528,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 FilingDate = g.Max(h => h.FilingDate),
                 Aum = g.Sum(h => h.Value),
                 PositionCount = g.Count(),
-                StockCount = g.Select(h => h.CommonStockId).Distinct().Count(),
+                StockCount = g.Select(h => h.EquityIssuerId).Distinct().Count(),
             })
             .ToListAsync(cancellationToken);
         snapshots.AddRange(
@@ -650,7 +653,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         ExtendCommandTimeoutForMarketWideAggregates();
         return GetAll()
             .Where(Is13F)
-            .Where(holding => holding.CommonStock.Active)
+            .Where(holding => holding.Issuer.Presentation.Listing.Active)
             .Where(h => h.ReportDate == current || h.ReportDate == previous);
     }
 
@@ -667,7 +670,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         return BothQuarters(current, previous)
-            .GroupBy(h => h.CommonStockId)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockActivity
             {
                 CommonStockId = g.Key,
@@ -780,7 +783,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         return BothQuarters(current, previous)
-            .GroupBy(h => h.CommonStockId)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockChurn
             {
                 CommonStockId = g.Key,
@@ -791,7 +794,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Any(p =>
                                 p.ReportDate == previous
                                 && p.FilingType == FilingType.Form13F
-                                && p.CommonStockId == h.CommonStockId
+                                && p.EquityIssuerId == h.EquityIssuerId
                                 && p.InstitutionalHolderId == h.InstitutionalHolderId
                             )
                     )
@@ -805,7 +808,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Any(c =>
                                 c.ReportDate == current
                                 && c.FilingType == FilingType.Form13F
-                                && c.CommonStockId == h.CommonStockId
+                                && c.EquityIssuerId == h.EquityIssuerId
                                 && c.InstitutionalHolderId == h.InstitutionalHolderId
                             )
                     )
@@ -824,17 +827,20 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Where(snapshot =>
                 snapshot.ReportDate == reportDate
                 && DbContext
-                    .Set<CommonStock>()
-                    .Any(stock => stock.Id == snapshot.CommonStockId && stock.Active)
+                    .Set<EquityIssuer>()
+                    .Any(stock =>
+                        stock.Id == snapshot.EquityIssuerId && stock.Presentation.Listing.Active
+                    )
             );
 
-    public IQueryable<StockQuarterlyActivity> GetStockActivitySnapshotsByStock(CommonStock stock) =>
-        DbContext.Set<StockQuarterlyActivity>().Where(s => s.CommonStockId == stock.Id);
+    public IQueryable<StockQuarterlyActivity> GetStockActivitySnapshotsByStock(
+        EquityIssuer stock
+    ) => DbContext.Set<StockQuarterlyActivity>().Where(s => s.EquityIssuerId == stock.Id);
 
     // Snapshot-first stock trend source. The newest live row bounds stale snapshot history and
     // is appended while refresh lags; the stock-scoped live GROUP BY remains bootstrap-only.
     public async Task<List<StockQuarterlyActivity>> GetStockActivitySnapshotsByStockSnapshotBacked(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     )
     {
@@ -860,7 +866,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Set<StockQuarterlyListingActivity>()
             .AsNoTracking()
             .Where(row =>
-                row.CommonStockId == stock.Id
+                row.EquityIssuerId == stock.Id
                 && !row.IsCombined
                 && snapshotDates.Contains(row.ReportDate)
             )
@@ -889,7 +895,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     public async Task<List<StockQuarterlyActivity>> GetListingActivityHistory(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
         CancellationToken cancellationToken = default
     )
@@ -917,7 +923,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             result.Add(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = current.ReportDate,
                     PreviousReportDate = previous?.ReportDate,
                     CurrentShares = current.Shares,
@@ -930,7 +936,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     [
                         new StockQuarterlyListingActivity
                         {
-                            CommonStockId = stock.Id,
+                            EquityIssuerId = stock.Id,
                             ReportDate = current.ReportDate,
                             IsCombined = false,
                             PriceSeriesTicker = listedTicker,
@@ -950,7 +956,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // quarter. The exact-listing rows are version-checked with the stock row before split
     // restatement; a missing generation falls back only to this stock's two-quarter aggregate.
     public async Task<StockQuarterlyActivity> GetCombinedStockActivitySnapshotBacked(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly currentReportDate,
         DateOnly previousReportDate,
         CancellationToken cancellationToken = default
@@ -958,7 +964,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     {
         var snapshot = await GetStockActivitySnapshotsCombined(currentReportDate)
             .AsNoTracking()
-            .SingleOrDefaultAsync(row => row.CommonStockId == stock.Id, cancellationToken);
+            .SingleOrDefaultAsync(row => row.EquityIssuerId == stock.Id, cancellationToken);
         if (snapshot != null)
         {
             var listingShares = await GetStockListingActivitySnapshots(
@@ -966,7 +972,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     combined: true
                 )
                 .AsNoTracking()
-                .Where(row => row.CommonStockId == stock.Id)
+                .Where(row => row.EquityIssuerId == stock.Id)
                 .ToListAsync(cancellationToken);
             if (
                 listingShares.Count > 0
@@ -1011,13 +1017,13 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         if (liveListingShares.Count == 0)
         {
             throw new InvalidOperationException(
-                $"Cannot load combined holdings activity for {stock.Ticker} without listing-share rows."
+                $"Cannot load combined holdings activity for {stock.Presentation.Listing.Ticker} without listing-share rows."
             );
         }
 
         return new StockQuarterlyActivity
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ReportDate = currentReportDate,
             PreviousReportDate = previousReportDate,
             CurrentShares = liveListingShares.Sum(row => row.CurrentShares),
@@ -1040,7 +1046,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     ) =>
         new()
         {
-            CommonStockId = snapshot.CommonStockId,
+            EquityIssuerId = snapshot.EquityIssuerId,
             ReportDate = snapshot.ReportDate,
             PreviousReportDate = snapshot.PreviousReportDate,
             CurrentShares = snapshot.CurrentShares,
@@ -1059,7 +1065,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // quarter and the immediately preceding live quarter instead of regrouping the stock's
     // entire filing history whenever the aggregate worker trails ingestion.
     private async Task<StockQuarterlyActivity> GetLiveStockActivityPoint(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly currentReportDate,
         CancellationToken cancellationToken
     )
@@ -1085,10 +1091,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Select(row => row.InstitutionalHolderId)
             .ToHashSet();
         var listingShares = activity
-            .GroupBy(row => row.ListedTicker ?? stock.Ticker)
+            .GroupBy(row => row.ListedTicker ?? stock.Presentation.Listing.Ticker)
             .Select(group => new StockQuarterlyListingActivity
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = currentReportDate,
                 IsCombined = false,
                 PriceSeriesTicker = group.Key,
@@ -1098,7 +1104,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .ToList();
         return new StockQuarterlyActivity
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ReportDate = currentReportDate,
             PreviousReportDate = previousReportDate,
             CurrentShares = activity.Sum(row => row.CurrentShares),
@@ -1114,7 +1120,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     private async Task<List<StockQuarterlyActivity>> GetLiveStockActivity(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken
     )
     {
@@ -1140,7 +1146,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .GroupBy(holding => new
             {
                 holding.ReportDate,
-                PriceSeriesTicker = holding.ListedTicker ?? stock.Ticker,
+                PriceSeriesTicker = holding.ListedTicker ?? stock.Presentation.Listing.Ticker,
             })
             .Select(group => new
             {
@@ -1169,7 +1175,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 .Keys.Union(previousSeries.Keys)
                 .Select(ticker => new StockQuarterlyListingActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = current.ReportDate,
                     IsCombined = false,
                     PriceSeriesTicker = ticker,
@@ -1180,7 +1186,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             result.Add(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = current.ReportDate,
                     PreviousReportDate = previous?.ReportDate,
                     CurrentShares = current.Shares,
@@ -1210,8 +1216,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .Where(snapshot =>
                 snapshot.ReportDate == reportDate
                 && DbContext
-                    .Set<CommonStock>()
-                    .Any(stock => stock.Id == snapshot.CommonStockId && stock.Active)
+                    .Set<EquityIssuer>()
+                    .Any(stock =>
+                        stock.Id == snapshot.EquityIssuerId && stock.Presentation.Listing.Active
+                    )
             );
 
     public IQueryable<StockQuarterlyListingActivity> GetStockListingActivitySnapshots(
@@ -1240,7 +1248,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
             activity = rows.Select(row => row.ToActivity()).ToList();
-            versions = rows.ToDictionary(row => row.CommonStockId, row => row.ComputedAt);
+            versions = rows.ToDictionary(row => row.EquityIssuerId, row => row.ComputedAt);
         }
         else
         {
@@ -1248,7 +1256,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
             activity = rows.Select(row => row.ToActivity()).ToList();
-            versions = rows.ToDictionary(row => row.CommonStockId, row => row.ComputedAt);
+            versions = rows.ToDictionary(row => row.EquityIssuerId, row => row.ComputedAt);
         }
         if (activity.Count == 0)
             return [];
@@ -1257,7 +1265,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .AsNoTracking()
             .ToListAsync(cancellationToken);
         var byStock = listingRows
-            .GroupBy(row => row.CommonStockId)
+            .GroupBy(row => row.EquityIssuerId)
             .ToDictionary(
                 group => group.Key,
                 group => (IReadOnlyList<StockQuarterlyListingActivity>)group.ToList()
@@ -1306,7 +1314,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 operationCancellationToken
             );
             var byStock = listings
-                .GroupBy(row => row.CommonStockId)
+                .GroupBy(row => row.EquityIssuerId)
                 .ToDictionary(
                     group => group.Key,
                     group => (IReadOnlyList<StockQuarterlyListingActivity>)group.ToList()
@@ -1356,23 +1364,24 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             return await GetAll()
                 .Where(Is13F)
                 .Where(holding =>
-                    commonStockIds.Contains(holding.CommonStockId)
+                    commonStockIds.Contains(holding.EquityIssuerId)
                     && (holding.ReportDate == current || holding.ReportDate == previous)
                 )
                 .Join(
-                    DbContext.Set<CommonStock>(),
-                    holding => holding.CommonStockId,
+                    DbContext.Set<EquityIssuer>(),
+                    holding => holding.EquityIssuerId,
                     stock => stock.Id,
-                    (holding, stock) => new { Holding = holding, stock.Ticker }
+                    (holding, stock) =>
+                        new { Holding = holding, Ticker = stock.Presentation.Listing.Ticker }
                 )
                 .GroupBy(row => new
                 {
-                    row.Holding.CommonStockId,
+                    row.Holding.EquityIssuerId,
                     PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
                 })
                 .Select(group => new StockQuarterlyListingActivity
                 {
-                    CommonStockId = group.Key.CommonStockId,
+                    EquityIssuerId = group.Key.EquityIssuerId,
                     ReportDate = current,
                     IsCombined = false,
                     PriceSeriesTicker = group.Key.PriceSeriesTicker,
@@ -1387,23 +1396,24 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         }
 
         var currentRows = await GetCombinedQuarter(current, previous)
-            .Where(holding => commonStockIds.Contains(holding.CommonStockId))
+            .Where(holding => commonStockIds.Contains(holding.EquityIssuerId))
             .Join(
-                DbContext.Set<CommonStock>(),
-                holding => holding.CommonStockId,
+                DbContext.Set<EquityIssuer>(),
+                holding => holding.EquityIssuerId,
                 stock => stock.Id,
-                (holding, stock) => new { Holding = holding, stock.Ticker }
+                (holding, stock) =>
+                    new { Holding = holding, Ticker = stock.Presentation.Listing.Ticker }
             )
             .GroupBy(row => new
             {
-                row.Holding.CommonStockId,
+                row.Holding.EquityIssuerId,
                 PrimaryTicker = row.Ticker,
                 PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
                 SourceReportDate = row.Holding.ReportDate,
             })
             .Select(group => new
             {
-                group.Key.CommonStockId,
+                group.Key.EquityIssuerId,
                 group.Key.PrimaryTicker,
                 group.Key.PriceSeriesTicker,
                 group.Key.SourceReportDate,
@@ -1413,23 +1423,24 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         var previousRows = await GetAll()
             .Where(Is13F)
             .Where(holding =>
-                commonStockIds.Contains(holding.CommonStockId) && holding.ReportDate == previous
+                commonStockIds.Contains(holding.EquityIssuerId) && holding.ReportDate == previous
             )
             .Join(
-                DbContext.Set<CommonStock>(),
-                holding => holding.CommonStockId,
+                DbContext.Set<EquityIssuer>(),
+                holding => holding.EquityIssuerId,
                 stock => stock.Id,
-                (holding, stock) => new { Holding = holding, stock.Ticker }
+                (holding, stock) =>
+                    new { Holding = holding, Ticker = stock.Presentation.Listing.Ticker }
             )
             .GroupBy(row => new
             {
-                row.Holding.CommonStockId,
+                row.Holding.EquityIssuerId,
                 PrimaryTicker = row.Ticker,
                 PriceSeriesTicker = row.Holding.ListedTicker ?? row.Ticker,
             })
             .Select(group => new
             {
-                group.Key.CommonStockId,
+                group.Key.EquityIssuerId,
                 group.Key.PrimaryTicker,
                 group.Key.PriceSeriesTicker,
                 Shares = group.Sum(row => row.Holding.Shares),
@@ -1439,20 +1450,20 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             await DbContext
                 .Set<StockSplit>()
                 .AsNoTracking()
-                .Where(split => commonStockIds.Contains(split.CommonStockId))
+                .Where(split => commonStockIds.Contains(split.EquityIssuerId))
                 .ToListAsync(cancellationToken)
         )
-            .GroupBy(split => split.CommonStockId)
+            .GroupBy(split => split.EquityIssuerId)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<StockSplit>)group.ToList());
         var currentLookup = currentRows
             .GroupBy(row => new
             {
-                row.CommonStockId,
+                row.EquityIssuerId,
                 row.PrimaryTicker,
                 row.PriceSeriesTicker,
             })
             .ToDictionary(
-                group => (group.Key.CommonStockId, group.Key.PriceSeriesTicker),
+                group => (group.Key.EquityIssuerId, group.Key.PriceSeriesTicker),
                 group =>
                     group.Sum(row =>
                         RestateShareCountBetween(
@@ -1461,19 +1472,19 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             current,
                             group.Key.PrimaryTicker,
                             group.Key.PriceSeriesTicker,
-                            splitsByStock.GetValueOrDefault(group.Key.CommonStockId) ?? []
+                            splitsByStock.GetValueOrDefault(group.Key.EquityIssuerId) ?? []
                         )
                     )
             );
         var previousLookup = previousRows.ToDictionary(
-            row => (row.CommonStockId, row.PriceSeriesTicker),
+            row => (row.EquityIssuerId, row.PriceSeriesTicker),
             row => row.Shares
         );
         return currentLookup
             .Keys.Union(previousLookup.Keys)
             .Select(key => new StockQuarterlyListingActivity
             {
-                CommonStockId = key.CommonStockId,
+                EquityIssuerId = key.EquityIssuerId,
                 ReportDate = current,
                 IsCombined = true,
                 PriceSeriesTicker = key.PriceSeriesTicker,
@@ -1514,11 +1525,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         var aggregated = BothQuarters(current, previous)
-            .GroupBy(h => new { h.InstitutionalHolderId, h.CommonStockId })
+            .GroupBy(h => new { h.InstitutionalHolderId, h.EquityIssuerId })
             .Select(g => new DoubleDownAggregate
             {
                 InstitutionalHolderId = g.Key.InstitutionalHolderId,
-                CommonStockId = g.Key.CommonStockId,
+                CommonStockId = g.Key.EquityIssuerId,
                 CurrentShares = g.Sum(h => h.ReportDate == current ? h.Shares : 0L),
                 PreviousShares = g.Sum(h => h.ReportDate == previous ? h.Shares : 0L),
                 CurrentValue = g.Sum(h => h.ReportDate == current ? h.Value : 0L),
@@ -1636,7 +1647,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             ? splitAffectedStockIds.ToList()
             : null;
         var aggregated = BothQuarters(current, previous)
-            .GroupBy(h => h.CommonStockId)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new
             {
                 CommonStockId = g.Key,
@@ -1658,7 +1669,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Any(p =>
                                 p.ReportDate == previous
                                 && p.FilingType == FilingType.Form13F
-                                && p.CommonStockId == h.CommonStockId
+                                && p.EquityIssuerId == h.EquityIssuerId
                                 && p.InstitutionalHolderId == h.InstitutionalHolderId
                             )
                     )
@@ -1672,7 +1683,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Any(c =>
                                 c.ReportDate == current
                                 && c.FilingType == FilingType.Form13F
-                                && c.CommonStockId == h.CommonStockId
+                                && c.EquityIssuerId == h.EquityIssuerId
                                 && c.InstitutionalHolderId == h.InstitutionalHolderId
                             )
                     )
@@ -1725,7 +1736,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
         var joined = aggregated
             .Join(
-                DbContext.Set<CommonStock>(),
+                DbContext.Set<EquityIssuer>(),
                 agg => agg.CommonStockId,
                 cs => cs.Id,
                 (agg, cs) => new { agg, cs }
@@ -1739,8 +1750,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             .WhereIf(
                 criteria.MinPctFloat.HasValue && pctPassthroughIds == null,
                 j =>
-                    j.cs.SharesOutStanding > 0
-                    && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0
+                    j.cs.Presentation.Listing.Security.SharesOutstanding > 0
+                    && (double)j.agg.CurrentShares
+                        / j.cs.Presentation.Listing.Security.SharesOutstanding
+                        * 100.0
                         >= criteria.MinPctFloat.Value
             )
             .WhereIf(
@@ -1748,16 +1761,20 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 j =>
                     pctPassthroughIds.Contains(j.agg.CommonStockId)
                     || (
-                        j.cs.SharesOutStanding > 0
-                        && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0
+                        j.cs.Presentation.Listing.Security.SharesOutstanding > 0
+                        && (double)j.agg.CurrentShares
+                            / j.cs.Presentation.Listing.Security.SharesOutstanding
+                            * 100.0
                             >= criteria.MinPctFloat.Value
                     )
             )
             .WhereIf(
                 criteria.MaxPctFloat.HasValue && pctPassthroughIds == null,
                 j =>
-                    j.cs.SharesOutStanding > 0
-                    && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0
+                    j.cs.Presentation.Listing.Security.SharesOutstanding > 0
+                    && (double)j.agg.CurrentShares
+                        / j.cs.Presentation.Listing.Security.SharesOutstanding
+                        * 100.0
                         <= criteria.MaxPctFloat.Value
             )
             .WhereIf(
@@ -1765,8 +1782,10 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                 j =>
                     pctPassthroughIds.Contains(j.agg.CommonStockId)
                     || (
-                        j.cs.SharesOutStanding > 0
-                        && (double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0
+                        j.cs.Presentation.Listing.Security.SharesOutstanding > 0
+                        && (double)j.agg.CurrentShares
+                            / j.cs.Presentation.Listing.Security.SharesOutstanding
+                            * 100.0
                             <= criteria.MaxPctFloat.Value
                     )
             );
@@ -1774,11 +1793,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         return joined.Select(j => new ScreenerRow
         {
             CommonStockId = j.agg.CommonStockId,
-            Ticker = j.cs.Ticker,
+            Ticker = j.cs.Presentation.Listing.Ticker,
             Name = j.cs.Name,
             IndustryId = j.cs.IndustryId,
             IndustryName = j.cs.Industry != null ? j.cs.Industry.Name : null,
-            SharesOutStanding = j.cs.SharesOutStanding,
+            SharesOutStanding = j.cs.Presentation.Listing.Security.SharesOutstanding,
             CurrentFilerCount = j.agg.CurrentFilerCount,
             PreviousFilerCount = j.agg.PreviousFilerCount,
             CurrentValue = j.agg.CurrentValue,
@@ -1787,8 +1806,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             NewFilerCount = j.agg.NewFilerCount,
             SoldOutFilerCount = j.agg.SoldOutFilerCount,
             PercentOfFloat =
-                j.cs.SharesOutStanding > 0
-                    ? (double?)((double)j.agg.CurrentShares / j.cs.SharesOutStanding * 100.0)
+                j.cs.Presentation.Listing.Security.SharesOutstanding > 0
+                    ? (double?)(
+                        (double)j.agg.CurrentShares
+                        / j.cs.Presentation.Listing.Security.SharesOutstanding
+                        * 100.0
+                    )
                     : null,
         });
     }
@@ -1814,7 +1837,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     {
         var splitsByStock = (splitsSinceCurrent ?? [])
             .Where(s => s.Numerator > 0 && s.Denominator > 0)
-            .GroupBy(s => s.CommonStockId)
+            .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<StockSplit>)g.ToList());
 
         var query = Screen(criteria, current, previous, splitsByStock.Keys.ToList())
@@ -1836,11 +1859,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         {
             var affectedIds = affectedRows.Select(r => r.CommonStockId).Distinct().ToList();
             var listingShares = await BothQuarters(current, previous)
-                .Where(h => h.ReportDate == current && affectedIds.Contains(h.CommonStockId))
-                .GroupBy(h => new { h.CommonStockId, h.ListedTicker })
+                .Where(h => h.ReportDate == current && affectedIds.Contains(h.EquityIssuerId))
+                .GroupBy(h => new { h.EquityIssuerId, h.ListedTicker })
                 .Select(g => new ScreenerListingShares
                 {
-                    CommonStockId = g.Key.CommonStockId,
+                    CommonStockId = g.Key.EquityIssuerId,
                     ListedTicker = g.Key.ListedTicker,
                     Shares = g.Sum(h => h.Shares),
                 })
@@ -1852,7 +1875,12 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             foreach (var row in affectedRows)
                 ScreenerSplitRestatement.RestateRow(
                     row,
-                    listingSharesByStock.GetValueOrDefault(row.CommonStockId) ?? [],
+                    (IReadOnlyList<ScreenerListingShares>)(
+                        CollectionExtensions.GetValueOrDefault<
+                            Guid,
+                            IReadOnlyList<ScreenerListingShares>
+                        >(listingSharesByStock, row.CommonStockId) ?? []
+                    ),
                     splitsByStock[row.CommonStockId],
                     current
                 );
@@ -1871,13 +1899,13 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     public IQueryable<FilingActivitySummary> GetFilingActivitySummary(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly since
     )
     {
         return GetAll()
-            .Where(h => h.CommonStockId == stock.Id && h.FilingDate >= since)
-            .GroupBy(h => h.CommonStockId)
+            .Where(h => h.EquityIssuerId == stock.Id && h.FilingDate >= since)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new FilingActivitySummary
             {
                 FilingCount = g.Select(h => h.AccessionNumber).Distinct().Count(),
@@ -1886,14 +1914,14 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     public IQueryable<FilingActivitySummary> GetFilingActivitySummary(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
         DateOnly since
     )
     {
         return Get13FHistoryByListing(stock, listedTicker)
             .Where(h => h.FilingDate >= since)
-            .GroupBy(h => h.CommonStockId)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new FilingActivitySummary
             {
                 FilingCount = g.Select(h => h.AccessionNumber).Distinct().Count(),
@@ -1902,7 +1930,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     }
 
     public IQueryable<KeyValuePair<Guid, DateOnly>> GetFirstOwnedQuarters(
-        CommonStock stock,
+        EquityIssuer stock,
         IEnumerable<Guid> holderIds
     )
     {
@@ -1912,7 +1940,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
         // the Min and mislabel the first-owned quarter (GH-4449).
         return GetAll()
             .Where(h =>
-                h.CommonStockId == stock.Id
+                h.EquityIssuerId == stock.Id
                 && ids.Contains(h.InstitutionalHolderId)
                 && h.FilingType == FilingType.Form13F
             )
@@ -1931,7 +1959,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     {
         return GetAll()
             .Where(Is13F)
-            .Where(holding => holding.CommonStock.Active)
+            .Where(holding => holding.Issuer.Presentation.Listing.Active)
             .Where(h =>
                 h.ReportDate == current
                 || (
@@ -1954,14 +1982,14 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     // test stays UNSCOPED by stock on purpose: a fund that filed this quarter without this
     // stock proved it sold out, so its prior row must not carry forward.
     public IQueryable<InstitutionalHolding> GetCombinedQuarterByStock(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly current,
         DateOnly previous
     )
     {
         return GetAll()
             .Where(Is13F)
-            .Where(h => h.CommonStockId == stock.Id)
+            .Where(h => h.EquityIssuerId == stock.Id)
             .Where(h =>
                 h.ReportDate == current
                 || (
@@ -1979,7 +2007,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
 
     // Same combined per-stock view with the holder navigation eagerly loaded for rendering.
     public IQueryable<InstitutionalHolding> GetCombinedQuarterByStockWithHolder(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly current,
         DateOnly previous
     )
@@ -2012,7 +2040,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         return BothQuarters(current, previous)
-            .GroupBy(h => h.CommonStockId)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockActivity
             {
                 CommonStockId = g.Key,
@@ -2100,7 +2128,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         return BothQuarters(current, previous)
-            .GroupBy(h => h.CommonStockId)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new MarketWideStockChurn
             {
                 CommonStockId = g.Key,
@@ -2113,7 +2141,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Any(p =>
                                 p.ReportDate == previous
                                 && p.FilingType == FilingType.Form13F
-                                && p.CommonStockId == h.CommonStockId
+                                && p.EquityIssuerId == h.EquityIssuerId
                                 && p.InstitutionalHolderId == h.InstitutionalHolderId
                             )
                     )
@@ -2137,7 +2165,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                             .Any(c =>
                                 c.ReportDate == current
                                 && c.FilingType == FilingType.Form13F
-                                && c.CommonStockId == h.CommonStockId
+                                && c.EquityIssuerId == h.EquityIssuerId
                                 && c.InstitutionalHolderId == h.InstitutionalHolderId
                             )
                     )
@@ -2154,11 +2182,11 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
     )
     {
         var aggregated = BothQuarters(current, previous)
-            .GroupBy(h => new { h.InstitutionalHolderId, h.CommonStockId })
+            .GroupBy(h => new { h.InstitutionalHolderId, h.EquityIssuerId })
             .Select(g => new DoubleDownAggregate
             {
                 InstitutionalHolderId = g.Key.InstitutionalHolderId,
-                CommonStockId = g.Key.CommonStockId,
+                CommonStockId = g.Key.EquityIssuerId,
                 CurrentShares =
                     g.Where(h =>
                             h.ReportDate == current
@@ -2234,7 +2262,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                     }
             )
             .Join(
-                DbContext.Set<CommonStock>(),
+                DbContext.Set<EquityIssuer>(),
                 x => x.a.CommonStockId,
                 s => s.Id,
                 (x, s) =>
@@ -2244,7 +2272,7 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
                         FilerName = x.FilerName,
                         FilerCik = x.FilerCik,
                         CommonStockId = x.a.CommonStockId,
-                        Ticker = s.Ticker,
+                        Ticker = s.Presentation.Listing.Ticker,
                         StockName = s.Name,
                         CurrentShares = x.a.CurrentShares,
                         PreviousShares = x.a.PreviousShares,

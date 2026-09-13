@@ -27,15 +27,14 @@ public class NCenFilingRepositoryTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private static CommonStock CreateStock(string ticker = "MXF", string cik = "0000065433")
+    private static EquityIssuer CreateStock(string ticker = "MXF", string cik = "0000065433")
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker,
-            Cik = cik,
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker,
+            Cik: cik
+        );
     }
 
     private static NCenFiling CreateFiling(
@@ -48,7 +47,7 @@ public class NCenFilingRepositoryTests : IDisposable
         return new NCenFiling
         {
             Id = Guid.NewGuid(),
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             AccessionNumber = accessionNumber,
             FilingDate = filingDate ?? new DateOnly(2025, 1, 15),
             IsAmendment = false,
@@ -69,9 +68,9 @@ public class NCenFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_ReturnsOnlyFilingsForThatStock()
     {
-        var mexico = CreateStock("MXF", "0000065433");
-        var other = CreateStock("ASA", "0000004969");
-        _dbContext.Set<CommonStock>().AddRange(mexico, other);
+        EquityIssuer mexico = CreateStock("MXF", "0000065433");
+        EquityIssuer other = CreateStock("ASA", "0000004969");
+        _dbContext.Set<EquityIssuer>().AddRange(mexico, other);
         await _dbContext.SaveChangesAsync();
 
         _repository.Add(CreateFiling(mexico.Id, "0000065433-24-000002"));
@@ -79,17 +78,17 @@ public class NCenFilingRepositoryTests : IDisposable
         _repository.Add(CreateFiling(other.Id, "0000004969-24-000001"));
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(mexico).ToListAsync();
+        var result = await _repository.GetByIssuerId((mexico).Id).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Should().OnlyContain(f => f.CommonStockId == mexico.Id);
+        result.Should().OnlyContain(f => f.EquityIssuerId == mexico.Id);
     }
 
     [Fact]
     public async Task GetByAccessionNumber_ExistingAccession_ReturnsFiling()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
         _repository.Add(CreateFiling(stock.Id, "0000065433-24-000002"));
         await _repository.SaveChanges();
@@ -105,8 +104,8 @@ public class NCenFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAccessionNumber_NonExistentAccession_ReturnsEmpty()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
         _repository.Add(CreateFiling(stock.Id, "0000065433-24-000002"));
         await _repository.SaveChanges();
@@ -119,8 +118,8 @@ public class NCenFilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetRecent_ReturnsOnlyFilingsOnOrAfterCutoff()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         _repository.Add(CreateFiling(stock.Id, "old", filingDate: new DateOnly(2024, 1, 1)));
@@ -136,8 +135,8 @@ public class NCenFilingRepositoryTests : IDisposable
     [Fact]
     public async Task Add_FilingWithServiceProviders_PersistsChildRows()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var filing = CreateFiling(stock.Id);

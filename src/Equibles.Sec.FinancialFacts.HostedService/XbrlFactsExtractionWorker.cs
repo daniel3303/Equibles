@@ -77,11 +77,11 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
             if (batch.Count == 0)
                 return;
 
-            var stockIds = batch.Select(d => d.CommonStockId).Distinct().ToArray();
+            var stockIds = batch.Select(d => d.EquityIssuerId).Distinct().ToArray();
             var fingerprints = await checkpoints
-                .Where(s => stockIds.Contains(s.CommonStockId))
+                .Where(s => stockIds.Contains(s.EquityIssuerId))
                 .ToDictionaryAsync(
-                    s => s.CommonStockId,
+                    s => s.EquityIssuerId,
                     s => s.CalendarEvidenceFingerprint,
                     stoppingToken
                 );
@@ -90,7 +90,7 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
             foreach (var document in batch)
             {
                 stoppingToken.ThrowIfCancellationRequested();
-                fingerprints.TryGetValue(document.CommonStockId, out var fingerprint);
+                fingerprints.TryGetValue(document.EquityIssuerId, out var fingerprint);
                 if (document.XbrlCalendarEvidenceFingerprint != fingerprint)
                 {
                     document.XbrlFactsAttempts = 0;
@@ -172,7 +172,7 @@ public class XbrlFactsExtractionWorker : BaseScraperWorker
                 && d.XbrlFactsAttempts < Document.MaxXbrlFactsAttempts
             )
             || checkpoints.Any(s =>
-                s.CommonStockId == d.CommonStockId
+                s.EquityIssuerId == d.EquityIssuerId
                 && s.CalendarEvidenceFingerprint != null
                 && s.CalendarEvidenceFingerprint != d.XbrlCalendarEvidenceFingerprint
             )

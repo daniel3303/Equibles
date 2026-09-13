@@ -52,10 +52,13 @@ public class CompanySyncServiceCreateNewStockCatchTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -74,7 +77,7 @@ public class CompanySyncServiceCreateNewStockCatchTests : ParadeDbMcpTestBase
         await sut.SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().BeEmpty("the invalid company must not produce a row");
     }
 }

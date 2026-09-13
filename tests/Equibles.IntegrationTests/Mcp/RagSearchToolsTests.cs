@@ -38,7 +38,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     {
         var ragManager = new RagManager(
             HybridChunkSearcherFactory.Bm25Only(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             NullLogger<RagManager>()
         );
         var secDocumentService = new SecDocumentService(
@@ -52,7 +52,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
         return new RagSearchTools(
             ragManager,
             secDocumentService,
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new DocumentRepository(DbContext),
             fileManager,
             ErrorManager,
@@ -63,7 +63,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     // ── Seeding ─────────────────────────────────────────────────────────
 
     private async Task<(
-        CommonStock stock,
+        EquityIssuer stock,
         Document document,
         List<Chunk> chunks
     )> SeedDocumentWithChunks(
@@ -80,19 +80,19 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
 
         // Ticker has a unique index; reuse an existing stock if a previous call in the same
         // test already seeded one with this ticker.
-        var stockSet = DbContext.Set<CommonStock>();
-        var stock =
-            stockSet.Local.FirstOrDefault(s => s.Ticker == ticker)
-            ?? await stockSet.FirstOrDefaultAsync(s => s.Ticker == ticker);
+        var stockSet = DbContext.Set<EquityIssuer>();
+        EquityIssuer stock =
+            stockSet.Local.FirstOrDefault(s => s.Presentation.Listing.Ticker == ticker)
+            ?? await stockSet.FirstOrDefaultAsync(s => s.Presentation.Listing.Ticker == ticker);
         if (stock == null)
         {
-            stock = new CommonStock
-            {
-                Ticker = ticker,
-                Name = companyName,
-                Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
-            };
+            stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: ticker,
+                Name: companyName,
+                Cik: Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString()
+            );
             stockSet.Add(stock);
+            await DbContext.SaveChangesAsync();
         }
 
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
@@ -109,8 +109,7 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
 
         var document = new Document
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Issuer = await DbContext.Set<EquityIssuer>().SingleAsync(row => row.Id == stock.Id),
             Content = file,
             ContentId = file.Id,
             DocumentType = documentType,
@@ -477,14 +476,13 @@ public class RagSearchToolsTests : ParadeDbMcpTestBase
     public async Task ListFilings_KnownTickerNoDocuments_ReturnsNoDocumentsMessage()
     {
         DbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Ticker = "NODOC",
-                    Name = "Empty Corp",
-                    Cik = Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString(),
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "NODOC",
+                    Name: "Empty Corp",
+                    Cik: Random.Shared.NextInt64(1_000_000_000L, 9_999_999_999L).ToString()
+                )
             );
         await DbContext.SaveChangesAsync();
 

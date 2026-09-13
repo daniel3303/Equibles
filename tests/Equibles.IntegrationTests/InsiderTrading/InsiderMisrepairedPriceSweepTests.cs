@@ -76,7 +76,7 @@ public class InsiderMisrepairedPriceSweepTests : IDisposable
         var row = new InsiderTransaction
         {
             Id = Guid.NewGuid(),
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             InsiderOwnerId = Guid.NewGuid(),
             AccessionNumber = Guid.NewGuid().ToString()[..20],
             TransactionOrder = 0,

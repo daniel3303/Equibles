@@ -43,8 +43,8 @@ public class ShortVolumeImportServiceAggregateVolumesByStockDuplicateSymbolTests
         );
 
         var stockId = Guid.NewGuid();
-        var security = new ListedSecurityKey(stockId, "AAPL");
-        var tickerMap = new Dictionary<string, ListedSecurityKey> { ["AAPL"] = security };
+        var security = new EquityListingReference(stockId, Guid.NewGuid(), "AAPL");
+        var tickerMap = new Dictionary<string, EquityListingReference> { ["AAPL"] = security };
         var records = new List<ShortVolumeRecord>
         {
             new()
@@ -64,11 +64,11 @@ public class ShortVolumeImportServiceAggregateVolumesByStockDuplicateSymbolTests
         };
 
         var result =
-            (Dictionary<ListedSecurityKey, DailyShortVolume>)
+            (Dictionary<Guid, DailyShortVolume>)
                 method.Invoke(null, [records, tickerMap, new DateOnly(2024, 12, 31)]);
 
         result.Should().HaveCount(1);
-        var aggregated = result[security];
+        var aggregated = result[security.EquityListingId];
         aggregated.ShortVolume.Should().Be(3_000);
         aggregated.ShortExemptVolume.Should().Be(300);
         aggregated.TotalVolume.Should().Be(15_000);

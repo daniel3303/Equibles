@@ -1,4 +1,3 @@
-using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Enums;
@@ -16,17 +15,17 @@ public class ReportedFinancialStatementRepository : BaseRepository<ReportedFinan
         GetAll().Where(s => s.DocumentId == document.Id);
 
     /// <summary>Statements of a given kind for a company, newest filing first.</summary>
-    public IQueryable<ReportedFinancialStatement> GetByStockAndKind(
-        CommonStock stock,
+    public IQueryable<ReportedFinancialStatement> GetByIssuerAndKind(
+        Guid issuerId,
         ReportedStatementKind kind
     ) =>
         GetAll()
-            .Where(s => s.CommonStockId == stock.Id && s.Kind == kind)
+            .Where(s => s.EquityIssuerId == issuerId && s.Kind == kind)
             .OrderByDescending(s => s.FiscalYear)
             .ThenByDescending(s => s.PrimaryPeriodEnd)
             .ThenByDescending(s => s.FiledDate);
 
     /// <summary>All statements a company has, used to discover the available kinds and periods.</summary>
-    public IQueryable<ReportedFinancialStatement> GetByStock(CommonStock stock) =>
-        GetAll().Where(s => s.CommonStockId == stock.Id);
+    public IQueryable<ReportedFinancialStatement> GetByIssuerId(Guid issuerId) =>
+        GetAll().Where(s => s.EquityIssuerId == issuerId);
 }

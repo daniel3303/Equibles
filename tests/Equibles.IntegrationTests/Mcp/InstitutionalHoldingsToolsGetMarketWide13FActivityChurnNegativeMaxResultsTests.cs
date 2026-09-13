@@ -34,18 +34,16 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityChurnNegativeMaxR
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "C0",
-        };
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C1",
-        };
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "C0"
+        );
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C1"
+        );
         var continuing = new InstitutionalHolder { Cik = "H0", Name = "Continuing Filer" };
         var newFiler = new InstitutionalHolder { Cik = "H1", Name = "New Filer" };
         DbContext.AddRange(msft, aapl, continuing, newFiler);
@@ -63,7 +61,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityChurnNegativeMaxR
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -79,7 +77,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityChurnNegativeMaxR
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -87,7 +85,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityChurnNegativeMaxR
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
@@ -95,6 +93,7 @@ public class InstitutionalHoldingsToolsGetMarketWide13FActivityChurnNegativeMaxR
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{holder.Cik}-{stock.Ticker}-{reportDate:yyyyMMdd}",
+            AccessionNumber =
+                $"acc-{holder.Cik}-{stock.Presentation.Listing.Ticker}-{reportDate:yyyyMMdd}",
         };
 }

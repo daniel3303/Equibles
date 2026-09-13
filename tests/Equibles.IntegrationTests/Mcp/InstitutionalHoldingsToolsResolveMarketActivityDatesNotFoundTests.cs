@@ -33,12 +33,11 @@ public class InstitutionalHoldingsToolsResolveMarketActivityDatesNotFoundTests :
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C1",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C1"
+        );
         var filer = new InstitutionalHolder { Cik = "H1", Name = "Sole Filer" };
         DbContext.AddRange(aapl, filer);
         DbContext.Add(MakeHolding(aapl, filer, prior, shares: 100, value: 100_000));
@@ -50,7 +49,7 @@ public class InstitutionalHoldingsToolsResolveMarketActivityDatesNotFoundTests :
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -79,7 +78,7 @@ public class InstitutionalHoldingsToolsResolveMarketActivityDatesNotFoundTests :
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -87,7 +86,7 @@ public class InstitutionalHoldingsToolsResolveMarketActivityDatesNotFoundTests :
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
@@ -95,6 +94,7 @@ public class InstitutionalHoldingsToolsResolveMarketActivityDatesNotFoundTests :
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{holder.Cik}-{stock.Ticker}-{reportDate:yyyyMMdd}",
+            AccessionNumber =
+                $"acc-{holder.Cik}-{stock.Presentation.Listing.Ticker}-{reportDate:yyyyMMdd}",
         };
 }

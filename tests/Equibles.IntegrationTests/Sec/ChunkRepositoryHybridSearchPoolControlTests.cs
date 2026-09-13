@@ -40,9 +40,9 @@ public class ChunkRepositoryHybridSearchPoolControlTests : ParadeDbMcpTestBase
     {
         // Apple dominates the match set; excluding it must surface the other filers
         // rather than returning a shrunken, Apple-shaped hole.
-        var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
-        var microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
-        var alphabet = SeedStock("GOOG", "Alphabet Inc.", "0001652044");
+        EquityIssuer apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        EquityIssuer microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
+        EquityIssuer alphabet = SeedStock("GOOG", "Alphabet Inc.", "0001652044");
         var appleFiling = SeedDocument(apple, DocumentType.TenK);
         for (var index = 0; index < 5; index++)
             SeedChunk(
@@ -79,7 +79,7 @@ public class ChunkRepositoryHybridSearchPoolControlTests : ParadeDbMcpTestBase
     [Fact]
     public async Task HybridSearch_MultipleDocumentTypes_ReturnsOnlyThoseTypes()
     {
-        var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        EquityIssuer apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
         SeedChunk(
             SeedDocument(apple, DocumentType.TenK),
             "Services revenue grew in the annual report.",
@@ -118,7 +118,7 @@ public class ChunkRepositoryHybridSearchPoolControlTests : ParadeDbMcpTestBase
     [Fact]
     public async Task HybridSearch_PoolControls_RideInsideTheBm25Query_NotSqlHeapFilters()
     {
-        var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        EquityIssuer apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
         SeedChunk(
             SeedDocument(apple, DocumentType.TenK),
             "Services revenue grew substantially this quarter.",
@@ -159,19 +159,18 @@ public class ChunkRepositoryHybridSearchPoolControlTests : ParadeDbMcpTestBase
             );
     }
 
-    private CommonStock SeedStock(string ticker, string name, string cik)
+    private EquityIssuer SeedStock(string ticker, string name, string cik)
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = name,
-            Cik = cik,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: name,
+            Cik: cik
+        );
         DbContext.Add(stock);
         return stock;
     }
 
-    private Document SeedDocument(CommonStock stock, DocumentType documentType)
+    private Document SeedDocument(EquityIssuer stock, DocumentType documentType)
     {
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
         var file = new File
@@ -187,8 +186,7 @@ public class ChunkRepositoryHybridSearchPoolControlTests : ParadeDbMcpTestBase
 
         var document = new Document
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = documentType,

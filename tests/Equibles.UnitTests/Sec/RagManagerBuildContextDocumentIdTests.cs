@@ -23,7 +23,14 @@ public class RagManagerBuildContextDocumentIdTests
     {
         var document = new Document
         {
-            CommonStock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." },
+            Issuer = new EquityIssuer
+            {
+                Presentation = new EquityIssuerPresentation
+                {
+                    Listing = new EquityListing { Ticker = "AAPL" },
+                },
+                Name = "Apple Inc.",
+            },
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 12, 31),
         };

@@ -35,18 +35,16 @@ public class InstitutionalHoldingRepositoryMostHeldCombinedTests : IDisposable
     [Fact]
     public async Task GetMostHeldCombined_ExcludesFullyExitedStock_KeepsCurrentlyHeld()
     {
-        var held = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
-        var exited = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-        };
+        EquityIssuer held = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
+        EquityIssuer exited = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corp."
+        );
         var holderA = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -62,7 +60,9 @@ public class InstitutionalHoldingRepositoryMostHeldCombinedTests : IDisposable
         var previous = new DateOnly(2024, 3, 31);
         var current = new DateOnly(2024, 6, 30);
 
-        _dbContext.Set<CommonStock>().AddRange(held, exited);
+        _dbContext.Set<EquityIssuer>().AddRange(held, exited);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, held);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, exited);
         _dbContext.Set<InstitutionalHolder>().AddRange(holderA, holderB);
         _dbContext
             .Set<InstitutionalHolding>()
@@ -92,7 +92,7 @@ public class InstitutionalHoldingRepositoryMostHeldCombinedTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

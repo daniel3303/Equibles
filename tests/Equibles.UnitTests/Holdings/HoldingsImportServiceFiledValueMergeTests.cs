@@ -12,7 +12,7 @@ public class HoldingsImportServiceFiledValueMergeTests
     private static InstitutionalHolding Leg(long shares, long value, long? filedValue) =>
         new()
         {
-            CommonStockId = StockId,
+            EquityIssuerId = StockId,
             InstitutionalHolderId = HolderId,
             ReportDate = new DateOnly(2020, 3, 31),
             ShareType = ShareType.Shares,

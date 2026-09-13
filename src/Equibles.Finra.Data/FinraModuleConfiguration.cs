@@ -7,9 +7,24 @@ public class FinraModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {
-        builder.Entity<DailyShortVolume>();
+        builder
+            .Entity<DailyShortVolume>()
+            .HasOne(row => row.Listing)
+            .WithMany()
+            .HasForeignKey(row => row.EquityListingId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<FinraImportPartition>();
-        builder.Entity<OffExchangeVolume>();
-        builder.Entity<ShortInterest>();
+        builder
+            .Entity<OffExchangeVolume>()
+            .HasOne(row => row.Listing)
+            .WithMany()
+            .HasForeignKey(row => row.EquityListingId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<ShortInterest>()
+            .HasOne(row => row.Listing)
+            .WithMany()
+            .HasForeignKey(row => row.EquityListingId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

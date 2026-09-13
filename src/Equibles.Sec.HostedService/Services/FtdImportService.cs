@@ -279,7 +279,7 @@ public class FtdImportService
 
     /// <summary>
     /// Walks the FTD archive backwards in time recording the CUSIPs each tracked symbol
-    /// USED to trade under, as <see cref="CommonStockCusipAlias"/> rows.
+    /// USED to trade under, as <see cref="EquityIssuerCusipAlias"/> rows.
     /// <para>
     /// <see cref="SeedCusips"/> only captures a retirement it witnesses live, so every
     /// CUSIP change that predates this pipeline left no alias — and the 13F lines filed
@@ -473,7 +473,7 @@ public class FtdImportService
 
     /// <summary>
     /// Walks the FTD archive recording the CUSIPs of tracked stocks' SECONDARY listings —
-    /// sibling share classes, units, fund series — as <see cref="CommonStockListedCusip"/> rows.
+    /// sibling share classes, units, fund series — as <see cref="EquityListingCusipEvidence"/> rows.
     /// <para>
     /// The retired-CUSIP sweep above deliberately admits only PRIMARY symbols, so a sibling
     /// class's CUSIP (Alphabet Class C, 02079K107 under symbol GOOG) was never captured and
@@ -661,20 +661,29 @@ public class FtdImportService
         }
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-        var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        EquityIdentityManager stockManager =
+            scope.ServiceProvider.GetRequiredService<EquityIdentityManager>();
 
-        var stocks = await stockRepo.GetByIds(byStock.Keys).ToListAsync(cancellationToken);
+        var stocks = await stockRepo
+            .GetCurrentUsDirectoryByIds(byStock.Keys)
+            .ToListAsync(cancellationToken);
 
         var recorded = 0;
-        foreach (var stock in stocks)
+        foreach (EquityIssuer stock in stocks)
         {
             if (!byStock.TryGetValue(stock.Id, out var byTicker))
                 continue;
 
-            var referenceTickers = stock.ReferenceTickers.ToHashSet(
-                StringComparer.OrdinalIgnoreCase
-            );
+            var referenceTickers = stock
+                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                .Where(nativeListing =>
+                    nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+                )
+                .Select(nativeListing => nativeListing.Ticker)
+                .ToList()
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             // A fund filer's product series can carry unrelated six-digit CUSIP prefixes
             // (AAXJ 464288 vs IVV 464287). ReferenceTickers is the authoritative current
             // security-type feed, so its exact ticker can trust the SEC CNS pair directly.
@@ -683,7 +692,13 @@ public class FtdImportService
                 .SelectMany(kv =>
                     kv.Value.Where(c =>
                             referenceTickers.Contains(kv.Key)
-                            || (stock.Cusip != null && CusipIdentity.SameIssuer(c, stock.Cusip))
+                            || (
+                                stock.Presentation.Listing.Security.Cusip != null
+                                && CusipIdentity.SameIssuer(
+                                    c,
+                                    stock.Presentation.Listing.Security.Cusip
+                                )
+                            )
                         )
                         .Select(c => (ListedTicker: kv.Key, Cusip: c))
                 )
@@ -708,24 +723,47 @@ public class FtdImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
         var query =
             _workerOptions.TickersToSync?.Count > 0
-                ? stockRepo.GetByTickers(_workerOptions.TickersToSync)
-                : stockRepo.GetAll();
+                ? stockRepo.GetUsByTickers(_workerOptions.TickersToSync)
+                : stockRepo.GetCurrentUsDirectory();
         var stocks = await query
-            .Where(cs => cs.SecondaryTickers.Count > 0)
-            .Select(cs => new { cs.Id, cs.SecondaryTickers })
+            .Where(cs =>
+                cs.Securities.Any(security =>
+                    security.Listings.Any(listing =>
+                        listing.MarketCountryCode == "US"
+                        && listing.IsDirectoryListed
+                        && listing.Id != cs.Presentation.EquityListingId
+                    )
+                )
+            )
+            .Select(cs => new
+            {
+                cs.Id,
+                SecondaryTickers = cs
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != cs.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
+            })
             .ToListAsync(cancellationToken);
         var stockIds = stocks.Select(stock => stock.Id).ToList();
         var delistedRows = await stockRepo
             .GetDelistedListings()
-            .Where(listing => stockIds.Contains(listing.CommonStockId))
-            .Select(listing => new { listing.CommonStockId, listing.ListedTicker })
+            .Where(listing => stockIds.Contains(listing.EquityIssuerId))
+            .Select(listing => new { listing.EquityIssuerId, listing.ListedTicker })
             .ToListAsync(cancellationToken);
         var delistedByStock = delistedRows
-            .GroupBy(listing => listing.CommonStockId)
+            .GroupBy(listing => listing.EquityIssuerId)
             .ToDictionary(
                 group => group.Key,
                 group =>
@@ -804,23 +842,31 @@ public class FtdImportService
         }
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-        var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        EquityIdentityManager stockManager =
+            scope.ServiceProvider.GetRequiredService<EquityIdentityManager>();
 
         var stocks = await stockRepo
-            .GetByTickers(cusipsByTicker.Keys.ToList())
+            .GetUsByTickers(cusipsByTicker.Keys.ToList())
             .ToListAsync(cancellationToken);
 
         var recorded = 0;
-        foreach (var stock in stocks)
+        foreach (EquityIssuer stock in stocks)
         {
             // Only the stock's OWN symbol may contribute: a secondary ticker names a
             // different security sharing this filer's row, and its CUSIP is not this
             // security's retired identity.
-            if (stock.Cusip == null || !cusipsByTicker.TryGetValue(stock.Ticker, out var seen))
+            if (
+                stock.Presentation.Listing.Security.Cusip == null
+                || !cusipsByTicker.TryGetValue(stock.Presentation.Listing.Ticker, out var seen)
+            )
                 continue;
 
-            var retired = seen.Where(c => CusipIdentity.SameIssuer(c, stock.Cusip)).ToList();
+            var retired = seen.Where(c =>
+                    CusipIdentity.SameIssuer(c, stock.Presentation.Listing.Security.Cusip)
+                )
+                .ToList();
             if (retired.Count == 0)
                 continue;
 
@@ -836,7 +882,8 @@ public class FtdImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var query = stockRepo
             .GetDelistedListings()
             .Where(listing =>
@@ -929,7 +976,8 @@ public class FtdImportService
         }
 
         using var scope = _scopeFactory.CreateScope();
-        var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+        EquityIdentityManager stockManager =
+            scope.ServiceProvider.GetRequiredService<EquityIdentityManager>();
         var seeded = 0;
         foreach (var candidate in latestByListing.OrderBy(candidate => candidate.Key))
         {
@@ -970,7 +1018,8 @@ public class FtdImportService
         }
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var listings = await stockRepo
             .GetDelistedListings()
             .Where(listing =>
@@ -1000,7 +1049,7 @@ public class FtdImportService
     }
 
     internal static void RejectContestedHistoricalCusips(
-        IEnumerable<CommonStockDelistedListing> listings
+        IEnumerable<EquityListingRetirementEvidence> listings
     )
     {
         var contestedListingIds = listings
@@ -1022,7 +1071,7 @@ public class FtdImportService
     }
 
     internal static void ApplyHistoricalCusipEvidence(
-        CommonStockDelistedListing listing,
+        EquityListingRetirementEvidence listing,
         IEnumerable<HistoricalCusipCandidate> candidates
     )
     {
@@ -1058,7 +1107,8 @@ public class FtdImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var staged = await stockRepo
             .GetDelistedListings()
             .Where(listing =>
@@ -1101,7 +1151,8 @@ public class FtdImportService
     {
         using var scope = _scopeFactory.CreateScope();
         var stateRepo = scope.ServiceProvider.GetRequiredService<BackfillStateRepository>();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var state = await stateRepo.GetByName(InactiveCusipSweepCursorName);
 
         var pending = stockRepo.GetDelistedListings().Where(listing => listing.Cusip == null);
@@ -1462,11 +1513,13 @@ public class FtdImportService
         var secondaryCusips = BuildLatestSecondaryCusips(records, tickerMap, secondaryMap);
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-        var stockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        EquityIdentityManager stockManager =
+            scope.ServiceProvider.GetRequiredService<EquityIdentityManager>();
 
         var tickers = tickerToCusip.Keys.ToList();
-        var stocks = await stockRepo.GetByTickers(tickers).ToListAsync(cancellationToken);
+        var stocks = await stockRepo.GetUsByTickers(tickers).ToListAsync(cancellationToken);
 
         // Guard against ticker recycling: if a delisted issuer's symbol is
         // reassigned to a different company before CompanySync retires the
@@ -1488,9 +1541,9 @@ public class FtdImportService
         }
 
         var owners = await stockRepo
-            .GetAllIncludingInactive()
+            .GetSecurities()
             .Where(s => s.Cusip != null && resolvedCusips.Contains(s.Cusip))
-            .Select(s => new { s.Id, s.Cusip })
+            .Select(s => new { Id = s.EquityIssuerId, s.Cusip })
             .ToListAsync(cancellationToken);
         foreach (var owner in owners)
         {
@@ -1499,38 +1552,44 @@ public class FtdImportService
         var aliasOwners = await stockRepo
             .GetCusipAliases()
             .Where(alias => resolvedCusips.Contains(alias.Cusip))
-            .Select(alias => new { alias.CommonStockId, alias.Cusip })
+            .Select(alias => new { alias.EquityIssuerId, alias.Cusip })
             .ToListAsync(cancellationToken);
         foreach (var owner in aliasOwners)
         {
-            AddOwner(owner.Cusip, owner.CommonStockId);
+            AddOwner(owner.Cusip, owner.EquityIssuerId);
         }
         var listedClaimRows = await stockRepo
             .GetListedCusips()
             .Where(listing => resolvedCusips.Contains(listing.Cusip))
             .Select(listing => new
             {
-                listing.CommonStockId,
+                listing.EquityIssuerId,
                 listing.ListedTicker,
                 listing.Cusip,
             })
             .ToListAsync(cancellationToken);
 
         var seeded = 0;
-        foreach (var stock in stocks)
+        foreach (EquityIssuer stock in stocks)
         {
-            if (!tickerToCusip.TryGetValue(stock.Ticker, out var resolved))
+            if (!tickerToCusip.TryGetValue(stock.Presentation.Listing.Ticker, out var resolved))
                 continue;
-            if (string.Equals(stock.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase))
+            if (
+                string.Equals(
+                    stock.Presentation.Listing.Security.Cusip,
+                    resolved.Cusip,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
                 continue;
             var listedClaim = listedClaimRows.FirstOrDefault(listing =>
                 string.Equals(listing.Cusip, resolved.Cusip, StringComparison.OrdinalIgnoreCase)
             );
             var promotesExactListing =
-                listedClaim?.CommonStockId == stock.Id
+                listedClaim?.EquityIssuerId == stock.Id
                 && string.Equals(
                     listedClaim.ListedTicker,
-                    stock.Ticker,
+                    stock.Presentation.Listing.Ticker,
                     StringComparison.OrdinalIgnoreCase
                 );
             var displacedTicker = promotesExactListing
@@ -1547,7 +1606,7 @@ public class FtdImportService
             {
                 _logger.LogWarning(
                     "FTD maps {Ticker} to CUSIP {Cusip}, but that CUSIP already identifies another tracked stock — skipping (possible ticker reuse)",
-                    stock.Ticker,
+                    stock.Presentation.Listing.Ticker,
                     resolved.Cusip
                 );
                 continue;
@@ -1662,16 +1721,23 @@ public class FtdImportService
     }
 
     private static string ResolveDisplacedListedTicker(
-        CommonStock stock,
+        EquityIssuer stock,
         IReadOnlyDictionary<Guid, List<(string Ticker, string Cusip)>> secondaryCusips
     )
     {
-        if (stock.Cusip == null || !secondaryCusips.TryGetValue(stock.Id, out var candidates))
+        if (
+            stock.Presentation.Listing.Security.Cusip == null
+            || !secondaryCusips.TryGetValue(stock.Id, out var candidates)
+        )
             return null;
 
         var matches = candidates
             .Where(candidate =>
-                string.Equals(candidate.Cusip, stock.Cusip, StringComparison.OrdinalIgnoreCase)
+                string.Equals(
+                    candidate.Cusip,
+                    stock.Presentation.Listing.Security.Cusip,
+                    StringComparison.OrdinalIgnoreCase
+                )
             )
             .Select(candidate => candidate.Ticker)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -1753,9 +1819,28 @@ public class FtdImportService
         CancellationToken cancellationToken
     )
     {
-        // Group by stock+date, keeping the latest record per day (FTD is cumulative)
-        var grouped =
-            new Dictionary<(Guid StockId, string ListedTicker, DateOnly Date), FailToDeliver>();
+        // The source reports a cumulative balance; retain its last observation per listing/date.
+        using var scope = _scopeFactory.CreateScope();
+        var listingRepository = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
+        var issuerIds = tickerMap.Values.Select(key => key.CommonStockId).Distinct().ToList();
+        var candidates = await listingRepository
+            .GetAll()
+            .Where(listing =>
+                listing.MarketCountryCode == "US"
+                && issuerIds.Contains(listing.Security.EquityIssuerId)
+            )
+            .Select(listing => new
+            {
+                listing.Id,
+                listing.Security.EquityIssuerId,
+                listing.Ticker,
+            })
+            .ToListAsync(cancellationToken);
+        var mappings = candidates
+            .GroupBy(listing => new ListedSecurityKey(listing.EquityIssuerId, listing.Ticker))
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single().Id);
+        var grouped = new Dictionary<(Guid ListingId, DateOnly Date), FailToDeliver>();
 
         var strippedAliases = BuildStrippedTickerAliases(tickerMap.Keys);
         foreach (var record in records)
@@ -1769,10 +1854,15 @@ public class FtdImportService
                 continue;
             }
 
-            var key = (listing.CommonStockId, listing.ListedTicker, record.SettlementDate);
+            if (!mappings.TryGetValue(listing, out var listingId))
+                throw new InvalidOperationException(
+                    $"No native listing identity for {listing.CommonStockId}/{listing.ListedTicker}."
+                );
+
+            var key = (listingId, record.SettlementDate);
             grouped[key] = new FailToDeliver
             {
-                CommonStockId = listing.CommonStockId,
+                EquityListingId = listingId,
                 ListedTicker = listing.ListedTicker,
                 SettlementDate = record.SettlementDate,
                 Quantity = record.Quantity,
@@ -1787,21 +1877,20 @@ public class FtdImportService
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-
-        // Guards GH-1591: CompanySync can delete a CommonStock between BuildTickerMap and
-        // this flush. Without filtering, one stale CommonStockId trips
-        // FK_FailToDeliver_CommonStock_CommonStockId and rolls back the entire UpsertRange —
-        // dropping rows for surviving stocks alongside the orphan.
-        var safeItems = await stockRepo.FilterByExistingStocks(items, i => i.CommonStockId);
+        var listingIds = items.Select(row => row.EquityListingId).Distinct().ToList();
+        var existingIds = await dbContext
+            .Set<EquityListing>()
+            .Where(row => listingIds.Contains(row.Id))
+            .Select(row => row.Id)
+            .ToListAsync();
+        var existing = existingIds.ToHashSet();
+        var safeItems = items.Where(row => existing.Contains(row.EquityListingId)).ToList();
         var skipped = items.Count - safeItems.Count;
         if (skipped > 0)
-        {
             _logger.LogWarning(
-                "FTD batch: skipping {Count} rows whose parent CommonStock was removed before flush",
+                "FTD batch: skipping {Count} rows whose listing was removed before flush",
                 skipped
             );
-        }
         if (safeItems.Count == 0)
         {
             return;
@@ -1810,12 +1899,7 @@ public class FtdImportService
         await dbContext
             .Set<FailToDeliver>()
             .UpsertRange(safeItems)
-            .On(f => new
-            {
-                f.CommonStockId,
-                f.ListedTicker,
-                f.SettlementDate,
-            })
+            .On(f => new { f.EquityListingId, f.SettlementDate })
             .WhenMatched(
                 (existing, incoming) =>
                     new FailToDeliver { Quantity = incoming.Quantity, Price = incoming.Price }

@@ -251,7 +251,9 @@ public class InsiderTradingFilingProcessorAmendmentTests
         var txRepo = new InsiderTransactionRepository(dbContext);
         var filingRepo = new InsiderFilingRepository(dbContext);
         var errorManager = new ErrorManager(new ErrorRepository(dbContext));
-        var dailyStockPriceRepo = new DailyStockPriceRepository(dbContext);
+        EquityDailyStockPriceRepository dailyStockPriceRepo = new EquityDailyStockPriceRepository(
+            dbContext
+        );
         var secClient = Substitute.For<ISecEdgarClient>();
         var configuredFileManager = Substitute.For<IFileManager>();
 
@@ -296,7 +298,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
             (typeof(FailedFilingIngestRepository), new FailedFilingIngestRepository(dbContext)),
             (typeof(IFileManager), configuredFileManager),
             (typeof(ErrorManager), errorManager),
-            (typeof(DailyStockPriceRepository), dailyStockPriceRepo),
+            (typeof(EquityDailyStockPriceRepository), dailyStockPriceRepo),
             (typeof(InsiderTransactionPriceValidator), new InsiderTransactionPriceValidator()),
             (typeof(StockSplitRepository), new StockSplitRepository(dbContext))
         );
@@ -350,13 +352,12 @@ public class InsiderTradingFilingProcessorAmendmentTests
             Cik = "0000320193",
         };
 
-    private static CommonStock MakeCompany() =>
-        new()
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+    private static EquityIssuer MakeCompany() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
 
     private static List<InsiderTransaction> CurrentRows(InsiderTransactionRepository repository) =>
         repository.GetAll().Where(t => t.TransactionCode != TransactionCode.IngestMarker).ToList();
@@ -379,7 +380,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_AmendmentAfterOriginal_ReplacesTheOriginalsTransactions()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
 
@@ -405,7 +406,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_HoldingsOnlyAmendmentAfterOriginal_PreservesOriginalTransactions()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
 
@@ -427,7 +428,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_LegacyWholesaleDeletion_ReplaysOriginalAndRestoresUntouchedSection()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
 
@@ -469,7 +470,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_LegacyClaimAndUnresolvedAmendment_ReplayAppliesBothSections()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
@@ -511,7 +512,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_OriginalAfterHoldingsOnlyAmendment_PreservesOriginalTransactions()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
 
@@ -532,7 +533,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_OriginalAfterEmptyAmendment_PreservesEveryOriginalSection()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(EmptyAmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
 
@@ -564,7 +565,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_EmptyNewerAmendment_DoesNotSuppressOlderAmendmentSections()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
 
@@ -594,7 +595,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_FormThreeOriginalAfterNoSecuritiesOwnedAmendment_IsSuperseded()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         var amendment = MakeAmendment();
         amendment.Form = "3/A";
         secClient
@@ -620,7 +621,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_TransactionAmendment_PreservesAmbiguousPreV5Holding()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
 
@@ -644,7 +645,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_HoldingsAmendment_PreservesAmbiguousPreV5Holding()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
 
@@ -672,7 +673,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_NewerHoldingsAmendment_PreservesOlderAmendmentTransactions()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4WithHoldingXml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
 
@@ -699,7 +700,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_OlderTransactionAmendmentAfterNewerHoldingsAmendment_PreservesBoth()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         var newerAmendment = MakeAmendment();
         newerAmendment.AccessionNumber = "0001-24-000300";
         newerAmendment.FilingDate = AmendmentFilingDate.AddDays(1);
@@ -730,7 +731,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
             out var fileManager,
             out var restoreFileManager
         );
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(HoldingsOnlyAmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
 
@@ -772,7 +773,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_AmendmentAgainstLegacyUnknownOriginal_ResolvesFamilyBeforeSuperseding()
     {
         var (processor, txRepo, secClient, filingRepo) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
@@ -793,7 +794,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_NewerAmendmentAgainstLegacyUnknownOlderAmendment_ReplacesIt()
     {
         var (processor, txRepo, secClient, filingRepo) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         var olderAmendment = MakeAmendment();
         olderAmendment.AccessionNumber = "0001-24-000150";
         olderAmendment.FilingDate = AmendmentFilingDate.AddDays(-1);
@@ -818,7 +819,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
         // EDGAR's submissions feed lists newest-first, so during a history sweep
         // the 4/A routinely processes BEFORE its Form 4.
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
 
@@ -843,7 +844,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_OriginalAfterLegacyUnknownOrphanAmendment_ResolvesAndClaimsIt()
     {
         var (processor, txRepo, secClient, filingRepo) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
@@ -871,7 +872,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_OriginalAfterLegacyUnknownAmendmentWithCorruptCache_StillIngests()
     {
         var (processor, txRepo, secClient, filingRepo) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
@@ -901,7 +902,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     {
         var logger = Substitute.For<ILogger<InsiderTradingFilingProcessor>>();
         var (processor, txRepo, secClient, filingRepo) = CreateProcessorWithDeps(logger);
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
@@ -922,7 +923,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     {
         var logger = Substitute.For<ILogger<InsiderTradingFilingProcessor>>();
         var (processor, txRepo, secClient, filingRepo) = CreateProcessorWithDeps(logger);
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
@@ -961,7 +962,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_FormFiveAmendmentAfterSameDayFormFourAndFive_ReplacesOnlyFormFive()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
@@ -996,7 +997,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_FormFiveAmendmentBeforeSameDayFormFourAndFive_ClaimsOnlyFormFive()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient
             .GetDocumentContent(Arg.Any<FilingData>())
@@ -1033,7 +1034,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_OlderFormFourAmendmentAfterNewerFormFiveAmendment_IsNotStale()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient
             .GetDocumentContent(Arg.Any<FilingData>())
@@ -1057,7 +1058,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_NewerFormFiveAmendment_ReplacesOnlyOlderFormFiveAmendment()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
@@ -1087,7 +1088,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_FormFiveOriginalAfterBadCrossFamilyClaim_ReassignsTheClaim()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
@@ -1118,7 +1119,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_NewerFormFiveAmendment_DoesNotInheritBadCrossFamilyClaim()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
@@ -1153,7 +1154,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_LegacyCrossFamilyClaim_DoesNotHideOrSuppressOriginal()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient
             .GetDocumentContent(Arg.Any<FilingData>())
@@ -1195,7 +1196,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_LegacyEmptyParseMarkerClaim_DoesNotHideOriginal()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
@@ -1224,7 +1225,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_AmbiguousPreV5OtherClaim_DoesNotHideOriginal()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
@@ -1251,7 +1252,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_ValidLegacyUnknownClaim_ResolvesFromCachedXmlAndStillSuppressesOriginal()
     {
         var (processor, txRepo, secClient, filingRepo) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
@@ -1296,7 +1297,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
         // dateOfOriginalSubmission. The window resolution must still find and
         // replace it — exact-date-only matching would leave both rows counted.
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         var shiftedOriginal = MakeOriginal();
         shiftedOriginal.FilingDate = OriginalFilingDate.AddDays(3); // Friday 18:00 → Monday index
@@ -1321,7 +1322,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
         // Claims cannot make an original known because a legacy claim may have
         // been paired with wholesale deletion of sections it never restated.
         var (processor, _, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(OriginalForm4Xml);
         (await processor.Process(MakeOriginal(), company)).Should().BeTrue();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
@@ -1340,7 +1341,7 @@ public class InsiderTradingFilingProcessorAmendmentTests
     public async Task Process_OlderAmendmentAfterNewer_IsSkipped()
     {
         var (processor, txRepo, secClient, _) = CreateProcessorWithDeps();
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(AmendmentForm4Xml);
         (await processor.Process(MakeAmendment(), company)).Should().BeTrue();
 

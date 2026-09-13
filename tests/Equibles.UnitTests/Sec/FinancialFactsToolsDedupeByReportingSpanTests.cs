@@ -27,7 +27,7 @@ public class FinancialFactsToolsDedupeByReportingSpanTests
     ) =>
         new()
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             FinancialConceptId = Guid.NewGuid(),
             Value = 2.94m,
             Unit = "USD/shares",

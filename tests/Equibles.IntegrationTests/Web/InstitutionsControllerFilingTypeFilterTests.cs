@@ -29,14 +29,13 @@ public class InstitutionsControllerFilingTypeFilterTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "QXO",
-                    Name = "QXO, Inc.",
-                    Cik = "0001236275",
-                    Cusip = "82846H405",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "QXO",
+                    Name: "QXO, Inc.",
+                    Cik: "0001236275",
+                    Cusip: "82846H405"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -58,7 +57,7 @@ public class InstitutionsControllerFilingTypeFilterTests
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = activistId,
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     FilingDate = reportDate,
                     ReportDate = reportDate,
                     Shares = 1_000_000,
@@ -72,7 +71,7 @@ public class InstitutionsControllerFilingTypeFilterTests
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = quantId,
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     FilingDate = reportDate,
                     ReportDate = reportDate,
                     Shares = 500,

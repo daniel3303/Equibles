@@ -89,11 +89,11 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         return result;
     }
 
-    public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
+    public async Task<bool> Process(FilingData filing, EquityIssuer companyOutContext)
     {
         // Capture IDs from the outer-scope entity to avoid leaking untracked entities into inner scope
         var companyId = companyOutContext.Id;
-        var companyTicker = companyOutContext.Ticker;
+        var companyTicker = companyOutContext.Presentation?.Listing?.Ticker;
         var companyCiks = new List<string> { companyOutContext.Cik };
         companyCiks.AddRange(companyOutContext.SecondaryCiks);
 
@@ -104,8 +104,8 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             scope.ServiceProvider.GetRequiredService<InsiderTransactionRepository>();
         var filingRepository = scope.ServiceProvider.GetRequiredService<InsiderFilingRepository>();
         var fileManager = scope.ServiceProvider.GetRequiredService<IFileManager>();
-        var dailyStockPriceRepository =
-            scope.ServiceProvider.GetRequiredService<DailyStockPriceRepository>();
+        EquityDailyStockPriceRepository dailyStockPriceRepository =
+            scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
         var priceValidator =
             scope.ServiceProvider.GetRequiredService<InsiderTransactionPriceValidator>();
         var stockSplitRepository = scope.ServiceProvider.GetRequiredService<StockSplitRepository>();
@@ -346,8 +346,18 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         await ApplyPriceValidity(
             transactions,
             companyId,
-            companyOutContext.Ticker,
-            companyOutContext.SecondaryTickers,
+            companyOutContext.Presentation?.Listing?.Ticker,
+            companyOutContext
+                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                .Where(nativeListing =>
+                    nativeListing.MarketCountryCode == "US"
+                    && (
+                        nativeListing.IsDirectoryListed
+                        && nativeListing.Id != companyOutContext.Presentation?.EquityListingId
+                    )
+                )
+                .Select(nativeListing => nativeListing.Ticker)
+                .ToList(),
             dailyStockPriceRepository,
             stockSplitRepository,
             priceValidator
@@ -530,7 +540,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             .IgnoreQueryFilters()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
-                && t.CommonStockId == companyId
+                && t.EquityIssuerId == companyId
                 && (
                     (
                         !t.IsAmendment
@@ -568,7 +578,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             .IgnoreQueryFilters()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
-                && t.CommonStockId == companyId
+                && t.EquityIssuerId == companyId
                 && t.IsAmendment
                 && t.OriginalFilingDate != null
                 && t.OriginalFilingDate >= windowStart
@@ -1204,7 +1214,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
             marker = new InsiderTransaction
             {
                 InsiderOwnerId = owner.Id,
-                CommonStockId = companyId,
+                EquityIssuerId = companyId,
                 AccessionNumber = filing.AccessionNumber,
                 TransactionOrder = 0,
             };
@@ -1267,7 +1277,7 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         Guid companyId,
         string primaryTicker,
         IReadOnlyCollection<string> secondaryTickers,
-        DailyStockPriceRepository dailyStockPriceRepository,
+        EquityDailyStockPriceRepository dailyStockPriceRepository,
         StockSplitRepository stockSplitRepository,
         InsiderTransactionPriceValidator priceValidator
     )
@@ -1279,9 +1289,9 @@ public class InsiderTradingFilingProcessor : IFilingProcessor
         var maxDate = transactions.Max(t => t.TransactionDate);
 
         var prices = await dailyStockPriceRepository
-            .GetAll()
+            .GetPrimarySeries()
             .Where(p =>
-                p.CommonStockId == companyId
+                p.Listing.Security.EquityIssuerId == companyId
                 && p.Date >= minDate
                 && p.Date <= maxDate
                 && p.Volume > 0

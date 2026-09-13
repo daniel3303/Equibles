@@ -162,9 +162,12 @@ public class ShortSqueezeScoreManager
     /// (MLPs) EXCEPT the SIC-classified commodity/currency trusts, whose
     /// creatable units cannot be squeezed. Public so tests pin the gate.
     /// </summary>
-    public static readonly Expression<Func<CommonStock, bool>> SqueezeCandidateListing = s =>
-        !NonEquityListingTypes.Contains(s.ListedSecurityType)
-        && !(s.ListedSecurityType == ListedSecurityType.Units && s.Sic == CommodityTrustSic);
+    public static readonly Expression<Func<EquityIssuer, bool>> SqueezeCandidateListing = s =>
+        !NonEquityListingTypes.Contains(s.Presentation.Listing.Security.RegistrationType)
+        && !(
+            s.Presentation.Listing.Security.RegistrationType == ListedSecurityType.Units
+            && s.Sic == CommodityTrustSic
+        );
 
     /// <summary>
     /// Highest short-interest-to-shares-outstanding ratio accepted as a real measurement. No
@@ -179,19 +182,19 @@ public class ShortSqueezeScoreManager
 
     private readonly ShortInterestRepository _shortInterestRepository;
     private readonly DailyShortVolumeRepository _dailyShortVolumeRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly FailToDeliverRepository _failToDeliverRepository;
-    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
     private readonly IEnumerable<IEarningsProximitySource> _earningsProximitySources;
 
     public ShortSqueezeScoreManager(
         ShortInterestRepository shortInterestRepository,
         DailyShortVolumeRepository dailyShortVolumeRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         FailToDeliverRepository failToDeliverRepository,
-        DailyStockPriceRepository dailyStockPriceRepository,
+        EquityDailyStockPriceRepository dailyStockPriceRepository,
         IEnumerable<IEarningsProximitySource> earningsProximitySources
     )
     {
@@ -225,10 +228,10 @@ public class ShortSqueezeScoreManager
         // FINRA omits days-to-cover.
         var shortInterests = await _shortInterestRepository
             .GetBySettlementDate(settlementDate)
-            .Where(s => s.ListedTicker == s.CommonStock.Ticker || s.ListedTicker == "")
+            .Where(s => s.EquityListingId == s.Listing.Security.Issuer.Presentation.EquityListingId)
             .Select(s => new
             {
-                s.CommonStockId,
+                CommonStockId = s.Listing.Security.EquityIssuerId,
                 s.CurrentShortPosition,
                 s.PreviousShortPosition,
                 s.AverageDailyVolume,
@@ -240,16 +243,18 @@ public class ShortSqueezeScoreManager
 
         var stockIds = shortInterests.Select(s => s.CommonStockId).Distinct().ToList();
         var stocks = await _commonStockRepository
-            .GetAll()
-            .Where(s => stockIds.Contains(s.Id) && s.SharesOutStanding > 0)
+            .GetCurrentUsDirectory()
+            .Where(s =>
+                stockIds.Contains(s.Id) && s.Presentation.Listing.Security.SharesOutstanding > 0
+            )
             .Where(SqueezeCandidateListing)
             .Where(SecondaryTickerPolicy.PrimaryOperatingCompany)
             .Select(s => new
             {
                 s.Id,
-                s.Ticker,
-                s.SharesOutStanding,
-                s.MarketCapitalization,
+                Ticker = s.Presentation.Listing.Ticker,
+                SharesOutStanding = s.Presentation.Listing.Security.SharesOutstanding,
+                MarketCapitalization = s.Presentation.Listing.Security.MarketCapitalization,
             })
             .ToDictionaryAsync(s => s.Id, cancellationToken);
 
@@ -264,12 +269,15 @@ public class ShortSqueezeScoreManager
             await _stockSplitRepository
                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                 .Where(s =>
-                    stockIds.Contains(s.CommonStockId)
-                    && (s.PriceSeriesTicker == null || s.PriceSeriesTicker == s.CommonStock.Ticker)
+                    stockIds.Contains(s.EquityIssuerId)
+                    && (
+                        s.PriceSeriesTicker == null
+                        || s.PriceSeriesTicker == s.Issuer.Presentation.Listing.Ticker
+                    )
                 )
                 .ToListAsync(cancellationToken)
         )
-            .GroupBy(s => s.CommonStockId)
+            .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<StockSplit>)g.ToList());
 
         // The previous settlement date anchors the split basis of PreviousShortPosition.
@@ -410,10 +418,16 @@ public class ShortSqueezeScoreManager
         var windows = await _dailyShortVolumeRepository
             .GetAll()
             .Where(v =>
-                v.Date > farCutoff && v.Date <= settlementDate && stockIds.Contains(v.CommonStockId)
+                v.Date > farCutoff
+                && v.Date <= settlementDate
+                && stockIds.Contains(v.Listing.Security.EquityIssuerId)
             )
-            .Where(v => v.ListedTicker == v.CommonStock.Ticker || v.ListedTicker == "")
-            .GroupBy(v => new { v.CommonStockId, Recent = v.Date > midCutoff })
+            .Where(v => v.EquityListingId == v.Listing.Security.Issuer.Presentation.EquityListingId)
+            .GroupBy(v => new
+            {
+                CommonStockId = v.Listing.Security.EquityIssuerId,
+                Recent = v.Date > midCutoff,
+            })
             .Select(g => new
             {
                 g.Key.CommonStockId,
@@ -468,12 +482,12 @@ public class ShortSqueezeScoreManager
             .Where(f =>
                 f.SettlementDate > windowStart
                 && f.SettlementDate <= latestDate
-                && stockIds.Contains(f.CommonStockId)
-                && (f.ListedTicker == f.CommonStock.Ticker || f.ListedTicker == "")
+                && stockIds.Contains(f.Listing.Security.EquityIssuerId)
+                && f.EquityListingId == f.Listing.Security.Issuer.Presentation.EquityListingId
             )
             .Select(f => new
             {
-                f.CommonStockId,
+                CommonStockId = f.Listing.Security.EquityIssuerId,
                 f.SettlementDate,
                 f.Quantity,
             })
@@ -532,8 +546,8 @@ public class ShortSqueezeScoreManager
             .GetTradedByStocks(stockIds, cutoff, today)
             .Select(p => new
             {
-                p.CommonStockId,
-                p.ListedTicker,
+                CommonStockId = p.Listing.Security.EquityIssuerId,
+                ListedTicker = p.SourceTicker,
                 p.Date,
                 p.Close,
                 p.Volume,
@@ -556,9 +570,8 @@ public class ShortSqueezeScoreManager
         {
             var ticker = primaryTickers[group.Key];
             var latestDate = group.Max(bar => bar.Date);
-            var applicableSplits = PriceSeriesSplitScope.ForListing(
+            var applicableSplits = PriceSeriesSplitScope.ForPriceComparison(
                 splitsByStock.GetValueOrDefault(group.Key) ?? [],
-                ticker,
                 ticker
             );
             var splitBoundary = applicableSplits

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
@@ -71,11 +72,10 @@ public class CompanySyncServiceTests
             Name = "Mystery Filer",
             Tickers = ["X"],
         };
-        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock
-        {
-            Cik = "200",
-            Ticker = "X",
-        };
+        EquityIssuer incumbent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "200",
+            Ticker: "X"
+        );
 
         var result = await (Task<bool>)
             ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
@@ -132,11 +132,10 @@ public class CompanySyncServiceTests
             Name = "Leveraged ETF",
             Tickers = ["X"],
         };
-        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock
-        {
-            Cik = "200",
-            Ticker = "X",
-        };
+        EquityIssuer incumbent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "200",
+            Ticker: "X"
+        );
 
         var result = await (Task<bool>)
             ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
@@ -198,11 +197,10 @@ public class CompanySyncServiceTests
             Name = "Subsidiary Co",
             Tickers = ["X"],
         };
-        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock
-        {
-            Cik = "200",
-            Ticker = "X",
-        };
+        EquityIssuer incumbent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "200",
+            Ticker: "X"
+        );
 
         var result = await (Task<bool>)
             ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);
@@ -278,11 +276,10 @@ public class CompanySyncServiceTests
             Name = "New Filer",
             Tickers = ["X"],
         };
-        var incumbent = new Equibles.CommonStocks.Data.Models.CommonStock
-        {
-            Cik = "100",
-            Ticker = "X",
-        };
+        EquityIssuer incumbent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "100",
+            Ticker: "X"
+        );
 
         var result = await (Task<bool>)
             ShouldIncumbentWinMethod.Invoke(service, [incoming, incumbent]);

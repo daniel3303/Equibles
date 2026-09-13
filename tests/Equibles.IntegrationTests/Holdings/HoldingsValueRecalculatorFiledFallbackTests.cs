@@ -91,7 +91,7 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
             .Returns(prices);
     }
 
-    private async Task<(CommonStock Stock, InstitutionalHolding Holding)> Seed(
+    private async Task<(EquityIssuer Stock, InstitutionalHolding Holding)> Seed(
         DateOnly reportDate,
         long shares,
         long? filedValue,
@@ -100,12 +100,11 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
     )
     {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AZUL",
-            Name = "Azul SA",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AZUL",
+            Name: "Azul SA"
+        );
         var holder = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -115,7 +114,7 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
         var holding = new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(30),
@@ -140,7 +139,7 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
             ],
         };
 
-        seedContext.Set<CommonStock>().Add(stock);
+        seedContext.Set<EquityIssuer>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
         seedContext.Set<InstitutionalHolding>().Add(holding);
         await seedContext.SaveChangesAsync();
@@ -202,7 +201,7 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
                 new StockSplit
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     EffectiveDate = reportDate.AddDays(10),
                     Numerator = 10,
                     Denominator = 1,
@@ -245,7 +244,7 @@ public class HoldingsValueRecalculatorFiledFallbackTests : IDisposable
                 new StockSplit
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     EffectiveDate = reportDate.AddDays(10),
                     Numerator = 100,
                     Denominator = 1,

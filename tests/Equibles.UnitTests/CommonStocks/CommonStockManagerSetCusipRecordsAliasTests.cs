@@ -29,23 +29,25 @@ public class CommonStockManagerSetCusipRecordsAliasTests
     }
 
     private static async Task<(
-        CommonStockManager Sut,
+        EquityIdentityManager Sut,
         EquiblesFinancialDbContext Db,
-        CommonStock Stock
+        EquityIssuer Stock
     )> Arrange(string initialCusip)
     {
         var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "BBUC",
-            Name = "Brookfield Business Corp",
-            Cik = "1654795",
-            Cusip = initialCusip,
-        };
-        db.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BBUC",
+            Name: "Brookfield Business Corp",
+            Cik: "1654795",
+            Cusip: initialCusip
+        );
+        db.Set<EquityIssuer>().Add(stock);
         await db.SaveChangesAsync();
 
-        var sut = new CommonStockManager(new CommonStockRepository(db), Substitute.For<IBus>());
+        EquityIdentityManager sut = new EquityIdentityManager(
+            new EquityIssuerRepository(db),
+            Substitute.For<IBus>()
+        );
         return (sut, db, stock);
     }
 
@@ -56,10 +58,10 @@ public class CommonStockManagerSetCusipRecordsAliasTests
 
         await sut.SetCusip(stock, "113006100");
 
-        stock.Cusip.Should().Be("113006100");
-        var alias = await db.Set<CommonStockCusipAlias>().SingleAsync();
+        stock.Presentation.Listing.Security.Cusip.Should().Be("113006100");
+        var alias = await db.Set<EquityIssuerCusipAlias>().SingleAsync();
         alias.Cusip.Should().Be("11259V106");
-        alias.CommonStockId.Should().Be(stock.Id);
+        alias.EquityIssuerId.Should().Be(stock.Id);
     }
 
     [Fact]
@@ -69,22 +71,22 @@ public class CommonStockManagerSetCusipRecordsAliasTests
 
         await sut.SetCusip(stock, "113006100");
 
-        stock.Cusip.Should().Be("113006100");
-        (await db.Set<CommonStockCusipAlias>().AnyAsync()).Should().BeFalse();
+        stock.Presentation.Listing.Security.Cusip.Should().Be("113006100");
+        (await db.Set<EquityIssuerCusipAlias>().AnyAsync()).Should().BeFalse();
     }
 
     [Fact]
     public async Task SetCusip_RetiredCusipAlreadyAliased_DoesNotDuplicateAliasRow()
     {
         var (sut, db, stock) = await Arrange("11259V106");
-        db.Set<CommonStockCusipAlias>()
-            .Add(new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "11259V106" });
+        db.Set<EquityIssuerCusipAlias>()
+            .Add(new EquityIssuerCusipAlias { EquityIssuerId = stock.Id, Cusip = "11259V106" });
         await db.SaveChangesAsync();
 
         await sut.SetCusip(stock, "113006100");
 
-        stock.Cusip.Should().Be("113006100");
-        var aliases = await db.Set<CommonStockCusipAlias>().ToListAsync();
+        stock.Presentation.Listing.Security.Cusip.Should().Be("113006100");
+        var aliases = await db.Set<EquityIssuerCusipAlias>().ToListAsync();
         aliases.Should().ContainSingle().Which.Cusip.Should().Be("11259V106");
     }
 }

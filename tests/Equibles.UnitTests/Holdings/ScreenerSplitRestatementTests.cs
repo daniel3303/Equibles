@@ -15,6 +15,37 @@ public class ScreenerSplitRestatementTests
     private static readonly DateOnly Current = new(2026, 6, 30);
 
     [Fact]
+    public void UnknownSplit_PreservesReportedSharesAndWithholdsCurrentBasisPercentage()
+    {
+        var row = new ScreenerRow
+        {
+            Ticker = "TEST",
+            CurrentShares = 1000,
+            SharesOutStanding = 2000,
+            PercentOfFloat = 50,
+        };
+        ScreenerSplitRestatement.RestateRow(
+            row,
+            [new ScreenerListingShares { Shares = 1000 }],
+            [
+                new StockSplit
+                {
+                    EffectiveDate = Current.AddDays(1),
+                    Numerator = 2,
+                    Denominator = 1,
+                },
+            ],
+            Current
+        );
+        row.CurrentShares.Should().Be(1000);
+        row.PercentOfFloat.Should().BeNull();
+        ScreenerSplitRestatement
+            .PassesPctFloat(row, new ScreenerCriteria { MinPctFloat = 1 })
+            .Should()
+            .BeFalse();
+    }
+
+    [Fact]
     public void RestateRow_ReverseSplitAfterTheQuarter_ShrinksSharesAndPercent()
     {
         // The BYND shape: 1-for-30 reverse split after the screened quarter. The as-filed

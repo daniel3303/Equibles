@@ -61,8 +61,9 @@ public class SecDocumentService : ISecDocumentService
                 .Select(d => new SecDocumentInfo
                 {
                     Id = d.Id,
-                    Ticker = d.CommonStock.Ticker,
-                    CompanyName = d.CommonStock.Name,
+                    Ticker =
+                        d.Issuer.Presentation == null ? null : d.Issuer.Presentation.Listing.Ticker,
+                    CompanyName = d.Issuer.Name,
                     DocumentType = d.DocumentType,
                     ReportingDate = d.ReportingDate,
                     ReportingForDate = d.ReportingForDate,

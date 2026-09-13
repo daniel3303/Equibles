@@ -29,15 +29,14 @@ public class CommonStockManagerCreateNegativeSharesTests
         // Contract: SharesOutStanding represents a count of issued shares and
         // must never be negative — the validator should reject it before persist.
         var db = NewDb();
-        var repo = Substitute.For<CommonStockRepository>(db);
-        var sut = new CommonStockManager(repo, Substitute.For<IBus>());
-        var stock = new CommonStock
-        {
-            Ticker = "TEST",
-            Name = "Test Corp",
-            Cik = "0000099999",
-            SharesOutStanding = -1,
-        };
+        EquityIssuerRepository repo = Substitute.For<EquityIssuerRepository>(db);
+        EquityIdentityManager sut = new EquityIdentityManager(repo, Substitute.For<IBus>());
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TEST",
+            Name: "Test Corp",
+            Cik: "0000099999",
+            SharesOutStanding: -1
+        );
 
         var act = () => sut.Create(stock);
 

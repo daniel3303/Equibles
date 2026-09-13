@@ -19,19 +19,18 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
 {
     private static readonly Guid AlphabetId = Guid.NewGuid();
 
-    private static CommonStock Alphabet() =>
-        new()
-        {
-            Id = AlphabetId,
-            Ticker = "GOOGL",
-            Name = "Alphabet Inc.",
-            SecondaryTickers = ["GOOG"],
-        };
+    private static EquityIssuer Alphabet() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: AlphabetId,
+            Ticker: "GOOGL",
+            Name: "Alphabet Inc.",
+            SecondaryTickers: ["GOOG"]
+        );
 
     private static FinancialFact Fact() =>
         new()
         {
-            CommonStockId = AlphabetId,
+            EquityIssuerId = AlphabetId,
             Value = 307_394_000_000m,
             Unit = "USD",
             PeriodType = FactPeriodType.Duration,
@@ -47,7 +46,7 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
     private static (
         List<(string Ticker, string Name, FinancialFact Fact)> Rows,
         List<string> Skipped
-    ) Invoke(List<string> requested, Dictionary<string, CommonStock> stockByTicker)
+    ) Invoke(List<string> requested, Dictionary<string, EquityIssuer> stockByTicker)
     {
         var method = typeof(FinancialFactsTools).GetMethod(
             "BuildComparisonRows",
@@ -61,8 +60,8 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
     [Fact]
     public void BuildComparisonRows_PrimaryAndSecondaryTickerOfSameStock_OneRowPlusDuplicateNotice()
     {
-        var stock = Alphabet();
-        var stockByTicker = new Dictionary<string, CommonStock>
+        EquityIssuer stock = Alphabet();
+        var stockByTicker = new Dictionary<string, EquityIssuer>
         {
             ["GOOGL"] = stock,
             ["GOOG"] = stock,
@@ -78,8 +77,8 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
     [Fact]
     public void BuildComparisonRows_SecondaryTickerOnly_RowTraceableToRequestedTicker()
     {
-        var stock = Alphabet();
-        var stockByTicker = new Dictionary<string, CommonStock> { ["GOOG"] = stock };
+        EquityIssuer stock = Alphabet();
+        var stockByTicker = new Dictionary<string, EquityIssuer> { ["GOOG"] = stock };
 
         var (rows, skipped) = Invoke(["GOOG"], stockByTicker);
 
@@ -91,8 +90,14 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
     [Fact]
     public void BuildComparisonStockMap_DottedTicker_UsesOnlyExactAuthoritativeListing()
     {
-        var exact = new CommonStock { Id = Guid.NewGuid(), Ticker = "FDR.V" };
-        var dash = new CommonStock { Id = Guid.NewGuid(), Ticker = "FDR-V" };
+        EquityIssuer exact = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "FDR.V"
+        );
+        EquityIssuer dash = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "FDR-V"
+        );
 
         var stockByTicker = FinancialFactsTools.BuildComparisonStockMap(["FDR.V"], [dash, exact]);
 
@@ -111,7 +116,10 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
     [Fact]
     public void BuildComparisonStockMap_DottedTicker_DoesNotInferDashListing()
     {
-        var dash = new CommonStock { Id = Guid.NewGuid(), Ticker = "FDR-V" };
+        EquityIssuer dash = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "FDR-V"
+        );
 
         var stockByTicker = FinancialFactsTools.BuildComparisonStockMap(["FDR.V"], [dash]);
 
@@ -121,13 +129,15 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
     [Fact]
     public void BuildComparisonStockMap_PrimaryTicker_WinsOverSecondaryCollision()
     {
-        var primary = new CommonStock { Id = Guid.NewGuid(), Ticker = "DUP" };
-        var secondary = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "ZZZ",
-            SecondaryTickers = ["DUP"],
-        };
+        EquityIssuer primary = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "DUP"
+        );
+        EquityIssuer secondary = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "ZZZ",
+            SecondaryTickers: ["DUP"]
+        );
 
         var stockByTicker = FinancialFactsTools.BuildComparisonStockMap(
             ["DUP"],
@@ -140,18 +150,16 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
     [Fact]
     public void BuildComparisonStockMap_SecondaryCollision_IsIndependentOfQueryOrder()
     {
-        var alphabeticallyFirst = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAA",
-            SecondaryTickers = ["DUP"],
-        };
-        var alphabeticallyLast = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "ZZZ",
-            SecondaryTickers = ["DUP"],
-        };
+        EquityIssuer alphabeticallyFirst = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAA",
+            SecondaryTickers: ["DUP"]
+        );
+        EquityIssuer alphabeticallyLast = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "ZZZ",
+            SecondaryTickers: ["DUP"]
+        );
 
         var forward = FinancialFactsTools.BuildComparisonStockMap(
             ["DUP"],
@@ -169,7 +177,7 @@ public class FinancialFactsToolsBuildComparisonRowsDuplicateStockTests
     [Fact]
     public void BuildComparisonRows_UnknownDottedTicker_PreservesCallerSpellingAndScope()
     {
-        var (rows, skipped) = Invoke(["FDR.V"], new Dictionary<string, CommonStock>());
+        var (rows, skipped) = Invoke(["FDR.V"], new Dictionary<string, EquityIssuer>());
 
         rows.Should().BeEmpty();
         skipped

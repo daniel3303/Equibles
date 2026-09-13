@@ -22,7 +22,7 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     private OffExchangeVolumeTools Sut() =>
         new(
             new OffExchangeVolumeRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<OffExchangeVolumeTools>()
@@ -31,26 +31,31 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     public OffExchangeVolumeToolsStrictDatesAndTruncationTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private CommonStock AddGme()
+    private EquityIssuer AddGme()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GME",
-            Name = "GameStop Corp",
-            Cik = "0001326380",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GME",
+            Name: "GameStop Corp",
+            Cik: "0001326380"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
-    private void AddWeek(CommonStock stock, DateOnly weekStart) =>
+    private void AddWeek(EquityIssuer stock, DateOnly weekStart) =>
         DbContext
             .Set<OffExchangeVolume>()
             .Add(
                 new OffExchangeVolume
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     WeekStartDate = weekStart,
                     AtsVolume = 5_000_000,
                     AtsTradeCount = 11_111,
@@ -73,8 +78,8 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     [Fact]
     public async Task GetOffExchangeVolume_SecondaryListing_WithNoExactRows_DoesNotReturnPrimarySeries()
     {
-        var stock = AddGme();
-        stock.SecondaryTickers = ["GME-A"];
+        EquityIssuer stock = AddGme();
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["GME-A"]);
         AddWeek(stock, new DateOnly(2026, 3, 16));
         await DbContext.SaveChangesAsync();
 
@@ -88,7 +93,7 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     [Fact]
     public async Task GetOffExchangeVolume_InvertedRange_ReturnsExplicitError()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddWeek(stock, new DateOnly(2026, 3, 16));
         await DbContext.SaveChangesAsync();
 
@@ -104,7 +109,7 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     [Fact]
     public async Task GetOffExchangeVolume_TruncatedRange_AppendsNewestKeptNote()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddWeek(stock, new DateOnly(2026, 3, 2));
         AddWeek(stock, new DateOnly(2026, 3, 9));
         AddWeek(stock, new DateOnly(2026, 3, 16));
@@ -126,7 +131,7 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     [Fact]
     public async Task GetOffExchangeVolume_CompleteRange_HasNoTruncationNote()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddWeek(stock, new DateOnly(2026, 3, 16));
         await DbContext.SaveChangesAsync();
 
@@ -139,7 +144,7 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     [Fact]
     public async Task GetOffExchangeVolume_AffectedHistoricalWeek_AppendsCoverageCaveat()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddWeek(stock, OffExchangeVolumeCoverage.CorrectedSymbolResolutionStartWeek.AddDays(-7));
         await DbContext.SaveChangesAsync();
 
@@ -152,7 +157,7 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     [Fact]
     public async Task GetOffExchangeVolume_CorrectedBoundaryWeek_HasNoCoverageCaveat()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddWeek(stock, OffExchangeVolumeCoverage.CorrectedSymbolResolutionStartWeek);
         await DbContext.SaveChangesAsync();
 
@@ -165,7 +170,7 @@ public class OffExchangeVolumeToolsStrictDatesAndTruncationTests : ParadeDbMcpTe
     [Fact]
     public async Task GetOffExchangeVolume_AffectedWeekExcludedByLimit_HasNoCoverageCaveat()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddWeek(stock, OffExchangeVolumeCoverage.CorrectedSymbolResolutionStartWeek.AddDays(-7));
         AddWeek(stock, OffExchangeVolumeCoverage.CorrectedSymbolResolutionStartWeek);
         await DbContext.SaveChangesAsync();

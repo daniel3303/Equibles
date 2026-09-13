@@ -32,19 +32,18 @@ public class CommonStockManagerSetCusipNoopTests
     public async Task SetCusip_SameValueDifferentCase_DoesNotPublishOrSave()
     {
         var db = NewDb();
-        var repo = Substitute.For<CommonStockRepository>(db);
+        EquityIssuerRepository repo = Substitute.For<EquityIssuerRepository>(db);
         var publishEndpoint = Substitute.For<IBus>();
-        var sut = new CommonStockManager(repo, publishEndpoint);
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cusip = "037833100",
-        };
+        EquityIdentityManager sut = new EquityIdentityManager(repo, publishEndpoint);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cusip: "037833100"
+        );
 
         await sut.SetCusip(stock, "037833100");
 
-        stock.Cusip.Should().Be("037833100");
+        stock.Presentation.Listing.Security.Cusip.Should().Be("037833100");
         await publishEndpoint.DidNotReceive().Publish(Arg.Any<StockCusipChanged>());
         await repo.DidNotReceive().SaveChanges();
     }

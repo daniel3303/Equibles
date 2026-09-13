@@ -32,7 +32,10 @@ public class EmbeddingRepositorySearchWithThresholdTests : ParadeDbMcpTestBase
     {
         var sut = new EmbeddingRepository(DbContext);
 
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = new File
         {
             Name = "10K",
@@ -43,7 +46,7 @@ public class EmbeddingRepositorySearchWithThresholdTests : ParadeDbMcpTestBase
         };
         var document = new Document
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 3, 15),
@@ -59,7 +62,7 @@ public class EmbeddingRepositorySearchWithThresholdTests : ParadeDbMcpTestBase
         var embedX = MakeEmbedding(chunkX.Id, new[] { 1f, 0f, 0f });
         var embedZ = MakeEmbedding(chunkZ.Id, new[] { 0f, 0f, 1f });
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         DbContext.Set<Chunk>().AddRange(chunkX, chunkZ);

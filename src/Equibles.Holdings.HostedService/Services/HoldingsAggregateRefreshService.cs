@@ -343,7 +343,7 @@ public class HoldingsAggregateRefreshService
         foreach (var listing in listingRows)
             listing.ComputedAt = computedAt;
         var listingTotalsByStock = listingRows
-            .GroupBy(row => row.CommonStockId)
+            .GroupBy(row => row.EquityIssuerId)
             .ToDictionary(
                 group => group.Key,
                 group => new
@@ -364,7 +364,7 @@ public class HoldingsAggregateRefreshService
                 churn.TryGetValue(a.CommonStockId, out var c);
                 return new StockQuarterlyActivityCombined
                 {
-                    CommonStockId = a.CommonStockId,
+                    EquityIssuerId = a.CommonStockId,
                     ReportDate = latest,
                     PreviousReportDate = previous,
                     CurrentShares = listingTotals.CurrentShares,
@@ -385,7 +385,7 @@ public class HoldingsAggregateRefreshService
             await dbContext
                 .Set<StockQuarterlyActivityCombined>()
                 .UpsertRange(rows)
-                .On(a => new { a.CommonStockId, a.ReportDate })
+                .On(a => new { a.EquityIssuerId, a.ReportDate })
                 .WhenMatched(
                     (_, incoming) =>
                         new StockQuarterlyActivityCombined
@@ -408,10 +408,10 @@ public class HoldingsAggregateRefreshService
         // Rows for stocks no longer in the combined view, and any stale rows from a
         // PREVIOUS window's quarter (a new quarter opened before the old lane was
         // retired): one delete covers both.
-        var currentStockIds = rows.Select(r => r.CommonStockId).ToList();
+        var currentStockIds = rows.Select(r => r.EquityIssuerId).ToList();
         await dbContext
             .Set<StockQuarterlyActivityCombined>()
-            .Where(s => s.ReportDate != latest || !currentStockIds.Contains(s.CommonStockId))
+            .Where(s => s.ReportDate != latest || !currentStockIds.Contains(s.EquityIssuerId))
             .ExecuteDeleteAsync(cancellationToken);
 
         await dbContext
@@ -449,7 +449,7 @@ public class HoldingsAggregateRefreshService
                 FilingDate = g.Max(h => h.FilingDate),
                 Aum = g.Sum(h => h.Value),
                 PositionCount = g.Count(),
-                StockCount = g.Select(h => h.CommonStockId).Distinct().Count(),
+                StockCount = g.Select(h => h.EquityIssuerId).Distinct().Count(),
             })
             .ToListAsync(cancellationToken);
 
@@ -526,7 +526,7 @@ public class HoldingsAggregateRefreshService
                 TotalValue = g.Sum(h => h.Value),
                 FilerCount = g.Select(h => h.InstitutionalHolderId).Distinct().Count(),
                 PositionCount = g.Count(),
-                StockCount = g.Select(h => h.CommonStockId).Distinct().Count(),
+                StockCount = g.Select(h => h.EquityIssuerId).Distinct().Count(),
                 FilingCount = g.Select(h => h.AccessionNumber).Distinct().Count(),
             })
             .FirstOrDefaultAsync(cancellationToken);
@@ -589,8 +589,8 @@ public class HoldingsAggregateRefreshService
             .Set<InstitutionalHolding>()
             .Where(h => h.ReportDate == reportDate && h.FilingType == FilingType.Form13F)
             .Join(
-                dbContext.Set<CommonStock>(),
-                h => h.CommonStockId,
+                dbContext.Set<EquityIssuer>(),
+                h => h.EquityIssuerId,
                 s => s.Id,
                 (h, s) => new { h.Value, s.IndustryId }
             )
@@ -693,9 +693,9 @@ public class HoldingsAggregateRefreshService
             .Where(h =>
                 (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
                 && h.FilingType == FilingType.Form13F
-                && h.CommonStock.Active
+                && h.Issuer.Presentation.Listing.Active
             )
-            .GroupBy(h => h.CommonStockId)
+            .GroupBy(h => h.EquityIssuerId)
             .Select(g => new
             {
                 CommonStockId = g.Key,
@@ -721,20 +721,21 @@ public class HoldingsAggregateRefreshService
                 && h.FilingType == FilingType.Form13F
             )
             .Join(
-                dbContext.Set<CommonStock>(),
-                holding => holding.CommonStockId,
+                dbContext.Set<EquityIssuer>(),
+                holding => holding.EquityIssuerId,
                 stock => stock.Id,
                 (holding, stock) => new { Holding = holding, Stock = stock }
             )
-            .Where(row => row.Stock.Active)
+            .Where(row => row.Stock.Presentation.Listing.Active)
             .GroupBy(row => new
             {
-                row.Holding.CommonStockId,
-                PriceSeriesTicker = row.Holding.ListedTicker ?? row.Stock.Ticker,
+                row.Holding.EquityIssuerId,
+                PriceSeriesTicker = row.Holding.ListedTicker
+                    ?? row.Stock.Presentation.Listing.Ticker,
             })
             .Select(group => new
             {
-                group.Key.CommonStockId,
+                group.Key.EquityIssuerId,
                 group.Key.PriceSeriesTicker,
                 CurrentShares = group.Sum(row =>
                     row.Holding.ReportDate == reportDate ? row.Holding.Shares : 0L
@@ -757,7 +758,7 @@ public class HoldingsAggregateRefreshService
                 churn.TryGetValue(a.CommonStockId, out var c);
                 return new StockQuarterlyActivity
                 {
-                    CommonStockId = a.CommonStockId,
+                    EquityIssuerId = a.CommonStockId,
                     ReportDate = reportDate,
                     PreviousReportDate = hasPrevious ? previousReportDate : null,
                     CurrentShares = a.CurrentShares,
@@ -778,7 +779,7 @@ public class HoldingsAggregateRefreshService
             await dbContext
                 .Set<StockQuarterlyActivity>()
                 .UpsertRange(rows)
-                .On(a => new { a.CommonStockId, a.ReportDate })
+                .On(a => new { a.EquityIssuerId, a.ReportDate })
                 .WhenMatched(
                     (_, incoming) =>
                         new StockQuarterlyActivity
@@ -800,10 +801,10 @@ public class HoldingsAggregateRefreshService
 
         // Stocks with no exposure in either quarter — drop their stale rows for
         // this quarter so the heat map can't render a phantom point.
-        var currentStockIds = rows.Select(r => r.CommonStockId).ToList();
+        var currentStockIds = rows.Select(r => r.EquityIssuerId).ToList();
         await dbContext
             .Set<StockQuarterlyActivity>()
-            .Where(s => s.ReportDate == reportDate && !currentStockIds.Contains(s.CommonStockId))
+            .Where(s => s.ReportDate == reportDate && !currentStockIds.Contains(s.EquityIssuerId))
             .ExecuteDeleteAsync(cancellationToken);
 
         await ReplaceListingActivitySnapshots(
@@ -813,7 +814,7 @@ public class HoldingsAggregateRefreshService
             listingActivity
                 .Select(row => new StockQuarterlyListingActivity
                 {
-                    CommonStockId = row.CommonStockId,
+                    EquityIssuerId = row.EquityIssuerId,
                     ReportDate = reportDate,
                     IsCombined = false,
                     PriceSeriesTicker = row.PriceSeriesTicker,
@@ -847,7 +848,7 @@ public class HoldingsAggregateRefreshService
             .UpsertRange(rows)
             .On(row => new
             {
-                row.CommonStockId,
+                row.EquityIssuerId,
                 row.ReportDate,
                 row.IsCombined,
                 row.PriceSeriesTicker,
@@ -883,16 +884,16 @@ public class HoldingsAggregateRefreshService
             .Where(h =>
                 (h.ReportDate == reportDate || h.ReportDate == previousReportDate)
                 && h.FilingType == FilingType.Form13F
-                && h.CommonStock.Active
+                && h.Issuer.Presentation.Listing.Active
             )
-            .GroupBy(h => new { h.CommonStockId, h.InstitutionalHolderId })
+            .GroupBy(h => new { h.EquityIssuerId, h.InstitutionalHolderId })
             .Select(g => new
             {
-                g.Key.CommonStockId,
+                g.Key.EquityIssuerId,
                 HasCurrent = g.Max(h => h.ReportDate == reportDate ? 1 : 0),
                 HasPrevious = g.Max(h => h.ReportDate == previousReportDate ? 1 : 0),
             })
-            .GroupBy(p => p.CommonStockId)
+            .GroupBy(p => p.EquityIssuerId)
             .Select(g => new MarketWideStockChurn
             {
                 CommonStockId = g.Key,

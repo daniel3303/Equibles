@@ -11,56 +11,43 @@ public class ShortInterestRepository : BaseRepository<ShortInterest>
     public ShortInterestRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<ShortInterest> GetByStock(CommonStock stock, DateOnly settlementDate)
-    {
-        return GetAll()
-            .Where(s =>
-                s.CommonStockId == stock.Id
-                && (s.ListedTicker == stock.Ticker || s.ListedTicker == "")
-                && s.SettlementDate == settlementDate
-            );
-    }
+    public IQueryable<ShortInterest> GetByListingId(Guid listingId, DateOnly date) =>
+        GetHistoryByListingId(listingId).Where(row => row.SettlementDate == date);
+
+    public IQueryable<ShortInterest> GetHistoryByListingId(Guid listingId) =>
+        GetAll().Where(row => row.EquityListingId == listingId);
+
+    public IQueryable<ShortInterest> GetByStock(EquityIssuer stock, DateOnly date) =>
+        GetHistoryByStock(stock).Where(row => row.SettlementDate == date);
 
     public IQueryable<ShortInterest> GetByListing(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
-        DateOnly settlementDate
+        DateOnly date
+    ) => GetHistoryByListing(stock, listedTicker).Where(row => row.SettlementDate == date);
+
+    public IQueryable<ShortInterest> GetHistoryByStock(EquityIssuer stock) =>
+        GetAll()
+            .Where(row =>
+                row.Listing.Security.EquityIssuerId == stock.Id
+                && row.EquityListingId == row.Listing.Security.Issuer.Presentation.EquityListingId
+            );
+
+    public virtual IQueryable<ShortInterest> GetHistoryByListing(
+        EquityIssuer stock,
+        string listedTicker
     )
     {
-        var isPrimary = string.Equals(
-            listedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
+        var listingIds = DbContext
+            .Set<EquityListing>()
+            .Where(row =>
+                row.Security.EquityIssuerId == stock.Id
+                && row.MarketCountryCode == "US"
+                && row.Ticker == listedTicker
+            )
+            .Select(row => row.Id);
         return GetAll()
-            .Where(s =>
-                s.CommonStockId == stock.Id
-                && (s.ListedTicker == listedTicker || (isPrimary && s.ListedTicker == ""))
-                && s.SettlementDate == settlementDate
-            );
-    }
-
-    public IQueryable<ShortInterest> GetHistoryByStock(CommonStock stock)
-    {
-        return GetAll()
-            .Where(s =>
-                s.CommonStockId == stock.Id
-                && (s.ListedTicker == stock.Ticker || s.ListedTicker == "")
-            );
-    }
-
-    public IQueryable<ShortInterest> GetHistoryByListing(CommonStock stock, string listedTicker)
-    {
-        var isPrimary = string.Equals(
-            listedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
-        return GetAll()
-            .Where(s =>
-                s.CommonStockId == stock.Id
-                && (s.ListedTicker == listedTicker || (isPrimary && s.ListedTicker == ""))
-            );
+            .Where(row => listingIds.Count() == 1 && listingIds.Contains(row.EquityListingId));
     }
 
     public IQueryable<DateOnly> GetLatestSettlementDate()
@@ -116,11 +103,11 @@ public class ShortInterestRepository : BaseRepository<ShortInterest>
 
     public IQueryable<Guid> GetStockIdsBySettlementDate(DateOnly settlementDate)
     {
-        return GetAll().Where(s => s.SettlementDate == settlementDate).Select(s => s.CommonStockId);
+        return GetAll()
+            .Where(s => s.SettlementDate == settlementDate)
+            .Select(s => s.Listing.Security.EquityIssuerId);
     }
 
-    public IQueryable<ListedSecurityKey> GetListingKeysBySettlementDate(DateOnly settlementDate) =>
-        GetAll()
-            .Where(s => s.SettlementDate == settlementDate)
-            .Select(s => new ListedSecurityKey(s.CommonStockId, s.ListedTicker));
+    public IQueryable<Guid> GetListingIdsBySettlementDate(DateOnly settlementDate) =>
+        GetAll().Where(s => s.SettlementDate == settlementDate).Select(s => s.EquityListingId);
 }

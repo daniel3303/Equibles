@@ -81,7 +81,7 @@ public class FtdImportServiceHistoricalIdentityTests
     public void SelectCusips_DifferentValuesOnLatestDate_DropsStock()
     {
         var listingId = Guid.NewGuid();
-        var listing = new CommonStockDelistedListing { Id = listingId };
+        var listing = new EquityListingRetirementEvidence { Id = listingId };
         FtdImportService.ApplyHistoricalCusipEvidence(
             listing,
             [new(listingId, "111111111", new DateOnly(2020, 6, 30))]
@@ -105,8 +105,14 @@ public class FtdImportServiceHistoricalIdentityTests
     {
         var listings = new[]
         {
-            new CommonStockDelistedListing { HistoricalCusipBackfillCandidates = ["111111111"] },
-            new CommonStockDelistedListing { HistoricalCusipBackfillCandidates = ["111111111"] },
+            new EquityListingRetirementEvidence
+            {
+                HistoricalCusipBackfillCandidates = ["111111111"],
+            },
+            new EquityListingRetirementEvidence
+            {
+                HistoricalCusipBackfillCandidates = ["111111111"],
+            },
         };
 
         FtdImportService.RejectContestedHistoricalCusips(listings);
@@ -123,17 +129,17 @@ public class FtdImportServiceHistoricalIdentityTests
     [Fact]
     public void SelectCusips_ContestedClaimFromEarlierBatch_RemainsVisibleToLaterOwner()
     {
-        var first = new CommonStockDelistedListing
+        var first = new EquityListingRetirementEvidence
         {
             HistoricalCusipBackfillCandidates = ["111111111"],
         };
-        var second = new CommonStockDelistedListing
+        var second = new EquityListingRetirementEvidence
         {
             HistoricalCusipBackfillCandidates = ["111111111"],
         };
         FtdImportService.RejectContestedHistoricalCusips([first, second]);
 
-        var later = new CommonStockDelistedListing
+        var later = new EquityListingRetirementEvidence
         {
             HistoricalCusipBackfillCandidates = ["111111111"],
         };

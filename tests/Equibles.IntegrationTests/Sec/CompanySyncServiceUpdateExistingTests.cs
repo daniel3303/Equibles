@@ -36,15 +36,14 @@ public class CompanySyncServiceUpdateExistingTests : ParadeDbMcpTestBase
     public async Task SyncCompaniesFromSecApi_ExistingCikWithDifferentTicker_UpdatesInPlace()
     {
         // Seed an existing stock whose CIK appears in the next SEC sync payload.
-        var existing = new CommonStock
-        {
-            Cik = "0001067983",
-            Ticker = "OLD",
-            Name = "Old Name Inc.",
-            SecondaryTickers = ["X.A", "FUND-X"],
-            ReferenceTickers = ["FUND-X"],
-            Description = "Pre-sync description",
-        };
+        EquityIssuer existing = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0001067983",
+            Ticker: "OLD",
+            Name: "Old Name Inc.",
+            SecondaryTickers: ["X.A", "FUND-X"],
+            ReferenceTickers: ["FUND-X"],
+            Description: "Pre-sync description"
+        );
         DbContext.Add(existing);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -66,10 +65,13 @@ public class CompanySyncServiceUpdateExistingTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -91,26 +93,45 @@ public class CompanySyncServiceUpdateExistingTests : ParadeDbMcpTestBase
         // Re-read from a fresh context — the row must be the SAME row (same Id)
         // with updated ticker/name/secondaries, NOT a new duplicate.
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().ContainSingle("CIK must be unique — never duplicated");
         stocks[0].Id.Should().Be(existing.Id);
-        stocks[0].Ticker.Should().Be("BRK.A");
+        stocks[0].Presentation.Listing.Ticker.Should().Be("BRK.A");
         stocks[0].Name.Should().Be("Berkshire Hathaway Inc.");
-        stocks[0].ReferenceTickers.Should().Equal("FUND-X");
-        stocks[0].SecondaryTickers.Should().Equal("BRK.B", "FUND-X");
+        stocks[0]
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .BeEquivalentTo("FUND-X");
+        stocks[0]
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US"
+                && (
+                    nativeListing.IsDirectoryListed
+                    && nativeListing.Id != stocks[0].Presentation.EquityListingId
+                )
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .BeEquivalentTo("BRK.B", "FUND-X");
     }
 
     [Fact]
     public async Task SyncCompaniesFromSecApi_EquivalentCikSpellingPreservesReferenceOwner()
     {
-        var existing = new CommonStock
-        {
-            Cik = "0000036405",
-            Ticker = "VOO",
-            Name = "Vanguard S&P 500 ETF",
-            SecondaryTickers = ["VOO"],
-            ReferenceTickers = ["VOO"],
-        };
+        EquityIssuer existing = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000036405",
+            Ticker: "VOO",
+            Name: "Vanguard S&P 500 ETF",
+            SecondaryTickers: ["VOO"],
+            ReferenceTickers: ["VOO"]
+        );
         DbContext.Add(existing);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -129,10 +150,13 @@ public class CompanySyncServiceUpdateExistingTests : ParadeDbMcpTestBase
             ]);
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -151,29 +175,35 @@ public class CompanySyncServiceUpdateExistingTests : ParadeDbMcpTestBase
         await sut.SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().ContainSingle();
         stocks[0].Id.Should().Be(existing.Id);
         stocks[0].Cik.Should().Be("0000036405");
-        stocks[0].ReferenceTickers.Should().Equal("VOO");
+        stocks[0]
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .BeEquivalentTo("VOO");
     }
 
     [Fact]
     public async Task SyncCompaniesFromSecApi_RenameCollidesWithReferenceOwner_PreservesBothRows()
     {
-        var referenceOwner = new CommonStock
-        {
-            Cik = "999",
-            Ticker = "REUSED",
-            Name = "Reference-owned ETF",
-            ReferenceTickers = ["REUSED"],
-        };
-        var incoming = new CommonStock
-        {
-            Cik = "111",
-            Ticker = "OLD",
-            Name = "Incoming SEC company",
-        };
+        EquityIssuer referenceOwner = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "999",
+            Ticker: "REUSED",
+            Name: "Reference-owned ETF",
+            ReferenceTickers: ["REUSED"]
+        );
+        EquityIssuer incoming = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "111",
+            Ticker: "OLD",
+            Name: "Incoming SEC company"
+        );
         DbContext.AddRange(referenceOwner, incoming);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -192,10 +222,13 @@ public class CompanySyncServiceUpdateExistingTests : ParadeDbMcpTestBase
             ]);
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -214,9 +247,15 @@ public class CompanySyncServiceUpdateExistingTests : ParadeDbMcpTestBase
         await sut.SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().HaveCount(2);
-        stocks.Single(stock => stock.Id == referenceOwner.Id).Ticker.Should().Be("REUSED");
-        stocks.Single(stock => stock.Id == incoming.Id).Ticker.Should().Be("OLD");
+        stocks
+            .Single(stock => stock.Id == referenceOwner.Id)
+            .Presentation.Listing.Ticker.Should()
+            .Be("REUSED");
+        stocks
+            .Single(stock => stock.Id == incoming.Id)
+            .Presentation.Listing.Ticker.Should()
+            .Be("OLD");
     }
 }

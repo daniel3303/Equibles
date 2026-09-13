@@ -17,7 +17,7 @@ public class CongressToolsGetMemberTradesCultureInvarianceTests : ParadeDbMcpTes
             new CongressionalTradeRepository(DbContext),
             new CongressMemberRepository(DbContext),
             new CongressionalAnnualDisclosureRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             ErrorManager,
             NullLogger<CongressTools>()
         );
@@ -34,12 +34,11 @@ public class CongressToolsGetMemberTradesCultureInvarianceTests : ParadeDbMcpTes
     [Fact]
     public async Task GetMemberTrades_UnderNonInvariantCulture_RendersAmountCultureInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corporation",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corporation",
+            Cik: "0001045810"
+        );
         var member = new CongressMember
         {
             Name = "Nancy Pelosi",
@@ -49,8 +48,10 @@ public class CongressToolsGetMemberTradesCultureInvarianceTests : ParadeDbMcpTes
         {
             CongressMember = member,
             CongressMemberId = member.Id,
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                .Security.Issuer,
+            EquityIssuerId = stock.Id,
             TransactionDate = new DateOnly(2026, 3, 15),
             FilingDate = new DateOnly(2026, 4, 14),
             TransactionType = CongressTransactionType.Purchase,
@@ -59,7 +60,6 @@ public class CongressToolsGetMemberTradesCultureInvarianceTests : ParadeDbMcpTes
             AmountFrom = 1_000_000,
             AmountTo = 5_000_000,
         };
-        DbContext.Set<CommonStock>().Add(stock);
         DbContext.Set<CongressMember>().Add(member);
         DbContext.Set<CongressionalTrade>().Add(trade);
         await DbContext.SaveChangesAsync();

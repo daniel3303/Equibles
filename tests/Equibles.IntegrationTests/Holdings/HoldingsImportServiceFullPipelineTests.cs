@@ -28,14 +28,14 @@ namespace Equibles.IntegrationTests.Holdings;
 /// <see cref="HoldingsImportServiceTests"/> file (which covers the four early-exit
 /// branches before that path).
 /// </summary>
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
     private readonly List<EquiblesFinancialDbContext> _contexts = [];
     private readonly CultureInfo _previousCulture;
 
-    public HoldingsImportServiceFullPipelineTests(ParadeDbFixture fixture)
+    public HoldingsImportServiceFullPipelineTests(HistoricalEquityDbFixture fixture)
     {
         _fixture = fixture;
         _previousCulture = CultureInfo.CurrentCulture;
@@ -79,8 +79,8 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -149,17 +149,16 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // Pin the canonical post-conditions on a real database row: holding present,
         // value = shares * price, ValuePending=false, a ManagerEntry persisted.
         // Regressions in any phase break at least one of these assertions.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -217,7 +216,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ImportDataSet_StockReplacedAfterCusipMapping_PersistsSurvivorsAndRetries()
+    public async Task ImportDataSet_LegacyOwnerRetiredAfterCusipMapping_PreservesBothPositions()
     {
         var apple = new CommonStock
         {
@@ -270,6 +269,9 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
                 // the production window while leaving MSFT valid in the same write batch.
                 using var delete = FreshContext();
                 var staleApple = delete.Set<CommonStock>().Single(s => s.Id == apple.Id);
+                delete.Database.ExecuteSqlInterpolated(
+                    $"""UPDATE "EquityIssuer" SET "CommonStockId" = NULL WHERE "Id" = {apple.Id}"""
+                );
                 delete.Remove(staleApple);
                 delete.SaveChanges();
                 return Task.FromResult(
@@ -284,14 +286,14 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         var result = await CreateImporter(priceProvider)
             .ImportDataSet(archive, new DateOnly(2024, 1, 1), CancellationToken.None);
 
-        result.IsComplete.Should().BeFalse();
-        result.InsertedHoldings.Should().Be(1);
+        result.IsComplete.Should().BeTrue();
+        result.InsertedHoldings.Should().Be(2);
 
         using var verify = FreshContext();
         var holdings = await verify.Set<InstitutionalHolding>().AsNoTracking().ToListAsync();
-        holdings.Should().ContainSingle();
-        holdings[0].CommonStockId.Should().Be(microsoft.Id);
-        holdings[0].Shares.Should().Be(2000);
+        holdings.Should().HaveCount(2);
+        holdings.Single(row => row.EquityIssuerId == apple.Id).Shares.Should().Be(1000);
+        holdings.Single(row => row.EquityIssuerId == microsoft.Id).Shares.Should().Be(2000);
     }
 
     [Fact]
@@ -304,17 +306,16 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // filing. Pre-2023 filings declare thousands, so the era scale must apply to the declared
         // value exactly as it does to per-position values: this fixture files 1,381,198 (a 2022
         // filing date) and the rollup must land 1,381,198,000 dollars.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -368,17 +369,16 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // Older archives and 13F-NT rows carry no summary page. The rollup must say "no
         // declaration captured" (null), never zero — surfaces fall back to the generic tracked
         // wording on null, but a zero would render as a filer declaring an empty book.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -425,7 +425,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // is flagged and each persisted holding carries shares = VALUE ÷
         // closing price instead of the corrupt count.
         var reportDate = new DateOnly(2026, 3, 31);
-        var stocks = new List<CommonStock>();
+        var stocks = new List<EquityIssuer>();
         var prices = new Dictionary<(Guid, string, DateOnly), decimal>();
         var infoTable = new StringBuilder(
             "ACCESSION_NUMBER\tCUSIP\tVALUE\tSSHPRNAMT\tSSHPRNAMTTYPE\tPUTCALL\tINVESTMENTDISCRETION\tVOTING_AUTH_SOLE\tVOTING_AUTH_SHARED\tVOTING_AUTH_NONE\tTITLEOFCLASS\tOTHERMANAGER\n"
@@ -433,27 +433,26 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 
         for (var i = 1; i <= 5; i++)
         {
-            var stock = new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = $"TK{i}",
-                Name = $"Tracked Co {i}",
-                Cik = $"000000010{i}",
-                Cusip = $"11111111{i}",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: $"TK{i}",
+                Name: $"Tracked Co {i}",
+                Cik: $"000000010{i}",
+                Cusip: $"11111111{i}"
+            );
             stocks.Add(stock);
             prices[(stock.Id, null, reportDate)] = 250m;
 
             // SSHPRNAMT duplicates VALUE — the defect under test.
             var dollarValue = i * 2_500_000L;
             infoTable.Append(
-                $"ACC-13F\t{stock.Cusip}\t{dollarValue}\t{dollarValue}\tSH\t\tSOLE\t{i * 10_000}\t0\t0\tCOM\t\n"
+                $"ACC-13F\t{stock.Presentation.Listing.Security.Cusip}\t{dollarValue}\t{dollarValue}\tSH\t\tSOLE\t{i * 10_000}\t0\t0\tCOM\t\n"
             );
         }
 
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().AddRange(stocks);
+            seed.Set<EquityIssuer>().AddRange(stocks);
             await seed.SaveChangesAsync();
         }
 
@@ -552,17 +551,16 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // the downstream HoldingsValueRecalculator would never see them and the
         // 0-dollar rows would persist permanently. Asserting BOTH fields proves
         // the fallback wired the two related properties consistently.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "TSLA",
-            Name = "Tesla",
-            Cik = "0001318605",
-            Cusip = "88160R101",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "TSLA",
+            Name: "Tesla",
+            Cik: "0001318605",
+            Cusip: "88160R101"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -607,17 +605,16 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // A regression that dropped ParseOtherManagers entirely would still pass
         // every early-exit pin (the orchestrator doesn't gate on it) but would
         // silently leave every co-filer-attributed holding with ManagerName=null.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft",
-            Cik = "0000789019",
-            Cusip = "594918104",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft",
+            Cik: "0000789019",
+            Cusip: "594918104"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -675,17 +672,16 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // entries would survive the upsert's WhenMatched policy). Pinning
         // the aggregated row proves the in-memory merge fires before the
         // DB hop, preserving both manager entries.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "NVDA",
-            Name = "NVIDIA",
-            Cik = "0001045810",
-            Cusip = "67066G104",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NVDA",
+            Name: "NVIDIA",
+            Cik: "0001045810",
+            Cusip: "67066G104"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -755,14 +751,13 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         //     amendment's effect on the historical row.
         //   - after ImportDataSet the original row is gone, the amendment's
         //     row with shares=42 is the only survivor.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "META",
-            Name = "Meta",
-            Cik = "0001326801",
-            Cusip = "30303M102",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "META",
+            Name: "Meta",
+            Cik: "0001326801",
+            Cusip: "30303M102"
+        );
         var holder = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -773,7 +768,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         var originalHolding = new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = reportDate,
             FilingDate = new DateOnly(2024, 10, 1),
@@ -786,7 +781,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         };
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<InstitutionalHolder>().Add(holder);
             seed.Set<InstitutionalHolding>().Add(originalHolding);
             await seed.SaveChangesAsync();
@@ -844,22 +839,20 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // that event date, and because the wiped filings stay recorded as
         // processed (and 13D/G has no quarterly bulk data set), the loss is
         // permanent and silent.
-        var stockAmended = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "META",
-            Name = "Meta",
-            Cik = "0001326801",
-            Cusip = "30303M102",
-        };
-        var stockOther = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
+        EquityIssuer stockAmended = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "META",
+            Name: "Meta",
+            Cik: "0001326801",
+            Cusip: "30303M102"
+        );
+        EquityIssuer stockOther = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
         var holder = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -870,7 +863,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         var amendedIssuerHolding = new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockAmended.Id,
+            EquityIssuerId = stockAmended.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = eventDate,
             FilingDate = new DateOnly(2025, 1, 10),
@@ -885,7 +878,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         var otherIssuerHolding = new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockOther.Id,
+            EquityIssuerId = stockOther.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = eventDate,
             FilingDate = new DateOnly(2025, 1, 11),
@@ -899,7 +892,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         };
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().AddRange(stockAmended, stockOther);
+            seed.Set<EquityIssuer>().AddRange(stockAmended, stockOther);
             seed.Set<InstitutionalHolder>().Add(holder);
             seed.Set<InstitutionalHolding>().AddRange(amendedIssuerHolding, otherIssuerHolding);
             await seed.SaveChangesAsync();
@@ -940,10 +933,10 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             .ToListAsync();
 
         holdings.Should().HaveCount(2, "the 13G/A must replace only its own issuer's stake");
-        var meta = holdings.Single(h => h.CommonStockId == stockAmended.Id);
+        var meta = holdings.Single(h => h.EquityIssuerId == stockAmended.Id);
         meta.Shares.Should().Be(42);
         meta.AccessionNumber.Should().Be("ACC-13G-META-A");
-        var aapl = holdings.Single(h => h.CommonStockId == stockOther.Id);
+        var aapl = holdings.Single(h => h.EquityIssuerId == stockOther.Id);
         aapl.Shares.Should().Be(555, "the other issuer's stake must survive the amendment");
         aapl.AccessionNumber.Should().Be("ACC-13G-AAPL");
     }
@@ -988,17 +981,16 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // ParseOtherManagers' three skip guards (zero-hit): unknown accession,
         // non-numeric SEQUENCENUMBER, and empty NAME must each be skipped while
         // a valid co-manager row is still parsed and the import completes.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -1054,17 +1046,16 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
         // references a CUSIP no tracked stock holds. The second must hit the
         // CusipMapping miss → totalSkipped++/continue, while the first still
         // persists — a single unknown holding can't drop the rest of a filing.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 

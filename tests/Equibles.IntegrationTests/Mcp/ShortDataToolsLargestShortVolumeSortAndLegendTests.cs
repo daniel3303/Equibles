@@ -26,14 +26,14 @@ public class ShortDataToolsLargestShortVolumeSortAndLegendTests : ParadeDbMcpTes
         new(
             new DailyShortVolumeRepository(DbContext),
             new ShortInterestRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new ShortSqueezeScoreManager(
                 new ShortInterestRepository(DbContext),
                 new DailyShortVolumeRepository(DbContext),
-                new CommonStockRepository(DbContext),
+                new EquityIssuerRepository(DbContext),
                 new StockSplitRepository(DbContext),
                 new FailToDeliverRepository(DbContext),
-                new DailyStockPriceRepository(DbContext),
+                new EquityDailyStockPriceRepository(DbContext),
                 []
             ),
             new StockSplitRepository(DbContext),
@@ -50,26 +50,31 @@ public class ShortDataToolsLargestShortVolumeSortAndLegendTests : ParadeDbMcpTes
 
     private int _nextCik = 1;
 
-    private CommonStock AddStock(string ticker, string name)
+    private EquityIssuer AddStock(string ticker, string name)
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = name,
-            Cik = (_nextCik++).ToString("D10"),
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: name,
+            Cik: (_nextCik++).ToString("D10")
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
-    private void AddVolume(CommonStock stock, long shortVolume, long totalVolume) =>
+    private void AddVolume(EquityIssuer stock, long shortVolume, long totalVolume) =>
         DbContext
             .Set<DailyShortVolume>()
             .Add(
                 new DailyShortVolume
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = Day,
                     ShortVolume = shortVolume,
                     ShortExemptVolume = 0,

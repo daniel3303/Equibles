@@ -37,20 +37,22 @@ public class HoldingsCloneBacktestProviderSecondaryBenchmarkTests : IDisposable
         var reportDate = new DateOnly(2025, 12, 31);
         var from = HoldingsBacktestCalculator.RebalanceDateOf(reportDate);
         var to = from.AddDays(100);
-        var held = new CommonStock { Ticker = "HELD", Name = "Held Co" };
-        var benchmark = new CommonStock
-        {
-            Ticker = "BRK-B",
-            SecondaryTickers = ["BRK-A"],
-            Name = "Berkshire Hathaway",
-        };
+        EquityIssuer held = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "HELD",
+            Name: "Held Co"
+        );
+        EquityIssuer benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BRK-B",
+            SecondaryTickers: ["BRK-A"],
+            Name: "Berkshire Hathaway"
+        );
         var holder = new InstitutionalHolder { Cik = "0001067983", Name = "Clone Capital" };
         _dbContext.AddRange(held, benchmark, holder);
         _dbContext.Add(
             new InstitutionalHolding
             {
                 InstitutionalHolderId = holder.Id,
-                CommonStockId = held.Id,
+                EquityIssuerId = held.Id,
                 ReportDate = reportDate,
                 FilingDate = from,
                 Shares = 1_000,
@@ -58,8 +60,8 @@ public class HoldingsCloneBacktestProviderSecondaryBenchmarkTests : IDisposable
                 FilingType = FilingType.Form13F,
             }
         );
-        AddPrice(held, held.Ticker, from, 100m);
-        AddPrice(held, held.Ticker, to, 100m);
+        AddPrice(held, held.Presentation.Listing.Ticker, from, 100m);
+        AddPrice(held, held.Presentation.Listing.Ticker, to, 100m);
         AddPrice(benchmark, "BRK-B", from, 100m);
         AddPrice(benchmark, "BRK-B", to, 100m);
         AddPrice(benchmark, "BRK-A", from, 200m);
@@ -69,10 +71,10 @@ public class HoldingsCloneBacktestProviderSecondaryBenchmarkTests : IDisposable
         var provider = new HoldingsCloneBacktestProvider(
             new InstitutionalHolderRepository(_dbContext),
             new InstitutionalHoldingRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new BacktestPriceLoader(
-                new DailyStockPriceRepository(_dbContext),
-                new CommonStockRepository(_dbContext),
+                new EquityDailyStockPriceRepository(_dbContext),
+                new EquityIssuerRepository(_dbContext),
                 new StockSplitRepository(_dbContext)
             )
         );
@@ -83,12 +85,16 @@ public class HoldingsCloneBacktestProviderSecondaryBenchmarkTests : IDisposable
         outcome.Result.BenchmarkSummary.TotalReturnPercent.Should().Be(100m);
     }
 
-    private void AddPrice(CommonStock stock, string listedTicker, DateOnly date, decimal close) =>
+    private void AddPrice(EquityIssuer stock, string listedTicker, DateOnly date, decimal close) =>
         _dbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = stock.Id,
-                ListedTicker = listedTicker,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                    _dbContext,
+                    stock,
+                    listedTicker
+                ),
+                SourceTicker = listedTicker,
                 Date = date,
                 Open = close,
                 High = close,

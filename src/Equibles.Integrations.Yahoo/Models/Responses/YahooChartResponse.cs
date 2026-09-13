@@ -70,6 +70,21 @@ public class ChartSplit
 
 public class ChartMeta
 {
+    [JsonProperty("symbol")]
+    public string Symbol { get; set; }
+
+    [JsonProperty("currency")]
+    public string Currency { get; set; }
+
+    [JsonProperty("exchangeName")]
+    public string ExchangeCode { get; set; }
+
+    [JsonProperty("fullExchangeName")]
+    public string ExchangeName { get; set; }
+
+    [JsonProperty("instrumentType")]
+    public string InstrumentType { get; set; }
+
     [JsonProperty("firstTradeDate")]
     public long? FirstTradeDate { get; set; }
 

@@ -1,4 +1,3 @@
-using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Sec.FinancialFacts.Data.Models;
 
@@ -9,8 +8,8 @@ public class FinancialFactsSyncStatusRepository : BaseRepository<FinancialFactsS
     public FinancialFactsSyncStatusRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<FinancialFactsSyncStatus> GetByStock(CommonStock stock)
+    public IQueryable<FinancialFactsSyncStatus> GetByIssuerId(Guid issuerId)
     {
-        return GetAll().Where(s => s.CommonStockId == stock.Id);
+        return GetAll().Where(s => s.EquityIssuerId == issuerId);
     }
 }

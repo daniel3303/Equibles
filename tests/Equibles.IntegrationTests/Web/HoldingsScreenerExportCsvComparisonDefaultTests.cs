@@ -37,12 +37,11 @@ public class HoldingsScreenerExportCsvComparisonDefaultTests
                     Name = "Default-Comparison Holder",
                 }
             );
-            var stock = new CommonStock
-            {
-                Ticker = "TRIQ",
-                Name = "Three Quarters Co.",
-                Cik = "0000099761",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "TRIQ",
+                Name: "Three Quarters Co.",
+                Cik: "0000099761"
+            );
             db.Add(stock);
             db.Add(MakeHolding(stock.Id, holderId, oldest, 100, 100_000));
             db.Add(MakeHolding(stock.Id, holderId, middle, 110, 110_000));
@@ -74,7 +73,7 @@ public class HoldingsScreenerExportCsvComparisonDefaultTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

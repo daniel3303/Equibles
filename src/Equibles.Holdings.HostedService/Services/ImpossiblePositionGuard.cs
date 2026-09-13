@@ -67,7 +67,7 @@ internal static class ImpossiblePositionGuard
     /// Whether the issuer's share count can be used to judge a position at all.
     /// </summary>
     /// <remarks>
-    /// <c>CommonStock.SharesOutStanding</c> is itself wrong for a handful of stocks — Air Lease
+    /// <c>EquitySecurity.SharesOutstanding</c> is itself wrong for a handful of stocks — Air Lease
     /// carries 200 shares beside a correct $7.28B market cap — and a guard anchored on a corrupt
     /// count deletes real data: that one stock accounts for 7,309 of the 7,749 rows a naive
     /// shares-outstanding rule matches, every one of them a legitimate holding. So the count has

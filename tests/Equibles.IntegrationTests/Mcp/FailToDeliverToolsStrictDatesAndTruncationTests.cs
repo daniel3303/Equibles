@@ -4,6 +4,7 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 
@@ -22,7 +23,7 @@ public class FailToDeliverToolsStrictDatesAndTruncationTests : ParadeDbMcpTestBa
     private FailToDeliverTools Sut() =>
         new(
             new FailToDeliverRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new MemoryCache(new MemoryCacheOptions()),
             ErrorManager,
             NullLogger<FailToDeliverTools>()
@@ -31,26 +32,25 @@ public class FailToDeliverToolsStrictDatesAndTruncationTests : ParadeDbMcpTestBa
     public FailToDeliverToolsStrictDatesAndTruncationTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private CommonStock AddGme()
+    private EquityIssuer AddGme()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GME",
-            Name = "GameStop Corp",
-            Cik = "0001326380",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GME",
+            Name: "GameStop Corp",
+            Cik: "0001326380"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
-    private void AddFtd(CommonStock stock, DateOnly settlementDate) =>
+    private void AddFtd(EquityIssuer stock, DateOnly settlementDate) =>
         DbContext
             .Set<FailToDeliver>()
             .Add(
                 new FailToDeliver
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = settlementDate,
                     Quantity = 100_000,
                     Price = 25.50m,
@@ -82,7 +82,7 @@ public class FailToDeliverToolsStrictDatesAndTruncationTests : ParadeDbMcpTestBa
     [Fact]
     public async Task GetFailsToDeliver_InvertedRange_ReturnsExplicitError()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddFtd(stock, new DateOnly(2026, 4, 1));
         await DbContext.SaveChangesAsync();
 
@@ -98,7 +98,7 @@ public class FailToDeliverToolsStrictDatesAndTruncationTests : ParadeDbMcpTestBa
     [Fact]
     public async Task GetFailsToDeliver_TruncatedRange_AppendsNewestKeptNote()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddFtd(stock, new DateOnly(2026, 4, 1));
         AddFtd(stock, new DateOnly(2026, 4, 2));
         AddFtd(stock, new DateOnly(2026, 4, 3));
@@ -122,7 +122,7 @@ public class FailToDeliverToolsStrictDatesAndTruncationTests : ParadeDbMcpTestBa
     [Fact]
     public async Task GetFailsToDeliver_CompleteRange_HasNoTruncationNote()
     {
-        var stock = AddGme();
+        EquityIssuer stock = AddGme();
         AddFtd(stock, new DateOnly(2026, 4, 1));
         await DbContext.SaveChangesAsync();
 

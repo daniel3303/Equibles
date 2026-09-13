@@ -63,10 +63,10 @@ public class StockTabServiceLoadHoldingsTabSoldOutTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
     }
 
@@ -75,9 +75,9 @@ public class StockTabServiceLoadHoldingsTabSoldOutTests : IDisposable
     [Fact]
     public async Task LoadHoldingsTab_ExitedHolderStillFilingThisQuarter_CountsAsSoldOut()
     {
-        var aapl = MakeStock("AAPL", "Apple Inc.", "0000320193");
-        var msft = MakeStock("MSFT", "Microsoft Corp.", "0000789019");
-        _dbContext.Set<CommonStock>().AddRange(aapl, msft);
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.", "0000320193");
+        EquityIssuer msft = MakeStock("MSFT", "Microsoft Corp.", "0000789019");
+        _dbContext.Set<EquityIssuer>().AddRange(aapl, msft);
 
         var exiting = new InstitutionalHolder
         {
@@ -115,14 +115,13 @@ public class StockTabServiceLoadHoldingsTabSoldOutTests : IDisposable
         result.BucketCounts.GetValueOrDefault(PositionChangeType.SoldOut).Should().Be(1);
     }
 
-    private static CommonStock MakeStock(string ticker, string name, string cik) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = cik,
-        };
+    private static EquityIssuer MakeStock(string ticker, string name, string cik) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: cik
+        );
 
     private static InstitutionalHolding Make(
         Guid stockId,
@@ -133,7 +132,7 @@ public class StockTabServiceLoadHoldingsTabSoldOutTests : IDisposable
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

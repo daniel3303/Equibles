@@ -10,56 +10,43 @@ public class OffExchangeVolumeRepository : BaseRepository<OffExchangeVolume>
     public OffExchangeVolumeRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<OffExchangeVolume> GetByStock(CommonStock stock, DateOnly weekStartDate)
-    {
-        return GetAll()
-            .Where(d =>
-                d.CommonStockId == stock.Id
-                && (d.ListedTicker == stock.Ticker || d.ListedTicker == "")
-                && d.WeekStartDate == weekStartDate
-            );
-    }
+    public IQueryable<OffExchangeVolume> GetByListingId(Guid listingId, DateOnly date) =>
+        GetHistoryByListingId(listingId).Where(row => row.WeekStartDate == date);
+
+    public IQueryable<OffExchangeVolume> GetHistoryByListingId(Guid listingId) =>
+        GetAll().Where(row => row.EquityListingId == listingId);
+
+    public IQueryable<OffExchangeVolume> GetByStock(EquityIssuer stock, DateOnly date) =>
+        GetHistoryByStock(stock).Where(row => row.WeekStartDate == date);
 
     public IQueryable<OffExchangeVolume> GetByListing(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
-        DateOnly weekStartDate
+        DateOnly date
+    ) => GetHistoryByListing(stock, listedTicker).Where(row => row.WeekStartDate == date);
+
+    public IQueryable<OffExchangeVolume> GetHistoryByStock(EquityIssuer stock) =>
+        GetAll()
+            .Where(row =>
+                row.Listing.Security.EquityIssuerId == stock.Id
+                && row.EquityListingId == row.Listing.Security.Issuer.Presentation.EquityListingId
+            );
+
+    public virtual IQueryable<OffExchangeVolume> GetHistoryByListing(
+        EquityIssuer stock,
+        string listedTicker
     )
     {
-        var isPrimary = string.Equals(
-            listedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
+        var listingIds = DbContext
+            .Set<EquityListing>()
+            .Where(row =>
+                row.Security.EquityIssuerId == stock.Id
+                && row.MarketCountryCode == "US"
+                && row.Ticker == listedTicker
+            )
+            .Select(row => row.Id);
         return GetAll()
-            .Where(d =>
-                d.CommonStockId == stock.Id
-                && (d.ListedTicker == listedTicker || (isPrimary && d.ListedTicker == ""))
-                && d.WeekStartDate == weekStartDate
-            );
-    }
-
-    public IQueryable<OffExchangeVolume> GetHistoryByStock(CommonStock stock)
-    {
-        return GetAll()
-            .Where(d =>
-                d.CommonStockId == stock.Id
-                && (d.ListedTicker == stock.Ticker || d.ListedTicker == "")
-            );
-    }
-
-    public IQueryable<OffExchangeVolume> GetHistoryByListing(CommonStock stock, string listedTicker)
-    {
-        var isPrimary = string.Equals(
-            listedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
-        return GetAll()
-            .Where(d =>
-                d.CommonStockId == stock.Id
-                && (d.ListedTicker == listedTicker || (isPrimary && d.ListedTicker == ""))
-            );
+            .Where(row => listingIds.Count() == 1 && listingIds.Contains(row.EquityListingId));
     }
 
     public IQueryable<DateOnly> GetLatestWeek()

@@ -80,16 +80,15 @@ public class FinancialFactsImportServiceIdempotencyTests : IAsyncLifetime
     [Fact]
     public async Task Import_RunTwiceWithIdenticalFacts_SecondRunIsNoOpNoDuplicateRows()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
@@ -146,7 +145,7 @@ public class FinancialFactsImportServiceIdempotencyTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == apple.Id)
+            .Where(f => f.EquityIssuerId == apple.Id)
             .ToListAsync(CancellationToken.None);
 
         facts.Should().ContainSingle("re-running a company with nothing new filed must be a no-op");

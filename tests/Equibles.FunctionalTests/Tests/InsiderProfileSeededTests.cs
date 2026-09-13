@@ -32,13 +32,12 @@ public class InsiderProfileSeededTests
 
         await _web.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Id = stockId,
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: stockId,
+                Ticker: "AAPL",
+                Name: "Apple Inc.",
+                Cik: "0000320193"
+            );
             db.Add(stock);
 
             var owner = new InsiderOwner
@@ -55,7 +54,7 @@ public class InsiderProfileSeededTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InsiderOwnerId = owner.Id,
                     TransactionDate = new DateOnly(2025, 3, 15),
                     FilingDate = new DateOnly(2025, 3, 17),

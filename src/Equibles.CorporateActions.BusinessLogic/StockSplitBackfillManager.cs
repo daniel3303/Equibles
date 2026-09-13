@@ -36,7 +36,7 @@ public class StockSplitBackfillManager
     // dates plus changed ratios); a re-run over already-captured history
     // returns 0.
     public async Task<int> BackfillHistory(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly since,
         CancellationToken cancellationToken
     )
@@ -44,7 +44,11 @@ public class StockSplitBackfillManager
         cancellationToken.ThrowIfCancellationRequested();
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var chartData = await _yahooClient.GetChart(stock.Ticker, since, today);
+        var chartData = await _yahooClient.GetChart(
+            stock.Presentation.Listing.Ticker,
+            since,
+            today
+        );
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -61,6 +65,11 @@ public class StockSplitBackfillManager
             })
             .ToList();
 
-        return await _captureManager.Capture(stock.Id, stock.Ticker, captured, cancellationToken);
+        return await _captureManager.Capture(
+            stock.Id,
+            stock.Presentation.Listing.Ticker,
+            captured,
+            cancellationToken
+        );
     }
 }

@@ -27,27 +27,24 @@ public class StocksIndexSortFilterSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                    MarketCapitalization = 2_000_000_000_000,
-                },
-                new CommonStock
-                {
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                    MarketCapitalization = 1_000_000_000_000,
-                },
-                new CommonStock
-                {
-                    Ticker = "NVDA",
-                    Name = "NVIDIA Corp.",
-                    Cik = "0001045810",
-                    MarketCapitalization = 3_000_000_000_000,
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193",
+                    MarketCapitalization: 2_000_000_000_000
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019",
+                    MarketCapitalization: 1_000_000_000_000
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "NVDA",
+                    Name: "NVIDIA Corp.",
+                    Cik: "0001045810",
+                    MarketCapitalization: 3_000_000_000_000
+                )
             );
             await Task.CompletedTask;
         });
@@ -77,27 +74,24 @@ public class StocksIndexSortFilterSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                    MarketCapitalization = 2_000_000_000_000,
-                },
-                new CommonStock
-                {
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                    MarketCapitalization = 1_000_000_000_000,
-                },
-                new CommonStock
-                {
-                    Ticker = "NVDA",
-                    Name = "NVIDIA Corp.",
-                    Cik = "0001045810",
-                    MarketCapitalization = 3_000_000_000_000,
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193",
+                    MarketCapitalization: 2_000_000_000_000
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019",
+                    MarketCapitalization: 1_000_000_000_000
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "NVDA",
+                    Name: "NVIDIA Corp.",
+                    Cik: "0001045810",
+                    MarketCapitalization: 3_000_000_000_000
+                )
             );
             await Task.CompletedTask;
         });

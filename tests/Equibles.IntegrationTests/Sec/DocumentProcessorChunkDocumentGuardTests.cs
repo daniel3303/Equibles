@@ -83,7 +83,14 @@ public class DocumentProcessorChunkDocumentGuardTests : ParadeDbMcpTestBase
         var document = new Document
         {
             DocumentType = DocumentType.TenK,
-            CommonStock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." },
+            Issuer = new EquityIssuer
+            {
+                Presentation = new EquityIssuerPresentation
+                {
+                    Listing = new EquityListing { Ticker = "AAPL" },
+                },
+                Name = "Apple Inc.",
+            },
             Content = new File
             {
                 FileContent = new Equibles.Media.Data.Models.FileContent

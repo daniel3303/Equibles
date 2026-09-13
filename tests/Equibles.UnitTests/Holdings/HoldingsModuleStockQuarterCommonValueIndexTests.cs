@@ -30,7 +30,7 @@ public class HoldingsModuleStockQuarterCommonValueIndexTests
             .Properties.Select(p => p.Name)
             .Should()
             .Equal(
-                nameof(InstitutionalHolding.CommonStockId),
+                nameof(InstitutionalHolding.EquityIssuerId),
                 nameof(InstitutionalHolding.ReportDate),
                 nameof(InstitutionalHolding.InstitutionalHolderId)
             );

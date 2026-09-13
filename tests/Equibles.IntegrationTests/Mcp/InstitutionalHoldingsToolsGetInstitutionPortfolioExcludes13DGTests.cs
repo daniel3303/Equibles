@@ -34,24 +34,21 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioExcludes13DGTests
     public async Task GetInstitutionPortfolio_Later13DGEventDate_ServesLatest13FQuarterNotTheStake()
     {
         var holder = new InstitutionalHolder { Cik = "1", Name = "Pinnacle Capital Management" };
-        var apple = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var microsoft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
-        var tesla = new CommonStock
-        {
-            Ticker = "TSLA",
-            Name = "Tesla Inc.",
-            Cik = "0001318605",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer microsoft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
+        EquityIssuer tesla = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TSLA",
+            Name: "Tesla Inc.",
+            Cik: "0001318605"
+        );
         DbContext.AddRange(holder, apple, microsoft, tesla);
 
         var quarterEnd = new DateOnly(2026, 3, 31);
@@ -70,7 +67,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioExcludes13DGTests
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -93,7 +90,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioExcludes13DGTests
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly reportDate,
         FilingType filingType,
         long shares,
@@ -101,7 +98,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioExcludes13DGTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
@@ -110,6 +107,6 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioExcludes13DGTests
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{stock.Ticker}",
+            AccessionNumber = $"acc-{stock.Presentation.Listing.Ticker}",
         };
 }

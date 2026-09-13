@@ -21,8 +21,8 @@ public class FundOverlapCalculatorComputePairwiseOverlapZeroValueTests
         // Fund B: AAPL@0 (present but zero-valued), MSFT@50 (one real position).
         // Per the Value > 0 contract, B's AAPL is not a holding: B's diagonal is 1,
         // and the only shared stock is MSFT. A guardless count would report 2 and 2.
-        var aapl = MakeStock("AAPL");
-        var msft = MakeStock("MSFT");
+        EquityIssuer aapl = MakeStock("AAPL");
+        EquityIssuer msft = MakeStock("MSFT");
         var holderA = MakeHolder("Fund A");
         var holderB = MakeHolder("Fund B");
 
@@ -48,13 +48,12 @@ public class FundOverlapCalculatorComputePairwiseOverlapZeroValueTests
         matrix.SharedTickerCounts[1][0].Should().Be(1, "symmetry: B∩A = A∩B");
     }
 
-    private static CommonStock MakeStock(string ticker) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker,
-        };
+    private static EquityIssuer MakeStock(string ticker) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker
+        );
 
     private static InstitutionalHolder MakeHolder(string name) =>
         new()
@@ -66,14 +65,14 @@ public class FundOverlapCalculatorComputePairwiseOverlapZeroValueTests
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         long value
     ) =>
         new()
         {
             InstitutionalHolderId = holder.Id,
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(null, stock).Security.Issuer,
             Shares = value,
             Value = value,
         };

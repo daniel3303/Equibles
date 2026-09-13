@@ -68,10 +68,9 @@ public class InsiderDailyBarsBuildTests
     }
 
     [Fact]
-    public void Build_UnattributedLegacySplit_CountsForThePrimarySeries()
+    public void Build_UnattributedLegacySplit_LeavesTheBasisUnresolved()
     {
-        // Insider rows are issuer-level (listedTicker = null → primary), and only the primary
-        // series can have produced a pre-attribution legacy row.
+        // A missing source symbol cannot identify the current primary security.
         var bar = InsiderDailyBars.Build(
             close: 50m,
             low: null,
@@ -82,8 +81,8 @@ public class InsiderDailyBarsBuildTests
             secondaryTickers: []
         );
 
-        bar.SplitBasisAmbiguous.Should().BeFalse();
-        bar.SplitFactorToPresent.Should().Be(0.1m, "a 1:10 reverse split divides the count");
+        bar.SplitBasisAmbiguous.Should().BeTrue();
+        bar.SplitFactorToPresent.Should().Be(1m);
     }
 
     [Fact]

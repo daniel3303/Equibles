@@ -32,7 +32,7 @@ public class Form144ProposedSalesToolTests : IDisposable
             new InsiderTransactionRepository(_dbContext),
             new InsiderOwnerRepository(_dbContext),
             new Form144FilingRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new StockSplitRepository(_dbContext),
             errorManager: null,
             NullLogger<InsiderTradingTools>.Instance
@@ -41,21 +41,20 @@ public class Form144ProposedSalesToolTests : IDisposable
 
     public void Dispose() => _dbContext.Dispose();
 
-    private CommonStock SeedStock(
+    private EquityIssuer SeedStock(
         string ticker = "AAPL",
         string cik = "0000320193",
         long sharesOutstanding = 0
     )
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = "Apple Inc.",
-            Cik = cik,
-            SharesOutStanding = sharesOutstanding,
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: "Apple Inc.",
+            Cik: cik,
+            SharesOutStanding: sharesOutstanding
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.SaveChanges();
         return stock;
     }
@@ -81,7 +80,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_WithFilings_RendersTableNewestFirst()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext
             .Set<Form144Filing>()
             .Add(MakeFiling(stock.Id, "older", new DateOnly(2026, 1, 5), "ALICE", 1000));
@@ -108,7 +107,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_TiedDates_UseAccessionBeforeTheLimit()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var day = new DateOnly(2026, 5, 27);
         _dbContext
             .Set<Form144Filing>()
@@ -131,7 +130,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_RespectsMaxResults()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         for (var i = 0; i < 5; i++)
         {
             _dbContext
@@ -157,7 +156,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_AllNoticesShown_OmitsTruncationNote()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext
             .Set<Form144Filing>()
             .Add(MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000));
@@ -172,7 +171,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_DateRange_FiltersByFilingDate()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext
             .Set<Form144Filing>()
             .Add(MakeFiling(stock.Id, "early", new DateOnly(2026, 1, 10), "EARLY SELLER", 1000));
@@ -195,7 +194,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_DateRangeWithoutMatches_NamesTheAppliedRange()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext
             .Set<Form144Filing>()
             .Add(MakeFiling(stock.Id, "old", new DateOnly(2026, 1, 10), "EARLY SELLER", 1000));
@@ -215,7 +214,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_OffsetPagesNewestFirst_AndRejectsPastEnd()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         _dbContext
             .Set<Form144Filing>()
             .AddRange(
@@ -264,7 +263,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_RendersPercentOfIssuerSharesOutstanding()
     {
-        var stock = SeedStock(sharesOutstanding: 2_000_000_000);
+        EquityIssuer stock = SeedStock(sharesOutstanding: 2_000_000_000);
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1_000_000);
         // Filer typed their own sale count into noOfUnitsOutstanding (the MSFT
         // "100% of outstanding" bug, #7164 EquiblesCommercial) — the notice's field
@@ -286,7 +285,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     {
         // Issuer record carries no share count — serve "-" rather than trusting the
         // notice's self-reported field.
-        var stock = SeedStock(sharesOutstanding: 0);
+        EquityIssuer stock = SeedStock(sharesOutstanding: 0);
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
         filing.SharesOutstanding = 2_000_000_000;
         _dbContext.Set<Form144Filing>().Add(filing);
@@ -297,19 +296,25 @@ public class Form144ProposedSalesToolTests : IDisposable
         result.Should().Contain("| - |");
     }
 
-    [Fact]
-    public async Task GetForm144ProposedSales_NoticeBeforeSplit_PercentUsesTheSplitAdjustedShareCount()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetForm144ProposedSales_NoticeBeforeSplit_PercentRequiresAttributedShareBasis(
+        bool attributed
+    )
     {
         // The filed share count sits on the pre-split basis while the issuer record's
         // count is current — restate the numerator so the ratio compares like with like
         // (10,000 pre-split shares = 100,000 post-split ÷ 2,000,000,000 = 0.005%).
-        var stock = SeedStock(sharesOutstanding: 2_000_000_000);
+        EquityIssuer stock = SeedStock(sharesOutstanding: 2_000_000_000);
         _dbContext
             .Set<StockSplit>()
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
+                    EquityListingId = attributed ? stock.Presentation.EquityListingId : null,
+                    PriceSeriesTicker = attributed ? stock.Presentation.Listing.Ticker : null,
                     EffectiveDate = new DateOnly(2026, 3, 1),
                     Numerator = 10,
                     Denominator = 1,
@@ -324,13 +329,22 @@ public class Form144ProposedSalesToolTests : IDisposable
 
         // The Shares column stays as filed; only the percent numerator is restated.
         result.Should().Contain("| 10,000 |");
-        result.Should().Contain("| 0.005% |");
+        if (attributed)
+        {
+            result.Should().Contain("| 0.005% |");
+        }
+        else
+        {
+            result.Should().Contain("| $3,000,000 | - |");
+            result.Should().Contain("Unresolved split attribution");
+            result.Should().NotContain("0.0005%");
+        }
     }
 
     [Fact]
     public async Task GetForm144ProposedSales_RemarksPreserveCompleteUnicodeText()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
         filing.Remarks = new string('a', 89) + "😀 trailing text";
         _dbContext.Set<Form144Filing>().Add(filing);
@@ -344,7 +358,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_RemarksPreserveCompleteEscapedPipeText()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
         filing.Remarks = new string('a', 89) + "|trailing text";
         _dbContext.Set<Form144Filing>().Add(filing);
@@ -358,7 +372,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_RemarksPreserveLateRule10b5OneDisclosure()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
         filing.Remarks =
             new string('a', 120) + " Sale will be made pursuant to a Rule 10b5-1 plan.";
@@ -373,7 +387,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_RemarksBackslashBeforePipe_KeepsPipeInsideCell()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var filing = MakeFiling(stock.Id, "acc", new DateOnly(2026, 1, 5), "ALICE", 1000);
         filing.Remarks = "Sale under plan A\\|renewed";
         _dbContext.Set<Form144Filing>().Add(filing);
@@ -387,7 +401,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     [Fact]
     public async Task GetForm144ProposedSales_AllFiledTextCellsStayInsideTheirColumns()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var filing = MakeFiling(
             stock.Id,
             "acc",
@@ -417,7 +431,7 @@ public class Form144ProposedSalesToolTests : IDisposable
     {
         return new Form144Filing
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             AccessionNumber = accession,
             FilingDate = filingDate,
             SellerName = seller,

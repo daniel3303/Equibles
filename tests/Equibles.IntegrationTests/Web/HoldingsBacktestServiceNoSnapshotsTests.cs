@@ -27,13 +27,12 @@ public class HoldingsBacktestServiceNoSnapshotsTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = Guid.NewGuid(),
-                    Ticker = "SPY",
-                    Name = "SPDR S&P 500 ETF",
-                    Cik = "0000884394",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "SPY",
+                    Name: "SPDR S&P 500 ETF",
+                    Cik: "0000884394"
+                )
             );
             db.Add(
                 new InstitutionalHolder

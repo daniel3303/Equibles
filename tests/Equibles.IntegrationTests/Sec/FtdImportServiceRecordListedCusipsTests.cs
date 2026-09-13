@@ -57,12 +57,12 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
+                sp.GetService(typeof(EquityIdentityManager))
                     .Returns(
-                        new CommonStockManager(
-                            new CommonStockRepository(ctx),
+                        new EquityIdentityManager(
+                            new EquityIssuerRepository(ctx),
                             Substitute.For<IBus>()
                         )
                     );
@@ -111,18 +111,17 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
     [Fact]
     public async Task RecordListedCusips_SiblingClassSharesIssuerPrefix_Records()
     {
-        var alphabet = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GOOGL",
-            Name = "Alphabet Inc",
-            Cik = "1652044",
-            Cusip = "02079K305",
-            SecondaryTickers = ["GOOG"],
-        };
+        EquityIssuer alphabet = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GOOGL",
+            Name: "Alphabet Inc",
+            Cik: "1652044",
+            Cusip: "02079K305",
+            SecondaryTickers: ["GOOG"]
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(alphabet);
+            seed.Set<EquityIssuer>().Add(alphabet);
             await seed.SaveChangesAsync();
         }
 
@@ -133,8 +132,8 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
 
         recorded.Should().Be(1);
         using var verify = FreshContext();
-        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
-        listing.CommonStockId.Should().Be(alphabet.Id);
+        var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        listing.EquityIssuerId.Should().Be(alphabet.Id);
         listing.ListedTicker.Should().Be("GOOG");
         listing.Cusip.Should().Be("02079K107");
     }
@@ -142,19 +141,18 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
     [Fact]
     public async Task RecordListedCusips_ReferenceTickerWithDifferentIssuerPrefix_Records()
     {
-        var ishares = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAXJ",
-            Name = "iShares MSCI All Country Asia ex Japan ETF",
-            Cik = "1100663",
-            Cusip = "464288182",
-            SecondaryTickers = ["IVV"],
-            ReferenceTickers = ["AAXJ", "IVV"],
-        };
+        EquityIssuer ishares = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAXJ",
+            Name: "iShares MSCI All Country Asia ex Japan ETF",
+            Cik: "1100663",
+            Cusip: "464288182",
+            SecondaryTickers: ["IVV"],
+            ReferenceTickers: ["AAXJ", "IVV"]
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(ishares);
+            seed.Set<EquityIssuer>().Add(ishares);
             await seed.SaveChangesAsync();
         }
 
@@ -165,8 +163,8 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
 
         recorded.Should().Be(1);
         using var verify = FreshContext();
-        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
-        listing.CommonStockId.Should().Be(ishares.Id);
+        var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        listing.EquityIssuerId.Should().Be(ishares.Id);
         listing.ListedTicker.Should().Be("IVV");
         listing.Cusip.Should().Be("464287200");
     }
@@ -174,18 +172,17 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
     [Fact]
     public async Task RecordListedCusips_ReferenceTickerWithoutPrimaryCusip_Records()
     {
-        var fund = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "FUND",
-            Name = "Series Trust",
-            Cik = "0000000003",
-            SecondaryTickers = ["ETF1"],
-            ReferenceTickers = ["ETF1"],
-        };
+        EquityIssuer fund = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "FUND",
+            Name: "Series Trust",
+            Cik: "0000000003",
+            SecondaryTickers: ["ETF1"],
+            ReferenceTickers: ["ETF1"]
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(fund);
+            seed.Set<EquityIssuer>().Add(fund);
             await seed.SaveChangesAsync();
         }
 
@@ -196,8 +193,8 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
 
         recorded.Should().Be(1);
         using var verify = FreshContext();
-        var listing = await verify.Set<CommonStockListedCusip>().SingleAsync();
-        listing.CommonStockId.Should().Be(fund.Id);
+        var listing = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        listing.EquityIssuerId.Should().Be(fund.Id);
         listing.ListedTicker.Should().Be("ETF1");
         listing.Cusip.Should().Be("33333R107");
     }
@@ -208,18 +205,17 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
         // The recycled-symbol case: an old archive file pairs this secondary symbol with a
         // DIFFERENT issuer's CUSIP (the symbol's previous owner). Without the prefix guard
         // that delisted issuer's 13F lines would import as this filer's sibling class.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAA",
-            Name = "Current Symbol Owner Inc",
-            Cik = "0000000001",
-            Cusip = "111111111",
-            SecondaryTickers = ["AAA-A"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAA",
+            Name: "Current Symbol Owner Inc",
+            Cik: "0000000001",
+            Cusip: "111111111",
+            SecondaryTickers: ["AAA-A"]
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -230,7 +226,7 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
 
         recorded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStockListedCusip>().AnyAsync()).Should().BeFalse();
+        (await verify.Set<EquityListingCusipEvidence>().AnyAsync()).Should().BeFalse();
     }
 
     [Fact]
@@ -238,17 +234,16 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
     {
         // A non-reference secondary symbol still has no authority without a primary
         // issuer prefix, so it is skipped rather than admitted on faith.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BBB",
-            Name = "Unseeded Issuer Inc",
-            Cik = "0000000002",
-            SecondaryTickers = ["BBB-A"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BBB",
+            Name: "Unseeded Issuer Inc",
+            Cik: "0000000002",
+            SecondaryTickers: ["BBB-A"]
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -259,6 +254,6 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
 
         recorded.Should().Be(0);
         using var verify = FreshContext();
-        (await verify.Set<CommonStockListedCusip>().AnyAsync()).Should().BeFalse();
+        (await verify.Set<EquityListingCusipEvidence>().AnyAsync()).Should().BeFalse();
     }
 }

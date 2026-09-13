@@ -92,8 +92,8 @@ public class HoldingsScraperWorkerTryProcessDataSetTests : ParadeDbMcpTestBase
             .Returns(_ =>
             {
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(DbContext));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(DbContext));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(DbContext));
                 sp.GetService(typeof(InstitutionalHoldingRepository))

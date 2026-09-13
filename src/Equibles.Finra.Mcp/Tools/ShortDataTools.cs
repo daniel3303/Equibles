@@ -35,7 +35,7 @@ public class ShortDataTools
 
     private readonly DailyShortVolumeRepository _shortVolumeRepository;
     private readonly ShortInterestRepository _shortInterestRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly ShortSqueezeScoreManager _shortSqueezeScoreManager;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly IMemoryCache _memoryCache;
@@ -48,7 +48,7 @@ public class ShortDataTools
     public ShortDataTools(
         DailyShortVolumeRepository shortVolumeRepository,
         ShortInterestRepository shortInterestRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         ShortSqueezeScoreManager shortSqueezeScoreManager,
         StockSplitRepository stockSplitRepository,
         IMemoryCache memoryCache,
@@ -134,13 +134,27 @@ public class ShortDataTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, listedTicker);
+                var unresolvedBasis = records.Any(row =>
+                    PriceSeriesSplitScope.HasUnresolvedBasis(splits, listedTicker, row.Date)
+                );
+                splits = unresolvedBasis
+                    ? []
+                    : PriceSeriesSplitScope.ForListing(
+                        splits,
+                        stock.Presentation.Listing.Ticker,
+                        listedTicker
+                    );
 
                 var table = MarkdownTable.Render(
                     records.OrderBy(r => r.Date).ToList(),
                     $"No short volume data found for {listedTicker} in the specified date range.",
                     $"Daily short volume for {listedTicker}{ListingName(stock, listedTicker)}:",
-                    "_Volumes are trades reported to FINRA facilities (off-exchange/TRF) only — not consolidated tape volume; a 40-50% Short % is the normal baseline. Short Exempt = short sales exempt from Reg SHO price-test restrictions. Share counts are restated onto today's split basis._",
+                    "_Volumes are trades reported to FINRA facilities (off-exchange/TRF) only — not consolidated tape volume; a 40-50% Short % is the normal baseline. Short Exempt = short sales exempt from Reg SHO price-test restrictions. "
+                        + (
+                            unresolvedBasis
+                                ? "Share counts are as reported on each date; unresolved split attribution prevents comparison on one share basis._"
+                                : "Share counts are restated onto today's split basis._"
+                        ),
                     "| Date | Short Volume | Short Exempt | Total Volume | Short % |",
                     "|------|-------------|--------------|-------------|---------|",
                     r =>
@@ -224,7 +238,21 @@ public class ShortDataTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, listedTicker);
+                if (
+                    calculationRows.Any(row =>
+                        PriceSeriesSplitScope.HasUnresolvedBasis(
+                            splits,
+                            listedTicker,
+                            row.SettlementDate
+                        )
+                    )
+                )
+                    return $"Split-adjusted short interest for {listedTicker} is unavailable for this range because historical split attribution is unresolved. Original FINRA observations are retained.";
+                splits = PriceSeriesSplitScope.ForListing(
+                    splits,
+                    stock.Presentation.Listing.Ticker,
+                    listedTicker
+                );
 
                 // FINRA's raw change is (current − previous) where the previous position is on
                 // the PREVIOUS settlement's split basis, so scaling it by the current factor
@@ -280,7 +308,7 @@ public class ShortDataTools
         );
     }
 
-    private static string ListingName(CommonStock stock, string listedTicker) =>
+    private static string ListingName(EquityIssuer stock, string listedTicker) =>
         !SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker)
             ? $" ({stock.Name})"
             : string.Empty;
@@ -322,7 +350,7 @@ public class ShortDataTools
 
                 var query = _shortInterestRepository
                     .GetBySettlementDate(latestDate)
-                    .Include(s => s.CommonStock)
+                    .Include(s => s.Listing.Security.Issuer)
                     .Where(s => s.DaysToCover != null)
                     .Where(s => s.AverageDailyVolume != null && s.AverageDailyVolume > 0);
 
@@ -352,16 +380,19 @@ public class ShortDataTools
                     .Where(row =>
                         validListings.Contains(
                             new ListedSecurityKey(
-                                row.CommonStockId,
-                                ListingTicker(row.CommonStock, row.ListedTicker)
+                                row.Listing.Security.EquityIssuerId,
+                                row.ListedTicker
                             )
                         )
                     )
                     .ToList();
-                var stockIds = rawRecords.Select(row => row.CommonStockId).Distinct().ToList();
+                var stockIds = rawRecords
+                    .Select(row => row.Listing.Security.EquityIssuerId)
+                    .Distinct()
+                    .ToList();
                 var splitRows = await _stockSplitRepository
                     .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                    .Where(split => stockIds.Contains(split.CommonStockId))
+                    .Where(split => stockIds.Contains(split.EquityIssuerId))
                     .ToListAsync();
                 var previousDate = await _shortInterestRepository
                     .GetAllSettlementDates()
@@ -369,12 +400,23 @@ public class ShortDataTools
                     .OrderByDescending(day => day)
                     .FirstOrDefaultAsync();
                 var adjusted = rawRecords
+                    .Where(row =>
+                        !PriceSeriesSplitScope.HasUnresolvedBasis(
+                            splitRows.Where(split =>
+                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
+                            ),
+                            row.ListedTicker,
+                            previousDate
+                        )
+                    )
                     .Select(row =>
                     {
-                        var listedTicker = ListingTicker(row.CommonStock, row.ListedTicker);
+                        var listedTicker = row.ListedTicker;
                         var scoped = PriceSeriesSplitScope.ForListing(
-                            splitRows.Where(split => split.CommonStockId == row.CommonStockId),
-                            row.CommonStock.Ticker,
+                            splitRows.Where(split =>
+                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
+                            ),
+                            row.Listing.Security.Issuer.Presentation.Listing.Ticker,
                             listedTicker
                         );
                         var factor = SplitAdjustment.ShareCountFactor(latestDate, scoped);
@@ -492,7 +534,7 @@ public class ShortDataTools
 
                 var query = _shortVolumeRepository
                     .GetByDate(tradingDay)
-                    .Include(d => d.CommonStock)
+                    .Include(d => d.Listing.Security.Issuer)
                     .Where(d => d.TotalVolume > 0);
 
                 var sortKey = string.IsNullOrWhiteSpace(sortBy) ? "shortVolume" : sortBy.Trim();
@@ -511,24 +553,38 @@ public class ShortDataTools
                     .Where(row =>
                         validListings.Contains(
                             new ListedSecurityKey(
-                                row.CommonStockId,
-                                ListingTicker(row.CommonStock, row.ListedTicker)
+                                row.Listing.Security.EquityIssuerId,
+                                row.ListedTicker
                             )
                         )
                     )
                     .ToList();
-                var stockIds = rawRecords.Select(row => row.CommonStockId).Distinct().ToList();
+                var stockIds = rawRecords
+                    .Select(row => row.Listing.Security.EquityIssuerId)
+                    .Distinct()
+                    .ToList();
                 var splitRows = await _stockSplitRepository
                     .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                    .Where(split => stockIds.Contains(split.CommonStockId))
+                    .Where(split => stockIds.Contains(split.EquityIssuerId))
                     .ToListAsync();
                 var adjusted = rawRecords
+                    .Where(row =>
+                        !PriceSeriesSplitScope.HasUnresolvedBasis(
+                            splitRows.Where(split =>
+                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
+                            ),
+                            row.ListedTicker,
+                            row.Date
+                        )
+                    )
                     .Select(row =>
                     {
-                        var listedTicker = ListingTicker(row.CommonStock, row.ListedTicker);
+                        var listedTicker = row.ListedTicker;
                         var scoped = PriceSeriesSplitScope.ForListing(
-                            splitRows.Where(split => split.CommonStockId == row.CommonStockId),
-                            row.CommonStock.Ticker,
+                            splitRows.Where(split =>
+                                split.EquityIssuerId == row.Listing.Security.EquityIssuerId
+                            ),
+                            row.Listing.Security.Issuer.Presentation.Listing.Ticker,
                             listedTicker
                         );
                         var factor = SplitAdjustment.ShareCountFactor(row.Date, scoped);
@@ -572,7 +628,7 @@ public class ShortDataTools
                     // renderer splices it in front of the volume cells verbatim.
                     r =>
                         RenderShortVolumeRow(
-                            $"{r.ListedTicker} | {ListingCompany(r.Row.CommonStock, r.ListedTicker)}",
+                            $"{r.ListedTicker} | {ListingCompany(r.Row.Listing, r.ListedTicker)}",
                             r.Row,
                             r.Factor
                         )
@@ -606,13 +662,11 @@ public class ShortDataTools
         return $"| {leadCell} | {McpFormat.WholeNumber(shortVolume)} | {McpFormat.WholeNumber(exemptVolume)} | {McpFormat.WholeNumber(totalVolume)} | {McpFormat.Invariant(shortPct, "F1")}% |";
     }
 
-    private static string ListingTicker(CommonStock stock, string listedTicker) =>
-        string.IsNullOrWhiteSpace(listedTicker) ? stock.Ticker : listedTicker;
-
-    private static string ListingCompany(CommonStock stock, string listedTicker) =>
-        SecondaryTickerPolicy.RequiresExactListingScope(stock, ListingTicker(stock, listedTicker))
-            ? "-"
-            : stock.Name;
+    private static string ListingCompany(EquityListing listing, string listedTicker) =>
+        !listing.IsReferenceListed
+        && listing.Id == listing.Security.Issuer.Presentation?.EquityListingId
+            ? listing.Security.Issuer.Name
+            : "-";
 
     // Render with InvariantCulture so the MCP markdown does not fork the separators by host
     // locale (e.g. de-DE would render 1.234.567 / 12,3). `shareFactor` restates the share
@@ -751,7 +805,7 @@ public class ShortDataTools
     }
 
     // Thin forwarder so existing reflection-based normalization tests still find the method.
-    private Task<(CommonStock Stock, string Error)> ResolveStockByTicker(string ticker) =>
+    private Task<(EquityIssuer Stock, string Error)> ResolveStockByTicker(string ticker) =>
         _commonStockRepository.ResolveByTicker(ticker);
 
     [McpServerTool(Name = "GetShortSqueezeScores", Title = "Short Squeeze Scores", ReadOnly = true)]
@@ -784,7 +838,7 @@ public class ShortDataTools
         return _runner.Execute(
             async () =>
             {
-                CommonStock requestedStock = null;
+                EquityIssuer requestedStock = null;
                 if (!string.IsNullOrWhiteSpace(ticker))
                 {
                     var (stock, stockError) = await _commonStockRepository.ResolveByTicker(ticker);
@@ -897,7 +951,7 @@ public class ShortDataTools
     // factor breakdown (raw reading + universe percentile per factor). The board answers
     // "what looks squeeze-prone"; this answers "does MY stock look squeeze-prone".
     private static string RenderSingleSqueezeScore(
-        CommonStock stock,
+        EquityIssuer stock,
         IReadOnlyList<ShortSqueezeScore> scores,
         DateOnly settlementDate
     )
@@ -913,7 +967,7 @@ public class ShortDataTools
         }
 
         if (index < 0)
-            return $"{stock.Ticker} is not in the scored universe at settlement {settlementDate:yyyy-MM-dd} ({scores.Count} stocks scored) — it reported no FINRA short interest, has no usable share count, an implausible short-interest ratio, or a non-equity/trust listing. Use GetShortInterest for its raw series.";
+            return $"{stock.Presentation.Listing.Ticker} is not in the scored universe at settlement {settlementDate:yyyy-MM-dd} ({scores.Count} stocks scored) — it reported no FINRA short interest, has no usable share count, an implausible short-interest ratio, or a non-equity/trust listing. Use GetShortInterest for its raw series.";
 
         var score = scores[index];
         var sb = new System.Text.StringBuilder();

@@ -12,24 +12,30 @@ public static class CommonStockRepositoryExtensions
     /// cannot publish a ticker that became delisted or ambiguously claimed after ingestion.
     /// </summary>
     public static async Task<HashSet<ListedSecurityKey>> GetUniqueActiveListingKeys(
-        this CommonStockRepository repository,
+        this EquityIssuerRepository repository,
         CancellationToken cancellationToken = default
     )
     {
         var stocks = await repository
-            .GetAll()
+            .GetCurrentUsDirectory()
             .Select(stock => new
             {
                 stock.Id,
-                stock.Ticker,
-                stock.ReferenceTickers,
+                Ticker = stock.Presentation.Listing.Ticker,
+                ReferenceTickers = stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
             })
             .ToListAsync(cancellationToken);
         var stockIds = stocks.Select(stock => stock.Id).ToList();
         var delistedRows = await repository
             .GetDelistedListings()
-            .Where(listing => stockIds.Contains(listing.CommonStockId))
-            .Select(listing => new ListedSecurityKey(listing.CommonStockId, listing.ListedTicker))
+            .Where(listing => stockIds.Contains(listing.EquityIssuerId))
+            .Select(listing => new ListedSecurityKey(listing.EquityIssuerId, listing.ListedTicker))
             .ToListAsync(cancellationToken);
         var primaryByStock = stocks.ToDictionary(stock => stock.Id, stock => stock.Ticker);
         var delisted = delistedRows
@@ -78,8 +84,8 @@ public static class CommonStockRepositoryExtensions
             .ToHashSet();
     }
 
-    public static async Task<(CommonStock Stock, string Error)> ResolveByTicker(
-        this CommonStockRepository repository,
+    public static async Task<(EquityIssuer Stock, string Error)> ResolveByTicker(
+        this EquityIssuerRepository repository,
         string ticker
     )
     {
@@ -90,12 +96,23 @@ public static class CommonStockRepositoryExtensions
         var literal = normalized;
         var folded = TickerNormalizer.NormalizeDashListed(normalized) ?? literal;
 
-        async Task<List<CommonStock>> FindOwners(string listedTicker) =>
+        async Task<List<EquityIssuer>> FindOwners(string listedTicker) =>
             await repository
-                .GetAll()
+                .GetCurrentUsDirectory()
                 .Where(candidate =>
-                    candidate.Ticker == listedTicker
-                    || (candidate.Active && candidate.ReferenceTickers.Contains(listedTicker))
+                    candidate.Presentation.Listing.Ticker == listedTicker
+                    || (
+                        candidate.Presentation.Listing.Active
+                        && candidate
+                            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                            .Where(nativeListing =>
+                                nativeListing.MarketCountryCode == "US"
+                                && (nativeListing.IsReferenceListed)
+                            )
+                            .Select(nativeListing => nativeListing.Ticker)
+                            .ToList()
+                            .Contains(listedTicker)
+                    )
                 )
                 .Take(2)
                 .ToListAsync();
@@ -103,7 +120,7 @@ public static class CommonStockRepositoryExtensions
         var authoritativeOwners = await FindOwners(literal);
         if (authoritativeOwners.Select(candidate => candidate.Id).Distinct().Count() > 1)
             return (null, $"Listed security '{ticker}' is ambiguous.");
-        var stock = authoritativeOwners.SingleOrDefault();
+        EquityIssuer stock = authoritativeOwners.SingleOrDefault();
         if (stock == null && !string.Equals(literal, folded, StringComparison.OrdinalIgnoreCase))
         {
             authoritativeOwners = await FindOwners(folded);
@@ -111,17 +128,17 @@ public static class CommonStockRepositoryExtensions
                 return (null, $"Listed security '{ticker}' is ambiguous.");
             stock = authoritativeOwners.SingleOrDefault();
         }
-        stock ??= await repository.GetByTicker(normalized);
+        stock ??= await repository.GetUsByTicker(normalized);
         if (stock == null && normalized.Contains('.'))
-            stock = await repository.GetByTicker(normalized.Replace('.', '-'));
+            stock = await repository.GetUsByTicker(normalized.Replace('.', '-'));
         return stock == null ? (null, $"Stock '{ticker}' not found.") : (stock, null);
     }
 
     // SEC CIKs appear padded and unpadded, while a surviving filer can also own a predecessor's
     // CIK through SecondaryCiks. Resolve the canonical identity across both fields and fail closed
     // when corrupted ownership maps the same CIK to more than one CommonStock.
-    public static async Task<CommonStock> GetByCikTolerant(
-        this CommonStockRepository repository,
+    public static async Task<EquityIssuer> GetByCikTolerant(
+        this EquityIssuerRepository repository,
         string cik,
         CancellationToken cancellationToken = default
     )
@@ -133,7 +150,7 @@ public static class CommonStockRepositoryExtensions
 
         var padded = canonical.PadLeft(10, '0');
         var matches = await repository
-            .GetAll()
+            .GetCurrentUsDirectory()
             .Where(stock =>
                 stock.Cik == validated
                 || stock.Cik == canonical
@@ -152,15 +169,12 @@ public static class CommonStockRepositoryExtensions
     // hard-delete a stock after a ticker map is built, and a dangling FK rolls back the
     // whole batch.
     public static Task<HashSet<Guid>> GetExistingIds(
-        this CommonStockRepository repository,
+        this EquityIssuerRepository repository,
         IEnumerable<Guid> ids,
         CancellationToken cancellationToken = default
     )
     {
-        return repository
-            .GetByIdsIncludingInactive(ids)
-            .Select(s => s.Id)
-            .ToHashSetAsync(cancellationToken);
+        return repository.GetByIds(ids).Select(s => s.Id).ToHashSetAsync(cancellationToken);
     }
 
     // Returns the subset of items whose CommonStockId still exists, preserving order.
@@ -168,7 +182,7 @@ public static class CommonStockRepositoryExtensions
     // can hard-delete a stock after a ticker map is built, and a single dangling FK rolls
     // back the whole batch.
     public static async Task<List<T>> FilterByExistingStocks<T>(
-        this CommonStockRepository repository,
+        this EquityIssuerRepository repository,
         List<T> items,
         Func<T, Guid> stockIdSelector,
         CancellationToken cancellationToken = default

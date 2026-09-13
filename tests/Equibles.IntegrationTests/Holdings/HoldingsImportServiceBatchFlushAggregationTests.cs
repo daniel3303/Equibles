@@ -73,8 +73,8 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -136,30 +136,30 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
         // rows aggregated regardless of how far apart they sit.
         const int paddingCount = 999;
 
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
         var padding = Enumerable
             .Range(0, paddingCount)
-            .Select(i => new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = $"PAD{i:D4}",
-                Name = $"Padding {i}",
-                Cik = (1000000 + i).ToString("D10", CultureInfo.InvariantCulture),
-                Cusip = $"PAD{i:D6}",
-            })
+            .Select(i =>
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: $"PAD{i:D4}",
+                    Name: $"Padding {i}",
+                    Cik: (1000000 + i).ToString("D10", CultureInfo.InvariantCulture),
+                    Cusip: $"PAD{i:D6}"
+                )
+            )
             .ToList();
 
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(apple);
-            seed.Set<CommonStock>().AddRange(padding);
+            seed.Set<EquityIssuer>().Add(apple);
+            seed.Set<EquityIssuer>().AddRange(padding);
             await seed.SaveChangesAsync();
         }
 
@@ -168,7 +168,7 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
         {
             [(apple.Id, null, reportDate)] = 250m,
         };
-        foreach (var p in padding)
+        foreach (EquityIssuer p in padding)
             prices[(p.Id, null, reportDate)] = 1m;
 
         const string coverHeader =
@@ -180,8 +180,10 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
         // AAPL under otherManager 1, 100 shares.
         info.Append("ACC-MULTI\t037833100\t100\tSH\t\tDEFINED\t0\t0\t100\tCOM\t1\n");
         // 999 unique padding rows separating the two AAPL rows.
-        foreach (var p in padding)
-            info.Append($"ACC-MULTI\t{p.Cusip}\t10\tSH\t\tSOLE\t10\t0\t0\tCOM\t\n");
+        foreach (EquityIssuer p in padding)
+            info.Append(
+                $"ACC-MULTI\t{p.Presentation.Listing.Security.Cusip}\t10\tSH\t\tSOLE\t10\t0\t0\tCOM\t\n"
+            );
         // AAPL under otherManager 2, 200 shares. Same upsert key as the
         // first AAPL row but rows apart from it in the INFOTABLE stream.
         info.Append("ACC-MULTI\t037833100\t200\tSH\t\tDEFINED\t0\t0\t200\tCOM\t2\n");
@@ -205,7 +207,7 @@ public class HoldingsImportServiceBatchFlushAggregationTests : IAsyncLifetime
         using var verify = FreshContext();
         var appleHoldings = await verify
             .Set<InstitutionalHolding>()
-            .Where(h => h.CommonStockId == apple.Id)
+            .Where(h => h.EquityIssuerId == apple.Id)
             .ToListAsync();
 
         // Both AAPL rows share one upsert key — exactly one persisted row.

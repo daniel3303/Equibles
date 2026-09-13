@@ -30,12 +30,11 @@ public class InstitutionalHoldingsToolsOwnershipHistoryTests : ParadeDbMcpTestBa
     [Fact]
     public async Task GetInstitutionalOwnershipHistory_QuarterOverQuarterIncrease_RendersPlusSignedPercentChange()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var holder = new InstitutionalHolder
         {
             Cik = "0001067983",
@@ -55,7 +54,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryTests : ParadeDbMcpTestBa
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -75,14 +74,14 @@ public class InstitutionalHoldingsToolsOwnershipHistoryTests : ParadeDbMcpTestBa
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

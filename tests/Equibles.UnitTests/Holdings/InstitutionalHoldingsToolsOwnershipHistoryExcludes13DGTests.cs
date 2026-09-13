@@ -55,12 +55,11 @@ public class InstitutionalHoldingsToolsOwnershipHistoryExcludes13DGTests
     {
         await using var db = NewDb();
 
-        var apple = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var vanguardCapital = new InstitutionalHolder
         {
             Cik = "0002100119",
@@ -102,7 +101,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryExcludes13DGTests
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(db),
             new InstitutionalHolderRepository(db),
-            new CommonStockRepository(db),
+            new EquityIssuerRepository(db),
             new StockSplitRepository(db),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(db),
@@ -124,7 +123,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryExcludes13DGTests
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly reportDate,
         FilingType filingType,
         InvestmentDiscretion discretion,
@@ -134,7 +133,7 @@ public class InstitutionalHoldingsToolsOwnershipHistoryExcludes13DGTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

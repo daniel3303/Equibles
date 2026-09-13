@@ -74,7 +74,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
     {
         await using var seed = FreshContext();
         var industry = await SeedTaxonomy(seed);
-        var aapl = await SeedStock(seed, "AAPL", industry);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
         var holderA = await SeedHolder(seed, "H001");
         var holderB = await SeedHolder(seed, "H002");
         var holderC = await SeedHolder(seed, "H003");
@@ -115,7 +115,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
 
         await using var read = FreshContext();
         var row = await read.Set<StockQuarterlyActivity>()
-            .SingleAsync(s => s.CommonStockId == aapl.Id && s.ReportDate == QCur);
+            .SingleAsync(s => s.EquityIssuerId == aapl.Id && s.ReportDate == QCur);
 
         row.PreviousReportDate.Should()
             .Be(QPrev, "the prior quarter is the latest Form 13F date, not the 13D/G event date");
@@ -132,7 +132,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
     {
         await using var seed = FreshContext();
         var industry = await SeedTaxonomy(seed);
-        var stock = await SeedStock(seed, "ACME", industry);
+        EquityIssuer stock = await SeedStock(seed, "ACME", industry);
         var holder = await SeedHolder(seed, "H001");
         seed.AddRange(
             MakeHolding(stock, holder, QPrev, 10_000, "primary-prev"),
@@ -146,7 +146,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
 
         await using var read = FreshContext();
         var rows = await read.Set<StockQuarterlyListingActivity>()
-            .Where(row => row.CommonStockId == stock.Id && row.ReportDate == QCur)
+            .Where(row => row.EquityIssuerId == stock.Id && row.ReportDate == QCur)
             .OrderBy(row => row.PriceSeriesTicker)
             .ToListAsync();
 
@@ -171,10 +171,10 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
     {
         await using var seed = FreshContext();
         var industry = await SeedTaxonomy(seed);
-        var active = await SeedStock(seed, "LIVE", industry);
-        var inactive = await SeedStock(seed, "GONE", industry);
-        inactive.Active = false;
-        inactive.DelistedOn = QCur.AddDays(-1);
+        EquityIssuer active = await SeedStock(seed, "LIVE", industry);
+        EquityIssuer inactive = await SeedStock(seed, "GONE", industry);
+        inactive.Presentation.Listing.Active = false;
+        inactive.Presentation.Listing.DelistedOn = QCur.AddDays(-1);
         var holder = await SeedHolder(seed, "H001");
         seed.AddRange(
             MakeHolding(active, holder, QCur, 100_000, "live-cur"),
@@ -188,14 +188,14 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
         var activity = await read.Set<StockQuarterlyActivity>()
             .Where(row => row.ReportDate == QCur)
             .ToListAsync();
-        activity.Should().ContainSingle(row => row.CommonStockId == active.Id);
-        activity.Should().NotContain(row => row.CommonStockId == inactive.Id);
+        activity.Should().ContainSingle(row => row.EquityIssuerId == active.Id);
+        activity.Should().NotContain(row => row.EquityIssuerId == inactive.Id);
 
         var listingActivity = await read.Set<StockQuarterlyListingActivity>()
             .Where(row => row.ReportDate == QCur && !row.IsCombined)
             .ToListAsync();
-        listingActivity.Should().ContainSingle(row => row.CommonStockId == active.Id);
-        listingActivity.Should().NotContain(row => row.CommonStockId == inactive.Id);
+        listingActivity.Should().ContainSingle(row => row.EquityIssuerId == active.Id);
+        listingActivity.Should().NotContain(row => row.EquityIssuerId == inactive.Id);
     }
 
     [Fact]
@@ -203,7 +203,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
     {
         await using var seed = FreshContext();
         var industry = await SeedTaxonomy(seed);
-        var stock = await SeedStock(seed, "GONE", industry);
+        EquityIssuer stock = await SeedStock(seed, "GONE", industry);
         var holder = await SeedHolder(seed, "H001");
         seed.Add(MakeHolding(stock, holder, QCur, 100_000, "gone-cur"));
         await seed.SaveChangesAsync();
@@ -212,11 +212,11 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
 
         await using (var deactivate = FreshContext())
         {
-            var persisted = await deactivate
-                .Set<CommonStock>()
+            EquityIssuer persisted = await deactivate
+                .Set<EquityIssuer>()
                 .SingleAsync(row => row.Id == stock.Id);
-            persisted.Active = false;
-            persisted.DelistedOn = QCur.AddDays(1);
+            persisted.Presentation.Listing.Active = false;
+            persisted.Presentation.Listing.DelistedOn = QCur.AddDays(1);
             await deactivate.SaveChangesAsync();
         }
 
@@ -238,19 +238,18 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
         return industry.Id;
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker,
         Guid industryId
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-            IndustryId = industryId,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
+            IndustryId: industryId
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -268,7 +267,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long value,
@@ -278,7 +277,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
@@ -292,7 +291,7 @@ public class HoldingsAggregateRefreshServiceStockActivityTests : IAsyncLifetime
             // CUSIP column is varchar(9); a deterministic per-accession value keeps
             // the holding-row unique key disambiguated across the seeds.
             Cusip =
-                $"{stock.Ticker[..Math.Min(4, stock.Ticker.Length)]}{accession.GetHashCode():X8}"[
+                $"{stock.Presentation.Listing.Ticker[..Math.Min(4, stock.Presentation.Listing.Ticker.Length)]}{accession.GetHashCode():X8}"[
                     ..9
                 ],
         };

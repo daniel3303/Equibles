@@ -79,18 +79,16 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksTests : ParadeDbMcpTestB
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C1",
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "C2",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C1"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "C2"
+        );
         var holders = new InstitutionalHolder[6];
         for (var i = 0; i < holders.Length; i++)
             holders[i] = new InstitutionalHolder { Cik = $"H{i + 1}", Name = $"Filer {i + 1}" };
@@ -142,20 +140,18 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksTests : ParadeDbMcpTestB
     public async Task GetMostHeldStocks_ExactMetricTies_OrderByStockId()
     {
         var reportDate = new DateOnly(2024, 12, 31);
-        var first = new CommonStock
-        {
-            Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
-            Ticker = "ZZZZ",
-            Name = "First by identifier",
-            Cik = "C1",
-        };
-        var second = new CommonStock
-        {
-            Id = Guid.Parse("00000000-0000-0000-0000-000000000002"),
-            Ticker = "AAAA",
-            Name = "Second by identifier",
-            Cik = "C2",
-        };
+        EquityIssuer first = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            Ticker: "ZZZZ",
+            Name: "First by identifier",
+            Cik: "C1"
+        );
+        EquityIssuer second = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.Parse("00000000-0000-0000-0000-000000000002"),
+            Ticker: "AAAA",
+            Name: "Second by identifier",
+            Cik: "C2"
+        );
         var holder = new InstitutionalHolder { Cik = "H1", Name = "Filer 1" };
         DbContext.AddRange(first, second, holder);
         DbContext.Add(MakeHolding(first, holder, reportDate, shares: 100, value: 100_000));
@@ -176,24 +172,21 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksTests : ParadeDbMcpTestB
     {
         var prior = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C1",
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "C2",
-        };
-        var nvda = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "C3",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C1"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "C2"
+        );
+        EquityIssuer nvda = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "C3"
+        );
         DbContext.AddRange(aapl, msft, nvda);
 
         var holders = new InstitutionalHolder[5];
@@ -217,7 +210,7 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksTests : ParadeDbMcpTestB
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             new StockSplitRepository(ctx),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(ctx),
@@ -228,7 +221,7 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksTests : ParadeDbMcpTestB
         );
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -236,7 +229,7 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksTests : ParadeDbMcpTestB
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
@@ -244,6 +237,7 @@ public class InstitutionalHoldingsToolsGetMostHeldStocksTests : ParadeDbMcpTestB
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{holder.Cik}-{stock.Ticker}-{reportDate:yyyyMMdd}",
+            AccessionNumber =
+                $"acc-{holder.Cik}-{stock.Presentation.Listing.Ticker}-{reportDate:yyyyMMdd}",
         };
 }

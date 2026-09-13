@@ -38,9 +38,9 @@ public class InsiderTransactionRepositoryGetRecentByTypeTests : IDisposable
     public async Task GetRecentByType_FiltersByCodeAndIncludesSinceBoundary()
     {
         var since = new DateOnly(2024, 6, 10);
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InsiderOwner>().Add(owner);
 
         var onBoundary = CreateTransaction(
@@ -76,13 +76,12 @@ public class InsiderTransactionRepositoryGetRecentByTypeTests : IDisposable
         result.Should().ContainSingle().Which.Id.Should().Be(onBoundary.Id);
     }
 
-    private static CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.") =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-        };
+    private static EquityIssuer CreateStock(string ticker = "AAPL", string name = "Apple Inc.") =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name
+        );
 
     private static InsiderOwner CreateOwner(string cik = "0001234567", string name = "John Doe") =>
         new()
@@ -96,7 +95,7 @@ public class InsiderTransactionRepositoryGetRecentByTypeTests : IDisposable
         };
 
     private static InsiderTransaction CreateTransaction(
-        CommonStock stock,
+        EquityIssuer stock,
         InsiderOwner owner,
         TransactionCode code,
         DateOnly transactionDate,
@@ -105,8 +104,7 @@ public class InsiderTransactionRepositoryGetRecentByTypeTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
             FilingDate = transactionDate.AddDays(1),

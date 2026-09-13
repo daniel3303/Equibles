@@ -430,7 +430,7 @@ public class CongressionalTradeSyncService
                 new CongressionalTrade
                 {
                     CongressMemberId = member.Id,
-                    CommonStockId = resolutions.GetValueOrDefault(tx),
+                    EquityIssuerId = resolutions.GetValueOrDefault(tx),
                     FiledTicker = TickerNormalizer.NormalizeIdentity(tx.Ticker) ?? "",
                     FilingKind = tx.FilingKind,
                     SourceId = tx.SourceId,
@@ -475,14 +475,14 @@ public class CongressionalTradeSyncService
         var incomingByIdentity = incoming
             .GroupBy(InlineMetadataRepairIdentity.From)
             .ToDictionary(group => group.Key, group => group.ToList());
-        var stockIds = incoming.Select(t => t.CommonStockId).Distinct().ToList();
+        var stockIds = incoming.Select(t => t.EquityIssuerId).Distinct().ToList();
         var memberIds = incoming.Select(t => t.CongressMemberId).Distinct().ToList();
         var firstDate = incoming.Min(t => t.TransactionDate);
         var lastDate = incoming.Max(t => t.TransactionDate);
         var legacyRows = await dbContext
             .Set<CongressionalTrade>()
             .Where(t =>
-                stockIds.Contains(t.CommonStockId)
+                stockIds.Contains(t.EquityIssuerId)
                 && memberIds.Contains(t.CongressMemberId)
                 && t.TransactionDate >= firstDate
                 && t.TransactionDate <= lastDate
@@ -600,7 +600,7 @@ public class CongressionalTradeSyncService
                     (existing, incoming) =>
                         new CongressionalTrade
                         {
-                            CommonStockId = incoming.CommonStockId,
+                            EquityIssuerId = incoming.EquityIssuerId,
                             CongressMemberId = incoming.CongressMemberId,
                             TransactionDate = incoming.TransactionDate,
                             FilingDate = incoming.FilingDate,
@@ -741,7 +741,7 @@ public class CongressionalTradeSyncService
                 .ThenBy(candidate => candidate.SourceId, StringComparer.Ordinal)
                 .First();
             var legacy = legacyCandidates[0];
-            legacy.CommonStockId = source.CommonStockId;
+            legacy.EquityIssuerId = source.EquityIssuerId;
             legacy.FiledTicker = source.FiledTicker;
             legacy.FilingKind = source.FilingKind;
             legacy.SourceId = source.SourceId;
@@ -778,14 +778,14 @@ public class CongressionalTradeSyncService
         if (authoritativeIdentities.Count == 0)
             return;
 
-        var stockIds = incoming.Select(t => t.CommonStockId).Distinct().ToList();
+        var stockIds = incoming.Select(t => t.EquityIssuerId).Distinct().ToList();
         var memberIds = incoming.Select(t => t.CongressMemberId).Distinct().ToList();
         var firstDate = incoming.Min(t => t.TransactionDate);
         var lastDate = incoming.Max(t => t.TransactionDate);
         var legacyRows = await dbContext
             .Set<CongressionalTrade>()
             .Where(t =>
-                stockIds.Contains(t.CommonStockId)
+                stockIds.Contains(t.EquityIssuerId)
                 && memberIds.Contains(t.CongressMemberId)
                 && t.TransactionDate >= firstDate
                 && t.TransactionDate <= lastDate
@@ -888,7 +888,7 @@ public class CongressionalTradeSyncService
     {
         public static TradeBaseIdentity From(CongressionalTrade trade) =>
             new(
-                trade.CommonStockId,
+                trade.EquityIssuerId,
                 trade.CongressMemberId,
                 trade.TransactionDate,
                 trade.TransactionType,
@@ -918,7 +918,7 @@ public class CongressionalTradeSyncService
             string assetName
         ) =>
             new(
-                trade.CommonStockId,
+                trade.EquityIssuerId,
                 trade.CongressMemberId,
                 trade.TransactionDate,
                 trade.TransactionType,

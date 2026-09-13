@@ -56,14 +56,14 @@ public class InsiderTradingToolsOwnershipBucketsTests
             new InsiderTransactionRepository(db),
             new InsiderOwnerRepository(db),
             new Form144FilingRepository(db),
-            new CommonStockRepository(db),
+            new EquityIssuerRepository(db),
             new StockSplitRepository(db),
             new ErrorManager(new ErrorRepository(db)),
             Substitute.For<ILogger<InsiderTradingTools>>()
         );
 
     private static InsiderTransaction Row(
-        CommonStock stock,
+        EquityIssuer stock,
         InsiderOwner owner,
         string accession,
         int order,
@@ -75,8 +75,7 @@ public class InsiderTradingToolsOwnershipBucketsTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
             TransactionDate = transactionDate ?? new DateOnly(2026, 2, 10),
@@ -93,14 +92,13 @@ public class InsiderTradingToolsOwnershipBucketsTests
             TransactionOrder = order,
         };
 
-    private static (CommonStock Stock, InsiderOwner Owner) Fixture(EquiblesFinancialDbContext db)
+    private static (EquityIssuer Stock, InsiderOwner Owner) Fixture(EquiblesFinancialDbContext db)
     {
-        var stock = new CommonStock
-        {
-            Ticker = "LLY",
-            Name = "Eli Lilly and Company",
-            Cik = "0000059478",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "LLY",
+            Name: "Eli Lilly and Company",
+            Cik: "0000059478"
+        );
         var owner = new InsiderOwner
         {
             OwnerCik = "0001233333",

@@ -22,6 +22,7 @@ public class HoldingValueBasisForwardSplitTests
         {
             new()
             {
+                PriceSeriesTicker = "TEST",
                 EffectiveDate = new DateOnly(2024, 6, 10),
                 Numerator = 10m,
                 Denominator = 1m,

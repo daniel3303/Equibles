@@ -93,14 +93,28 @@ public class DocumentProcessorTests
             new()
             {
                 Id = documentId,
-                CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
+                Issuer = new EquityIssuer
+                {
+                    Name = "Test Co",
+                    Presentation = new EquityIssuerPresentation
+                    {
+                        Listing = new EquityListing { Ticker = "TEST" },
+                    },
+                },
                 Content = null,
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 DocumentType = DocumentType.TenK,
-                CommonStock = new CommonStock { Name = "Good Co", Ticker = "GOOD" },
+                Issuer = new EquityIssuer
+                {
+                    Name = "Good Co",
+                    Presentation = new EquityIssuerPresentation
+                    {
+                        Listing = new EquityListing { Ticker = "GOOD" },
+                    },
+                },
                 Content = new Equibles.Media.Data.Models.File(),
             },
         };
@@ -133,13 +147,27 @@ public class DocumentProcessorTests
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
+                Issuer = new EquityIssuer
+                {
+                    Name = "Test Co",
+                    Presentation = new EquityIssuerPresentation
+                    {
+                        Listing = new EquityListing { Ticker = "TEST" },
+                    },
+                },
                 Content = null,
             },
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStock = new CommonStock { Name = "Other Co", Ticker = "OTHR" },
+                Issuer = new EquityIssuer
+                {
+                    Name = "Other Co",
+                    Presentation = new EquityIssuerPresentation
+                    {
+                        Listing = new EquityListing { Ticker = "OTHR" },
+                    },
+                },
                 Content = null,
             },
         };
@@ -166,7 +194,14 @@ public class DocumentProcessorTests
         {
             Id = Guid.NewGuid(),
             DocumentType = DocumentType.TenK,
-            CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
+            Issuer = new EquityIssuer
+            {
+                Name = "Test Co",
+                Presentation = new EquityIssuerPresentation
+                {
+                    Listing = new EquityListing { Ticker = "TEST" },
+                },
+            },
             Content = new Equibles.Media.Data.Models.File(),
         };
         var documents = new List<Document> { document };
@@ -199,14 +234,28 @@ public class DocumentProcessorTests
             {
                 Id = Guid.NewGuid(),
                 DocumentType = DocumentType.TenK,
-                CommonStock = new CommonStock { Name = "Test Co", Ticker = "TEST" },
+                Issuer = new EquityIssuer
+                {
+                    Name = "Test Co",
+                    Presentation = new EquityIssuerPresentation
+                    {
+                        Listing = new EquityListing { Ticker = "TEST" },
+                    },
+                },
                 Content = new Equibles.Media.Data.Models.File(),
             },
             new()
             {
                 Id = Guid.NewGuid(),
                 DocumentType = DocumentType.TenK,
-                CommonStock = new CommonStock { Name = "Other Co", Ticker = "OTHR" },
+                Issuer = new EquityIssuer
+                {
+                    Name = "Other Co",
+                    Presentation = new EquityIssuerPresentation
+                    {
+                        Listing = new EquityListing { Ticker = "OTHR" },
+                    },
+                },
                 Content = new Equibles.Media.Data.Models.File(),
             },
         };

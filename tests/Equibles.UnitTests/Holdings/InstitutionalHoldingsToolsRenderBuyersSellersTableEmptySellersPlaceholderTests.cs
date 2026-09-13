@@ -23,7 +23,10 @@ public class InstitutionalHoldingsToolsRenderBuyersSellersTableEmptySellersPlace
     [Fact]
     public void RenderBuyersSellersTable_EmptySellers_EmitsSellersSpecificPlaceholder()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var topBuyers = new List<(
             string Name,
             long CurrentShares,

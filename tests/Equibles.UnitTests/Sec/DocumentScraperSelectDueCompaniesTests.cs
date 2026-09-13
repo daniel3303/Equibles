@@ -14,19 +14,14 @@ public class DocumentScraperSelectDueCompaniesTests
     private static readonly DateTime Now = new(2026, 7, 9, 12, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime Cutoff = Now.AddHours(-24);
 
-    private static CommonStock Company(string ticker) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Cik = "1",
-        };
+    private static EquityIssuer Company(string ticker) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(Id: Guid.NewGuid(), Ticker: ticker, Cik: "1");
 
     [Fact]
     public void NeverSyncedCompaniesComeFirst()
     {
-        var neverSynced = Company("NEW");
-        var stale = Company("OLD");
+        EquityIssuer neverSynced = Company("NEW");
+        EquityIssuer stale = Company("OLD");
 
         var due = DocumentScraper.SelectDueCompanies(
             [stale, neverSynced],
@@ -44,7 +39,7 @@ public class DocumentScraperSelectDueCompaniesTests
     [Fact]
     public void FreshlySyncedCompaniesAreNotDue()
     {
-        var fresh = Company("FRESH");
+        EquityIssuer fresh = Company("FRESH");
 
         var due = DocumentScraper.SelectDueCompanies(
             [fresh],
@@ -60,9 +55,9 @@ public class DocumentScraperSelectDueCompaniesTests
     [Fact]
     public void StalestCompaniesAreOrderedFirstAndCapApplies()
     {
-        var stale1 = Company("S1");
-        var stale2 = Company("S2");
-        var stale3 = Company("S3");
+        EquityIssuer stale1 = Company("S1");
+        EquityIssuer stale2 = Company("S2");
+        EquityIssuer stale3 = Company("S3");
         var stamps = new Dictionary<Guid, DateTime>
         {
             [stale1.Id] = Cutoff.AddHours(-3),
@@ -86,7 +81,7 @@ public class DocumentScraperSelectDueCompaniesTests
     [Fact]
     public void CompaniesAlreadySelectedByDiscoveryAreExcluded()
     {
-        var dirty = Company("DIRTY");
+        EquityIssuer dirty = Company("DIRTY");
 
         var due = DocumentScraper.SelectDueCompanies([dirty], [], [dirty.Id], Cutoff, 10);
 

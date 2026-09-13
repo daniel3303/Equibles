@@ -25,17 +25,16 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
     public FilingItemsBackfillServiceTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private async Task<CommonStock> SeedCompany(string ticker, string cik)
+    private async Task<EquityIssuer> SeedCompany(string ticker, string cik)
     {
-        var company = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = $"{ticker} Inc.",
-            Cik = cik,
-        };
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: $"{ticker} Inc.",
+            Cik: cik
+        );
         await using var seed = Fixture.CreateDbContext();
-        seed.Set<CommonStock>().Add(company);
+        seed.Set<EquityIssuer>().Add(company);
         await seed.SaveChangesAsync();
         return company;
     }
@@ -63,7 +62,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
         var document = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = companyId,
+            EquityIssuerId = companyId,
             Content = content,
             DocumentType = documentType ?? DocumentType.EightK,
             ReportingDate = reportingDate,
@@ -116,7 +115,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Backfill_StampsPendingEightKsByAccessionAndMarksFeedlessOnes()
     {
-        var company = await SeedCompany("ITM1", "0000320193");
+        EquityIssuer company = await SeedCompany("ITM1", "0000320193");
         await SeedEightK(company.Id, "0000320193-24-000001", new DateOnly(2024, 2, 1));
         await SeedEightK(company.Id, "0000320193-24-000002", new DateOnly(2024, 5, 1));
         DbContext.ChangeTracker.Clear();
@@ -148,7 +147,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
         // 8-K/A rows carry form "8-K/A" in the submissions feed, so an exact-form
         // "8-K" filter would drop them and the amendment would be stamped not-found.
         // The sweep must select pending amendments AND walk the feed unfiltered.
-        var company = await SeedCompany("ITMA", "0000320193");
+        EquityIssuer company = await SeedCompany("ITMA", "0000320193");
         var documentId = await SeedEightK(
             company.Id,
             "0000320193-24-000003",
@@ -182,7 +181,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Backfill_DerivesAccessionFromLegacySourceUrlAndPersistsIt()
     {
-        var company = await SeedCompany("ITM2", "0000320193");
+        EquityIssuer company = await SeedCompany("ITM2", "0000320193");
         var documentId = await SeedEightK(
             company.Id,
             accessionNumber: null,
@@ -207,7 +206,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
     {
         // A document the feed can never match (no accession, underivable URL) must be marked
         // on the first sweep so the company is not re-fetched forever.
-        var company = await SeedCompany("ITM3", "0000320193");
+        EquityIssuer company = await SeedCompany("ITM3", "0000320193");
         await SeedEightK(company.Id, accessionNumber: null, new DateOnly(2024, 2, 1));
         DbContext.ChangeTracker.Clear();
 
@@ -235,7 +234,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Backfill_FeedFailure_LeavesDocumentsPendingForRetry()
     {
-        var company = await SeedCompany("ITM4", "0000320193");
+        EquityIssuer company = await SeedCompany("ITM4", "0000320193");
         var documentId = await SeedEightK(
             company.Id,
             "0000320193-24-000010",
@@ -279,8 +278,8 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Backfill_BatchSizeBoundsCompaniesPerCycle_NewestFilingsFirst()
     {
-        var older = await SeedCompany("ITM5", "0000100001");
-        var newer = await SeedCompany("ITM6", "0000100002");
+        EquityIssuer older = await SeedCompany("ITM5", "0000100001");
+        EquityIssuer newer = await SeedCompany("ITM6", "0000100002");
         await SeedEightK(older.Id, "0000100001-20-000001", new DateOnly(2020, 1, 1));
         await SeedEightK(newer.Id, "0000100002-24-000001", new DateOnly(2024, 1, 1));
         DbContext.ChangeTracker.Clear();
@@ -309,8 +308,8 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
     {
         // The newest-first ordering puts the failing company first; the healthy one must
         // still be fetched and stamped in the same cycle.
-        var failingCompany = await SeedCompany("ITM8", "0000200001");
-        var healthyCompany = await SeedCompany("ITM9", "0000200002");
+        EquityIssuer failingCompany = await SeedCompany("ITM8", "0000200001");
+        EquityIssuer healthyCompany = await SeedCompany("ITM9", "0000200002");
         await SeedEightK(failingCompany.Id, "0000200001-24-000001", new DateOnly(2024, 6, 1));
         await SeedEightK(healthyCompany.Id, "0000200002-24-000001", new DateOnly(2024, 1, 1));
         DbContext.ChangeTracker.Clear();
@@ -352,7 +351,7 @@ public class FilingItemsBackfillServiceTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Backfill_CompanyWithoutCik_IsNeverSelected()
     {
-        var company = await SeedCompany("ITM7", cik: null);
+        EquityIssuer company = await SeedCompany("ITM7", cik: null);
         await SeedEightK(company.Id, "0000100003-24-000001", new DateOnly(2024, 1, 1));
         DbContext.ChangeTracker.Clear();
 

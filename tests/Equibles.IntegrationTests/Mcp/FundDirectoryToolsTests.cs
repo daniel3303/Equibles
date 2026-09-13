@@ -324,7 +324,7 @@ public class FundDirectoryToolsTests : IDisposable
     {
         return new NportFiling
         {
-            CommonStockId = null,
+            EquityIssuerId = null,
             RegistrantCik = series.RegistrantCik,
             AccessionNumber = accession,
             FilingDate = filingDate,

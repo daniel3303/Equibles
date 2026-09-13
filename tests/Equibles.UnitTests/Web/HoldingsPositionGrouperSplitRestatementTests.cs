@@ -178,10 +178,9 @@ public class HoldingsPositionGrouperSplitRestatementTests
     }
 
     [Fact]
-    public void LegacyNullAttributedSplit_RestatesThePrimarySeries()
+    public void UnattributedSplit_DoesNotRewriteReportedShareCounts()
     {
-        // Older captured splits carry no PriceSeriesTicker; they belong to the primary
-        // series (PriceSeriesSplitScope's legacy-null rule).
+        // Unknown source identity cannot authorize a numerical restatement.
         var holderId = Guid.NewGuid();
         var holder = new InstitutionalHolder { Id = holderId, Name = "Legacy Fund" };
         var previous = MakeHolding(holderId, holder, PreviousQuarter, shares: 1_000, value: 90);
@@ -205,7 +204,9 @@ public class HoldingsPositionGrouperSplitRestatementTests
             PrimaryTicker
         );
 
-        grouped[PositionChangeType.Unchanged].Should().ContainSingle();
+        var retained = grouped.SelectMany(pair => pair.Value).Should().ContainSingle().Subject;
+        retained.PreviousShares.Should().Be(1_000);
+        retained.CurrentShares.Should().Be(10_000);
     }
 
     [Fact]

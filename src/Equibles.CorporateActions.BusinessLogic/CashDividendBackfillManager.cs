@@ -31,17 +31,28 @@ public class CashDividendBackfillManager
     // them into CashDividend. Returns the number of rows written (new ex-dates
     // plus restated amounts); a re-run over already-captured history returns 0.
     public async Task<int> BackfillHistory(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly since,
         CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        var listing = stock.Presentation.Listing;
+        var ticker = listing.Ticker;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var chartData = await _yahooClient.GetChart(stock.Ticker, since, today);
+        var chartData = await _yahooClient.GetChart(ticker, since, today);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (
+            chartData.SourceIdentity is not { Currency: "USD" } identity
+            || !string.Equals(identity.Symbol, ticker, StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(identity.ExchangeCode)
+            || string.IsNullOrWhiteSpace(identity.ExchangeTimeZone)
+            || listing.MarketCountryCode != "US"
+        )
+            return 0;
 
         // Map Yahoo's dividend shape onto the source-neutral capture DTO at this
         // boundary (mirrors the price sync's CaptureDividends), so the capture
@@ -51,10 +62,17 @@ public class CashDividendBackfillManager
             {
                 ExDate = d.Date,
                 AmountPerShare = d.Amount,
+                Currency = identity.Currency,
                 Source = CashDividendSource.Yahoo,
             })
             .ToList();
 
-        return await _captureManager.Capture(stock.Id, stock.Ticker, captured, cancellationToken);
+        return await _captureManager.CaptureForListing(
+            stock.Id,
+            listing.Id,
+            ticker,
+            captured,
+            cancellationToken
+        );
     }
 }

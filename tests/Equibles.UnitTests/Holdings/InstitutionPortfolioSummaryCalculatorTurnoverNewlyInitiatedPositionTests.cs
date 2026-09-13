@@ -45,7 +45,7 @@ public class InstitutionPortfolioSummaryCalculatorTurnoverNewlyInitiatedPosition
     private static InstitutionalHolding MakeHolding(Guid stockId, long shares, long value) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = Guid.NewGuid(),
             FilingDate = new DateOnly(2025, 1, 15),
             ReportDate = new DateOnly(2024, 12, 31),

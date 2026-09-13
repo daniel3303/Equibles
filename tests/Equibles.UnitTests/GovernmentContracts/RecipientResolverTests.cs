@@ -37,24 +37,21 @@ public class RecipientResolverTests
             // "Acme Corporation" and "Acme Corp" both normalize to "ACME" but are distinct stocks —
             // ambiguous. "Zenith Industries" is unique.
             seed.AddRange(
-                new CommonStock
-                {
-                    Ticker = "ACMEA",
-                    Name = "Acme Corporation",
-                    Cik = "1",
-                },
-                new CommonStock
-                {
-                    Ticker = "ACMEB",
-                    Name = "Acme Corp",
-                    Cik = "2",
-                },
-                new CommonStock
-                {
-                    Ticker = "ZNTH",
-                    Name = "Zenith Industries",
-                    Cik = "3",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "ACMEA",
+                    Name: "Acme Corporation",
+                    Cik: "1"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "ACMEB",
+                    Name: "Acme Corp",
+                    Cik: "2"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "ZNTH",
+                    Name: "Zenith Industries",
+                    Cik: "3"
+                )
             );
             await seed.SaveChangesAsync();
         }
@@ -93,7 +90,7 @@ public class RecipientResolverTests
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => NewContext(options));
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 }

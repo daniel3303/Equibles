@@ -183,14 +183,13 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private static CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
+    private static EquityIssuer CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name
+        );
     }
 
     private static InsiderOwner CreateOwner(string cik = "0001234567", string name = "John Doe")
@@ -207,7 +206,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     }
 
     private static InsiderTransaction CreateTransaction(
-        CommonStock stock,
+        EquityIssuer stock,
         InsiderOwner owner,
         DateOnly? filingDate = null,
         DateOnly? transactionDate = null,
@@ -225,8 +224,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         return new InsiderTransaction
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
             FilingDate = filingDate ?? (transactionDate ?? new DateOnly(2024, 6, 14)).AddDays(1),
@@ -243,9 +241,9 @@ public class InsiderTransactionRepositoryTests : IDisposable
         };
     }
 
-    private async Task SeedStockAndOwner(CommonStock stock, InsiderOwner owner)
+    private async Task SeedStockAndOwner(EquityIssuer stock, InsiderOwner owner)
     {
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InsiderOwner>().Add(owner);
         await _dbContext.SaveChangesAsync();
     }
@@ -255,7 +253,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_StockWithTransactions_ReturnsAll()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
@@ -269,7 +267,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _repository.AddRange([tx1, tx2]);
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(stock).ToListAsync();
+        var result = await _repository.GetByIssuerId((stock).Id).ToListAsync();
 
         result.Should().HaveCount(2);
         result.Select(t => t.Id).Should().Contain(tx1.Id).And.Contain(tx2.Id);
@@ -278,11 +276,11 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_StockWithNoTransactions_ReturnsEmpty()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
-        var result = await _repository.GetByStock(stock).ToListAsync();
+        var result = await _repository.GetByIssuerId((stock).Id).ToListAsync();
 
         result.Should().BeEmpty();
     }
@@ -290,10 +288,10 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_DoesNotReturnTransactionsForOtherStocks()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.");
         var owner = CreateOwner();
-        _dbContext.Set<CommonStock>().AddRange(apple, msft);
+        _dbContext.Set<EquityIssuer>().AddRange(apple, msft);
         _dbContext.Set<InsiderOwner>().Add(owner);
         await _dbContext.SaveChangesAsync();
 
@@ -302,7 +300,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _repository.AddRange([appleTx, msftTx]);
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(apple).ToListAsync();
+        var result = await _repository.GetByIssuerId((apple).Id).ToListAsync();
 
         result.Should().ContainSingle().Which.Id.Should().Be(appleTx.Id);
     }
@@ -310,11 +308,11 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_ReturnsQueryable()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
-        var result = _repository.GetByStock(stock);
+        var result = _repository.GetByIssuerId((stock).Id);
 
         result.Should().BeAssignableTo<IQueryable<InsiderTransaction>>();
     }
@@ -324,7 +322,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_DateRange_ReturnsOnlyTransactionsInRange()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
@@ -357,7 +355,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
 
         var from = new DateOnly(2024, 3, 1);
         var to = new DateOnly(2024, 6, 30);
-        var result = await _repository.GetByStock(stock, from, to).ToListAsync();
+        var result = await _repository.GetByIssuerId((stock).Id, from, to).ToListAsync();
 
         result.Should().HaveCount(2);
         result.Select(t => t.Id).Should().Contain(txInRange1.Id).And.Contain(txInRange2.Id);
@@ -366,7 +364,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_DateRange_IncludesBoundaryDates()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
@@ -387,7 +385,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _repository.AddRange([txOnFrom, txOnTo]);
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(stock, fromDate, toDate).ToListAsync();
+        var result = await _repository.GetByIssuerId((stock).Id, fromDate, toDate).ToListAsync();
 
         result.Should().HaveCount(2);
     }
@@ -395,7 +393,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_DateRange_NoMatchingDates_ReturnsEmpty()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
@@ -405,7 +403,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
 
         var from = new DateOnly(2024, 6, 1);
         var to = new DateOnly(2024, 12, 31);
-        var result = await _repository.GetByStock(stock, from, to).ToListAsync();
+        var result = await _repository.GetByIssuerId((stock).Id, from, to).ToListAsync();
 
         result.Should().BeEmpty();
     }
@@ -413,10 +411,10 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_DateRange_DoesNotReturnOtherStocks()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.");
         var owner = CreateOwner();
-        _dbContext.Set<CommonStock>().AddRange(apple, msft);
+        _dbContext.Set<EquityIssuer>().AddRange(apple, msft);
         _dbContext.Set<InsiderOwner>().Add(owner);
         await _dbContext.SaveChangesAsync();
 
@@ -437,7 +435,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         await _repository.SaveChanges();
 
         var result = await _repository
-            .GetByStock(apple, new DateOnly(2024, 1, 1), new DateOnly(2024, 12, 31))
+            .GetByIssuerId((apple).Id, new DateOnly(2024, 1, 1), new DateOnly(2024, 12, 31))
             .ToListAsync();
 
         result.Should().ContainSingle().Which.Id.Should().Be(appleTx.Id);
@@ -448,7 +446,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByOwner_OwnerWithTransactions_ReturnsAll()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
@@ -470,7 +468,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByOwner_OwnerWithNoTransactions_ReturnsEmpty()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
@@ -482,10 +480,10 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByOwner_DoesNotReturnTransactionsForOtherOwners()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner1 = CreateOwner(cik: "0001111111", name: "Alice");
         var owner2 = CreateOwner(cik: "0002222222", name: "Bob");
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InsiderOwner>().AddRange(owner1, owner2);
         await _dbContext.SaveChangesAsync();
 
@@ -502,7 +500,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByOwner_ReturnsQueryable()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
@@ -516,7 +514,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByStock_ReturnsAllTransactionsForStock()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
@@ -535,7 +533,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _repository.AddRange([tx1, tx2]);
         await _repository.SaveChanges();
 
-        var result = await _repository.GetHistoryByStock(stock).ToListAsync();
+        var result = await _repository.GetHistoryByIssuerId((stock).Id).ToListAsync();
 
         result.Should().HaveCount(2);
     }
@@ -543,10 +541,10 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByStock_DoesNotReturnOtherStocks()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.");
         var owner = CreateOwner();
-        _dbContext.Set<CommonStock>().AddRange(apple, msft);
+        _dbContext.Set<EquityIssuer>().AddRange(apple, msft);
         _dbContext.Set<InsiderOwner>().Add(owner);
         await _dbContext.SaveChangesAsync();
 
@@ -555,7 +553,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
         _repository.AddRange([appleTx, msftTx]);
         await _repository.SaveChanges();
 
-        var result = await _repository.GetHistoryByStock(apple).ToListAsync();
+        var result = await _repository.GetHistoryByIssuerId((apple).Id).ToListAsync();
 
         result.Should().ContainSingle().Which.Id.Should().Be(appleTx.Id);
     }
@@ -565,7 +563,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAccessionNumber_MatchingNumber_ReturnsTransactions()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
@@ -581,10 +579,10 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAccessionNumber_MultipleTransactionsSameAccession_ReturnsAll()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner1 = CreateOwner(cik: "0001111111", name: "Alice");
         var owner2 = CreateOwner(cik: "0002222222", name: "Bob");
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InsiderOwner>().AddRange(owner1, owner2);
         await _dbContext.SaveChangesAsync();
 
@@ -602,7 +600,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAccessionNumber_NoMatch_ReturnsEmpty()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 
@@ -618,7 +616,7 @@ public class InsiderTransactionRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAccessionNumber_ReturnsQueryable()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateOwner();
         await SeedStockAndOwner(stock, owner);
 

@@ -30,13 +30,12 @@ public class InsiderFilingReprocessManagerCancellationTests : ParadeDbMcpTestBas
     public async Task Run_CancelledMidBatch_CountsOnlyAttemptedFilingsAsProcessed()
     {
         var date = new DateOnly(2024, 6, 14);
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var owner = new InsiderOwner
         {
             Id = Guid.NewGuid(),
@@ -52,7 +51,7 @@ public class InsiderFilingReprocessManagerCancellationTests : ParadeDbMcpTestBas
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InsiderOwnerId = owner.Id,
                 AccessionNumber = accession,
                 TransactionOrder = 0,
@@ -120,7 +119,7 @@ public class InsiderFilingReprocessManagerCancellationTests : ParadeDbMcpTestBas
         var manager = new InsiderFilingReprocessManager(
             new InsiderTransactionRepository(runCtx),
             new InsiderFilingRepository(runCtx),
-            new DailyStockPriceRepository(runCtx),
+            new EquityDailyStockPriceRepository(runCtx),
             new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             edgar,

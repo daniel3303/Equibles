@@ -31,19 +31,23 @@ public class TickerMapService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
         var query =
-            tickersToSync?.Count > 0 ? stockRepo.GetByTickers(tickersToSync) : stockRepo.GetAll();
+            tickersToSync?.Count > 0
+                ? stockRepo.GetUsByTickers(tickersToSync)
+                : stockRepo.GetCurrentUsDirectory();
         var delistedListings = stockRepo.GetDelistedListings();
         query = query.Where(stock =>
             !delistedListings.Any(listing =>
-                listing.CommonStockId == stock.Id && listing.ListedTicker == stock.Ticker
+                listing.EquityIssuerId == stock.Id
+                && listing.ListedTicker == stock.Presentation.Listing.Ticker
             )
         );
 
         return await query.ToDictionaryAsync(
-            s => s.Ticker,
+            s => s.Presentation.Listing.Ticker,
             s => s.Id,
             comparer ?? StringComparer.OrdinalIgnoreCase,
             cancellationToken
@@ -61,20 +65,27 @@ public class TickerMapService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var stocks = await stockRepo
-            .GetAll()
-            .Where(stock => stock.Active)
+            .GetCurrentUsDirectory()
+            .Where(stock => stock.Presentation.Listing.Active)
             .Select(stock => new
             {
                 stock.Id,
-                stock.Ticker,
-                stock.ReferenceTickers,
+                Ticker = stock.Presentation.Listing.Ticker,
+                ReferenceTickers = stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
             })
             .ToListAsync(cancellationToken);
         var rawDelisted = await stockRepo
             .GetDelistedListings()
-            .Select(listing => new ListedSecurityKey(listing.CommonStockId, listing.ListedTicker))
+            .Select(listing => new ListedSecurityKey(listing.EquityIssuerId, listing.ListedTicker))
             .ToListAsync(cancellationToken);
         var primaryByStock = stocks.ToDictionary(stock => stock.Id, stock => stock.Ticker);
         var delistedSet = rawDelisted
@@ -128,6 +139,44 @@ public class TickerMapService
         return claims.ToDictionary(
             claim => claim.Key,
             claim => claim.Value,
+            comparer ?? StringComparer.OrdinalIgnoreCase
+        );
+    }
+
+    public async Task<Dictionary<string, EquityListingReference>> BuildNativeListed(
+        List<string> tickersToSync,
+        CancellationToken cancellationToken,
+        StringComparer comparer = null
+    )
+    {
+        var source = await BuildListed(tickersToSync, cancellationToken, comparer);
+        using var scope = _scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
+        var issuerIds = source.Values.Select(row => row.CommonStockId).Distinct().ToList();
+        var candidates = await repository
+            .GetAll()
+            .Where(listing =>
+                listing.MarketCountryCode == "US"
+                && issuerIds.Contains(listing.Security.EquityIssuerId)
+            )
+            .Select(listing => new EquityListingReference(
+                listing.Id,
+                listing.Security.EquityIssuerId,
+                listing.Ticker
+            ))
+            .ToListAsync(cancellationToken);
+        var mappings = candidates
+            .GroupBy(listing => new ListedSecurityKey(listing.EquityIssuerId, listing.ListedTicker))
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single());
+        return source.ToDictionary(
+            row => row.Key,
+            row =>
+                mappings.TryGetValue(row.Value, out var listing)
+                    ? listing
+                    : throw new InvalidOperationException(
+                        $"No native identity for {row.Value.CommonStockId}/{row.Value.ListedTicker}."
+                    ),
             comparer ?? StringComparer.OrdinalIgnoreCase
         );
     }

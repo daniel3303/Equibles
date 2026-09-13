@@ -30,19 +30,18 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple"
+                )
             );
             await seed.SaveChangesAsync();
         }
 
         await using var context = _fixture.CreateDbContext();
-        var repository = new CommonStockRepository(context);
-        var tracked = await repository.GetByPrimaryTicker("AAPL");
+        EquityIssuerRepository repository = new EquityIssuerRepository(context);
+        EquityIssuer tracked = await repository.GetPrimaryUsByTicker("AAPL");
         tracked.Name = "Pending local name";
         await using var transaction = await repository.CreateTransaction(
             IsolationLevel.ReadCommitted
@@ -64,7 +63,7 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
         var stockId = await SeedStock();
         await using var context = _fixture.CreateDbContext();
         await using var transaction = await context.Database.BeginTransactionAsync();
-        await Lock(new CommonStockRepository(context), stockId, keyUpdate);
+        await Lock(new EquityIssuerRepository(context), stockId, keyUpdate);
 
         await using var writer = new NpgsqlConnection(_fixture.ConnectionString);
         await writer.OpenAsync();
@@ -72,10 +71,8 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
         await setup.ExecuteNonQueryAsync();
         await using var insert = new NpgsqlCommand(
             """
-            INSERT INTO "OffExchangeVolume"
-                ("Id", "CommonStockId", "ListedTicker", "WeekStartDate", "AtsVolume",
-                 "AtsTradeCount", "NonAtsOtcVolume", "NonAtsOtcTradeCount", "CreationTime")
-            VALUES (@id, @stock, 'AAPL', '2026-09-07', 1, 1, 0, 0, CURRENT_TIMESTAMP)
+            INSERT INTO "EquitySecurity" ("Id", "EquityIssuerId", "SecurityType", "RegistrationType", "SharesOutstanding", "MarketCapitalization")
+            VALUES (@id, @stock, 0, 0, 0, 0)
             """,
             writer
         );
@@ -102,15 +99,15 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
         var stockId = await SeedStock();
         await using var context = _fixture.CreateDbContext();
         await using var transaction = await context.Database.BeginTransactionAsync();
-        await new CommonStockRepository(context).GetForNoKeyUpdate(stockId);
+        await new EquityIssuerRepository(context).GetForNoKeyUpdate(stockId);
         await using var writer = new NpgsqlConnection(_fixture.ConnectionString);
         await writer.OpenAsync();
         await using var timeout = new NpgsqlCommand("SET lock_timeout = '500ms'", writer);
         await timeout.ExecuteNonQueryAsync();
         await using var command = new NpgsqlCommand(
             delete
-                ? """DELETE FROM "CommonStock" WHERE "Id" = @stock"""
-                : """UPDATE "CommonStock" SET "Name" = 'Competing writer' WHERE "Id" = @stock""",
+                ? """DELETE FROM "EquityIssuer" WHERE "Id" = @stock"""
+                : """UPDATE "EquityIssuer" SET "Name" = 'Competing writer' WHERE "Id" = @stock""",
             writer
         );
         command.Parameters.AddWithValue("stock", stockId);
@@ -127,19 +124,19 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
     {
         var stockId = await SeedStock();
         await using var context = _fixture.CreateDbContext();
-        var repository = new CommonStockRepository(context);
-        var tracked = await repository.GetByPrimaryTicker("AAPL");
+        EquityIssuerRepository repository = new EquityIssuerRepository(context);
+        EquityIssuer tracked = await repository.GetPrimaryUsByTicker("AAPL");
         await using (var writer = _fixture.CreateDbContext())
         {
             await writer
-                .Set<CommonStock>()
+                .Set<EquityIssuer>()
                 .Where(stock => stock.Id == stockId)
                 .ExecuteUpdateAsync(update =>
                     update.SetProperty(stock => stock.Name, "Updated issuer")
                 );
         }
         await using var transaction = await context.Database.BeginTransactionAsync();
-        var locked = await Lock(repository, stockId, keyUpdate);
+        EquityIssuer locked = await Lock(repository, stockId, keyUpdate);
         locked.Should().BeSameAs(tracked);
         locked.Name.Should().Be("Updated issuer");
     }
@@ -150,7 +147,7 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
     public async Task WriteLock_WithoutTransaction_RefusesUnprotectedRead(bool keyUpdate)
     {
         await using var context = _fixture.CreateDbContext();
-        var action = () => Lock(new CommonStockRepository(context), Guid.NewGuid(), keyUpdate);
+        var action = () => Lock(new EquityIssuerRepository(context), Guid.NewGuid(), keyUpdate);
         await action
             .Should()
             .ThrowAsync<InvalidOperationException>()
@@ -160,14 +157,17 @@ public class CommonStockRepositoryGetForUpdateTests : IAsyncLifetime
     private async Task<Guid> SeedStock()
     {
         await using var context = _fixture.CreateDbContext();
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple"
+        );
         context.Add(stock);
         await context.SaveChangesAsync();
         return stock.Id;
     }
 
-    private static Task<CommonStock> Lock(
-        CommonStockRepository repository,
+    private static Task<EquityIssuer> Lock(
+        EquityIssuerRepository repository,
         Guid stockId,
         bool keyUpdate
     ) => keyUpdate ? repository.GetForUpdate(stockId) : repository.GetForNoKeyUpdate(stockId);

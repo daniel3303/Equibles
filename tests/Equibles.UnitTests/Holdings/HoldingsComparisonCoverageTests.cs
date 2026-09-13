@@ -30,12 +30,11 @@ public class HoldingsComparisonCoverageTests
     public async Task History_MissingFilersOnEitherSide_WithholdsDelta(bool missingPrior)
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193"
+        );
         var stable = new InstitutionalHolder { Name = "Stable", Cik = "100" };
         var missing = new InstitutionalHolder { Name = "CoverageGapFiler", Cik = "200" };
         db.AddRange(stock, stable, missing);
@@ -68,18 +67,16 @@ public class HoldingsComparisonCoverageTests
     public async Task FiledElsewhere_ProvesEntryOrExit_WithoutInferringFromShareCount(bool entry)
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "320193",
-        };
-        var other = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft",
-            Cik = "789019",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193"
+        );
+        EquityIssuer other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft",
+            Cik: "789019"
+        );
         var holder = new InstitutionalHolder { Name = "Reporter", Cik = "100" };
         var stable = new InstitutionalHolder { Name = "Stable", Cik = "200" };
         db.AddRange(stock, other, holder, stable);
@@ -100,12 +97,11 @@ public class HoldingsComparisonCoverageTests
     public async Task Schedule13GDoesNotProvePrior13FFiling()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193"
+        );
         var holder = new InstitutionalHolder { Name = "Reporter", Cik = "100" };
         db.AddRange(stock, holder);
         var prior = Holding(stock, holder, Prior, 100);
@@ -120,12 +116,11 @@ public class HoldingsComparisonCoverageTests
     public async Task NonconsecutiveQuarters_WithholdComparisonEvenForTheSameFiler()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193"
+        );
         var holder = new InstitutionalHolder { Name = "Reporter", Cik = "100" };
         db.AddRange(stock, holder);
         var older = new DateOnly(2025, 6, 30);
@@ -140,12 +135,11 @@ public class HoldingsComparisonCoverageTests
     public async Task UnchangedComparableQuarter_DoesNotClaimThePriorQuarterIsMissing()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193"
+        );
         var holder = new InstitutionalHolder { Name = "Reporter", Cik = "100" };
         db.AddRange(stock, holder);
         db.AddRange(Holding(stock, holder, Prior, 100), Holding(stock, holder, Current, 100));
@@ -178,14 +172,14 @@ public class HoldingsComparisonCoverageTests
     }
 
     private static InstitutionalHolding Holding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly date,
         long shares
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = date,
             FilingDate = date.AddDays(45),

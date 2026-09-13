@@ -34,8 +34,8 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
     // Past Current's deadline (Aug 14).
     private static readonly DateOnly AfterWindow = new(2026, 9, 1);
 
-    private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+    private InstitutionalHolding MakeHolding(
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -43,8 +43,10 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock)
+                .Security.Issuer,
             InstitutionalHolderId = holder.Id,
             InstitutionalHolder = holder,
             FilingDate = reportDate.AddDays(20),
@@ -56,10 +58,16 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
             FilingType = FilingType.Form13F,
         };
 
-    private async Task<(CommonStock Stock, StockCombinedQuarterService Service)> Seed()
+    private async Task<(EquityIssuer Stock, StockCombinedQuarterService Service)> Seed()
     {
-        var stock = new CommonStock { Ticker = "ARE", Name = "Alexandria Real Estate" };
-        var other = new CommonStock { Ticker = "OTHR", Name = "Other Co" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ARE",
+            Name: "Alexandria Real Estate"
+        );
+        EquityIssuer other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "OTHR",
+            Name: "Other Co"
+        );
         var continuing = new InstitutionalHolder { Cik = "1", Name = "Continuing Fund" };
         var carried = new InstitutionalHolder { Cik = "2", Name = "Carried Fund" };
         var exited = new InstitutionalHolder { Cik = "3", Name = "Exited Fund" };
@@ -152,7 +160,9 @@ public class StockCombinedQuarterServiceTests : ParadeDbMcpTestBase
         DbContext.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
+                EquityListingId = stock.Presentation.EquityListingId,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = new DateOnly(2026, 5, 15),
                 Numerator = 2,
                 Denominator = 1,

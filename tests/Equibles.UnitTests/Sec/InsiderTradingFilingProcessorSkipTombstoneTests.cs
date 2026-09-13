@@ -79,7 +79,7 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
         services.AddScoped<InsiderTransactionRepository>();
         services.AddScoped<InsiderFilingRepository>();
         services.AddScoped<FailedFilingIngestRepository>();
-        services.AddScoped<DailyStockPriceRepository>();
+        services.AddScoped<EquityDailyStockPriceRepository>();
         services.AddScoped<StockSplitRepository>();
         services.AddScoped<InsiderTransactionPriceValidator>();
         var scopeFactory = services
@@ -96,13 +96,12 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
         );
     }
 
-    private static CommonStock Issuer() =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "QXO",
-            Cik = IssuerCik,
-        };
+    private static EquityIssuer Issuer() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "QXO",
+            Cik: IssuerCik
+        );
 
     private static FilingData Filing(string form = "4") =>
         new()
@@ -199,7 +198,7 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
     public async Task StaleAmendment_NewerAmendmentAlreadyIngested_IsTombstoned()
     {
         await using var ctx = CreateContext();
-        var issuer = Issuer();
+        EquityIssuer issuer = Issuer();
         var owner = new InsiderOwner { OwnerCik = OwnerCik, Name = "Doe John" };
         ctx.Set<InsiderOwner>().Add(owner);
         await ctx.SaveChangesAsync();
@@ -209,7 +208,7 @@ public class InsiderTradingFilingProcessorSkipTombstoneTests
                 new InsiderTransaction
                 {
                     InsiderOwnerId = owner.Id,
-                    CommonStockId = issuer.Id,
+                    EquityIssuerId = issuer.Id,
                     FilingDate = new DateOnly(2023, 7, 1),
                     TransactionDate = new DateOnly(2023, 5, 30),
                     TransactionCode = TransactionCode.Other,

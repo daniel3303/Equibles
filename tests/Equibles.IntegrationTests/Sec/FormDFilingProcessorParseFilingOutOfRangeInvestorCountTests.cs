@@ -87,14 +87,13 @@ public class FormDFilingProcessorParseFilingOutOfRangeInvestorCountTests
         };
     }
 
-    private static CommonStock MakeCompany()
+    private static EquityIssuer MakeCompany()
     {
-        return new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
     }
 
     // totalNumberAlreadyInvested exceeds Int32.MaxValue (2,147,483,647). It parses cleanly

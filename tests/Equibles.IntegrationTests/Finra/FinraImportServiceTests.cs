@@ -29,7 +29,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly DailyShortVolumeRepository _volumeRepo;
     private readonly FinraImportPartitionRepository _partitionRepo;
-    private readonly CommonStockRepository _stockRepo;
+    private readonly EquityIssuerRepository _stockRepo;
     private readonly IFinraClient _finraClient;
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
@@ -45,7 +45,7 @@ public class ShortVolumeImportServiceTests : IDisposable
         );
         _volumeRepo = new DailyShortVolumeRepository(_dbContext);
         _partitionRepo = new FinraImportPartitionRepository(_dbContext);
-        _stockRepo = new CommonStockRepository(_dbContext);
+        _stockRepo = new EquityIssuerRepository(_dbContext);
 
         _finraClient = Substitute.For<IFinraClient>();
         _errorReporter = Substitute.For<ErrorReporter>(
@@ -60,7 +60,8 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(DailyShortVolumeRepository), _volumeRepo),
-            (typeof(CommonStockRepository), _stockRepo)
+            (typeof(EquityIssuerRepository), _stockRepo),
+            (typeof(EquityListingRepository), new EquityListingRepository(_dbContext))
         );
 
         var tickerMapService = new TickerMapService(scopeFactory);
@@ -85,32 +86,65 @@ public class ShortVolumeImportServiceTests : IDisposable
 
     // ── Helpers ────────────────────────────────────────────────────────
 
-    private CommonStock CreateStock(string ticker, string name)
+    private EquityIssuer CreateStock(string ticker, string name)
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = $"CIK-{ticker}",
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: $"CIK-{ticker}"
+        );
     }
 
-    private async Task SeedStocks(params CommonStock[] stocks)
+    private async Task SeedStocks(params EquityIssuer[] stocks)
     {
         _stockRepo.AddRange(stocks);
+        foreach (EquityIssuer owner in _dbContext.Set<EquityIssuer>().Local.ToList())
+        foreach (
+            var ticker in new[] { owner.Presentation.Listing.Ticker }
+                .Concat(
+                    owner
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (nativeListing.IsReferenceListed)
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
+                .Concat(
+                    owner
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (
+                                nativeListing.IsDirectoryListed
+                                && nativeListing.Id != owner.Presentation.EquityListingId
+                            )
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
+        )
+            Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner, ticker);
         await _stockRepo.SaveChanges();
     }
 
-    private async Task SeedVolume(CommonStock stock, DateOnly date, long shortVolume = 1_000_000)
+    private async Task SeedVolume(EquityIssuer stock, DateOnly date, long shortVolume = 1_000_000)
     {
         _dbContext
             .Set<DailyShortVolume>()
             .Add(
                 new DailyShortVolume
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = stock.Ticker,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = date,
                     ShortVolume = shortVolume,
                     ShortExemptVolume = 5_000,
@@ -140,12 +174,12 @@ public class ShortVolumeImportServiceTests : IDisposable
         _dbContext.ChangeTracker.Clear();
     }
 
-    private static string ResolveListingUniverse(params CommonStock[] stocks)
+    private static string ResolveListingUniverse(params EquityIssuer[] stocks)
     {
         return FinraImportScope.ResolveListingUniverse(
             stocks.ToDictionary(
-                stock => stock.Ticker,
-                stock => new ListedSecurityKey(stock.Id, stock.Ticker),
+                stock => stock.Presentation.Listing.Ticker,
+                stock => new ListedSecurityKey(stock.Id, stock.Presentation.Listing.Ticker),
                 StringComparer.Ordinal
             )
         );
@@ -176,7 +210,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NewRecords_FetchesAndInserts()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         // Set MinSyncDate to a known weekday (Wednesday)
@@ -193,7 +227,7 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetAll().ToList();
         volumes.Should().ContainSingle();
-        volumes[0].CommonStockId.Should().Be(apple.Id);
+        volumes[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
         volumes[0].Date.Should().Be(new DateOnly(2026, 3, 25));
         volumes[0].ShortVolume.Should().Be(500_000);
         volumes[0].ShortExemptVolume.Should().Be(10_000);
@@ -203,8 +237,8 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_MultipleStocks_InsertsRecordsForEach()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.");
         await SeedStocks(apple, msft);
 
         _workerOptions.MinSyncDate = new DateTime(2026, 3, 25);
@@ -222,8 +256,14 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetAll().ToList();
         volumes.Should().HaveCount(2);
-        volumes.Should().Contain(v => v.CommonStockId == apple.Id && v.ShortVolume == 500_000);
-        volumes.Should().Contain(v => v.CommonStockId == msft.Id && v.ShortVolume == 300_000);
+        volumes
+            .Should()
+            .Contain(v =>
+                v.Listing.Security.EquityIssuerId == apple.Id && v.ShortVolume == 500_000
+            );
+        volumes
+            .Should()
+            .Contain(v => v.Listing.Security.EquityIssuerId == msft.Id && v.ShortVolume == 300_000);
     }
 
     // ── Aggregates across markets ────────────────────────────────────
@@ -231,7 +271,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_MultipleMarketsForSameSymbol_AggregatesVolumes()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = new DateTime(2026, 3, 25);
@@ -275,7 +315,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_CompletedPartition_SkipsWithoutCallingApi()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var today = DateOnly.FromDateTime(Now.UtcDateTime);
@@ -291,7 +331,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_SubsetPartitionMarker_DoesNotSuppressAllTickerReconciliation()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var today = DateOnly.FromDateTime(Now.UtcDateTime);
@@ -311,7 +351,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_ConfiguredSubset_WritesFilteredIdentityMarker()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var today = DateOnly.FromDateTime(Now.UtcDateTime);
@@ -343,8 +383,8 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_SparseStoredDay_ReconcilesAndMarksWholePartitionComplete()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var microsoft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer microsoft = CreateStock("MSFT", "Microsoft Corp.");
         await SeedStocks(apple, microsoft);
 
         var existingDate = new DateOnly(2026, 3, 25); // Wednesday
@@ -369,8 +409,20 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetByDate(existingDate).ToList();
         volumes.Should().HaveCount(2);
-        volumes.Should().Contain(v => v.CommonStockId == apple.Id && v.ShortVolume == 200_000);
-        volumes.Should().Contain(v => v.CommonStockId == microsoft.Id && v.ShortVolume == 300_000);
+        volumes
+            .Should()
+            .Contain(v =>
+                v.EquityListingId
+                    == Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, apple).Id
+                && v.ShortVolume == 200_000
+            );
+        volumes
+            .Should()
+            .Contain(v =>
+                v.EquityListingId
+                    == Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, microsoft).Id
+                && v.ShortVolume == 300_000
+            );
         _partitionRepo
             .GetPartition(
                 "daily-short-volume-files-v3",
@@ -388,7 +440,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_StockAddedAfterPartitionsComplete_BackfillsOutsideCorrectionLookback()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var historicalDate = new DateOnly(2026, 3, 20);
@@ -400,7 +452,7 @@ public class ShortVolumeImportServiceTests : IDisposable
         await _service.Import(CancellationToken.None);
         _finraClient.ClearReceivedCalls();
 
-        var microsoft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer microsoft = CreateStock("MSFT", "Microsoft Corp.");
         await SeedStocks(microsoft);
         _finraClient
             .GetDailyShortVolume(historicalDate)
@@ -413,14 +465,15 @@ public class ShortVolumeImportServiceTests : IDisposable
             .GetByDate(historicalDate)
             .Should()
             .ContainSingle(volume =>
-                volume.CommonStockId == microsoft.Id && volume.ShortVolume == 300_000
+                volume.Listing.Security.EquityIssuerId == microsoft.Id
+                && volume.ShortVolume == 300_000
             );
     }
 
     [Fact]
     public async Task Import_StockUniverseChange_HonorsBackfillDateCap()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var floor = new DateOnly(2026, 3, 20);
@@ -447,7 +500,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_ApiReturnsEmptyList_InsertsNothing()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = new DateTime(2026, 3, 25);
@@ -467,7 +520,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_UnknownSymbolInApiResponse_SkipsRecord()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = new DateTime(2026, 3, 25);
@@ -485,13 +538,13 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetAll().ToList();
         volumes.Should().ContainSingle();
-        volumes[0].CommonStockId.Should().Be(apple.Id);
+        volumes[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
     }
 
     [Fact]
     public async Task Import_NullOrEmptySymbol_SkipsRecord()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = new DateTime(2026, 3, 25);
@@ -527,7 +580,7 @@ public class ShortVolumeImportServiceTests : IDisposable
 
         var volumes = _volumeRepo.GetAll().ToList();
         volumes.Should().ContainSingle();
-        volumes[0].CommonStockId.Should().Be(apple.Id);
+        volumes[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
     }
 
     // ── Null volume fields default to zero ────────────────────────────
@@ -535,7 +588,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NullVolumeFields_DefaultToZero()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = new DateTime(2026, 3, 25);
@@ -559,7 +612,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_SkipsWeekendDates_DoesNotCallApiForSaturdayOrSunday()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         // Friday March 27 2026 through Monday March 30 2026
@@ -584,7 +637,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_HttpRequestException_SkipsDateAndContinues()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         // Wednesday and Thursday
@@ -615,7 +668,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_HttpRequestException_DoesNotReportToErrorReporter()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = new DateTime(2026, 3, 25);
@@ -640,7 +693,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_GenericException_ReportsToErrorReporterAndContinues()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var wednesday = new DateOnly(2026, 3, 25);
@@ -683,7 +736,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_CancellationRequested_ThrowsOperationCancelled()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = new DateTime(2026, 3, 25);
@@ -701,7 +754,7 @@ public class ShortVolumeImportServiceTests : IDisposable
     [Fact]
     public async Task Import_WithoutMinSyncDate_StartsAtFirstTradingDayAfterDefaultFloor()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = null;
@@ -741,7 +794,7 @@ public class ShortInterestImportServiceTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
     private readonly ShortInterestRepository _interestRepo;
-    private readonly CommonStockRepository _stockRepo;
+    private readonly EquityIssuerRepository _stockRepo;
     private readonly IFinraClient _finraClient;
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
@@ -754,7 +807,7 @@ public class ShortInterestImportServiceTests : IDisposable
             new FinraModuleConfiguration()
         );
         _interestRepo = new ShortInterestRepository(_dbContext);
-        _stockRepo = new CommonStockRepository(_dbContext);
+        _stockRepo = new EquityIssuerRepository(_dbContext);
 
         _finraClient = Substitute.For<IFinraClient>();
         _errorReporter = Substitute.For<ErrorReporter>(
@@ -766,7 +819,8 @@ public class ShortInterestImportServiceTests : IDisposable
 
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(ShortInterestRepository), _interestRepo),
-            (typeof(CommonStockRepository), _stockRepo)
+            (typeof(EquityIssuerRepository), _stockRepo),
+            (typeof(EquityListingRepository), new EquityListingRepository(_dbContext))
         );
 
         var tickerMapService = new TickerMapService(scopeFactory);
@@ -788,25 +842,52 @@ public class ShortInterestImportServiceTests : IDisposable
 
     // ── Helpers ────────────────────────────────────────────────────────
 
-    private CommonStock CreateStock(string ticker, string name)
+    private EquityIssuer CreateStock(string ticker, string name)
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = $"CIK-{ticker}",
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: $"CIK-{ticker}"
+        );
     }
 
-    private async Task SeedStocks(params CommonStock[] stocks)
+    private async Task SeedStocks(params EquityIssuer[] stocks)
     {
         _stockRepo.AddRange(stocks);
+        foreach (EquityIssuer owner in _dbContext.Set<EquityIssuer>().Local.ToList())
+        foreach (
+            var ticker in new[] { owner.Presentation.Listing.Ticker }
+                .Concat(
+                    owner
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (nativeListing.IsReferenceListed)
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
+                .Concat(
+                    owner
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (
+                                nativeListing.IsDirectoryListed
+                                && nativeListing.Id != owner.Presentation.EquityListingId
+                            )
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
+        )
+            Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, owner, ticker);
         await _stockRepo.SaveChanges();
     }
 
     private async Task SeedInterest(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly settlementDate,
         long currentShort = 10_000_000
     )
@@ -816,8 +897,14 @@ public class ShortInterestImportServiceTests : IDisposable
             .Add(
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = stock.Ticker,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = settlementDate,
                     CurrentShortPosition = currentShort,
                     PreviousShortPosition = 9_000_000,
@@ -857,7 +944,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NewRecords_FetchesAndInserts()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var settlementDate = new DateOnly(2026, 3, 15);
@@ -874,7 +961,7 @@ public class ShortInterestImportServiceTests : IDisposable
 
         var interests = _interestRepo.GetAll().ToList();
         interests.Should().ContainSingle();
-        interests[0].CommonStockId.Should().Be(apple.Id);
+        interests[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
         interests[0].SettlementDate.Should().Be(settlementDate);
         interests[0].CurrentShortPosition.Should().Be(15_000_000);
         interests[0].PreviousShortPosition.Should().Be(14_000_000);
@@ -886,8 +973,8 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_MultipleStocks_InsertsRecordsForEach()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.");
         await SeedStocks(apple, msft);
 
         var settlementDate = new DateOnly(2026, 3, 15);
@@ -907,16 +994,21 @@ public class ShortInterestImportServiceTests : IDisposable
         interests.Should().HaveCount(2);
         interests
             .Should()
-            .Contain(i => i.CommonStockId == apple.Id && i.CurrentShortPosition == 15_000_000);
+            .Contain(i =>
+                i.Listing.Security.EquityIssuerId == apple.Id
+                && i.CurrentShortPosition == 15_000_000
+            );
         interests
             .Should()
-            .Contain(i => i.CommonStockId == msft.Id && i.CurrentShortPosition == 8_000_000);
+            .Contain(i =>
+                i.Listing.Security.EquityIssuerId == msft.Id && i.CurrentShortPosition == 8_000_000
+            );
     }
 
     [Fact]
     public async Task Import_MultipleSettlementDates_ImportsAll()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var date1 = new DateOnly(2026, 3, 1);
@@ -951,7 +1043,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_ExistingSettlementDate_OnlyImportsNewDates()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var existingDate = new DateOnly(2026, 3, 1);
@@ -981,7 +1073,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_AllDatesAlreadyImported_SkipsWithoutCallingApi()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var existingDate = new DateOnly(2026, 3, 15);
@@ -999,7 +1091,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_StoredDatesAboveFloor_DiscoversAndBackfillsEarlierDates()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var existingDate = new DateOnly(2026, 3, 15);
@@ -1037,7 +1129,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_ApiReturnsEmptyRecords_InsertsNothing()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var settlementDate = new DateOnly(2026, 3, 15);
@@ -1056,7 +1148,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NoSettlementDatesAvailable_InsertsNothing()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _finraClient.GetShortInterestSettlementDates().Returns(new List<DateOnly>());
@@ -1073,7 +1165,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_UnknownSymbolInApiResponse_SkipsRecord()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var settlementDate = new DateOnly(2026, 3, 15);
@@ -1091,13 +1183,13 @@ public class ShortInterestImportServiceTests : IDisposable
 
         var interests = _interestRepo.GetAll().ToList();
         interests.Should().ContainSingle();
-        interests[0].CommonStockId.Should().Be(apple.Id);
+        interests[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
     }
 
     [Fact]
     public async Task Import_NullOrEmptySymbol_SkipsRecord()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var settlementDate = new DateOnly(2026, 3, 15);
@@ -1123,7 +1215,7 @@ public class ShortInterestImportServiceTests : IDisposable
 
         var interests = _interestRepo.GetAll().ToList();
         interests.Should().ContainSingle();
-        interests[0].CommonStockId.Should().Be(apple.Id);
+        interests[0].Listing.Security.EquityIssuerId.Should().Be(apple.Id);
     }
 
     // ── Null fields default to zero or null ───────────────────────────
@@ -1131,7 +1223,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NullPositionFields_DefaultToZero()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var settlementDate = new DateOnly(2026, 3, 15);
@@ -1157,7 +1249,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_SettlementDatesFetchFails_ReportsErrorAndReturnsEarly()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _finraClient.GetShortInterestSettlementDates().Throws(new HttpRequestException("API down"));
@@ -1179,7 +1271,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_HttpRequestExceptionOnDate_SkipsDateAndContinues()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var date1 = new DateOnly(2026, 3, 1);
@@ -1205,7 +1297,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_HttpRequestExceptionOnDate_DoesNotReportToErrorReporter()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var settlementDate = new DateOnly(2026, 3, 15);
@@ -1232,7 +1324,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_GenericException_ReportsToErrorReporterAndContinues()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var date1 = new DateOnly(2026, 3, 1);
@@ -1271,7 +1363,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_CancellationRequested_ThrowsOperationCancelled()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var settlementDate = new DateOnly(2026, 3, 15);
@@ -1314,7 +1406,7 @@ public class ShortInterestImportServiceTests : IDisposable
     [Fact]
     public async Task Import_SettlementDateBeforeMinSyncDate_SkipsDate()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = new DateTime(2026, 3, 10);

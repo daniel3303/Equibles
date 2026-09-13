@@ -74,16 +74,15 @@ public class FinancialFactsImportServiceEmptyFactsTests : IAsyncLifetime
     [Fact]
     public async Task Import_ResponseWithNoFacts_CheckpointsNullSyncStatusWithoutError()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "ZZZZ",
-            Name = "No Facts Co.",
-            Cik = "0000000123",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "ZZZZ",
+            Name: "No Facts Co.",
+            Cik: "0000000123"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
@@ -115,7 +114,7 @@ public class FinancialFactsImportServiceEmptyFactsTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var status = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleOrDefaultAsync(s => s.CommonStockId == stock.Id, CancellationToken.None);
+            .SingleOrDefaultAsync(s => s.EquityIssuerId == stock.Id, CancellationToken.None);
         status.Should().NotBeNull("an empty-facts company must still be checkpointed");
         status!
             .LastFiledDateSeen.Should()

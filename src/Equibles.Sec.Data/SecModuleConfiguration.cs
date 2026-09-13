@@ -15,6 +15,10 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
 
         builder.Entity<Document>(b =>
         {
+            b.HasOne(row => row.Issuer)
+                .WithMany()
+                .HasForeignKey(row => row.EquityIssuerId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.Property(e => e.DocumentType).HasConversion(docTypeConversion);
             b.HasIndex(e => new { e.CreationTime, e.Id })
                 .HasDatabaseName("IX_Document_PendingChunking")
@@ -52,21 +56,50 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
         });
 
         builder.Entity<BackfillState>();
-        builder.Entity<CompanyFilingSyncState>();
-        builder.Entity<FailToDeliver>();
+        builder
+            .Entity<CompanyFilingSyncState>()
+            .HasOne(state => state.Issuer)
+            .WithMany()
+            .HasForeignKey(state => state.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder
+            .Entity<FailToDeliver>()
+            .HasOne(row => row.Listing)
+            .WithMany()
+            .HasForeignKey(row => row.EquityListingId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<FailedFilingIngest>();
         builder.Entity<FormAdvAdviser>();
-        builder.Entity<FormDFiling>();
+        builder
+            .Entity<FormDFiling>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<FormDRelatedPerson>();
         builder.Entity<FundSeries>(b =>
         {
+            b.HasOne(row => row.Issuer)
+                .WithMany()
+                .HasForeignKey(row => row.EquityIssuerId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(e => e.ClassTickers)
                 .HasDatabaseName("IX_FundSeries_ClassTickers_Gin")
                 .HasMethod("gin");
         });
-        builder.Entity<NCenFiling>();
+        builder
+            .Entity<NCenFiling>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<NCenServiceProvider>();
-        builder.Entity<NportFiling>();
+        builder
+            .Entity<NportFiling>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<NportHolding>(b =>
         {
             b.HasIndex(h => h.Cusip)
@@ -75,6 +108,11 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
                 .IsCreatedConcurrently();
         });
         builder.Entity<ProcessedNportFiling>();
-        builder.Entity<TranscriptCheckStatus>();
+        builder
+            .Entity<TranscriptCheckStatus>()
+            .HasOne(state => state.Issuer)
+            .WithMany()
+            .HasForeignKey(state => state.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

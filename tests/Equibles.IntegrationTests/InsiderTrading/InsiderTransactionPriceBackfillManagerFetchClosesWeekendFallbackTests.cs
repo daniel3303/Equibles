@@ -32,7 +32,7 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
         );
         _manager = new InsiderTransactionPriceBackfillManager(
             new InsiderTransactionRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new StockSplitRepository(_dbContext),
             new InsiderTransactionPriceValidator(),
             _dbContext,
@@ -55,23 +55,33 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
         var friday = new DateOnly(2024, 6, 14);
         var saturday = new DateOnly(2024, 6, 15);
 
-        _dbContext.Set<CommonStock>().Add(new CommonStock { Id = stockId, Ticker = "WKND" });
+        _dbContext
+            .Set<EquityIssuer>()
+            .Add(Equibles.TestSupport.EquityIssuerSeed.Create(Id: stockId, Ticker: "WKND"));
 
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stockId,
-                    ListedTicker = "WKND",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                        _dbContext,
+                        stockId,
+                        "WKND"
+                    ),
+                    SourceTicker = "WKND",
                     Date = thursday,
                     Close = 48m,
                     Volume = 1_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stockId,
-                    ListedTicker = "WKND",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                        _dbContext,
+                        stockId,
+                        "WKND"
+                    ),
+                    SourceTicker = "WKND",
                     Date = friday,
                     Close = 50m,
                     Volume = 1_000,
@@ -84,7 +94,7 @@ public class InsiderTransactionPriceBackfillManagerFetchClosesWeekendFallbackTes
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = stockId,
+                EquityIssuerId = stockId,
                 TransactionDate = saturday,
             },
         };

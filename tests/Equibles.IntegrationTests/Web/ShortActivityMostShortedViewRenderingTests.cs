@@ -26,17 +26,25 @@ public class ShortActivityMostShortedViewRenderingTests
         {
             var stockId = Guid.NewGuid();
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "GME",
-                    Name = "GameStop Corp.",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "GME",
+                    Name: "GameStop Corp."
+                )
             );
             db.Add(
                 new ShortInterest
                 {
-                    CommonStockId = stockId,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStockId(
+                            db,
+                            stockId,
+                            Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId).Ticker
+                        )
+                        .Id,
+                    ListedTicker = Equibles
+                        .TestSupport.NativeListingSeed.ForStockId(db, stockId)
+                        .Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 12_345_678,
                     PreviousShortPosition = 10_000_000,

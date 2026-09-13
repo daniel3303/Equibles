@@ -91,13 +91,18 @@ public class FormDFilingProcessorTests
 
     // ── Process ──
 
-    [Fact]
-    public async Task Process_ValidFormD_InsertsFilingWithRelatedPersons()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Process_ValidFormD_InsertsFilingWithRelatedPersons(bool unlisted)
     {
         var (processor, repo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(ValidFormDSubmission);
 
-        var result = await processor.Process(MakeFiling(), MakeCompany());
+        var company = unlisted
+            ? new EquityIssuer { Name = "Unlisted filer", Cik = "0000320193" }
+            : MakeCompany();
+        var result = await processor.Process(MakeFiling(), company);
 
         result.Should().BeTrue();
         var filing = await repo.GetAll().Include(f => f.RelatedPersons).SingleAsync();
@@ -250,14 +255,13 @@ public class FormDFilingProcessorTests
         };
     }
 
-    private static CommonStock MakeCompany()
+    private static EquityIssuer MakeCompany()
     {
-        return new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
     }
 
     // A real Form D submission (accession 0002058722-25-000001), trimmed to the SGML envelope

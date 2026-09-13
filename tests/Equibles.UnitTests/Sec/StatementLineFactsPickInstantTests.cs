@@ -67,7 +67,7 @@ public class StatementLineFactsPickInstantTests
     private static FinancialFact Duration(DateOnly start, DateOnly end, decimal value) =>
         new()
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             FinancialConceptId = Guid.NewGuid(),
             Value = value,
             Unit = "USD",

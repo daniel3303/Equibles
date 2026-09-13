@@ -101,7 +101,7 @@ public class FilingsWebsiteSource : IWebsiteSource
 
         var documentId = await documents
             .GetAll()
-            .Where(d => d.CommonStockId == stockId && d.DocumentType == filingType)
+            .Where(d => d.EquityIssuerId == stockId && d.DocumentType == filingType)
             .OrderByDescending(d => d.ReportingDate)
             .Select(d => (Guid?)d.Id)
             .FirstOrDefaultAsync(cancellationToken);

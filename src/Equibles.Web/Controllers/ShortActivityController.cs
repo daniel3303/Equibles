@@ -68,23 +68,23 @@ public class ShortActivityController : BaseController
 
         var query = _shortInterestRepository
             .GetBySettlementDate(selectedDate)
-            .Include(s => s.CommonStock)
+            .Include(s => s.Listing.Security.Issuer)
             // The OSS portal has no ETF shell. Keep its derived stock board primary-only.
-            .Where(s => s.ListedTicker == s.CommonStock.Ticker || s.ListedTicker == "");
+            .Where(s =>
+                s.EquityListingId == s.Listing.Security.Issuer.Presentation.EquityListingId
+            );
 
         // Null DaysToCover coalesces to 0 so it sorts last under descending order.
         var ordered = sort switch
         {
             MostShortedSort.ChangeDescending => query
                 .OrderByDescending(s => s.ChangeInShortPosition)
-                .ThenBy(s => s.CommonStock.Ticker),
+                .ThenBy(s => s.Listing.Ticker),
             MostShortedSort.DaysToCoverDescending => query
                 .OrderByDescending(s => s.DaysToCover ?? 0m)
-                .ThenBy(s => s.CommonStock.Ticker),
-            MostShortedSort.Ticker => query.OrderBy(s => s.CommonStock.Ticker),
-            _ => query
-                .OrderByDescending(s => s.CurrentShortPosition)
-                .ThenBy(s => s.CommonStock.Ticker),
+                .ThenBy(s => s.Listing.Ticker),
+            MostShortedSort.Ticker => query.OrderBy(s => s.Listing.Ticker),
+            _ => query.OrderByDescending(s => s.CurrentShortPosition).ThenBy(s => s.Listing.Ticker),
         };
 
         var totalCount = await ordered.CountAsync();
@@ -93,8 +93,8 @@ public class ShortActivityController : BaseController
             .Page(page, pageSize)
             .Select(s => new MostShortedListItemViewModel
             {
-                Ticker = s.CommonStock.Ticker,
-                Name = s.CommonStock.Name,
+                Ticker = s.Listing.Ticker,
+                Name = s.Listing.Security.Issuer.Name,
                 CurrentShortPosition = s.CurrentShortPosition,
                 ChangeInShortPosition = s.ChangeInShortPosition,
                 AverageDailyVolume = s.AverageDailyVolume,

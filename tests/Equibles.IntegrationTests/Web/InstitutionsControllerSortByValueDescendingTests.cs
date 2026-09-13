@@ -34,13 +34,12 @@ public class InstitutionsControllerSortByValueDescendingTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -85,7 +84,7 @@ public class InstitutionsControllerSortByValueDescendingTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

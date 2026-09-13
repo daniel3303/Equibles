@@ -7,12 +7,11 @@ namespace Equibles.UnitTests.Finra;
 
 public class FinraTickerScopeTests
 {
-    private static readonly CommonStock Stock = new()
-    {
-        Ticker = "AAXJ",
-        Name = "iShares Trust",
-        SecondaryTickers = ["SOXX"],
-    };
+    private static readonly EquityIssuer Stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+        Ticker: "AAXJ",
+        Name: "iShares Trust",
+        SecondaryTickers: ["SOXX"]
+    );
 
     [Fact]
     public void SecondaryListingUnavailable_PrimaryTicker_IsSupported()

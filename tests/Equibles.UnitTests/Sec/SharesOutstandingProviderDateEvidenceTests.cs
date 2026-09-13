@@ -41,8 +41,8 @@ public class SharesOutstandingProviderDateEvidenceTests
             invalid,
             new StockSplit
             {
-                CommonStockId = stock.Id,
-                PriceSeriesTicker = stock.Ticker,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = new(2025, 10, 13),
                 Numerator = 1,
                 Denominator = 15,
@@ -291,14 +291,13 @@ public class SharesOutstandingProviderDateEvidenceTests
             new CorporateActionsModuleConfiguration(),
         ];
 
-    private static (CommonStock, FinancialConcept) SeedIdentity(EquiblesFinancialDbContext db)
+    private static (EquityIssuer, FinancialConcept) SeedIdentity(EquiblesFinancialDbContext db)
     {
-        var stock = new CommonStock
-        {
-            Ticker = "LPSN",
-            Cik = "1102993",
-            Name = "LivePerson",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "LPSN",
+            Cik: "1102993",
+            Name: "LivePerson"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -316,7 +315,7 @@ public class SharesOutstandingProviderDateEvidenceTests
         );
 
     private static FinancialFact Fact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly asOf,
@@ -326,11 +325,11 @@ public class SharesOutstandingProviderDateEvidenceTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Document = new Document
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 DocumentType = form ?? DocumentType.TenQ,
                 ReportingForDate = report,
                 ReportingDate = filed,
@@ -347,7 +346,7 @@ public class SharesOutstandingProviderDateEvidenceTests
         };
 
     private static FinancialFact ClassFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly asOf,

@@ -62,15 +62,14 @@ public class InsiderTransactionsNegativeMaxResultsTests
 
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            db.Set<CommonStock>()
+            db.Set<EquityIssuer>()
                 .Add(
-                    new CommonStock
-                    {
-                        Id = stockId,
-                        Ticker = "AAPL",
-                        Name = "Apple Inc",
-                        Cik = "0000320193",
-                    }
+                    Equibles.TestSupport.EquityIssuerSeed.Create(
+                        Id: stockId,
+                        Ticker: "AAPL",
+                        Name: "Apple Inc",
+                        Cik: "0000320193"
+                    )
                 );
             db.Set<InsiderOwner>()
                 .Add(
@@ -87,7 +86,7 @@ public class InsiderTransactionsNegativeMaxResultsTests
                 .Add(
                     new InsiderTransaction
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         InsiderOwnerId = ownerId,
                         FilingDate = new DateOnly(2026, 4, 3),
                         TransactionDate = new DateOnly(2026, 4, 1),

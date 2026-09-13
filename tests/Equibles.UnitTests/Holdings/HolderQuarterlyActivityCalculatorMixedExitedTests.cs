@@ -17,8 +17,8 @@ public class HolderQuarterlyActivityCalculatorMixedExitedTests
     [Fact]
     public void Group_StockInPreviousNotInCurrent_AlongsideIncreasedStock_ExitsBucketStillPopulated()
     {
-        var aapl = MakeStock("AAPL", "Apple Inc.");
-        var msft = MakeStock("MSFT", "Microsoft Corp.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = MakeStock("MSFT", "Microsoft Corp.");
 
         var result = HolderQuarterlyActivityCalculator.Group(
             [MakeHolding(aapl, shares: 1_500, value: 1_500_000)],
@@ -36,20 +36,19 @@ public class HolderQuarterlyActivityCalculatorMixedExitedTests
         result[StockPositionChangeType.Exited][0].CurrentShares.Should().Be(0);
     }
 
-    private static CommonStock MakeStock(string ticker, string name) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = "C" + Guid.NewGuid().ToString("N")[..7],
-        };
+    private static EquityIssuer MakeStock(string ticker, string name) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: "C" + Guid.NewGuid().ToString("N")[..7]
+        );
 
-    private static InstitutionalHolding MakeHolding(CommonStock stock, long shares, long value) =>
+    private static InstitutionalHolding MakeHolding(EquityIssuer stock, long shares, long value) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(null, stock).Security.Issuer,
             InstitutionalHolderId = Guid.NewGuid(),
             FilingDate = new DateOnly(2025, 1, 15),
             ReportDate = new DateOnly(2024, 12, 31),

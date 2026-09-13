@@ -39,7 +39,7 @@ public class NportRealtimeIngestionService
     private const int BatchSize = 50;
 
     private readonly ISecEdgarClient _edgarClient;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly NportFilingRepository _nportFilingRepository;
     private readonly ProcessedNportFilingRepository _processedRepository;
     private readonly EquiblesFinancialDbContext _dbContext;
@@ -51,7 +51,7 @@ public class NportRealtimeIngestionService
 
     public NportRealtimeIngestionService(
         ISecEdgarClient edgarClient,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         NportFilingRepository nportFilingRepository,
         ProcessedNportFilingRepository processedRepository,
         EquiblesFinancialDbContext dbContext,
@@ -384,9 +384,9 @@ public class NportRealtimeIngestionService
     private async Task<HashSet<string>> LoadTrackedCusips(CancellationToken cancellationToken)
     {
         var cusips = await _commonStockRepository
-            .GetAll()
-            .Where(c => c.Cusip != null && c.Cusip != "")
-            .Select(c => c.Cusip)
+            .GetSecurities()
+            .Where(security => security.Cusip != null && security.Cusip != "")
+            .Select(security => security.Cusip)
             .ToListAsync(cancellationToken);
 
         return new HashSet<string>(cusips, StringComparer.OrdinalIgnoreCase);
@@ -395,7 +395,7 @@ public class NportRealtimeIngestionService
     private async Task<HashSet<string>> LoadTrackedCiks(CancellationToken cancellationToken)
     {
         var rows = await _commonStockRepository
-            .GetAll()
+            .GetCurrentUsDirectory()
             .Select(c => new { c.Cik, c.SecondaryCiks })
             .ToListAsync(cancellationToken);
 

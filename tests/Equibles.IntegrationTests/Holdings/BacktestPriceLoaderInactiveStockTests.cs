@@ -28,35 +28,58 @@ public class BacktestPriceLoaderInactiveStockTests : IDisposable
 
     public void Dispose() => _dbContext.Dispose();
 
-    [Fact]
-    public async Task RunBacktest_PricesRetainedInactiveHolding()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunBacktest_PricesRetainedInactiveHolding(bool ambiguousVenue)
     {
         var from = new DateOnly(2023, 1, 3);
         var to = new DateOnly(2023, 2, 3);
-        var delisted = new CommonStock
-        {
-            Ticker = "GONE",
-            Name = "Formerly Listed",
-            Cik = "111",
-            Active = false,
-            DelistedOn = to,
-        };
-        var benchmark = new CommonStock
-        {
-            Ticker = "SPY",
-            Name = "Benchmark",
-            Cik = "222",
-        };
+        EquityIssuer delisted = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GONE",
+            Name: "Formerly Listed",
+            Cik: "111",
+            Active: false,
+            DelistedOn: to
+        );
+        EquityIssuer benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SPY",
+            Name: "Benchmark",
+            Cik: "222"
+        );
         _dbContext.AddRange(delisted, benchmark);
         AddPrice(delisted, from, 10m);
         AddPrice(delisted, to, 12m);
         AddPrice(benchmark, from, 100m);
         AddPrice(benchmark, to, 100m);
+        if (ambiguousVenue)
+        {
+            var security = delisted.Presentation.Listing.Security;
+            var other = new EquityListing
+            {
+                Security = security,
+                EquitySecurityId = security.Id,
+                Ticker = "GONE",
+                MarketCountryCode = "US",
+                MarketIdentifierCode = "XNAS",
+            };
+            security.Listings.Add(other);
+            _dbContext.Add(
+                new EquityDailyStockPrice
+                {
+                    Listing = other,
+                    SourceTicker = "GONE",
+                    Date = from,
+                    Close = 900m,
+                    Volume = 100,
+                }
+            );
+        }
         await _dbContext.SaveChangesAsync();
 
         var loader = new BacktestPriceLoader(
-            new DailyStockPriceRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new StockSplitRepository(_dbContext)
         );
         var snapshots = new[]
@@ -78,17 +101,27 @@ public class BacktestPriceLoaderInactiveStockTests : IDisposable
 
         var result = await loader.RunBacktest(snapshots, benchmark, "SPY", from, to);
 
+        if (ambiguousVenue)
+        {
+            result.Points.Should().BeEmpty();
+            result.Reason.Should().NotBeNullOrEmpty();
+            return;
+        }
         result.Reason.Should().BeNull();
         result.Points.Should().NotBeEmpty();
         result.Points[^1].PortfolioValue.Should().Be(120m);
     }
 
-    private void AddPrice(CommonStock stock, DateOnly date, decimal close) =>
+    private void AddPrice(EquityIssuer stock, DateOnly date, decimal close) =>
         _dbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = stock.Id,
-                ListedTicker = stock.Ticker,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                    _dbContext,
+                    stock,
+                    stock.Presentation.Listing.Ticker
+                ),
+                SourceTicker = stock.Presentation.Listing.Ticker,
                 Date = date,
                 Open = close,
                 High = close,

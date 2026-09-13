@@ -35,13 +35,12 @@ public class InstitutionalHoldingRepositoryDoubleDownCombinedTests : IDisposable
     [Fact]
     public async Task GetDoubleDownPositionsCombined_NonFilerCarriedForward_NotReportedAsIncrease()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var doubler = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -57,7 +56,8 @@ public class InstitutionalHoldingRepositoryDoubleDownCombinedTests : IDisposable
         var previous = new DateOnly(2024, 3, 31);
         var current = new DateOnly(2024, 6, 30);
 
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(doubler, nonFiler);
         _dbContext
             .Set<InstitutionalHolding>()
@@ -88,7 +88,7 @@ public class InstitutionalHoldingRepositoryDoubleDownCombinedTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

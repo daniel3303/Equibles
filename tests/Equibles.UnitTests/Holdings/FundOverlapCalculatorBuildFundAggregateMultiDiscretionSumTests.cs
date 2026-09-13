@@ -18,25 +18,28 @@ public class FundOverlapCalculatorBuildFundAggregateMultiDiscretionSumTests
     public void BuildFundAggregate_SameStockReportedTwiceUnderDifferentDiscretion_PerStockSumsSharesAndValue()
     {
         var stockId = Guid.NewGuid();
-        var stock = new CommonStock
-        {
-            Id = stockId,
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: stockId,
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var holdings = new List<InstitutionalHolding>
         {
             new()
             {
-                CommonStockId = stockId,
-                CommonStock = stock,
+                EquityIssuerId = stockId,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(null, stock)
+                    .Security.Issuer,
                 Shares = 100,
                 Value = 1_000,
             },
             new()
             {
-                CommonStockId = stockId,
-                CommonStock = stock,
+                EquityIssuerId = stockId,
+                Issuer = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(null, stock)
+                    .Security.Issuer,
                 Shares = 200,
                 Value = 2_000,
             },

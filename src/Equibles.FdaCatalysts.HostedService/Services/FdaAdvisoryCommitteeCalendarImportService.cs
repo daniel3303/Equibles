@@ -124,7 +124,7 @@ public class FdaAdvisoryCommitteeCalendarImportService : IImporter
     /// <summary>
     /// Refreshes the mutable, calendar-sourced fields of an existing catalyst from a
     /// freshly parsed row, preserving the stored <c>Id</c>, <c>CreationTime</c>, and any
-    /// resolved <c>CommonStockId</c>. Returns true only when something actually changed,
+    /// resolved <c>EquityIssuerId</c>. Returns true only when something actually changed,
     /// so a row is marked dirty only on a real update.
     /// </summary>
     private static bool Apply(FdaCatalyst source, FdaCatalyst target)

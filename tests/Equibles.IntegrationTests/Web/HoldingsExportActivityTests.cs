@@ -25,13 +25,12 @@ public class HoldingsExportActivityTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "ONE",
-                    Name = "One Quarter Co.",
-                    Cik = "0000700001",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "ONE",
+                    Name: "One Quarter Co.",
+                    Cik: "0000700001"
+                )
             );
             var holder = new InstitutionalHolder { Cik = "0009000010", Name = "Solo" };
             db.Add(holder);
@@ -73,34 +72,30 @@ public class HoldingsExportActivityTests
                 }
             );
             db.AddRange(
-                new CommonStock
-                {
-                    Id = buyerStock,
-                    Ticker = "BUYR",
-                    Name = "Buyer Co.",
-                    Cik = "0007710001",
-                },
-                new CommonStock
-                {
-                    Id = sellerStock,
-                    Ticker = "SELL",
-                    Name = "Seller Co.",
-                    Cik = "0007710002",
-                },
-                new CommonStock
-                {
-                    Id = newStock,
-                    Ticker = "NEW1",
-                    Name = "Newcomer Co.",
-                    Cik = "0007710003",
-                },
-                new CommonStock
-                {
-                    Id = soldStock,
-                    Ticker = "OUT1",
-                    Name = "Exited Co.",
-                    Cik = "0007710004",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: buyerStock,
+                    Ticker: "BUYR",
+                    Name: "Buyer Co.",
+                    Cik: "0007710001"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: sellerStock,
+                    Ticker: "SELL",
+                    Name: "Seller Co.",
+                    Cik: "0007710002"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: newStock,
+                    Ticker: "NEW1",
+                    Name: "Newcomer Co.",
+                    Cik: "0007710003"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: soldStock,
+                    Ticker: "OUT1",
+                    Name: "Exited Co.",
+                    Cik: "0007710004"
+                )
             );
 
             // Buyer: holder A holds 100, then 200 (Δ shares +100, Δ value +50).
@@ -158,13 +153,12 @@ public class HoldingsExportActivityTests
                 }
             );
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "TKB",
-                    Name = "Button Co.",
-                    Cik = "0007777001",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "TKB",
+                    Name: "Button Co.",
+                    Cik: "0007777001"
+                )
             );
             db.Add(MakeHoldingById(stockId, holderId, q1, 1, 1));
             db.Add(MakeHoldingById(stockId, holderId, q2, 2, 2));
@@ -210,20 +204,18 @@ public class HoldingsExportActivityTests
                 }
             );
             db.AddRange(
-                new CommonStock
-                {
-                    Id = bigSharesStock,
-                    Ticker = "BIGS",
-                    Name = "Big Share Move",
-                    Cik = "0007720001",
-                },
-                new CommonStock
-                {
-                    Id = smallSharesStock,
-                    Ticker = "BIGV",
-                    Name = "Big Value Move",
-                    Cik = "0007720002",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: bigSharesStock,
+                    Ticker: "BIGS",
+                    Name: "Big Share Move",
+                    Cik: "0007720001"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: smallSharesStock,
+                    Ticker: "BIGV",
+                    Name: "Big Value Move",
+                    Cik: "0007720002"
+                )
             );
             // BIGS: shares 100 → 200 (Δ +100), value 1000 → 1500 (Δ +500).
             db.Add(MakeHoldingById(bigSharesStock, holderA, q1, 100, 1000));
@@ -263,7 +255,7 @@ public class HoldingsExportActivityTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

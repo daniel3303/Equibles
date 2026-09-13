@@ -32,11 +32,15 @@ public class StockPriceToolsDayChangeBasisTests
         DateOnly? splitBoundaryDate = null
     )
     {
-        var latest = new DailyStockPrice { Date = latestDate, Close = 110m };
-        var previous =
+        EquityDailyStockPrice latest = new EquityDailyStockPrice
+        {
+            Date = latestDate,
+            Close = 110m,
+        };
+        EquityDailyStockPrice previous =
             previousDate == null
                 ? null
-                : new DailyStockPrice { Date = previousDate.Value, Close = previousClose };
+                : new EquityDailyStockPrice { Date = previousDate.Value, Close = previousClose };
         return (decimal?)Method().Invoke(null, [latest, previous, splitBoundaryDate]);
     }
 

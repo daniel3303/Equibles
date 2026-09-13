@@ -63,13 +63,12 @@ public class GetMostHeldStocksNegativeMaxResultsTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
 
             var holder = new InstitutionalHolder
@@ -84,7 +83,7 @@ public class GetMostHeldStocksNegativeMaxResultsTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InstitutionalHolderId = holder.Id,
                     ReportDate = current,
                     FilingDate = current.AddDays(45),
@@ -98,7 +97,7 @@ public class GetMostHeldStocksNegativeMaxResultsTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InstitutionalHolderId = holder.Id,
                     ReportDate = prior,
                     FilingDate = prior.AddDays(45),

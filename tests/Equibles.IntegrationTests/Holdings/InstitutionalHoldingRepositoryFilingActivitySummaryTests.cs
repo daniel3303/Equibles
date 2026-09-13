@@ -44,7 +44,7 @@ public class InstitutionalHoldingRepositoryFilingActivitySummaryTests : IAsyncLi
         // 13F filing (same AccessionNumber). The summary must deduplicate: 1
         // filing, 1 filer — not 2 of each.
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "AAPL");
+        EquityIssuer stock = await SeedStock(seed, "AAPL");
         var holder = await SeedHolder(seed, "H001");
         var filingDate = new DateOnly(2025, 2, 14);
 
@@ -65,17 +65,16 @@ public class InstitutionalHoldingRepositoryFilingActivitySummaryTests : IAsyncLi
         result.FilerCount.Should().Be(1, "same holder in both rows is still one filer");
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}"
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -93,7 +92,7 @@ public class InstitutionalHoldingRepositoryFilingActivitySummaryTests : IAsyncLi
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly filingDate,
         long value,
@@ -102,7 +101,7 @@ public class InstitutionalHoldingRepositoryFilingActivitySummaryTests : IAsyncLi
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = filingDate,
             ReportDate = new DateOnly(filingDate.Year - 1, 12, 31),

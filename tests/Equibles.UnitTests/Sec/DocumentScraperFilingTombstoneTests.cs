@@ -63,15 +63,14 @@ public class DocumentScraperFilingTombstoneTests
     )
     {
         ctx.Database.EnsureCreated();
-        ctx.Set<CommonStock>()
+        ctx.Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Id = Guid.NewGuid(),
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
         await ctx.SaveChangesAsync();
         return ctx;
@@ -119,11 +118,11 @@ public class DocumentScraperFilingTombstoneTests
 
         var services = new ServiceCollection();
         services.AddSingleton(ctx);
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         services.AddScoped<DocumentRepository>();
         services.AddScoped<FailedFilingIngestRepository>();
         services.AddSingleton(Substitute.For<IBus>());
-        services.AddScoped<CommonStockManager>();
+        services.AddScoped<EquityIdentityManager>();
         services.AddSingleton(secEdgar);
         services.AddSingleton(persistence);
         services.AddSingleton(normalizer);
@@ -167,7 +166,7 @@ public class DocumentScraperFilingTombstoneTests
         var persistence = Substitute.For<IDocumentPersistenceService>();
         persistence
             .Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -227,7 +226,7 @@ public class DocumentScraperFilingTombstoneTests
         var persistence = Substitute.For<IDocumentPersistenceService>();
         persistence
             .Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -270,7 +269,7 @@ public class DocumentScraperFilingTombstoneTests
         var persistence = Substitute.For<IDocumentPersistenceService>();
         persistence
             .Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -279,7 +278,7 @@ public class DocumentScraperFilingTombstoneTests
             .Returns(false);
         persistence
             .GetKnownFilingKeys(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<IReadOnlyCollection<string>>()
             )

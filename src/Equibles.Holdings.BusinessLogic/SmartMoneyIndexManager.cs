@@ -36,14 +36,14 @@ public class SmartMoneyIndexManager
     private readonly FundScoreRepository _fundScoreRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly InstitutionalHoldingRepository _holdingRepository;
-    private readonly CommonStockRepository _stockRepository;
+    private readonly EquityIssuerRepository _stockRepository;
     private readonly BacktestPriceLoader _priceLoader;
 
     public SmartMoneyIndexManager(
         FundScoreRepository fundScoreRepository,
         InstitutionalHolderRepository holderRepository,
         InstitutionalHoldingRepository holdingRepository,
-        CommonStockRepository stockRepository,
+        EquityIssuerRepository stockRepository,
         BacktestPriceLoader priceLoader
     )
     {
@@ -82,7 +82,7 @@ public class SmartMoneyIndexManager
             return result;
         }
 
-        var benchmarkStock = await _stockRepository.GetByTicker(benchmarkTicker);
+        EquityIssuer benchmarkStock = await _stockRepository.GetUsByTicker(benchmarkTicker);
         if (benchmarkStock == null)
         {
             result.Reason = $"Benchmark ticker '{benchmarkTicker}' is not known.";
@@ -168,12 +168,12 @@ public class SmartMoneyIndexManager
             // composing consensus so null and an explicit primary ticker cannot count twice.
             .GroupBy(h => new
             {
-                h.CommonStockId,
-                ListedTicker = h.ListedTicker ?? h.CommonStock.Ticker,
+                h.EquityIssuerId,
+                ListedTicker = h.ListedTicker ?? h.Issuer.Presentation.Listing.Ticker,
             })
             .Select(g => new
             {
-                StockId = g.Key.CommonStockId,
+                StockId = g.Key.EquityIssuerId,
                 g.Key.ListedTicker,
                 Value = g.Sum(h => h.Value),
             })
@@ -202,11 +202,11 @@ public class SmartMoneyIndexManager
     {
         var stockIds = constituents.Select(c => c.CommonStockId).Distinct().ToList();
         var stocksById = await _stockRepository
-            .GetByIds(stockIds)
+            .GetCurrentUsDirectoryByIds(stockIds)
             .Select(s => new
             {
                 s.Id,
-                s.Ticker,
+                Ticker = s.Presentation.Listing.Ticker,
                 s.Name,
             })
             .ToDictionaryAsync(s => s.Id);
@@ -226,7 +226,7 @@ public class SmartMoneyIndexManager
         IReadOnlyList<SmartMoneyIndexConstituent> constituents,
         DateOnly constructionDate,
         DateOnly asOf,
-        CommonStock benchmarkStock
+        EquityIssuer benchmarkStock
     )
     {
         var snapshot = new BacktestQuarterSnapshot
