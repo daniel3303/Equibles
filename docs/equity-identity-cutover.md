@@ -333,3 +333,15 @@
 - Atomic, idempotent setup locks both small source tables with a five-second lock timeout, captures existing rows, and records old/new versions on subsequent inserts, updates and deletes. A retry never replaces evidence or duplicates an unchanged version.
 - The finite completion query is `scripts/verify-retiring-equity-identity-sources.sql`; both missing-source counts and invalid-hash/key counts must be zero.
 - At final retirement, lock both sources, run only `scripts/audit-retiring-equity-identity-sources.sql` inside the owning transaction, and retain the returned counts. Remove the two `equity_retiring_*_source` triggers and three `eq_*_retiring_*` capture functions together with compatibility storage after older writers are gone. Keep all immutable evidence and its permanent guards.
+
+### Final financial storage retirement
+
+- `src/Equibles.Migrations/Infrastructure/RetireLegacyFinancialEquityStorage20260913.sql` is the frozen, transaction-neutral final contract body; it is not attached to an EF migration during the native-binary rollout.
+- Execute it in one owning transaction only after all deployed binaries use native storage, full original-field conservation and source/native reconciliation pass, and live pages have been verified.
+- Source/native comparison pairs stay locked against writes while ordinary reads remain available; a five-second lock timeout refuses contention before retirement.
+- Validated owner-equality constraints prove every original/native issuer reference without rescanning the largest owner tables under schema locks.
+- The contract requires completed owner, price and observation backfills; exact source archives; full evidence and price equivalence; and exact observation listing ownership.
+- It transfers native owner primary keys onto their existing unique indexes, removes obsolete owner columns and ten source tables, and retires transition functions, triggers and progress tables.
+- Unknown source price fields, missing archives, changed prices, unvalidated ownership or an unexpected dependent object refuse retirement; no cascading drop hides an unmigrated dependency.
+- Native data, immutable original source versions, aliases, applied migration history and permanent identity/corporate-action guards survive.
+- PostgreSQL regression cases cover successful native writes after retirement and atomic refusal for each incomplete state; restored full-data and deployed checks remain separate gates.
