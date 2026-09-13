@@ -11,8 +11,9 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeIssuerFinancialFactsTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeIssuerFinancialFactsTests(HistoricalEquityDbFixture fixture)
+    : ParadeDbMcpTestBase(fixture)
 {
     [Fact]
     public async Task Migration_PreservesCompleteFactsAndStatements_WhenLegacyOwnerIsRemoved()

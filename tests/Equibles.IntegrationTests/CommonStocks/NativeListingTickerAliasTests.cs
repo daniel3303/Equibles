@@ -7,8 +7,9 @@ using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeListingTickerAliasTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeListingTickerAliasTests(HistoricalEquityDbFixture fixture)
+    : ParadeDbMcpTestBase(fixture)
 {
     [Fact]
     public async Task Migration_PreservesEveryOriginalSymbolWithoutChangingItsSource()

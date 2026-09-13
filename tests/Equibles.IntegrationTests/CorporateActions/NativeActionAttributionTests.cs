@@ -8,8 +8,9 @@ using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
 namespace Equibles.IntegrationTests.CorporateActions;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeActionAttributionTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeActionAttributionTests(HistoricalEquityDbFixture fixture)
+    : ParadeDbMcpTestBase(fixture)
 {
     private async Task ReplayAttribution()
     {

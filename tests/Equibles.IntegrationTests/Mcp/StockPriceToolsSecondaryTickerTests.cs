@@ -19,10 +19,10 @@ namespace Equibles.IntegrationTests.Mcp;
 /// In production that made BRK-A report BRK-B's close (the two are fixed at 1500:1 by
 /// charter). These pin independent resolution end-to-end through the real repository.
 /// </summary>
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
 {
-    public StockPriceToolsSecondaryTickerTests(ParadeDbFixture fixture)
+    public StockPriceToolsSecondaryTickerTests(HistoricalEquityDbFixture fixture)
         : base(fixture) { }
 
     private StockPriceTools Sut() =>

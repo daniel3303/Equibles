@@ -55,7 +55,15 @@ public class NativeQuotationEvidenceTests(ParadeDbFixture fixture) : ParadeDbMcp
         evidence.SourceRecordKey.Should().Be(listing.Id.ToString());
         evidence.PayloadJson.Should().Contain("NasdaqGS").And.Contain("America/New_York");
         evidence.PayloadHash.Should().HaveLength(64);
-        (await DbContext.Set<LegacyEquityListing>().CountAsync()).Should().Be(0);
+        (
+            await DbContext
+                .Database.SqlQueryRaw<int>(
+                    "SELECT count(*)::int AS \"Value\" FROM pg_class WHERE oid = to_regclass('\"LegacyEquityListing\"')"
+                )
+                .SingleAsync()
+        )
+            .Should()
+            .Be(0);
     }
 
     [Theory]

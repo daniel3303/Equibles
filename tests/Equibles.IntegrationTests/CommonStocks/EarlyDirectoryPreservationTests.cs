@@ -9,8 +9,8 @@ using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class EarlyDirectoryPreservationTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class EarlyDirectoryPreservationTests(HistoricalEquityDbFixture fixture)
 {
     [Fact]
     public async Task FirstExpansionCapturesEveryDirectoryFieldAndProtectsFactsUntilTheirOwnerMoves()
@@ -112,7 +112,9 @@ public class EarlyDirectoryPreservationTests(ParadeDbFixture fixture)
         )
             .Should()
             .Be(stock.Id);
-        await context.Database.MigrateAsync();
+        await context
+            .GetService<IMigrator>()
+            .MigrateAsync("20260913025100_PreserveHoldingObservationIdentity");
         await AssertFacts(context);
         var retained = await context
             .Set<EquityDirectorySourceRecord>()

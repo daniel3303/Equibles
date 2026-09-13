@@ -7,7 +7,7 @@ namespace Equibles.IntegrationTests.CommonStocks;
 
 public class FinancialEquityStorageRetirementTests : IAsyncLifetime
 {
-    private readonly ParadeDbFixture _fixture = new();
+    private readonly HistoricalEquityDbFixture _fixture = new();
 
     public async Task InitializeAsync() => await _fixture.InitializeAsync();
 

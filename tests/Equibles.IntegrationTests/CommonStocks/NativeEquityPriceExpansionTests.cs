@@ -3,13 +3,15 @@ using Equibles.Data;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Migrations.Migrations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeEquityPriceExpansionTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeEquityPriceExpansionTests(HistoricalEquityDbFixture fixture)
 {
     [Theory]
     [InlineData("DailyStockPrice", "UnattributedDailyStockPrice")]
@@ -70,7 +72,10 @@ public class NativeEquityPriceExpansionTests(ParadeDbFixture fixture)
                 FOR EACH ROW EXECUTE FUNCTION stop_second_price_batch();
             """
         );
-        Func<Task> migrate = () => context.Database.MigrateAsync();
+        Func<Task> migrate = () =>
+            context
+                .GetService<IMigrator>()
+                .MigrateAsync("20260913025100_PreserveHoldingObservationIdentity");
         (await migrate.Should().ThrowAsync<PostgresException>())
             .Which.MessageText.Should()
             .Be("Injected second price batch failure");
@@ -151,7 +156,10 @@ public class NativeEquityPriceExpansionTests(ParadeDbFixture fixture)
             VALUES ({Guid.NewGuid()}, {stock.Id}, DATE '2020-01-02', 1, 3, 1, 2, 2, 123, now(), 'Fonte — original');
             """
         );
-        Func<Task> migrate = () => context.Database.MigrateAsync();
+        Func<Task> migrate = () =>
+            context
+                .GetService<IMigrator>()
+                .MigrateAsync("20260913025100_PreserveHoldingObservationIdentity");
         (await migrate.Should().ThrowAsync<PostgresException>())
             .Which.MessageText.Should()
             .Contain("unexpected original fields");

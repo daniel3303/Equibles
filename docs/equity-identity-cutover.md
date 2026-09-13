@@ -336,7 +336,7 @@
 
 ### Final financial storage retirement
 
-- `src/Equibles.Migrations/Infrastructure/RetireLegacyFinancialEquityStorage20260913.sql` is the frozen, transaction-neutral final contract body; it is not attached to an EF migration during the native-binary rollout.
+- `src/Equibles.Migrations/Infrastructure/RetireLegacyFinancialEquityStorage20260913.sql` is embedded in the final `RetireLegacyFinancialEquityStorage` migration; ship this migration only after the separate native-binary rollout and reconciliation gates.
 - Execute it in one owning transaction only after all deployed binaries use native storage, full original-field conservation and source/native reconciliation pass, and live pages have been verified.
 - Source/native comparison pairs stay locked against writes while ordinary reads remain available; a five-second lock timeout refuses contention before retirement.
 - Validated owner-equality constraints prove every original/native issuer reference without rescanning the largest owner tables under schema locks.
@@ -345,3 +345,12 @@
 - Unknown source price fields, missing archives, changed prices, unvalidated ownership or an unexpected dependent object refuse retirement; no cascading drop hides an unmigrated dependency.
 - Native data, immutable original source versions, aliases, applied migration history and permanent identity/corporate-action guards survive.
 - PostgreSQL regression cases cover successful native writes after retirement and atomic refusal for each incomplete state; restored full-data and deployed checks remain separate gates.
+
+## Final storage retirement
+
+- `RetireLegacyFinancialEquityStorage` embeds the guarded SQL contract as an assembly resource; published migrations need no source checkout.
+- Deploy it only after native writers, full original-row conservation, source/native reconciliation, frontend verification and a fresh recovery backup.
+- The owning transaction refuses unknown dependencies or incomplete reconciliation before removing redundant storage; no cascading drop hides a missing migration.
+- Applied migrations, original source evidence, aliases and permanent identity guards remain.
+- Automatic downgrade refuses reconstruction of deleted storage; recovery uses the verified backup and matching binaries.
+- Normal `ParadeDbFixture` applies the final schema without retired model mappings; `HistoricalEquityDbFixture` stops before retirement for historical migration contracts.

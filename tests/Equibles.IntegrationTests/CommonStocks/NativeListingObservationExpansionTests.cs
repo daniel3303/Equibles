@@ -2,13 +2,15 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Migrations.Migrations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeListingObservationExpansionTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeListingObservationExpansionTests(HistoricalEquityDbFixture fixture)
 {
     [Fact]
     public async Task InterruptedBatchResumesWithoutChangingOriginalFieldsAndAcceptsRetiringWrites()
@@ -57,7 +59,10 @@ public class NativeListingObservationExpansionTests(ParadeDbFixture fixture)
                 FOR EACH ROW EXECUTE FUNCTION stop_second_observation_batch();
             """
         );
-        Func<Task> migrate = () => context.Database.MigrateAsync();
+        Func<Task> migrate = () =>
+            context
+                .GetService<IMigrator>()
+                .MigrateAsync("20260913025100_PreserveHoldingObservationIdentity");
         (await migrate.Should().ThrowAsync<PostgresException>())
             .Which.MessageText.Should()
             .Be("Injected second batch failure");

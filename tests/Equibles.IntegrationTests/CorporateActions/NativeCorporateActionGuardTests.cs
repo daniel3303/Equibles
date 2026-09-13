@@ -8,8 +8,9 @@ using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
 namespace Equibles.IntegrationTests.CorporateActions;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeCorporateActionGuardTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeCorporateActionGuardTests(HistoricalEquityDbFixture fixture)
+    : ParadeDbMcpTestBase(fixture)
 {
     [Theory]
     [InlineData(false)]

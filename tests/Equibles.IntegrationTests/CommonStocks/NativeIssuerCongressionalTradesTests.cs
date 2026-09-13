@@ -10,8 +10,8 @@ using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeIssuerCongressionalTradesTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeIssuerCongressionalTradesTests(HistoricalEquityDbFixture fixture)
     : ParadeDbMcpTestBase(fixture)
 {
     [Theory]

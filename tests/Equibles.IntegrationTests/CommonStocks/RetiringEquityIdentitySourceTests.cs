@@ -8,8 +8,8 @@ using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class RetiringEquityIdentitySourceTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class RetiringEquityIdentitySourceTests(HistoricalEquityDbFixture fixture)
     : ParadeDbMcpTestBase(fixture)
 {
     [Fact]

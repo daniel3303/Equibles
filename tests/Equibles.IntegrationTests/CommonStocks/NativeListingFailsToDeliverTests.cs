@@ -5,12 +5,14 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeListingFailsToDeliverTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeListingFailsToDeliverTests(HistoricalEquityDbFixture fixture)
     : ParadeDbMcpTestBase(fixture)
 {
     private EquiblesFinancialDbContext _migrationContext;
@@ -206,7 +208,10 @@ public class NativeListingFailsToDeliverTests(ParadeDbFixture fixture)
             """
         );
 
-    private Task ApplyMigration() => Context.Database.MigrateAsync();
+    private Task ApplyMigration() =>
+        Context
+            .GetService<IMigrator>()
+            .MigrateAsync("20260913025100_PreserveHoldingObservationIdentity");
 
     private Task<string> Snapshot() =>
         Context

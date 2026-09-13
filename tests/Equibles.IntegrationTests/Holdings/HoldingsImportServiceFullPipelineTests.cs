@@ -28,14 +28,14 @@ namespace Equibles.IntegrationTests.Holdings;
 /// <see cref="HoldingsImportServiceTests"/> file (which covers the four early-exit
 /// branches before that path).
 /// </summary>
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
     private readonly List<EquiblesFinancialDbContext> _contexts = [];
     private readonly CultureInfo _previousCulture;
 
-    public HoldingsImportServiceFullPipelineTests(ParadeDbFixture fixture)
+    public HoldingsImportServiceFullPipelineTests(HistoricalEquityDbFixture fixture)
     {
         _fixture = fixture;
         _previousCulture = CultureInfo.CurrentCulture;

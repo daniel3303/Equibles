@@ -583,7 +583,15 @@ public class LisbonPriceImportTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
 
         await using var read = Fixture.CreateDbContext();
         (await read.Set<EquityIssuerPresentation>().CountAsync()).Should().Be(0);
-        (await read.Set<CommonStock>().CountAsync()).Should().Be(0);
+        (
+            await read
+                .Database.SqlQueryRaw<int>(
+                    "SELECT count(*)::int AS \"Value\" FROM pg_class WHERE oid = to_regclass('\"CommonStock\"')"
+                )
+                .SingleAsync()
+        )
+            .Should()
+            .Be(0);
         (await read.Set<EquityDailyStockPrice>().CountAsync()).Should().Be(2);
         var split = await read.Set<StockSplit>().SingleAsync();
         split.EquityListingId.Should().Be(listing.Id);

@@ -14,10 +14,10 @@ using Xunit;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
 {
-    public LegacyEquityMigrationTests(ParadeDbFixture fixture)
+    public LegacyEquityMigrationTests(HistoricalEquityDbFixture fixture)
         : base(fixture) { }
 
     [Fact]
@@ -51,7 +51,9 @@ public class LegacyEquityMigrationTests : ParadeDbMcpTestBase
                 FROM generate_series(1, 12000) AS n;
                 """
             );
-            await context.Database.MigrateAsync();
+            await context
+                .GetService<IMigrator>()
+                .MigrateAsync("20260913025100_PreserveHoldingObservationIdentity");
             (await context.Set<EquityIssuer>().CountAsync()).Should().Be(12000);
             (await context.Set<EquityListing>().CountAsync()).Should().Be(12000);
             (await context.Set<LegacyEquityListing>().CountAsync()).Should().Be(12000);

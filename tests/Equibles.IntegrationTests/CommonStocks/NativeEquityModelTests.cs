@@ -6,8 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeEquityModelTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeEquityModelTests(HistoricalEquityDbFixture fixture)
+    : ParadeDbMcpTestBase(fixture)
 {
     [Fact]
     public async Task ProductionModel_HasNoRetiredStorage_AndMatchesItsMigrationSnapshot()

@@ -26,10 +26,10 @@ namespace Equibles.IntegrationTests.Sec;
 /// normalization end to end (filings write "BRK.B" where the ticker feed says
 /// "BRK-B").
 /// </summary>
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class XbrlFactExtractionServiceCoverListingsTests : ParadeDbMcpTestBase
 {
-    public XbrlFactExtractionServiceCoverListingsTests(ParadeDbFixture fixture)
+    public XbrlFactExtractionServiceCoverListingsTests(HistoricalEquityDbFixture fixture)
         : base(fixture) { }
 
     [Fact]

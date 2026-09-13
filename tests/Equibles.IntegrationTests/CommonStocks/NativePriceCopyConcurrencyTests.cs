@@ -2,13 +2,15 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Migrations.Migrations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativePriceCopyConcurrencyTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativePriceCopyConcurrencyTests(HistoricalEquityDbFixture fixture)
 {
     [Fact]
     public async Task CopyLocksOnlySelectedSourceRowsAndMirrorsCorrectionsAfterCommit()
@@ -51,7 +53,9 @@ public class NativePriceCopyConcurrencyTests(ParadeDbFixture fixture)
         await blocker.OpenAsync();
         await writer.OpenAsync();
         await Execute(blocker, "SELECT pg_advisory_lock(178901)");
-        var migration = context.Database.MigrateAsync();
+        var migration = context
+            .GetService<IMigrator>()
+            .MigrateAsync("20260913025100_PreserveHoldingObservationIdentity");
         try
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));

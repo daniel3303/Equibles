@@ -11,8 +11,8 @@ using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeIssuerIdentityEvidenceTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeIssuerIdentityEvidenceTests(HistoricalEquityDbFixture fixture)
     : ParadeDbMcpTestBase(fixture)
 {
     [Theory]

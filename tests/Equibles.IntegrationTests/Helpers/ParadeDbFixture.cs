@@ -20,6 +20,8 @@ using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Yahoo.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Respawn;
 using Testcontainers.PostgreSql;
@@ -48,6 +50,9 @@ public class ParadeDbFixture : IAsyncLifetime
         .WithPassword("postgres")
         .Build();
 
+    protected virtual string MigrationTarget => null;
+    protected virtual bool IncludeLegacyMappings => false;
+
     private Respawner _respawner;
 
     public string ConnectionString { get; private set; }
@@ -63,7 +68,7 @@ public class ParadeDbFixture : IAsyncLifetime
             // the hour-long ceiling, but a few minutes guards against a slow container on a
             // first-run cold start where Postgres is still warming up its shared buffers.
             ctx.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
-            await ctx.Database.MigrateAsync();
+            await ctx.GetService<IMigrator>().MigrateAsync(MigrationTarget);
         }
 
         // Respawn snapshots user tables once and replays TRUNCATE on every reset — far faster
@@ -110,9 +115,10 @@ public class ParadeDbFixture : IAsyncLifetime
         Action<DbContextOptionsBuilder<EquiblesFinancialDbContext>> configure,
         Action<Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder> configureNpgsql =
             null,
-        bool includeLegacyMappings = true
+        bool? includeLegacyMappings = null
     )
     {
+        var legacyMappings = includeLegacyMappings ?? IncludeLegacyMappings;
         var optionsBuilder = new DbContextOptionsBuilder<EquiblesFinancialDbContext>();
         optionsBuilder.UseNpgsql(
             ConnectionString,
@@ -127,7 +133,7 @@ public class ParadeDbFixture : IAsyncLifetime
                 configureNpgsql?.Invoke(npgsql);
             }
         );
-        if (includeLegacyMappings)
+        if (legacyMappings)
             optionsBuilder.ConfigureWarnings(warnings =>
                 warnings.Ignore(RelationalEventId.PendingModelChangesWarning)
             );
@@ -158,7 +164,7 @@ public class ParadeDbFixture : IAsyncLifetime
         return new EquiblesFinancialDbContext(
             optionsBuilder.Options,
             new ModuleConfigurationSet<EquiblesFinancialDbContext>(
-                includeLegacyMappings
+                legacyMappings
                     ? modules.Append(new Equibles.TestSupport.LegacyEquityTestMappings())
                     : modules
             )
