@@ -192,6 +192,7 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
+    [InlineData(3)]
     public async Task ImportDataSet_FilingReferencesInactiveStock_ResolvesRetainedIdentity(
         int presentationState
     )
@@ -238,7 +239,8 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         );
         var prices = new Dictionary<(Guid, string, DateOnly), decimal>
         {
-            [(stock.Id, presentationState != 0 ? "GONE" : null, reportDate)] = 20m,
+            [(stock.Id, null, reportDate)] = 20m,
+            [(stock.Id, "GONE", reportDate)] = 20m,
         };
 
         var result = await CreateImporter(PriceProviderReturning(prices))
@@ -249,7 +251,67 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
         holding.EquityIssuerId.Should().Be(stock.Id);
         holding.Shares.Should().Be(2500);
-        holding.ListedTicker.Should().Be(presentationState != 0 ? "GONE" : null);
+        holding.ListedTicker.Should().Be(presentationState is 1 or 2 ? "GONE" : null);
+        if (presentationState == 3)
+        {
+            var originalId = holding.Id;
+            var originalValue = holding.Value;
+            var originalRow = await verify
+                .Database.SqlQuery<string>(
+                    $"""
+                    SELECT to_jsonb(h)::text AS "Value" FROM "InstitutionalHolding" h WHERE "Id" = {originalId}
+                    """
+                )
+                .SingleAsync();
+            var originalLegs = await verify
+                .Database.SqlQuery<string>(
+                    $"""
+                    SELECT jsonb_agg(to_jsonb(m) ORDER BY m."Id")::text AS "Value"
+                    FROM "HoldingManagerEntry" m WHERE "InstitutionalHoldingId" = {originalId}
+                    """
+                )
+                .SingleAsync();
+            using (var update = FreshContext())
+            {
+                var issuer = await update.Set<EquityIssuer>().SingleAsync();
+                Equibles.CommonStocks.Data.Helpers.UsEquityDirectory.ReplaceDirectorySymbols(
+                    issuer,
+                    "NEW",
+                    [],
+                    activate: true
+                );
+                await update.SaveChangesAsync();
+            }
+            var replay = await CreateImporter(PriceProviderReturning(prices))
+                .ImportDataSet(archive, new DateOnly(2020, 10, 1), CancellationToken.None);
+            replay.IsComplete.Should().BeTrue();
+            using var reread = FreshContext();
+            var retained = await reread.Set<InstitutionalHolding>().SingleAsync();
+            retained.Id.Should().Be(originalId);
+            retained.Value.Should().Be(originalValue);
+            retained.Shares.Should().Be(2500);
+            retained.ListedTicker.Should().BeNull();
+            retained.Cusip.Should().Be("123456789");
+            (
+                await reread
+                    .Database.SqlQuery<string>(
+                        $"""
+                        SELECT to_jsonb(h)::text AS "Value" FROM "InstitutionalHolding" h WHERE "Id" = {originalId}
+                        """
+                    )
+                    .SingleAsync()
+            ).Should().Be(originalRow);
+            (
+                await reread
+                    .Database.SqlQuery<string>(
+                        $"""
+                        SELECT jsonb_agg(to_jsonb(m) ORDER BY m."Id")::text AS "Value"
+                        FROM "HoldingManagerEntry" m WHERE "InstitutionalHoldingId" = {originalId}
+                        """
+                    )
+                    .SingleAsync()
+            ).Should().Be(originalLegs);
+        }
     }
 
     [Fact]

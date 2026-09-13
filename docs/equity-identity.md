@@ -88,3 +88,9 @@
 
 - `EquityMarkets:LisbonEnabled=false` prevents prices, quotation evidence and corporate actions from being captured for retained verified Lisbon listings.
 - Disabled-market history reconciliation and applied-split audits leave stored observations and applied markers unchanged.
+
+## Holdings replay identity
+
+- Native import preflight retains the stored full-grain/CUSIP observation key before assembling both position and manager writes.
+- A permanent insert guard refuses incompatible keys from unprepared writers before they can alter either positions or another security’s allocations.
+- Both generations serialize on native issuer locks; original position IDs, source facts and attribution IDs remain intact through replay and final storage retirement.

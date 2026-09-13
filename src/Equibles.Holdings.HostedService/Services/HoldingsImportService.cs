@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
+using System.Text.Json;
 using Equibles.CommonStocks.Data.Helpers;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
@@ -2024,6 +2025,20 @@ public class HoldingsImportService
         if (safeHoldings.Count == 0)
             return new HoldingsFlushResult(0, SkippedStaleParent: skipped > 0);
 
+        await using var transaction =
+            dbContext.Database.CurrentTransaction == null
+                ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+        // Serialise overlapping import batches by stable issuer, including a presentation change
+        // between two captures. NO KEY UPDATE remains compatible with dependent-row FK checks.
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            SELECT "Id" FROM "EquityIssuer" WHERE "Id" = ANY({issuerIds}) ORDER BY "Id" FOR NO KEY UPDATE
+            """,
+            cancellationToken
+        );
+        await PreserveStoredObservationKeys(dbContext, safeHoldings, cancellationToken);
+
         // PostgreSQL takes a KEY SHARE lock on each issuer while checking the holding FK.
         // Bulk and realtime imports can flush overlapping stocks concurrently; one shared parent
         // order prevents the two multi-row upserts from forming a circular lock dependency.
@@ -2110,7 +2125,81 @@ public class HoldingsImportService
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        if (transaction != null)
+            await transaction.CommitAsync(cancellationToken);
+
         return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
+    }
+
+    private static async Task PreserveStoredObservationKeys(
+        EquiblesFinancialDbContext dbContext,
+        List<InstitutionalHolding> incoming,
+        CancellationToken cancellationToken
+    )
+    {
+        // CUSIP is the filing's stated identity. Presentation changes cannot turn a replay of
+        // that observation into a second position. Match the full position grain except for
+        // its previously assigned display ticker, retaining option/principal/form distinctions.
+        var keys = JsonSerializer.Serialize(
+            incoming
+                .Where(row => row.Cusip != null)
+                .Select(row => new
+                {
+                    row.EquityIssuerId,
+                    row.InstitutionalHolderId,
+                    row.ReportDate,
+                    row.Cusip,
+                    ShareType = (int)row.ShareType,
+                    OptionType = (int?)row.OptionType,
+                    FilingType = (int)row.FilingType,
+                })
+                .Distinct()
+        );
+        var stored = await dbContext
+            .Set<InstitutionalHolding>()
+            .FromSqlInterpolated(
+                $"""
+                SELECT h.* FROM "InstitutionalHolding" h
+                JOIN jsonb_to_recordset({keys}::jsonb) AS k(
+                    "EquityIssuerId" uuid, "InstitutionalHolderId" uuid, "ReportDate" date,
+                    "Cusip" text, "ShareType" integer, "OptionType" integer, "FilingType" integer)
+                  ON h."EquityIssuerId" = k."EquityIssuerId"
+                 AND h."InstitutionalHolderId" = k."InstitutionalHolderId"
+                 AND h."ReportDate" = k."ReportDate" AND h."Cusip" = k."Cusip"
+                 AND h."ShareType" = k."ShareType" AND h."FilingType" = k."FilingType"
+                 AND h."OptionType" IS NOT DISTINCT FROM k."OptionType"
+                """
+            )
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        static object ObservationKey(InstitutionalHolding row) =>
+            new
+            {
+                row.EquityIssuerId,
+                row.InstitutionalHolderId,
+                row.ReportDate,
+                row.Cusip,
+                row.ShareType,
+                row.OptionType,
+                row.FilingType,
+            };
+        var retained = stored
+            .GroupBy(ObservationKey)
+            .ToDictionary(group => group.Key, group => group.ToList());
+        foreach (var row in incoming)
+        {
+            if (row.Cusip == null || !retained.TryGetValue(ObservationKey(row), out var matches))
+                continue;
+            if (matches.Count != 1)
+                throw new InvalidOperationException(
+                    "The stored filing security has conflicting observation identities; replay was refused."
+                );
+            row.ListedTicker = matches[0].ListedTicker;
+        }
+        if (incoming.GroupBy(BuildHoldingKey).Any(group => group.Count() > 1))
+            throw new InvalidOperationException(
+                "Retained observation identities would merge incoming positions; replay was refused."
+            );
     }
 
     internal static List<InstitutionalHolding> OrderForUpsert(

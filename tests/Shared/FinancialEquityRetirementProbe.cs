@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.Finra.Data.Models;
+using Equibles.Holdings.Data.Models;
 using Equibles.Yahoo.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -154,7 +155,7 @@ public static class FinancialEquityRetirementProbe
                         WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e')
                     """
                 )
-                .SingleAsync() == 6,
+                .SingleAsync() == 7,
             "Temporary functions remain or a permanent guard was removed"
         );
         native.Database.SetDbConnection(db.Database.GetDbConnection());
@@ -163,6 +164,42 @@ public static class FinancialEquityRetirementProbe
         var next = EquityIssuerSeed.Create(Ticker: "AFTER");
         db.Add(next);
         await db.SaveChangesAsync();
+        var holding = new InstitutionalHolding
+        {
+            Issuer = next,
+            InstitutionalHolder = new InstitutionalHolder
+            {
+                Cik = "0000000999",
+                Name = "Retained manager",
+            },
+            ReportDate = new(2026, 6, 30),
+            FilingDate = new(2026, 8, 1),
+            Cusip = "123456789",
+            ListedTicker = "AFTER",
+            Shares = 100,
+            Value = 1234,
+        };
+        db.Add(holding);
+        await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO "InstitutionalHolding"
+            SELECT r.* FROM "InstitutionalHolding" h
+            CROSS JOIN LATERAL jsonb_populate_record(NULL::"InstitutionalHolding", to_jsonb(h)
+                || jsonb_build_object('Id', gen_random_uuid(), 'ListedTicker', 'AFTER')) r
+            WHERE h."Id" = {holding.Id}
+            ON CONFLICT ("EquityIssuerId", "InstitutionalHolderId", "ReportDate", "ShareType", "OptionType", "FilingType", "ListedTicker")
+            DO UPDATE SET "Value" = EXCLUDED."Value"
+            """
+        );
+        Require(
+            await db.Set<InstitutionalHolding>().CountAsync() == 1,
+            "Native holding replay duplicated a position after retirement"
+        );
+        Require(
+            (await db.Set<InstitutionalHolding>().AsNoTracking().SingleAsync()).Id == holding.Id,
+            "Native holding replay replaced the original ID after retirement"
+        );
         await transaction.CreateSavepointAsync("after_retirement");
         var split = await db.Set<StockSplit>().SingleAsync();
         split.EquityIssuerId = next.Id;
