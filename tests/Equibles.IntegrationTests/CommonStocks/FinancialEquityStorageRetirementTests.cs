@@ -15,6 +15,8 @@ public class FinancialEquityStorageRetirementTests : IAsyncLifetime
 
     [Theory]
     [InlineData("preserve")]
+    [InlineData("altered-native-index")]
+    [InlineData("unknown-owner-statistics")]
     [InlineData("preserve-alias")]
     [InlineData("wrong-sibling-observation")]
     [InlineData("wrong-price-mapping-owner")]

@@ -209,6 +209,13 @@ public static class FinancialEquityRetirementProbe
                 DELETE FROM "EquityDirectorySourceRecord" WHERE "Source" = 'common-stock-v1';
                 ALTER TABLE "EquityDirectorySourceRecord" ENABLE TRIGGER USER;
                 """,
+            "altered-native-index" => """
+                DROP INDEX "IX_StockSplit_EquityIssuerId_EffectiveDate";
+                CREATE INDEX "IX_StockSplit_EquityIssuerId_EffectiveDate" ON "StockSplit" ("EquityIssuerId", "EffectiveDate")
+                    WHERE "PriceSeriesTicker" IS NULL AND "EquityListingId" IS NULL;
+                """,
+            "unknown-owner-statistics" =>
+                "CREATE STATISTICS \"UnmigratedOwnerStatistics\" ON \"CommonStockId\", \"EffectiveDate\" FROM \"StockSplit\";",
             "wrong-sibling-observation" => """
                 INSERT INTO "EquityListing" SELECT (jsonb_populate_record(NULL::"EquityListing",
                     to_jsonb(l) || jsonb_build_object('Id', '99999999-0000-0000-0000-000000000001', 'Ticker', 'SIBLING'))).*
@@ -273,6 +280,9 @@ public static class FinancialEquityRetirementProbe
                     "Original listing ownership differs in DailyShortVolume",
                 "wrong-price-mapping-owner" =>
                     "Original listing mapping belongs to another native issuer",
+                "altered-native-index" =>
+                    "Native owner index definition differs: IX_StockSplit_EquityIssuerId_EffectiveDate",
+                "unknown-owner-statistics" => "Unreviewed dependencies on retired identity columns",
                 "unknown-owner-constraint" => "Unreviewed dependencies on retired identity columns",
                 "missing-native-owner-key" =>
                     "Validated native issuer foreign key is missing for StockSplit",

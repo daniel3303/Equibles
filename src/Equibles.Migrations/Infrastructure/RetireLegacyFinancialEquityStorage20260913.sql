@@ -76,6 +76,61 @@ BEGIN
     END IF;
 END $owners$;
 
+DO $native_indexes$
+DECLARE target record;
+BEGIN
+    FOR target IN SELECT * FROM (VALUES
+        ('CommonStockCusipAlias', 'IX_CommonStockCusipAlias_EquityIssuerId', 'CREATE INDEX "IX_CommonStockCusipAlias_EquityIssuerId" ON public."CommonStockCusipAlias" USING btree ("EquityIssuerId")'),
+        ('CommonStockTickerAlias', 'IX_CommonStockTickerAlias_EquityIssuerId', 'CREATE INDEX "IX_CommonStockTickerAlias_EquityIssuerId" ON public."CommonStockTickerAlias" USING btree ("EquityIssuerId")'),
+        ('CommonStockTickerEvidence', 'IX_CommonStockTickerEvidence_EquityIssuerId_Ticker_SourceDocum~', 'CREATE UNIQUE INDEX "IX_CommonStockTickerEvidence_EquityIssuerId_Ticker_SourceDocum~" ON public."CommonStockTickerEvidence" USING btree ("EquityIssuerId", "Ticker", "SourceDocumentId")'),
+        ('CommonStockListedCusip', 'IX_CommonStockListedCusip_EquityIssuerId', 'CREATE INDEX "IX_CommonStockListedCusip_EquityIssuerId" ON public."CommonStockListedCusip" USING btree ("EquityIssuerId")'),
+        ('CommonStockDelistedListing', 'IX_CommonStockDelistedListing_EquityIssuerId_ListedTicker', 'CREATE UNIQUE INDEX "IX_CommonStockDelistedListing_EquityIssuerId_ListedTicker" ON public."CommonStockDelistedListing" USING btree ("EquityIssuerId", "ListedTicker")'),
+        ('CongressionalTrade', 'IX_CongressionalTrade_EquityIssuerId_TransactionDate', 'CREATE INDEX "IX_CongressionalTrade_EquityIssuerId_TransactionDate" ON public."CongressionalTrade" USING btree ("EquityIssuerId", "TransactionDate")'),
+        ('CongressionalTrade', 'IX_CongressionalTrade_LegacyFilingIdentity_CanonicalOwner', 'CREATE INDEX "IX_CongressionalTrade_LegacyFilingIdentity_CanonicalOwner" ON public."CongressionalTrade" USING btree ("EquityIssuerId", "CongressMemberId", "TransactionDate", "TransactionType", "AssetName", "OwnerType", "AmountFrom", "AmountTo", "AssetType", "Subholding")'),
+        ('CashDividend', 'IX_CashDividend_EquityIssuerId_ExDate', 'CREATE UNIQUE INDEX "IX_CashDividend_EquityIssuerId_ExDate" ON public."CashDividend" USING btree ("EquityIssuerId", "ExDate") WHERE ("EquityListingId" IS NULL)'),
+        ('StockSplit', 'IX_StockSplit_EquityIssuerId_EffectiveDate', 'CREATE UNIQUE INDEX "IX_StockSplit_EquityIssuerId_EffectiveDate" ON public."StockSplit" USING btree ("EquityIssuerId", "EffectiveDate") WHERE (("PriceSeriesTicker" IS NULL) AND ("EquityListingId" IS NULL))'),
+        ('StockSplit', 'IX_StockSplit_EquityIssuerId_PriceSeriesTicker_EffectiveDate', 'CREATE UNIQUE INDEX "IX_StockSplit_EquityIssuerId_PriceSeriesTicker_EffectiveDate" ON public."StockSplit" USING btree ("EquityIssuerId", "PriceSeriesTicker", "EffectiveDate") WHERE (("PriceSeriesTicker" IS NOT NULL) AND ("EquityListingId" IS NULL))'),
+        ('FdaCatalyst', 'IX_FdaCatalyst_EquityIssuerId', 'CREATE INDEX "IX_FdaCatalyst_EquityIssuerId" ON public."FdaCatalyst" USING btree ("EquityIssuerId")'),
+        ('GovernmentContract', 'IX_GovernmentContract_EquityIssuerId_ActionDate', 'CREATE INDEX "IX_GovernmentContract_EquityIssuerId_ActionDate" ON public."GovernmentContract" USING btree ("EquityIssuerId", "ActionDate")'),
+        ('InstitutionalHolding', 'IX_InstitutionalHolding_EquityIssuerId_FilingDate', 'CREATE INDEX "IX_InstitutionalHolding_EquityIssuerId_FilingDate" ON public."InstitutionalHolding" USING btree ("EquityIssuerId", "FilingDate") INCLUDE ("AccessionNumber", "InstitutionalHolderId")'),
+        ('InstitutionalHolding', 'IX_InstitutionalHolding_EquityIssuerId_InstitutionalHolderId_R~', 'CREATE UNIQUE INDEX "IX_InstitutionalHolding_EquityIssuerId_InstitutionalHolderId_R~" ON public."InstitutionalHolding" USING btree ("EquityIssuerId", "InstitutionalHolderId", "ReportDate", "ShareType", "OptionType", "FilingType", "ListedTicker") NULLS NOT DISTINCT'),
+        ('InstitutionalHolding', 'IX_InstitutionalHolding_InstitutionalHolderId_Report_0362a272bc', 'CREATE INDEX "IX_InstitutionalHolding_InstitutionalHolderId_Report_0362a272bc" ON public."InstitutionalHolding" USING btree ("InstitutionalHolderId", "ReportDate") INCLUDE ("EquityIssuerId", "Value", "Shares", "FilingDate", "FilingType")'),
+        ('InstitutionalHolding', 'IX_InstitutionalHolding_ReportDate_EquityIssuerId_Institutiona~', 'CREATE INDEX "IX_InstitutionalHolding_ReportDate_EquityIssuerId_Institutiona~" ON public."InstitutionalHolding" USING btree ("ReportDate", "EquityIssuerId", "InstitutionalHolderId") INCLUDE ("Shares", "Value")'),
+        ('InstitutionalHolding', 'IX_InstitutionalHolding_ReportDate_InstitutionalHolderId_Equit~', 'CREATE INDEX "IX_InstitutionalHolding_ReportDate_InstitutionalHolderId_Equit~" ON public."InstitutionalHolding" USING btree ("ReportDate", "InstitutionalHolderId", "EquityIssuerId") INCLUDE ("Shares", "Value")'),
+        ('InstitutionalHolding', 'IX_InstitutionalHolding_StockQuarterCommonValue_CanonicalOwner', 'CREATE INDEX "IX_InstitutionalHolding_StockQuarterCommonValue_CanonicalOwner" ON public."InstitutionalHolding" USING btree ("EquityIssuerId", "ReportDate", "InstitutionalHolderId") INCLUDE ("Value") WHERE (("FilingType" = 0) AND ("OptionType" IS NULL))'),
+        ('InstitutionalHolding', 'IX_InstitutionalHolding_StockQuarterExposure_CanonicalOwner', 'CREATE INDEX "IX_InstitutionalHolding_StockQuarterExposure_CanonicalOwner" ON public."InstitutionalHolding" USING btree ("EquityIssuerId", "ReportDate") INCLUDE ("InstitutionalHolderId", "Value", "Shares", "ListedTicker", "FilingType", "OptionType")'),
+        ('InstitutionalHolding', 'IX_InstitutionalHolding_ValuePending_Pairs_CanonicalOwner', 'CREATE INDEX "IX_InstitutionalHolding_ValuePending_Pairs_CanonicalOwner" ON public."InstitutionalHolding" USING btree ("EquityIssuerId", "ListedTicker", "ReportDate") WHERE "ValuePending"'),
+        ('StockQuarterlyActivity', 'UX_StockQuarterlyActivity_CanonicalOwnerKey', 'CREATE UNIQUE INDEX "UX_StockQuarterlyActivity_CanonicalOwnerKey" ON public."StockQuarterlyActivity" USING btree ("EquityIssuerId", "ReportDate")'),
+        ('StockQuarterlyActivityCombined', 'UX_StockQuarterlyActivityCombined_CanonicalOwnerKey', 'CREATE UNIQUE INDEX "UX_StockQuarterlyActivityCombined_CanonicalOwnerKey" ON public."StockQuarterlyActivityCombined" USING btree ("EquityIssuerId", "ReportDate")'),
+        ('StockQuarterlyListingActivity', 'UX_StockQuarterlyListingActivity_CanonicalOwnerKey', 'CREATE UNIQUE INDEX "UX_StockQuarterlyListingActivity_CanonicalOwnerKey" ON public."StockQuarterlyListingActivity" USING btree ("EquityIssuerId", "ReportDate", "IsCombined", "PriceSeriesTicker")'),
+        ('Form144Filing', 'IX_Form144Filing_EquityIssuerId_FilingDate', 'CREATE INDEX "IX_Form144Filing_EquityIssuerId_FilingDate" ON public."Form144Filing" USING btree ("EquityIssuerId", "FilingDate")'),
+        ('InsiderTransaction', 'IX_InsiderTransaction_EquityIssuerId_TransactionDate', 'CREATE INDEX "IX_InsiderTransaction_EquityIssuerId_TransactionDate" ON public."InsiderTransaction" USING btree ("EquityIssuerId", "TransactionDate")'),
+        ('InsiderTransaction', 'IX_InsiderTransaction_TransactionDate_Covering_CanonicalOwner', 'CREATE INDEX "IX_InsiderTransaction_TransactionDate_Covering_CanonicalOwner" ON public."InsiderTransaction" USING btree ("TransactionDate") INCLUDE ("Shares", "PricePerShare", "IsPriceValid", "SecurityKind", "SecurityTitle", "EquityIssuerId", "InsiderOwnerId", "TransactionCode", "IsRule10b5One")'),
+        ('CompanyFilingSyncState', 'UX_CompanyFilingSyncState_CanonicalOwnerKey', 'CREATE UNIQUE INDEX "UX_CompanyFilingSyncState_CanonicalOwnerKey" ON public."CompanyFilingSyncState" USING btree ("EquityIssuerId")'),
+        ('Document', 'IX_Document_EquityIssuerId_DocumentType', 'CREATE INDEX "IX_Document_EquityIssuerId_DocumentType" ON public."Document" USING btree ("EquityIssuerId", "DocumentType")'),
+        ('FormDFiling', 'IX_FormDFiling_EquityIssuerId_FilingDate', 'CREATE INDEX "IX_FormDFiling_EquityIssuerId_FilingDate" ON public."FormDFiling" USING btree ("EquityIssuerId", "FilingDate")'),
+        ('FundSeries', 'IX_FundSeries_EquityIssuerId', 'CREATE INDEX "IX_FundSeries_EquityIssuerId" ON public."FundSeries" USING btree ("EquityIssuerId")'),
+        ('NCenFiling', 'IX_NCenFiling_EquityIssuerId_FilingDate', 'CREATE INDEX "IX_NCenFiling_EquityIssuerId_FilingDate" ON public."NCenFiling" USING btree ("EquityIssuerId", "FilingDate")'),
+        ('NportFiling', 'IX_NportFiling_EquityIssuerId_FilingDate', 'CREATE INDEX "IX_NportFiling_EquityIssuerId_FilingDate" ON public."NportFiling" USING btree ("EquityIssuerId", "FilingDate")'),
+        ('TranscriptCheckStatuses', 'IX_TranscriptCheckStatuses_EquityIssuerId', 'CREATE UNIQUE INDEX "IX_TranscriptCheckStatuses_EquityIssuerId" ON public."TranscriptCheckStatuses" USING btree ("EquityIssuerId")'),
+        ('FinancialFact', 'IX_FinancialFact_EquityIssuerId_FinancialConceptId_PeriodEnd', 'CREATE INDEX "IX_FinancialFact_EquityIssuerId_FinancialConceptId_PeriodEnd" ON public."FinancialFact" USING btree ("EquityIssuerId", "FinancialConceptId", "PeriodEnd")'),
+        ('FinancialFact', 'IX_FinancialFact_EquityIssuerId_FinancialConceptId_Unit_Period~', 'CREATE UNIQUE INDEX "IX_FinancialFact_EquityIssuerId_FinancialConceptId_Unit_Period~" ON public."FinancialFact" USING btree ("EquityIssuerId", "FinancialConceptId", "Unit", "PeriodStart", "PeriodEnd", "AccessionNumber", "DimensionsKey")'),
+        ('FinancialFact', 'IX_FinancialFact_EquityIssuerId_FiscalYear_FiscalPeriod', 'CREATE INDEX "IX_FinancialFact_EquityIssuerId_FiscalYear_FiscalPeriod" ON public."FinancialFact" USING btree ("EquityIssuerId", "FiscalYear", "FiscalPeriod")'),
+        ('FinancialFactsSyncStatus', 'IX_FinancialFactsSyncStatus_EquityIssuerId', 'CREATE UNIQUE INDEX "IX_FinancialFactsSyncStatus_EquityIssuerId" ON public."FinancialFactsSyncStatus" USING btree ("EquityIssuerId")'),
+        ('ListedSecurity', 'IX_ListedSecurity_EquityIssuerId_TradingSymbol', 'CREATE UNIQUE INDEX "IX_ListedSecurity_EquityIssuerId_TradingSymbol" ON public."ListedSecurity" USING btree ("EquityIssuerId", "TradingSymbol")'),
+        ('ReportedFinancialStatement', 'IX_ReportedFinancialStatement_EquityIssuerId_Kind_FiscalYear_F~', 'CREATE INDEX "IX_ReportedFinancialStatement_EquityIssuerId_Kind_FiscalYear_F~" ON public."ReportedFinancialStatement" USING btree ("EquityIssuerId", "Kind", "FiscalYear", "FiscalPeriod")')
+    ) expected(table_name, index_name, definition)
+    LOOP
+        IF NOT EXISTS (SELECT 1 FROM pg_index
+            WHERE indexrelid = to_regclass(format('%I', target.index_name))
+              AND indrelid = to_regclass(format('%I', target.table_name)) AND indisvalid AND indisready
+              AND pg_get_indexdef(indexrelid) = target.definition) THEN
+            RAISE EXCEPTION 'Native owner index definition differs: %', target.index_name;
+        END IF;
+    END LOOP;
+END $native_indexes$;
+
+
 DO $column_dependencies$
 DECLARE unexpected text;
 BEGIN
@@ -207,21 +262,29 @@ BEGIN
             ('TranscriptCheckStatuses', 'CommonStockId', 'pg_class', 'IX_TranscriptCheckStatuses_CommonStockId', 'CREATE UNIQUE INDEX "IX_TranscriptCheckStatuses_CommonStockId" ON public."TranscriptCheckStatuses" USING btree ("CommonStockId")'),
             ('TranscriptCheckStatuses', 'CommonStockId', 'pg_constraint', 'CK_TranscriptCheckStatuses_CanonicalOwnerMirror', 'CHECK ((NOT ("EquityIssuerId" IS DISTINCT FROM "CommonStockId")))'),
             ('TranscriptCheckStatuses', 'CommonStockId', 'pg_constraint', 'FK_TranscriptCheckStatuses_EquityIssuer_CommonStockId', 'FOREIGN KEY ("CommonStockId") REFERENCES "EquityIssuer"("Id") ON DELETE RESTRICT'),
-            ('TranscriptCheckStatuses', 'CommonStockId', 'pg_constraint', 'TranscriptCheckStatuses_CommonStockId_not_null', 'NOT NULL "CommonStockId"')
+            ('TranscriptCheckStatuses', 'CommonStockId', 'pg_constraint', 'TranscriptCheckStatuses_CommonStockId_not_null', 'NOT NULL "CommonStockId"'),
+        ('InstitutionalHolding', 'CommonStockId', 'pg_trigger', 'equity_identity_series_write', 'CREATE TRIGGER equity_identity_series_write AFTER INSERT OR UPDATE OF "EquityIssuerId", "CommonStockId", "ListedTicker" ON public."InstitutionalHolding" FOR EACH ROW EXECUTE FUNCTION eq_sync_legacy_series(''ListedTicker'')'),
+        ('StockQuarterlyListingActivity', 'CommonStockId', 'pg_trigger', 'equity_identity_series_write', 'CREATE TRIGGER equity_identity_series_write AFTER INSERT OR UPDATE OF "EquityIssuerId", "CommonStockId", "PriceSeriesTicker" ON public."StockQuarterlyListingActivity" FOR EACH ROW EXECUTE FUNCTION eq_sync_legacy_series(''PriceSeriesTicker'')'),
+        ('StockSplit', 'CommonStockId', 'pg_trigger', 'equity_identity_series_write', 'CREATE TRIGGER equity_identity_series_write AFTER INSERT OR UPDATE OF "EquityIssuerId", "CommonStockId", "PriceSeriesTicker" ON public."StockSplit" FOR EACH ROW EXECUTE FUNCTION eq_sync_legacy_series(''PriceSeriesTicker'')')
     ), actual AS (
         SELECT DISTINCT t.relname::text AS table_name, a.attname::text AS column_name,
             d.classid::regclass::text AS object_catalog,
-            CASE WHEN d.classid = 'pg_constraint'::regclass THEN c.conname::text ELSE i.relname::text END AS object_name,
-            CASE WHEN d.classid = 'pg_constraint'::regclass THEN pg_get_constraintdef(c.oid) ELSE pg_get_indexdef(i.oid) END AS definition
+            CASE WHEN d.classid = 'pg_constraint'::regclass THEN c.conname::text
+                WHEN d.classid = 'pg_class'::regclass AND i.relkind = 'i' THEN i.relname::text
+                WHEN d.classid = 'pg_trigger'::regclass THEN trigger.tgname::text
+                ELSE pg_describe_object(d.classid, d.objid, d.objsubid) END AS object_name,
+            CASE WHEN d.classid = 'pg_constraint'::regclass THEN pg_get_constraintdef(c.oid)
+                WHEN d.classid = 'pg_class'::regclass AND i.relkind = 'i' THEN pg_get_indexdef(i.oid)
+                WHEN d.classid = 'pg_trigger'::regclass THEN pg_get_triggerdef(trigger.oid)
+                ELSE pg_describe_object(d.classid, d.objid, d.objsubid) END AS definition
         FROM pg_depend d JOIN pg_class t ON t.oid = d.refobjid
         JOIN pg_namespace n ON n.oid = t.relnamespace
         JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
         JOIN dropped_columns target ON target.table_name = t.relname AND target.column_name = a.attname
         LEFT JOIN pg_constraint c ON d.classid = 'pg_constraint'::regclass AND c.oid = d.objid
         LEFT JOIN pg_class i ON d.classid = 'pg_class'::regclass AND i.oid = d.objid
+        LEFT JOIN pg_trigger trigger ON d.classid = 'pg_trigger'::regclass AND trigger.oid = d.objid
         WHERE d.refclassid = 'pg_class'::regclass AND n.nspname = 'public'
-          AND d.classid IN ('pg_class'::regclass, 'pg_constraint'::regclass)
-          AND (d.classid <> 'pg_class'::regclass OR i.relkind = 'i')
     )
     SELECT string_agg(table_name || '.' || object_name, ', ' ORDER BY table_name, object_name)
         INTO unexpected FROM (SELECT * FROM actual EXCEPT SELECT * FROM approved) unreviewed;
