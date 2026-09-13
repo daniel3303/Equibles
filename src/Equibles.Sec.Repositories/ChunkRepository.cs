@@ -3,6 +3,7 @@ using Equibles.Data;
 using Equibles.ParadeDB.EntityFrameworkCore;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
+using Equibles.Sec.Repositories.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -108,6 +109,14 @@ public class ChunkRepository : BaseRepository<Chunk>
             .ToJson();
 
         var query = DbContext.Set<Chunk>().Where(c => EF.Functions.JsonSearch(c.Id, searchQuery));
+        if (ticker != null)
+        {
+            var documents = DbContext
+                .Set<Document>()
+                .ForUsTicker(ticker)
+                .Select(document => document.Id);
+            query = query.Where(chunk => documents.Contains(chunk.DocumentId));
+        }
 
         // Document.ReportingDate is the filing/source date surfaced everywhere else. The chunk's
         // denormalized copy is only an indexed cache and legacy transcript chunks can trail a
@@ -223,7 +232,13 @@ public class ChunkRepository : BaseRepository<Chunk>
         if (!string.IsNullOrWhiteSpace(ticker))
         {
             var normalizedTicker = ticker.ToUpperInvariant();
-            query = query.Where(c => c.Ticker == normalizedTicker);
+            var documents = DbContext
+                .Set<Document>()
+                .ForUsTicker(ticker)
+                .Select(document => document.Id);
+            query = query.Where(c =>
+                c.Ticker == normalizedTicker && documents.Contains(c.DocumentId)
+            );
         }
 
         if (documentId.HasValue)

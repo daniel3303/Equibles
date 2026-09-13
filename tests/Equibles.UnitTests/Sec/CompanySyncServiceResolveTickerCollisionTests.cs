@@ -49,18 +49,18 @@ public class CompanySyncServiceResolveTickerCollisionTests
         var state = Activator.CreateInstance(stateType);
         void Set(string name, object value) => stateType.GetProperty(name).SetValue(state, value);
         Set("SecCiks", new HashSet<string>());
-        Set("ExistingStocks", new List<CommonStock>());
+        Set("ExistingStocks", new List<EquityIssuer>());
         Set("ExistingCiks", new HashSet<string>());
         Set("ExistingPrimaryTickers", new HashSet<string>());
-        Set("PrimaryTickerToStock", new Dictionary<string, CommonStock>());
-        Set("SecondaryCikToParent", new Dictionary<string, CommonStock>());
+        Set("PrimaryTickerToStock", new Dictionary<string, EquityIssuer>());
+        Set("SecondaryCikToParent", new Dictionary<string, EquityIssuer>());
         return state;
     }
 
     private static Task InvokeResolve(
         CompanySyncService sut,
         CompanyInfo incoming,
-        CommonStock incumbent,
+        EquityIssuer incumbent,
         string ticker,
         object state
     )
@@ -82,13 +82,12 @@ public class CompanySyncServiceResolveTickerCollisionTests
         client.GetCompanyMetadata(Arg.Any<string>()).Returns((CompanyMetadata)null);
 
         var incoming = new CompanyInfo { Cik = "0000001111", Name = "Sub Co" };
-        var incumbent = new CommonStock
-        {
-            Cik = "0000009999",
-            Ticker = "SHARED",
-            Name = "Parent Co",
-            SecondaryCiks = ["0000001111"],
-        };
+        EquityIssuer incumbent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000009999",
+            Ticker: "SHARED",
+            Name: "Parent Co",
+            SecondaryCiks: ["0000001111"]
+        );
 
         await InvokeResolve(sut, incoming, incumbent, "SHARED", EmptyState());
 
@@ -110,12 +109,11 @@ public class CompanySyncServiceResolveTickerCollisionTests
             );
 
         var incoming = new CompanyInfo { Cik = "0000001111", Name = "Incoming Co" };
-        var incumbent = new CommonStock
-        {
-            Cik = "0000009999",
-            Ticker = "SHARED",
-            Name = "Incumbent Co",
-        };
+        EquityIssuer incumbent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000009999",
+            Ticker: "SHARED",
+            Name: "Incumbent Co"
+        );
 
         // Must not throw — the catch arm logs and escalates, the sync carries on.
         await InvokeResolve(sut, incoming, incumbent, "SHARED", EmptyState());

@@ -53,12 +53,11 @@ public class DocumentScraperProcessDocTypeCatchTests
             )
         );
 
-        var company = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var secFilter = DocumentType.TenK.ToSecEdgarFilter()!.Value;
         var result = new ScrapingResult();
 

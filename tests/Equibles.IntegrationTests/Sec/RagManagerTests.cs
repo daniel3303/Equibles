@@ -22,11 +22,17 @@ public class RagManagerTests
         DocumentType documentType = null
     )
     {
-        var stock = new CommonStock { Ticker = ticker, Name = companyName };
+        var stock = new EquityIssuer
+        {
+            Presentation = new EquityIssuerPresentation
+            {
+                Listing = new EquityListing { Ticker = ticker },
+            },
+            Name = companyName,
+        };
         var doc = new Document
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Issuer = stock,
             DocumentType = documentType ?? DocumentType.TenK,
             ReportingDate = reportingDate ?? new DateOnly(2024, 3, 15),
         };
@@ -48,7 +54,7 @@ public class RagManagerTests
         // These tests exercise BuildContext only, which never touches the searcher — pass null.
         return new RagManager(
             hybridChunkSearcher: null,
-            Substitute.For<CommonStockRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
+            Substitute.For<EquityIssuerRepository>((Equibles.Data.EquiblesFinancialDbContext)null),
             Substitute.For<ILogger<RagManager>>()
         );
     }
@@ -83,11 +89,17 @@ public class RagManagerTests
     public async Task BuildContext_MultipleChunksSameDocument_GroupedTogether()
     {
         var sut = CreateSut();
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc" };
+        var stock = new EquityIssuer
+        {
+            Presentation = new EquityIssuerPresentation
+            {
+                Listing = new EquityListing { Ticker = "AAPL" },
+            },
+            Name = "Apple Inc",
+        };
         var doc = new Document
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Issuer = stock,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 3, 15),
         };

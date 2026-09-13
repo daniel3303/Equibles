@@ -22,7 +22,7 @@ public class HoldingsImportServiceAddOrMergeHoldingTests
         InstitutionalHolding Holding(long shares, long value, long sole, long shared, long none) =>
             new()
             {
-                CommonStockId = stockId,
+                EquityIssuerId = stockId,
                 InstitutionalHolderId = holderId,
                 ReportDate = reportDate,
                 ShareType = ShareType.Shares,

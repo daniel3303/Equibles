@@ -12,7 +12,7 @@ namespace Equibles.IntegrationTests.CommonStocks;
 
 /// <summary>
 /// Contract for recording a secondary listing's CUSIP (#4247). A row lands in
-/// <see cref="CommonStockListedCusip"/> — NEVER in <see cref="CommonStockCusipAlias"/>,
+/// <see cref="EquityListingCusipEvidence"/> — NEVER in <see cref="EquityIssuerCusipAlias"/>,
 /// which maps to the primary series and would collapse two securities into one row.
 /// Admission: the ticker must be one of the stock's CURRENT secondary tickers, the CUSIP
 /// must not be the stock's own primary, and a CUSIP already owned anywhere (a primary,
@@ -21,19 +21,19 @@ namespace Equibles.IntegrationTests.CommonStocks;
 /// </summary>
 public class CommonStockManagerRecordListedTickerCusipsTests
 {
-    private readonly CommonStockManager _sut;
-    private readonly CommonStockRepository _repository;
+    private readonly EquityIdentityManager _sut;
+    private readonly EquityIssuerRepository _repository;
     private readonly IBus _bus;
 
     public CommonStockManagerRecordListedTickerCusipsTests()
     {
         var context = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _repository = new CommonStockRepository(context);
+        _repository = new EquityIssuerRepository(context);
         _bus = Substitute.For<IBus>();
-        _sut = new CommonStockManager(_repository, _bus);
+        _sut = new EquityIdentityManager(_repository, _bus);
     }
 
-    private async Task<CommonStock> SeedStock(
+    private async Task<EquityIssuer> SeedStock(
         string ticker,
         string cik,
         string cusip = null,
@@ -41,15 +41,14 @@ public class CommonStockManagerRecordListedTickerCusipsTests
         bool active = true
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Test Co",
-            Cik = cik,
-            Cusip = cusip,
-            SecondaryTickers = secondaryTickers ?? [],
-            Active = active,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Test Co",
+            Cik: cik,
+            Cusip: cusip,
+            SecondaryTickers: secondaryTickers ?? [],
+            Active: active
+        );
         _repository.Add(stock);
         await _repository.SaveChanges();
         return stock;
@@ -59,7 +58,7 @@ public class CommonStockManagerRecordListedTickerCusipsTests
     public async Task RecordListedTickerCusips_SiblingClassCusip_RecordsListingAndSignalsReimport()
     {
         // The Alphabet shape: GOOG's CUSIP recorded as a LISTING of the GOOGL filer.
-        var stock = await SeedStock(
+        EquityIssuer stock = await SeedStock(
             "GOOGL",
             "1652044",
             cusip: "02079K305",
@@ -70,7 +69,7 @@ public class CommonStockManagerRecordListedTickerCusipsTests
 
         recorded.Should().Be(1);
         var listing = await _repository.GetListedCusips().SingleAsync();
-        listing.CommonStockId.Should().Be(stock.Id);
+        listing.EquityIssuerId.Should().Be(stock.Id);
         listing.ListedTicker.Should().Be("GOOG");
         listing.Cusip.Should().Be("02079K107");
 
@@ -94,7 +93,7 @@ public class CommonStockManagerRecordListedTickerCusipsTests
     {
         // Only the stock's own authoritative secondary list admits a listing; an arbitrary
         // symbol+CUSIP pair from the feed must not attach to this filer.
-        var stock = await SeedStock("GOOGL", "1652044", cusip: "02079K305");
+        EquityIssuer stock = await SeedStock("GOOGL", "1652044", cusip: "02079K305");
 
         var recorded = await _sut.RecordListedTickerCusips(stock, [("GOOG", "02079K107")]);
 
@@ -109,7 +108,7 @@ public class CommonStockManagerRecordListedTickerCusipsTests
     {
         // The primary CUSIP resolving through the listing table would tag primary-class
         // rows with a listed ticker; the primary's identity stays on the stock itself.
-        var stock = await SeedStock(
+        EquityIssuer stock = await SeedStock(
             "GOOGL",
             "1652044",
             cusip: "02079K305",
@@ -127,8 +126,13 @@ public class CommonStockManagerRecordListedTickerCusipsTests
     {
         // One CUSIP identifies one security, ever. Whether the prior owner holds it as a
         // primary, an alias, or another listing, a later claim is dropped silently.
-        var owner = await SeedStock("AAA", "0000000001", cusip: "111111111", active: false);
-        var claimant = await SeedStock(
+        EquityIssuer owner = await SeedStock(
+            "AAA",
+            "0000000001",
+            cusip: "111111111",
+            active: false
+        );
+        EquityIssuer claimant = await SeedStock(
             "BBB",
             "0000000002",
             cusip: "222222222",
@@ -147,7 +151,7 @@ public class CommonStockManagerRecordListedTickerCusipsTests
     public async Task RecordRetiredCusipAliases_CusipOwnedByInactivePrimary_RecordsNothing()
     {
         await SeedStock("OLD", "0000000001", cusip: "111111111", active: false);
-        var claimant = await SeedStock("LIVE", "0000000002", cusip: "222222222");
+        EquityIssuer claimant = await SeedStock("LIVE", "0000000002", cusip: "222222222");
 
         var recorded = await _sut.RecordRetiredCusipAliases(claimant, ["111111111"]);
 
@@ -162,7 +166,7 @@ public class CommonStockManagerRecordListedTickerCusipsTests
     {
         // The FTD archive repeats a (symbol, CUSIP) pair across many files; both the batch
         // dedupe and the unique index behind it must collapse the repeats.
-        var stock = await SeedStock(
+        EquityIssuer stock = await SeedStock(
             "GOOGL",
             "1652044",
             cusip: "02079K305",

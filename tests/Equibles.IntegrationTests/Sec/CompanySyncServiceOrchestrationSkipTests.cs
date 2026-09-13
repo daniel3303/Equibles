@@ -36,20 +36,18 @@ public class CompanySyncServiceOrchestrationSkipTests : ParadeDbMcpTestBase
     {
         // Both stocks list subsidiary CIK 0000000099 → the second TryAdd fails
         // and logs the duplicate-parent warning.
-        var stockA = new CommonStock
-        {
-            Cik = "0000000001",
-            Ticker = "AAA",
-            Name = "Alpha Inc.",
-            SecondaryCiks = ["0000000099"],
-        };
-        var stockB = new CommonStock
-        {
-            Cik = "0000000002",
-            Ticker = "BBB",
-            Name = "Beta Inc.",
-            SecondaryCiks = ["0000000099", "0000000088"],
-        };
+        EquityIssuer stockA = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000001",
+            Ticker: "AAA",
+            Name: "Alpha Inc.",
+            SecondaryCiks: ["0000000099"]
+        );
+        EquityIssuer stockB = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000002",
+            Ticker: "BBB",
+            Name: "Beta Inc.",
+            SecondaryCiks: ["0000000099", "0000000088"]
+        );
         DbContext.AddRange(stockA, stockB);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -80,10 +78,13 @@ public class CompanySyncServiceOrchestrationSkipTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -103,7 +104,7 @@ public class CompanySyncServiceOrchestrationSkipTests : ParadeDbMcpTestBase
         await sut.SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().HaveCount(2, "every incoming company was skipped — no rows created");
         stocks.Select(s => s.Cik).Should().BeEquivalentTo(["0000000001", "0000000002"]);
     }

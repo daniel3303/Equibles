@@ -66,7 +66,7 @@ public class FilingItemsBackfillService
         // quarters become linkable soonest. Companies without a CIK can never be fetched
         // and are simply never selected.
         var companies = await PendingEightKs()
-            .GroupBy(d => d.CommonStockId)
+            .GroupBy(d => d.EquityIssuerId)
             .Select(g => new { StockId = g.Key, LatestReportingDate = g.Max(d => d.ReportingDate) })
             .OrderByDescending(x => x.LatestReportingDate)
             .Take(companyBatchSize)
@@ -104,15 +104,15 @@ public class FilingItemsBackfillService
     )
     {
         var documents = await PendingEightKs()
-            .Where(d => d.CommonStockId == stockId)
-            .Include(d => d.CommonStock)
+            .Where(d => d.EquityIssuerId == stockId)
+            .Include(d => d.Issuer)
             .ToListAsync(cancellationToken);
         if (documents.Count == 0)
         {
             return;
         }
 
-        var stock = documents[0].CommonStock;
+        var stock = documents[0].Issuer;
         // Unfiltered on purpose: the exact-form filter would drop 8-K/A rows (form "8-K/A"),
         // and the accession lookup below only ever matches the 8-K-family rows anyway.
         var filings = await _secEdgarClient.GetCompanyFilings(stock.Cik);
@@ -155,7 +155,7 @@ public class FilingItemsBackfillService
             "Filing-items backfill stamped {Stamped} of {Total} pending 8-Ks for {Ticker}.",
             stamped,
             documents.Count,
-            stock.Ticker
+            stock.Presentation?.Listing?.Ticker
         );
     }
 
@@ -165,7 +165,7 @@ public class FilingItemsBackfillService
             .Where(d =>
                 (d.DocumentType == DocumentType.EightK || d.DocumentType == DocumentType.EightKa)
                 && d.Items == null
-                && d.CommonStock.Cik != null
+                && d.Issuer.Cik != null
             );
 
     private static string DeriveAccessionNumber(string sourceUrl)

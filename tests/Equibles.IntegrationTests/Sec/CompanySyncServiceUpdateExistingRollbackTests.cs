@@ -36,13 +36,12 @@ public class CompanySyncServiceUpdateExistingRollbackTests : ParadeDbMcpTestBase
     [Fact]
     public async Task SyncCompaniesFromSecApi_ExistingCikUpdateFailsValidation_RollsBackAndKeepsStoredRow()
     {
-        var stored = new CommonStock
-        {
-            Cik = "0000000999",
-            Ticker = "KEEP",
-            Name = "Original Name Inc.",
-            SecondaryTickers = ["KEEP.A"],
-        };
+        EquityIssuer stored = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000999",
+            Ticker: "KEEP",
+            Name: "Original Name Inc.",
+            SecondaryTickers: ["KEEP.A"]
+        );
         DbContext.Add(stored);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -67,10 +66,13 @@ public class CompanySyncServiceUpdateExistingRollbackTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -90,10 +92,10 @@ public class CompanySyncServiceUpdateExistingRollbackTests : ParadeDbMcpTestBase
         await sut.SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().ContainSingle("the failed update must not delete or duplicate the row");
         stocks[0].Cik.Should().Be("0000000999");
-        stocks[0].Ticker.Should().Be("KEEP");
+        stocks[0].Presentation.Listing.Ticker.Should().Be("KEEP");
         stocks[0]
             .Name.Should()
             .Be("Original Name Inc.", "the empty Name must have been rolled back, not persisted");

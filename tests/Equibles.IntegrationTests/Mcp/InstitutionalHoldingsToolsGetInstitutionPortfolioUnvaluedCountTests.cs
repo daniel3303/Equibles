@@ -33,11 +33,11 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioUnvaluedCountTests
     public async Task GetInstitutionPortfolio_CountsEveryUnvaluedCohortOnTheDistinctStockBasis()
     {
         var holder = new InstitutionalHolder { Cik = "77", Name = "Gotham Asset Management" };
-        var valued = MakeStock("VALD");
-        var pending = MakeStock("PEND");
-        var unavailable = MakeStock("UNAV");
-        var abandoned = MakeStock("ABND");
-        var wortholess = MakeStock("ZERO");
+        EquityIssuer valued = MakeStock("VALD");
+        EquityIssuer pending = MakeStock("PEND");
+        EquityIssuer unavailable = MakeStock("UNAV");
+        EquityIssuer abandoned = MakeStock("ABND");
+        EquityIssuer wortholess = MakeStock("ZERO");
         DbContext.AddRange(holder, valued, pending, unavailable, abandoned, wortholess);
 
         var reportDate = new DateOnly(2026, 3, 31);
@@ -70,7 +70,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioUnvaluedCountTests
         return new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -81,17 +81,16 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioUnvaluedCountTests
         );
     }
 
-    private static CommonStock MakeStock(string ticker) =>
-        new()
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Corp",
-            Cik = ticker.GetHashCode().ToString(),
-        };
+    private static EquityIssuer MakeStock(string ticker) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Corp",
+            Cik: ticker.GetHashCode().ToString()
+        );
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly reportDate,
         long value,
         long? filedValue = null,
@@ -100,7 +99,7 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioUnvaluedCountTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
@@ -111,6 +110,6 @@ public class InstitutionalHoldingsToolsGetInstitutionPortfolioUnvaluedCountTests
             ValueUnavailable = valueUnavailable,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{stock.Ticker}",
+            AccessionNumber = $"acc-{stock.Presentation.Listing.Ticker}",
         };
 }

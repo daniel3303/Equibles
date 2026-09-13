@@ -7,6 +7,12 @@ public class FdaCatalystsModuleConfiguration : Equibles.Data.IFinancialModule
 {
     public void ConfigureEntities(ModelBuilder builder)
     {
+        builder
+            .Entity<FdaCatalyst>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<FdaCatalyst>();
     }
 }

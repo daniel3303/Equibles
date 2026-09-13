@@ -1,11 +1,12 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CorporateActions.Data.Models;
 
 /// <summary>
-/// An as-reported corporate-action stock split for a <see cref="CommonStock"/>.
+/// An as-reported corporate-action stock split for a <see cref="Issuer"/>.
 /// The ratio is expressed as <see cref="Numerator"/>:<see cref="Denominator"/>
 /// (e.g. 10:1 is a forward split, 1:12 is a reverse split).
 /// <see cref="PriceAdjustmentAppliedTime"/> is the idempotency marker for the price
@@ -17,8 +18,12 @@ public class StockSplit
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
+
+    // Null retains historical evidence whose exact source listing cannot be proved.
+    public Guid? EquityListingId { get; set; }
+    public virtual EquityListing Listing { get; set; }
 
     /// <summary>
     /// The exact listed ticker whose Yahoo series produced this issuer-level action. The price

@@ -23,7 +23,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
     private readonly IFileManager _fileManager = Substitute.For<IFileManager>();
     private readonly IDocumentPersistenceService _persistenceService =
         Substitute.For<IDocumentPersistenceService>();
-    private readonly CommonStock _company;
+    private readonly EquityIssuer _company;
 
     public DocumentNormalizationBackfillServiceTests()
     {
@@ -42,10 +42,9 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         );
         _dbContext.Database.EnsureCreated();
 
-        _company = new CommonStock
+        _company = new EquityIssuer
         {
             Id = Guid.NewGuid(),
-            Ticker = "NVDA",
             Name = "NVIDIA Corporation",
             Cik = "0001045810",
         };
@@ -216,7 +215,7 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         var document = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = _company.Id,
+            EquityIssuerId = _company.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2026, 2, 25),
             ReportingForDate = new DateOnly(2026, 1, 25),

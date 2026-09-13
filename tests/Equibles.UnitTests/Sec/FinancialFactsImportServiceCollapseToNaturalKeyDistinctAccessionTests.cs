@@ -65,7 +65,7 @@ public class FinancialFactsImportServiceCollapseToNaturalKeyDistinctAccessionTes
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = conceptId,
             Unit = "USD",
             PeriodStart = new DateOnly(2024, 1, 1),

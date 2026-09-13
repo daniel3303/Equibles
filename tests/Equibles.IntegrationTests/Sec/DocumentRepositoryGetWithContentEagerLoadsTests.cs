@@ -26,7 +26,10 @@ public class DocumentRepositoryGetWithContentEagerLoadsTests : ParadeDbMcpTestBa
     [Fact]
     public async Task GetWithContent_LoadsContentAndCommonStock_WithoutLazyLoading()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = new File
         {
             Name = "10k",
@@ -37,7 +40,7 @@ public class DocumentRepositoryGetWithContentEagerLoadsTests : ParadeDbMcpTestBa
         };
         var document = new Document
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,
@@ -58,6 +61,6 @@ public class DocumentRepositoryGetWithContentEagerLoadsTests : ParadeDbMcpTestBa
         // IsLoaded reports eager loading without dereferencing the navigation —
         // dereferencing would itself lazily load it and mask the regression.
         verify.Entry(loaded).Reference(d => d.Content).IsLoaded.Should().BeTrue();
-        verify.Entry(loaded).Reference(d => d.CommonStock).IsLoaded.Should().BeTrue();
+        verify.Entry(loaded).Reference(d => d.Issuer).IsLoaded.Should().BeTrue();
     }
 }

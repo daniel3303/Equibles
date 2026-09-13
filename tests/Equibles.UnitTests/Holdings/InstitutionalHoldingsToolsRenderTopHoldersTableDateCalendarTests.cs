@@ -24,7 +24,10 @@ public class InstitutionalHoldingsToolsRenderTopHoldersTableDateCalendarTests
     [Fact]
     public void RenderTopHoldersTable_UnderNonGregorianCalendar_RendersGregorianIsoDate()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var holder = new InstitutionalHolder { Name = "ACME Capital" };
         var holdings = new List<InstitutionalHolding>
         {

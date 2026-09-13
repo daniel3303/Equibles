@@ -61,8 +61,8 @@ public class FinancialFactsImportServiceMissingCommonStockTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(FinancialConceptRepository))
                     .Returns(new FinancialConceptRepository(ctx));
                 sp.GetService(typeof(FinancialFactsSyncStatusRepository))
@@ -78,16 +78,15 @@ public class FinancialFactsImportServiceMissingCommonStockTests : IAsyncLifetime
     [Fact]
     public async Task Import_CommonStockDeletedDuringNetworkCall_DoesNotWriteOrphanRows()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
@@ -129,8 +128,18 @@ public class FinancialFactsImportServiceMissingCommonStockTests : IAsyncLifetime
                 // call. Hooking GetCompanyFacts is the natural injection point —
                 // every write that follows in Import references the now-stale id.
                 using var deleteCtx = _fixture.CreateDbContext();
-                var staleApple = deleteCtx.Set<CommonStock>().Single(s => s.Id == apple.Id);
-                deleteCtx.Set<CommonStock>().Remove(staleApple);
+                EquityIssuer staleApple = deleteCtx
+                    .Set<EquityIssuer>()
+                    .Include(issuer => issuer.Presentation)
+                    .Include(issuer => issuer.Securities)
+                        .ThenInclude(security => security.Listings)
+                    .Single(s => s.Id == apple.Id);
+                deleteCtx.Remove(staleApple.Presentation);
+                deleteCtx.RemoveRange(
+                    staleApple.Securities.SelectMany(security => security.Listings)
+                );
+                deleteCtx.RemoveRange(staleApple.Securities);
+                deleteCtx.Set<EquityIssuer>().Remove(staleApple);
                 deleteCtx.SaveChanges();
                 return Task.FromResult(response);
             });
@@ -153,7 +162,7 @@ public class FinancialFactsImportServiceMissingCommonStockTests : IAsyncLifetime
 
         // Diagnostic: confirm the callback actually ran and deleted apple.
         var stillExists = await verify
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AnyAsync(s => s.Id == apple.Id, CancellationToken.None);
         stillExists.Should().BeFalse("the GetCompanyFacts callback should have deleted apple");
 
@@ -167,13 +176,13 @@ public class FinancialFactsImportServiceMissingCommonStockTests : IAsyncLifetime
 
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == apple.Id)
+            .Where(f => f.EquityIssuerId == apple.Id)
             .ToListAsync(CancellationToken.None);
         facts.Should().BeEmpty("no FinancialFact row should be written for a deleted parent");
 
         var syncStatus = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleOrDefaultAsync(s => s.CommonStockId == apple.Id, CancellationToken.None);
+            .SingleOrDefaultAsync(s => s.EquityIssuerId == apple.Id, CancellationToken.None);
         syncStatus
             .Should()
             .BeNull("no FinancialFactsSyncStatus row should be written for a deleted parent");

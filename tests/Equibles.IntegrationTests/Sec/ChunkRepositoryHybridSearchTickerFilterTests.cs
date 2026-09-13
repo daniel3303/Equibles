@@ -45,8 +45,8 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
     [Fact]
     public async Task HybridSearch_WithTickerFilter_ReturnsOnlyChunksForThatTicker()
     {
-        var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
-        var microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
+        EquityIssuer apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        EquityIssuer microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
         SeedChunk(SeedDocument(apple), "Services revenue grew substantially this quarter.", "AAPL");
         SeedChunk(SeedDocument(microsoft), "Services revenue rose across the cloud unit.", "MSFT");
         await DbContext.SaveChangesAsync();
@@ -62,8 +62,8 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
     [Fact]
     public async Task HybridSearchScopedFallback_UsesTickerTypeAndParentDocumentDate()
     {
-        var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
-        var microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
+        EquityIssuer apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        EquityIssuer microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
         var insideWindow = SeedDocument(apple);
         insideWindow.ReportingDate = new DateOnly(2026, 1, 15);
         var expected = SeedChunk(
@@ -111,8 +111,8 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
     [Fact]
     public async Task HybridSearchScopedFallback_DocumentScoped_NarrowsWithoutATicker()
     {
-        var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
-        var microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
+        EquityIssuer apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        EquityIssuer microsoft = SeedStock("MSFT", "Microsoft Corp.", "0000789019");
 
         var target = SeedDocument(apple);
         target.ReportingDate = new DateOnly(2026, 1, 15);
@@ -143,8 +143,8 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
     {
         // The default BM25 tokenizer splits "BRK-B" into "brk"/"b", which would make a
         // single exact term filter impossible. The raw tokenizer keeps it as one token.
-        var berkshire = SeedStock("BRK-B", "Berkshire Hathaway Inc.", "0001067983");
-        var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        EquityIssuer berkshire = SeedStock("BRK-B", "Berkshire Hathaway Inc.", "0001067983");
+        EquityIssuer apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
         SeedChunk(SeedDocument(berkshire), "Insurance services revenue increased.", "BRK-B");
         SeedChunk(SeedDocument(apple), "Services revenue grew this quarter.", "AAPL");
         await DbContext.SaveChangesAsync();
@@ -160,7 +160,7 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
     [Fact]
     public async Task HybridSearch_TickerFilter_IsPushedIntoTheBm25Query_NotASqlHeapFilter()
     {
-        var apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        EquityIssuer apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
         SeedChunk(SeedDocument(apple), "Services revenue grew substantially this quarter.", "AAPL");
         await DbContext.SaveChangesAsync();
 
@@ -180,24 +180,23 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
         sql.Should().Contain("jsonb", "the boolean query is passed as a ::jsonb predicate");
         sql.Should()
             .NotContain(
-                "\"Ticker\" =",
-                "the ticker filter must live inside the BM25 query, not a SQL heap-filter predicate that re-introduces #2157"
+                "c.\"Ticker\" =",
+                "the chunk ticker filter must remain inside BM25; native listing comparisons only verify issuer ownership"
             );
     }
 
-    private CommonStock SeedStock(string ticker, string name, string cik)
+    private EquityIssuer SeedStock(string ticker, string name, string cik)
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = name,
-            Cik = cik,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: name,
+            Cik: cik
+        );
         DbContext.Add(stock);
         return stock;
     }
 
-    private Document SeedDocument(CommonStock stock)
+    private Document SeedDocument(EquityIssuer stock)
     {
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
         var file = new File
@@ -213,8 +212,7 @@ public class ChunkRepositoryHybridSearchTickerFilterTests : ParadeDbMcpTestBase
 
         var document = new Document
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,

@@ -53,16 +53,15 @@ public class StockPricesNegativeMaxResultsTests : IClassFixture<McpServerAppFixt
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple Inc",
-                Cik = "0000320193",
-            };
-            db.Set<CommonStock>().Add(stock);
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple Inc",
+                Cik: "0000320193"
+            );
+            db.Set<EquityIssuer>().Add(stock);
             await db.SaveChangesAsync();
 
-            db.Set<DailyStockPrice>()
+            db.Set<EquityDailyStockPrice>()
                 .Add(
                     BuildPrice(stock, new DateOnly(2026, 4, 1), close: 175.50m, volume: 50_000_000)
                 );
@@ -89,17 +88,27 @@ public class StockPricesNegativeMaxResultsTests : IClassFixture<McpServerAppFixt
         text.Should().NotContain("An error occurred while executing");
     }
 
-    private static DailyStockPrice BuildPrice(
-        CommonStock stock,
+    private static EquityDailyStockPrice BuildPrice(
+        EquityIssuer stock,
         DateOnly date,
         decimal close,
         long volume
     ) =>
         new()
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
-            ListedTicker = stock.Ticker,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                null,
+                stock,
+                stock.Presentation.Listing.Ticker
+            ),
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStock(
+                    null,
+                    stock,
+                    stock.Presentation.Listing.Ticker
+                )
+                .Id,
+            SourceTicker = stock.Presentation.Listing.Ticker,
             Date = date,
             Open = close - 1m,
             High = close + 1m,

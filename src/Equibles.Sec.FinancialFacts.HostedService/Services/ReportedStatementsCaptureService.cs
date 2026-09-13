@@ -54,7 +54,7 @@ public class ReportedStatementsCaptureService
         CancellationToken cancellationToken
     )
     {
-        var cik = document.CommonStock?.Cik;
+        var cik = document.Issuer?.Cik;
         var accession = document.AccessionNumber;
         if (string.IsNullOrWhiteSpace(cik) || string.IsNullOrWhiteSpace(accession))
         {

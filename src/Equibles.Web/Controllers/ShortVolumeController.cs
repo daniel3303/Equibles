@@ -70,22 +70,22 @@ public class ShortVolumeController : BaseController
         // rule the GetLargestShortVolume MCP tool applies.
         var query = _shortVolumeRepository
             .GetByDate(selectedDate)
-            .Include(d => d.CommonStock)
+            .Include(d => d.Listing.Security.Issuer)
             // The OSS portal has no ETF shell. Keep its stock board primary-only so exact
             // exchange-traded rows are neither duplicated nor mislabeled as the registrant.
-            .Where(d => d.ListedTicker == d.CommonStock.Ticker || d.ListedTicker == "")
+            .Where(d => d.EquityListingId == d.Listing.Security.Issuer.Presentation.EquityListingId)
             .Where(d => d.TotalVolume > 0);
 
         var ordered = sort switch
         {
             ShortVolumeSort.ShortPercentDescending => query
                 .OrderByDescending(d => d.ShortVolume / d.TotalVolume)
-                .ThenBy(d => d.CommonStock.Ticker),
+                .ThenBy(d => d.Listing.Ticker),
             ShortVolumeSort.TotalVolumeDescending => query
                 .OrderByDescending(d => d.TotalVolume)
-                .ThenBy(d => d.CommonStock.Ticker),
-            ShortVolumeSort.Ticker => query.OrderBy(d => d.CommonStock.Ticker),
-            _ => query.OrderByDescending(d => d.ShortVolume).ThenBy(d => d.CommonStock.Ticker),
+                .ThenBy(d => d.Listing.Ticker),
+            ShortVolumeSort.Ticker => query.OrderBy(d => d.Listing.Ticker),
+            _ => query.OrderByDescending(d => d.ShortVolume).ThenBy(d => d.Listing.Ticker),
         };
 
         var totalCount = await ordered.CountAsync();
@@ -94,8 +94,8 @@ public class ShortVolumeController : BaseController
             .Page(page, pageSize)
             .Select(d => new ShortVolumeListItemViewModel
             {
-                Ticker = d.CommonStock.Ticker,
-                Name = d.CommonStock.Name,
+                Ticker = d.Listing.Ticker,
+                Name = d.Listing.Security.Issuer.Name,
                 ShortVolume = d.ShortVolume,
                 ShortExemptVolume = d.ShortExemptVolume,
                 TotalVolume = d.TotalVolume,

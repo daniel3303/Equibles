@@ -26,17 +26,25 @@ public class ShortVolumeIndexViewRenderingTests
         {
             var stockId = Guid.NewGuid();
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc."
+                )
             );
             db.Add(
                 new DailyShortVolume
                 {
-                    CommonStockId = stockId,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStockId(
+                            db,
+                            stockId,
+                            Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId).Ticker
+                        )
+                        .Id,
+                    ListedTicker = Equibles
+                        .TestSupport.NativeListingSeed.ForStockId(db, stockId)
+                        .Ticker,
                     Date = day,
                     ShortVolume = 600,
                     ShortExemptVolume = 25,

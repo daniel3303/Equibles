@@ -28,14 +28,14 @@ public class ShortDataToolsSnapshotSentinelTests : ParadeDbMcpTestBase
         new(
             new DailyShortVolumeRepository(DbContext),
             new ShortInterestRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new ShortSqueezeScoreManager(
                 new ShortInterestRepository(DbContext),
                 new DailyShortVolumeRepository(DbContext),
-                new CommonStockRepository(DbContext),
+                new EquityIssuerRepository(DbContext),
                 new StockSplitRepository(DbContext),
                 new FailToDeliverRepository(DbContext),
-                new DailyStockPriceRepository(DbContext),
+                new EquityDailyStockPriceRepository(DbContext),
                 []
             ),
             new StockSplitRepository(DbContext),
@@ -52,20 +52,19 @@ public class ShortDataToolsSnapshotSentinelTests : ParadeDbMcpTestBase
 
     private int _nextCik = 1;
 
-    private CommonStock AddStock(string ticker, string name)
+    private EquityIssuer AddStock(string ticker, string name)
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = name,
-            Cik = (_nextCik++).ToString("D10"),
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: name,
+            Cik: (_nextCik++).ToString("D10")
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
     private void AddShortInterest(
-        CommonStock stock,
+        EquityIssuer stock,
         decimal daysToCover,
         long position = 1_000_000,
         long avgDailyVolume = 100_000,
@@ -76,8 +75,14 @@ public class ShortDataToolsSnapshotSentinelTests : ParadeDbMcpTestBase
             .Add(
                 new ShortInterest
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = Settlement,
                     CurrentShortPosition = position,
                     ChangeInShortPosition = change,
@@ -89,7 +94,7 @@ public class ShortDataToolsSnapshotSentinelTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Snapshot_CappedDaysToCover_RendersSentinelNotRoundedThousand()
     {
-        var illiquid = AddStock("CODQL", "Compagnie OTC");
+        EquityIssuer illiquid = AddStock("CODQL", "Compagnie OTC");
         AddShortInterest(illiquid, daysToCover: 999.99m, avgDailyVolume: 4);
         await DbContext.SaveChangesAsync();
 
@@ -104,9 +109,9 @@ public class ShortDataToolsSnapshotSentinelTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Snapshot_CappedRows_RankAfterRealReadings()
     {
-        var real = AddStock("GME", "GameStop Corp");
+        EquityIssuer real = AddStock("GME", "GameStop Corp");
         AddShortInterest(real, daysToCover: 8.0m, avgDailyVolume: 5_000_000);
-        var capped = AddStock("CODQL", "Compagnie OTC");
+        EquityIssuer capped = AddStock("CODQL", "Compagnie OTC");
         AddShortInterest(capped, daysToCover: 999.99m, avgDailyVolume: 4);
         await DbContext.SaveChangesAsync();
 
@@ -137,9 +142,9 @@ public class ShortDataToolsSnapshotSentinelTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Snapshot_MinAvgDailyVolume_DropsIlliquidNames()
     {
-        var liquid = AddStock("GME", "GameStop Corp");
+        EquityIssuer liquid = AddStock("GME", "GameStop Corp");
         AddShortInterest(liquid, daysToCover: 8.0m, avgDailyVolume: 5_000_000);
-        var illiquid = AddStock("CODQL", "Compagnie OTC");
+        EquityIssuer illiquid = AddStock("CODQL", "Compagnie OTC");
         AddShortInterest(illiquid, daysToCover: 999.99m, avgDailyVolume: 4);
         await DbContext.SaveChangesAsync();
 
@@ -152,9 +157,9 @@ public class ShortDataToolsSnapshotSentinelTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Snapshot_SortByShortPosition_RanksByPosition()
     {
-        var small = AddStock("GME", "GameStop Corp");
+        EquityIssuer small = AddStock("GME", "GameStop Corp");
         AddShortInterest(small, daysToCover: 9.0m, position: 1_000, avgDailyVolume: 100);
-        var big = AddStock("AMC", "AMC Entertainment");
+        EquityIssuer big = AddStock("AMC", "AMC Entertainment");
         AddShortInterest(big, daysToCover: 1.0m, position: 90_000_000, avgDailyVolume: 90_000_000);
         await DbContext.SaveChangesAsync();
 

@@ -77,8 +77,8 @@ public class Realtime13DGIngestionPoisonedFilingTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -131,24 +131,22 @@ public class Realtime13DGIngestionPoisonedFilingTests : IAsyncLifetime
     {
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>()
+            seed.Set<EquityIssuer>()
                 .AddRange(
-                    new CommonStock
-                    {
-                        Id = Guid.NewGuid(),
-                        Ticker = "POISN",
-                        Name = "Poisoned Issuer Inc.",
-                        Cik = "0001236275",
-                        Cusip = PoisonedCusip,
-                    },
-                    new CommonStock
-                    {
-                        Id = Guid.NewGuid(),
-                        Ticker = "CLEAN",
-                        Name = "Clean Issuer Inc.",
-                        Cik = "0001236276",
-                        Cusip = CleanCusip,
-                    }
+                    Equibles.TestSupport.EquityIssuerSeed.Create(
+                        Id: Guid.NewGuid(),
+                        Ticker: "POISN",
+                        Name: "Poisoned Issuer Inc.",
+                        Cik: "0001236275",
+                        Cusip: PoisonedCusip
+                    ),
+                    Equibles.TestSupport.EquityIssuerSeed.Create(
+                        Id: Guid.NewGuid(),
+                        Ticker: "CLEAN",
+                        Name: "Clean Issuer Inc.",
+                        Cik: "0001236276",
+                        Cusip: CleanCusip
+                    )
                 );
             await seed.SaveChangesAsync();
         }

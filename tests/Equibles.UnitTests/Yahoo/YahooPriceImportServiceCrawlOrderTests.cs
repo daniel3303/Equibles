@@ -23,14 +23,16 @@ public class YahooPriceImportServiceCrawlOrderTests
     )
     {
         var targets = tickerMap
-            .Select(pair => new PriceSeriesTarget(pair.Key, pair.Value, IsPrimary: true))
+            .Select(pair => new PriceSeriesTarget(
+                pair.Key,
+                Guid.NewGuid(),
+                pair.Value,
+                IsPrimary: true
+            ))
             .ToList();
         var seriesDates = tickerMap
             .Where(pair => lastDates.ContainsKey(pair.Value))
-            .ToDictionary(
-                pair => new PriceSeriesKey(pair.Value, pair.Key),
-                pair => lastDates[pair.Value]
-            );
+            .ToDictionary(pair => pair.Value, pair => lastDates[pair.Value]);
 
         return YahooPriceImportService
             .BuildCrawlOrder(targets, seriesDates, Today)
@@ -137,12 +139,12 @@ public class YahooPriceImportServiceCrawlOrderTests
     public void SecondaryListing_FreshnessIsIndependentFromThePrimary()
     {
         var stockId = Guid.NewGuid();
-        var primary = new PriceSeriesTarget("GOOGL", stockId, IsPrimary: true);
-        var secondary = new PriceSeriesTarget("GOOG", stockId, IsPrimary: false);
-        var lastDates = new Dictionary<PriceSeriesKey, DateOnly>
+        var primary = new PriceSeriesTarget("GOOGL", stockId, Guid.NewGuid(), IsPrimary: true);
+        var secondary = new PriceSeriesTarget("GOOG", stockId, Guid.NewGuid(), IsPrimary: false);
+        var lastDates = new Dictionary<Guid, DateOnly>
         {
-            [primary.Key] = Today.AddDays(-1),
-            [secondary.Key] = Today.AddDays(-30),
+            [primary.EquityListingId] = Today.AddDays(-1),
+            [secondary.EquityListingId] = Today.AddDays(-30),
         };
 
         var ordered = YahooPriceImportService.BuildCrawlOrder(
@@ -157,10 +159,21 @@ public class YahooPriceImportServiceCrawlOrderTests
     [Fact]
     public void CurrentListings_LeadHistoricalRegardlessOfFreshness()
     {
-        var liveRecent = new PriceSeriesTarget("LIVE", Guid.NewGuid(), IsPrimary: true);
-        var liveNeverSynced = new PriceSeriesTarget("NEW", Guid.NewGuid(), IsPrimary: true);
+        var liveRecent = new PriceSeriesTarget(
+            "LIVE",
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            IsPrimary: true
+        );
+        var liveNeverSynced = new PriceSeriesTarget(
+            "NEW",
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            IsPrimary: true
+        );
         var historicalRecent = new PriceSeriesTarget(
             "OLD-LIVE",
+            Guid.NewGuid(),
             Guid.NewGuid(),
             IsPrimary: true,
             IsHistorical: true
@@ -168,13 +181,14 @@ public class YahooPriceImportServiceCrawlOrderTests
         var historicalNeverSynced = new PriceSeriesTarget(
             "OLD-NEW",
             Guid.NewGuid(),
+            Guid.NewGuid(),
             IsPrimary: true,
             IsHistorical: true
         );
-        var lastDates = new Dictionary<PriceSeriesKey, DateOnly>
+        var lastDates = new Dictionary<Guid, DateOnly>
         {
-            [liveRecent.Key] = Today.AddDays(-1),
-            [historicalRecent.Key] = Today.AddDays(-1),
+            [liveRecent.EquityListingId] = Today.AddDays(-1),
+            [historicalRecent.EquityListingId] = Today.AddDays(-1),
         };
 
         var ordered = YahooPriceImportService.BuildCrawlOrder(

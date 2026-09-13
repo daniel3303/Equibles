@@ -1,6 +1,7 @@
 using Equibles.Data;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
+using Equibles.Sec.Repositories.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Pgvector;
 using Pgvector.EntityFrameworkCore;
@@ -80,7 +81,13 @@ public class EmbeddingRepository : BaseRepository<Embedding>
             // stored uppercase by the chunker; normalizing the parameter is a mechanical case
             // conversion, not classification.
             var normalizedTicker = ticker.ToUpperInvariant();
-            query = query.Where(e => e.Chunk.Ticker == normalizedTicker);
+            var documents = DbContext
+                .Set<Document>()
+                .ForUsTicker(ticker)
+                .Select(document => document.Id);
+            query = query.Where(e =>
+                e.Chunk.Ticker == normalizedTicker && documents.Contains(e.Chunk.DocumentId)
+            );
         }
 
         if (documentId.HasValue)

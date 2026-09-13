@@ -14,7 +14,11 @@ public class ShortSqueezeScoreManagerSqueezeCandidateListingTests
 {
     private static bool IsCandidate(ListedSecurityType type, string sic) =>
         ShortSqueezeScoreManager.SqueezeCandidateListing.Compile()(
-            new CommonStock { ListedSecurityType = type, Sic = sic }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "TEST",
+                ListedSecurityType: type,
+                Sic: sic
+            )
         );
 
     [Theory]

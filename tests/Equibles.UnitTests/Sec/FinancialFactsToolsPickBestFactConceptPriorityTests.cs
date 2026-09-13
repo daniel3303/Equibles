@@ -30,7 +30,7 @@ public class FinancialFactsToolsPickBestFactConceptPriorityTests
         var synonymConceptId = Guid.NewGuid();
         var primary = new FinancialFact
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = primaryConceptId,
             Value = 100m,
             FiledDate = new DateOnly(2024, 5, 1),
@@ -45,7 +45,7 @@ public class FinancialFactsToolsPickBestFactConceptPriorityTests
         };
         var synonym = new FinancialFact
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = synonymConceptId,
             Value = 200m,
             FiledDate = new DateOnly(2024, 9, 15),

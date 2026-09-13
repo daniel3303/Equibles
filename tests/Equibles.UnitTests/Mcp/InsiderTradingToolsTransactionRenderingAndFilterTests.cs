@@ -60,19 +60,18 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
             new InsiderTransactionRepository(db),
             new InsiderOwnerRepository(db),
             new Form144FilingRepository(db),
-            new CommonStockRepository(db),
+            new EquityIssuerRepository(db),
             new StockSplitRepository(db),
             new ErrorManager(new ErrorRepository(db)),
             Substitute.For<ILogger<InsiderTradingTools>>()
         );
 
-    private static CommonStock NewStock() =>
-        new()
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+    private static EquityIssuer NewStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
 
     private static InsiderOwner NewOwner(string name = "John Doe", string cik = "0001234567") =>
         new()
@@ -83,7 +82,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
         };
 
     private static InsiderTransaction NewTransaction(
-        CommonStock stock,
+        EquityIssuer stock,
         InsiderOwner owner,
         TransactionCode code,
         AcquiredDisposed acquiredDisposed,
@@ -96,8 +95,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             InsiderOwner = owner,
             TransactionDate = transactionDate ?? new DateOnly(2024, 6, 1),
@@ -117,7 +115,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_ConversionRow_RendersConversionNotBuy()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var owner = NewOwner();
         db.AddRange(stock, owner);
         db.Add(
@@ -141,7 +139,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_TaxPaymentRow_RendersTaxPaymentNotSell()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var owner = NewOwner();
         db.AddRange(stock, owner);
         db.Add(
@@ -165,7 +163,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_Rule10b5OneFlag_RendersYesNoAndDash()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var owner = NewOwner();
         db.AddRange(stock, owner);
         db.Add(
@@ -215,7 +213,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_ZeroShareZeroBalanceRow_IsDropped()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var real = NewOwner(name: "Real Trader", cik: "0000000001");
         var ghost = NewOwner(name: "Ghost Filer", cik: "0000000002");
         db.AddRange(stock, real, ghost);
@@ -254,7 +252,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_InvalidFromDate_ReturnsStrictError()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -267,7 +265,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_InvalidTransactionType_ListsAcceptedValues()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -284,7 +282,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_DateRange_LimitsToWindow()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var owner = NewOwner();
         db.AddRange(stock, owner);
         db.Add(
@@ -331,7 +329,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_TransactionTypeBuy_FiltersToOpenMarketPurchases()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var owner = NewOwner();
         db.AddRange(stock, owner);
         db.Add(
@@ -362,7 +360,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_Truncated_AppendsTruncationNote()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var owner = NewOwner();
         db.AddRange(stock, owner);
         for (var i = 0; i < 3; i++)
@@ -393,7 +391,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_NotTruncated_HasNoTruncationNote()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var owner = NewOwner();
         db.AddRange(stock, owner);
         db.Add(
@@ -416,7 +414,7 @@ public class InsiderTradingToolsTransactionRenderingAndFilterTests
     public async Task GetInsiderTransactions_LowercaseTicker_EchoesCanonicalTicker()
     {
         await using var db = NewDb();
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var owner = NewOwner();
         db.AddRange(stock, owner);
         db.Add(

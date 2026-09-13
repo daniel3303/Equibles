@@ -21,8 +21,8 @@ public class StockPriceToolsBollingerBandsStdDevValidationTests : ParadeDbMcpTes
 
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()

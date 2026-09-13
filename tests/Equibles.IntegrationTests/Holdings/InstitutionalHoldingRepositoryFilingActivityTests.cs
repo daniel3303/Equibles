@@ -44,12 +44,11 @@ public class InstitutionalHoldingRepositoryFilingActivityTests : IAsyncLifetime
     public async Task GetFilingActivitySummary_TwoRowsSameAccession_CountsOneFilingOneFiler()
     {
         await using var seed = FreshContext();
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         seed.Add(stock);
         var holder = new InstitutionalHolder { Cik = "H001", Name = "Test Fund LP" };
         seed.Add(holder);
@@ -59,7 +58,7 @@ public class InstitutionalHoldingRepositoryFilingActivityTests : IAsyncLifetime
         seed.AddRange(
             new InstitutionalHolding
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InstitutionalHolderId = holder.Id,
                 FilingDate = filingDate,
                 ReportDate = new DateOnly(2025, 3, 31),
@@ -71,7 +70,7 @@ public class InstitutionalHoldingRepositoryFilingActivityTests : IAsyncLifetime
             },
             new InstitutionalHolding
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InstitutionalHolderId = holder.Id,
                 FilingDate = filingDate,
                 ReportDate = new DateOnly(2025, 3, 31),

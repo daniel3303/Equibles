@@ -1,23 +1,31 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.CorporateActions.Data.Models;
 
 /// <summary>
-/// An as-reported cash dividend for a <see cref="CommonStock"/>.
+/// An as-reported cash dividend for a <see cref="Issuer"/>.
 /// <see cref="ExDate"/> is the ex-dividend date (the first trading day the
 /// stock trades without the dividend) and <see cref="AmountPerShare"/> is the
-/// declared cash amount per share. The (stock, ex-date) pair is unique — it is
-/// the idempotency guard for the capture upsert.
+/// declared cash amount in major currency units per share. Attributed observations are unique
+/// per listing and ex-date; earlier issuer-only observations retain their separate identity.
 /// </summary>
-[Index(nameof(CommonStockId), nameof(ExDate), IsUnique = true)]
 [Index(nameof(PriceAdjustmentAppliedTime))]
 public class CashDividend
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
+
+    // Earlier captures did not retain the source listing or denomination.
+    public Guid? EquityListingId { get; set; }
+    public virtual EquityListing Listing { get; set; }
+
+    [MaxLength(3)]
+    public string Currency { get; set; }
 
     public DateOnly ExDate { get; set; }
 
@@ -36,7 +44,7 @@ public class CashDividend
 
     /// <summary>
     /// Null while this dividend still requires a full provider-history reconciliation of the
-    /// stock's current primary listed series.
+    /// captured listing's price series.
     /// </summary>
     public DateTime? PriceAdjustmentAppliedTime { get; set; }
 }

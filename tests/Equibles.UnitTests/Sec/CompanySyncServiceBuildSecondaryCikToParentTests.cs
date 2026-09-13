@@ -42,26 +42,24 @@ public class CompanySyncServiceBuildSecondaryCikToParentTests
             Substitute.For<IBus>()
         );
 
-        var firstParent = new CommonStock
-        {
-            Cik = "0000001000",
-            Ticker = "AAA",
-            Name = "Apple",
-            SecondaryCiks = ["0000005555"],
-        };
-        var duplicateParent = new CommonStock
-        {
-            Cik = "0000002000",
-            Ticker = "BBB",
-            Name = "BeeCo",
-            SecondaryCiks = ["0000005555"],
-        };
+        EquityIssuer firstParent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000001000",
+            Ticker: "AAA",
+            Name: "Apple",
+            SecondaryCiks: ["0000005555"]
+        );
+        EquityIssuer duplicateParent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000002000",
+            Ticker: "BBB",
+            Name: "BeeCo",
+            SecondaryCiks: ["0000005555"]
+        );
 
         var method = typeof(CompanySyncService).GetMethod(
             "BuildSecondaryCikToParent",
             BindingFlags.NonPublic | BindingFlags.Instance
         );
-        method.Invoke(sut, [new List<CommonStock> { firstParent, duplicateParent }]);
+        method.Invoke(sut, [new List<EquityIssuer> { firstParent, duplicateParent }]);
 
         var warning = capturing.Warnings.Should().ContainSingle().Subject;
         warning

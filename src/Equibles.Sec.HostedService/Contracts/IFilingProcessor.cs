@@ -12,7 +12,7 @@ namespace Equibles.Sec.HostedService.Contracts;
 public interface IFilingProcessor
 {
     bool CanProcess(DocumentType documentType);
-    Task<bool> Process(FilingData filing, CommonStock company);
+    Task<bool> Process(FilingData filing, EquityIssuer company);
 
     /// <summary>
     /// The subset of <paramref name="accessionNumbers"/> this processor has already

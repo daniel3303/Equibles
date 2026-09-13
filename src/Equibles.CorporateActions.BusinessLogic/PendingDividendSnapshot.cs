@@ -9,5 +9,7 @@ public readonly record struct PendingDividendSnapshot(
     Guid Id,
     DateOnly ExDate,
     decimal AmountPerShare,
-    CashDividendSource Source
+    CashDividendSource Source,
+    Guid EquityListingId,
+    string Currency
 );

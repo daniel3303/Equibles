@@ -21,8 +21,8 @@ public class ShortVolumeImportServiceAggregateVolumesByStockNullVolumeTests
         );
 
         var stockId = Guid.NewGuid();
-        var security = new ListedSecurityKey(stockId, "AAPL");
-        var tickerMap = new Dictionary<string, ListedSecurityKey> { ["AAPL"] = security };
+        var security = new EquityListingReference(stockId, Guid.NewGuid(), "AAPL");
+        var tickerMap = new Dictionary<string, EquityListingReference> { ["AAPL"] = security };
         var records = new List<ShortVolumeRecord>
         {
             new()
@@ -35,10 +35,10 @@ public class ShortVolumeImportServiceAggregateVolumesByStockNullVolumeTests
         };
 
         var result =
-            (Dictionary<ListedSecurityKey, DailyShortVolume>)
+            (Dictionary<Guid, DailyShortVolume>)
                 method.Invoke(null, [records, tickerMap, new DateOnly(2024, 9, 30)]);
 
-        result.Should().ContainKey(security);
-        result[security].ShortVolume.Should().Be(0);
+        result.Should().ContainKey(security.EquityListingId);
+        result[security.EquityListingId].ShortVolume.Should().Be(0);
     }
 }

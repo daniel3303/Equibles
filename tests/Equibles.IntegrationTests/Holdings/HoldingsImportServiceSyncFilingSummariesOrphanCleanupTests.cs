@@ -39,7 +39,10 @@ public class HoldingsImportServiceSyncFilingSummariesOrphanCleanupTests : IAsync
     {
         var holderA = new InstitutionalHolder { Cik = "111", Name = "Alpha Capital" };
         var holderB = new InstitutionalHolder { Cik = "222", Name = "Beta Capital" };
-        var stock = new CommonStock { Ticker = "TST", Name = "Test Corp" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TST",
+            Name: "Test Corp"
+        );
         // Holder A's pre-existing Q2 filing sits outside the touched pairs; its
         // accession has no holdings rows, so a cross-product cleanup would kill it.
         var untouched = new InstitutionalFiling
@@ -97,14 +100,14 @@ public class HoldingsImportServiceSyncFilingSummariesOrphanCleanupTests : IAsync
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         string accession,
         DateOnly reportDate
     ) =>
         new InstitutionalHolding
         {
             InstitutionalHolderId = holder.Id,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             AccessionNumber = accession,
             FilingDate = new DateOnly(2026, 8, 15),
             ReportDate = reportDate,

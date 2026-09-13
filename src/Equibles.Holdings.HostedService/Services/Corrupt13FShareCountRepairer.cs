@@ -81,7 +81,7 @@ internal static class Corrupt13FShareCountRepairer
 
             if (
                 stockPrices.TryGetValue(
-                    (holding.CommonStockId, holding.ListedTicker, holding.ReportDate),
+                    (holding.EquityIssuerId, holding.ListedTicker, holding.ReportDate),
                     out var closePrice
                 )
                 && closePrice > 0

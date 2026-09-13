@@ -48,7 +48,10 @@ public class HistoricalCalendarImportTests
                 "",
                 "USD",
                 value,
-                new CommonStock { FiscalYearEndMonth = 6, FiscalYearEndDay = 30 },
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    FiscalYearEndMonth: 6,
+                    FiscalYearEndDay: 30
+                ),
                 calendar,
             ]
         );

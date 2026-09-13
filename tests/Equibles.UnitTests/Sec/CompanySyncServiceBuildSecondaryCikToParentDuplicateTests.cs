@@ -32,25 +32,23 @@ public class CompanySyncServiceBuildSecondaryCikToParentDuplicateTests
     [Fact]
     public void BuildSecondaryCikToParent_TwoParentsShareSubsidiaryCik_KeepsFirstParentSilently()
     {
-        var apple = new CommonStock
-        {
-            Ticker = "AAPL",
-            Cik = "0000320193",
-            SecondaryCiks = ["0000999999"],
-        };
-        var microsoft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Cik = "0000789019",
-            SecondaryCiks = ["0000999999"],
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Cik: "0000320193",
+            SecondaryCiks: ["0000999999"]
+        );
+        EquityIssuer microsoft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Cik: "0000789019",
+            SecondaryCiks: ["0000999999"]
+        );
         var service = CreateService();
 
         var result =
-            (Dictionary<string, CommonStock>)
+            (Dictionary<string, EquityIssuer>)
                 BuildSecondaryCikToParentMethod.Invoke(
                     service,
-                    [new List<CommonStock> { apple, microsoft }]
+                    [new List<EquityIssuer> { apple, microsoft }]
                 );
 
         result[CikNormalizer.Canonicalize("0000999999")].Should().BeSameAs(apple);

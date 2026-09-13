@@ -24,22 +24,20 @@ public class StocksControllerSearchPercentEscapingTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "AAPL",
-                    Name = "Apple Inc",
-                    Description = "Consumer electronics maker",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "AAPL",
+                    Name: "Apple Inc",
+                    Description: "Consumer electronics maker",
+                    Cik: "0000320193"
+                )
             );
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corporation",
-                    Description = "Enterprise software vendor",
-                    Cik = "0000789019",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corporation",
+                    Description: "Enterprise software vendor",
+                    Cik: "0000789019"
+                )
             );
             await db.SaveChangesAsync();
         });

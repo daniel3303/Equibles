@@ -9,20 +9,20 @@ namespace Equibles.Sec.Data.Models;
 /// <summary>
 /// A SEC Form D notice — an issuer's report of an exempt (Regulation D) securities offering,
 /// i.e. a private placement. Form D appears in the issuer's EDGAR submissions feed, so each
-/// notice is attributed to the issuer's <see cref="CommonStock"/>. Offering amounts can be
+/// notice is attributed to the issuer's <see cref="Issuer"/>. Offering amounts can be
 /// reported as the literal "Indefinite" rather than a number; those are stored as <c>null</c>
 /// and flagged via <see cref="IsOfferingAmountIndefinite"/> / <see cref="IsRemainingIndefinite"/>.
 /// </summary>
-[Index(nameof(CommonStockId), nameof(FilingDate))]
+[Index(nameof(EquityIssuerId), nameof(FilingDate))]
 [Index(nameof(AccessionNumber), IsUnique = true)]
 [Index(nameof(FilingDate))]
-public class FormDFiling : IStockFiling
+public class FormDFiling : IIssuerFiling
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     [MaxLength(32)]
     public string AccessionNumber { get; set; }

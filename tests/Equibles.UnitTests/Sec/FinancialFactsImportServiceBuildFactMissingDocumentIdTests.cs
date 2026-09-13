@@ -32,7 +32,7 @@ public class FinancialFactsImportServiceBuildFactMissingDocumentIdTests
         SetInit(parsedFact, "Filed", new DateOnly(2025, 1, 15));
         SetInit(parsedFact, "Accession", "0001234567-25-000001");
 
-        var stock = new CommonStock { Id = Guid.NewGuid() };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(Id: Guid.NewGuid());
         var conceptIds = new Dictionary<(FactTaxonomy, string), Guid>
         {
             [(FactTaxonomy.UsGaap, "Revenues")] = Guid.NewGuid(),

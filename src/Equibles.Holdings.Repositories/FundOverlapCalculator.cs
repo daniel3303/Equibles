@@ -159,14 +159,14 @@ public static class FundOverlapCalculator
     )
     {
         var perStock = fund
-            .Holdings.GroupBy(h => h.CommonStockId)
+            .Holdings.GroupBy(h => h.EquityIssuerId)
             .ToDictionary(
                 g => g.Key,
                 g => new FundStockAggregate
                 {
                     CommonStockId = g.Key,
-                    Ticker = g.First().CommonStock?.Ticker,
-                    Name = g.First().CommonStock?.Name,
+                    Ticker = g.First().Issuer?.Presentation?.Listing?.Ticker,
+                    Name = g.First().Issuer?.Name,
                     Shares = g.Sum(h => h.Shares),
                     Value = g.Sum(h => h.Value),
                 }

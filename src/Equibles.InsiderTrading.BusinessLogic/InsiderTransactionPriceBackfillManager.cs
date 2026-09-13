@@ -44,7 +44,7 @@ public class InsiderTransactionPriceBackfillManager
     private const int CloseLookbackDays = 10;
 
     private readonly InsiderTransactionRepository _transactionRepository;
-    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly InsiderTransactionPriceValidator _validator;
     private readonly EquiblesFinancialDbContext _dbContext;
@@ -52,7 +52,7 @@ public class InsiderTransactionPriceBackfillManager
 
     public InsiderTransactionPriceBackfillManager(
         InsiderTransactionRepository transactionRepository,
-        DailyStockPriceRepository dailyStockPriceRepository,
+        EquityDailyStockPriceRepository dailyStockPriceRepository,
         StockSplitRepository stockSplitRepository,
         InsiderTransactionPriceValidator validator,
         EquiblesFinancialDbContext dbContext,
@@ -122,10 +122,10 @@ public class InsiderTransactionPriceBackfillManager
 
             foreach (var transaction in batch)
             {
-                var key = (transaction.CommonStockId, transaction.TransactionDate);
+                var key = (transaction.EquityIssuerId, transaction.TransactionDate);
                 bars.TryGetValue(key, out var barRow);
-                splitsByStock.TryGetValue(transaction.CommonStockId, out var splits);
-                identityByStock.TryGetValue(transaction.CommonStockId, out var identity);
+                splitsByStock.TryGetValue(transaction.EquityIssuerId, out var splits);
+                identityByStock.TryGetValue(transaction.EquityIssuerId, out var identity);
 
                 var bar = InsiderDailyBars.Build(
                     barRow?.Close,
@@ -196,7 +196,7 @@ public class InsiderTransactionPriceBackfillManager
 
     /// <summary>
     /// Fetch one bar per distinct (CommonStockId, TransactionDate) — the most
-    /// recent <see cref="DailyStockPrice"/> on or before that date. The stored
+    /// recent <see cref="EquityDailyStockPrice"/> on or before that date. The stored
     /// Close/Low/High are on TODAY'S split-adjusted basis (the split
     /// reconciliation rewrites the whole listed series), which is exactly why
     /// the evaluation carries the split factor rather than treating the close
@@ -206,21 +206,21 @@ public class InsiderTransactionPriceBackfillManager
         List<InsiderTransaction> batch
     )
     {
-        var stockIds = batch.Select(t => t.CommonStockId).Distinct().ToList();
+        var stockIds = batch.Select(t => t.EquityIssuerId).Distinct().ToList();
         var maxDate = batch.Max(t => t.TransactionDate);
         var minDate = batch.Min(t => t.TransactionDate).AddDays(-CloseLookbackDays);
 
         var rawPrices = await _dailyStockPriceRepository
-            .GetAll()
+            .GetPrimarySeries()
             .Where(p =>
-                stockIds.Contains(p.CommonStockId)
+                stockIds.Contains(p.Listing.Security.EquityIssuerId)
                 && p.Date >= minDate
                 && p.Date <= maxDate
                 && p.Volume > 0
             )
             .Select(p => new
             {
-                p.CommonStockId,
+                CommonStockId = p.Listing.Security.EquityIssuerId,
                 p.Date,
                 p.Close,
                 p.Low,
@@ -235,10 +235,10 @@ public class InsiderTransactionPriceBackfillManager
         var result = new Dictionary<(Guid, DateOnly), BarRow>();
         foreach (var transaction in batch)
         {
-            var key = (transaction.CommonStockId, transaction.TransactionDate);
+            var key = (transaction.EquityIssuerId, transaction.TransactionDate);
             if (result.ContainsKey(key))
                 continue;
-            if (!byStock.TryGetValue(transaction.CommonStockId, out var stockPrices))
+            if (!byStock.TryGetValue(transaction.EquityIssuerId, out var stockPrices))
                 continue;
             var match = stockPrices.FirstOrDefault(p => p.Date <= transaction.TransactionDate);
             if (match != null)
@@ -257,26 +257,36 @@ public class InsiderTransactionPriceBackfillManager
         Dictionary<Guid, StockIdentity> IdentityByStock
     )> FetchSplitContext(List<InsiderTransaction> batch)
     {
-        var stockIds = batch.Select(t => t.CommonStockId).Distinct().ToList();
+        var stockIds = batch.Select(t => t.EquityIssuerId).Distinct().ToList();
 
         var splitsByStock = (
             await _stockSplitRepository
                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
-                .Where(sp => stockIds.Contains(sp.CommonStockId))
+                .Where(sp => stockIds.Contains(sp.EquityIssuerId))
                 .ToListAsync()
         )
-            .GroupBy(sp => sp.CommonStockId)
+            .GroupBy(sp => sp.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var identityByStock = (
             await _dbContext
-                .Set<CommonStock>()
+                .Set<EquityIssuer>()
                 .Where(cs => stockIds.Contains(cs.Id))
                 .Select(cs => new
                 {
                     cs.Id,
-                    cs.Ticker,
-                    cs.SecondaryTickers,
+                    Ticker = cs.Presentation.Listing.Ticker,
+                    SecondaryTickers = cs
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (
+                                nativeListing.IsDirectoryListed
+                                && nativeListing.Id != cs.Presentation.EquityListingId
+                            )
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList(),
                 })
                 .ToListAsync()
         ).ToDictionary(cs => cs.Id, cs => new StockIdentity(cs.Ticker, cs.SecondaryTickers ?? []));

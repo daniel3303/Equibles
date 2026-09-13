@@ -33,22 +33,28 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
     public ShortVolumeImportServicePipelineTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private CommonStock _stock;
+    private EquityIssuer _stock;
 
     private async Task SeedStockAndLatestRow()
     {
-        _stock = new CommonStock
-        {
-            Cik = "0000000777",
-            Ticker = "TESTV",
-            Name = "Short Volume Test Inc.",
-        };
+        _stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000777",
+            Ticker: "TESTV",
+            Name: "Short Volume Test Inc."
+        );
         DbContext.Add(_stock);
         // A "latest" row 3 days back bounds the loop to the last 3 days.
         DbContext.Add(
             new DailyShortVolume
             {
-                CommonStockId = _stock.Id,
+                EquityListingId = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        _stock,
+                        _stock.Presentation.Listing.Ticker
+                    )
+                    .Id,
+                ListedTicker = _stock.Presentation.Listing.Ticker,
                 Date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-3),
                 ShortVolume = 1,
                 TotalVolume = 1,
@@ -61,7 +67,8 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
     private ShortVolumeImportService BuildService(IFinraClient finraClient)
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
+            (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(DailyShortVolumeRepository), new DailyShortVolumeRepository(DbContext))
         );
         return new ShortVolumeImportService(
@@ -128,7 +135,7 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
         var aggregated = await verify
             .Set<DailyShortVolume>()
             .AsNoTracking()
-            .Where(v => v.CommonStockId == _stock.Id && v.ShortVolume == 150)
+            .Where(v => v.Listing.Security.EquityIssuerId == _stock.Id && v.ShortVolume == 150)
             .ToListAsync();
         aggregated.Should().NotBeEmpty("the two per-market rows must aggregate to ShortVolume 150");
         aggregated.Should().OnlyContain(v => v.TotalVolume == 260);
@@ -150,7 +157,7 @@ public class ShortVolumeImportServicePipelineTests : ParadeDbMcpTestBase
         var hasAggregate = await verify
             .Set<DailyShortVolume>()
             .AsNoTracking()
-            .AnyAsync(v => v.CommonStockId == _stock.Id && v.ShortVolume == 150);
+            .AnyAsync(v => v.Listing.Security.EquityIssuerId == _stock.Id && v.ShortVolume == 150);
         hasAggregate.Should().BeFalse("every fetch failed, so nothing new was persisted");
     }
 }

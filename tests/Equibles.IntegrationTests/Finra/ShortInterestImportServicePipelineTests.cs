@@ -30,16 +30,15 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
     public ShortInterestImportServicePipelineTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private CommonStock _stock;
+    private EquityIssuer _stock;
 
     private async Task SeedStock()
     {
-        _stock = new CommonStock
-        {
-            Cik = "0000000888",
-            Ticker = "TESTI",
-            Name = "Short Interest Test Inc.",
-        };
+        _stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000888",
+            Ticker: "TESTI",
+            Name: "Short Interest Test Inc."
+        );
         DbContext.Add(_stock);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -48,7 +47,8 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
     private ShortInterestImportService BuildService(IFinraClient finraClient)
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
+            (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (typeof(ShortInterestRepository), new ShortInterestRepository(DbContext))
         );
         return new ShortInterestImportService(
@@ -99,7 +99,9 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
         var rows = await verify
             .Set<ShortInterest>()
             .AsNoTracking()
-            .Where(s => s.CommonStockId == _stock.Id && s.SettlementDate == settlementDate)
+            .Where(s =>
+                s.Listing.Security.EquityIssuerId == _stock.Id && s.SettlementDate == settlementDate
+            )
             .ToListAsync();
         rows.Should().ContainSingle("the tracked stock's short interest must be persisted");
         rows[0].CurrentShortPosition.Should().Be(500_000);
@@ -109,18 +111,16 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Import_CaseVariantSymbols_PersistsEachSecurity()
     {
-        var common = new CommonStock
-        {
-            Cik = "0000000889",
-            Ticker = "TPC",
-            Name = "Tutor Perini Corporation",
-        };
-        var preferred = new CommonStock
-        {
-            Cik = "0000000890",
-            Ticker = "TpC",
-            Name = "Tutor Perini Preferred",
-        };
+        EquityIssuer common = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000889",
+            Ticker: "TPC",
+            Name: "Tutor Perini Corporation"
+        );
+        EquityIssuer preferred = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000890",
+            Ticker: "TpC",
+            Name: "Tutor Perini Preferred"
+        );
         DbContext.AddRange(common, preferred);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -147,25 +147,27 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
             .Where(s => s.SettlementDate == settlementDate)
             .ToListAsync();
         rows.Should().HaveCount(2);
-        rows.Single(row => row.CommonStockId == common.Id).CurrentShortPosition.Should().Be(100);
-        rows.Single(row => row.CommonStockId == preferred.Id).CurrentShortPosition.Should().Be(200);
+        rows.Single(row => row.Listing.Security.EquityIssuerId == common.Id)
+            .CurrentShortPosition.Should()
+            .Be(100);
+        rows.Single(row => row.Listing.Security.EquityIssuerId == preferred.Id)
+            .CurrentShortPosition.Should()
+            .Be(200);
     }
 
     [Fact]
     public async Task Import_CaseVariantCompressedClassSymbols_PersistsEachSecurity()
     {
-        var commonClass = new CommonStock
-        {
-            Cik = "0000000891",
-            Ticker = "TPC-A",
-            Name = "Tutor Perini Class A",
-        };
-        var preferredClass = new CommonStock
-        {
-            Cik = "0000000892",
-            Ticker = "TpC-A",
-            Name = "Tutor Perini Preferred Class A",
-        };
+        EquityIssuer commonClass = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000891",
+            Ticker: "TPC-A",
+            Name: "Tutor Perini Class A"
+        );
+        EquityIssuer preferredClass = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000892",
+            Ticker: "TpC-A",
+            Name: "Tutor Perini Preferred Class A"
+        );
         DbContext.AddRange(commonClass, preferredClass);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -192,10 +194,10 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
             .Where(s => s.SettlementDate == settlementDate)
             .ToListAsync();
         rows.Should().HaveCount(2);
-        rows.Single(row => row.CommonStockId == commonClass.Id)
+        rows.Single(row => row.Listing.Security.EquityIssuerId == commonClass.Id)
             .CurrentShortPosition.Should()
             .Be(300);
-        rows.Single(row => row.CommonStockId == preferredClass.Id)
+        rows.Single(row => row.Listing.Security.EquityIssuerId == preferredClass.Id)
             .CurrentShortPosition.Should()
             .Be(400);
     }

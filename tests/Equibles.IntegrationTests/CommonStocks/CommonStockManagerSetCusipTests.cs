@@ -11,26 +11,25 @@ namespace Equibles.IntegrationTests.CommonStocks;
 
 public class CommonStockManagerSetCusipTests
 {
-    private readonly CommonStockManager _sut;
+    private readonly EquityIdentityManager _sut;
     private readonly IBus _publishEndpoint = Substitute.For<IBus>();
-    private readonly CommonStockRepository _repository;
+    private readonly EquityIssuerRepository _repository;
 
     public CommonStockManagerSetCusipTests()
     {
         var context = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _repository = new CommonStockRepository(context);
-        _sut = new CommonStockManager(_repository, _publishEndpoint);
+        _repository = new EquityIssuerRepository(context);
+        _sut = new EquityIdentityManager(_repository, _publishEndpoint);
     }
 
-    private async Task<CommonStock> SeedStock(string cusip)
+    private async Task<EquityIssuer> SeedStock(string cusip)
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = cusip,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: cusip
+        );
         _repository.Add(stock);
         await _repository.SaveChanges();
         return stock;
@@ -42,11 +41,11 @@ public class CommonStockManagerSetCusipTests
     [Fact]
     public async Task SetCusip_CusipChanged_PublishesEventAndPersists()
     {
-        var stock = await SeedStock(null);
+        EquityIssuer stock = await SeedStock(null);
 
         await _sut.SetCusip(stock, "037833100");
 
-        stock.Cusip.Should().Be("037833100");
+        stock.Presentation.Listing.Security.Cusip.Should().Be("037833100");
         await _publishEndpoint
             .Received(1)
             .Publish(
@@ -64,7 +63,7 @@ public class CommonStockManagerSetCusipTests
     [Fact]
     public async Task SetCusip_SameCusip_DoesNotPublish()
     {
-        var stock = await SeedStock("037833100");
+        EquityIssuer stock = await SeedStock("037833100");
 
         await _sut.SetCusip(stock, "037833100");
 

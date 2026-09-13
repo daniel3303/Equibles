@@ -19,9 +19,9 @@ public class FundOverlapCalculatorDollarWeightedOverlapTests
         //   NVDA: B=$300,000              (B only)  → max 300,000
         // numerator = 800,000; denominator = 1,000,000 + 500,000 + 300,000 = 1,800,000.
         // Expected: 800,000 / 1,800,000 * 100 ≈ 44.4444…%.
-        var aapl = MakeStock("AAPL", "Apple Inc.");
-        var msft = MakeStock("MSFT", "Microsoft Corp.");
-        var nvda = MakeStock("NVDA", "NVIDIA Corp.");
+        EquityIssuer aapl = MakeStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = MakeStock("MSFT", "Microsoft Corp.");
+        EquityIssuer nvda = MakeStock("NVDA", "NVIDIA Corp.");
         var fundA = MakeHolder("Fund A", "C001");
         var fundB = MakeHolder("Fund B", "C002");
 
@@ -50,14 +50,13 @@ public class FundOverlapCalculatorDollarWeightedOverlapTests
         result.DollarWeightedOverlapPercent.Should().BeApproximately(44.44, precision: 0.01);
     }
 
-    private static CommonStock MakeStock(string ticker, string name) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = "C" + Guid.NewGuid().ToString("N")[..7],
-        };
+    private static EquityIssuer MakeStock(string ticker, string name) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: "C" + Guid.NewGuid().ToString("N")[..7]
+        );
 
     private static InstitutionalHolder MakeHolder(string name, string cik) =>
         new()
@@ -69,14 +68,14 @@ public class FundOverlapCalculatorDollarWeightedOverlapTests
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         long shares,
         long value
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(null, stock).Security.Issuer,
             InstitutionalHolderId = holder.Id,
             InstitutionalHolder = holder,
             FilingDate = Report.AddDays(45),

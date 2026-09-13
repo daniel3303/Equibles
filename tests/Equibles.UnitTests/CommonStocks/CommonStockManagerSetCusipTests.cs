@@ -30,21 +30,21 @@ public class CommonStockManagerSetCusipTests
     public async Task SetCusip_NewValueDifferentFromCurrent_PublishesEventAndSaves()
     {
         var db = NewDb();
-        var repo = Substitute.For<CommonStockRepository>(db);
+        EquityIssuerRepository repo = Substitute.For<EquityIssuerRepository>(db);
+        repo.GetAll().Returns(db.Set<EquityIssuer>());
         var publishEndpoint = Substitute.For<IBus>();
-        var sut = new CommonStockManager(repo, publishEndpoint);
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cusip = "037833100",
-        };
-        db.Set<CommonStock>().Add(stock);
+        EquityIdentityManager sut = new EquityIdentityManager(repo, publishEndpoint);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cusip: "037833100"
+        );
+        db.Set<EquityIssuer>().Add(stock);
         await db.SaveChangesAsync();
 
         await sut.SetCusip(stock, "594918104");
 
-        stock.Cusip.Should().Be("594918104");
+        stock.Presentation.Listing.Security.Cusip.Should().Be("594918104");
         await publishEndpoint
             .Received(1)
             .Publish(

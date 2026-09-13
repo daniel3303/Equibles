@@ -19,5 +19,7 @@
     <ProjectReference Include="..\Equibles.Integrations.Common\Equibles.Integrations.Common.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Wikidata\Equibles.Integrations.Wikidata.csproj" />
     <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.Euronext\Equibles.Integrations.Euronext.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.Gleif\Equibles.Integrations.Gleif.csproj" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,6 @@
 using System.Text;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.Repositories;
@@ -16,13 +17,13 @@ namespace Equibles.Web.Controllers;
 
 public class HoldingsExportController : BaseController
 {
-    private readonly CommonStockRepository _stockRepository;
+    private readonly EquityIssuerRepository _stockRepository;
     private readonly InstitutionalHoldingRepository _holdingRepository;
     private readonly InstitutionalHolderRepository _holderRepository;
     private readonly StockTabService _stockTabService;
 
     public HoldingsExportController(
-        CommonStockRepository stockRepository,
+        EquityIssuerRepository stockRepository,
         InstitutionalHoldingRepository holdingRepository,
         InstitutionalHolderRepository holderRepository,
         StockTabService stockTabService,
@@ -43,7 +44,7 @@ public class HoldingsExportController : BaseController
         if (normalizedTicker == null)
             return NotFound();
 
-        var stock = await _stockRepository.GetByTicker(normalizedTicker);
+        EquityIssuer stock = await _stockRepository.GetUsByTicker(normalizedTicker);
         if (stock == null)
             return NotFound();
 
@@ -78,7 +79,7 @@ public class HoldingsExportController : BaseController
         var rows = allHolders.Select(h =>
             new[]
             {
-                CsvExportService.FormatText(stock.Ticker),
+                CsvExportService.FormatText(stock.Presentation.Listing.Ticker),
                 CsvExportService.FormatText(stock.Name),
                 CsvExportService.Format(tab.SelectedDate),
                 CsvExportService.FormatText(h.InstitutionalHolder?.Name),
@@ -98,7 +99,10 @@ public class HoldingsExportController : BaseController
         );
 
         var csv = CsvExportService.BuildCsv(headers, rows);
-        return CsvFile(csv, $"{stock.Ticker}-13F-{tab.SelectedDate:yyyy-MM-dd}.csv");
+        return CsvFile(
+            csv,
+            $"{stock.Presentation.Listing.Ticker}-13F-{tab.SelectedDate:yyyy-MM-dd}.csv"
+        );
     }
 
     [HttpGet("~/holdings/export/institution")]
@@ -123,8 +127,8 @@ public class HoldingsExportController : BaseController
             .OrderByDescending(h => h.Value)
             .Select(h => new
             {
-                Ticker = h.CommonStock.Ticker,
-                Name = h.CommonStock.Name,
+                Ticker = h.Issuer.Presentation.Listing.Ticker,
+                Name = h.Issuer.Name,
                 h.Shares,
                 h.Value,
                 h.ShareType,
@@ -204,8 +208,8 @@ public class HoldingsExportController : BaseController
             .Distinct()
             .ToList();
         var stocks = await _stockRepository
-            .GetByIds(stockIds)
-            .Select(s => new StockLabel(s.Id, s.Ticker, s.Name))
+            .GetCurrentUsDirectoryByIds(stockIds)
+            .Select(s => new StockLabel(s.Id, s.Presentation.Listing.Ticker, s.Name))
             .ToDictionaryAsync(s => s.Id);
 
         string[] headers =

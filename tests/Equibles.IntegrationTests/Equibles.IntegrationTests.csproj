@@ -114,4 +114,22 @@
     <ProjectReference Include="..\..\src\Equibles.Mcp.Server\Equibles.Mcp.Server.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Messaging\Equibles.Messaging.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/NativeListingSeed.cs" Link="Helpers/NativeListingSeed.cs" />
+    <Compile Include="../Shared/EquityIssuerSeed.cs" Link="Helpers/EquityIssuerSeed.cs" />
+    <Compile
+      Include="../Shared/ImmutableEvidenceTestReset.cs"
+      Link="Helpers/ImmutableEvidenceTestReset.cs"
+    />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile
+      Include="../Shared/LegacyEquity/*.cs"
+      Link="Helpers/LegacyEquity/%(Filename)%(Extension)"
+    />
+    <Compile
+      Include="../Shared/FinancialEquityRetirementProbe.cs"
+      Link="Helpers/FinancialEquityRetirementProbe.cs"
+    />
+  </ItemGroup>
 </Project>

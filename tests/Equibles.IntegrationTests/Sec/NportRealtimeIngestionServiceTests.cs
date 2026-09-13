@@ -58,7 +58,7 @@ public class NportRealtimeIngestionServiceTests
         result.Stored.Should().Be(1);
 
         var stored = await dbContext.Set<NportFiling>().Include(f => f.Holdings).SingleAsync();
-        stored.CommonStockId.Should().BeNull();
+        stored.EquityIssuerId.Should().BeNull();
         stored.RegistrantCik.Should().Be("36405");
         stored.RegistrantName.Should().Be("VANGUARD INDEX FUNDS");
         // The bond is dropped; only the tracked-stock position is kept.
@@ -187,15 +187,14 @@ public class NportRealtimeIngestionServiceTests
         // ingestion. The other seeds in this file default SecondaryCiks to [], which is why this
         // case slipped through.
         dbContext.Add(
-            new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = "AAPL",
-                Name = "AAPL",
-                Cik = "0000320193",
-                Cusip = AppleCusip,
-                SecondaryCiks = null,
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "AAPL",
+                Name: "AAPL",
+                Cik: "0000320193",
+                Cusip: AppleCusip,
+                SecondaryCiks: null
+            )
         );
         dbContext.SaveChanges();
         dbContext.ChangeTracker.Clear();
@@ -351,7 +350,7 @@ public class NportRealtimeIngestionServiceTests
 
         var service = new NportRealtimeIngestionService(
             secClient,
-            new CommonStockRepository(dbContext),
+            new EquityIssuerRepository(dbContext),
             new NportFilingRepository(dbContext),
             new ProcessedNportFilingRepository(dbContext),
             dbContext,
@@ -370,14 +369,13 @@ public class NportRealtimeIngestionServiceTests
     )
     {
         dbContext.Add(
-            new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = ticker,
-                Name = ticker,
-                Cik = cik,
-                Cusip = cusip,
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: ticker,
+                Name: ticker,
+                Cik: cik,
+                Cusip: cusip
+            )
         );
         dbContext.SaveChanges();
         dbContext.ChangeTracker.Clear();

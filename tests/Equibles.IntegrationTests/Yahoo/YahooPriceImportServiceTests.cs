@@ -32,7 +32,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_CorrectedReferenceSplit_RestatesHistoryDespiteStaleYahooRatio()
     {
-        var stock = CreateStock("CORR", "Corrected Split");
+        EquityIssuer stock = CreateStock("CORR", "Corrected Split");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var after = UsMarketCalendar.PreviousTradingDay(today);
@@ -41,8 +41,8 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
-                PriceSeriesTicker = stock.Ticker,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = after,
                 Numerator = 1m,
                 Denominator = 60000m,
@@ -63,13 +63,14 @@ public class YahooPriceImportServiceTests : IDisposable
             }
         );
         _yahooClient
-            .GetChart(stock.Ticker, Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
+            .GetChart(stock.Presentation.Listing.Ticker, Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(chart);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         _priceRepo
-            .GetAll()
+            .GetPrimarySeries()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
@@ -80,9 +81,43 @@ public class YahooPriceImportServiceTests : IDisposable
         split.PriceAdjustmentAppliedTime.Should().NotBeNull();
     }
 
+    // Existing reconciliation fixtures represent exact named U.S. observations, not unknown legacy rows.
+    private async Task AttributeFixtureActions()
+    {
+        foreach (
+            var split in _splitRepo
+                .GetAll()
+                .Where(row => row.EquityListingId == null && row.PriceSeriesTicker != null)
+                .ToList()
+        )
+        {
+            split.EquityListingId = await _stockRepo.GetEquityListingId(
+                split.EquityIssuerId,
+                split.PriceSeriesTicker
+            );
+            split.Listing = _dbContext
+                .Set<EquityListing>()
+                .SingleOrDefault(row => row.Id == split.EquityListingId);
+        }
+        foreach (
+            var dividend in _dividendRepo
+                .GetAll()
+                .Where(row => row.EquityListingId == null)
+                .ToList()
+        )
+        {
+            var issuer = _stockRepo.GetAll().Single(row => row.Id == dividend.EquityIssuerId);
+            dividend.Listing = issuer.Presentation.Listing;
+            dividend.EquityListingId = dividend.Listing.Id;
+            dividend.Currency = "USD";
+            dividend.Listing.TradingCurrency = "USD";
+        }
+        await _dbContext.SaveChangesAsync();
+    }
+
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly DailyStockPriceRepository _priceRepo;
-    private readonly CommonStockRepository _stockRepo;
+    private readonly EquityDailyStockPriceRepository _priceRepo;
+    private readonly EquityIssuerRepository _stockRepo;
     private readonly StockSplitRepository _splitRepo;
     private readonly CashDividendRepository _dividendRepo;
     private readonly IYahooFinanceClient _yahooClient;
@@ -98,8 +133,8 @@ public class YahooPriceImportServiceTests : IDisposable
                 new CommonStocksModuleConfiguration(),
                 new YahooModuleConfiguration()
             );
-        _priceRepo = new DailyStockPriceRepository(_dbContext);
-        _stockRepo = new CommonStockRepository(_dbContext);
+        _priceRepo = new EquityDailyStockPriceRepository(_dbContext);
+        _stockRepo = new EquityIssuerRepository(_dbContext);
         _splitRepo = new StockSplitRepository(_dbContext);
         _dividendRepo = new CashDividendRepository(_dbContext);
 
@@ -116,8 +151,9 @@ public class YahooPriceImportServiceTests : IDisposable
         // TickerMapService resolves CommonStockRepository from scoped DI.
         // Corporate-action reconciliation and per-ticker action capture resolve from scoped DI.
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(DailyStockPriceRepository), _priceRepo),
-            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(EquityDailyStockPriceRepository), _priceRepo),
+            (typeof(EquityIssuerRepository), _stockRepo),
+            (typeof(EquityListingRepository), new EquityListingRepository(_dbContext)),
             (typeof(StockSplitRepository), _splitRepo),
             (typeof(ISharesOutstandingProvider), _sharesProvider),
             (
@@ -157,38 +193,71 @@ public class YahooPriceImportServiceTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private CommonStock CreateStock(string ticker, string name)
+    private EquityIssuer CreateStock(string ticker, string name)
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = $"CIK-{ticker}",
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: $"CIK-{ticker}"
+        );
     }
 
-    private async Task SeedStocks(params CommonStock[] stocks)
+    private async Task SeedStocks(params EquityIssuer[] stocks)
     {
         _stockRepo.AddRange(stocks);
         await _stockRepo.SaveChanges();
-        foreach (var stock in stocks.Where(stock => !stock.Active && stock.DelistedOn != null))
+        foreach (EquityIssuer stock in stocks)
+        foreach (
+            var ticker in stock
+                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                .Where(nativeListing =>
+                    nativeListing.MarketCountryCode == "US"
+                    && (
+                        nativeListing.IsDirectoryListed
+                        && nativeListing.Id != stock.Presentation.EquityListingId
+                    )
+                )
+                .Select(nativeListing => nativeListing.Ticker)
+                .ToList()
+                .Append(stock.Presentation.Listing.Ticker)
+                .Concat(
+                    stock
+                        .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                        .Where(nativeListing =>
+                            nativeListing.MarketCountryCode == "US"
+                            && (nativeListing.IsReferenceListed)
+                        )
+                        .Select(nativeListing => nativeListing.Ticker)
+                        .ToList()
+                )
+                .Distinct()
+        )
+            Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock, ticker);
+        foreach (
+            EquityIssuer stock in stocks.Where(stock =>
+                !stock.Presentation.Listing.Active && stock.Presentation.Listing.DelistedOn != null
+            )
+        )
         {
             _stockRepo.AddDelistedListing(
-                new CommonStockDelistedListing
+                new EquityListingRetirementEvidence
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = stock.Ticker,
-                    DelistedOn = stock.DelistedOn.Value,
-                    HistoricalPriceBackfillAttemptedAt = stock.HistoricalPriceBackfillAttemptedAt,
+                    EquityIssuerId = stock.Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
+                    DelistedOn = stock.Presentation.Listing.DelistedOn.Value,
+                    HistoricalPriceBackfillAttemptedAt = stock
+                        .Presentation
+                        .Listing
+                        .HistoricalPriceBackfillAttemptedAt,
                 }
             );
         }
         await _stockRepo.SaveChanges();
     }
 
-    private CommonStockDelistedListing GetDelistedListing(CommonStock stock) =>
-        _stockRepo.GetDelistedListings().Single(listing => listing.CommonStockId == stock.Id);
+    private EquityListingRetirementEvidence GetDelistedListing(EquityIssuer stock) =>
+        _stockRepo.GetDelistedListings().Single(listing => listing.EquityIssuerId == stock.Id);
 
     [Fact]
     public async Task Import_InactiveListing_BackfillsOnlyThroughAuthoritativeDelistingDate()
@@ -196,9 +265,9 @@ public class YahooPriceImportServiceTests : IDisposable
         var floor = new DateOnly(2023, 1, 1);
         var delistedOn = new DateOnly(2023, 1, 10);
         _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
-        var stock = CreateStock("GONE", "Formerly Listed");
-        stock.Active = false;
-        stock.DelistedOn = delistedOn;
+        EquityIssuer stock = CreateStock("GONE", "Formerly Listed");
+        stock.Presentation.Listing.Active = false;
+        stock.Presentation.Listing.DelistedOn = delistedOn;
         await SeedStocks(stock);
         await SeedPrices(CreatePrice(stock, delistedOn.AddDays(3), 99m));
 
@@ -219,20 +288,49 @@ public class YahooPriceImportServiceTests : IDisposable
             .ToList();
         _yahooClient
             .GetChart("GONE", floor, delistedOn)
-            .Returns(new YahooChartData { FirstTradeDate = floor, Prices = prices });
+            .Returns(
+                new YahooChartData
+                {
+                    FirstTradeDate = floor,
+                    Prices = prices,
+                    Splits =
+                    [
+                        new StockSplitEvent
+                        {
+                            Date = prices[0].Date,
+                            Numerator = 2,
+                            Denominator = 1,
+                        },
+                    ],
+                }
+            );
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         await _yahooClient.Received(1).GetChart("GONE", floor, delistedOn);
-        var retained = _stockRepo.GetAllIncludingInactive().Single(row => row.Id == stock.Id);
+        var capturedSplit = _splitRepo.GetByStock(stock.Id).Single();
+        capturedSplit.EquityListingId.Should().Be(stock.Presentation.EquityListingId);
+        capturedSplit.PriceSeriesTicker.Should().Be("GONE");
+        capturedSplit.EffectiveDate.Should().Be(prices[0].Date);
+        EquityIssuer retained = _stockRepo.GetAll().Single(row => row.Id == stock.Id);
         GetDelistedListing(retained).HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
-        retained.PriceHistoryBackfilledTickers.Should().Equal("GONE");
+        retained
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .Equal("GONE");
         _priceRepo
             .GetAllSeries()
-            .Where(price => price.CommonStockId == stock.Id)
+            .Where(price => price.Listing.Security.EquityIssuerId == stock.Id)
             .Select(price => price.Date)
+            .OrderBy(date => date)
             .Should()
-            .Equal(prices.Select(price => price.Date));
+            .Equal(prices.Select(price => price.Date).OrderBy(date => date));
     }
 
     [Fact]
@@ -241,12 +339,15 @@ public class YahooPriceImportServiceTests : IDisposable
         var floor = new DateOnly(2023, 1, 1);
         var delistedOn = new DateOnly(2023, 1, 10);
         _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
-        var stock = CreateStock("LIVE", "Still Listed Filer");
+        EquityIssuer stock = CreateStock("LIVE", "Still Listed Filer");
         await SeedStocks(stock);
+        var retired = Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock, "OLD");
+        retired.Active = false;
+        retired.DelistedOn = delistedOn;
         _stockRepo.AddDelistedListing(
-            new CommonStockDelistedListing
+            new EquityListingRetirementEvidence
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ListedTicker = "OLD",
                 DelistedOn = delistedOn,
             }
@@ -271,17 +372,29 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("OLD", floor, delistedOn)
             .Returns(new YahooChartData { FirstTradeDate = floor, Prices = prices });
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         await _yahooClient.Received(1).GetChart("OLD", floor, delistedOn);
         await _yahooClient.Received(1).GetChart("OLD", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
-        stock.PriceHistoryBackfilledTickers.Should().Contain("OLD");
+        stock
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .Contain("OLD");
         _priceRepo
             .GetAllSeries()
-            .Where(price => price.CommonStockId == stock.Id && price.ListedTicker == "OLD")
+            .Where(price =>
+                price.Listing.Security.EquityIssuerId == stock.Id && price.SourceTicker == "OLD"
+            )
             .Select(price => price.Date)
+            .OrderBy(date => date)
             .Should()
-            .Equal(prices.Select(price => price.Date));
+            .Equal(prices.Select(price => price.Date).OrderBy(date => date));
     }
 
     [Theory]
@@ -295,9 +408,9 @@ public class YahooPriceImportServiceTests : IDisposable
         var delistedOn = new DateOnly(2023, 1, 10);
         var retainedDate = delistedOn.AddDays(-1);
         _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
-        var stock = CreateStock("GONE", "Formerly Listed");
-        stock.Active = false;
-        stock.DelistedOn = delistedOn;
+        EquityIssuer stock = CreateStock("GONE", "Formerly Listed");
+        stock.Presentation.Listing.Active = false;
+        stock.Presentation.Listing.DelistedOn = delistedOn;
         await SeedStocks(stock);
         await SeedPrices(
             CreatePrice(stock, retainedDate, 10m),
@@ -324,15 +437,24 @@ public class YahooPriceImportServiceTests : IDisposable
         };
         _yahooClient.GetChart("GONE", floor, delistedOn).Returns(response);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         _priceRepo
             .GetAllSeries()
-            .Where(price => price.CommonStockId == stock.Id)
+            .Where(price => price.Listing.Security.EquityIssuerId == stock.Id)
             .Select(price => price.Date)
             .Should()
             .Equal(retainedDate);
-        stock.PriceHistoryBackfilledTickers.Should().BeEmpty();
+        stock
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .BeEmpty();
     }
 
     [Fact]
@@ -342,17 +464,17 @@ public class YahooPriceImportServiceTests : IDisposable
         var delistedOn = new DateOnly(2023, 1, 10);
         var splitDate = new DateOnly(2023, 1, 6);
         _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
-        var stock = CreateStock("GONE", "Formerly Listed");
-        stock.Active = false;
-        stock.DelistedOn = delistedOn;
-        stock.PriceHistoryBackfilledTickers = ["GONE"];
+        EquityIssuer stock = CreateStock("GONE", "Formerly Listed");
+        stock.Presentation.Listing.Active = false;
+        stock.Presentation.Listing.DelistedOn = delistedOn;
+        Equibles.TestSupport.EquityIssuerSeed.SetPriceHistoryBackfilledTickers(stock, ["GONE"]);
         await SeedStocks(stock);
         await SeedPrices(CreatePrice(stock, delistedOn.AddDays(3), 99m));
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
-                PriceSeriesTicker = stock.Ticker,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = splitDate,
                 Numerator = 2m,
                 Denominator = 1m,
@@ -361,7 +483,7 @@ public class YahooPriceImportServiceTests : IDisposable
         );
         var dividend = new CashDividend
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ExDate = delistedOn,
             AmountPerShare = 0.25m,
             Source = CashDividendSource.Yahoo,
@@ -373,12 +495,20 @@ public class YahooPriceImportServiceTests : IDisposable
             (splitDate.AddDays(1), 10m),
             (delistedOn, 10m)
         );
+        chartData.SourceIdentity = new()
+        {
+            Symbol = "GONE",
+            Currency = "USD",
+            ExchangeCode = "NMS",
+            ExchangeTimeZone = "America/New_York",
+        };
         chartData.Dividends =
         [
             new CashDividendEvent { Date = delistedOn, Amount = dividend.AmountPerShare },
         ];
         _yahooClient.GetChart("GONE", floor, delistedOn).Returns(chartData);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         await _yahooClient.Received(1).GetChart("GONE", floor, delistedOn);
@@ -391,7 +521,7 @@ public class YahooPriceImportServiceTests : IDisposable
             );
         _priceRepo
             .GetAllSeries()
-            .Where(price => price.CommonStockId == stock.Id)
+            .Where(price => price.Listing.Security.EquityIssuerId == stock.Id)
             .OrderBy(price => price.Date)
             .Select(price => price.Date)
             .Should()
@@ -410,15 +540,15 @@ public class YahooPriceImportServiceTests : IDisposable
             .Range(0, 25)
             .Select(index => CreateStock($"OLD{index:D2}", $"Old Listing {index:D2}"))
             .ToArray();
-        foreach (var stock in ineligible)
+        foreach (EquityIssuer stock in ineligible)
         {
-            stock.Active = false;
-            stock.DelistedOn = floor.AddDays(-1);
+            stock.Presentation.Listing.Active = false;
+            stock.Presentation.Listing.DelistedOn = floor.AddDays(-1);
         }
 
-        var eligible = CreateStock("GONE", "Formerly Listed");
-        eligible.Active = false;
-        eligible.DelistedOn = delistedOn;
+        EquityIssuer eligible = CreateStock("GONE", "Formerly Listed");
+        eligible.Presentation.Listing.Active = false;
+        eligible.Presentation.Listing.DelistedOn = delistedOn;
         await SeedStocks([.. ineligible, eligible]);
 
         var prices = Enumerable
@@ -440,6 +570,7 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("GONE", floor, delistedOn)
             .Returns(new YahooChartData { FirstTradeDate = floor, Prices = prices });
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         await _yahooClient.Received(1).GetChart("GONE", floor, delistedOn);
@@ -450,7 +581,15 @@ public class YahooPriceImportServiceTests : IDisposable
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>()
             );
-        eligible.PriceHistoryBackfilledTickers.Should().Equal("GONE");
+        eligible
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .Equal("GONE");
     }
 
     [Fact]
@@ -459,15 +598,15 @@ public class YahooPriceImportServiceTests : IDisposable
         var floor = new DateOnly(2023, 1, 1);
         var delistedOn = floor.AddDays(-10);
         _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
-        var stock = CreateStock("OLD", "Former Listing");
-        stock.Active = false;
-        stock.DelistedOn = delistedOn;
+        EquityIssuer stock = CreateStock("OLD", "Former Listing");
+        stock.Presentation.Listing.Active = false;
+        stock.Presentation.Listing.DelistedOn = delistedOn;
         await SeedStocks(stock);
         await SeedPrices(CreatePrice(stock, floor, 99m));
         var split = new StockSplit
         {
-            CommonStockId = stock.Id,
-            PriceSeriesTicker = stock.Ticker,
+            EquityIssuerId = stock.Id,
+            PriceSeriesTicker = stock.Presentation.Listing.Ticker,
             EffectiveDate = delistedOn.AddDays(-1),
             Numerator = 2m,
             Denominator = 1m,
@@ -476,31 +615,44 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(split);
         await _splitRepo.SaveChanges();
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         await _yahooClient
             .DidNotReceive()
             .GetChart("OLD", Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
-        _priceRepo.GetAllSeries().Should().NotContain(price => price.CommonStockId == stock.Id);
+        _priceRepo
+            .GetAllSeries()
+            .Should()
+            .NotContain(price => price.Listing.Security.EquityIssuerId == stock.Id);
         split.PriceAdjustmentAppliedTime.Should().BeNull();
     }
 
     [Fact]
     public async Task Import_InactiveListingHttpFailure_CheckpointsAttemptWithoutCompleting()
     {
-        var stock = CreateStock("GONE", "Formerly Listed");
-        stock.Active = false;
-        stock.DelistedOn = new DateOnly(2023, 1, 10);
+        EquityIssuer stock = CreateStock("GONE", "Formerly Listed");
+        stock.Presentation.Listing.Active = false;
+        stock.Presentation.Listing.DelistedOn = new DateOnly(2023, 1, 10);
         await SeedStocks(stock);
         _yahooClient
-            .GetChart("GONE", Arg.Any<DateOnly>(), stock.DelistedOn.Value)
+            .GetChart("GONE", Arg.Any<DateOnly>(), stock.Presentation.Listing.DelistedOn.Value)
             .ThrowsAsync(new HttpRequestException("temporary"));
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        var retained = _stockRepo.GetAllIncludingInactive().Single(row => row.Id == stock.Id);
+        EquityIssuer retained = _stockRepo.GetAll().Single(row => row.Id == stock.Id);
         GetDelistedListing(retained).HistoricalPriceBackfillAttemptedAt.Should().NotBeNull();
-        retained.PriceHistoryBackfilledTickers.Should().BeEmpty();
+        retained
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .BeEmpty();
     }
 
     [Fact]
@@ -509,9 +661,9 @@ public class YahooPriceImportServiceTests : IDisposable
         var floor = new DateOnly(2023, 1, 1);
         var delistedOn = new DateOnly(2023, 1, 10);
         _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
-        var stock = CreateStock("GONE", "Formerly Listed");
-        stock.Active = false;
-        stock.DelistedOn = delistedOn;
+        EquityIssuer stock = CreateStock("GONE", "Formerly Listed");
+        stock.Presentation.Listing.Active = false;
+        stock.Presentation.Listing.DelistedOn = delistedOn;
         await SeedStocks(stock);
         var prices = Enumerable
             .Range(0, delistedOn.DayNumber - floor.DayNumber + 1)
@@ -532,40 +684,53 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("GONE", floor, delistedOn)
             .Returns(_ =>
             {
-                stock.Active = true;
-                stock.DelistedOn = null;
-                _dbContext.Set<CommonStockDelistedListing>().Remove(GetDelistedListing(stock));
+                stock.Presentation.Listing.Active = true;
+                stock.Presentation.Listing.DelistedOn = null;
+                _dbContext.Set<EquityListingRetirementEvidence>().Remove(GetDelistedListing(stock));
                 _dbContext.SaveChanges();
                 return new YahooChartData { FirstTradeDate = floor, Prices = prices };
             });
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         _priceRepo
             .GetAllSeries()
             .Should()
             .BeEmpty("the fetched cutoff no longer describes the listing at commit time");
-        stock.PriceHistoryBackfilledTickers.Should().BeEmpty();
+        stock
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .BeEmpty();
     }
 
-    private async Task SeedPrices(params DailyStockPrice[] prices)
+    private async Task SeedPrices(params EquityDailyStockPrice[] prices)
     {
         _priceRepo.AddRange(prices);
         await _priceRepo.SaveChanges();
     }
 
-    private DailyStockPrice CreatePrice(
-        CommonStock stock,
+    private EquityDailyStockPrice CreatePrice(
+        EquityIssuer stock,
         DateOnly date,
         decimal close = 150m,
         string listedTicker = null
     )
     {
-        return new DailyStockPrice
+        return new EquityDailyStockPrice
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
-            ListedTicker = listedTicker ?? stock.Ticker,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                _dbContext,
+                stock,
+                listedTicker ?? stock.Presentation.Listing.Ticker
+            ),
+            SourceTicker = listedTicker ?? stock.Presentation.Listing.Ticker,
             Date = date,
             Open = close - 2m,
             High = close + 2m,
@@ -606,9 +771,10 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NoStocksExist_InsertsNothing()
     {
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().BeEmpty();
         await _yahooClient
             .DidNotReceive()
@@ -620,7 +786,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NewStock_FetchesAndInsertsPrices()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var chartData = CreateChartData(
@@ -631,11 +797,12 @@ public class YahooPriceImportServiceTests : IDisposable
 
         _yahooClient.GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>()).Returns(chartData);
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().HaveCount(3);
-        prices.Should().AllSatisfy(p => p.CommonStockId.Should().Be(apple.Id));
+        prices.Should().AllSatisfy(p => p.Listing.Security.EquityIssuerId.Should().Be(apple.Id));
         prices.Select(p => p.Close).Should().BeEquivalentTo([180m, 182m, 185m]);
     }
 
@@ -643,16 +810,16 @@ public class YahooPriceImportServiceTests : IDisposable
     public async Task Import_ReferenceSeriesWithTwoGroupedRows_RetriesShortResponseThenCommitsFullHistory()
     {
         _workerOptions.MinSyncDate = new DateTime(2020, 1, 1);
-        var stock = CreateStock("OWNER", "Reference Owner");
-        stock.SecondaryTickers = ["REF"];
-        stock.ReferenceTickers = ["REF"];
+        EquityIssuer stock = CreateStock("OWNER", "Reference Owner");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["REF"]);
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(stock, ["REF"]);
         await SeedStocks(stock);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
         var priorSettled = UsMarketCalendar.PreviousTradingDay(latestSettled);
-        var firstBootstrap = CreatePrice(stock, priorSettled, 100m, "REF");
-        var secondBootstrap = CreatePrice(stock, latestSettled, 101m, "REF");
+        EquityDailyStockPrice firstBootstrap = CreatePrice(stock, priorSettled, 100m, "REF");
+        EquityDailyStockPrice secondBootstrap = CreatePrice(stock, latestSettled, 101m, "REF");
         await SeedPrices(firstBootstrap, secondBootstrap);
 
         var requestedStarts = new List<DateOnly>();
@@ -694,23 +861,33 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("OWNER", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(new YahooChartData());
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
         requestedStarts.Should().Equal(floor);
         _priceRepo.GetAllSeries().Should().Contain(price => price.Id == firstBootstrap.Id);
         _priceRepo.GetAllSeries().Should().Contain(price => price.Id == secondBootstrap.Id);
         _stockRepo
-            .GetAll()
+            .GetCurrentUsDirectory()
             .Single(stockRow => stockRow.Id == stock.Id)
-            .PriceHistoryBackfilledTickers.Should()
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
             .BeEmpty();
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
         requestedStarts.Should().Equal(floor, floor);
         var stored = _priceRepo
             .GetAllSeries()
-            .Where(price => price.CommonStockId == stock.Id && price.ListedTicker == "REF")
+            .Where(price =>
+                price.Listing.Security.EquityIssuerId == stock.Id && price.SourceTicker == "REF"
+            )
             .OrderBy(price => price.Date)
             .ToList();
         stored
@@ -720,9 +897,15 @@ public class YahooPriceImportServiceTests : IDisposable
         stored.Should().NotContain(price => price.Id == firstBootstrap.Id);
         stored.Should().NotContain(price => price.Id == secondBootstrap.Id);
         _stockRepo
-            .GetAll()
+            .GetCurrentUsDirectory()
             .Single(stockRow => stockRow.Id == stock.Id)
-            .PriceHistoryBackfilledTickers.Should()
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
             .Equal("REF");
     }
 
@@ -732,8 +915,11 @@ public class YahooPriceImportServiceTests : IDisposable
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var floor = today.AddDays(-14);
         _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
-        var stock = CreateStock("REF", "Reference Owner");
-        stock.ReferenceTickers = [stock.Ticker];
+        EquityIssuer stock = CreateStock("REF", "Reference Owner");
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(
+            stock,
+            [stock.Presentation.Listing.Ticker]
+        );
         await SeedStocks(stock);
 
         var sessions = Enumerable
@@ -742,8 +928,8 @@ public class YahooPriceImportServiceTests : IDisposable
             .Where(UsMarketCalendar.IsTradingDay)
             .ToList();
         var effectiveDate = sessions[sessions.Count / 2];
-        var firstBootstrap = CreatePrice(stock, sessions[^2], 100m);
-        var secondBootstrap = CreatePrice(stock, sessions[^1], 101m);
+        EquityDailyStockPrice firstBootstrap = CreatePrice(stock, sessions[^2], 100m);
+        EquityDailyStockPrice secondBootstrap = CreatePrice(stock, sessions[^1], 101m);
         await SeedPrices(firstBootstrap, secondBootstrap);
 
         var fullHistory = new YahooChartData
@@ -776,6 +962,7 @@ public class YahooPriceImportServiceTests : IDisposable
         };
         _yahooClient.GetChart("REF", floor, Arg.Any<DateOnly>()).Returns(fullHistory);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         // The serve straddles the captured effective 1:16 split at the matching ratio, so the
@@ -783,7 +970,9 @@ public class YahooPriceImportServiceTests : IDisposable
         // until the provider restates. The bootstrap rows are replaced by the full history.
         var stored = _priceRepo
             .GetAllSeries()
-            .Where(price => price.CommonStockId == stock.Id && price.ListedTicker == "REF")
+            .Where(price =>
+                price.Listing.Security.EquityIssuerId == stock.Id && price.SourceTicker == "REF"
+            )
             .OrderBy(price => price.Date)
             .ToList();
         stored.Select(price => price.Date).Should().Equal(sessions);
@@ -794,9 +983,15 @@ public class YahooPriceImportServiceTests : IDisposable
         stored.Should().NotContain(price => price.Id == firstBootstrap.Id);
         stored.Should().NotContain(price => price.Id == secondBootstrap.Id);
         _stockRepo
-            .GetAll()
+            .GetCurrentUsDirectory()
             .Single(row => row.Id == stock.Id)
-            .PriceHistoryBackfilledTickers.Should()
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
             .Equal("REF");
         // The split was captured from this same response, after the cycle's reconcile pass ran,
         // so its marker is stamped on a later cycle rather than this one.
@@ -814,11 +1009,14 @@ public class YahooPriceImportServiceTests : IDisposable
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var floor = today.AddDays(-14);
         _workerOptions.MinSyncDate = floor.ToDateTime(TimeOnly.MinValue);
-        var stock = CreateStock("REF", "Reference Owner");
-        stock.ReferenceTickers = [stock.Ticker];
+        EquityIssuer stock = CreateStock("REF", "Reference Owner");
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(
+            stock,
+            [stock.Presentation.Listing.Ticker]
+        );
         await SeedStocks(stock);
         var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
-        var groupedRow = CreatePrice(stock, latestSettled, 100m);
+        EquityDailyStockPrice groupedRow = CreatePrice(stock, latestSettled, 100m);
         await SeedPrices(groupedRow);
         var effectiveDate = latestSettled.AddDays(-3);
         _yahooClient
@@ -839,6 +1037,7 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         _priceRepo.GetAllSeries().Should().Contain(price => price.Id == groupedRow.Id);
@@ -848,8 +1047,8 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_MultipleStocks_FetchesAndInsertsPricesForEach()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.");
         await SeedStocks(apple, msft);
 
         _yahooClient
@@ -860,19 +1059,24 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateChartData((new DateOnly(2026, 3, 25), 400m)));
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().HaveCount(2);
-        prices.Should().Contain(p => p.CommonStockId == apple.Id && p.Close == 180m);
-        prices.Should().Contain(p => p.CommonStockId == msft.Id && p.Close == 400m);
+        prices
+            .Should()
+            .Contain(p => p.Listing.Security.EquityIssuerId == apple.Id && p.Close == 180m);
+        prices
+            .Should()
+            .Contain(p => p.Listing.Security.EquityIssuerId == msft.Id && p.Close == 400m);
     }
 
     [Fact]
     public async Task Import_SecondaryListing_PersistsAnIndependentPriceSeries()
     {
-        var alphabet = CreateStock("GOOGL", "Alphabet Inc.");
-        alphabet.SecondaryTickers = ["GOOG"];
+        EquityIssuer alphabet = CreateStock("GOOGL", "Alphabet Inc.");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(alphabet, ["GOOG"]);
         await SeedStocks(alphabet);
 
         var date = new DateOnly(2026, 3, 25);
@@ -883,22 +1087,23 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("GOOG", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateChartData((date, 175m)));
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        var primary = _priceRepo.GetByStock(alphabet).Single();
-        var secondary = _priceRepo.GetByStock(alphabet, "GOOG").Single();
+        EquityDailyStockPrice primary = _priceRepo.GetByStock(alphabet).Single();
+        EquityDailyStockPrice secondary = _priceRepo.GetByStock(alphabet, "GOOG").Single();
         primary.Close.Should().Be(190m);
-        primary.ListedTicker.Should().Be("GOOGL");
+        primary.SourceTicker.Should().Be("GOOGL");
         secondary.Close.Should().Be(175m);
-        secondary.ListedTicker.Should().Be("GOOG");
+        secondary.SourceTicker.Should().Be("GOOG");
         _priceRepo.GetAllSeries().Should().HaveCount(2);
     }
 
     [Fact]
     public async Task Import_RefreshingPrimarySeries_DoesNotDeleteSecondaryRows()
     {
-        var alphabet = CreateStock("GOOGL", "Alphabet Inc.");
-        alphabet.SecondaryTickers = ["GOOG"];
+        EquityIssuer alphabet = CreateStock("GOOGL", "Alphabet Inc.");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(alphabet, ["GOOG"]);
         await SeedStocks(alphabet);
 
         var existingDate = new DateOnly(2026, 3, 25);
@@ -915,6 +1120,7 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("GOOG", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(new YahooChartData());
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         _priceRepo.GetByStock(alphabet, "GOOGL").Max(price => price.Close).Should().Be(190m);
@@ -924,7 +1130,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_MapsAllPriceFieldsCorrectly()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var date = new DateOnly(2026, 3, 25);
@@ -949,10 +1155,11 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var price = _priceRepo.GetAll().Single();
-        price.CommonStockId.Should().Be(apple.Id);
+        EquityDailyStockPrice price = _priceRepo.GetPrimarySeries().Single();
+        price.Listing.Security.EquityIssuerId.Should().Be(apple.Id);
         price.Date.Should().Be(date);
         price.Open.Should().Be(178m);
         price.High.Should().Be(186m);
@@ -967,7 +1174,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_ChartReturnsSplitEvents_CapturesThemAsStockSplits()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _yahooClient
@@ -988,13 +1195,14 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
         // Prices still land, and the split event from the same chart payload is
         // persisted as an unreconciled StockSplit (Yahoo-sourced).
-        _priceRepo.GetAll().Should().ContainSingle();
+        _priceRepo.GetPrimarySeries().Should().ContainSingle();
         var split = _splitRepo.GetAll().Should().ContainSingle().Which;
-        split.CommonStockId.Should().Be(apple.Id);
+        split.EquityIssuerId.Should().Be(apple.Id);
         split.EffectiveDate.Should().Be(new DateOnly(2026, 3, 24));
         split.Numerator.Should().Be(4m);
         split.Denominator.Should().Be(1m);
@@ -1005,10 +1213,10 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_SecondaryEtfSplit_CapturesAndRebasesOnlyThatListedSeries()
     {
-        var alphabet = CreateStock("GOOGL", "Alphabet Inc.");
-        alphabet.SecondaryTickers = ["GOOG"];
-        alphabet.ReferenceTickers = ["GOOG"];
-        alphabet.PriceHistoryBackfilledTickers = ["GOOG"];
+        EquityIssuer alphabet = CreateStock("GOOGL", "Alphabet Inc.");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(alphabet, ["GOOG"]);
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(alphabet, ["GOOG"]);
+        Equibles.TestSupport.EquityIssuerSeed.SetPriceHistoryBackfilledTickers(alphabet, ["GOOG"]);
         await SeedStocks(alphabet);
 
         var existingDate = new DateOnly(2026, 3, 20);
@@ -1041,13 +1249,14 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("GOOG", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(call => call.ArgAt<DateOnly>(1) == floor ? fullHistory : incremental);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         var primary = _priceRepo.GetByStock(alphabet, "GOOGL").ToList();
         var secondary = _priceRepo.GetByStock(alphabet, "GOOG").OrderBy(p => p.Date).ToList();
         primary.Should().ContainSingle().Which.Close.Should().Be(190m);
         secondary.Select(p => p.Close).Should().Equal(87.5m, 88m);
-        secondary.Should().AllSatisfy(p => p.ListedTicker.Should().Be("GOOG"));
+        secondary.Should().AllSatisfy(p => p.SourceTicker.Should().Be("GOOG"));
         var split = _splitRepo.GetAll().Should().ContainSingle().Which;
         split.PriceSeriesTicker.Should().Be("GOOG");
         split.EffectiveDate.Should().Be(nextDate);
@@ -1056,82 +1265,19 @@ public class YahooPriceImportServiceTests : IDisposable
         await _yahooClient.Received(1).GetChart("GOOG", floor, Arg.Any<DateOnly>());
     }
 
-    [Fact]
-    public async Task Import_RequestVariantPendingDividend_StampsSameProviderResponse()
-    {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        await SeedStocks(apple);
-        var beforeExDate = new DateOnly(2026, 5, 8);
-        var exDate = new DateOnly(2026, 5, 11);
-        await SeedPrices(CreatePrice(apple, beforeExDate, 100m), CreatePrice(apple, exDate, 105m));
-        var dividend = new CashDividend
-        {
-            CommonStockId = apple.Id,
-            ExDate = exDate,
-            AmountPerShare = 0.27m,
-            Source = CashDividendSource.Yahoo,
-        };
-        _dividendRepo.Add(dividend);
-        await _dividendRepo.SaveChanges();
-        _workerOptions.MinSyncDate = new DateTime(2026, 5, 1);
-
-        _yahooClient
-            .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
-            .Returns(
-                new YahooChartData
-                {
-                    Prices =
-                    [
-                        new HistoricalPrice
-                        {
-                            Date = beforeExDate,
-                            Open = 99m,
-                            High = 101m,
-                            Low = 98m,
-                            Close = 100m,
-                            AdjustedClose = 99.73m,
-                            Volume = 1_000_000,
-                        },
-                        new HistoricalPrice
-                        {
-                            Date = exDate,
-                            Open = 104m,
-                            High = 106m,
-                            Low = 103m,
-                            Close = 105m,
-                            AdjustedClose = 105m,
-                            Volume = 1_100_000,
-                        },
-                    ],
-                    Dividends = [new CashDividendEvent { Date = exDate, Amount = 0.2701m }],
-                }
-            );
-
-        await _service.Import(includeEnrichment: false, CancellationToken.None);
-
-        var stored = _priceRepo.GetByStock(apple, "AAPL").OrderBy(price => price.Date).ToList();
-        stored.Select(price => price.AdjustedClose).Should().Equal(99.73m, 105m);
-        dividend.AmountPerShare.Should().Be(0.2701m);
-        dividend.PriceAdjustmentAppliedAmountPerShare.Should().Be(0.2701m);
-        dividend.PriceAdjustmentAppliedTime.Should().NotBeNull();
-        await _yahooClient
-            .Received()
-            .GetChart("AAPL", new DateOnly(2026, 5, 1), Arg.Any<DateOnly>());
-        await _yahooClient.DidNotReceive().GetKeyStatistics("AAPL");
-    }
-
     // ── Skips stocks with existing recent data ────────────────────────
 
     [Fact]
     public async Task Import_StockWithPricesUpToToday_SkipsWithoutCallingApi()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         // Seed a price for today so startDate >= today triggers early return
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         await SeedPrices(CreatePrice(apple, today, 180m));
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
         await _yahooClient
@@ -1142,7 +1288,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_StockWithRecentPrices_FetchesOnlyFromDayAfterLatest()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var existingDate = new DateOnly(2026, 3, 20);
@@ -1153,6 +1299,7 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("AAPL", expectedStartDate, Arg.Any<DateOnly>())
             .Returns(CreateChartData((new DateOnly(2026, 3, 21), 178m)));
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
         await _yahooClient.Received(1).GetChart("AAPL", expectedStartDate, Arg.Any<DateOnly>());
@@ -1163,7 +1310,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_ApiReturnsDuplicateDates_OnlyInsertsNewDates()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var existingDate = new DateOnly(2026, 3, 20);
@@ -1174,9 +1321,10 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateChartData((existingDate, 175m), (new DateOnly(2026, 3, 21), 178m)));
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().HaveCount(2); // 1 existing + 1 new
         prices.Should().ContainSingle(p => p.Date == new DateOnly(2026, 3, 21));
     }
@@ -1184,7 +1332,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_AllReturnedDatesAlreadyExist_InsertsNothing()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var date1 = new DateOnly(2026, 3, 20);
@@ -1195,9 +1343,10 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateChartData((date1, 175m), (date2, 178m)));
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().HaveCount(2); // no new records inserted
     }
 
@@ -1206,16 +1355,17 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_ApiReturnsEmptyList_InsertsNothing()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _yahooClient
             .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(new YahooChartData());
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().BeEmpty();
     }
 
@@ -1224,8 +1374,8 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_HttpRequestException_SkipsTickerAndContinues()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.");
         await SeedStocks(apple, msft);
 
         _yahooClient
@@ -1236,23 +1386,25 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateChartData((new DateOnly(2026, 3, 25), 400m)));
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().ContainSingle();
-        prices[0].CommonStockId.Should().Be(msft.Id);
+        prices[0].Listing.Security.EquityIssuerId.Should().Be(msft.Id);
     }
 
     [Fact]
     public async Task Import_HttpRequestException_DoesNotReportToErrorReporter()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _yahooClient
             .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Throws(new HttpRequestException("Timeout"));
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
         await _errorReporter
@@ -1268,8 +1420,8 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_GenericException_ReportsToErrorReporterAndContinues()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.");
         await SeedStocks(apple, msft);
 
         _yahooClient
@@ -1280,12 +1432,13 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("MSFT", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(CreateChartData((new DateOnly(2026, 3, 25), 400m)));
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
         // MSFT prices should still be inserted despite AAPL failure
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().ContainSingle();
-        prices[0].CommonStockId.Should().Be(msft.Id);
+        prices[0].Listing.Security.EquityIssuerId.Should().Be(msft.Id);
 
         // Error reporter should have been called for the AAPL failure
         await _errorReporter
@@ -1303,7 +1456,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_CancellationRequested_ThrowsOperationCancelled()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var cts = new CancellationTokenSource();
@@ -1321,7 +1474,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // per-ticker catch-all must NOT record that OperationCanceledException as an error
         // row ("The operation was canceled.") — it rethrows so the worker's cancellation
         // handling sees an orderly shutdown instead of a phantom per-deploy error.
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         var cts = new CancellationTokenSource();
@@ -1352,13 +1505,13 @@ public class YahooPriceImportServiceTests : IDisposable
         // Same shutdown-cancellation contract for the reconciliation pass (the loop that
         // produced the prod "ReconcilePendingSplits(JILL)" phantom): cancellation
         // mid-reconcile propagates instead of landing in the per-stock error report.
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = apple.Id,
+                EquityIssuerId = apple.Id,
                 EffectiveDate = new DateOnly(2026, 3, 24),
                 Numerator = 4m,
                 Denominator = 1m,
@@ -1392,7 +1545,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_AppliedMarkerStillStraddlesSplit_RequeuesThenRestatesFromCapturedRatio()
     {
-        var stock = CreateStock("AEHL", "Antelope Enterprise Holdings");
+        EquityIssuer stock = CreateStock("AEHL", "Antelope Enterprise Holdings");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var effectiveDate = today.AddDays(-4);
@@ -1403,8 +1556,8 @@ public class YahooPriceImportServiceTests : IDisposable
         );
         var split = new StockSplit
         {
-            CommonStockId = stock.Id,
-            PriceSeriesTicker = stock.Ticker,
+            EquityIssuerId = stock.Id,
+            PriceSeriesTicker = stock.Presentation.Listing.Ticker,
             EffectiveDate = effectiveDate,
             Numerator = 1m,
             Denominator = 16m,
@@ -1423,6 +1576,7 @@ public class YahooPriceImportServiceTests : IDisposable
                 )
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
         // The audit clears the false marker, then the same cycle's reconcile restates the still-
@@ -1430,7 +1584,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // one basis, and stamps the split off a serve that now certifies its boundary.
         split.PriceAdjustmentAppliedTime.Should().NotBeNull();
         _priceRepo
-            .GetAll()
+            .GetPrimarySeries()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
@@ -1440,7 +1594,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_OrdinarySplitFetchStraddlingKnownSplit_RestatesTheFullHistory()
     {
-        var stock = CreateStock("AEHL", "Antelope Enterprise Holdings");
+        EquityIssuer stock = CreateStock("AEHL", "Antelope Enterprise Holdings");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
@@ -1475,13 +1629,14 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("AEHL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(call => call.ArgAt<DateOnly>(1) == floor ? mixedFullHistory : incremental);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         // The full serve still straddles the newly captured 1:16 split at the matching ratio, so
         // its pre-effective segment is restated (3.20 x 16 = 51.2) and the atomic replacement
         // proceeds instead of freezing the stored series until the provider restates.
         _priceRepo
-            .GetAll()
+            .GetPrimarySeries()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
@@ -1499,7 +1654,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_OrdinaryEmptyFullHistory_CapturesReturnedSplitsBeforeRejecting()
     {
-        var stock = CreateStock("EMPTY", "Empty Full History Company");
+        EquityIssuer stock = CreateStock("EMPTY", "Empty Full History Company");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
@@ -1537,6 +1692,7 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("EMPTY", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(call => call.ArgAt<DateOnly>(1) == floor ? emptyFull : incremental);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         _priceRepo.GetAllSeries().Should().ContainSingle(price => price.Close == 50m);
@@ -1550,7 +1706,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_FirstOrdinaryHistoryStraddlingKnownSplit_RestatesAndInserts()
     {
-        var stock = CreateStock("NEW", "Newly Imported Company");
+        EquityIssuer stock = CreateStock("NEW", "Newly Imported Company");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var effectiveDate = today.AddDays(-4);
@@ -1572,12 +1728,13 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("NEW", new DateOnly(2020, 1, 1), Arg.Any<DateOnly>())
             .Returns(response);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         // A first backfill whose serve straddles the captured split at the matching ratio is put
         // on one basis (3.20 x 16 = 51.2) and inserted, instead of leaving the series empty.
         _priceRepo
-            .GetAll()
+            .GetPrimarySeries()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
@@ -1593,7 +1750,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_OrdinarySplitFullResponseHasOlderMixedSplit_RestatesTheOlderBoundary()
     {
-        var stock = CreateStock("DUAL", "Dual Split Company");
+        EquityIssuer stock = CreateStock("DUAL", "Dual Split Company");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
@@ -1639,13 +1796,14 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("DUAL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(call => call.ArgAt<DateOnly>(1) == floor ? fullHistory : incremental);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         // The older 1:16 boundary still straddles at the matching ratio and is restated
         // (3.20 x 16 = 51.2); the newer 2:1 event shows no boundary jump (the provider already
         // adjusted it), so the serve is accepted as one continuous basis and replaces the store.
         _priceRepo
-            .GetAll()
+            .GetPrimarySeries()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
@@ -1665,7 +1823,7 @@ public class YahooPriceImportServiceTests : IDisposable
         bool legacyNullAttribution
     )
     {
-        var stock = CreateStock("DBSP", "Captured Split Company");
+        EquityIssuer stock = CreateStock("DBSP", "Captured Split Company");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
@@ -1680,8 +1838,10 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
-                PriceSeriesTicker = legacyNullAttribution ? null : stock.Ticker,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = legacyNullAttribution
+                    ? null
+                    : stock.Presentation.Listing.Ticker,
                 EffectiveDate = olderEffectiveDate,
                 Numerator = 1m,
                 Denominator = 16m,
@@ -1717,22 +1877,25 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("DBSP", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(call => call.ArgAt<DateOnly>(1) == floor ? fullHistory : incremental);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        // The full response omitted the older 1:16 event, but the applicable database row is
-        // still authoritative. Primary-series legacy null attribution follows the same rule.
+        // Exact captured source evidence still validates an omitted event; unresolved ownership
+        // prevents replacing stored history with a potentially different split basis.
         _priceRepo
-            .GetAll()
+            .GetPrimarySeries()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
-            .Equal(51.20m, 58.00m, 57.00m, 60.00m);
+            .Equal(
+                legacyNullAttribution ? [3.00m, 57.10m, 56.00m] : [51.20m, 58.00m, 57.00m, 60.00m]
+            );
     }
 
     [Fact]
     public async Task Import_FullResponseWithInvalidCapturedBoundary_RefusesReplacement()
     {
-        var stock = CreateStock("BADR", "Malformed Split Company");
+        EquityIssuer stock = CreateStock("BADR", "Malformed Split Company");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
@@ -1747,8 +1910,8 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
-                PriceSeriesTicker = stock.Ticker,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = malformedEffectiveDate,
                 Numerator = 0m,
                 Denominator = 1m,
@@ -1784,12 +1947,13 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("BADR", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(call => call.ArgAt<DateOnly>(1) == floor ? fullHistory : incremental);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         // A legacy malformed row cannot certify how the two segments relate. Keep the previous
         // store intact until a valid authoritative capture replaces the bad boundary.
         _priceRepo
-            .GetAll()
+            .GetPrimarySeries()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
@@ -1797,9 +1961,9 @@ public class YahooPriceImportServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Import_PrimaryBecomesSecondaryBeforeReplacement_ExcludesLegacyPrimarySplit()
+    public async Task Import_PrimaryBecomesSecondaryBeforeReplacement_PreservesUnknownSplitBasis()
     {
-        var stock = CreateStock("OLD", "Designation Change Company");
+        EquityIssuer stock = CreateStock("OLD", "Designation Change Company");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var latestSettled = UsMarketCalendar.PreviousTradingDay(today);
@@ -1814,7 +1978,7 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = null,
                 EffectiveDate = malformedEffectiveDate,
                 Numerator = 0m,
@@ -1854,31 +2018,35 @@ public class YahooPriceImportServiceTests : IDisposable
             {
                 if (!designationChanged)
                 {
-                    stock.Ticker = "NEW";
-                    stock.SecondaryTickers = ["OLD"];
+                    Equibles.CommonStocks.Data.Helpers.UsEquityDirectory.SelectPrimary(
+                        stock,
+                        "NEW"
+                    );
+                    Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["OLD"]);
                     _dbContext.SaveChanges();
                     designationChanged = true;
                 }
                 return call.ArgAt<DateOnly>(1) == floor ? fullHistory : incremental;
             });
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        // OLD was primary when the crawl target was built but secondary at the locked write. The
-        // legacy null split belongs only to the current primary, so it cannot block or restate OLD.
+        // A designation change provides no evidence about an old unattributed split. Preserve
+        // the stored history until the split's security and basis can be established.
         _priceRepo
             .GetAllSeries()
-            .Where(price => price.ListedTicker == "OLD")
+            .Where(price => price.SourceTicker == "OLD")
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
-            .Equal(10.00m, 10.50m, 11.00m, 12.00m);
+            .Equal(10.00m, 10.50m, 11.00m);
     }
 
     [Fact]
     public async Task Import_PendingReconcileResponseHasNewMixedSplit_RestatesAndStampsTheSelected()
     {
-        var stock = CreateStock("PNDG", "Pending Split Company");
+        EquityIssuer stock = CreateStock("PNDG", "Pending Split Company");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var selectedEffectiveDate = today.AddDays(-10);
@@ -1895,8 +2063,8 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
-                PriceSeriesTicker = stock.Ticker,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = selectedEffectiveDate,
                 Numerator = 2m,
                 Denominator = 1m,
@@ -1923,6 +2091,7 @@ public class YahooPriceImportServiceTests : IDisposable
         ];
         _yahooClient.GetChart("PNDG", Arg.Any<DateOnly>(), Arg.Any<DateOnly>()).Returns(response);
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         // The newly returned 1:16 event is captured first, its matching boundary is restated
@@ -1930,7 +2099,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // own boundary shows no jump — so the serve is accepted, replaces the store, and the
         // selected split is stamped. The new 1:16 stays pending for a later cycle.
         _priceRepo
-            .GetAll()
+            .GetPrimarySeries()
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
@@ -1946,7 +2115,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_PendingSplitRatioChangesDuringFetch_RefusesStaleRestatement()
     {
-        var stock = CreateStock("RREV", "Revised Split Company");
+        EquityIssuer stock = CreateStock("RREV", "Revised Split Company");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var effectiveDate = today.AddDays(-10);
@@ -1960,8 +2129,8 @@ public class YahooPriceImportServiceTests : IDisposable
         );
         var split = new StockSplit
         {
-            CommonStockId = stock.Id,
-            PriceSeriesTicker = stock.Ticker,
+            EquityIssuerId = stock.Id,
+            PriceSeriesTicker = stock.Presentation.Listing.Ticker,
             EffectiveDate = effectiveDate,
             Numerator = 2m,
             Denominator = 1m,
@@ -1982,11 +2151,12 @@ public class YahooPriceImportServiceTests : IDisposable
                 return response;
             });
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         _priceRepo
             .GetAllSeries()
-            .Where(price => price.ListedTicker == "RREV")
+            .Where(price => price.SourceTicker == "RREV")
             .OrderBy(price => price.Date)
             .Select(price => price.Close)
             .Should()
@@ -1998,15 +2168,15 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_EmptySeriesWithOmittedInvalidCapturedSplit_PublishesNothing()
     {
-        var stock = CreateStock("EBAD", "Empty Invalid Split Company");
+        EquityIssuer stock = CreateStock("EBAD", "Empty Invalid Split Company");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var effectiveDate = today.AddDays(-4);
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
-                PriceSeriesTicker = stock.Ticker,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = effectiveDate,
                 Numerator = 0m,
                 Denominator = 1m,
@@ -2027,15 +2197,19 @@ public class YahooPriceImportServiceTests : IDisposable
                 )
             );
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
-        _priceRepo.GetAllSeries().Should().NotContain(price => price.CommonStockId == stock.Id);
+        _priceRepo
+            .GetAllSeries()
+            .Should()
+            .NotContain(price => price.Listing.Security.EquityIssuerId == stock.Id);
     }
 
     [Fact]
     public async Task Import_PendingEmptyHistory_CapturesReturnedSplitBeforeRejecting()
     {
-        var stock = CreateStock("PNDE", "Pending Empty Company");
+        EquityIssuer stock = CreateStock("PNDE", "Pending Empty Company");
         await SeedStocks(stock);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var selectedDate = today.AddDays(-10);
@@ -2043,8 +2217,8 @@ public class YahooPriceImportServiceTests : IDisposable
         _splitRepo.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
-                PriceSeriesTicker = stock.Ticker,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = selectedDate,
                 Numerator = 2m,
                 Denominator = 1m,
@@ -2069,6 +2243,7 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(includeEnrichment: false, CancellationToken.None);
 
         _splitRepo
@@ -2087,7 +2262,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_WithMinSyncDateConfigured_UsesItAsStartDate()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = new DateTime(2025, 6, 1);
@@ -2097,6 +2272,7 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("AAPL", expectedStart, Arg.Any<DateOnly>())
             .Returns(CreateChartData((new DateOnly(2025, 6, 2), 170m)));
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
         await _yahooClient.Received(1).GetChart("AAPL", expectedStart, Arg.Any<DateOnly>());
@@ -2105,7 +2281,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_WithoutMinSyncDate_DefaultsTo2020()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         _workerOptions.MinSyncDate = null;
@@ -2115,6 +2291,7 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("AAPL", expectedStart, Arg.Any<DateOnly>())
             .Returns(CreateChartData((new DateOnly(2020, 1, 2), 75m)));
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
         await _yahooClient.Received(1).GetChart("AAPL", expectedStart, Arg.Any<DateOnly>());
@@ -2125,7 +2302,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_LargePriceSet_InsertsAllRecords()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
         await SeedStocks(apple);
 
         // Generate more than one batch worth (InsertBatchSize = 500)
@@ -2148,9 +2325,10 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("AAPL", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(new YahooChartData { Prices = historicalPrices });
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().HaveCount(600);
     }
 
@@ -2159,7 +2337,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_PriceExceedsNumericLimit_SkipsOverflowRowButInsertsValidOnes()
     {
-        var stock = CreateStock("OVR", "Overflow Co.");
+        EquityIssuer stock = CreateStock("OVR", "Overflow Co.");
         await SeedStocks(stock);
 
         var valid = new HistoricalPrice
@@ -2187,9 +2365,10 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetChart("OVR", Arg.Any<DateOnly>(), Arg.Any<DateOnly>())
             .Returns(new YahooChartData { Prices = [valid, overflow] });
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var prices = _priceRepo.GetAll().ToList();
+        var prices = _priceRepo.GetPrimarySeries().ToList();
         prices.Should().ContainSingle("the overflow row must be skipped, the valid one kept");
         prices[0].Date.Should().Be(new DateOnly(2024, 1, 2));
     }
@@ -2197,7 +2376,7 @@ public class YahooPriceImportServiceTests : IDisposable
     [Fact]
     public async Task Import_KeyStatisticsSharesDiffer_UpdatesStockSharesOutstanding()
     {
-        var stock = CreateStock("KST", "KeyStat Co.");
+        EquityIssuer stock = CreateStock("KST", "KeyStat Co.");
         await SeedStocks(stock);
 
         // No prices → ImportTicker returns early; SyncKeyStatistics still runs.
@@ -2208,16 +2387,19 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetKeyStatistics("KST")
             .Returns(new KeyStatistics { SharesOutstanding = 5_000_000 });
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "KST");
-        updated.SharesOutStanding.Should().Be(5_000_000);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "KST");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(5_000_000);
     }
 
     [Fact]
     public async Task Import_KeyStatisticsMarketCapDiffers_UpdatesStockMarketCapitalization()
     {
-        var stock = CreateStock("MKT", "MarketCap Co.");
+        EquityIssuer stock = CreateStock("MKT", "MarketCap Co.");
         await SeedStocks(stock);
 
         _yahooClient
@@ -2233,11 +2415,14 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "MKT");
-        updated.MarketCapitalization.Should().Be(1_500_000_000d);
-        updated.SharesOutStanding.Should().Be(10_000_000);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "MKT");
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(1_500_000_000d);
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(10_000_000);
     }
 
     [Fact]
@@ -2245,8 +2430,8 @@ public class YahooPriceImportServiceTests : IDisposable
     {
         // Yahoo returns 0 when market cap is unknown — the worker must not overwrite a
         // previously-known value with that sentinel.
-        var stock = CreateStock("MKT0", "MarketCap Zero Co.");
-        stock.MarketCapitalization = 9_876_543_210d;
+        EquityIssuer stock = CreateStock("MKT0", "MarketCap Zero Co.");
+        stock.Presentation.Listing.Security.MarketCapitalization = 9_876_543_210d;
         await SeedStocks(stock);
 
         _yahooClient
@@ -2256,11 +2441,14 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetKeyStatistics("MKT0")
             .Returns(new KeyStatistics { SharesOutstanding = 42, MarketCapitalization = 0 });
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "MKT0");
-        updated.MarketCapitalization.Should().Be(9_876_543_210d);
-        updated.SharesOutStanding.Should().Be(42);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "MKT0");
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(9_876_543_210d);
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(42);
     }
 
     [Fact]
@@ -2270,8 +2458,8 @@ public class YahooPriceImportServiceTests : IDisposable
         // with 0" contract has to hold on both fields. A regression that dropped the
         // `stats.SharesOutstanding != 0` guard would let Yahoo's "unknown" sentinel blank
         // an existing SharesOutStanding; the MarketCap pin alone wouldn't catch it.
-        var stock = CreateStock("SHS0", "Shares Zero Co.");
-        stock.SharesOutStanding = 12_345_678;
+        EquityIssuer stock = CreateStock("SHS0", "Shares Zero Co.");
+        stock.Presentation.Listing.Security.SharesOutstanding = 12_345_678;
         await SeedStocks(stock);
 
         _yahooClient
@@ -2283,11 +2471,14 @@ public class YahooPriceImportServiceTests : IDisposable
                 new KeyStatistics { SharesOutstanding = 0, MarketCapitalization = 2_222_222d }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "SHS0");
-        updated.SharesOutStanding.Should().Be(12_345_678);
-        updated.MarketCapitalization.Should().Be(2_222_222d);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "SHS0");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(12_345_678);
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(2_222_222d);
     }
 
     [Fact]
@@ -2297,7 +2488,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // cap on 287M ADR shares. EDGAR reports the issuer's 574B *ordinary* shares from its 20-F,
         // a different unit. Reconciling onto that ordinary base would inflate market cap ~2000x to
         // ~$33T, so a foreign private issuer must keep Yahoo's ADR figures verbatim.
-        var stock = CreateStock("LTM", "Latam Airlines Group S.A.");
+        EquityIssuer stock = CreateStock("LTM", "Latam Airlines Group S.A.");
         await SeedStocks(stock);
 
         _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(574_215_983_709L);
@@ -2316,11 +2507,14 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "LTM");
-        updated.MarketCapitalization.Should().Be(16_657_130_496d);
-        updated.SharesOutStanding.Should().Be(287_107_992);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "LTM");
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(16_657_130_496d);
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(287_107_992);
     }
 
     [Fact]
@@ -2329,7 +2523,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // A listing Yahoo carries prices for but no statistics at all (closed-end funds like
         // PSUS, fresh IPOs): the sync used to end on the null stats, leaving 0/0 forever even
         // though EDGAR has the cover-page count and the same cycle stored a close to price it.
-        var stock = CreateStock("CEF", "ClosedEnd Fund Co.");
+        EquityIssuer stock = CreateStock("CEF", "ClosedEnd Fund Co.");
         await SeedStocks(stock);
         await SeedPrices(CreatePrice(stock, new DateOnly(2024, 1, 2), close: 40m));
 
@@ -2341,20 +2535,27 @@ public class YahooPriceImportServiceTests : IDisposable
             .Returns(new YahooChartData());
         _yahooClient.GetKeyStatistics("CEF").Returns((KeyStatistics)null);
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "CEF");
-        updated.SharesOutStanding.Should().Be(50_000_000);
-        updated.MarketCapitalization.Should().Be(50_000_000d * 40d);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "CEF");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(50_000_000);
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(50_000_000d * 40d);
     }
 
     [Fact]
     public async Task Import_MarketCapFallback_UsesLatestTradedClose()
     {
-        var stock = CreateStock("TRD", "Traded Close Co.");
+        EquityIssuer stock = CreateStock("TRD", "Traded Close Co.");
         await SeedStocks(stock);
-        var traded = CreatePrice(stock, new DateOnly(2024, 1, 2), close: 40m);
-        var carryForward = CreatePrice(stock, new DateOnly(2024, 1, 3), close: 90m);
+        EquityDailyStockPrice traded = CreatePrice(stock, new DateOnly(2024, 1, 2), close: 40m);
+        EquityDailyStockPrice carryForward = CreatePrice(
+            stock,
+            new DateOnly(2024, 1, 3),
+            close: 90m
+        );
         carryForward.Volume = 0;
         await SeedPrices(traded, carryForward);
 
@@ -2365,17 +2566,20 @@ public class YahooPriceImportServiceTests : IDisposable
             .Returns(new YahooChartData());
         _yahooClient.GetKeyStatistics("TRD").Returns((KeyStatistics)null);
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "TRD");
-        updated.MarketCapitalization.Should().Be(50_000_000d * 40d);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "TRD");
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(50_000_000d * 40d);
     }
 
     [Fact]
     public async Task Import_YahooKeyStatisticsAllZero_FallsBackToEdgarSharesTimesLatestClose()
     {
         // Same fallback when the stats modules exist but every field is zero.
-        var stock = CreateStock("ZRO", "AllZero Stats Co.");
+        EquityIssuer stock = CreateStock("ZRO", "AllZero Stats Co.");
         await SeedStocks(stock);
         await SeedPrices(CreatePrice(stock, new DateOnly(2024, 1, 2), close: 25m));
 
@@ -2387,11 +2591,14 @@ public class YahooPriceImportServiceTests : IDisposable
             .Returns(new YahooChartData());
         _yahooClient.GetKeyStatistics("ZRO").Returns(new KeyStatistics());
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "ZRO");
-        updated.SharesOutStanding.Should().Be(8_000_000);
-        updated.MarketCapitalization.Should().Be(8_000_000d * 25d);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "ZRO");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(8_000_000);
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(8_000_000d * 25d);
     }
 
     [Fact]
@@ -2399,7 +2606,7 @@ public class YahooPriceImportServiceTests : IDisposable
     {
         // No Yahoo stats AND no EDGAR cover-page count: exactly the old behavior — nothing to
         // write, the stored pair stays untouched.
-        var stock = CreateStock("NON", "NoAnchor Co.");
+        EquityIssuer stock = CreateStock("NON", "NoAnchor Co.");
         await SeedStocks(stock);
         await SeedPrices(CreatePrice(stock, new DateOnly(2024, 1, 2), close: 10m));
 
@@ -2411,11 +2618,14 @@ public class YahooPriceImportServiceTests : IDisposable
             .Returns(new YahooChartData());
         _yahooClient.GetKeyStatistics("NON").Returns((KeyStatistics)null);
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "NON");
-        updated.SharesOutStanding.Should().Be(0);
-        updated.MarketCapitalization.Should().Be(0);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "NON");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(0);
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(0);
     }
 
     [Fact]
@@ -2424,7 +2634,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // An FPI's EDGAR count is in ordinary shares — a different unit from the US-listed ADR
         // the stored close prices — so with no Yahoo figures the fallback must not run at all
         // (shares × ADR close would inflate the cap by the ADS ratio).
-        var stock = CreateStock("FPI", "Foreign Private Issuer Co.");
+        EquityIssuer stock = CreateStock("FPI", "Foreign Private Issuer Co.");
         await SeedStocks(stock);
         await SeedPrices(CreatePrice(stock, new DateOnly(2024, 1, 2), close: 12m));
 
@@ -2436,11 +2646,14 @@ public class YahooPriceImportServiceTests : IDisposable
             .Returns(new YahooChartData());
         _yahooClient.GetKeyStatistics("FPI").Returns((KeyStatistics)null);
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "FPI");
-        updated.SharesOutStanding.Should().Be(0);
-        updated.MarketCapitalization.Should().Be(0);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "FPI");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(0);
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(0);
     }
 
     [Fact]
@@ -2449,7 +2662,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // A domestic multi-class issuer keeps the reconciliation: EDGAR's consolidated count (10M)
         // is twice Yahoo's single-class count (5M), so Yahoo's $1B market cap rescales to $2B to
         // stay consistent with the authoritative share base.
-        var stock = CreateStock("DOM", "Domestic Multi-Class Co.");
+        EquityIssuer stock = CreateStock("DOM", "Domestic Multi-Class Co.");
         await SeedStocks(stock);
 
         _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(10_000_000L);
@@ -2468,10 +2681,13 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "DOM");
-        updated.MarketCapitalization.Should().Be(2_000_000_000d);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "DOM");
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(2_000_000_000d);
     }
 
     [Fact]
@@ -2483,7 +2699,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // ADS). Rescaling Yahoo's correct ~$27M cap onto that base stored $998B, and the damage
         // was invisible downstream because the pair stayed self-consistent. The unit-mismatch
         // guard must keep Yahoo's listed-security figures verbatim, exactly like the FPI path.
-        var stock = CreateStock("AKTX", "Akari Therapeutics Plc");
+        EquityIssuer stock = CreateStock("AKTX", "Akari Therapeutics Plc");
         await SeedStocks(stock);
 
         _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(91_567_009_533L);
@@ -2503,11 +2719,14 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "AKTX");
-        updated.MarketCapitalization.Should().Be(27_000_000d);
-        updated.SharesOutStanding.Should().Be(2_477_000);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "AKTX");
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(27_000_000d);
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(2_477_000);
     }
 
     [Fact]
@@ -2519,7 +2738,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // (cap ÷ shares) off by the ADR ratio / listing mix — CYATY read 21x the close. The
         // share count stored must be the base the cap was built on, so the pair stays
         // self-consistent.
-        var stock = CreateStock("CYATY", "Cyient Limited");
+        EquityIssuer stock = CreateStock("CYATY", "Cyient Limited");
         await SeedStocks(stock);
 
         _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(1_400_000_000L);
@@ -2539,11 +2758,14 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "CYATY");
-        updated.MarketCapitalization.Should().Be(16_380_000_000d);
-        updated.SharesOutStanding.Should().Be(700_000_000);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "CYATY");
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(16_380_000_000d);
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(700_000_000);
     }
 
     [Fact]
@@ -2552,7 +2774,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // Same listing-mix inconsistency for an OTC ordinary with no EDGAR fact at all (the
         // provider returns null rather than the FPI guard dropping it): the stored share count
         // must still be the base Yahoo built its cap on, not the single-listing count.
-        var stock = CreateStock("PCCYF", "PICC Property and Casualty Co.");
+        EquityIssuer stock = CreateStock("PCCYF", "PICC Property and Casualty Co.");
         await SeedStocks(stock);
 
         _sharesProvider.GetCurrentSharesOutstanding(stock).Returns((long?)null);
@@ -2571,11 +2793,14 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "PCCYF");
-        updated.MarketCapitalization.Should().Be(298_100_000_000d);
-        updated.SharesOutStanding.Should().Be(22_200_000_000);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "PCCYF");
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(298_100_000_000d);
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(22_200_000_000);
     }
 
     [Fact]
@@ -2585,7 +2810,7 @@ public class YahooPriceImportServiceTests : IDisposable
         // dropped digit / thousands-scaled cover-page entry). Rescaling Yahoo's cap onto it
         // collapses market cap by the same factor; the guard is direction-agnostic and keeps
         // Yahoo's self-consistent pair.
-        var stock = CreateStock("ABTC", "Garbage Count Co.");
+        EquityIssuer stock = CreateStock("ABTC", "Garbage Count Co.");
         await SeedStocks(stock);
 
         _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(1_000L);
@@ -2604,11 +2829,14 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "ABTC");
-        updated.MarketCapitalization.Should().Be(45_800_000d);
-        updated.SharesOutStanding.Should().Be(458_000_000);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "ABTC");
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(45_800_000d);
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(458_000_000);
     }
 
     [Fact]
@@ -2617,8 +2845,8 @@ public class YahooPriceImportServiceTests : IDisposable
         // When the EDGAR count is the authoritative base, the key-stats sync stores it together
         // with the market cap rescaled onto it, so the stored pair always moves as one — the
         // share count can't sit on Yahoo's base for a cycle while the cap is already on EDGAR's.
-        var stock = CreateStock("PAIR", "Paired Write Co.");
-        stock.SharesOutStanding = 5_000_000;
+        EquityIssuer stock = CreateStock("PAIR", "Paired Write Co.");
+        stock.Presentation.Listing.Security.SharesOutstanding = 5_000_000;
         await SeedStocks(stock);
 
         _sharesProvider.GetCurrentSharesOutstanding(stock).Returns(10_000_000L);
@@ -2637,19 +2865,22 @@ public class YahooPriceImportServiceTests : IDisposable
                 }
             );
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "PAIR");
-        updated.SharesOutStanding.Should().Be(10_000_000L);
-        updated.MarketCapitalization.Should().Be(2_000_000_000d);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "PAIR");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(10_000_000L);
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(2_000_000_000d);
     }
 
     [Fact]
     public async Task Import_KeyStatisticsBothZero_LeavesStockUntouched()
     {
-        var stock = CreateStock("ZERO", "All Zero Co.");
-        stock.SharesOutStanding = 100;
-        stock.MarketCapitalization = 200d;
+        EquityIssuer stock = CreateStock("ZERO", "All Zero Co.");
+        stock.Presentation.Listing.Security.SharesOutstanding = 100;
+        stock.Presentation.Listing.Security.MarketCapitalization = 200d;
         await SeedStocks(stock);
 
         _yahooClient
@@ -2659,10 +2890,13 @@ public class YahooPriceImportServiceTests : IDisposable
             .GetKeyStatistics("ZERO")
             .Returns(new KeyStatistics { SharesOutstanding = 0, MarketCapitalization = 0 });
 
+        await AttributeFixtureActions();
         await _service.Import(CancellationToken.None);
 
-        var updated = _stockRepo.GetAll().Single(s => s.Ticker == "ZERO");
-        updated.SharesOutStanding.Should().Be(100);
-        updated.MarketCapitalization.Should().Be(200d);
+        EquityIssuer updated = _stockRepo
+            .GetCurrentUsDirectory()
+            .Single(s => s.Presentation.Listing.Ticker == "ZERO");
+        updated.Presentation.Listing.Security.SharesOutstanding.Should().Be(100);
+        updated.Presentation.Listing.Security.MarketCapitalization.Should().Be(200d);
     }
 }

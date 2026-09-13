@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Search;
 using Equibles.Search.Abstractions;
@@ -18,11 +19,11 @@ public class SearchController : BaseController
     private const int MaxPerProviderFocused = 50;
 
     private readonly SearchAggregator _searchAggregator;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
 
     public SearchController(
         SearchAggregator searchAggregator,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         ILogger<SearchController> logger
     )
         : base(logger)
@@ -45,9 +46,13 @@ public class SearchController : BaseController
         // (e.g. "Filings") is an explicit request to stay on the results page.
         if (string.IsNullOrWhiteSpace(category))
         {
-            var stock = await ResolveExactTicker(q);
+            EquityIssuer stock = await ResolveExactTicker(q);
             if (stock != null)
-                return RedirectToAction("Show", "Stocks", new { ticker = stock.Ticker });
+                return RedirectToAction(
+                    "Show",
+                    "Stocks",
+                    new { ticker = stock.Presentation.Listing.Ticker }
+                );
         }
 
         ViewData["Title"] = "Search";
@@ -56,13 +61,13 @@ public class SearchController : BaseController
 
     // Resolves a query to a stock only on an exact (case-insensitive) ticker match — primary or
     // secondary. Returns null for company-name or partial queries so they fall through to search.
-    private async Task<Equibles.CommonStocks.Data.Models.CommonStock> ResolveExactTicker(string q)
+    private async Task<Equibles.CommonStocks.Data.Models.EquityIssuer> ResolveExactTicker(string q)
     {
         var normalizedTicker = TickerNormalizer.NormalizeListed(q);
         if (normalizedTicker == null)
             return null;
 
-        return await _commonStockRepository.GetByTicker(normalizedTicker);
+        return await _commonStockRepository.GetUsByTicker(normalizedTicker);
     }
 
     // Results-only fragment for instant (as-you-type) search. instant-search.js fetches this

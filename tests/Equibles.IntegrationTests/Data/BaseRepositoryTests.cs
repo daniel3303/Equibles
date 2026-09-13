@@ -8,12 +8,12 @@ namespace Equibles.IntegrationTests.Data;
 
 public class BaseRepositoryTests : IDisposable
 {
-    private sealed class TestRepository : BaseRepository<CommonStock>
+    private sealed class TestRepository : BaseRepository<EquityIssuer>
     {
         public TestRepository(EquiblesFinancialDbContext dbContext)
             : base(dbContext) { }
 
-        public DbSet<CommonStock> ExposeGetDbSet() => GetDbSet();
+        public DbSet<EquityIssuer> ExposeGetDbSet() => GetDbSet();
 
         public EquiblesFinancialDbContext ExposeGetDbContext() => GetDbContext();
     }
@@ -32,14 +32,13 @@ public class BaseRepositoryTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private static CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
+    private static EquityIssuer CreateStock(string ticker = "AAPL", string name = "Apple Inc.")
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name
+        );
     }
 
     // ── Get ─────────────────────────────────────────────────────────────
@@ -47,21 +46,21 @@ public class BaseRepositoryTests : IDisposable
     [Fact]
     public async Task Get_ExistingEntity_ReturnsEntity()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.Get(stock.Id);
+        EquityIssuer result = await _repository.Get(stock.Id);
 
         result.Should().NotBeNull();
         result.Id.Should().Be(stock.Id);
-        result.Ticker.Should().Be("AAPL");
+        result.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 
     [Fact]
     public async Task Get_NonExistentKey_ReturnsNull()
     {
-        var result = await _repository.Get(Guid.NewGuid());
+        EquityIssuer result = await _repository.Get(Guid.NewGuid());
 
         result.Should().BeNull();
     }
@@ -80,7 +79,7 @@ public class BaseRepositoryTests : IDisposable
     public async Task GetAll_WithEntities_ReturnsAllAsQueryable()
     {
         _dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AddRange(
                 CreateStock("AAPL", "Apple"),
                 CreateStock("MSFT", "Microsoft"),
@@ -91,18 +90,21 @@ public class BaseRepositoryTests : IDisposable
         var result = _repository.GetAll();
 
         result.Should().HaveCount(3);
-        result.Should().BeAssignableTo<IQueryable<CommonStock>>();
+        result.Should().BeAssignableTo<IQueryable<EquityIssuer>>();
     }
 
     [Fact]
     public async Task GetAll_SupportsLinqFiltering()
     {
         _dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AddRange(CreateStock("AAPL", "Apple"), CreateStock("MSFT", "Microsoft"));
         await _dbContext.SaveChangesAsync();
 
-        var result = _repository.GetAll().Where(s => s.Ticker == "MSFT").ToList();
+        var result = _repository
+            .GetAll()
+            .Where(s => s.Presentation.Listing.Ticker == "MSFT")
+            .ToList();
 
         result.Should().ContainSingle().Which.Name.Should().Be("Microsoft");
     }
@@ -112,21 +114,26 @@ public class BaseRepositoryTests : IDisposable
     [Fact]
     public async Task Add_SingleEntity_PersistsAfterSave()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
 
-        var returned = _repository.Add(stock);
+        EquityIssuer returned = _repository.Add(stock);
         await _repository.SaveChanges();
 
         returned.Should().BeSameAs(stock);
-        _dbContext.Set<CommonStock>().Should().ContainSingle().Which.Ticker.Should().Be("AAPL");
+        _dbContext
+            .Set<EquityIssuer>()
+            .Should()
+            .ContainSingle()
+            .Which.Presentation.Listing.Ticker.Should()
+            .Be("AAPL");
     }
 
     [Fact]
     public async Task Add_ReturnsTheSameEntity()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
 
-        var result = _repository.Add(stock);
+        EquityIssuer result = _repository.Add(stock);
 
         result.Should().BeSameAs(stock);
     }
@@ -146,7 +153,7 @@ public class BaseRepositoryTests : IDisposable
         _repository.AddRange(stocks);
         await _repository.SaveChanges();
 
-        _dbContext.Set<CommonStock>().Should().HaveCount(3);
+        _dbContext.Set<EquityIssuer>().Should().HaveCount(3);
     }
 
     [Fact]
@@ -155,7 +162,7 @@ public class BaseRepositoryTests : IDisposable
         _repository.AddRange([]);
         await _repository.SaveChanges();
 
-        _dbContext.Set<CommonStock>().Should().BeEmpty();
+        _dbContext.Set<EquityIssuer>().Should().BeEmpty();
     }
 
     // ── Update ──────────────────────────────────────────────────────────
@@ -163,8 +170,8 @@ public class BaseRepositoryTests : IDisposable
     [Fact]
     public async Task Update_ModifiedEntity_PersistsChanges()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         stock.Name = "Apple Inc. (Updated)";
@@ -172,7 +179,7 @@ public class BaseRepositoryTests : IDisposable
         await _repository.SaveChanges();
 
         _repository.ClearChangeTracker();
-        var updated = await _repository.Get(stock.Id);
+        EquityIssuer updated = await _repository.Get(stock.Id);
         updated.Name.Should().Be("Apple Inc. (Updated)");
     }
 
@@ -181,28 +188,28 @@ public class BaseRepositoryTests : IDisposable
     [Fact]
     public async Task Delete_SingleEntity_RemovesFromDatabase()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = new() { Name = "Apple" };
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         _repository.Delete(stock);
         await _repository.SaveChanges();
 
-        _dbContext.Set<CommonStock>().Should().BeEmpty();
+        _dbContext.Set<EquityIssuer>().Should().BeEmpty();
     }
 
     [Fact]
     public async Task Delete_SingleEntity_DoesNotAffectOthers()
     {
-        var apple = CreateStock("AAPL", "Apple");
-        var msft = CreateStock("MSFT", "Microsoft");
-        _dbContext.Set<CommonStock>().AddRange(apple, msft);
+        EquityIssuer apple = new() { Name = "Apple" };
+        EquityIssuer msft = new() { Name = "Microsoft" };
+        _dbContext.Set<EquityIssuer>().AddRange(apple, msft);
         await _dbContext.SaveChangesAsync();
 
         _repository.Delete(apple);
         await _repository.SaveChanges();
 
-        _dbContext.Set<CommonStock>().Should().ContainSingle().Which.Ticker.Should().Be("MSFT");
+        _dbContext.Set<EquityIssuer>().Should().ContainSingle().Which.Name.Should().Be("Microsoft");
     }
 
     // ── Delete (collection) ─────────────────────────────────────────────
@@ -212,30 +219,30 @@ public class BaseRepositoryTests : IDisposable
     {
         var stocks = new[]
         {
-            CreateStock("AAPL", "Apple"),
-            CreateStock("MSFT", "Microsoft"),
-            CreateStock("GOOG", "Alphabet"),
+            new EquityIssuer { Name = "Apple" },
+            new EquityIssuer { Name = "Microsoft" },
+            new EquityIssuer { Name = "Alphabet" },
         };
-        _dbContext.Set<CommonStock>().AddRange(stocks);
+        _dbContext.Set<EquityIssuer>().AddRange(stocks);
         await _dbContext.SaveChangesAsync();
 
         _repository.Delete(stocks.Take(2));
         await _repository.SaveChanges();
 
-        _dbContext.Set<CommonStock>().Should().ContainSingle().Which.Ticker.Should().Be("GOOG");
+        _dbContext.Set<EquityIssuer>().Should().ContainSingle().Which.Name.Should().Be("Alphabet");
     }
 
     [Fact]
     public async Task Delete_EmptyCollection_NoEntitiesRemoved()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = new() { Name = "Apple" };
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         _repository.Delete([]);
         await _repository.SaveChanges();
 
-        _dbContext.Set<CommonStock>().Should().ContainSingle();
+        _dbContext.Set<EquityIssuer>().Should().ContainSingle();
     }
 
     // ── GetDbSet ────────────────────────────────────────────────────────
@@ -246,13 +253,13 @@ public class BaseRepositoryTests : IDisposable
         var dbSet = _repository.ExposeGetDbSet();
 
         dbSet.Should().NotBeNull();
-        dbSet.Should().BeAssignableTo<DbSet<CommonStock>>();
+        dbSet.Should().BeAssignableTo<DbSet<EquityIssuer>>();
     }
 
     [Fact]
     public async Task GetDbSet_ReturnsSameSetUsedByRepository()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _repository.Add(stock);
         await _repository.SaveChanges();
 
@@ -274,8 +281,8 @@ public class BaseRepositoryTests : IDisposable
     [Fact]
     public void ClearChangeTracker_DetachesAllTrackedEntities()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
 
         _dbContext.ChangeTracker.Entries().Should().NotBeEmpty();
 

@@ -28,18 +28,35 @@ public static class SecondaryTickerPolicy
     /// the exchange-traded reference feed belongs on the ETF surface and must not consume issuer
     /// financials, shares outstanding, derived short models, or stock rankings.
     /// </summary>
-    public static readonly Expression<Func<CommonStock, bool>> PrimaryOperatingCompany = stock =>
-        !stock.ReferenceTickers.Contains(stock.Ticker)
-        && !stock.ReferenceTickers.Contains(stock.Ticker.Replace(".", "-"));
+    public static readonly Expression<Func<EquityIssuer, bool>> PrimaryOperatingCompany = stock =>
+        !stock
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Contains(stock.Presentation.Listing.Ticker)
+        && !stock
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Contains(stock.Presentation.Listing.Ticker.Replace(".", "-"));
 
     /// <summary>
     /// Resolves a caller's spelling to the exact canonical ticker carried by the filer.
     /// The dot class-share notation is mechanically folded to the stored dash form
     /// (BRK.B -&gt; BRK-B). Returns null when the ticker is not one of the filer's listings.
     /// </summary>
-    public static string ResolveListedTicker(CommonStock stock, string requestedTicker)
+    public static string ResolveListedTicker(EquityIssuer stock, string requestedTicker)
     {
-        if (stock?.Ticker == null || string.IsNullOrWhiteSpace(requestedTicker))
+        if (
+            stock?.Presentation?.Listing?.Ticker == null
+            || string.IsNullOrWhiteSpace(requestedTicker)
+        )
             return null;
 
         var requested = TickerNormalizer.Normalize(requestedTicker);
@@ -52,10 +69,29 @@ public static class SecondaryTickerPolicy
 
         foreach (var candidate in candidates)
         {
-            if (string.Equals(stock.Ticker, candidate, StringComparison.Ordinal))
-                return stock.Ticker;
+            if (
+                string.Equals(
+                    stock.Presentation.Listing.Ticker,
+                    candidate,
+                    StringComparison.Ordinal
+                )
+            )
+                return stock.Presentation.Listing.Ticker;
 
-            var secondary = (stock.SecondaryTickers ?? []).FirstOrDefault(ticker =>
+            var secondary = (
+                stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != stock.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList()
+                ?? []
+            ).FirstOrDefault(ticker =>
                 string.Equals(ticker, candidate, StringComparison.OrdinalIgnoreCase)
             );
             if (secondary != null)
@@ -71,10 +107,15 @@ public static class SecondaryTickerPolicy
     /// the dash form the data stores (BRK.B is BRK-B, not a secondary symbol) so the
     /// spelling a caller happens to use cannot change the answer.
     /// </summary>
-    public static bool IsSecondarySymbol(CommonStock stock, string requestedTicker)
+    public static bool IsSecondarySymbol(EquityIssuer stock, string requestedTicker)
     {
         var resolved = ResolveListedTicker(stock, requestedTicker);
-        return resolved != null && !string.Equals(resolved, stock.Ticker, StringComparison.Ordinal);
+        return resolved != null
+            && !string.Equals(
+                resolved,
+                stock.Presentation.Listing.Ticker,
+                StringComparison.Ordinal
+            );
     }
 
     /// <summary>
@@ -82,12 +123,21 @@ public static class SecondaryTickerPolicy
     /// ReferenceTickers is populated from the provider's ETF/ETN/ETV/ETS reference feed;
     /// never infer this classification from a ticker or issuer name.
     /// </summary>
-    public static bool IsExchangeTradedListing(CommonStock stock, string requestedTicker)
+    public static bool IsExchangeTradedListing(EquityIssuer stock, string requestedTicker)
     {
         var requested = TickerNormalizer.NormalizeDashListed(requestedTicker);
         return stock != null
             && requested != null
-            && (stock.ReferenceTickers ?? []).Any(reference =>
+            && (
+                stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList()
+                ?? []
+            ).Any(reference =>
                 string.Equals(
                     TickerNormalizer.NormalizeDashListed(reference),
                     requested,
@@ -101,7 +151,7 @@ public static class SecondaryTickerPolicy
     /// Primary operating-company stocks retain their established filer-wide read models;
     /// ETFs and every secondary security require the exact listed ticker.
     /// </summary>
-    public static bool RequiresExactListingScope(CommonStock stock, string requestedTicker) =>
+    public static bool RequiresExactListingScope(EquityIssuer stock, string requestedTicker) =>
         IsSecondarySymbol(stock, requestedTicker)
         || IsExchangeTradedListing(stock, requestedTicker);
 
@@ -110,10 +160,10 @@ public static class SecondaryTickerPolicy
     /// independent price series, so callers should resolve the symbol and query that series.
     /// </summary>
     [Obsolete("Secondary listings have independent price series; use ResolveListedTicker.")]
-    public static string NoPriceSeriesMessage(CommonStock stock, string requestedTicker)
+    public static string NoPriceSeriesMessage(EquityIssuer stock, string requestedTicker)
     {
         var resolved = ResolveListedTicker(stock, requestedTicker) ?? requestedTicker;
         return $"No price data found for '{resolved}'. It is listed separately from "
-            + $"{stock.Ticker} ({stock.Name}) and its price history may still be backfilling.";
+            + $"{stock.Presentation.Listing.Ticker} ({stock.Name}) and its price history may still be backfilling.";
     }
 }

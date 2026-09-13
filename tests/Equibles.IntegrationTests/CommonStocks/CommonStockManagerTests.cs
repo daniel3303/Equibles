@@ -11,28 +11,23 @@ namespace Equibles.IntegrationTests.CommonStocks;
 
 public class CommonStockManagerTests
 {
-    private readonly CommonStockManager _sut;
-    private readonly CommonStockRepository _repository;
+    private readonly EquityIdentityManager _sut;
+    private readonly EquityIssuerRepository _repository;
 
     public CommonStockManagerTests()
     {
         var context = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _repository = new CommonStockRepository(context);
-        _sut = new CommonStockManager(_repository, Substitute.For<IBus>());
+        _repository = new EquityIssuerRepository(context);
+        _sut = new EquityIdentityManager(_repository, Substitute.For<IBus>());
     }
 
-    private static CommonStock MakeStock(
+    private static EquityIssuer MakeStock(
         string ticker = "AAPL",
         string name = "Apple Inc",
         string cik = "0000320193"
     )
     {
-        return new CommonStock
-        {
-            Ticker = ticker,
-            Name = name,
-            Cik = cik,
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: ticker, Name: name, Cik: cik);
     }
 
     // ── Create ──────────────────────────────────────────────────────────
@@ -40,12 +35,12 @@ public class CommonStockManagerTests
     [Fact]
     public async Task Create_ValidStock_AddsAndReturns()
     {
-        var stock = MakeStock();
+        EquityIssuer stock = MakeStock();
 
-        var result = await _sut.Create(stock);
+        EquityIssuer result = await _sut.Create(stock);
 
         result.Should().BeSameAs(stock);
-        var persisted = await _repository.GetByTicker("AAPL");
+        EquityIssuer persisted = await _repository.GetUsByTicker("AAPL");
         persisted.Should().NotBeNull();
     }
 
@@ -60,7 +55,7 @@ public class CommonStockManagerTests
     [Fact]
     public async Task Create_EmptyTicker_ThrowsDomainValidationException()
     {
-        var stock = MakeStock(ticker: "");
+        EquityIssuer stock = MakeStock(ticker: "");
 
         var act = () => _sut.Create(stock);
 
@@ -70,21 +65,19 @@ public class CommonStockManagerTests
     }
 
     [Fact]
-    public async Task Create_NullTicker_ThrowsDomainValidationException()
+    public async Task Create_UnlistedIssuer_PreservesItsIdentityWithoutInventingAListing()
     {
-        var stock = MakeStock(ticker: null);
-
-        var act = () => _sut.Create(stock);
-
-        await act.Should()
-            .ThrowAsync<DomainValidationException>()
-            .WithMessage("Ticker is required");
+        var issuer = MakeStock(ticker: null);
+        var created = await _sut.Create(issuer);
+        created.Id.Should().Be(issuer.Id);
+        created.Presentation.Should().BeNull();
+        created.Securities.Should().BeEmpty();
     }
 
     [Fact]
     public async Task Create_EmptyName_ThrowsDomainValidationException()
     {
-        var stock = MakeStock(name: "");
+        EquityIssuer stock = MakeStock(name: "");
 
         var act = () => _sut.Create(stock);
 
@@ -94,7 +87,7 @@ public class CommonStockManagerTests
     [Fact]
     public async Task Create_EmptyCik_ThrowsDomainValidationException()
     {
-        var stock = MakeStock(cik: "");
+        EquityIssuer stock = MakeStock(cik: "");
 
         var act = () => _sut.Create(stock);
 
@@ -104,8 +97,8 @@ public class CommonStockManagerTests
     [Fact]
     public async Task Create_NegativeMarketCap_ThrowsDomainValidationException()
     {
-        var stock = MakeStock();
-        stock.MarketCapitalization = -1;
+        EquityIssuer stock = MakeStock();
+        stock.Presentation.Listing.Security.MarketCapitalization = -1;
 
         var act = () => _sut.Create(stock);
 
@@ -117,8 +110,8 @@ public class CommonStockManagerTests
     [Fact]
     public async Task Create_NegativeSharesOutstanding_ThrowsDomainValidationException()
     {
-        var stock = MakeStock();
-        stock.SharesOutStanding = -1;
+        EquityIssuer stock = MakeStock();
+        stock.Presentation.Listing.Security.SharesOutstanding = -1;
 
         var act = () => _sut.Create(stock);
 
@@ -130,11 +123,11 @@ public class CommonStockManagerTests
     [Fact]
     public async Task Create_ZeroMarketCapAndShares_Succeeds()
     {
-        var stock = MakeStock();
-        stock.MarketCapitalization = 0;
-        stock.SharesOutStanding = 0;
+        EquityIssuer stock = MakeStock();
+        stock.Presentation.Listing.Security.MarketCapitalization = 0;
+        stock.Presentation.Listing.Security.SharesOutstanding = 0;
 
-        var result = await _sut.Create(stock);
+        EquityIssuer result = await _sut.Create(stock);
 
         result.Should().NotBeNull();
     }
@@ -144,7 +137,7 @@ public class CommonStockManagerTests
     {
         await _sut.Create(MakeStock());
 
-        var duplicate = MakeStock(ticker: "AAPL", name: "Other", cik: "9999999");
+        EquityIssuer duplicate = MakeStock(ticker: "AAPL", name: "Other", cik: "9999999");
         var act = () => _sut.Create(duplicate);
 
         await act.Should()
@@ -157,7 +150,7 @@ public class CommonStockManagerTests
     {
         await _sut.Create(MakeStock());
 
-        var duplicate = MakeStock(ticker: "GOOG", name: "Other", cik: "0000320193");
+        EquityIssuer duplicate = MakeStock(ticker: "GOOG", name: "Other", cik: "0000320193");
         var act = () => _sut.Create(duplicate);
 
         await act.Should()
@@ -173,27 +166,51 @@ public class CommonStockManagerTests
         // The domain must accept a secondary ticker that is already primary on another company.
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
 
-        var stock = MakeStock(ticker: "GOOG", name: "Google", cik: "222");
-        stock.SecondaryTickers = ["AAPL"];
+        EquityIssuer stock = MakeStock(ticker: "GOOG", name: "Google", cik: "222");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["AAPL"]);
 
-        var result = await _sut.Create(stock);
+        EquityIssuer result = await _sut.Create(stock);
 
-        result.SecondaryTickers.Should().Contain("AAPL");
+        result
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US"
+                && (
+                    nativeListing.IsDirectoryListed
+                    && nativeListing.Id != result.Presentation.EquityListingId
+                )
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .Contain("AAPL");
     }
 
     [Fact]
     public async Task Create_SecondaryTickerMatchesAnotherCompanySecondary_Succeeds()
     {
-        var existing = MakeStock(ticker: "AAPL", name: "Apple", cik: "111");
-        existing.SecondaryTickers = ["ALT1"];
+        EquityIssuer existing = MakeStock(ticker: "AAPL", name: "Apple", cik: "111");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(existing, ["ALT1"]);
         await _sut.Create(existing);
 
-        var stock = MakeStock(ticker: "GOOG", name: "Google", cik: "222");
-        stock.SecondaryTickers = ["ALT1"];
+        EquityIssuer stock = MakeStock(ticker: "GOOG", name: "Google", cik: "222");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["ALT1"]);
 
-        var result = await _sut.Create(stock);
+        EquityIssuer result = await _sut.Create(stock);
 
-        result.SecondaryTickers.Should().Contain("ALT1");
+        result
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US"
+                && (
+                    nativeListing.IsDirectoryListed
+                    && nativeListing.Id != result.Presentation.EquityListingId
+                )
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .Contain("ALT1");
     }
 
     [Fact]
@@ -201,10 +218,10 @@ public class CommonStockManagerTests
     {
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
 
-        var stock = MakeStock(ticker: "GOOG", name: "Google", cik: "222");
-        stock.SecondaryTickers = ["GOOGL"];
+        EquityIssuer stock = MakeStock(ticker: "GOOG", name: "Google", cik: "222");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["GOOGL"]);
 
-        var result = await _sut.Create(stock);
+        EquityIssuer result = await _sut.Create(stock);
 
         result.Should().NotBeNull();
     }
@@ -214,10 +231,10 @@ public class CommonStockManagerTests
     [Fact]
     public async Task Update_ValidNoConflicts_Succeeds()
     {
-        var stock = await _sut.Create(MakeStock());
+        EquityIssuer stock = await _sut.Create(MakeStock());
         stock.Name = "Apple Inc Updated";
 
-        var result = await _sut.Update(stock);
+        EquityIssuer result = await _sut.Update(stock);
 
         result.Name.Should().Be("Apple Inc Updated");
     }
@@ -233,10 +250,10 @@ public class CommonStockManagerTests
     [Fact]
     public async Task Update_SameTickerAsSelf_Succeeds()
     {
-        var stock = await _sut.Create(MakeStock());
+        EquityIssuer stock = await _sut.Create(MakeStock());
         stock.Name = "Updated Name";
 
-        var result = await _sut.Update(stock);
+        EquityIssuer result = await _sut.Update(stock);
 
         result.Should().NotBeNull();
     }
@@ -244,10 +261,10 @@ public class CommonStockManagerTests
     [Fact]
     public async Task Update_SameCikAsSelf_Succeeds()
     {
-        var stock = await _sut.Create(MakeStock());
+        EquityIssuer stock = await _sut.Create(MakeStock());
         stock.Name = "Updated Name";
 
-        var result = await _sut.Update(stock);
+        EquityIssuer result = await _sut.Update(stock);
 
         result.Should().NotBeNull();
     }
@@ -256,8 +273,10 @@ public class CommonStockManagerTests
     public async Task Update_TickerConflictWithDifferentStock_ThrowsDomainValidationException()
     {
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
-        var google = await _sut.Create(MakeStock(ticker: "GOOG", name: "Google", cik: "222"));
-        google.Ticker = "AAPL";
+        EquityIssuer google = await _sut.Create(
+            MakeStock(ticker: "GOOG", name: "Google", cik: "222")
+        );
+        google.Presentation.Listing.Ticker = "AAPL";
 
         var act = () => _sut.Update(google);
 
@@ -270,7 +289,9 @@ public class CommonStockManagerTests
     public async Task Update_CikConflictWithDifferentStock_ThrowsDomainValidationException()
     {
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
-        var google = await _sut.Create(MakeStock(ticker: "GOOG", name: "Google", cik: "222"));
+        EquityIssuer google = await _sut.Create(
+            MakeStock(ticker: "GOOG", name: "Google", cik: "222")
+        );
         google.Cik = "111";
 
         var act = () => _sut.Update(google);
@@ -284,12 +305,26 @@ public class CommonStockManagerTests
     public async Task Update_SecondaryTickerMatchesAnotherCompanyPrimary_Succeeds()
     {
         await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
-        var google = await _sut.Create(MakeStock(ticker: "GOOG", name: "Google", cik: "222"));
-        google.SecondaryTickers = ["AAPL"];
+        EquityIssuer google = await _sut.Create(
+            MakeStock(ticker: "GOOG", name: "Google", cik: "222")
+        );
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(google, ["AAPL"]);
 
-        var result = await _sut.Update(google);
+        EquityIssuer result = await _sut.Update(google);
 
-        result.SecondaryTickers.Should().Contain("AAPL");
+        result
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US"
+                && (
+                    nativeListing.IsDirectoryListed
+                    && nativeListing.Id != result.Presentation.EquityListingId
+                )
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .Contain("AAPL");
     }
 
     [Fact]
@@ -297,26 +332,44 @@ public class CommonStockManagerTests
     {
         // A primary ticker that exists only as a secondary on another company is still free
         // for use as a new primary — only primary-vs-primary collisions are disallowed.
-        var apple = await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
-        apple.SecondaryTickers = ["LEGACY"];
+        EquityIssuer apple = await _sut.Create(
+            MakeStock(ticker: "AAPL", name: "Apple", cik: "111")
+        );
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(apple, ["LEGACY"]);
         await _sut.Update(apple);
 
-        var google = await _sut.Create(MakeStock(ticker: "GOOG", name: "Google", cik: "222"));
-        google.Ticker = "LEGACY";
+        EquityIssuer google = await _sut.Create(
+            MakeStock(ticker: "GOOG", name: "Google", cik: "222")
+        );
+        google.Presentation.Listing.Ticker = "LEGACY";
 
-        var result = await _sut.Update(google);
+        EquityIssuer result = await _sut.Update(google);
 
-        result.Ticker.Should().Be("LEGACY");
+        result.Presentation.Listing.Ticker.Should().Be("LEGACY");
     }
 
     [Fact]
     public async Task Update_SecondaryTickerSameCompany_Succeeds()
     {
-        var stock = await _sut.Create(MakeStock(ticker: "AAPL", name: "Apple", cik: "111"));
-        stock.SecondaryTickers = ["AAPL-OLD"];
+        EquityIssuer stock = await _sut.Create(
+            MakeStock(ticker: "AAPL", name: "Apple", cik: "111")
+        );
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["AAPL-OLD"]);
 
-        var result = await _sut.Update(stock);
+        EquityIssuer result = await _sut.Update(stock);
 
-        result.SecondaryTickers.Should().Contain("AAPL-OLD");
+        result
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US"
+                && (
+                    nativeListing.IsDirectoryListed
+                    && nativeListing.Id != result.Presentation.EquityListingId
+                )
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .Contain("AAPL-OLD");
     }
 }

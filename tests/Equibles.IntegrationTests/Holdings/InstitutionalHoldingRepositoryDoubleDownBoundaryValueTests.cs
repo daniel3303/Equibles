@@ -44,12 +44,11 @@ public class InstitutionalHoldingRepositoryDoubleDownBoundaryValueTests : IAsync
     public async Task GetDoubleDownPositions_PriorValueExactlyAtMinimum_IsIncludedInTheReport()
     {
         await using var seed = FreshContext();
-        var stock = new CommonStock
-        {
-            Ticker = "WBS",
-            Name = "Webster Financial",
-            Cik = "0000801337",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "WBS",
+            Name: "Webster Financial",
+            Cik: "0000801337"
+        );
         var boundary = new InstitutionalHolder { Cik = "boundary", Name = "Threshold Capital" };
         seed.AddRange(stock, boundary);
         await seed.SaveChangesAsync();
@@ -79,7 +78,7 @@ public class InstitutionalHoldingRepositoryDoubleDownBoundaryValueTests : IAsync
     }
 
     private static InstitutionalHolding Holding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -88,7 +87,7 @@ public class InstitutionalHoldingRepositoryDoubleDownBoundaryValueTests : IAsync
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

@@ -29,14 +29,14 @@ public class StockPriceTools
     // holidays and weekends, but a window starting weeks late is a young listing.
     private const int BaselineSlackDays = 14;
 
-    private readonly DailyStockPriceRepository _priceRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityDailyStockPriceRepository _priceRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public StockPriceTools(
-        DailyStockPriceRepository priceRepository,
-        CommonStockRepository commonStockRepository,
+        EquityDailyStockPriceRepository priceRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<StockPriceTools> logger
@@ -255,7 +255,7 @@ public class StockPriceTools
                     batchSplits = await _stockSplitRepository
                         .GetAll()
                         .Where(split =>
-                            stockIds.Contains(split.CommonStockId)
+                            stockIds.Contains(split.EquityIssuerId)
                             && split.EffectiveDate > earliestCutoff
                             && split.EffectiveDate <= latestEnd
                         )
@@ -270,19 +270,18 @@ public class StockPriceTools
                         continue;
                     }
 
-                    var stock = selection.Stock;
+                    EquityIssuer stock = selection.Stock;
                     var priceTicker = selection.PriceTicker;
-                    var price = selection.Price;
-                    var previous = selection.Previous;
+                    EquityDailyStockPrice price = selection.Price;
+                    EquityDailyStockPrice previous = selection.Previous;
 
                     // Trailing 52-week close range, anchored on the row's own session so a
                     // stock that stopped trading doesn't fabricate a fresh range. A completed
                     // provider refresh cannot certify the basis of raw rows, so a captured split
                     // inside the requested year moves the comparison start to that split date.
                     var cutoff = price.Date.AddDays(-365);
-                    var applicableSplits = PriceSeriesSplitScope.ForListing(
-                        batchSplits.Where(split => split.CommonStockId == stock.Id),
-                        stock.Ticker,
+                    var applicableSplits = PriceSeriesSplitScope.ForPriceComparison(
+                        batchSplits.Where(split => split.EquityIssuerId == stock.Id),
                         priceTicker
                     );
                     var comparableWindow = ComparablePriceWindow.Resolve(
@@ -728,8 +727,12 @@ public class StockPriceTools
 
     // CommonStock.Name describes the primary SEC listing. Secondary symbols can identify a
     // different share class or fund series, and no authoritative per-listing name is stored.
-    private static string ListingTitle(CommonStock stock, string priceTicker) =>
-        string.Equals(stock.Ticker, priceTicker, StringComparison.OrdinalIgnoreCase)
+    private static string ListingTitle(EquityIssuer stock, string priceTicker) =>
+        string.Equals(
+            stock.Presentation.Listing.Ticker,
+            priceTicker,
+            StringComparison.OrdinalIgnoreCase
+        )
             ? $"{priceTicker} ({stock.Name})"
             : priceTicker;
 
@@ -738,7 +741,7 @@ public class StockPriceTools
     // This is a mechanical format conversion between two spellings of the same symbol, not a
     // heuristic. The returned PriceTicker is load-bearing: price queries use it so a secondary
     // listing can never fall through to the filer's primary bars.
-    private async Task<(CommonStock Stock, string PriceTicker, string Error)> ResolveTicker(
+    private async Task<(EquityIssuer Stock, string PriceTicker, string Error)> ResolveTicker(
         string ticker
     )
     {
@@ -752,9 +755,11 @@ public class StockPriceTools
         return resolved;
     }
 
-    private async Task<(CommonStock Stock, string PriceTicker, string Error)> ResolvePricedSpelling(
-        string lookupTicker
-    )
+    private async Task<(
+        EquityIssuer Stock,
+        string PriceTicker,
+        string Error
+    )> ResolvePricedSpelling(string lookupTicker)
     {
         var (stock, error) = await _commonStockRepository.ResolveByTicker(lookupTicker);
         if (stock == null)
@@ -818,9 +823,9 @@ public class StockPriceTools
     }
 
     private async Task<(
-        CommonStock Stock,
+        EquityIssuer Stock,
         string PriceTicker,
-        List<DailyStockPrice> Records,
+        List<EquityDailyStockPrice> Records,
         int RenderFrom,
         string Error
     )> LoadAscendingPriceWindow(string ticker, string startDate, string endDate, int warmupBars)
@@ -956,8 +961,8 @@ public class StockPriceTools
     // immediately before the latest one qualifies. Otherwise there is no day change to state,
     // and an absent percentage is honest where a wrong one is not.
     private static decimal? DayChangeBasis(
-        DailyStockPrice latest,
-        DailyStockPrice previous,
+        EquityDailyStockPrice latest,
+        EquityDailyStockPrice previous,
         DateOnly? splitBoundaryDate
     ) =>
         IsPriorSession(latest, previous)
@@ -976,7 +981,10 @@ public class StockPriceTools
     // calendar — foreign ordinaries quoted here keep trading through Juneteenth, Good Friday and
     // Memorial Day, and 121-297 of them carry a bar on each. Demanding an exact match blanked a
     // correct one-session move for every one of them on the day after an NYSE holiday.
-    private static bool IsPriorSession(DailyStockPrice latest, DailyStockPrice previous) =>
+    private static bool IsPriorSession(
+        EquityDailyStockPrice latest,
+        EquityDailyStockPrice previous
+    ) =>
         previous != null
         && previous.Date < latest.Date
         && previous.Date >= UsMarketCalendar.PreviousTradingDay(latest.Date);
@@ -1025,10 +1033,10 @@ public class StockPriceTools
     }
 
     private sealed record LatestPriceSelection(
-        CommonStock Stock,
+        EquityIssuer Stock,
         string PriceTicker,
-        DailyStockPrice Price,
-        DailyStockPrice Previous
+        EquityDailyStockPrice Price,
+        EquityDailyStockPrice Previous
     );
 
     // Placeholder row for a ticker with no price to show (unknown symbol or no data),
@@ -1038,14 +1046,14 @@ public class StockPriceTools
 
     // Leading "Date | Close" cells shared by every technical-indicator table row;
     // keeps the date format and close precision in sync across the four tables.
-    private static string DateAndCloseCells(DailyStockPrice record) =>
+    private static string DateAndCloseCells(EquityDailyStockPrice record) =>
         $"{record.Date:yyyy-MM-dd} | {McpFormat.Price(record.Close)}";
 
     private static (
         List<decimal> Highs,
         List<decimal> Lows,
         List<decimal> Closes
-    ) ExtractHighLowClose(List<DailyStockPrice> records) =>
+    ) ExtractHighLowClose(List<EquityDailyStockPrice> records) =>
         (
             records.Select(p => p.High).ToList(),
             records.Select(p => p.Low).ToList(),

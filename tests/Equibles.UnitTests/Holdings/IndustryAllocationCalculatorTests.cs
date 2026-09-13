@@ -20,7 +20,7 @@ public class IndustryAllocationCalculatorTests
     public void Calculate_SingleIndustry_IsOneHundredPercent()
     {
         var industry = new Industry { Name = "Software" };
-        var stock = MakeStock(industry);
+        EquityIssuer stock = MakeStock(industry);
         var holding = MakeHolding(stock, value: 1_000_000);
 
         var result = IndustryAllocationCalculator.Calculate([holding]);
@@ -93,7 +93,7 @@ public class IndustryAllocationCalculatorTests
     public void Calculate_MultipleRowsSameStock_CountsOnePosition()
     {
         var industry = new Industry { Id = Guid.NewGuid(), Name = "Software" };
-        var stock = MakeStock(industry);
+        EquityIssuer stock = MakeStock(industry);
         // Same stock reported twice with different InstitutionalHolderIds (multi-manager case).
         var holding1 = MakeHolding(stock, value: 300_000);
         var holding2 = MakeHolding(stock, value: 700_000);
@@ -105,22 +105,21 @@ public class IndustryAllocationCalculatorTests
         result[0].TotalValue.Should().Be(1_000_000);
     }
 
-    private static CommonStock MakeStock(Industry industry) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "STOCK",
-            Name = "Test Corp.",
-            Cik = "C" + Guid.NewGuid().ToString("N")[..7],
-            IndustryId = industry?.Id,
-            Industry = industry,
-        };
+    private static EquityIssuer MakeStock(Industry industry) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "STOCK",
+            Name: "Test Corp.",
+            Cik: "C" + Guid.NewGuid().ToString("N")[..7],
+            IndustryId: industry?.Id,
+            Industry: industry
+        );
 
-    private static InstitutionalHolding MakeHolding(CommonStock stock, long value) =>
+    private static InstitutionalHolding MakeHolding(EquityIssuer stock, long value) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(null, stock).Security.Issuer,
             InstitutionalHolderId = Guid.NewGuid(),
             FilingDate = new DateOnly(2025, 1, 15),
             ReportDate = new DateOnly(2024, 12, 31),

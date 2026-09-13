@@ -93,7 +93,7 @@ public class FiscalCalendarQuarterEndDateTests
     [Fact]
     public void GetQuarterEndDate_StockWithoutDetectedFiscalYearEnd_ReturnsNull()
     {
-        var stock = new CommonStock { FiscalYearEndMonth = null };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(FiscalYearEndMonth: null);
 
         FiscalCalendar.GetQuarterEndDate(2024, 1, stock).Should().BeNull();
     }
@@ -101,7 +101,7 @@ public class FiscalCalendarQuarterEndDateTests
     [Fact]
     public void GetQuarterEndDate_StockWithDetectedFiscalYearEnd_ReturnsDate()
     {
-        var stock = new CommonStock { FiscalYearEndMonth = 9 };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(FiscalYearEndMonth: 9);
 
         FiscalCalendar.GetQuarterEndDate(2024, 1, stock).Should().Be(new DateOnly(2023, 12, 31));
     }
@@ -109,7 +109,7 @@ public class FiscalCalendarQuarterEndDateTests
     [Fact]
     public void GetQuarterEndDate_NullStock_Throws()
     {
-        var act = () => FiscalCalendar.GetQuarterEndDate(2024, 1, (CommonStock)null);
+        var act = () => FiscalCalendar.GetQuarterEndDate(2024, 1, (EquityIssuer)null);
 
         act.Should().Throw<ArgumentNullException>();
     }

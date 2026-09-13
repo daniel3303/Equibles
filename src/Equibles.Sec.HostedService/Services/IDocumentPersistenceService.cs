@@ -7,7 +7,7 @@ namespace Equibles.Sec.HostedService.Services;
 public interface IDocumentPersistenceService
 {
     Task<bool> Exists(
-        CommonStock company,
+        EquityIssuer company,
         DocumentType documentType,
         DateOnly reportingDate,
         DateOnly reportingForDate,
@@ -22,14 +22,14 @@ public interface IDocumentPersistenceService
         HashSet<string> KnownAccessions,
         HashSet<(DateOnly FilingDate, DateOnly ReportDate)> LegacyKeys
     )> GetKnownFilingKeys(
-        CommonStock company,
+        EquityIssuer company,
         DocumentType documentType,
         IReadOnlyCollection<string> accessionNumbers,
         CancellationToken cancellationToken = default
     );
 
     Task Save(
-        CommonStock company,
+        EquityIssuer company,
         byte[] content,
         string fileName,
         DocumentType documentType,

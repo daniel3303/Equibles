@@ -230,14 +230,13 @@ public class NportFilingProcessorTests
         };
     }
 
-    private static CommonStock MakeCompany()
+    private static EquityIssuer MakeCompany()
     {
-        return new CommonStock
-        {
-            Ticker = "BTEC",
-            Name = "Big Tech Index ETF",
-            Cik = "0001771146",
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BTEC",
+            Name: "Big Tech Index ETF",
+            Cik: "0001771146"
+        );
     }
 
     // A trimmed NPORT-P submission modelled on a real ETF filing: the SGML envelope plus the

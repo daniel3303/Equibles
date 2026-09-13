@@ -16,10 +16,10 @@ public class CongressModuleConfiguration : Equibles.Data.IFinancialModule
         ConfigureRequiredTradeText(builder, t => t.FiledTicker);
         builder
             .Entity<CongressionalTrade>()
-            .HasOne(trade => trade.CommonStock)
+            .HasOne(trade => trade.Issuer)
             .WithMany()
-            .HasForeignKey(trade => trade.CommonStockId)
-            .OnDelete(DeleteBehavior.SetNull);
+            .HasForeignKey(trade => trade.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<CongressionalAnnualDisclosure>();
         builder.Entity<CongressionalDisclosureLine>();
         builder.Entity<CongressionalFilingRecord>();

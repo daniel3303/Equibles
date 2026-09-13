@@ -40,10 +40,17 @@ public class RagManagerBuildContextCultureInvarianceTests
     [Fact]
     public async Task BuildContext_UnderNonInvariantCulture_RendersCultureInvariantly()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var stock = new EquityIssuer
+        {
+            Presentation = new EquityIssuerPresentation
+            {
+                Listing = new EquityListing { Ticker = "AAPL" },
+            },
+            Name = "Apple Inc.",
+        };
         var document = new Document
         {
-            CommonStock = stock,
+            Issuer = stock,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 12, 31),
         };

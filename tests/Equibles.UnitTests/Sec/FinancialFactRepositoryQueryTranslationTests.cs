@@ -38,7 +38,10 @@ public class FinancialFactRepositoryQueryTranslationTests
         );
     }
 
-    private static readonly CommonStock Stock = new() { Id = Guid.NewGuid(), Ticker = "HD" };
+    private static readonly EquityIssuer Stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+        Id: Guid.NewGuid(),
+        Ticker: "HD"
+    );
 
     [Fact]
     public void GetMeasuredFlows_FullYear_TranslatesTheAnnualBoundsAgainstThePeriodStart()
@@ -48,7 +51,7 @@ public class FinancialFactRepositoryQueryTranslationTests
 
         var where = WhereClause(
             repository
-                .GetMeasuredFlows(Stock, 2025, SecFiscalPeriod.FullYear, [Guid.NewGuid()])
+                .GetMeasuredFlows(Stock.Id, 2025, SecFiscalPeriod.FullYear, [Guid.NewGuid()])
                 .ToQueryString()
         );
 
@@ -78,7 +81,7 @@ public class FinancialFactRepositoryQueryTranslationTests
 
         var where = WhereClause(
             repository
-                .GetMeasuredFlows(Stock, 2025, SecFiscalPeriod.Q2, [Guid.NewGuid()])
+                .GetMeasuredFlows(Stock.Id, 2025, SecFiscalPeriod.Q2, [Guid.NewGuid()])
                 .ToQueryString()
         );
 
@@ -95,7 +98,7 @@ public class FinancialFactRepositoryQueryTranslationTests
 
         var where = WhereClause(
             repository
-                .GetStatedNear(Stock, [Guid.NewGuid()], new DateOnly(2025, 2, 2), 7)
+                .GetStatedNear(Stock.Id, [Guid.NewGuid()], new DateOnly(2025, 2, 2), 7)
                 .ToQueryString()
         );
 

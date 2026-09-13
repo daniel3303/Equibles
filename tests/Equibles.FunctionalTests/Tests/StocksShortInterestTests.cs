@@ -39,13 +39,12 @@ public class StocksShortInterestTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
 
             db.ChangeTracker.AutoDetectChangesEnabled = false;
@@ -54,7 +53,18 @@ public class StocksShortInterestTests
                 db.Add(
                     new ShortInterest
                     {
-                        CommonStockId = stockId,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStockId(
+                                db,
+                                stockId,
+                                Equibles
+                                    .TestSupport.NativeListingSeed.ForStockId(db, stockId)
+                                    .Ticker
+                            )
+                            .Id,
+                        ListedTicker = Equibles
+                            .TestSupport.NativeListingSeed.ForStockId(db, stockId)
+                            .Ticker,
                         SettlementDate = newestSettlement.AddDays(-14 * i),
                         CurrentShortPosition = 50_000_000 + i,
                         PreviousShortPosition = 49_000_000 + i,
@@ -98,12 +108,11 @@ public class StocksShortInterestTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             await Task.CompletedTask;
         });

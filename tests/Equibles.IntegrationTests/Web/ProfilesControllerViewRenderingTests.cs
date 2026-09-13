@@ -27,7 +27,10 @@ public class ProfilesControllerViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple Inc."
+            );
             var holder = new InstitutionalHolder
             {
                 Cik = "0001067983",
@@ -41,7 +44,9 @@ public class ProfilesControllerViewRenderingTests
                 new InstitutionalHolding
                 {
                     InstitutionalHolder = holder,
-                    CommonStock = stock,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(db, stock)
+                        .Security.Issuer,
                     ReportDate = new DateOnly(2024, 9, 30),
                     FilingDate = new DateOnly(2024, 11, 14),
                     Shares = 1000,
@@ -63,7 +68,10 @@ public class ProfilesControllerViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock { Ticker = "MSFT", Name = "Microsoft Corp" };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "MSFT",
+                Name: "Microsoft Corp"
+            );
             var owner = new InsiderOwner
             {
                 OwnerCik = "0001214156",
@@ -77,7 +85,7 @@ public class ProfilesControllerViewRenderingTests
                 new InsiderTransaction
                 {
                     InsiderOwner = owner,
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     TransactionDate = new DateOnly(2024, 6, 3),
                     FilingDate = new DateOnly(2024, 6, 5),
                     Shares = 500,
@@ -101,7 +109,10 @@ public class ProfilesControllerViewRenderingTests
         var memberId = Guid.NewGuid();
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock { Ticker = "NVDA", Name = "NVIDIA Corp" };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "NVDA",
+                Name: "NVIDIA Corp"
+            );
             var member = new CongressMember
             {
                 Id = memberId,
@@ -114,7 +125,9 @@ public class ProfilesControllerViewRenderingTests
                 new CongressionalTrade
                 {
                     CongressMember = member,
-                    CommonStock = stock,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(db, stock)
+                        .Security.Issuer,
                     TransactionDate = new DateOnly(2024, 7, 1),
                     FilingDate = new DateOnly(2024, 7, 20),
                     TransactionType = CongressTransactionType.Purchase,

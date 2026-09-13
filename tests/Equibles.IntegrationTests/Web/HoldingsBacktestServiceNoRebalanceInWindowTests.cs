@@ -35,20 +35,18 @@ public class HoldingsBacktestServiceNoRebalanceInWindowTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                },
-                new CommonStock
-                {
-                    Id = spyId,
-                    Ticker = "SPY",
-                    Name = "SPDR S&P 500 ETF",
-                    Cik = "0000884394",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: spyId,
+                    Ticker: "SPY",
+                    Name: "SPDR S&P 500 ETF",
+                    Cik: "0000884394"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -63,7 +61,7 @@ public class HoldingsBacktestServiceNoRebalanceInWindowTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = holderId,
                     ReportDate = new DateOnly(2026, 1, 1),
                     FilingDate = new DateOnly(2026, 2, 15),
@@ -76,8 +74,8 @@ public class HoldingsBacktestServiceNoRebalanceInWindowTests
             );
             // Seed a couple of benchmark prices so the BenchmarkNotFound arm
             // doesn't fire — the relevance branch must be the one that hits.
-            db.Add(MakePrice(spyId, new DateOnly(2024, 6, 1), 400m));
-            db.Add(MakePrice(spyId, new DateOnly(2024, 12, 1), 410m));
+            db.Add(MakePrice(db, spyId, new DateOnly(2024, 6, 1), 400m));
+            db.Add(MakePrice(db, spyId, new DateOnly(2024, 12, 1), 410m));
             await Task.CompletedTask;
         });
 
@@ -93,10 +91,15 @@ public class HoldingsBacktestServiceNoRebalanceInWindowTests
         html.Should().NotContain("data-testid=\"backtest-portfolio-summary\"");
     }
 
-    private static DailyStockPrice MakePrice(Guid stockId, DateOnly date, decimal close) =>
+    private static EquityDailyStockPrice MakePrice(
+        Equibles.Data.EquiblesFinancialDbContext db,
+        Guid stockId,
+        DateOnly date,
+        decimal close
+    ) =>
         new()
         {
-            CommonStockId = stockId,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId),
             Date = date,
             Open = close,
             High = close,

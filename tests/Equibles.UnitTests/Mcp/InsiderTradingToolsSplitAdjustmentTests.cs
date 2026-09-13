@@ -60,7 +60,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
             new InsiderTransactionRepository(db),
             new InsiderOwnerRepository(db),
             new Form144FilingRepository(db),
-            new CommonStockRepository(db),
+            new EquityIssuerRepository(db),
             new StockSplitRepository(db),
             new ErrorManager(new ErrorRepository(db)),
             Substitute.For<ILogger<InsiderTradingTools>>()
@@ -71,12 +71,11 @@ public class InsiderTradingToolsSplitAdjustmentTests
     {
         await using var db = NewDb();
 
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         var owner = new InsiderOwner
         {
             OwnerCik = "0009876543",
@@ -91,7 +90,8 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = new DateOnly(2024, 6, 10),
                 Numerator = 10,
                 Denominator = 1,
@@ -101,8 +101,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new InsiderTransaction
             {
-                CommonStockId = stock.Id,
-                CommonStock = stock,
+                EquityIssuerId = stock.Id,
                 InsiderOwnerId = owner.Id,
                 InsiderOwner = owner,
                 TransactionDate = new DateOnly(2024, 6, 1),
@@ -140,12 +139,11 @@ public class InsiderTradingToolsSplitAdjustmentTests
     {
         await using var db = NewDb();
 
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         var owner = new InsiderOwner
         {
             OwnerCik = "0009876543",
@@ -157,7 +155,8 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(7),
                 Numerator = 10,
                 Denominator = 1,
@@ -167,8 +166,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new InsiderTransaction
             {
-                CommonStockId = stock.Id,
-                CommonStock = stock,
+                EquityIssuerId = stock.Id,
                 InsiderOwnerId = owner.Id,
                 InsiderOwner = owner,
                 TransactionDate = new DateOnly(2024, 6, 1),
@@ -197,18 +195,18 @@ public class InsiderTradingToolsSplitAdjustmentTests
     {
         await using var db = NewDb();
 
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         db.Add(stock);
 
         db.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                 EffectiveDate = new DateOnly(2024, 6, 10),
                 Numerator = 10,
                 Denominator = 1,
@@ -218,8 +216,7 @@ public class InsiderTradingToolsSplitAdjustmentTests
         db.Add(
             new Form144Filing
             {
-                CommonStockId = stock.Id,
-                CommonStock = stock,
+                EquityIssuerId = stock.Id,
                 FilingDate = new DateOnly(2024, 6, 1),
                 SellerName = "Jensen Huang",
                 RelationshipToIssuer = "Officer",

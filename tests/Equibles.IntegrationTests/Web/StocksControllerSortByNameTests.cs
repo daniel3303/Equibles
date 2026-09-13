@@ -31,28 +31,25 @@ public class StocksControllerSortByNameTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "ZED",
-                    Name = "Apex Large Co.",
-                    MarketCapitalization = 1_000d,
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "ZED",
+                    Name: "Apex Large Co.",
+                    MarketCapitalization: 1_000d
+                )
             );
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "MID",
-                    Name = "Mid Cap Co.",
-                    MarketCapitalization = 2_000d,
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "MID",
+                    Name: "Mid Cap Co.",
+                    MarketCapitalization: 2_000d
+                )
             );
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "TOP",
-                    Name = "Zeta Small Co.",
-                    MarketCapitalization = 3_000d,
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "TOP",
+                    Name: "Zeta Small Co.",
+                    MarketCapitalization: 3_000d
+                )
             );
             await Task.CompletedTask;
         });

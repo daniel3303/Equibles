@@ -170,17 +170,21 @@ public class ShortVolumeControllerTests
     {
         var stockId = Guid.NewGuid();
         db.Add(
-            new CommonStock
-            {
-                Id = stockId,
-                Ticker = ticker,
-                Name = name,
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(Id: stockId, Ticker: ticker, Name: name)
         );
         db.Add(
             new DailyShortVolume
             {
-                CommonStockId = stockId,
+                EquityListingId = Equibles
+                    .TestSupport.NativeListingSeed.ForStockId(
+                        db,
+                        stockId,
+                        Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId).Ticker
+                    )
+                    .Id,
+                ListedTicker = Equibles
+                    .TestSupport.NativeListingSeed.ForStockId(db, stockId)
+                    .Ticker,
                 Date = date,
                 ShortVolume = shortVolume,
                 ShortExemptVolume = 0,

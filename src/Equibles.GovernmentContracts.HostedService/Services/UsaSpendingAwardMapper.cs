@@ -23,7 +23,7 @@ public static class UsaSpendingAwardMapper
 
         return new GovernmentContract
         {
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             AwardUniqueKey = Truncate(uniqueKey, 128),
             AwardId = Truncate(record.AwardId, 128),
             RecipientName = Truncate(record.RecipientName, 512),

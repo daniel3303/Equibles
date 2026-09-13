@@ -84,7 +84,7 @@ public class Form144FilerCikBackfillManager
                         || f.FilerCikBackfillAttemptedAt <= retryBefore
                     )
                 )
-                .Include(f => f.CommonStock)
+                .Include(f => f.Issuer)
                 .OrderBy(f => f.FilerCikBackfillAttemptedAt != null)
                 .ThenBy(f => f.FilerCikBackfillAttemptedAt)
                 .ThenBy(f => f.FilingDate)
@@ -104,7 +104,7 @@ public class Form144FilerCikBackfillManager
                     cancellationToken.ThrowIfCancellationRequested();
                 }
 
-                var issuerCik = filing.CommonStock?.Cik;
+                var issuerCik = filing.Issuer?.Cik;
                 if (string.IsNullOrEmpty(issuerCik))
                 {
                     // The notice is attributed to an issuer with no CIK, so its document cannot

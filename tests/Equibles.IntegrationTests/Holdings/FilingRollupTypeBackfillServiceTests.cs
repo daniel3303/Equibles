@@ -110,7 +110,7 @@ public class FilingRollupTypeBackfillServiceTests : IDisposable
             .Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = Guid.NewGuid(),
+                    EquityIssuerId = Guid.NewGuid(),
                     InstitutionalHolderId = holderId,
                     FilingDate = new DateOnly(2026, 7, 23),
                     ReportDate = new DateOnly(2026, 7, 23),

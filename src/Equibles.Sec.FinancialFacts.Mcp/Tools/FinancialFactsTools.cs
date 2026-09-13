@@ -36,14 +36,14 @@ public class FinancialFactsTools
 
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public FinancialFactsTools(
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<FinancialFactsTools> logger
@@ -140,19 +140,19 @@ public class FinancialFactsTools
                 // under several of the alias's tags (the ASC 606 transition).
                 var conceptPriority = await ResolveConceptPriority(conceptRefs);
                 if (conceptPriority.Count == 0)
-                    return $"No '{concept}' data has been ingested for {stock.Ticker}.";
+                    return $"No '{concept}' data has been ingested for {stock.Presentation.Listing.Ticker}.";
 
                 var facts = await _financialFactRepository
-                    .GetConsolidatedByStock(stock)
+                    .GetConsolidatedByIssuerId(stock.Id)
                     .Where(f => conceptPriority.Keys.Contains(f.FinancialConceptId))
                     .ToListAsync();
                 var companyLatestPeriodEnd = await _financialFactRepository
-                    .GetConsolidatedByStock(stock)
+                    .GetConsolidatedByIssuerId(stock.Id)
                     .MaxAsync(f => (DateOnly?)f.PeriodEnd);
                 var aliasLatestPeriodEnd =
                     facts.Count == 0 ? (DateOnly?)null : facts.Max(f => f.PeriodEnd);
                 var coverageNote = BuildCoverageNote(
-                    stock.Ticker,
+                    stock.Presentation.Listing.Ticker,
                     aliasLatestPeriodEnd,
                     companyLatestPeriodEnd
                 );
@@ -202,14 +202,13 @@ public class FinancialFactsTools
                 var shown = perPeriod.Take(Math.Clamp(maxResults, 1, MaxResultsCap)).ToList();
 
                 if (shown.Count == 0)
-                    return $"No '{concept}' data found for {stock.Ticker} with the given filters.";
+                    return $"No '{concept}' data found for {stock.Presentation.Listing.Ticker} with the given filters.";
 
                 var splits = shown.Any(FinancialFactSplitAdjustment.IsPerShare)
                     ? await _stockSplitRepository
                         .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                         .ToListAsync()
                     : [];
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
 
                 return RenderFactHistoryTable(
                     concept,
@@ -290,7 +289,7 @@ public class FinancialFactsTools
 
                 // Two queries instead of 2N: batch-load the requested stocks,
                 // then all matching facts in one go keyed by company.
-                var stocks = await _commonStockRepository.GetByTickers(requested).ToListAsync();
+                var stocks = await _commonStockRepository.GetUsByTickers(requested).ToListAsync();
                 var stockByTicker = BuildComparisonStockMap(requested, stocks);
 
                 var stockIds = stocks.Select(s => s.Id).ToList();
@@ -299,7 +298,7 @@ public class FinancialFactsTools
                 // under the FullYear stamp (see ReportedQuarterPromotion).
                 var includeFullYearForQ4 = period == SecFiscalPeriod.Q4;
                 var facts = await _financialFactRepository
-                    .GetConsolidatedByStocks(stockIds)
+                    .GetConsolidatedByIssuerIds(stockIds)
                     .Where(f =>
                         f.FiscalYear == fiscalYear
                         && (
@@ -321,7 +320,7 @@ public class FinancialFactsTools
                         .Where(f => f.FiscalPeriod == SecFiscalPeriod.Q4)
                         .Concat(
                             facts
-                                .GroupBy(f => f.CommonStockId)
+                                .GroupBy(f => f.EquityIssuerId)
                                 .SelectMany(
                                     ReportedQuarterPromotion.PromotedFourthQuartersForYearSlice
                                 )
@@ -334,7 +333,7 @@ public class FinancialFactsTools
                 // accession provide stable amendment ordering (Postgres has no
                 // implicit row order).
                 var bestByStock = facts
-                    .GroupBy(f => f.CommonStockId)
+                    .GroupBy(f => f.EquityIssuerId)
                     .Select(g => (StockId: g.Key, Fact: PickBestFact(g, conceptPriority)))
                     .Where(item => item.Fact != null)
                     .ToDictionary(item => item.StockId, item => item.Fact);
@@ -343,7 +342,7 @@ public class FinancialFactsTools
                 var splitAdjustedStockIds = rows.Where(row =>
                         FinancialFactSplitAdjustment.IsPerShare(row.Fact)
                     )
-                    .Select(row => row.Fact.CommonStockId)
+                    .Select(row => row.Fact.EquityIssuerId)
                     .Distinct()
                     .ToList();
                 var splitsByStock =
@@ -353,15 +352,11 @@ public class FinancialFactsTools
                             await _stockSplitRepository
                                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                                 .Where(split =>
-                                    splitAdjustedStockIds.Contains(split.CommonStockId)
-                                    && (
-                                        split.PriceSeriesTicker == null
-                                        || split.PriceSeriesTicker == split.CommonStock.Ticker
-                                    )
+                                    splitAdjustedStockIds.Contains(split.EquityIssuerId)
                                 )
                                 .ToListAsync()
                         )
-                            .GroupBy(split => split.CommonStockId)
+                            .GroupBy(split => split.EquityIssuerId)
                             .ToDictionary(group => group.Key, group => group.ToList());
 
                 return RenderComparisonTable(
@@ -370,7 +365,11 @@ public class FinancialFactsTools
                     period,
                     rows,
                     skipped,
-                    splitsByStock
+                    splitsByStock,
+                    stocks.ToDictionary(
+                        stock => stock.Id,
+                        stock => stock.Presentation.EquityListingId
+                    )
                 );
             },
             "CompareFinancialFact",
@@ -398,7 +397,7 @@ public class FinancialFactsTools
 
     private static string RenderFactHistoryTable(
         string concept,
-        CommonStock stock,
+        EquityIssuer stock,
         bool asOriginallyReported,
         List<FinancialFact> perPeriod,
         int totalPeriods,
@@ -408,20 +407,28 @@ public class FinancialFactsTools
     {
         var basis = asOriginallyReported ? "as originally reported" : "latest restated";
         var result = MarkdownTable.Start(
-            $"{concept} for {stock.Ticker} ({FactMarkdown.Cell(stock.Name)}) — {basis}:",
+            $"{concept} for {stock.Presentation.Listing.Ticker} ({FactMarkdown.Cell(stock.Name)}) — {basis}:",
             "| Period Start | Period End | FY | Period | Value | Unit | Form | Filed | Accession |",
             "|--------------|------------|---:|--------|------:|------|------|-------|-----------|"
         );
         var splitAdjusted = false;
+        var unresolvedBasis = false;
         result.AppendRows(
             perPeriod,
             f =>
             {
-                var value = FinancialFactSplitAdjustment.Restate(f, splits, out var adjusted);
+                var value = FinancialFactSplitAdjustment.Restate(
+                    f,
+                    splits,
+                    stock.Presentation.EquityListingId,
+                    out var adjusted,
+                    out var unresolved
+                );
+                unresolvedBasis |= unresolved;
                 splitAdjusted |= adjusted;
                 return $"| {f.PeriodStart:yyyy-MM-dd} | {f.PeriodEnd:yyyy-MM-dd} | {f.FiscalYear} | "
                     + $"{f.FiscalPeriod.NameForHumans()} | "
-                    + $"{FactMarkdown.Value(value, f.Unit)} | "
+                    + $"{FactMarkdown.Value(value, f.Unit)}{(unresolved ? " (as filed)" : "")} | "
                     + $"{FactMarkdown.Cell(f.Unit)} | "
                     + $"{FactMarkdown.Cell(f.Form?.DisplayName)} | "
                     + $"{f.FiledDate:yyyy-MM-dd} | "
@@ -431,6 +438,8 @@ public class FinancialFactsTools
 
         if (splitAdjusted)
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
+        if (unresolvedBasis)
+            result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
 
         // Rows are newest first, so "first N" reads correctly; a no-op empty
         // line when nothing was cut off.
@@ -478,7 +487,7 @@ public class FinancialFactsTools
         List<string> Skipped
     ) BuildComparisonRows(
         IReadOnlyList<string> requested,
-        IReadOnlyDictionary<string, CommonStock> stockByTicker,
+        IReadOnlyDictionary<string, EquityIssuer> stockByTicker,
         IReadOnlyDictionary<Guid, FinancialFact> bestByStock
     )
     {
@@ -490,7 +499,7 @@ public class FinancialFactsTools
         var rowTickerByStockId = new Dictionary<Guid, string>();
         foreach (var ticker in requested)
         {
-            if (!stockByTicker.TryGetValue(ticker, out var stock))
+            if (!stockByTicker.TryGetValue(ticker, out EquityIssuer stock))
             {
                 skipped.Add(
                     $"{FactMarkdown.Cell(ticker)} (not found in the tracked SEC issuer set)"
@@ -510,21 +519,24 @@ public class FinancialFactsTools
             }
             // The row stays traceable to the caller's input: a secondary-ticker
             // request shows that ticker, with the primary in parentheses.
-            var label = ticker == stock.Ticker ? stock.Ticker : $"{ticker} ({stock.Ticker})";
+            var label =
+                ticker == stock.Presentation.Listing.Ticker
+                    ? stock.Presentation.Listing.Ticker
+                    : $"{ticker} ({stock.Presentation.Listing.Ticker})";
             rows.Add((label, stock.Name, best));
         }
         return (rows, skipped);
     }
 
-    internal static Dictionary<string, CommonStock> BuildComparisonStockMap(
+    internal static Dictionary<string, EquityIssuer> BuildComparisonStockMap(
         IReadOnlyList<string> requested,
-        IReadOnlyList<CommonStock> stocks
+        IReadOnlyList<EquityIssuer> stocks
     )
     {
-        var stockByTicker = new Dictionary<string, CommonStock>(StringComparer.Ordinal);
+        var stockByTicker = new Dictionary<string, EquityIssuer>(StringComparer.Ordinal);
         foreach (var ticker in requested)
         {
-            var stock = ResolveComparisonStock(stocks, ticker);
+            EquityIssuer stock = ResolveComparisonStock(stocks, ticker);
             if (stock != null)
                 stockByTicker.Add(ticker, stock);
         }
@@ -567,14 +579,28 @@ public class FinancialFactsTools
             tickers?.Split(',', StringSplitOptions.TrimEntries)
         );
 
-    private static CommonStock ResolveComparisonStock(
-        IReadOnlyList<CommonStock> stocks,
+    private static EquityIssuer ResolveComparisonStock(
+        IReadOnlyList<EquityIssuer> stocks,
         string ticker
     ) =>
         stocks
-            .Where(stock => stock.Ticker == ticker || stock.SecondaryTickers.Contains(ticker))
-            .OrderBy(stock => stock.Ticker == ticker ? 0 : 1)
-            .ThenBy(stock => stock.Ticker, StringComparer.Ordinal)
+            .Where(stock =>
+                stock.Presentation.Listing.Ticker == ticker
+                || stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != stock.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList()
+                    .Contains(ticker)
+            )
+            .OrderBy(stock => stock.Presentation.Listing.Ticker == ticker ? 0 : 1)
+            .ThenBy(stock => stock.Presentation.Listing.Ticker, StringComparer.Ordinal)
             .FirstOrDefault();
 
     // Peer period ends further apart than one calendar quarter mean the rows
@@ -589,7 +615,8 @@ public class FinancialFactsTools
         SecFiscalPeriod period,
         List<(string Ticker, string Name, FinancialFact Fact)> rows,
         List<string> skipped,
-        IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock
+        IReadOnlyDictionary<Guid, List<StockSplit>> splitsByStock,
+        IReadOnlyDictionary<Guid, Guid> listingIdsByStock
     )
     {
         var result = MarkdownTable.Start(
@@ -598,15 +625,23 @@ public class FinancialFactsTools
             "|--------|---------|------:|------|-----------|------|-------|"
         );
         var splitAdjusted = false;
+        var unresolvedBasis = false;
         result.AppendRows(
             rows,
             r =>
             {
-                var splits = splitsByStock.GetValueOrDefault(r.Fact.CommonStockId) ?? [];
-                var value = FinancialFactSplitAdjustment.Restate(r.Fact, splits, out var adjusted);
+                var splits = splitsByStock.GetValueOrDefault(r.Fact.EquityIssuerId) ?? [];
+                var value = FinancialFactSplitAdjustment.Restate(
+                    r.Fact,
+                    splits,
+                    listingIdsByStock[r.Fact.EquityIssuerId],
+                    out var adjusted,
+                    out var unresolved
+                );
+                unresolvedBasis |= unresolved;
                 splitAdjusted |= adjusted;
                 return $"| {FactMarkdown.Cell(r.Ticker)} | {FactMarkdown.Cell(r.Name)} | "
-                    + $"{FactMarkdown.Value(value, r.Fact.Unit)} | "
+                    + $"{FactMarkdown.Value(value, r.Fact.Unit)}{(unresolved ? " (as filed)" : "")} | "
                     + $"{FactMarkdown.Cell(r.Fact.Unit)} | "
                     + $"{r.Fact.PeriodEnd:yyyy-MM-dd} | "
                     + $"{FactMarkdown.Cell(r.Fact.Form?.DisplayName)} | "
@@ -616,6 +651,8 @@ public class FinancialFactsTools
 
         if (splitAdjusted)
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
+        if (unresolvedBasis)
+            result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
 
         if (rows.Count == 0)
             result.AppendLine(

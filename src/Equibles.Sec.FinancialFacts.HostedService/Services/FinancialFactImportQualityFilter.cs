@@ -50,7 +50,7 @@ internal static class FinancialFactImportQualityFilter
         foreach (
             var series in facts.GroupBy(f =>
                 (
-                    f.CommonStockId,
+                    f.EquityIssuerId,
                     ConceptFamily(f.FinancialConceptId, aliasFamilies),
                     f.Unit,
                     f.DimensionsKey
@@ -70,7 +70,7 @@ internal static class FinancialFactImportQualityFilter
         foreach (
             var period in scaleClean.GroupBy(f =>
                 (
-                    f.CommonStockId,
+                    f.EquityIssuerId,
                     f.FinancialConceptId,
                     f.Unit,
                     f.PeriodType,

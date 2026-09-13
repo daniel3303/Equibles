@@ -40,20 +40,18 @@ public class HoldingsLatestFilingsSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                },
-                new CommonStock
-                {
-                    Id = msftId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: msftId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019"
+                )
             );
 
             var filerA = new InstitutionalHolder { Cik = "F0000001", Name = "Alpha Capital" };
@@ -64,7 +62,7 @@ public class HoldingsLatestFilingsSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = filerA.Id,
                     ReportDate = q1,
                     FilingDate = q1.AddDays(45),
@@ -82,7 +80,7 @@ public class HoldingsLatestFilingsSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = filerA.Id,
                     ReportDate = q2,
                     FilingDate = q2.AddDays(45),
@@ -97,7 +95,7 @@ public class HoldingsLatestFilingsSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = msftId,
+                    EquityIssuerId = msftId,
                     InstitutionalHolderId = filerA.Id,
                     ReportDate = q2,
                     FilingDate = q2.AddDays(45),
@@ -114,7 +112,7 @@ public class HoldingsLatestFilingsSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = filerB.Id,
                     ReportDate = q2,
                     FilingDate = q2.AddDays(50),

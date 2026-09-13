@@ -60,17 +60,30 @@ public class ImpossiblePositionRepairService
             .Set<InstitutionalHolding>()
             .Where(h => h.ShareType == ShareType.Shares && !h.ValueUnavailable && h.Shares > 0)
             .Join(
-                dbContext.Set<CommonStock>(),
-                h => h.CommonStockId,
+                dbContext.Set<EquityIssuer>(),
+                h => h.EquityIssuerId,
                 cs => cs.Id,
                 (h, cs) =>
                     new
                     {
                         Holding = h,
-                        cs.Ticker,
-                        cs.SecondaryTickers,
-                        cs.SharesOutStanding,
-                        cs.MarketCapitalization,
+                        Ticker = cs.Presentation.Listing.Ticker,
+                        SecondaryTickers = cs
+                            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                            .Where(nativeListing =>
+                                nativeListing.MarketCountryCode == "US"
+                                && (
+                                    nativeListing.IsDirectoryListed
+                                    && nativeListing.Id != cs.Presentation.EquityListingId
+                                )
+                            )
+                            .Select(nativeListing => nativeListing.Ticker)
+                            .ToList(),
+                        SharesOutStanding = cs.Presentation.Listing.Security.SharesOutstanding,
+                        MarketCapitalization = cs.Presentation
+                            .Listing
+                            .Security
+                            .MarketCapitalization,
                     }
             )
             .Where(x =>
@@ -85,20 +98,23 @@ public class ImpossiblePositionRepairService
         // basis before the two are comparable. Without this, a holder of a few percent of a company
         // that later ran a 1:50 reverse split reads as owning fifty times the issuer, and its
         // perfectly good value is withdrawn.
-        var candidateStockIds = candidates.Select(c => c.Holding.CommonStockId).Distinct().ToList();
+        var candidateStockIds = candidates
+            .Select(c => c.Holding.EquityIssuerId)
+            .Distinct()
+            .ToList();
         var splitsByStock = (
             await dbContext
                 .Set<StockSplit>()
-                .Where(s => candidateStockIds.Contains(s.CommonStockId))
+                .Where(s => candidateStockIds.Contains(s.EquityIssuerId))
                 .ToListAsync(cancellationToken)
         )
-            .GroupBy(s => s.CommonStockId)
+            .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var repaired = 0;
         foreach (var candidate in candidates)
         {
-            splitsByStock.TryGetValue(candidate.Holding.CommonStockId, out var splits);
+            splitsByStock.TryGetValue(candidate.Holding.EquityIssuerId, out var splits);
             if (
                 !HoldingValueBasis.TryResolveShareCountFactor(
                     candidate.Holding.ReportDate,

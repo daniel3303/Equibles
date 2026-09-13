@@ -37,15 +37,26 @@ public class YahooPriceImportServiceReplacePriceRowsTests
         bool isPrimary,
         DateOnly floor,
         DateOnly today,
-        List<DailyStockPrice> freshRows
+        List<EquityDailyStockPrice> freshRows
     ) =>
         (Task<bool>)
             ReplacePriceRowsMethod.Invoke(
                 null,
                 [
-                    new DailyStockPriceRepository(db),
-                    new CommonStockRepository(db),
-                    new PriceSeriesTarget(ticker, commonStockId, isPrimary),
+                    new EquityDailyStockPriceRepository(db),
+                    new EquityIssuerRepository(db),
+                    new PriceSeriesTarget(
+                        ticker,
+                        commonStockId,
+                        db.Set<EquityListing>()
+                            .Where(listing =>
+                                listing.Security.EquityIssuerId == commonStockId
+                                && listing.Ticker == ticker
+                            )
+                            .Select(listing => listing.Id)
+                            .SingleOrDefault(),
+                        isPrimary
+                    ),
                     floor,
                     today,
                     freshRows,
@@ -74,7 +85,8 @@ public class YahooPriceImportServiceReplacePriceRowsTests
         return ctx;
     }
 
-    private static DailyStockPrice Row(
+    private static EquityDailyStockPrice Row(
+        EquiblesFinancialDbContext db,
         Guid stockId,
         DateOnly date,
         decimal close,
@@ -82,8 +94,11 @@ public class YahooPriceImportServiceReplacePriceRowsTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
-            ListedTicker = listedTicker,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId, listedTicker),
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStockId(db, stockId, listedTicker)
+                .Id,
+            SourceTicker = listedTicker,
             Date = date,
             Open = close,
             High = close,
@@ -93,17 +108,16 @@ public class YahooPriceImportServiceReplacePriceRowsTests
             Volume = 1000,
         };
 
-    private static CommonStock Stock(
+    private static EquityIssuer Stock(
         Guid stockId,
         string ticker = "AAPL",
         List<string> secondaryTickers = null
     ) =>
-        new()
-        {
-            Id = stockId,
-            Ticker = ticker,
-            SecondaryTickers = secondaryTickers ?? [],
-        };
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: stockId,
+            Ticker: ticker,
+            SecondaryTickers: secondaryTickers ?? []
+        );
 
     [Fact]
     public async Task ReplacePriceRows_SwapsWindowRowsForTheFreshSeries()
@@ -113,25 +127,25 @@ public class YahooPriceImportServiceReplacePriceRowsTests
         // Pre-split stored rows carry the old basis (close 400).
         db.Add(Stock(stockId));
         db.AddRange(
-            Row(stockId, new DateOnly(2024, 1, 2), 400m),
-            Row(stockId, new DateOnly(2024, 1, 3), 404m)
+            Row(db, stockId, new DateOnly(2024, 1, 2), 400m),
+            Row(db, stockId, new DateOnly(2024, 1, 3), 404m)
         );
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
         // Fresh fully-adjusted series (10:1 split -> close 40) plus a new day.
-        var fresh = new List<DailyStockPrice>
+        var fresh = new List<EquityDailyStockPrice>
         {
-            Row(stockId, new DateOnly(2024, 1, 2), 40m),
-            Row(stockId, new DateOnly(2024, 1, 3), 40.4m),
-            Row(stockId, new DateOnly(2024, 1, 4), 41m),
+            Row(db, stockId, new DateOnly(2024, 1, 2), 40m),
+            Row(db, stockId, new DateOnly(2024, 1, 3), 40.4m),
+            Row(db, stockId, new DateOnly(2024, 1, 4), 41m),
         };
 
         await ReplacePriceRows(db, stockId, "AAPL", isPrimary: true, Floor, Today, fresh);
 
         db.ChangeTracker.Clear();
-        var stored = await db.Set<DailyStockPrice>()
-            .Where(p => p.CommonStockId == stockId)
+        var stored = await db.Set<EquityDailyStockPrice>()
+            .Where(p => p.Listing.Security.EquityIssuerId == stockId)
             .OrderBy(p => p.Date)
             .ToListAsync();
         stored.Should().HaveCount(3);
@@ -145,18 +159,21 @@ public class YahooPriceImportServiceReplacePriceRowsTests
         var stockId = Guid.NewGuid();
         // A row before the floor must survive the replacement of the [floor, today] window.
         db.Add(Stock(stockId));
-        db.Add(Row(stockId, new DateOnly(2019, 6, 1), 10m));
-        db.Add(Row(stockId, new DateOnly(2024, 1, 2), 400m));
+        db.Add(Row(db, stockId, new DateOnly(2019, 6, 1), 10m));
+        db.Add(Row(db, stockId, new DateOnly(2024, 1, 2), 400m));
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var fresh = new List<DailyStockPrice> { Row(stockId, new DateOnly(2024, 1, 2), 40m) };
+        var fresh = new List<EquityDailyStockPrice>
+        {
+            Row(db, stockId, new DateOnly(2024, 1, 2), 40m),
+        };
 
         await ReplacePriceRows(db, stockId, "AAPL", isPrimary: true, Floor, Today, fresh);
 
         db.ChangeTracker.Clear();
-        var dates = await db.Set<DailyStockPrice>()
-            .Where(p => p.CommonStockId == stockId)
+        var dates = await db.Set<EquityDailyStockPrice>()
+            .Where(p => p.Listing.Security.EquityIssuerId == stockId)
             .Select(p => p.Date)
             .OrderBy(d => d)
             .ToListAsync();
@@ -172,8 +189,8 @@ public class YahooPriceImportServiceReplacePriceRowsTests
         var stockId = Guid.NewGuid();
         db.Add(Stock(stockId));
         db.AddRange(
-            Row(stockId, new DateOnly(2024, 1, 2), 400m),
-            Row(stockId, new DateOnly(2024, 1, 3), 404m)
+            Row(db, stockId, new DateOnly(2024, 1, 2), 400m),
+            Row(db, stockId, new DateOnly(2024, 1, 3), 404m)
         );
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
@@ -181,7 +198,8 @@ public class YahooPriceImportServiceReplacePriceRowsTests
         await ReplacePriceRows(db, stockId, "AAPL", isPrimary: true, Floor, Today, []);
 
         db.ChangeTracker.Clear();
-        var count = await db.Set<DailyStockPrice>().CountAsync(p => p.CommonStockId == stockId);
+        var count = await db.Set<EquityDailyStockPrice>()
+            .CountAsync(p => p.Listing.Security.EquityIssuerId == stockId);
         count.Should().Be(2); // existing rows preserved
     }
 
@@ -192,22 +210,22 @@ public class YahooPriceImportServiceReplacePriceRowsTests
         var stockId = Guid.NewGuid();
         var date = new DateOnly(2024, 1, 2);
         db.Add(Stock(stockId, "GOOGL", ["GOOG"]));
-        db.AddRange(Row(stockId, date, 190m, "GOOGL"), Row(stockId, date, 175m, "GOOG"));
+        db.AddRange(Row(db, stockId, date, 190m, "GOOGL"), Row(db, stockId, date, 175m, "GOOG"));
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var fresh = new List<DailyStockPrice> { Row(stockId, date, 87.5m, "GOOG") };
+        var fresh = new List<EquityDailyStockPrice> { Row(db, stockId, date, 87.5m, "GOOG") };
 
         await ReplacePriceRows(db, stockId, "GOOG", isPrimary: false, Floor, Today, fresh);
 
         db.ChangeTracker.Clear();
-        var stored = await db.Set<DailyStockPrice>()
-            .Where(p => p.CommonStockId == stockId)
-            .OrderBy(p => p.ListedTicker)
+        var stored = await db.Set<EquityDailyStockPrice>()
+            .Where(p => p.Listing.Security.EquityIssuerId == stockId)
+            .OrderBy(p => p.SourceTicker)
             .ToListAsync();
         stored.Should().HaveCount(2);
-        stored.Single(p => p.ListedTicker == "GOOGL").Close.Should().Be(190m);
-        stored.Single(p => p.ListedTicker == "GOOG").Close.Should().Be(87.5m);
+        stored.Single(p => p.SourceTicker == "GOOGL").Close.Should().Be(190m);
+        stored.Single(p => p.SourceTicker == "GOOG").Close.Should().Be(87.5m);
     }
 
     [Fact]
@@ -220,11 +238,11 @@ public class YahooPriceImportServiceReplacePriceRowsTests
         // The crawl snapshotted GOOG while it belonged to this filer. Company sync removed it
         // before the fetched data reached the write boundary.
         db.Add(Stock(stockId, "GOOGL"));
-        db.Add(Row(stockId, date, 175m, "GOOG"));
+        db.Add(Row(db, stockId, date, 175m, "GOOG"));
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var fresh = new List<DailyStockPrice> { Row(stockId, date, 87.5m, "GOOG") };
+        var fresh = new List<EquityDailyStockPrice> { Row(db, stockId, date, 87.5m, "GOOG") };
 
         var replaced = await ReplacePriceRows(
             db,
@@ -238,8 +256,8 @@ public class YahooPriceImportServiceReplacePriceRowsTests
 
         replaced.Should().BeFalse();
         db.ChangeTracker.Clear();
-        var stored = await db.Set<DailyStockPrice>().SingleAsync();
-        stored.ListedTicker.Should().Be("GOOG");
+        EquityDailyStockPrice stored = await db.Set<EquityDailyStockPrice>().SingleAsync();
+        stored.SourceTicker.Should().Be("GOOG");
         stored.Close.Should().Be(175m);
     }
 }

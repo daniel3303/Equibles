@@ -31,7 +31,7 @@ public class HoldingsActivityControllerBuildHeatMapPointZeroPreviousFilersTests
 
         var activity = new StockQuarterlyActivity
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             CurrentFilerCount = 10,
             PreviousFilerCount = 0,
             NewFilerCount = 10,

@@ -86,8 +86,8 @@ public class YahooPriceScraperWorkerDoWorkTests : IAsyncLifetime
                 var ctx = _fixture.CreateDbContext();
                 _contexts.Add(ctx);
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(TickerMapService)).Returns(new TickerMapService(scopeFactory));
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);

@@ -39,12 +39,19 @@ public class DocumentProcessorCreateChunksTests
             string.Concat(Enumerable.Repeat("Apple Inc. reported revenue. ", 200))
         );
 
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var stock = new EquityIssuer
+        {
+            Presentation = new EquityIssuerPresentation
+            {
+                Listing = new EquityListing { Ticker = "AAPL" },
+            },
+            Name = "Apple Inc.",
+        };
         var documentId = Guid.NewGuid();
         var document = new Document
         {
             Id = documentId,
-            CommonStock = stock,
+            Issuer = stock,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2025, 1, 15),
             Content = new File

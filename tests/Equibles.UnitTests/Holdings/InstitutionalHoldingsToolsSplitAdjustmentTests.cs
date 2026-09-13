@@ -60,7 +60,7 @@ public class InstitutionalHoldingsToolsSplitAdjustmentTests
         new(
             new InstitutionalHoldingRepository(db),
             new InstitutionalHolderRepository(db),
-            new CommonStockRepository(db),
+            new EquityIssuerRepository(db),
             new StockSplitRepository(db),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(db),
@@ -75,27 +75,28 @@ public class InstitutionalHoldingsToolsSplitAdjustmentTests
     {
         await using var db = NewDb();
 
-        var apple = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var microsoft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer microsoft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         var holder = new InstitutionalHolder { Cik = "1", Name = "Fund One" };
         db.AddRange(apple, microsoft, holder);
+        Equibles.TestSupport.NativeListingSeed.ForStock(db, apple);
+        Equibles.TestSupport.NativeListingSeed.ForStock(db, microsoft);
 
         // Apple did a 2:1 split between the quarters; the fund's economic position is flat
         // (1,000 pre-split → 2,000 post-split) with a flat dollar value.
         db.Add(
             new StockSplit
             {
-                CommonStockId = apple.Id,
+                EquityIssuerId = apple.Id,
+                PriceSeriesTicker = apple.Presentation.Listing.Ticker,
                 EffectiveDate = SplitDate,
                 Numerator = 2,
                 Denominator = 1,
@@ -127,14 +128,14 @@ public class InstitutionalHoldingsToolsSplitAdjustmentTests
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly reportDate,
         long shares,
         long value
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
@@ -143,6 +144,6 @@ public class InstitutionalHoldingsToolsSplitAdjustmentTests
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{stock.Ticker}-{reportDate:yyyyMMdd}",
+            AccessionNumber = $"acc-{stock.Presentation.Listing.Ticker}-{reportDate:yyyyMMdd}",
         };
 }

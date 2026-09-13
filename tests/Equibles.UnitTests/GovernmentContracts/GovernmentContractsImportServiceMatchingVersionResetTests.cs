@@ -164,12 +164,11 @@ public class GovernmentContractsImportServiceMatchingVersionResetTests
     {
         using var seed = NewContext(options);
         seed.Add(
-            new CommonStock
-            {
-                Ticker = "LMT",
-                Name = "Lockheed Martin Corporation",
-                Cik = "1",
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "LMT",
+                Name: "Lockheed Martin Corporation",
+                Cik: "1"
+            )
         );
         seed.SaveChanges();
     }
@@ -212,7 +211,7 @@ public class GovernmentContractsImportServiceMatchingVersionResetTests
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => NewContext(options));
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         services.AddScoped<GovernmentContractRepository>();
         services.AddScoped<GovernmentContractsScanStateRepository>();
         services.AddScoped<GovernmentContractRecipientParentRepository>();

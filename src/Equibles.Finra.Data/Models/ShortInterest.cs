@@ -5,18 +5,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Finra.Data.Models;
 
-[Index(nameof(CommonStockId), nameof(ListedTicker), nameof(SettlementDate), IsUnique = true)]
+[Index(nameof(EquityListingId), nameof(SettlementDate), IsUnique = true)]
 [Index(nameof(SettlementDate))]
 public class ShortInterest
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    public Guid EquityListingId { get; set; }
+    public virtual EquityListing Listing { get; set; }
 
+    // Preserve original source attribution independently of the stable listing identity.
     [Required]
     [MaxLength(TickerNormalizer.MaxListedLength)]
-    public string ListedTicker { get; set; } = "";
+    public string ListedTicker { get; set; }
 
     public DateOnly SettlementDate { get; set; }
 

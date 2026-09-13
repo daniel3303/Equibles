@@ -35,7 +35,7 @@ public class StockSecondaryCikAttachedConsumer : IConsumer<StockSecondaryCikAtta
     {
         var cleared = await _syncStatusRepository
             .GetAll()
-            .Where(s => s.CommonStockId == context.Message.CommonStockId)
+            .Where(s => s.EquityIssuerId == context.Message.CommonStockId)
             .ExecuteDeleteAsync(context.CancellationToken);
 
         _logger.LogInformation(

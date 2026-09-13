@@ -34,14 +34,13 @@ public class CommonStockManagerCreateWhitespaceTickerTests
         // tests cover negative shares/market-cap but never the blank-required-field
         // rejection.
         var db = NewDb();
-        var repo = Substitute.For<CommonStockRepository>(db);
-        var sut = new CommonStockManager(repo, Substitute.For<IBus>());
-        var stock = new CommonStock
-        {
-            Ticker = "   ",
-            Name = "Test Corp",
-            Cik = "0000099999",
-        };
+        EquityIssuerRepository repo = Substitute.For<EquityIssuerRepository>(db);
+        EquityIdentityManager sut = new EquityIdentityManager(repo, Substitute.For<IBus>());
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "   ",
+            Name: "Test Corp",
+            Cik: "0000099999"
+        );
 
         var act = () => sut.Create(stock);
 

@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.IO.Compression;
+using System.Text.Json;
 using Equibles.CommonStocks.Data.Helpers;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.CommonStocks.Repositories.Extensions;
 using Equibles.Core.AutoWiring;
@@ -458,26 +460,48 @@ public class HoldingsImportService
         _logger.LogInformation("Found {Count} unique CUSIPs in INFOTABLE", uniqueCusips.Count);
 
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository stockRepo =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var uniqueCusipsList = uniqueCusips.ToList();
 
         // Historical filings must resolve identities that are no longer in the live directory.
         // The default repository surface is active-only by design, so this importer opts into
         // retained inactive rows explicitly.
-        var query = stockRepo.GetAllIncludingInactive();
+        var query = stockRepo.GetAll();
         if (_workerOptions.TickersToSync?.Count > 0)
         {
             query = query.Where(stock =>
-                _workerOptions.TickersToSync.Contains(stock.Ticker)
-                || stock.SecondaryTickers.Any(ticker =>
-                    _workerOptions.TickersToSync.Contains(ticker)
-                )
+                _workerOptions.TickersToSync.Contains(stock.Presentation.Listing.Ticker)
+                || stock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != stock.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList()
+                    .Any(ticker => _workerOptions.TickersToSync.Contains(ticker))
             );
         }
 
-        var stocksWithCusip = await query
-            .Where(cs => cs.Cusip != null && uniqueCusipsList.Contains(cs.Cusip))
-            .Select(cs => new { cs.Id, cs.Cusip })
+        var securityClaims = await query
+            .SelectMany(issuer => issuer.Securities)
+            .Where(security => security.Cusip != null && uniqueCusipsList.Contains(security.Cusip))
+            .Select(security => new
+            {
+                security.Id,
+                security.EquityIssuerId,
+                security.Cusip,
+                PrimarySecurityId = (Guid?)security.Issuer.Presentation.Listing.EquitySecurityId,
+                UsTickers = security
+                    .Listings.Where(listing => listing.MarketCountryCode == "US")
+                    .Select(listing => listing.Ticker)
+                    .Distinct()
+                    .ToList(),
+            })
             .ToListAsync(cancellationToken);
 
         // Retired CUSIPs must keep resolving: after an issuer-level CUSIP change,
@@ -490,9 +514,9 @@ public class HoldingsImportService
         var cusipAliases = await stockRepo
             .GetCusipAliases()
             .Where(a =>
-                uniqueCusipsList.Contains(a.Cusip) && stockIdsQuery.Contains(a.CommonStockId)
+                uniqueCusipsList.Contains(a.Cusip) && stockIdsQuery.Contains(a.EquityIssuerId)
             )
-            .Select(a => new { a.CommonStockId, a.Cusip })
+            .Select(a => new { a.EquityIssuerId, a.Cusip })
             .ToListAsync(cancellationToken);
 
         // The filer's OTHER listed securities (sibling share classes, units) carry their own
@@ -501,11 +525,11 @@ public class HoldingsImportService
         var listedCusips = await stockRepo
             .GetListedCusips()
             .Where(l =>
-                uniqueCusipsList.Contains(l.Cusip) && stockIdsQuery.Contains(l.CommonStockId)
+                uniqueCusipsList.Contains(l.Cusip) && stockIdsQuery.Contains(l.EquityIssuerId)
             )
             .Select(l => new
             {
-                l.CommonStockId,
+                l.EquityIssuerId,
                 l.ListedTicker,
                 l.Cusip,
             })
@@ -523,7 +547,7 @@ public class HoldingsImportService
             var listedTicker = string.IsNullOrWhiteSpace(listed.ListedTicker)
                 ? null
                 : listed.ListedTicker;
-            cusipMapping[listed.Cusip] = new CusipTarget(listed.CommonStockId, listedTicker);
+            cusipMapping[listed.Cusip] = new CusipTarget(listed.EquityIssuerId, listedTicker);
         }
         var listedClaims = new HashSet<string>(
             listedCusips.Select(l => l.Cusip),
@@ -538,7 +562,7 @@ public class HoldingsImportService
                 cusipMapping.Remove(alias.Cusip);
                 continue;
             }
-            cusipMapping[alias.Cusip] = new CusipTarget(alias.CommonStockId, null);
+            cusipMapping[alias.Cusip] = new CusipTarget(alias.EquityIssuerId, null);
         }
         if (contested.Count > 0)
         {
@@ -549,9 +573,26 @@ public class HoldingsImportService
                 string.Join(", ", contested)
             );
         }
-        foreach (var stock in stocksWithCusip)
+        // A retained security keeps its CUSIP after the issuer chooses a different presentation.
+        // Ambiguous securities or venue symbols cannot be assigned to the current primary.
+        foreach (
+            var claims in securityClaims.GroupBy(
+                claim => claim.Cusip,
+                StringComparer.OrdinalIgnoreCase
+            )
+        )
         {
-            cusipMapping[stock.Cusip] = new CusipTarget(stock.Id, null);
+            cusipMapping.Remove(claims.Key);
+            if (claims.Count() != 1)
+                continue;
+            var security = claims.Single();
+            if (security.Id == security.PrimarySecurityId)
+                cusipMapping[security.Cusip] = new CusipTarget(security.EquityIssuerId, null);
+            else if (security.UsTickers.Count == 1)
+                cusipMapping[security.Cusip] = new CusipTarget(
+                    security.EquityIssuerId,
+                    security.UsTickers[0]
+                );
         }
 
         _logger.LogInformation(
@@ -574,12 +615,22 @@ public class HoldingsImportService
         var mappedStockIds = cusipMapping.Values.Select(t => t.CommonStockId).Distinct().ToList();
         context.IssuerSizes = await LoadIssuerSizes(stockRepo, mappedStockIds, cancellationToken);
         var tickerIdentities = await stockRepo
-            .GetByIdsIncludingInactive(mappedStockIds)
+            .GetByIds(mappedStockIds)
             .Select(cs => new
             {
                 cs.Id,
-                cs.Ticker,
-                cs.SecondaryTickers,
+                Ticker = cs.Presentation.Listing.Ticker,
+                SecondaryTickers = cs
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id != cs.Presentation.EquityListingId
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList(),
             })
             .ToListAsync(cancellationToken);
         context.PrimaryTickers = tickerIdentities.ToDictionary(cs => cs.Id, cs => cs.Ticker);
@@ -608,19 +659,19 @@ public class HoldingsImportService
     /// this data set actually references.
     /// </summary>
     private static async Task<Dictionary<Guid, IssuerSize>> LoadIssuerSizes(
-        CommonStockRepository stockRepo,
+        EquityIssuerRepository stockRepo,
         List<Guid> stockIds,
         CancellationToken cancellationToken
     )
     {
         var sizes = await stockRepo
-            .GetAllIncludingInactive()
-            .Where(cs => stockIds.Contains(cs.Id))
+            .GetAll()
+            .Where(cs => stockIds.Contains(cs.Id) && cs.Presentation != null)
             .Select(cs => new
             {
                 cs.Id,
-                cs.SharesOutStanding,
-                cs.MarketCapitalization,
+                SharesOutStanding = cs.Presentation.Listing.Security.SharesOutstanding,
+                MarketCapitalization = cs.Presentation.Listing.Security.MarketCapitalization,
             })
             .ToListAsync(cancellationToken);
 
@@ -678,11 +729,11 @@ public class HoldingsImportService
 
         var splits = await dbContext
             .Set<StockSplit>()
-            .Where(s => stockIds.Contains(s.CommonStockId))
+            .Where(s => stockIds.Contains(s.EquityIssuerId))
             .ToListAsync(cancellationToken);
 
         context.StockSplits = splits
-            .GroupBy(s => s.CommonStockId)
+            .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         _logger.LogInformation(
@@ -1457,7 +1508,7 @@ public class HoldingsImportService
                     // security, at most a handful. A null listing compares as IS NULL.
                     deleted += await existingQuery
                         .Where(h =>
-                            h.CommonStockId == target.CommonStockId
+                            h.EquityIssuerId == target.CommonStockId
                             && h.ListedTicker == target.ListedTicker
                         )
                         .ExecuteDeleteAsync(cancellationToken);
@@ -1916,7 +1967,7 @@ public class HoldingsImportService
         var holding = new InstitutionalHolding
         {
             InstitutionalHolderId = holderId,
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             FilingDate = filingDate,
             ReportDate = reportDate,
             Value = value,
@@ -1952,29 +2003,43 @@ public class HoldingsImportService
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-
-        // CompanySync can replace a CommonStock after BuildCusipMapping cached its id. Remove
-        // those stale children immediately before the write so one dangling FK cannot roll back
-        // every valid position in the accession. The caller leaves the data set unprocessed when
-        // any row is skipped, allowing the replacement stock to resolve on the next pass.
-        var safeHoldings = await stockRepo.FilterByExistingStocks(
-            holdings,
-            h => h.CommonStockId,
-            cancellationToken
-        );
+        // Validate the stable issuer owner immediately before writing. Removing a legacy
+        // directory row must not discard an otherwise valid historical position.
+        var issuerIds = holdings.Select(row => row.EquityIssuerId).Distinct().ToArray();
+        var existingIssuerIds = await dbContext
+            .Set<EquityIssuer>()
+            .Where(row => issuerIds.Contains(row.Id))
+            .Select(row => row.Id)
+            .ToHashSetAsync(cancellationToken);
+        var safeHoldings = holdings
+            .Where(row => existingIssuerIds.Contains(row.EquityIssuerId))
+            .ToList();
         var skipped = holdings.Count - safeHoldings.Count;
         if (skipped > 0)
         {
             _logger.LogWarning(
-                "Holdings batch: skipping {Count} rows whose parent CommonStock was removed before flush",
+                "Holdings batch: skipping {Count} rows whose issuer was removed before flush",
                 skipped
             );
         }
         if (safeHoldings.Count == 0)
             return new HoldingsFlushResult(0, SkippedStaleParent: skipped > 0);
 
-        // PostgreSQL takes a KEY SHARE lock on each CommonStock while checking the holding FK.
+        await using var transaction =
+            dbContext.Database.CurrentTransaction == null
+                ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+        // Serialise overlapping import batches by stable issuer, including a presentation change
+        // between two captures. NO KEY UPDATE remains compatible with dependent-row FK checks.
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            SELECT "Id" FROM "EquityIssuer" WHERE "Id" = ANY({issuerIds}) ORDER BY "Id" FOR NO KEY UPDATE
+            """,
+            cancellationToken
+        );
+        await PreserveStoredObservationKeys(dbContext, safeHoldings, cancellationToken);
+
+        // PostgreSQL takes a KEY SHARE lock on each issuer while checking the holding FK.
         // Bulk and realtime imports can flush overlapping stocks concurrently; one shared parent
         // order prevents the two multi-row upserts from forming a circular lock dependency.
         safeHoldings = OrderForUpsert(safeHoldings);
@@ -1991,7 +2056,7 @@ public class HoldingsImportService
             .UpsertRange(safeHoldings)
             .On(h => new
             {
-                h.CommonStockId,
+                h.EquityIssuerId,
                 h.InstitutionalHolderId,
                 h.ReportDate,
                 h.ShareType,
@@ -2060,14 +2125,88 @@ public class HoldingsImportService
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        if (transaction != null)
+            await transaction.CommitAsync(cancellationToken);
+
         return new HoldingsFlushResult(safeHoldings.Count, SkippedStaleParent: skipped > 0);
+    }
+
+    private static async Task PreserveStoredObservationKeys(
+        EquiblesFinancialDbContext dbContext,
+        List<InstitutionalHolding> incoming,
+        CancellationToken cancellationToken
+    )
+    {
+        // CUSIP is the filing's stated identity. Presentation changes cannot turn a replay of
+        // that observation into a second position. Match the full position grain except for
+        // its previously assigned display ticker, retaining option/principal/form distinctions.
+        var keys = JsonSerializer.Serialize(
+            incoming
+                .Where(row => row.Cusip != null)
+                .Select(row => new
+                {
+                    row.EquityIssuerId,
+                    row.InstitutionalHolderId,
+                    row.ReportDate,
+                    row.Cusip,
+                    ShareType = (int)row.ShareType,
+                    OptionType = (int?)row.OptionType,
+                    FilingType = (int)row.FilingType,
+                })
+                .Distinct()
+        );
+        var stored = await dbContext
+            .Set<InstitutionalHolding>()
+            .FromSqlInterpolated(
+                $"""
+                SELECT h.* FROM "InstitutionalHolding" h
+                JOIN jsonb_to_recordset({keys}::jsonb) AS k(
+                    "EquityIssuerId" uuid, "InstitutionalHolderId" uuid, "ReportDate" date,
+                    "Cusip" text, "ShareType" integer, "OptionType" integer, "FilingType" integer)
+                  ON h."EquityIssuerId" = k."EquityIssuerId"
+                 AND h."InstitutionalHolderId" = k."InstitutionalHolderId"
+                 AND h."ReportDate" = k."ReportDate" AND h."Cusip" = k."Cusip"
+                 AND h."ShareType" = k."ShareType" AND h."FilingType" = k."FilingType"
+                 AND h."OptionType" IS NOT DISTINCT FROM k."OptionType"
+                """
+            )
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        static object ObservationKey(InstitutionalHolding row) =>
+            new
+            {
+                row.EquityIssuerId,
+                row.InstitutionalHolderId,
+                row.ReportDate,
+                row.Cusip,
+                row.ShareType,
+                row.OptionType,
+                row.FilingType,
+            };
+        var retained = stored
+            .GroupBy(ObservationKey)
+            .ToDictionary(group => group.Key, group => group.ToList());
+        foreach (var row in incoming)
+        {
+            if (row.Cusip == null || !retained.TryGetValue(ObservationKey(row), out var matches))
+                continue;
+            if (matches.Count != 1)
+                throw new InvalidOperationException(
+                    "The stored filing security has conflicting observation identities; replay was refused."
+                );
+            row.ListedTicker = matches[0].ListedTicker;
+        }
+        if (incoming.GroupBy(BuildHoldingKey).Any(group => group.Count() > 1))
+            throw new InvalidOperationException(
+                "Retained observation identities would merge incoming positions; replay was refused."
+            );
     }
 
     internal static List<InstitutionalHolding> OrderForUpsert(
         IEnumerable<InstitutionalHolding> holdings
     ) =>
         holdings
-            .OrderBy(holding => holding.CommonStockId)
+            .OrderBy(holding => holding.EquityIssuerId)
             .ThenBy(holding => holding.InstitutionalHolderId)
             .ThenBy(holding => holding.ReportDate)
             .ThenBy(holding => holding.AccessionNumber, StringComparer.Ordinal)
@@ -2302,7 +2441,7 @@ public class HoldingsImportService
 
     private static string BuildHoldingKey(InstitutionalHolding h) =>
         BuildHoldingKey(
-            h.CommonStockId,
+            h.EquityIssuerId,
             h.InstitutionalHolderId,
             h.ReportDate,
             h.ShareType,

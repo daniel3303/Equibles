@@ -38,7 +38,7 @@ public class InstitutionPortfolioSummaryCalculatorTurnoverDecreasedPositionTests
     private static InstitutionalHolding MakeHolding(Guid stockId, long shares, long value) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             Shares = shares,
             Value = value,
         };

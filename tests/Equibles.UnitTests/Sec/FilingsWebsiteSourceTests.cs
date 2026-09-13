@@ -80,7 +80,7 @@ public class FilingsWebsiteSourceTests
         using var ctx = NewContext(options);
         var document = new Document
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             DocumentType = type,
             ReportingDate = reportingDate,
         };

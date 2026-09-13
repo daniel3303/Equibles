@@ -25,7 +25,7 @@ namespace Equibles.IntegrationTests.Yahoo;
 public class YahooPriceImportServiceCompanyProfileBlankSectorTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly CommonStockRepository _stockRepo;
+    private readonly EquityIssuerRepository _stockRepo;
     private readonly IndustryRepository _industryRepo;
     private readonly SectorRepository _sectorRepo;
     private readonly IYahooFinanceClient _yahooClient;
@@ -37,10 +37,10 @@ public class YahooPriceImportServiceCompanyProfileBlankSectorTests : IDisposable
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
-        _stockRepo = new CommonStockRepository(_dbContext);
+        _stockRepo = new EquityIssuerRepository(_dbContext);
         _industryRepo = new IndustryRepository(_dbContext);
         _sectorRepo = new SectorRepository(_dbContext);
-        var priceRepo = new DailyStockPriceRepository(_dbContext);
+        EquityDailyStockPriceRepository priceRepo = new EquityDailyStockPriceRepository(_dbContext);
 
         _yahooClient = Substitute.For<IYahooFinanceClient>();
         var errorReporter = Substitute.For<ErrorReporter>(
@@ -52,8 +52,8 @@ public class YahooPriceImportServiceCompanyProfileBlankSectorTests : IDisposable
         var splitRepo = new StockSplitRepository(_dbContext);
         var dividendRepo = new CashDividendRepository(_dbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(DailyStockPriceRepository), priceRepo),
-            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(EquityDailyStockPriceRepository), priceRepo),
+            (typeof(EquityIssuerRepository), _stockRepo),
             (typeof(StockSplitRepository), splitRepo),
             (typeof(IndustryRepository), _industryRepo),
             (typeof(SectorRepository), _sectorRepo),
@@ -105,7 +105,7 @@ public class YahooPriceImportServiceCompanyProfileBlankSectorTests : IDisposable
         // when sectorId was null, or that tightened the outer guard to also
         // require Sector, would re-introduce that drop and break taxonomy
         // backfill for every sector-less issuer.
-        var stock = SeedStock("XYZ");
+        EquityIssuer stock = SeedStock("XYZ");
         _yahooClient
             .GetCompanyProfile("XYZ")
             .Returns(new CompanyProfile { Sector = "   ", Industry = "Specialty Retail" });
@@ -118,19 +118,18 @@ public class YahooPriceImportServiceCompanyProfileBlankSectorTests : IDisposable
         industries[0].SectorId.Should().BeNull();
         _sectorRepo.GetAll().Should().BeEmpty();
 
-        var refreshed = _stockRepo.GetAll().Single(s => s.Id == stock.Id);
+        EquityIssuer refreshed = _stockRepo.GetCurrentUsDirectory().Single(s => s.Id == stock.Id);
         refreshed.IndustryId.Should().Be(industries[0].Id);
     }
 
-    private CommonStock SeedStock(string ticker)
+    private EquityIssuer SeedStock(string ticker)
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = $"{ticker} Inc.",
-            Cik = $"CIK-{ticker}",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: $"{ticker} Inc.",
+            Cik: $"CIK-{ticker}"
+        );
         _stockRepo.Add(stock);
         _stockRepo.SaveChanges().GetAwaiter().GetResult();
         return stock;

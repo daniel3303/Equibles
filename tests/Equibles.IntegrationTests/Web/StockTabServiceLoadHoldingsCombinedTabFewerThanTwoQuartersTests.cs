@@ -64,10 +64,10 @@ public class StockTabServiceLoadHoldingsCombinedTabFewerThanTwoQuartersTests : I
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
     }
 
@@ -79,14 +79,13 @@ public class StockTabServiceLoadHoldingsCombinedTabFewerThanTwoQuartersTests : I
     [Fact]
     public async Task LoadHoldingsCombinedTab_SingleReportDate_MarksCombinedUnavailableAndExposesAvailableDates()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
 
         var holder = new InstitutionalHolder
         {
@@ -102,7 +101,7 @@ public class StockTabServiceLoadHoldingsCombinedTabFewerThanTwoQuartersTests : I
             .Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = onlyReportDate,

@@ -29,7 +29,7 @@
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h1 class="text-2xl font-bold mb-2">@doc.DocumentType.DisplayName</h1>
-                    <p class="text-base-content/60 mb-3">@doc.CommonStock.Name (@doc.CommonStock.Ticker)</p>
+                    <p class="text-base-content/60 mb-3">@doc.Issuer.Name (@(doc.Issuer.Presentation?.Listing?.Ticker))</p>
                     <div class="flex gap-2 flex-wrap">
                         <span class="badge badge-primary">@doc.DocumentType.DisplayName</span>
                         <span class="badge badge-info">@doc.ReportingDate.ToString("yyyy-MM-dd")</span>

@@ -20,8 +20,8 @@ public class StockPriceToolsAtrTests : ParadeDbMcpTestBase
 
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
@@ -38,7 +38,7 @@ public class StockPriceToolsAtrTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetAverageTrueRange_NoPrices_ReturnsEmptyRangeMessage()
     {
-        DbContext.Set<CommonStock>().Add(MakeStock());
+        DbContext.Set<EquityIssuer>().Add(MakeStock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut()
@@ -58,8 +58,8 @@ public class StockPriceToolsAtrTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetAverageTrueRange_FlatOhlc_ReturnsZeroAtrAfterWarmUp()
     {
-        var stock = MakeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = MakeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
 
         // 20 identical bars → TR is 0 throughout → ATR is 0 after the seed lands.
@@ -67,11 +67,15 @@ public class StockPriceToolsAtrTests : ParadeDbMcpTestBase
         for (var i = 0; i < 20; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m,
                         High = 100m,
@@ -100,18 +104,22 @@ public class StockPriceToolsAtrTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetAverageTrueRange_MaxResults_LimitsRowCount()
     {
-        var stock = MakeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = MakeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
         var start = new DateOnly(2025, 1, 6);
         for (var i = 0; i < 30; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m,
                         High = 101m,
@@ -143,18 +151,22 @@ public class StockPriceToolsAtrTests : ParadeDbMcpTestBase
         // must render those cells as "—" (em dash), not as "0", empty, or "0.0000". None
         // of the other tests pin this — they only inspect numeric cells or row counts.
         // Two bars with period=3: both indices land in warm-up, so every ATR cell is null.
-        var stock = MakeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = MakeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
         var start = new DateOnly(2025, 1, 6);
         for (var i = 0; i < 2; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m,
                         High = 101m,
@@ -187,18 +199,22 @@ public class StockPriceToolsAtrTests : ParadeDbMcpTestBase
         // tests pin the row order — a regression that flipped the loop direction would
         // still pass them. Five increasing dates; first data row in the table must be
         // the latest one.
-        var stock = MakeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = MakeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
         var start = new DateOnly(2025, 1, 6);
         for (var i = 0; i < 5; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m,
                         High = 101m,
@@ -222,11 +238,10 @@ public class StockPriceToolsAtrTests : ParadeDbMcpTestBase
         firstDataRow.Should().StartWith($"| {start.AddDays(4):yyyy-MM-dd} |");
     }
 
-    private static CommonStock MakeStock() =>
-        new()
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+    private static EquityIssuer MakeStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
 }

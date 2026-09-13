@@ -31,12 +31,11 @@ public class DocumentRepositoryGetByTickerTests : ParadeDbMcpTestBase
         // Parent stock with primary AAPL and a co-registrant ticker AAPL.PRA on
         // SecondaryTickers. The doc is filed against the parent, but a query for
         // the secondary ticker must still find it.
-        var parent = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            SecondaryTickers = ["AAPL.PRA"],
-        };
+        EquityIssuer parent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            SecondaryTickers: ["AAPL.PRA"]
+        );
         var file = new File
         {
             Name = "10k",
@@ -47,7 +46,7 @@ public class DocumentRepositoryGetByTickerTests : ParadeDbMcpTestBase
         };
         var document = new Document
         {
-            CommonStock = parent,
+            EquityIssuerId = parent.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,
@@ -69,6 +68,6 @@ public class DocumentRepositoryGetByTickerTests : ParadeDbMcpTestBase
 
         docs.Should().ContainSingle();
         docs[0].DocumentType.Should().Be(DocumentType.TenK);
-        docs[0].CommonStock.Ticker.Should().Be("AAPL");
+        docs[0].Issuer.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 }

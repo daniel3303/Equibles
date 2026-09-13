@@ -27,16 +27,19 @@ public class FiscalCalendarEvidenceReader(
     private const long MaxCalendarEnvelopeBytes = 50 * 1024 * 1024;
 
     public async Task<HistoricalFiscalCalendar> Read(
-        CommonStock stock,
+        Guid issuerId,
         IReadOnlyCollection<(DateOnly Start, DateOnly End)> incomingAnnualPeriods,
         CancellationToken cancellationToken
     )
     {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+        var stock = await db.Set<EquityIssuer>()
+            .AsNoTracking()
+            .SingleAsync(issuer => issuer.Id == issuerId, cancellationToken);
         var annualDates = await db.Set<Document>()
             .Where(d =>
-                d.CommonStockId == stock.Id
+                d.EquityIssuerId == stock.Id
                 && (
                     d.DocumentType == DocumentType.TenK
                     || d.DocumentType == DocumentType.TwentyF
@@ -48,7 +51,7 @@ public class FiscalCalendarEvidenceReader(
             .ToListAsync(cancellationToken);
         var stored = await db.Set<FinancialFact>()
             .Where(f =>
-                f.CommonStockId == stock.Id
+                f.EquityIssuerId == stock.Id
                 && f.DimensionsKey == ""
                 && f.PeriodType == FactPeriodType.Duration
                 && (
@@ -84,7 +87,7 @@ public class FiscalCalendarEvidenceReader(
             // years, even after a later annual report adopts the current calendar.
             var candidates = await db.Set<Document>()
                 .Where(d =>
-                    d.CommonStockId == stock.Id
+                    d.EquityIssuerId == stock.Id
                     && (
                         d.DocumentType == DocumentType.TenQ
                         || d.DocumentType == DocumentType.TenK
@@ -164,7 +167,7 @@ public class FiscalCalendarEvidenceReader(
         && !string.IsNullOrWhiteSpace(right)
         && left.Trim().TrimStart('0') == right.Trim().TrimStart('0');
 
-    private static bool MatchesCurrentCalendar(DateOnly annualEnd, CommonStock stock)
+    private static bool MatchesCurrentCalendar(DateOnly annualEnd, EquityIssuer stock)
     {
         if (
             stock.FiscalYearEndMonth is not (>= 1 and <= 12)

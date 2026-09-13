@@ -66,13 +66,8 @@ public class FilingDiscoveryServicePendingAccessionTests
     private static DocumentScraperOptions OptionsWithRetryGate(int retrySeconds) =>
         new() { RecentFeedPollSeconds = 0, FeedPendingRetrySeconds = retrySeconds };
 
-    private static CommonStock Tracked(string ticker, string cik) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Cik = cik,
-        };
+    private static EquityIssuer Tracked(string ticker, string cik) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(Id: Guid.NewGuid(), Ticker: ticker, Cik: cik);
 
     private static ISecEdgarClient ClientWithFeed(params EdgarRecentFilingEntry[] entries)
     {
@@ -107,7 +102,7 @@ public class FilingDiscoveryServicePendingAccessionTests
     public async Task UnconfirmedFeedAccession_RedirtiesCompanyOnLaterPass()
     {
         await using var context = CreateContext();
-        var company = Tracked("EBS", "1367644");
+        EquityIssuer company = Tracked("EBS", "1367644");
         var service = CreateService(ClientWithFeed(EbsEightK()), context, OptionsWithRetryGate(0));
 
         var firstPass = await service.DiscoverCompaniesWithNewFilings([company]);
@@ -123,7 +118,7 @@ public class FilingDiscoveryServicePendingAccessionTests
     public async Task ConfirmedFeedAccession_IsNotReflagged()
     {
         await using var context = CreateContext();
-        var company = Tracked("EBS", "1367644");
+        EquityIssuer company = Tracked("EBS", "1367644");
         var service = CreateService(ClientWithFeed(EbsEightK()), context, OptionsWithRetryGate(0));
 
         await service.DiscoverCompaniesWithNewFilings([company]);
@@ -139,8 +134,8 @@ public class FilingDiscoveryServicePendingAccessionTests
     public async Task ConfirmationUnderAnotherCik_DoesNotReleaseThisCompany()
     {
         await using var context = CreateContext();
-        var issuer = Tracked("EBS", "1367644");
-        var owner = Tracked("HOLD", "2000001");
+        EquityIssuer issuer = Tracked("EBS", "1367644");
+        EquityIssuer owner = Tracked("HOLD", "2000001");
         // The same accession appears once per associated entity, each with its
         // own CIK — confirming one side must not release the other.
         var ownerSideEntry = new EdgarRecentFilingEntry
@@ -170,7 +165,7 @@ public class FilingDiscoveryServicePendingAccessionTests
     public async Task UnconfirmedFeedAccession_InsideRetryGate_IsNotReflagged()
     {
         await using var context = CreateContext();
-        var company = Tracked("EBS", "1367644");
+        EquityIssuer company = Tracked("EBS", "1367644");
         // Real-sized gate: an immediate next pass must not burn an extra
         // enumeration on a filing flagged seconds ago.
         var service = CreateService(
@@ -189,7 +184,7 @@ public class FilingDiscoveryServicePendingAccessionTests
     public async Task UnconfirmedFeedAccession_RetriesExhausted_IsAbandoned()
     {
         await using var context = CreateContext();
-        var company = Tracked("EBS", "1367644");
+        EquityIssuer company = Tracked("EBS", "1367644");
         var options = OptionsWithRetryGate(0);
         options.FeedPendingMaxRetries = 1;
         var service = CreateService(ClientWithFeed(EbsEightK()), context, options);
@@ -207,7 +202,7 @@ public class FilingDiscoveryServicePendingAccessionTests
     public async Task ExpiredFeedAccession_IsAbandoned()
     {
         await using var context = CreateContext();
-        var company = Tracked("EBS", "1367644");
+        EquityIssuer company = Tracked("EBS", "1367644");
         var options = OptionsWithRetryGate(0);
         // Negative expiry makes every pending entry instantly stale without
         // needing a clock seam.
@@ -225,7 +220,7 @@ public class FilingDiscoveryServicePendingAccessionTests
     public async Task PendingAccessionForUntrackedCompany_IsDropped()
     {
         await using var context = CreateContext();
-        var company = Tracked("EBS", "1367644");
+        EquityIssuer company = Tracked("EBS", "1367644");
         var service = CreateService(ClientWithFeed(EbsEightK()), context, OptionsWithRetryGate(0));
 
         await service.DiscoverCompaniesWithNewFilings([company]);
@@ -242,7 +237,7 @@ public class FilingDiscoveryServicePendingAccessionTests
     public async Task FailedFeedPoll_DoesNotStopPendingRetries()
     {
         await using var context = CreateContext();
-        var company = Tracked("EBS", "1367644");
+        EquityIssuer company = Tracked("EBS", "1367644");
         var client = ClientWithFeed(EbsEightK());
         var service = CreateService(client, context, OptionsWithRetryGate(0));
 

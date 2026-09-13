@@ -34,10 +34,17 @@ public class RagManagerBuildContextWhitespaceChunkTests
         // `**Excerpt 1` header in the output. The group's document title still
         // renders (that's a separate code path), so the absence of the excerpt
         // header is a precise signal that the skip arm fired.
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        var stock = new EquityIssuer
+        {
+            Presentation = new EquityIssuerPresentation
+            {
+                Listing = new EquityListing { Ticker = "AAPL" },
+            },
+            Name = "Apple Inc.",
+        };
         var document = new Document
         {
-            CommonStock = stock,
+            Issuer = stock,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 12, 31),
         };

@@ -32,7 +32,7 @@ public class HoldingsActivityControllerBuildHeatMapPointScoreTests
 
         var activity = new StockQuarterlyActivity
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             CurrentFilerCount = 100,
             PreviousFilerCount = 80,
             NewFilerCount = 30,

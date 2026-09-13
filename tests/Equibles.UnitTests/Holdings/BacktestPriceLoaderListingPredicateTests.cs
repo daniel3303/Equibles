@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Holdings.BusinessLogic;
 using Equibles.Yahoo.Data;
@@ -14,19 +15,20 @@ public class BacktestPriceLoaderListingPredicateTests
     {
         var firstId = Guid.NewGuid();
         var secondId = Guid.NewGuid();
-        var predicate = BacktestPriceLoader
-            .ListingPredicate([
-                new BacktestPriceLoader.ListingKey(firstId, "BRK-A"),
-                new BacktestPriceLoader.ListingKey(secondId, "GOOG"),
-            ])
-            .Compile();
+        var predicate = BacktestPriceLoader.ListingPredicate([firstId, secondId]).Compile();
 
-        predicate(new DailyStockPrice { CommonStockId = firstId, ListedTicker = "BRK-A" })
+        predicate(new EquityDailyStockPrice { EquityListingId = firstId, SourceTicker = "BRK-A" })
             .Should()
             .BeTrue();
-        predicate(new DailyStockPrice { CommonStockId = firstId, ListedTicker = "GOOG" })
+        predicate(
+                new EquityDailyStockPrice
+                {
+                    EquityListingId = Guid.NewGuid(),
+                    SourceTicker = "BRK-A",
+                }
+            )
             .Should()
-            .BeFalse("independent stock and ticker filters would admit this cross-pair");
+            .BeFalse("the same ticker on another listing must not match");
     }
 
     [Fact]
@@ -46,7 +48,7 @@ public class BacktestPriceLoaderListingPredicateTests
         );
         var keys = Enumerable
             .Range(0, BacktestPriceLoader.ListingQueryBatchSize * 2 + 1)
-            .Select(index => new BacktestPriceLoader.ListingKey(Guid.NewGuid(), $"CLASS-{index}"))
+            .Select(index => Guid.NewGuid())
             .ToArray();
         var batches = keys.Chunk(BacktestPriceLoader.ListingQueryBatchSize).ToArray();
 
@@ -57,10 +59,10 @@ public class BacktestPriceLoaderListingPredicateTests
         foreach (var batch in batches)
         {
             var predicate = BacktestPriceLoader.ListingPredicate(batch);
-            var act = () => context.Set<DailyStockPrice>().Where(predicate).ToQueryString();
+            var act = () => context.Set<EquityDailyStockPrice>().Where(predicate).ToQueryString();
 
             act.Should().NotThrow<InvalidOperationException>();
-            act().Should().Contain("ListedTicker");
+            act().Should().Contain("EquityListingId");
         }
     }
 }

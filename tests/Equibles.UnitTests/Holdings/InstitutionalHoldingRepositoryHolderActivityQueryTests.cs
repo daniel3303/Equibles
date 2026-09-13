@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.Data;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CorporateActions.Data;
 using Equibles.Data;
 using Equibles.Holdings.Data;
@@ -26,7 +27,7 @@ public class InstitutionalHoldingRepositoryHolderActivityQueryTests
             }
         );
         var repository = new InstitutionalHoldingRepository(context);
-        var stock = new Equibles.CommonStocks.Data.Models.CommonStock { Id = Guid.NewGuid() };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(Id: Guid.NewGuid());
 
         var sql = repository
             .Get13FHolderActivityByStock(

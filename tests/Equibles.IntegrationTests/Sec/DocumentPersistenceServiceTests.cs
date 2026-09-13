@@ -73,14 +73,13 @@ public class DocumentPersistenceServiceTests : IDisposable
         //   (3) The file persisted to IFileManager is the SAME object stored on
         //       Document.Content — wiring this assignment wrong would save the bytes but
         //       point the Document at a different / null file.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            SecondaryTickers = [],
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            SecondaryTickers: []
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var savedFile = new File

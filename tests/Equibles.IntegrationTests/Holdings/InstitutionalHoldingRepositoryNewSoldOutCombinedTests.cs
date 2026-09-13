@@ -34,18 +34,16 @@ public class InstitutionalHoldingRepositoryNewSoldOutCombinedTests : IDisposable
     [Fact]
     public async Task GetQuarterlyNewSoldOutPositionsCombined_NonFilerNotCountedSoldOut_OnlyActualDropper()
     {
-        var stockS = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
-        var stockT = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-        };
+        EquityIssuer stockS = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
+        EquityIssuer stockT = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corp."
+        );
         var dropper = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -61,7 +59,9 @@ public class InstitutionalHoldingRepositoryNewSoldOutCombinedTests : IDisposable
         var previous = new DateOnly(2024, 3, 31);
         var current = new DateOnly(2024, 6, 30);
 
-        _dbContext.Set<CommonStock>().AddRange(stockS, stockT);
+        _dbContext.Set<EquityIssuer>().AddRange(stockS, stockT);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stockS);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stockT);
         _dbContext.Set<InstitutionalHolder>().AddRange(dropper, nonFiler);
         _dbContext
             .Set<InstitutionalHolding>()
@@ -92,7 +92,7 @@ public class InstitutionalHoldingRepositoryNewSoldOutCombinedTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

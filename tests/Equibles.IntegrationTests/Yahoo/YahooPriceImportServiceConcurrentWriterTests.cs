@@ -36,46 +36,59 @@ public class YahooPriceImportServiceConcurrentWriterTests : ParadeDbMcpTestBase
     [Fact]
     public async Task FlushPriceBatch_ConcurrentDateAlreadyCommitted_SkipsItAndCommitsRemainingRows()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Cik = "0000000991",
-            Ticker = "RACE",
-            Name = "Concurrent Writer Test",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Cik: "0000000991",
+            Ticker: "RACE",
+            Name: "Concurrent Writer Test"
+        );
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
+        var listingId =
+            await new EquityIssuerRepository(DbContext).GetEquityListingId(
+                stock.Id,
+                stock.Presentation.Listing.Ticker
+            ) ?? throw new InvalidOperationException("Missing fixture listing.");
         DbContext.ChangeTracker.Clear();
 
         var collisionDate = new DateOnly(2026, 8, 20);
         var remainingDate = collisionDate.AddDays(1);
-        var staleBatch = new List<DailyStockPrice>
+        var staleBatch = new List<EquityDailyStockPrice>
         {
-            Price(stock.Id, collisionDate, 99m),
-            Price(stock.Id, remainingDate, 101m),
+            Price(listingId, collisionDate, 99m),
+            Price(listingId, remainingDate, 101m),
         };
 
         await using var flushContext = Fixture.CreateDbContext();
         await using var concurrentWriter = Fixture.CreateDbContext();
         await using var writerTransaction = await concurrentWriter.Database.BeginTransactionAsync();
-        var writerStockRepo = new CommonStockRepository(concurrentWriter);
-        var writerPriceRepo = new DailyStockPriceRepository(concurrentWriter);
+        EquityIssuerRepository writerStockRepo = new EquityIssuerRepository(concurrentWriter);
+        EquityDailyStockPriceRepository writerPriceRepo = new EquityDailyStockPriceRepository(
+            concurrentWriter
+        );
         await writerStockRepo.GetForUpdate(stock.Id);
-        writerPriceRepo.Add(Price(stock.Id, collisionDate, 100m));
+        writerPriceRepo.Add(Price(listingId, collisionDate, 100m));
         await writerPriceRepo.SaveChanges();
         var writerPid = ((NpgsqlConnection)concurrentWriter.Database.GetDbConnection()).ProcessID;
 
         var service = BuildService(flushContext);
-        var flushTask = (Task)FlushPriceBatchMethod.Invoke(service, [staleBatch])!;
+        var flushTask = (Task)
+            FlushPriceBatchMethod.Invoke(
+                service,
+                [new PriceSeriesTarget("RACE", stock.Id, listingId, IsPrimary: true), staleBatch]
+            )!;
         await WaitUntilBlockedBy(writerPid);
         await writerTransaction.CommitAsync();
         await flushTask;
 
         await using var verify = Fixture.CreateDbContext();
         var stored = await verify
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AsNoTracking()
-            .Where(price => price.CommonStockId == stock.Id && price.ListedTicker == stock.Ticker)
+            .Where(price =>
+                price.Listing.Security.EquityIssuerId == stock.Id
+                && price.SourceTicker == stock.Presentation.Listing.Ticker
+            )
             .OrderBy(price => price.Date)
             .ToListAsync();
         stored.Select(price => price.Date).Should().Equal(collisionDate, remainingDate);
@@ -85,8 +98,8 @@ public class YahooPriceImportServiceConcurrentWriterTests : ParadeDbMcpTestBase
     private YahooPriceImportService BuildService(EquiblesFinancialDbContext context)
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(context)),
-            (typeof(DailyStockPriceRepository), new DailyStockPriceRepository(context))
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(context)),
+            (typeof(EquityDailyStockPriceRepository), new EquityDailyStockPriceRepository(context))
         );
         return new YahooPriceImportService(
             scopeFactory,
@@ -124,12 +137,12 @@ public class YahooPriceImportServiceConcurrentWriterTests : ParadeDbMcpTestBase
         throw new TimeoutException("Yahoo flush did not block on the concurrent writer's lock.");
     }
 
-    private static DailyStockPrice Price(Guid stockId, DateOnly date, decimal close) =>
+    private static EquityDailyStockPrice Price(Guid stockId, DateOnly date, decimal close) =>
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
-            ListedTicker = "RACE",
+            EquityListingId = stockId,
+            SourceTicker = "RACE",
             Date = date,
             Open = close - 1m,
             High = close + 1m,

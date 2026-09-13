@@ -88,7 +88,7 @@ public class OffExchangeVolumeImportService
         // (lowercase suffix = a different security), so a case-insensitive map merges two
         // securities' weekly volumes. The dataset-key bump above re-imports every week FINRA
         // still publishes; only weeks that have aged out of the rolling window stay corrupt.
-        var tickerMap = await _tickerMapService.BuildListed(
+        var tickerMap = await _tickerMapService.BuildNativeListed(
             _workerOptions.TickersToSync,
             cancellationToken,
             StringComparer.Ordinal
@@ -157,8 +157,8 @@ public class OffExchangeVolumeImportService
 
     private async Task ImportWeek(
         DateOnly weekStartDate,
-        IReadOnlyDictionary<string, ListedSecurityKey> tickerMap,
-        IReadOnlyDictionary<string, ListedSecurityKey> compressedIndex,
+        IReadOnlyDictionary<string, EquityListingReference> tickerMap,
+        IReadOnlyDictionary<string, EquityListingReference> compressedIndex,
         string scopeKey,
         DateTime importedAt,
         CancellationToken cancellationToken
@@ -263,22 +263,37 @@ public class OffExchangeVolumeImportService
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        var listingRepo = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
         var repo = scope.ServiceProvider.GetRequiredService<OffExchangeVolumeRepository>();
 
         var batch = volumes.ToList();
-        var validBatch = await stockRepo.FilterByExistingStocks(
-            batch,
-            volume => volume.CommonStockId,
-            cancellationToken
-        );
+        var listingIds = batch.Select(row => row.EquityListingId).Distinct().ToList();
+        var retainedIds = (
+            await listingRepo
+                .GetAll()
+                .Where(row => listingIds.Contains(row.Id))
+                .Select(row => row.Id)
+                .ToListAsync(cancellationToken)
+        ).ToHashSet();
+        var validBatch = batch.Where(row => retainedIds.Contains(row.EquityListingId)).ToList();
         LogDroppedRows(batch.Count - validBatch.Count, weekStartDate);
 
         var existing = await repo.GetByWeek(weekStartDate)
-            .ToDictionaryAsync(
-                volume => new ListedSecurityKey(volume.CommonStockId, volume.ListedTicker),
-                cancellationToken
-            );
+            .ToDictionaryAsync(volume => volume.EquityListingId, cancellationToken);
+        // A current symbol map cannot prove another historical source spelling was the same instrument.
+        // Validate the whole batch before changing tracked observations or marking the partition complete.
+        foreach (var volume in validBatch)
+            if (
+                existing.TryGetValue(volume.EquityListingId, out var stored)
+                && !string.Equals(
+                    stored.ListedTicker,
+                    volume.ListedTicker,
+                    StringComparison.Ordinal
+                )
+            )
+                throw new InvalidOperationException(
+                    $"FINRA source attribution disagrees for listing {volume.EquityListingId}; original observations were retained."
+                );
         foreach (var volume in validBatch)
             UpsertVolume(repo, existing, volume);
 
@@ -291,7 +306,7 @@ public class OffExchangeVolumeImportService
             return;
 
         _logger.LogWarning(
-            "Dropped {Dropped} off-exchange volume rows for week {Week} referencing CommonStockIds no longer in the database",
+            "Dropped {Dropped} off-exchange volume rows for week {Week} referencing listing IDs no longer in the database",
             dropped,
             weekStartDate
         );
@@ -299,11 +314,11 @@ public class OffExchangeVolumeImportService
 
     private static void UpsertVolume(
         OffExchangeVolumeRepository repository,
-        IReadOnlyDictionary<ListedSecurityKey, OffExchangeVolume> existing,
+        IReadOnlyDictionary<Guid, OffExchangeVolume> existing,
         OffExchangeVolume volume
     )
     {
-        var key = new ListedSecurityKey(volume.CommonStockId, volume.ListedTicker);
+        var key = volume.EquityListingId;
         if (!existing.TryGetValue(key, out var current))
         {
             repository.Add(volume);

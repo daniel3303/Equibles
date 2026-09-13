@@ -57,7 +57,10 @@ public class InsiderTradingFilingProcessorMalformedOwnershipXmlTests
             (typeof(FailedFilingIngestRepository), new FailedFilingIngestRepository(dbContext)),
             (typeof(IFileManager), Substitute.For<IFileManager>()),
             (typeof(ErrorManager), new ErrorManager(new ErrorRepository(dbContext))),
-            (typeof(DailyStockPriceRepository), new DailyStockPriceRepository(dbContext)),
+            (
+                typeof(EquityDailyStockPriceRepository),
+                new EquityDailyStockPriceRepository(dbContext)
+            ),
             (typeof(InsiderTransactionPriceValidator), new InsiderTransactionPriceValidator()),
             (typeof(StockSplitRepository), new StockSplitRepository(dbContext))
         );
@@ -82,12 +85,11 @@ public class InsiderTradingFilingProcessorMalformedOwnershipXmlTests
             ReportDate = new DateOnly(2024, 3, 15),
             Cik = "0000320193",
         };
-        var company = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
 
         var result = await processor.Process(filing, company);
 

@@ -24,7 +24,9 @@ public class StocksIndexViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            db.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+            db.Add(
+                Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+            );
             await Task.CompletedTask;
         });
 

@@ -22,13 +22,13 @@ namespace Equibles.Finra.Mcp.Tools;
 public class OffExchangeVolumeTools
 {
     private readonly OffExchangeVolumeRepository _offExchangeVolumeRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public OffExchangeVolumeTools(
         OffExchangeVolumeRepository offExchangeVolumeRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<OffExchangeVolumeTools> logger
@@ -96,7 +96,20 @@ public class OffExchangeVolumeTools
                 var splits = await _stockSplitRepository
                     .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                     .ToListAsync();
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, listedTicker);
+                var unresolvedBasis = records.Any(row =>
+                    PriceSeriesSplitScope.HasUnresolvedBasis(
+                        splits,
+                        listedTicker,
+                        row.WeekStartDate
+                    )
+                );
+                splits = unresolvedBasis
+                    ? []
+                    : PriceSeriesSplitScope.ForListing(
+                        splits,
+                        stock.Presentation.Listing.Ticker,
+                        listedTicker
+                    );
 
                 var table = MarkdownTable.Render(
                     records.OrderBy(r => r.WeekStartDate).ToList(),
@@ -114,6 +127,9 @@ public class OffExchangeVolumeTools
 
                 var notes = new[]
                 {
+                    unresolvedBasis
+                        ? "Volumes are as reported each week; unresolved split attribution prevents comparison on one share basis."
+                        : null,
                     HistoricalCoverageNote(records),
                     NewestKeptNote(records.Count, total, "weeks"),
                 };
@@ -124,7 +140,7 @@ public class OffExchangeVolumeTools
         );
     }
 
-    private static string ListingName(CommonStock stock, string listedTicker) =>
+    private static string ListingName(EquityIssuer stock, string listedTicker) =>
         !SecondaryTickerPolicy.RequiresExactListingScope(stock, listedTicker)
             ? $" ({stock.Name})"
             : string.Empty;
@@ -193,7 +209,7 @@ public class OffExchangeVolumeTools
     // renderers keep the table intact); a no-op when every note is empty.
     private static string AppendNotes(string table, IEnumerable<string> notes)
     {
-        var renderedNotes = notes.Where(note => note.Length > 0).ToList();
+        var renderedNotes = notes.Where(note => !string.IsNullOrEmpty(note)).ToList();
         return renderedNotes.Count == 0 ? table : $"{table}\n{string.Join("\n", renderedNotes)}\n";
     }
 

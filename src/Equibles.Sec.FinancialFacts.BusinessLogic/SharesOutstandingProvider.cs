@@ -96,7 +96,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // The shares on the most-recently-filed consolidated cover-page fact, or null when the issuer
     // has none on record (e.g. a multi-class filer that reports the count only per share class).
     public async Task<long?> GetReportedSharesOutstanding(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     ) =>
         (
@@ -113,7 +113,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // GetReportedSharesOutstanding instead). Sourced straight from the issuer's per-class cover-page
     // tags — no heuristic, no MarketCap / Price shortcut.
     public async Task<long?> GetSummedPerClassSharesOutstanding(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     ) =>
         (
@@ -146,7 +146,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // its place, so a repeated artifact cannot pin the stored count to garbage while every other
     // statement in the filing carries the real figure. Null when nothing is on record.
     public async Task<long?> GetCurrentSharesOutstanding(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     )
     {
@@ -167,7 +167,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // legacy null attribution): the entity total moves with the issuer's common stock, and a
     // split attributed only to a sibling listing must not rescale it.
     private async Task<long> RestateToCurrentSplitBasis(
-        CommonStock stock,
+        EquityIssuer stock,
         SharesFact fact,
         CancellationToken cancellationToken
     )
@@ -176,7 +176,8 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         var splits = await _stockSplitRepository
             .GetEffectiveByStock(stock.Id, today)
             .Where(split =>
-                split.PriceSeriesTicker == null || split.PriceSeriesTicker == stock.Ticker
+                split.PriceSeriesTicker == null
+                || split.PriceSeriesTicker == stock.Presentation.Listing.Ticker
             )
             .ToListAsync(cancellationToken);
 
@@ -191,7 +192,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // Preserve cover-page priority independently of whether a count's date is usable.
     // Filing form remains identity evidence even when its numerical count has a bad date.
     public async Task<bool> IsForeignPrivateIssuer(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     )
     {
@@ -209,13 +210,13 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     }
 
     private async Task<DocumentType> GetLatestShareForm(
-        CommonStock stock,
+        EquityIssuer stock,
         IReadOnlyCollection<Guid> conceptIds,
         CancellationToken cancellationToken
     )
     {
         return await _financialFactRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .Where(f => conceptIds.Contains(f.FinancialConceptId) && f.Unit == SharesUnit)
             .Where(f =>
                 f.Dimensions.Count == 0
@@ -235,7 +236,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     private readonly Dictionary<Guid, SharesFact> _currentFactByStock = [];
 
     private async Task<SharesFact> ResolveCurrentSharesFact(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken
     )
     {
@@ -248,7 +249,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     }
 
     private async Task<SharesFact> ResolveCurrentSharesFactUncached(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken
     )
     {
@@ -327,7 +328,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // rather than abstain. AL clears both bars (history 112.0M vs balance sheet 112.4M, cover page
     // 562,000x away); RLBY clears neither.
     private async Task<CollapseOutcome> EvaluateCoverPageCollapse(
-        CommonStock stock,
+        EquityIssuer stock,
         SharesFact latest,
         IReadOnlyCollection<Guid> coverPageConceptIds,
         CancellationToken cancellationToken
@@ -337,7 +338,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         var historyWindowStart = latest.Filed.AddDays(-CollapseHistoryWindowDays);
 
         var priorCoverPageMax = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(f =>
                 coverPageConceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit
@@ -398,7 +399,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // blind to its real figure). Same-accession so a later filing can never masquerade as the
     // corroborating anchor. Null when the filing states no balance-sheet count at all.
     private async Task<decimal?> GetSameFilingBalanceSheetCount(
-        CommonStock stock,
+        EquityIssuer stock,
         string accessionNumber,
         CancellationToken cancellationToken
     )
@@ -411,7 +412,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
             return null;
 
         var consolidated = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(f =>
                 balanceSheetConceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit
@@ -432,7 +433,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // filers put the consolidated roll-up, treasury shares, and the ADS listing on the same
         // axis, and summing any of those with the real classes double-counts or mixes units.
         var perClassFacts = await _financialFactRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .Where(f =>
                 balanceSheetConceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit
@@ -467,7 +468,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // null when the issuer has no consolidated fact on record or the count is unrepresentable as
     // Int64.
     private async Task<SharesFact> GetLatestConsolidated(
-        CommonStock stock,
+        EquityIssuer stock,
         IReadOnlyCollection<Guid> conceptIds,
         CancellationToken cancellationToken
     )
@@ -479,7 +480,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // is a whole share count. FromValue round-trips Form back to the cached DocumentType
         // statics, so reference equality holds after materialization.
         var match = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(CurrentShareEvidenceDates.Eligible)
             .Where(f => conceptIds.Contains(f.FinancialConceptId) && f.Unit == SharesUnit)
             .OrderByDescending(f => f.FiledDate)
@@ -514,7 +515,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
     // filing, or null when the issuer reports no per-class count on a class-of-stock axis or the
     // sum is unrepresentable as Int64.
     private async Task<SharesFact> GetLatestPerClass(
-        CommonStock stock,
+        EquityIssuer stock,
         IReadOnlyCollection<Guid> conceptIds,
         CancellationToken cancellationToken
     )
@@ -526,7 +527,7 @@ public class SharesOutstandingProvider : ISharesOutstandingProvider
         // axis. A fact dimensioned otherwise (segment/geography), on several axes, or with none is
         // excluded so only genuine per-class counts are summed.
         var perClassFacts = await _financialFactRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.Unit == SharesUnit

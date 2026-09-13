@@ -27,13 +27,12 @@ public class InsiderActivityControllerDashboardTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             db.Add(
                 new InsiderOwner
@@ -48,7 +47,7 @@ public class InsiderActivityControllerDashboardTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InsiderOwnerId = ownerId,
                     TransactionDate = today.AddDays(-5),
                     FilingDate = today.AddDays(-3),
@@ -64,7 +63,7 @@ public class InsiderActivityControllerDashboardTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InsiderOwnerId = ownerId,
                     TransactionDate = today.AddDays(-10),
                     FilingDate = today.AddDays(-8),
@@ -107,31 +106,28 @@ public class InsiderActivityControllerDashboardTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = shareStockId,
-                    Ticker = "SHRE",
-                    Name = "Share Co",
-                    Cik = "0000000101",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: shareStockId,
+                    Ticker: "SHRE",
+                    Name: "Share Co",
+                    Cik: "0000000101"
+                )
             );
             db.Add(
-                new CommonStock
-                {
-                    Id = derivKindStockId,
-                    Ticker = "DRVK",
-                    Name = "Deriv Kind Co",
-                    Cik = "0000000102",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: derivKindStockId,
+                    Ticker: "DRVK",
+                    Name: "Deriv Kind Co",
+                    Cik: "0000000102"
+                )
             );
             db.Add(
-                new CommonStock
-                {
-                    Id = derivTitleStockId,
-                    Ticker = "DRVT",
-                    Name = "Deriv Title Co",
-                    Cik = "0000000103",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: derivTitleStockId,
+                    Ticker: "DRVT",
+                    Name: "Deriv Title Co",
+                    Cik: "0000000103"
+                )
             );
             db.Add(
                 new InsiderOwner
@@ -147,7 +143,7 @@ public class InsiderActivityControllerDashboardTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = shareStockId,
+                    EquityIssuerId = shareStockId,
                     InsiderOwnerId = ownerId,
                     TransactionDate = today.AddDays(-5),
                     FilingDate = today.AddDays(-3),
@@ -165,7 +161,7 @@ public class InsiderActivityControllerDashboardTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = derivKindStockId,
+                    EquityIssuerId = derivKindStockId,
                     InsiderOwnerId = ownerId,
                     TransactionDate = today.AddDays(-5),
                     FilingDate = today.AddDays(-3),
@@ -183,7 +179,7 @@ public class InsiderActivityControllerDashboardTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = derivTitleStockId,
+                    EquityIssuerId = derivTitleStockId,
                     InsiderOwnerId = ownerId,
                     TransactionDate = today.AddDays(-5),
                     FilingDate = today.AddDays(-3),
@@ -222,13 +218,12 @@ public class InsiderActivityControllerDashboardTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "DUPE",
-                    Name = "Dupe Co",
-                    Cik = "0000000201",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "DUPE",
+                    Name: "Dupe Co",
+                    Cik: "0000000201"
+                )
             );
             for (var i = 0; i < chainOwners.Length; i++)
             {
@@ -246,7 +241,7 @@ public class InsiderActivityControllerDashboardTests
                 db.Add(
                     new InsiderTransaction
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         InsiderOwnerId = ownerId,
                         TransactionDate = today.AddDays(-7),
                         FilingDate = today.AddDays(-5),

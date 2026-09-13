@@ -27,14 +27,14 @@ public class FinancialStatementTools
 {
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
     private readonly McpToolRunner _runner;
 
     public FinancialStatementTools(
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository,
         ErrorManager errorManager,
         ILogger<FinancialStatementTools> logger
@@ -158,7 +158,7 @@ public class FinancialStatementTools
 
                 var facts = balanceSheetDate is { } statedAt
                     ? await _financialFactRepository
-                        .GetConsolidatedByStock(stock)
+                        .GetConsolidatedByIssuerId(stock.Id)
                         .Where(f =>
                             conceptIds.Contains(f.FinancialConceptId)
                             && f.PeriodEnd == statedAt
@@ -166,7 +166,7 @@ public class FinancialStatementTools
                         )
                         .ToListAsync()
                     : await _financialFactRepository
-                        .GetConsolidatedByStock(stock)
+                        .GetConsolidatedByIssuerId(stock.Id)
                         .Where(f =>
                             f.FiscalYear == selectedYear
                             && conceptIds.Contains(f.FinancialConceptId)
@@ -197,7 +197,7 @@ public class FinancialStatementTools
 
                 if (facts.Count == 0)
                     return $"No {statementType.NameForHumans().ToLowerInvariant()} line items "
-                        + $"were reported by {stock.Ticker} for FY{selectedYear} "
+                        + $"were reported by {stock.Presentation.Listing.Ticker} for FY{selectedYear} "
                         + $"{selectedPeriod.NameForHumans()}.";
 
                 // A filing re-reports comparative spans under its own fiscal stamp, and a stale
@@ -234,7 +234,6 @@ public class FinancialStatementTools
                         .GetEffectiveByStock(stock.Id, DateOnly.FromDateTime(DateTime.UtcNow))
                         .ToListAsync()
                     : [];
-                splits = PriceSeriesSplitScope.ForListing(splits, stock.Ticker, stock.Ticker);
 
                 return RenderStatementTable(
                     stock,
@@ -254,7 +253,7 @@ public class FinancialStatementTools
     }
 
     private static string RenderStatementTable(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialStatementType statementType,
         int selectedYear,
         SecFiscalPeriod selectedPeriod,
@@ -265,7 +264,7 @@ public class FinancialStatementTools
     )
     {
         var result = MarkdownTable.Start(
-            $"{statementType.NameForHumans()} for {stock.Ticker} "
+            $"{statementType.NameForHumans()} for {stock.Presentation.Listing.Ticker} "
                 + $"({FactMarkdown.Cell(stock.Name)}) — "
                 + $"FY{selectedYear} {selectedPeriod.NameForHumans()}:",
             "| Line Item | Value | Unit | Basis | Period Start | Period End | Form | Filed |",
@@ -275,6 +274,7 @@ public class FinancialStatementTools
         var rendered = 0;
         var omitted = 0;
         var splitAdjusted = false;
+        var unresolvedBasis = false;
         DateOnly? earliestFiled = null;
         DateOnly? latestFiled = null;
         foreach (var line in statementLines)
@@ -289,11 +289,18 @@ public class FinancialStatementTools
                 continue;
             }
 
-            var value = FinancialFactSplitAdjustment.Restate(fact, splits, out var adjusted);
+            var value = FinancialFactSplitAdjustment.Restate(
+                fact,
+                splits,
+                stock.Presentation.EquityListingId,
+                out var adjusted,
+                out var unresolved
+            );
+            unresolvedBasis |= unresolved;
             splitAdjusted |= adjusted;
             result.AppendLine(
                 $"| {FactMarkdown.Cell(line.Label)} | "
-                    + $"{FactMarkdown.Value(value, fact.Unit)} | "
+                    + $"{FactMarkdown.Value(value, fact.Unit)}{(unresolved ? " (as filed)" : "")} | "
                     + $"{FactMarkdown.Cell(fact.Unit)} | "
                     + $"{(StatementQuarterDerivation.IsDerived(fact) ? "Derived quarter" : "Reported")} | "
                     + $"{fact.PeriodStart:yyyy-MM-dd} | "
@@ -310,7 +317,7 @@ public class FinancialStatementTools
 
         if (rendered == 0)
             return $"No {statementType.NameForHumans().ToLowerInvariant()} line items were "
-                + $"reported by {stock.Ticker} for FY{selectedYear} "
+                + $"reported by {stock.Presentation.Listing.Ticker} for FY{selectedYear} "
                 + $"{selectedPeriod.NameForHumans()}.";
 
         if (omitted > 0)
@@ -320,6 +327,8 @@ public class FinancialStatementTools
 
         if (splitAdjusted)
             result.AppendLine($"\n_{FinancialFactSplitAdjustment.Note}_");
+        if (unresolvedBasis)
+            result.AppendLine($"\n_{FinancialFactSplitAdjustment.UnresolvedNote}_");
 
         if (
             selectedPeriod != SecFiscalPeriod.FullYear
@@ -367,7 +376,7 @@ public class FinancialStatementTools
         SecFiscalPeriod FiscalPeriod,
         string Error
     )> ResolveStatementPeriod(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialStatementType statementType,
         int? year,
         SecFiscalPeriod? requestedPeriod,
@@ -377,7 +386,7 @@ public class FinancialStatementTools
     {
         var statementName = statementType.NameForHumans().ToLowerInvariant();
         var availablePeriods = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(f =>
                 availabilityConceptIds.Contains(f.FinancialConceptId)
                 && (
@@ -396,7 +405,7 @@ public class FinancialStatementTools
             && (
                 statementConceptIds.SetEquals(availabilityConceptIds)
                 || await _financialFactRepository
-                    .GetConsolidatedByStock(stock)
+                    .GetConsolidatedByIssuerId(stock.Id)
                     .AnyAsync(f => statementConceptIds.Contains(f.FinancialConceptId))
             );
         if (!statementIngested)
@@ -404,14 +413,14 @@ public class FinancialStatementTools
             // Distinguish "nothing ingested at all" from "nothing for THIS
             // statement" so the caller isn't told a covered company is absent.
             var hasAnyFacts = await _financialFactRepository
-                .GetConsolidatedByStock(stock)
+                .GetConsolidatedByIssuerId(stock.Id)
                 .AnyAsync();
             return (
                 default,
                 default,
                 hasAnyFacts
-                    ? $"No {statementName} line items have been ingested for {stock.Ticker}."
-                    : $"No structured financial facts have been ingested for {stock.Ticker}."
+                    ? $"No {statementName} line items have been ingested for {stock.Presentation.Listing.Ticker}."
+                    : $"No structured financial facts have been ingested for {stock.Presentation.Listing.Ticker}."
             );
         }
 
@@ -435,7 +444,7 @@ public class FinancialStatementTools
                 $"{(year?.ToString() ?? "the latest year")} "
                 + $"{(requestedPeriod?.NameForHumans() ?? "period")}";
             var message =
-                $"{stock.Ticker} has no {statementName} data for {wanted}. Latest available: "
+                $"{stock.Presentation.Listing.Ticker} has no {statementName} data for {wanted}. Latest available: "
                 + $"FY{latest.FiscalYear} {latest.FiscalPeriod.NameForHumans()}.";
             // The Q4-under-FY trap: SEC Company Facts embeds the fourth
             // quarter's flow facts in the full-year duration, so a Q4

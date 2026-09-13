@@ -25,7 +25,10 @@ public class InstitutionalHoldingsToolsRenderBuyersSellersTableCultureInvariance
     [Fact]
     public void RenderBuyersSellersTable_UnderNonInvariantCulture_RendersCellsCultureInvariantly()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var buyers = new List<(
             string Name,
             long CurrentShares,

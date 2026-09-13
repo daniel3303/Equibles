@@ -29,7 +29,10 @@ public class DocumentTextToolsReadLinesNoContentTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ReadDocumentLines_DocumentContentBytesNull_ReturnsHasNoContentMessage()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = new File
         {
             Name = "10k",
@@ -41,7 +44,7 @@ public class DocumentTextToolsReadLinesNoContentTests : ParadeDbMcpTestBase
         };
         var document = new Document
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,

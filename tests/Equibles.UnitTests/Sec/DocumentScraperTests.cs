@@ -99,7 +99,7 @@ public class DocumentScraperTests
         // PDF-fallback branch is skipped.
         var harness = new Harness();
         await using var dbContext = harness.CreateDbContext();
-        var company = SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
+        EquityIssuer company = SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
 
         harness
             .SecEdgarClient.GetCompanyFilings("0000123456", DocumentTypeFilter.TenK, null)
@@ -126,7 +126,7 @@ public class DocumentScraperTests
             .Returns("# ACME Annual Report\n\nNormalized markdown content.");
         harness
             .Persistence.Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -149,7 +149,7 @@ public class DocumentScraperTests
         await harness
             .Persistence.Received(1)
             .Save(
-                Arg.Is<CommonStock>(c => c.Id == company.Id),
+                Arg.Is<EquityIssuer>(c => c.Id == company.Id),
                 Arg.Is<byte[]>(b => Encoding.UTF8.GetString(b).Contains("ACME Annual Report")),
                 $"ACME_{DocumentType.TenK.DisplayName}_{FilingDateAlpha:yyyy-MM-dd}.txt",
                 DocumentType.TenK,
@@ -193,7 +193,7 @@ public class DocumentScraperTests
             ]);
         harness
             .Persistence.GetKnownFilingKeys(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<IReadOnlyCollection<string>>(),
                 Arg.Any<CancellationToken>()
@@ -248,11 +248,11 @@ public class DocumentScraperTests
         // bypassed entirely. A Process result of true increments DocumentsAdded.
         var harness = new Harness();
         await using var dbContext = harness.CreateDbContext();
-        var company = SeedCompany(dbContext, ticker: "TSLA", cik: "0001318605");
+        EquityIssuer company = SeedCompany(dbContext, ticker: "TSLA", cik: "0001318605");
 
         var processor = Substitute.For<IFilingProcessor>();
         processor.CanProcess(DocumentType.FormFour).Returns(true);
-        processor.Process(Arg.Any<FilingData>(), Arg.Any<CommonStock>()).Returns(true);
+        processor.Process(Arg.Any<FilingData>(), Arg.Any<EquityIssuer>()).Returns(true);
         harness.FilingProcessors = [processor];
 
         harness
@@ -283,7 +283,7 @@ public class DocumentScraperTests
             .Received(1)
             .Process(
                 Arg.Is<FilingData>(f => f.AccessionNumber == "0001318605-25-000007"),
-                Arg.Is<CommonStock>(c => c.Id == company.Id)
+                Arg.Is<EquityIssuer>(c => c.Id == company.Id)
             );
         await harness
             .Persistence.DidNotReceiveWithAnyArgs()
@@ -317,8 +317,8 @@ public class DocumentScraperTests
         // CompaniesProcessed counter 2.
         var harness = new Harness();
         await using var dbContext = harness.CreateDbContext();
-        var acme = SeedCompany(dbContext, ticker: "ACME", cik: "0000111111");
-        var beta = SeedCompany(dbContext, ticker: "BETA", cik: "0000222222");
+        EquityIssuer acme = SeedCompany(dbContext, ticker: "ACME", cik: "0000111111");
+        EquityIssuer beta = SeedCompany(dbContext, ticker: "BETA", cik: "0000222222");
 
         harness
             .SecEdgarClient.GetCompanyFilings("0000111111", DocumentTypeFilter.TenK, null)
@@ -341,7 +341,7 @@ public class DocumentScraperTests
             .Returns(call => $"# Document\n\nContent for {call.Arg<string>()}");
         harness
             .Persistence.Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -364,7 +364,7 @@ public class DocumentScraperTests
         await harness
             .Persistence.Received(4)
             .Save(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<byte[]>(),
                 Arg.Any<string>(),
                 Arg.Any<DocumentType>(),
@@ -380,7 +380,7 @@ public class DocumentScraperTests
         await harness
             .Persistence.Received(2)
             .Save(
-                Arg.Is<CommonStock>(c => c.Id == acme.Id),
+                Arg.Is<EquityIssuer>(c => c.Id == acme.Id),
                 Arg.Any<byte[]>(),
                 Arg.Any<string>(),
                 Arg.Any<DocumentType>(),
@@ -396,7 +396,7 @@ public class DocumentScraperTests
         await harness
             .Persistence.Received(2)
             .Save(
-                Arg.Is<CommonStock>(c => c.Id == beta.Id),
+                Arg.Is<EquityIssuer>(c => c.Id == beta.Id),
                 Arg.Any<byte[]>(),
                 Arg.Any<string>(),
                 Arg.Any<DocumentType>(),
@@ -469,7 +469,7 @@ public class DocumentScraperTests
             .Returns([BuildFiling("0000123456", "0000123456-25-000010", "10-K")]);
         harness
             .Persistence.Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -537,7 +537,7 @@ public class DocumentScraperTests
             .Returns([BuildFiling("0000123456", "0000123456-25-000011", "10-K")]);
         harness
             .Persistence.Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -570,14 +570,16 @@ public class DocumentScraperTests
         // it via CommonStockManager before the (empty) document-type loop.
         var harness = new Harness();
         await using var dbContext = harness.CreateDbContext();
-        var company = SeedCompany(dbContext, ticker: "AAPL", cik: "0000320193");
+        EquityIssuer company = SeedCompany(dbContext, ticker: "AAPL", cik: "0000320193");
         harness
             .SecEdgarClient.GetCompanyMetadata("0000320193")
             .Returns(new CompanyMetadata { FiscalYearEnd = "0928" });
 
         await harness.BuildScraper(dbContext).ScrapeDocuments();
 
-        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(c => c.Id == company.Id);
         persisted.FiscalYearEndMonth.Should().Be(9);
         persisted.FiscalYearEndDay.Should().Be(28);
     }
@@ -589,11 +591,13 @@ public class DocumentScraperTests
         // exist; the stock's fiscal-year columns must stay null.
         var harness = new Harness();
         await using var dbContext = harness.CreateDbContext();
-        var company = SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
+        EquityIssuer company = SeedCompany(dbContext, ticker: "ACME", cik: "0000123456");
 
         await harness.BuildScraper(dbContext).ScrapeDocuments();
 
-        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(c => c.Id == company.Id);
         persisted.FiscalYearEndMonth.Should().BeNull();
         persisted.FiscalYearEndDay.Should().BeNull();
     }
@@ -605,7 +609,7 @@ public class DocumentScraperTests
         // falls back to the most recent 10-K filing's period-end date.
         var harness = new Harness();
         await using var dbContext = harness.CreateDbContext();
-        var company = SeedCompany(dbContext, ticker: "BY", cik: "0001712762");
+        EquityIssuer company = SeedCompany(dbContext, ticker: "BY", cik: "0001712762");
 
         SeedDocument(dbContext, company, DocumentType.TenK, new DateOnly(2024, 12, 31));
         SeedDocument(dbContext, company, DocumentType.TenK, new DateOnly(2023, 12, 31));
@@ -613,7 +617,9 @@ public class DocumentScraperTests
 
         await harness.BuildScraper(dbContext).ScrapeDocuments();
 
-        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(c => c.Id == company.Id);
         persisted.FiscalYearEndMonth.Should().Be(12);
         persisted.FiscalYearEndDay.Should().Be(31);
     }
@@ -625,7 +631,7 @@ public class DocumentScraperTests
         // most recent 20-F report date from the cached SEC submissions JSON.
         var harness = new Harness();
         await using var dbContext = harness.CreateDbContext();
-        var company = SeedCompany(dbContext, ticker: "BABA", cik: "0001577552");
+        EquityIssuer company = SeedCompany(dbContext, ticker: "BABA", cik: "0001577552");
 
         harness
             .SecEdgarClient.GetMostRecentReportDate("0001577552", DocumentTypeFilter.TwentyF)
@@ -633,7 +639,9 @@ public class DocumentScraperTests
 
         await harness.BuildScraper(dbContext).ScrapeDocuments();
 
-        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(c => c.Id == company.Id);
         persisted.FiscalYearEndMonth.Should().Be(3);
         persisted.FiscalYearEndDay.Should().Be(31);
     }
@@ -645,7 +653,7 @@ public class DocumentScraperTests
         // tries 20-F first, then falls back to 40-F.
         var harness = new Harness();
         await using var dbContext = harness.CreateDbContext();
-        var company = SeedCompany(dbContext, ticker: "CNQ", cik: "0001193125");
+        EquityIssuer company = SeedCompany(dbContext, ticker: "CNQ", cik: "0001193125");
 
         harness
             .SecEdgarClient.GetMostRecentReportDate("0001193125", DocumentTypeFilter.TwentyF)
@@ -656,7 +664,9 @@ public class DocumentScraperTests
 
         await harness.BuildScraper(dbContext).ScrapeDocuments();
 
-        var persisted = await dbContext.Set<CommonStock>().SingleAsync(c => c.Id == company.Id);
+        EquityIssuer persisted = await dbContext
+            .Set<EquityIssuer>()
+            .SingleAsync(c => c.Id == company.Id);
         persisted.FiscalYearEndMonth.Should().Be(12);
         persisted.FiscalYearEndDay.Should().Be(31);
 
@@ -679,27 +689,26 @@ public class DocumentScraperTests
             DocumentUrl = $"https://sec.gov/{accession}.htm",
         };
 
-    private static CommonStock SeedCompany(
+    private static EquityIssuer SeedCompany(
         EquiblesFinancialDbContext dbContext,
         string ticker,
         string cik
     )
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = $"{ticker} Inc",
-            Cik = cik,
-        };
-        dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: $"{ticker} Inc",
+            Cik: cik
+        );
+        dbContext.Set<EquityIssuer>().Add(stock);
         dbContext.SaveChanges();
         return stock;
     }
 
     private static void SeedDocument(
         EquiblesFinancialDbContext dbContext,
-        CommonStock company,
+        EquityIssuer company,
         DocumentType documentType,
         DateOnly reportingForDate
     )
@@ -709,7 +718,7 @@ public class DocumentScraperTests
             .Add(
                 new Document
                 {
-                    CommonStockId = company.Id,
+                    EquityIssuerId = company.Id,
                     DocumentType = documentType,
                     ReportingDate = reportingForDate,
                     ReportingForDate = reportingForDate,
@@ -765,14 +774,14 @@ public class DocumentScraperTests
             // short-lived scopes inside one ScrapeDocuments run, and a scoped factory
             // registration would invalidate the context after the first scope.
             services.AddSingleton(dbContext);
-            services.AddScoped<CommonStockRepository>();
+            services.AddScoped<EquityIssuerRepository>();
             services.AddScoped<DocumentRepository>();
             // DocumentScraper now resolves CommonStockManager per scope to
             // persist the SEC-sourced fiscal year-end. IBus is an
             // unrelated CommonStockManager ctor dep (SetCusip outbox event);
             // substituted because fiscal-year detection never publishes.
             services.AddSingleton(Substitute.For<IBus>());
-            services.AddScoped<CommonStockManager>();
+            services.AddScoped<EquityIdentityManager>();
             services.AddSingleton(SecEdgarClient);
             services.AddSingleton(Normalizer);
             services.AddSingleton(Converter);

@@ -134,13 +134,14 @@ public class SecDocumentSearchProvider : ISearchProvider
     private static SearchHit ProjectDocument(Document document) =>
         new()
         {
-            Title = $"{document.DocumentType.DisplayName} · {document.CommonStock.Ticker}",
+            Title =
+                $"{document.DocumentType.DisplayName} · {document.Issuer.Presentation?.Listing?.Ticker}",
             Subtitle = document.ReportingDate.ToString("yyyy-MM-dd"),
             Kind = "Filing",
             Date = document.ReportingDate,
             RouteValues =
             {
-                ["ticker"] = document.CommonStock.Ticker,
+                ["ticker"] = document.Issuer.Presentation?.Listing?.Ticker,
                 ["id"] = document.Id.ToString(),
             },
         };

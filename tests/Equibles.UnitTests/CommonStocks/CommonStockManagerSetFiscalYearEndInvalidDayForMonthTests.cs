@@ -26,9 +26,9 @@ public class CommonStockManagerSetFiscalYearEndInvalidDayForMonthTests
                 .Options,
             new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
         );
-        var repository = Substitute.For<CommonStockRepository>(db);
-        var sut = new CommonStockManager(repository, Substitute.For<IBus>());
-        var stock = new CommonStock();
+        EquityIssuerRepository repository = Substitute.For<EquityIssuerRepository>(db);
+        EquityIdentityManager sut = new EquityIdentityManager(repository, Substitute.For<IBus>());
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create();
 
         var act = () => sut.SetFiscalYearEnd(stock, 2, 31);
 

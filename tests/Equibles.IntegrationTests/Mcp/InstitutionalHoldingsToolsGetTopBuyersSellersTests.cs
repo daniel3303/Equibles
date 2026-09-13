@@ -30,12 +30,11 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
     [Fact]
     public async Task GetTopInstitutionalBuyersSellers_TickerWithQoQMovement_RanksBuyersDescAndSellersAsc()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var increaser = new InstitutionalHolder { Cik = "1", Name = "Increaser Inc." };
         var reducer = new InstitutionalHolder { Cik = "2", Name = "Reducer LLC" };
         var soldOut = new InstitutionalHolder { Cik = "3", Name = "Sold-Out Capital" };
@@ -63,12 +62,11 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         // Sold-Out Capital still FILED a 13F for the latest quarter (another position) — a
         // previous holder only counts as a seller when its current-quarter filing proves the
         // exit; a fund that just stopped filing (CIK migration/deregistration) is excluded.
-        var otherStock = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer otherStock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         DbContext.Add(otherStock);
         DbContext.Add(MakeHolding(otherStock, soldOut, latest, shares: 10));
         // A prior 13F establishes that the newcomer's missing stock position was an absence.
@@ -80,7 +78,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -128,12 +126,11 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
     [Fact]
     public async Task GetTopInstitutionalBuyersSellers_NoPriorQuarter_ReportsUnavailableComparison()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         var a = new InstitutionalHolder { Cik = "10", Name = "Alpha Capital" };
         var b = new InstitutionalHolder { Cik = "11", Name = "Beta Capital" };
         DbContext.Add(stock);
@@ -149,7 +146,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -174,7 +171,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -192,12 +189,11 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
     [Fact]
     public async Task GetTopInstitutionalBuyersSellers_StockExistsButHasNoHoldings_ReportsNoData()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "TSLA",
-            Name = "Tesla Inc.",
-            Cik = "0001318605",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TSLA",
+            Name: "Tesla Inc.",
+            Cik: "0001318605"
+        );
         DbContext.Add(stock);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -206,7 +202,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -224,12 +220,11 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
     [Fact]
     public async Task GetTopInstitutionalBuyersSellers_OnlyUnchangedHolders_ReportsNoMovement()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         var holder = new InstitutionalHolder { Cik = "30", Name = "Steady State Capital" };
         DbContext.Add(stock);
         DbContext.Add(holder);
@@ -246,7 +241,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -267,12 +262,11 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
     [Fact]
     public async Task GetTopInstitutionalBuyersSellers_CurrentZeroShareRowStillProvesAReportedExit()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "META",
-            Name = "Meta Platforms Inc.",
-            Cik = "0001326801",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "META",
+            Name: "Meta Platforms Inc.",
+            Cik: "0001326801"
+        );
         var holder = new InstitutionalHolder { Cik = "31", Name = "Zero Row Capital" };
         DbContext.AddRange(stock, holder);
 
@@ -287,7 +281,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -306,12 +300,11 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
     [Fact]
     public async Task GetTopInstitutionalBuyersSellers_ExplicitReportDate_HonorsArgument()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GOOG",
-            Name = "Alphabet Inc.",
-            Cik = "0001652044",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GOOG",
+            Name: "Alphabet Inc.",
+            Cik: "0001652044"
+        );
         var holder = new InstitutionalHolder { Cik = "20", Name = "Targeted Capital" };
         DbContext.Add(stock);
         DbContext.Add(holder);
@@ -327,7 +320,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -348,12 +341,11 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
     [Fact]
     public async Task GetTopInstitutionalBuyersSellers_PrimaryRowsIgnoreSiblingListingSplits()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GOOGL",
-            Name = "Alphabet Inc.",
-            Cik = "0001652044",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GOOGL",
+            Name: "Alphabet Inc.",
+            Cik: "0001652044"
+        );
         var holder = new InstitutionalHolder { Cik = "21", Name = "Class A Capital" };
         var prior = new DateOnly(2024, 9, 30);
         var latest = new DateOnly(2024, 12, 31);
@@ -364,7 +356,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
             MakeHolding(stock, holder, latest, shares: 1_000),
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 EffectiveDate = new DateOnly(2024, 10, 1),
                 Numerator = 20,
                 Denominator = 1,
@@ -378,7 +370,7 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -394,14 +386,14 @@ public class InstitutionalHoldingsToolsGetTopInstitutionalBuyersSellersTests : P
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

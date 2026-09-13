@@ -20,13 +20,13 @@ namespace Equibles.Sec.Mcp.Tools;
 public class FailToDeliverTools
 {
     private readonly FailToDeliverRepository _ftdRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly IMemoryCache _memoryCache;
     private readonly McpToolRunner _runner;
 
     public FailToDeliverTools(
         FailToDeliverRepository ftdRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         IMemoryCache memoryCache,
         ErrorManager errorManager,
         ILogger<FailToDeliverTools> logger
@@ -108,7 +108,7 @@ public class FailToDeliverTools
                 var table = MarkdownTable.Render(
                     records.OrderBy(f => f.SettlementDate).ToList(),
                     $"No FTD data found for {listedTicker} in the specified date range.",
-                    $"Fails-to-deliver for {listedTicker} ({(listedTicker == stock.Ticker ? stock.Name : listedTicker)}):",
+                    $"Fails-to-deliver for {listedTicker} ({(listedTicker == stock.Presentation.Listing.Ticker ? stock.Name : listedTicker)}):",
                     footnote,
                     "| Settlement Date | Quantity | Prior Close | Value |",
                     "|----------------|---------|-------------|-------|",

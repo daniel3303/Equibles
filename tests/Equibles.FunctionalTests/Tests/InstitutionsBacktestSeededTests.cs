@@ -33,13 +33,12 @@ public class InstitutionsBacktestSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
 
             var filer = new InstitutionalHolder { Cik = filerCik, Name = "Berkshire Hathaway Inc" };
@@ -48,7 +47,7 @@ public class InstitutionsBacktestSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     InstitutionalHolderId = filer.Id,
                     ReportDate = reportDate,
                     FilingDate = reportDate.AddDays(45),

@@ -15,7 +15,7 @@ public interface ISharesOutstandingProvider
     /// has none on record (e.g. a multi-class filer that reports the count only per share class).
     /// </summary>
     Task<long?> GetReportedSharesOutstanding(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     );
 
@@ -24,7 +24,7 @@ public interface ISharesOutstandingProvider
     /// null when no per-class facts are on record.
     /// </summary>
     Task<long?> GetSummedPerClassSharesOutstanding(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     );
 
@@ -49,7 +49,7 @@ public interface ISharesOutstandingProvider
     /// count. The first post-split cover page makes the restatement a natural no-op.
     /// </summary>
     Task<long?> GetCurrentSharesOutstanding(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     );
 
@@ -63,7 +63,7 @@ public interface ISharesOutstandingProvider
     /// when no shares fact is on record.
     /// </summary>
     Task<bool> IsForeignPrivateIssuer(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     );
 }

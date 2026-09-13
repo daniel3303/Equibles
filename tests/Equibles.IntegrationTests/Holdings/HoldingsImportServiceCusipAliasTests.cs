@@ -28,7 +28,7 @@ namespace Equibles.IntegrationTests.Holdings;
 /// Class A conversion retired 11259V106 for 113006100, and until aliases
 /// existed, whichever CUSIP was NOT stored on the stock silently dropped at
 /// BuildCusipMapping. Pin both resolution rules: (1) a retired CUSIP maps via
-/// its <see cref="CommonStockCusipAlias"/> row, (2) a stock's CURRENT CUSIP
+/// its <see cref="EquityIssuerCusipAlias"/> row, (2) a stock's CURRENT CUSIP
 /// wins over another stock's alias claiming the same CUSIP.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
@@ -75,8 +75,8 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -135,19 +135,18 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
     {
         // BBUC post-change shape: the stock carries the NEW CUSIP; a laggard
         // filer (or any historical data set) still reports the OLD one.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BBUC",
-            Name = "Brookfield Business Corp",
-            Cik = "1654795",
-            Cusip = "113006100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BBUC",
+            Name: "Brookfield Business Corp",
+            Cik: "1654795",
+            Cusip: "113006100"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
-            seed.Set<CommonStockCusipAlias>()
-                .Add(new CommonStockCusipAlias { CommonStockId = stock.Id, Cusip = "11259V106" });
+            seed.Set<EquityIssuer>().Add(stock);
+            seed.Set<EquityIssuerCusipAlias>()
+                .Add(new EquityIssuerCusipAlias { EquityIssuerId = stock.Id, Cusip = "11259V106" });
             await seed.SaveChangesAsync();
         }
 
@@ -184,27 +183,41 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
 
         using var verify = FreshContext();
         var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
-        holding.CommonStockId.Should().Be(stock.Id);
+        holding.EquityIssuerId.Should().Be(stock.Id);
         holding.Cusip.Should().Be("11259V106");
         holding.Shares.Should().Be(921231);
     }
 
-    [Fact]
-    public async Task ImportDataSet_FilingReferencesInactiveStock_ResolvesRetainedIdentity()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task ImportDataSet_FilingReferencesInactiveStock_ResolvesRetainedIdentity(
+        int presentationState
+    )
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GONE",
-            Name = "Formerly Listed Corp",
-            Cik = "0000000042",
-            Cusip = "123456789",
-            Active = false,
-            DelistedOn = new DateOnly(2021, 6, 30),
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GONE",
+            Name: "Formerly Listed Corp",
+            Cik: "0000000042",
+            Cusip: "123456789",
+            Active: false,
+            DelistedOn: new DateOnly(2021, 6, 30)
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            if (presentationState == 1)
+                Equibles.CommonStocks.Data.Helpers.UsEquityDirectory.ReplaceDirectorySymbols(
+                    stock,
+                    "NEW",
+                    [],
+                    activate: true
+                );
+            if (presentationState == 2)
+                stock.Presentation = null;
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -227,6 +240,7 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         var prices = new Dictionary<(Guid, string, DateOnly), decimal>
         {
             [(stock.Id, null, reportDate)] = 20m,
+            [(stock.Id, "GONE", reportDate)] = 20m,
         };
 
         var result = await CreateImporter(PriceProviderReturning(prices))
@@ -235,8 +249,69 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         result.IsComplete.Should().BeTrue();
         using var verify = FreshContext();
         var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
-        holding.CommonStockId.Should().Be(stock.Id);
+        holding.EquityIssuerId.Should().Be(stock.Id);
         holding.Shares.Should().Be(2500);
+        holding.ListedTicker.Should().Be(presentationState is 1 or 2 ? "GONE" : null);
+        if (presentationState == 3)
+        {
+            var originalId = holding.Id;
+            var originalValue = holding.Value;
+            var originalRow = await verify
+                .Database.SqlQuery<string>(
+                    $"""
+                    SELECT to_jsonb(h)::text AS "Value" FROM "InstitutionalHolding" h WHERE "Id" = {originalId}
+                    """
+                )
+                .SingleAsync();
+            var originalLegs = await verify
+                .Database.SqlQuery<string>(
+                    $"""
+                    SELECT jsonb_agg(to_jsonb(m) ORDER BY m."Id")::text AS "Value"
+                    FROM "HoldingManagerEntry" m WHERE "InstitutionalHoldingId" = {originalId}
+                    """
+                )
+                .SingleAsync();
+            using (var update = FreshContext())
+            {
+                var issuer = await update.Set<EquityIssuer>().SingleAsync();
+                Equibles.CommonStocks.Data.Helpers.UsEquityDirectory.ReplaceDirectorySymbols(
+                    issuer,
+                    "NEW",
+                    [],
+                    activate: true
+                );
+                await update.SaveChangesAsync();
+            }
+            var replay = await CreateImporter(PriceProviderReturning(prices))
+                .ImportDataSet(archive, new DateOnly(2020, 10, 1), CancellationToken.None);
+            replay.IsComplete.Should().BeTrue();
+            using var reread = FreshContext();
+            var retained = await reread.Set<InstitutionalHolding>().SingleAsync();
+            retained.Id.Should().Be(originalId);
+            retained.Value.Should().Be(originalValue);
+            retained.Shares.Should().Be(2500);
+            retained.ListedTicker.Should().BeNull();
+            retained.Cusip.Should().Be("123456789");
+            (
+                await reread
+                    .Database.SqlQuery<string>(
+                        $"""
+                        SELECT to_jsonb(h)::text AS "Value" FROM "InstitutionalHolding" h WHERE "Id" = {originalId}
+                        """
+                    )
+                    .SingleAsync()
+            ).Should().Be(originalRow);
+            (
+                await reread
+                    .Database.SqlQuery<string>(
+                        $"""
+                        SELECT jsonb_agg(to_jsonb(m) ORDER BY m."Id")::text AS "Value"
+                        FROM "HoldingManagerEntry" m WHERE "InstitutionalHoldingId" = {originalId}
+                        """
+                    )
+                    .SingleAsync()
+            ).Should().Be(originalLegs);
+        }
     }
 
     [Fact]
@@ -245,27 +320,27 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
         // Precedence pin: if a CUSIP is simultaneously stock A's CURRENT value
         // and stock B's retired alias (a shape only bad data can produce), the
         // current assignment is authoritative.
-        var stockA = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAA",
-            Name = "Current Owner Corp",
-            Cik = "0000000001",
-            Cusip = "999999999",
-        };
-        var stockB = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BBB",
-            Name = "Stale Alias Corp",
-            Cik = "0000000002",
-            Cusip = "888888888",
-        };
+        EquityIssuer stockA = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAA",
+            Name: "Current Owner Corp",
+            Cik: "0000000001",
+            Cusip: "999999999"
+        );
+        EquityIssuer stockB = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BBB",
+            Name: "Stale Alias Corp",
+            Cik: "0000000002",
+            Cusip: "888888888"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().AddRange(stockA, stockB);
-            seed.Set<CommonStockCusipAlias>()
-                .Add(new CommonStockCusipAlias { CommonStockId = stockB.Id, Cusip = "999999999" });
+            seed.Set<EquityIssuer>().AddRange(stockA, stockB);
+            seed.Set<EquityIssuerCusipAlias>()
+                .Add(
+                    new EquityIssuerCusipAlias { EquityIssuerId = stockB.Id, Cusip = "999999999" }
+                );
             await seed.SaveChangesAsync();
         }
 
@@ -303,6 +378,6 @@ public class HoldingsImportServiceCusipAliasTests : IAsyncLifetime
 
         using var verify = FreshContext();
         var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
-        holding.CommonStockId.Should().Be(stockA.Id);
+        holding.EquityIssuerId.Should().Be(stockA.Id);
     }
 }

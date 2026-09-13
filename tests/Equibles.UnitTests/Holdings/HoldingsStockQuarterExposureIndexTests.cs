@@ -26,7 +26,7 @@ public class HoldingsStockQuarterExposureIndexTests
             .GetIndexes()
             .Single(i =>
                 i.Properties.Select(p => p.Name)
-                    .SequenceEqual(new[] { "CommonStockId", "ReportDate" })
+                    .SequenceEqual(new[] { "EquityIssuerId", "ReportDate" })
             );
         index.GetDatabaseName().Should().Be("IX_InstitutionalHolding_StockQuarterExposure");
         ((IReadOnlyList<string>)index.FindAnnotation("Npgsql:IndexInclude").Value)

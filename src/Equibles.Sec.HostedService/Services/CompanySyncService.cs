@@ -96,13 +96,13 @@ public class CompanySyncService : ICompanySyncService
                     continue;
                 }
 
-                if (state.SecondaryCikToParent.TryGetValue(canonicalCik, out var parent))
+                if (state.SecondaryCikToParent.TryGetValue(canonicalCik, out EquityIssuer parent))
                 {
                     _logger.LogDebug(
                         "Skipping subsidiary CIK {Cik} ({Name}) — already attached to parent {ParentTicker} (CIK: {ParentCik})",
                         secCompany.Cik,
                         secCompany.Name,
-                        parent.Ticker,
+                        parent.Presentation?.Listing?.Ticker,
                         parent.Cik
                     );
                     continue;
@@ -166,9 +166,10 @@ public class CompanySyncService : ICompanySyncService
         IServiceScope scope
     )
     {
-        var commonStockRepository =
-            scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-        var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+        EquityIssuerRepository commonStockRepository =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        EquityIdentityManager commonStockManager =
+            scope.ServiceProvider.GetRequiredService<EquityIdentityManager>();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         var secCiks = secCompanies
             .Select(company => CikNormalizer.Canonicalize(company.Cik))
@@ -179,7 +180,7 @@ public class CompanySyncService : ICompanySyncService
         // as SecondaryCiks on prior syncs. We can't filter by SEC CIKs alone because
         // the subsidiary's CIK won't match any incoming primary CIK — it lives only
         // inside another stock's SecondaryCiks list.
-        var allExistingStocks = await commonStockRepository.GetAllIncludingInactive().ToListAsync();
+        var allExistingStocks = await commonStockRepository.GetAll().ToListAsync();
         var existingStocks = allExistingStocks
             .Where(stock => secCiks.Contains(CikNormalizer.Canonicalize(stock.Cik)))
             .ToList();
@@ -194,20 +195,28 @@ public class CompanySyncService : ICompanySyncService
         // ExistingPrimaryTickers (a casing mismatch made the holder unfindable, wedging
         // the incoming company forever), and last-wins so a duplicate-ticker data
         // anomaly can't throw and abort every future sync cycle.
-        var primaryTickerToStock = new Dictionary<string, CommonStock>(
+        var primaryTickerToStock = new Dictionary<string, EquityIssuer>(
             StringComparer.OrdinalIgnoreCase
         );
-        foreach (var stock in allExistingStocks.Where(stock => stock.Active))
+        foreach (
+            EquityIssuer stock in allExistingStocks.Where(stock =>
+                stock.Presentation?.Listing is { MarketCountryCode: "US", Active: true }
+            )
+        )
         {
-            primaryTickerToStock[stock.Ticker] = stock;
+            primaryTickerToStock[stock.Presentation.Listing.Ticker] = stock;
         }
 
         var secondaryCikToParent = BuildSecondaryCikToParent(
-            allExistingStocks.Where(stock => stock.Active).ToList()
+            allExistingStocks
+                .Where(stock =>
+                    stock.Presentation?.Listing is { MarketCountryCode: "US", Active: true }
+                )
+                .ToList()
         );
 
         var existingPrimaryTickers = (
-            await commonStockRepository.GetAllTickers().ToListAsync()
+            await commonStockRepository.GetUsPrimaryTickers().ToListAsync()
         ).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return new StockSyncState
@@ -232,14 +241,20 @@ public class CompanySyncService : ICompanySyncService
     )
     {
         var canonicalCik = CikNormalizer.Canonicalize(secCompany.Cik);
-        var existingStock = state.ExistingStocks.First(stock =>
+        EquityIssuer existingStock = state.ExistingStocks.First(stock =>
             CikNormalizer.Canonicalize(stock.Cik) == canonicalCik
         );
         var normalizedName = NormalizeCompanyName(secCompany.Name);
         var combinedSecondaryTickers = MergeSecondaryTickers(
             primaryTicker,
             secondaryTickers,
-            existingStock.ReferenceTickers
+            existingStock
+                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                .Where(nativeListing =>
+                    nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
+                )
+                .Select(nativeListing => nativeListing.Ticker)
+                .ToList()
         );
         // Empty string counts as missing: the SEC metadata website field is blank for most
         // companies, and rows that captured that blank must stay eligible for a refill —
@@ -248,11 +263,31 @@ public class CompanySyncService : ICompanySyncService
             string.IsNullOrEmpty(existingStock.Website)
             && ShouldAttemptWebsiteFetch(secCompany.Cik);
         var needsUpdate =
-            !existingStock.Active
-            || existingStock.DelistedOn != null
-            || existingStock.Ticker != primaryTicker
+            existingStock.Presentation?.Listing?.Active != true
+            || existingStock.Presentation.Listing.DelistedOn != null
+            || existingStock.Presentation.Listing.Ticker != primaryTicker
             || existingStock.Name != normalizedName
-            || !(existingStock.SecondaryTickers ?? []).SequenceEqual(combinedSecondaryTickers)
+            || !(
+                existingStock
+                    .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                    .Where(nativeListing =>
+                        nativeListing.MarketCountryCode == "US"
+                        && (
+                            nativeListing.IsDirectoryListed
+                            && nativeListing.Id
+                                != (
+                                    existingStock.Presentation == null
+                                        ? Guid.Empty
+                                        : existingStock.Presentation.EquityListingId
+                                )
+                        )
+                    )
+                    .Select(nativeListing => nativeListing.Ticker)
+                    .ToList()
+                ?? []
+            )
+                .ToHashSet(StringComparer.Ordinal)
+                .SetEquals(combinedSecondaryTickers)
             || missingWebsite;
 
         if (!needsUpdate)
@@ -261,31 +296,90 @@ public class CompanySyncService : ICompanySyncService
         if (!await TryClearPrimaryTickerCollision(secCompany, existingStock, primaryTicker, state))
             return;
 
-        // Save old values for rollback
-        var oldTicker = existingStock.Ticker;
-        var oldActive = existingStock.Active;
-        var oldDelistedOn = existingStock.DelistedOn;
+        await using var identityTransaction =
+            await state.CommonStockRepository.BeginDirectoryIdentityWrite();
+        existingStock = await state.CommonStockRepository.GetForUpdate(existingStock.Id);
+        if (existingStock == null)
+            return;
+        combinedSecondaryTickers = MergeSecondaryTickers(
+            primaryTicker,
+            secondaryTickers,
+            existingStock
+                .Securities.SelectMany(security => security.Listings)
+                .Where(listing => listing.MarketCountryCode == "US" && listing.IsReferenceListed)
+                .Select(listing => listing.Ticker)
+                .ToList()
+        );
+        var directorySnapshot = new EquityDirectorySnapshot(state.DbContext, existingStock);
+        // Save old values for change detection.
+        var oldUsListing = existingStock.Presentation?.Listing
+            is { MarketCountryCode: "US" } usListing
+            ? usListing
+            : null;
+        var oldTicker = oldUsListing?.Ticker;
+        var oldActive = oldUsListing?.Active == true;
+        var oldDelistedOn = oldUsListing?.DelistedOn;
         var oldName = existingStock.Name;
-        var oldSecondaryTickers = existingStock.SecondaryTickers.ToList();
+        var oldSecondaryTickers = existingStock
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US"
+                && (
+                    nativeListing.IsDirectoryListed
+                    && nativeListing.Id
+                        != (
+                            existingStock.Presentation == null
+                                ? Guid.Empty
+                                : existingStock.Presentation.EquityListingId
+                        )
+                )
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .ToList();
         var oldWebsite = existingStock.Website;
 
         try
         {
-            if (missingWebsite)
+            if (missingWebsite && string.IsNullOrEmpty(existingStock.Website))
                 existingStock.Website = await FetchWebsite(secCompany.Cik);
 
-            existingStock.Ticker = primaryTicker;
-            existingStock.Active = true;
-            existingStock.DelistedOn = null;
+            UsEquityDirectory.SelectPrimary(existingStock, primaryTicker);
+            existingStock.Presentation.Listing.Active = true;
+            existingStock.Presentation.Listing.DelistedOn = null;
             existingStock.Name = normalizedName;
-            existingStock.SecondaryTickers = combinedSecondaryTickers;
+            UsEquityDirectory.ReplaceDirectorySymbols(
+                existingStock,
+                primaryTicker,
+                combinedSecondaryTickers,
+                activate: true
+            );
 
             if (
-                existingStock.Ticker == oldTicker
-                && existingStock.Active == oldActive
-                && existingStock.DelistedOn == oldDelistedOn
+                existingStock.Presentation.Listing.Ticker == oldTicker
+                && existingStock.Presentation.Listing.Active == oldActive
+                && existingStock.Presentation.Listing.DelistedOn == oldDelistedOn
                 && existingStock.Name == oldName
-                && oldSecondaryTickers.SequenceEqual(existingStock.SecondaryTickers)
+                && oldSecondaryTickers
+                    .ToHashSet(StringComparer.Ordinal)
+                    .SetEquals(
+                        existingStock
+                            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+                            .Where(nativeListing =>
+                                nativeListing.MarketCountryCode == "US"
+                                && (
+                                    nativeListing.IsDirectoryListed
+                                    && nativeListing.Id
+                                        != (
+                                            existingStock.Presentation == null
+                                                ? Guid.Empty
+                                                : existingStock.Presentation.EquityListingId
+                                        )
+                                )
+                            )
+                            .Select(nativeListing => nativeListing.Ticker)
+                            .ToList()
+                    )
                 && existingStock.Website == oldWebsite
             )
                 return;
@@ -293,16 +387,20 @@ public class CompanySyncService : ICompanySyncService
             // A ticker change orphans every URL published under the old symbol — record it
             // as a redirect alias BEFORE the manager's save so alias and rename commit in
             // the same unit of work. Staged only; the catch below unwinds it on rollback.
-            if (oldTicker != primaryTicker)
+            if (oldTicker != null && oldTicker != primaryTicker)
                 await state.CommonStockManager.RecordTickerAlias(existingStock, oldTicker);
 
             await state.CommonStockManager.Update(existingStock);
+            if (identityTransaction != null)
+                await identityTransaction.CommitAsync();
 
             if (oldTicker != primaryTicker)
             {
-                state.ExistingPrimaryTickers.Remove(oldTicker);
+                if (oldTicker != null)
+                    state.ExistingPrimaryTickers.Remove(oldTicker);
                 state.ExistingPrimaryTickers.Add(primaryTicker);
-                state.PrimaryTickerToStock.Remove(oldTicker);
+                if (oldTicker != null)
+                    state.PrimaryTickerToStock.Remove(oldTicker);
                 state.PrimaryTickerToStock[primaryTicker] = existingStock;
             }
 
@@ -316,14 +414,9 @@ public class CompanySyncService : ICompanySyncService
         }
         catch (Exception ex)
         {
-            // Revert entity to old values and detach changes to prevent dirty state
-            existingStock.Ticker = oldTicker;
-            existingStock.Active = oldActive;
-            existingStock.DelistedOn = oldDelistedOn;
-            existingStock.Name = oldName;
-            existingStock.SecondaryTickers = oldSecondaryTickers;
-            existingStock.Website = oldWebsite;
-            state.DbContext.Entry(existingStock).State = EntityState.Unchanged;
+            if (identityTransaction != null)
+                await identityTransaction.RollbackAsync();
+            directorySnapshot.Restore();
             // Unwind any alias changes RecordTickerAlias staged for this failed rename — a
             // pending insert (the new alias) or delete (the last-writer-wins reclaim of a
             // stale one) would otherwise ride along on the NEXT SaveChanges of this
@@ -332,7 +425,7 @@ public class CompanySyncService : ICompanySyncService
             // so only this rename's pending entries can be in these states.
             foreach (
                 var aliasEntry in state
-                    .DbContext.ChangeTracker.Entries<CommonStockTickerAlias>()
+                    .DbContext.ChangeTracker.Entries<EquityIssuerTickerAlias>()
                     .Where(e => e.State is EntityState.Added or EntityState.Deleted)
                     .ToList()
             )
@@ -362,7 +455,7 @@ public class CompanySyncService : ICompanySyncService
     // when the collision can't be resolved and the caller must skip the update.
     private async Task<bool> TryClearPrimaryTickerCollision(
         CompanyInfo secCompany,
-        CommonStock existingStock,
+        EquityIssuer existingStock,
         string primaryTicker,
         StockSyncState state
     )
@@ -370,7 +463,8 @@ public class CompanySyncService : ICompanySyncService
         // Only a collision against another company's primary ticker blocks us.
         // Secondary-ticker overlap is allowed by the domain.
         if (
-            existingStock.Ticker == primaryTicker
+            existingStock.Presentation?.Listing is { MarketCountryCode: "US" } currentUsListing
+                && currentUsListing.Ticker == primaryTicker
             || !state.ExistingPrimaryTickers.Contains(primaryTicker)
         )
             return true;
@@ -381,7 +475,7 @@ public class CompanySyncService : ICompanySyncService
         // would never find it and the obsolete-removal arm below would be
         // unreachable. PrimaryTickerToStock exists for exactly this (see its
         // construction comment) and is what ReplaceObsoleteStock uses.
-        state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var tickerHolder);
+        state.PrimaryTickerToStock.TryGetValue(primaryTicker, out EquityIssuer tickerHolder);
         if (
             tickerHolder != null
             && !state.SecCiks.Contains(CikNormalizer.Canonicalize(tickerHolder.Cik))
@@ -424,7 +518,7 @@ public class CompanySyncService : ICompanySyncService
         {
             _logger.LogWarning(
                 "Cannot update {OldTicker} to {NewTicker} (CIK: {Cik}) - ticker already in use by active company, skipping",
-                existingStock.Ticker,
+                existingStock.Presentation?.Listing?.Ticker,
                 primaryTicker,
                 secCompany.Cik
             );
@@ -444,7 +538,7 @@ public class CompanySyncService : ICompanySyncService
         // The ticker holder may not be in state.ExistingStocks (which is scoped to CIKs in
         // SEC's current feed). Look in the full in-memory map so we also see holders whose
         // own CIK dropped out of the feed.
-        state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var obsoleteStock);
+        state.PrimaryTickerToStock.TryGetValue(primaryTicker, out EquityIssuer obsoleteStock);
 
         if (
             obsoleteStock != null
@@ -486,7 +580,7 @@ public class CompanySyncService : ICompanySyncService
             await RetireAndUntrack(obsoleteStock, state);
 
             var website = await FetchWebsite(secCompany.Cik);
-            var newStock = await CreateCommonStock(
+            EquityIssuer newStock = await CreateCommonStock(
                 secCompany,
                 primaryTicker,
                 secondaryTickers,
@@ -523,7 +617,7 @@ public class CompanySyncService : ICompanySyncService
         StockSyncState state
     )
     {
-        CommonStock newStock = null;
+        EquityIssuer newStock = null;
         try
         {
             var website = await FetchWebsite(secCompany.Cik);
@@ -594,7 +688,7 @@ public class CompanySyncService : ICompanySyncService
     /// </summary>
     private async Task ResolveTickerCollision(
         CompanyInfo incoming,
-        CommonStock incumbent,
+        EquityIssuer incumbent,
         string ticker,
         StockSyncState state
     )
@@ -641,7 +735,7 @@ public class CompanySyncService : ICompanySyncService
     }
 
     private async Task AttachAsSubsidiary(
-        CommonStock incumbent,
+        EquityIssuer incumbent,
         CompanyInfo incoming,
         string ticker,
         StockSyncState state
@@ -669,7 +763,11 @@ public class CompanySyncService : ICompanySyncService
         // without it the financial-facts checkpoint is never reset, so the newly
         // attached CIK's older facts are skipped until the primary next files.
         await _bus.Publish(
-            new StockSecondaryCikAttached(incumbent.Id, incumbent.Ticker, incoming.Cik)
+            new StockSecondaryCikAttached(
+                incumbent.Id,
+                incumbent.Presentation.Listing.Ticker,
+                incoming.Cik
+            )
         );
 
         _logger.LogInformation(
@@ -681,7 +779,7 @@ public class CompanySyncService : ICompanySyncService
         );
     }
 
-    private async Task<bool> ShouldIncumbentWin(CompanyInfo incoming, CommonStock incumbent)
+    private async Task<bool> ShouldIncumbentWin(CompanyInfo incoming, EquityIssuer incumbent)
     {
         var incomingMeta = await _secEdgarClient.GetCompanyMetadata(incoming.Cik);
         var incumbentMeta = await _secEdgarClient.GetCompanyMetadata(incumbent.Cik);
@@ -791,12 +889,12 @@ public class CompanySyncService : ICompanySyncService
     // skipped — without this filter every sync would re-evaluate the collision
     // and re-log the warning. Built defensively to survive a data anomaly
     // (the same subsidiary CIK attached to two parents) rather than throwing.
-    private Dictionary<string, CommonStock> BuildSecondaryCikToParent(
-        List<CommonStock> allExistingStocks
+    private Dictionary<string, EquityIssuer> BuildSecondaryCikToParent(
+        List<EquityIssuer> allExistingStocks
     )
     {
-        var secondaryCikToParent = new Dictionary<string, CommonStock>();
-        foreach (var stock in allExistingStocks)
+        var secondaryCikToParent = new Dictionary<string, EquityIssuer>();
+        foreach (EquityIssuer stock in allExistingStocks)
         {
             foreach (var subCik in stock.SecondaryCiks)
             {
@@ -810,9 +908,9 @@ public class CompanySyncService : ICompanySyncService
                         "Subsidiary CIK {Cik} is attached to multiple parents ({ExistingParent} and {DuplicateParent}); "
                             + "keeping {ExistingParent}. Manual cleanup required.",
                         subCik,
-                        secondaryCikToParent[canonicalCik].Ticker,
-                        stock.Ticker,
-                        secondaryCikToParent[canonicalCik].Ticker
+                        secondaryCikToParent[canonicalCik].Presentation.Listing.Ticker,
+                        stock.Presentation.Listing.Ticker,
+                        secondaryCikToParent[canonicalCik].Presentation.Listing.Ticker
                     );
                 }
             }
@@ -854,26 +952,29 @@ public class CompanySyncService : ICompanySyncService
         }
     }
 
-    private static Task<CommonStock> CreateCommonStock(
+    private static Task<EquityIssuer> CreateCommonStock(
         CompanyInfo secCompany,
         string primaryTicker,
         List<string> secondaryTickers,
         StockSyncState state,
         string website = null
-    ) =>
-        state.CommonStockManager.Create(
-            new CommonStock
-            {
-                Ticker = primaryTicker,
-                Name = NormalizeCompanyName(secCompany.Name),
-                Cik = secCompany.Cik,
-                SecondaryTickers = secondaryTickers,
-                Description = $"Company with tickers: {string.Join(", ", secCompany.Tickers)}",
-                MarketCapitalization = 0,
-                SharesOutStanding = 0,
-                Website = website,
-            }
+    )
+    {
+        var issuer = new EquityIssuer
+        {
+            Name = NormalizeCompanyName(secCompany.Name),
+            Cik = secCompany.Cik,
+            Description = $"Company with tickers: {string.Join(", ", secCompany.Tickers)}",
+            Website = website,
+        };
+        UsEquityDirectory.ReplaceDirectorySymbols(
+            issuer,
+            primaryTicker,
+            secondaryTickers,
+            activate: true
         );
+        return state.CommonStockManager.Create(issuer);
+    }
 
     internal static List<string> MergeSecondaryTickers(
         string primaryTicker,
@@ -893,13 +994,18 @@ public class CompanySyncService : ICompanySyncService
             .ToList();
     }
 
-    private static bool HasReferenceCoverage(CommonStock stock) =>
-        (stock.ReferenceTickers ?? []).Any(ticker =>
-            TickerNormalizer.NormalizeListed(ticker) != null
-        );
+    private static bool HasReferenceCoverage(EquityIssuer stock) =>
+        stock
+            .Securities.SelectMany(security => security.Listings)
+            .Any(listing =>
+                listing.MarketCountryCode == "US"
+                && listing.IsReferenceListed
+                && listing.Active
+                && listing.Ticker == stock.Presentation.Listing.Ticker
+            );
 
     private static void AddAndTrack(
-        CommonStock newStock,
+        EquityIssuer newStock,
         string cik,
         string primaryTicker,
         StockSyncState state
@@ -913,7 +1019,7 @@ public class CompanySyncService : ICompanySyncService
         state.PrimaryTickerToStock[primaryTicker] = newStock;
     }
 
-    private static async Task RetireAndUntrack(CommonStock stock, StockSyncState state)
+    private static async Task RetireAndUntrack(EquityIssuer stock, StockSyncState state)
     {
         if (state.DbContext.Database.IsRelational())
         {
@@ -921,16 +1027,19 @@ public class CompanySyncService : ICompanySyncService
                 IsolationLevel.ReadCommitted
             );
 
-            // BuildSyncState tracks the pre-lock snapshot. Detach it so the locking query
-            // materializes the current database values instead of returning that stale instance
-            // through EF identity resolution.
-            state.DbContext.Entry(stock).State = EntityState.Detached;
-            var lockedStock = await state.CommonStockRepository.GetForUpdate(stock.Id);
+            // Retain the expected identity before the repository refreshes the locked graph.
+            var expectedCik = stock.Cik;
+            var expectedTicker = stock.Presentation.Listing.Ticker;
+            EquityIssuer lockedStock = await state.CommonStockRepository.GetForUpdate(stock.Id);
             if (lockedStock != null)
             {
                 if (
-                    !string.Equals(lockedStock.Cik, stock.Cik, StringComparison.Ordinal)
-                    || !string.Equals(lockedStock.Ticker, stock.Ticker, StringComparison.Ordinal)
+                    !string.Equals(lockedStock.Cik, expectedCik, StringComparison.Ordinal)
+                    || !string.Equals(
+                        lockedStock.Presentation.Listing.Ticker,
+                        expectedTicker,
+                        StringComparison.Ordinal
+                    )
                 )
                 {
                     throw new DbUpdateConcurrencyException(
@@ -938,11 +1047,15 @@ public class CompanySyncService : ICompanySyncService
                     );
                 }
 
+                if (HasReferenceCoverage(lockedStock))
+                    throw new DbUpdateConcurrencyException(
+                        "The incumbent listing gained reference coverage before retirement."
+                    );
+
                 // A recycled ticker ends the live designation, not the old issuer's identity.
                 // Retain the row and every exact price/holding FK; the authoritative inactive
                 // directory fills DelistedOn before any historical backfill is attempted.
-                lockedStock.Active = false;
-                InvalidateHistoricalPriceCompletion(lockedStock);
+                WithdrawObsoleteDirectoryClaims(lockedStock);
                 await state.CommonStockRepository.SaveChanges();
             }
 
@@ -950,31 +1063,52 @@ public class CompanySyncService : ICompanySyncService
         }
         else
         {
-            stock.Active = false;
-            InvalidateHistoricalPriceCompletion(stock);
+            WithdrawObsoleteDirectoryClaims(stock);
             await state.CommonStockRepository.SaveChanges();
         }
 
         var canonicalCik = CikNormalizer.Canonicalize(stock.Cik);
         if (canonicalCik != null)
             state.ExistingCiks.Remove(canonicalCik);
-        state.ExistingPrimaryTickers.Remove(stock.Ticker);
+        state.ExistingPrimaryTickers.Remove(stock.Presentation.Listing.Ticker);
         state.ExistingStocks.Remove(stock);
         if (
-            state.PrimaryTickerToStock.TryGetValue(stock.Ticker, out var mapped)
+            state.PrimaryTickerToStock.TryGetValue(
+                stock.Presentation.Listing.Ticker,
+                out EquityIssuer mapped
+            )
             && mapped.Id == stock.Id
         )
-            state.PrimaryTickerToStock.Remove(stock.Ticker);
+            state.PrimaryTickerToStock.Remove(stock.Presentation.Listing.Ticker);
     }
 
-    private static void InvalidateHistoricalPriceCompletion(CommonStock stock)
+    private static void WithdrawObsoleteDirectoryClaims(EquityIssuer issuer)
     {
-        stock.PriceHistoryBackfilledTickers = stock
-            .PriceHistoryBackfilledTickers.Where(ticker =>
-                !string.Equals(ticker, stock.Ticker, StringComparison.OrdinalIgnoreCase)
-            )
-            .ToList();
-        stock.HistoricalPriceBackfillAttemptedAt = null;
+        foreach (
+            var listing in issuer
+                .Securities.SelectMany(security => security.Listings)
+                .Where(listing =>
+                    listing.MarketCountryCode == "US"
+                    && (
+                        listing.IsDirectoryListed
+                        || listing.Id == issuer.Presentation.EquityListingId
+                    )
+                )
+        )
+        {
+            listing.IsDirectoryListed = false;
+            if (listing.IsReferenceListed)
+                continue;
+            listing.Active = false;
+            listing.PriceHistoryBackfilled = false;
+            listing.HistoricalPriceBackfillAttemptedAt = null;
+        }
+    }
+
+    private static void InvalidateHistoricalPriceCompletion(EquityIssuer stock)
+    {
+        stock.Presentation.Listing.PriceHistoryBackfilled = false;
+        stock.Presentation.Listing.HistoricalPriceBackfillAttemptedAt = null;
     }
 
     private Task ReportError(string operation, Exception ex, string context) =>
@@ -983,13 +1117,13 @@ public class CompanySyncService : ICompanySyncService
     private class StockSyncState
     {
         public HashSet<string> SecCiks { get; init; }
-        public List<CommonStock> ExistingStocks { get; init; }
+        public List<EquityIssuer> ExistingStocks { get; init; }
         public HashSet<string> ExistingCiks { get; init; }
         public HashSet<string> ExistingPrimaryTickers { get; init; }
-        public Dictionary<string, CommonStock> PrimaryTickerToStock { get; init; }
-        public Dictionary<string, CommonStock> SecondaryCikToParent { get; init; }
-        public CommonStockRepository CommonStockRepository { get; init; }
-        public CommonStockManager CommonStockManager { get; init; }
+        public Dictionary<string, EquityIssuer> PrimaryTickerToStock { get; init; }
+        public Dictionary<string, EquityIssuer> SecondaryCikToParent { get; init; }
+        public EquityIssuerRepository CommonStockRepository { get; init; }
+        public EquityIdentityManager CommonStockManager { get; init; }
         public DbContext DbContext { get; init; }
     }
 }

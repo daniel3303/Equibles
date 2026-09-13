@@ -10,23 +10,23 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
     public InsiderTransactionRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<InsiderTransaction> GetByStock(CommonStock stock)
+    public IQueryable<InsiderTransaction> GetByIssuerId(Guid stock)
     {
-        return GetAll().Where(t => t.CommonStockId == stock.Id);
+        return GetAll().Where(t => t.EquityIssuerId == stock);
     }
 
     // Same stock filter as GetByStock, with the InsiderOwner navigation eagerly loaded for
     // callers that read insider fields (name/role) while ordering or rendering rows.
-    public IQueryable<InsiderTransaction> GetByStockWithOwner(CommonStock stock)
+    public IQueryable<InsiderTransaction> GetByIssuerIdWithOwner(Guid stock)
     {
-        return GetByStock(stock).Include(t => t.InsiderOwner);
+        return GetByIssuerId(stock).Include(t => t.InsiderOwner);
     }
 
-    public IQueryable<InsiderTransaction> GetByStock(CommonStock stock, DateOnly from, DateOnly to)
+    public IQueryable<InsiderTransaction> GetByIssuerId(Guid stock, DateOnly from, DateOnly to)
     {
         return GetAll()
             .Where(t =>
-                t.CommonStockId == stock.Id && t.TransactionDate >= from && t.TransactionDate <= to
+                t.EquityIssuerId == stock && t.TransactionDate >= from && t.TransactionDate <= to
             );
     }
 
@@ -40,9 +40,9 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
         return GetAll().Where(t => ownerIds.Contains(t.InsiderOwnerId));
     }
 
-    public IQueryable<InsiderTransaction> GetHistoryByStock(CommonStock stock)
+    public IQueryable<InsiderTransaction> GetHistoryByIssuerId(Guid stock)
     {
-        return GetAll().Where(t => t.CommonStockId == stock.Id);
+        return GetAll().Where(t => t.EquityIssuerId == stock);
     }
 
     /// <summary>
@@ -62,7 +62,7 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
         return GetAll()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
-                && t.CommonStockId == commonStockId
+                && t.EquityIssuerId == commonStockId
                 && t.FilingForm == filingForm
                 && t.OriginalFilingDate == originalFilingDate
                 && t.TransactionCode != TransactionCode.IngestMarker
@@ -117,7 +117,7 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
         return GetAll()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
-                && t.CommonStockId == commonStockId
+                && t.EquityIssuerId == commonStockId
                 && t.FilingForm == filingForm
                 && t.IsAmendment
                 && t.TransactionCode != TransactionCode.IngestMarker
@@ -152,7 +152,7 @@ public class InsiderTransactionRepository : BaseRepository<InsiderTransaction>
         return GetAll()
             .Where(t =>
                 t.InsiderOwnerId == owner.Id
-                && t.CommonStockId == commonStockId
+                && t.EquityIssuerId == commonStockId
                 && t.FilingForm == filingForm
                 && !t.IsAmendment
                 && t.TransactionCode != TransactionCode.IngestMarker

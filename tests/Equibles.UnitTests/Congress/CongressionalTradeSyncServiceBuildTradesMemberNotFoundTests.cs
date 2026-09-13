@@ -35,13 +35,12 @@ public class CongressionalTradeSyncServiceBuildTradesMemberNotFoundTests
             Substitute.For<ICongressMemberIdentityService>()
         );
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
         var tx = new DisclosureTransaction
         {
             MemberName = "Ghost Member",

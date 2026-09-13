@@ -68,12 +68,11 @@ public class CompanySyncServiceShouldIncumbentWinIsListedPriorityTests
         );
 
         var incoming = new CompanyInfo { Cik = "0000001111", Name = "Incoming Co" };
-        var incumbent = new CommonStock
-        {
-            Cik = "0000009999",
-            Ticker = "SHARED",
-            Name = "Incumbent Co",
-        };
+        EquityIssuer incumbent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000009999",
+            Ticker: "SHARED",
+            Name: "Incumbent Co"
+        );
 
         var method = typeof(CompanySyncService).GetMethod(
             "ShouldIncumbentWin",

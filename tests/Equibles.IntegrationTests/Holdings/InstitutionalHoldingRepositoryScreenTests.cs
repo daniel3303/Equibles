@@ -46,7 +46,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
     public async Task Screen_NoFilters_ProjectsFilerCountsAndValuesForBothQuarters()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, ticker: "AAPL");
+        EquityIssuer stock = await SeedStock(seed, ticker: "AAPL");
         var h1 = await SeedHolder(seed, cik: "h1");
         var h2 = await SeedHolder(seed, cik: "h2");
         seed.Add(MakeHolding(stock, h1, Prior, shares: 1_000, value: 1_000_000));
@@ -77,7 +77,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
     public async Task Screen_NewAndSoldOutCountsReflectPerStockChurn()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, ticker: "NVDA");
+        EquityIssuer stock = await SeedStock(seed, ticker: "NVDA");
         var continuingHolder = await SeedHolder(seed, cik: "cont");
         var initiatingHolder = await SeedHolder(seed, cik: "init");
         var exitingHolder = await SeedHolder(seed, cik: "exit");
@@ -107,8 +107,8 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
     public async Task Screen_MinFilerCount_FiltersStocksBelowThreshold()
     {
         await using var seed = FreshContext();
-        var hot = await SeedStock(seed, ticker: "HOT");
-        var cold = await SeedStock(seed, ticker: "COLD");
+        EquityIssuer hot = await SeedStock(seed, ticker: "HOT");
+        EquityIssuer cold = await SeedStock(seed, ticker: "COLD");
         var h1 = await SeedHolder(seed, cik: "fa");
         var h2 = await SeedHolder(seed, cik: "fb");
         seed.Add(MakeHolding(hot, h1, Current, shares: 1, value: 1));
@@ -131,8 +131,8 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
     public async Task Screen_MinDeltaValue_FiltersStocksWithoutGrowth()
     {
         await using var seed = FreshContext();
-        var growing = await SeedStock(seed, ticker: "GROW");
-        var flat = await SeedStock(seed, ticker: "FLAT");
+        EquityIssuer growing = await SeedStock(seed, ticker: "GROW");
+        EquityIssuer flat = await SeedStock(seed, ticker: "FLAT");
         var h = await SeedHolder(seed, cik: "gh");
         seed.Add(MakeHolding(growing, h, Prior, shares: 100, value: 100_000));
         seed.Add(MakeHolding(growing, h, Current, shares: 100, value: 500_000));
@@ -159,8 +159,8 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
     public async Task Screen_MinNewPositions_FiltersStocksWithoutEnoughInitiators()
     {
         await using var seed = FreshContext();
-        var trending = await SeedStock(seed, ticker: "TREND");
-        var quiet = await SeedStock(seed, ticker: "QUIET");
+        EquityIssuer trending = await SeedStock(seed, ticker: "TREND");
+        EquityIssuer quiet = await SeedStock(seed, ticker: "QUIET");
         var h1 = await SeedHolder(seed, cik: "p1");
         var h2 = await SeedHolder(seed, cik: "p2");
         var h3 = await SeedHolder(seed, cik: "p3");
@@ -191,8 +191,8 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         var energy = new Industry { Name = "Energy" };
         seed.AddRange(tech, energy);
         await seed.SaveChangesAsync();
-        var techStock = await SeedStock(seed, ticker: "TECH", industryId: tech.Id);
-        var energyStock = await SeedStock(seed, ticker: "OIL", industryId: energy.Id);
+        EquityIssuer techStock = await SeedStock(seed, ticker: "TECH", industryId: tech.Id);
+        EquityIssuer energyStock = await SeedStock(seed, ticker: "OIL", industryId: energy.Id);
         var holder = await SeedHolder(seed, cik: "ind1");
         seed.Add(MakeHolding(techStock, holder, Current, shares: 1, value: 1));
         seed.Add(MakeHolding(energyStock, holder, Current, shares: 1, value: 1));
@@ -219,11 +219,11 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
     {
         await using var seed = FreshContext();
         // Heavily held — 80% of float
-        var dense = await SeedStock(seed, ticker: "DENSE", sharesOutStanding: 1_000);
+        EquityIssuer dense = await SeedStock(seed, ticker: "DENSE", sharesOutStanding: 1_000);
         // Lightly held — 5% of float
-        var sparse = await SeedStock(seed, ticker: "SPARSE", sharesOutStanding: 1_000);
+        EquityIssuer sparse = await SeedStock(seed, ticker: "SPARSE", sharesOutStanding: 1_000);
         // Unknown float — SharesOutStanding == 0
-        var unknown = await SeedStock(seed, ticker: "UNK", sharesOutStanding: 0);
+        EquityIssuer unknown = await SeedStock(seed, ticker: "UNK", sharesOutStanding: 0);
         var holder = await SeedHolder(seed, cik: "pf");
         seed.Add(MakeHolding(dense, holder, Current, shares: 800, value: 800));
         seed.Add(MakeHolding(sparse, holder, Current, shares: 50, value: 50));
@@ -252,9 +252,17 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         // affected stock whose restated ratio fails, and never leaks an unaffected
         // stock that the plain SQL predicate already rejects.
         await using var seed = FreshContext();
-        var kept = await SeedStock(seed, ticker: "BYND", sharesOutStanding: 2_000_000);
-        var dropped = await SeedStock(seed, ticker: "DROPME", sharesOutStanding: 10_000_000);
-        var unaffected = await SeedStock(seed, ticker: "CTRL", sharesOutStanding: 1_000_000);
+        EquityIssuer kept = await SeedStock(seed, ticker: "BYND", sharesOutStanding: 2_000_000);
+        EquityIssuer dropped = await SeedStock(
+            seed,
+            ticker: "DROPME",
+            sharesOutStanding: 10_000_000
+        );
+        EquityIssuer unaffected = await SeedStock(
+            seed,
+            ticker: "CTRL",
+            sharesOutStanding: 1_000_000
+        );
         var holder = await SeedHolder(seed, cik: "sr1");
         seed.Add(MakeHolding(kept, holder, Current, shares: 30_000_000, value: 12_000_000));
         seed.Add(MakeHolding(dropped, holder, Current, shares: 30_000_000, value: 9_000_000));
@@ -267,7 +275,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         [
             new StockSplit
             {
-                CommonStockId = kept.Id,
+                EquityIssuerId = kept.Id,
                 EffectiveDate = Current.AddDays(20),
                 Numerator = 1m,
                 Denominator = 30m,
@@ -275,7 +283,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
             },
             new StockSplit
             {
-                CommonStockId = dropped.Id,
+                EquityIssuerId = dropped.Id,
                 EffectiveDate = Current.AddDays(20),
                 Numerator = 1m,
                 Denominator = 30m,
@@ -306,7 +314,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         // per exact listing: 300,000/30 + 700 as-filed = 10,700 → 10.7% of the 100,000
         // float. An unscoped factor over the mixed sum would divide the sibling's 700 too.
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, ticker: "GOOGL", sharesOutStanding: 100_000);
+        EquityIssuer stock = await SeedStock(seed, ticker: "GOOGL", sharesOutStanding: 100_000);
         var holder = await SeedHolder(seed, cik: "sr2");
         seed.Add(MakeHolding(stock, holder, Current, shares: 300_000, value: 5_000_000));
         seed.Add(
@@ -320,7 +328,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         [
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 EffectiveDate = Current.AddDays(20),
                 Numerator = 1m,
                 Denominator = 30m,
@@ -341,21 +349,20 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
         row.PercentOfFloat.Should().BeApproximately(10.7, 0.01);
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker,
         Guid? industryId = null,
         long sharesOutStanding = 0
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Test Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-            IndustryId = industryId,
-            SharesOutStanding = sharesOutStanding,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Test Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
+            IndustryId: industryId,
+            SharesOutStanding: sharesOutStanding
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -373,7 +380,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -382,7 +389,7 @@ public class InstitutionalHoldingRepositoryScreenTests : IAsyncLifetime
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

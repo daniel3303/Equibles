@@ -6,6 +6,30 @@ namespace Equibles.UnitTests.Finra;
 public class FinraImportScopeTests
 {
     [Fact]
+    public void NativeIdentity_PreservesExistingPartitionFingerprints()
+    {
+        var issuerId = Guid.NewGuid();
+        var original = new Dictionary<string, ListedSecurityKey>
+        {
+            ["AAA"] = new(issuerId, "AAA"),
+            ["BBB"] = new(issuerId, "BBB"),
+        };
+        var native = original.ToDictionary(
+            row => row.Key,
+            row => new EquityListingReference(Guid.NewGuid(), issuerId, row.Value.ListedTicker)
+        );
+
+        FinraImportScope
+            .ResolveListingUniverse(native)
+            .Should()
+            .Be(FinraImportScope.ResolveListingUniverse(original));
+        FinraImportScope
+            .ResolveListingImportScope(native, ["AAA"])
+            .Should()
+            .Be(FinraImportScope.ResolveListingImportScope(original, ["AAA"]));
+    }
+
+    [Fact]
     public void Resolve_EmptyOrBlankTickerSet_UsesAllScope()
     {
         FinraImportScope.Resolve([]).Should().Be("all");

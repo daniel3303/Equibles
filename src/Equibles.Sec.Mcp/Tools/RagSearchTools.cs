@@ -51,7 +51,7 @@ public class RagSearchTools
 
     private readonly IRagManager _ragManager;
     private readonly ISecDocumentService _secDocumentService;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly DocumentRepository _documentRepository;
     private readonly IFileManager _fileManager;
     private readonly IDocumentExcerptLinkBuilder _excerptLinkBuilder;
@@ -62,7 +62,7 @@ public class RagSearchTools
     public RagSearchTools(
         IRagManager ragManager,
         ISecDocumentService secDocumentService,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         DocumentRepository documentRepository,
         IFileManager fileManager,
         ErrorManager errorManager,
@@ -130,14 +130,16 @@ public class RagSearchTools
                     if (normalizedTicker == null)
                         return McpToolExecutor.StockNotFound(ticker);
 
-                    var stock = await _commonStockRepository.GetByTicker(normalizedTicker);
+                    EquityIssuer stock = await _commonStockRepository.GetUsByTicker(
+                        normalizedTicker
+                    );
                     if (stock == null)
                         return McpToolExecutor.StockNotFound(ticker);
 
                     chunks = await SearchOrTimeoutFault(() =>
                         _ragManager.SearchRelevantChunksByCompany(
                             query,
-                            stock.Ticker,
+                            stock.Presentation.Listing.Ticker,
                             maxResults,
                             parsedTypes,
                             ToDateOnly(startDate),
@@ -287,14 +289,14 @@ public class RagSearchTools
                 if (!string.IsNullOrWhiteSpace(itemNumber) && normalizedItemNumber == null)
                     return $"Invalid itemNumber '{itemNumber}'. Use an SEC item number such as 2.02, 5.02, or 1.01.";
 
-                CommonStock stock = null;
+                EquityIssuer stock = null;
                 if (!string.IsNullOrWhiteSpace(ticker))
                 {
                     var normalizedTicker = McpToolExecutor.NormalizeTicker(ticker);
                     if (normalizedTicker == null)
                         return McpToolExecutor.StockNotFound(ticker);
 
-                    stock = await _commonStockRepository.GetByTicker(normalizedTicker);
+                    stock = await _commonStockRepository.GetUsByTicker(normalizedTicker);
                     if (stock == null)
                         return McpToolExecutor.StockNotFound(ticker);
                 }
@@ -309,14 +311,14 @@ public class RagSearchTools
                 try
                 {
                     totalCount = await _secDocumentService.CountDocuments(
-                        stock?.Ticker,
+                        stock?.Presentation?.Listing?.Ticker,
                         startDate,
                         endDate,
                         parsedType,
                         normalizedItemNumber
                     );
                     documents = await _secDocumentService.GetRecentDocuments(
-                        stock?.Ticker,
+                        stock?.Presentation?.Listing?.Ticker,
                         startDate,
                         endDate,
                         maxItems,
@@ -342,10 +344,15 @@ public class RagSearchTools
                     if (!hasFilters)
                         return stock == null
                             ? "No filings are stored."
-                            : $"No documents found for ticker {stock.Ticker}";
+                            : $"No documents found for ticker {stock.Presentation.Listing.Ticker}";
 
-                    var scope = stock == null ? "the market-wide corpus" : stock.Ticker;
-                    var unfiltered = await _secDocumentService.CountDocuments(stock?.Ticker);
+                    var scope =
+                        stock == null
+                            ? "the market-wide corpus"
+                            : stock.Presentation.Listing.Ticker;
+                    var unfiltered = await _secDocumentService.CountDocuments(
+                        stock?.Presentation?.Listing?.Ticker
+                    );
                     return $"No documents match the given filters for {scope} — {McpFormat.WholeNumber(unfiltered)} document(s) exist without them. Relax documentType/itemNumber/startDate/endDate.";
                 }
 
@@ -356,7 +363,7 @@ public class RagSearchTools
                 var result = MarkdownTable.Start(
                     stock == null
                         ? $"Market-wide filings — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):"
-                        : $"Financial documents for {MarkdownTable.EscapeCell(stock.Name)} ({MarkdownTable.EscapeCell(stock.Ticker)}) — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):",
+                        : $"Financial documents for {MarkdownTable.EscapeCell(stock.Name)} ({MarkdownTable.EscapeCell(stock.Presentation.Listing.Ticker)}) — page {page} of {McpFormat.WholeNumber(totalPages)} ({McpFormat.WholeNumber(totalCount)} documents):",
                     "Ticker | Company | ID | Type | Filed | Reporting For | Items | Lines",
                     "-------|---------|----|------|-------|---------------|-------|------"
                 );

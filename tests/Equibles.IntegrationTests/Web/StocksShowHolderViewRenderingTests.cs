@@ -25,7 +25,9 @@ public class StocksShowHolderViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            db.Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+            db.Add(
+                Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc.")
+            );
             db.Add(new InstitutionalHolder { Cik = "0001067983", Name = "BERKSHIRE HATHAWAY INC" });
             await Task.CompletedTask;
         });

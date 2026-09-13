@@ -92,7 +92,7 @@ public class StatementQuarterDerivationTests
         var firstQuarter = Fact("2026-01-01", "2026-03-31", 80m, SecFiscalPeriod.Q1, "q1");
         var firstHalf = Fact("2026-01-01", "2026-06-30", 156m, SecFiscalPeriod.Q2, "h1");
 
-        firstQuarter.CommonStockId = Guid.NewGuid();
+        firstQuarter.EquityIssuerId = Guid.NewGuid();
         firstHalf.DimensionsKey = "segment-a";
 
         StatementQuarterDerivation
@@ -160,7 +160,7 @@ public class StatementQuarterDerivationTests
     ) =>
         new()
         {
-            CommonStockId = _stockId,
+            EquityIssuerId = _stockId,
             FinancialConceptId = _conceptId,
             Unit = unit,
             PeriodType = FactPeriodType.Duration,

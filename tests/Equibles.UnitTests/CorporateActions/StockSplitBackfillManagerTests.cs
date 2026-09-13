@@ -50,11 +50,11 @@ public class StockSplitBackfillManagerTests
             yahooClient,
             new StockSplitCaptureManager(
                 new StockSplitRepository(db),
-                new CommonStockRepository(db)
+                new EquityIssuerRepository(db)
             )
         );
 
-    private static async Task SeedStock(EquiblesFinancialDbContext db, CommonStock stock)
+    private static async Task SeedStock(EquiblesFinancialDbContext db, EquityIssuer stock)
     {
         db.Add(stock);
         await db.SaveChangesAsync();
@@ -73,7 +73,10 @@ public class StockSplitBackfillManagerTests
     public async Task BackfillHistory_RequestsOneChartCoveringSinceThroughToday()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL"
+        );
         var since = new DateOnly(2020, 1, 1);
         var client = ClientReturning();
         await SeedStock(db, stock);
@@ -92,7 +95,10 @@ public class StockSplitBackfillManagerTests
     public async Task BackfillHistory_UpsertsReturnedSplitsAsYahooSourcedAndPendingReconciliation()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL"
+        );
         var client = ClientReturning(
             new StockSplitEvent
             {
@@ -124,7 +130,10 @@ public class StockSplitBackfillManagerTests
     public async Task BackfillHistory_Rerun_IsIdempotentAndWritesNothing()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL"
+        );
         var client = ClientReturning(
             new StockSplitEvent
             {
@@ -148,7 +157,10 @@ public class StockSplitBackfillManagerTests
     public async Task BackfillHistory_NoSplitsInWindow_WritesNothingAndReturnsZero()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL"
+        );
         await SeedStock(db, stock);
 
         var captured = await NewManager(db, ClientReturning())
@@ -162,7 +174,10 @@ public class StockSplitBackfillManagerTests
     public async Task BackfillHistory_AlreadyCancelled_ThrowsWithoutFetching()
     {
         await using var db = NewDb();
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL"
+        );
         var client = ClientReturning();
         await SeedStock(db, stock);
         using var cts = new CancellationTokenSource();

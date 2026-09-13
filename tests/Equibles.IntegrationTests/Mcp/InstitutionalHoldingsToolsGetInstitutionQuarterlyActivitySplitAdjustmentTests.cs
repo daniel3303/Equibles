@@ -33,18 +33,16 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
     [Fact]
     public async Task GetInstitutionQuarterlyActivity_FlatPositionAcrossSplit_IsNotClassifiedIncreased()
     {
-        var apple = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var microsoft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer microsoft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         var holder = new InstitutionalHolder { Cik = "1", Name = "Fund One Capital" };
         DbContext.AddRange(apple, microsoft, holder);
 
@@ -56,7 +54,9 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
         DbContext.Add(
             new StockSplit
             {
-                CommonStockId = apple.Id,
+                EquityIssuerId = apple.Id,
+                EquityListingId = apple.Presentation.EquityListingId,
+                PriceSeriesTicker = apple.Presentation.Listing.Ticker,
                 EffectiveDate = new DateOnly(2024, 11, 15),
                 Numerator = 2,
                 Denominator = 1,
@@ -76,7 +76,7 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -100,14 +100,14 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly reportDate,
         long shares,
         long value
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
@@ -116,6 +116,6 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivitySplitAdjus
             Value = value,
             ShareType = ShareType.Shares,
             InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = $"acc-{stock.Ticker}-{reportDate:yyyyMMdd}",
+            AccessionNumber = $"acc-{stock.Presentation.Listing.Ticker}-{reportDate:yyyyMMdd}",
         };
 }

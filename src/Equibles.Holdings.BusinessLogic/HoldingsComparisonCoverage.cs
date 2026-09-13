@@ -11,7 +11,7 @@ public static class HoldingsComparisonCoverage
 {
     public static async Task<Dictionary<DateOnly, HoldingsComparisonStatus>> History(
         InstitutionalHoldingRepository repository,
-        CommonStock stock,
+        EquityIssuer stock,
         IReadOnlyList<DateOnly> dates,
         string listedTicker = null,
         CancellationToken cancellationToken = default

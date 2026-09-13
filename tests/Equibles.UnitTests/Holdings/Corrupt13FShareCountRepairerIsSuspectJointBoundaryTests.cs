@@ -26,7 +26,7 @@ public class Corrupt13FShareCountRepairerIsSuspectJointBoundaryTests
         {
             Holding = new InstitutionalHolding
             {
-                CommonStockId = Guid.NewGuid(),
+                EquityIssuerId = Guid.NewGuid(),
                 InstitutionalHolderId = Guid.NewGuid(),
                 FilingDate = new DateOnly(2026, 4, 15),
                 ReportDate = new DateOnly(2026, 3, 31),

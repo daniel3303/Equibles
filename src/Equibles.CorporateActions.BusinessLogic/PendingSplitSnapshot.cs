@@ -10,5 +10,6 @@ public readonly record struct PendingSplitSnapshot(
     DateOnly EffectiveDate,
     decimal Numerator,
     decimal Denominator,
-    StockSplitSource Source
+    StockSplitSource Source,
+    Guid? EquityListingId = null
 );

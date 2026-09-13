@@ -12,7 +12,7 @@ namespace Equibles.IntegrationTests.Yahoo;
 public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly DailyStockPriceRepository _repository;
+    private readonly EquityDailyStockPriceRepository _repository;
 
     public DailyStockPriceRepositoryGetByStocksTests()
     {
@@ -20,7 +20,7 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
-        _repository = new DailyStockPriceRepository(_dbContext);
+        _repository = new EquityDailyStockPriceRepository(_dbContext);
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -37,14 +37,14 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
         var end = new DateOnly(2024, 6, 20);
 
         _dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AddRange(
-                new CommonStock { Id = inSet, Ticker = "IN" },
-                new CommonStock { Id = notInSet, Ticker = "OUT" }
+                Equibles.TestSupport.EquityIssuerSeed.Create(Id: inSet, Ticker: "IN"),
+                Equibles.TestSupport.EquityIssuerSeed.Create(Id: notInSet, Ticker: "OUT")
             );
 
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
                 Price(inSet, "IN", start.AddDays(-1)), // before window — excluded
                 Price(inSet, "IN", start), // lower boundary — included
@@ -59,7 +59,7 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
             .ToListAsync(CancellationToken.None);
 
         result.Should().HaveCount(2);
-        result.Should().OnlyContain(p => p.CommonStockId == inSet);
+        result.Should().OnlyContain(p => p.Listing.Security.EquityIssuerId == inSet);
         result.Select(p => p.Date).Should().BeEquivalentTo([start, end]);
     }
 
@@ -69,9 +69,11 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
         var stockId = Guid.NewGuid();
         var start = new DateOnly(2026, 8, 7);
         var end = new DateOnly(2026, 8, 11);
-        _dbContext.Set<CommonStock>().Add(new CommonStock { Id = stockId, Ticker = "THIN" });
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityIssuer>()
+            .Add(Equibles.TestSupport.EquityIssuerSeed.Create(Id: stockId, Ticker: "THIN"));
+        _dbContext
+            .Set<EquityDailyStockPrice>()
             .AddRange(
                 Price(stockId, "THIN", start, 10),
                 Price(stockId, "THIN", start.AddDays(1), 0),
@@ -86,7 +88,7 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
         result.Should().ContainSingle().Which.Date.Should().Be(start);
     }
 
-    private static DailyStockPrice Price(
+    private EquityDailyStockPrice Price(
         Guid stockId,
         string listedTicker,
         DateOnly date,
@@ -94,8 +96,12 @@ public class DailyStockPriceRepositoryGetByStocksTests : IDisposable
     ) =>
         new()
         {
-            CommonStockId = stockId,
-            ListedTicker = listedTicker,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                _dbContext,
+                stockId,
+                listedTicker
+            ),
+            SourceTicker = listedTicker,
             Date = date,
             Close = 100m,
             Volume = volume,

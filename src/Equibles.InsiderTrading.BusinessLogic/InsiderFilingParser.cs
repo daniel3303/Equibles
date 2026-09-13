@@ -225,7 +225,7 @@ public static class InsiderFilingParser
         new()
         {
             InsiderOwnerId = owner.Id,
-            CommonStockId = companyId,
+            EquityIssuerId = companyId,
             FilingDate = filing.FilingDate,
             TransactionDate = filing.ReportDate,
             TransactionCode = TransactionCode.Holding,
@@ -312,7 +312,7 @@ public static class InsiderFilingParser
         return new InsiderTransaction
         {
             InsiderOwnerId = owner.Id,
-            CommonStockId = companyId,
+            EquityIssuerId = companyId,
             FilingDate = filing.FilingDate,
             TransactionDate = transactionDate,
             TransactionCode = ParseTransactionCode(codeStr),
@@ -351,7 +351,7 @@ public static class InsiderFilingParser
         return new InsiderTransaction
         {
             InsiderOwnerId = owner.Id,
-            CommonStockId = companyId,
+            EquityIssuerId = companyId,
             FilingDate = filing.FilingDate,
             TransactionDate = filing.ReportDate,
             // A holding element reports a position, not a trade: tag it Holding so

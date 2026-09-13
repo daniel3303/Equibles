@@ -37,14 +37,13 @@ public class Form144FilerCikBackfillManagerTests : IDisposable
     [Fact]
     public async Task Run_PermanentFailureBatch_RetriesAcrossManagersAndReachesLaterNotice()
     {
-        var stock = new CommonStock
+        var stock = new EquityIssuer
         {
             Id = Guid.NewGuid(),
-            Ticker = "TEST",
             Name = "Test Issuer",
             Cik = "0000000001",
         };
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
 
         for (var index = 1; index <= 64; index++)
         {
@@ -108,14 +107,13 @@ public class Form144FilerCikBackfillManagerTests : IDisposable
     [Fact]
     public async Task Run_CancelledMidBatch_PersistsEarlierSuccessAndCurrentAttempt()
     {
-        var stock = new CommonStock
+        var stock = new EquityIssuer
         {
             Id = Guid.NewGuid(),
-            Ticker = "TEST",
             Name = "Test Issuer",
             Cik = "0000000001",
         };
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         var first = Filing(stock, "0000000001-26-000001", new DateOnly(2026, 8, 1));
         var second = Filing(stock, "0000000001-26-000002", new DateOnly(2026, 8, 2));
         second.FilerCikBackfillAttempts = 2;
@@ -206,14 +204,14 @@ public class Form144FilerCikBackfillManagerTests : IDisposable
     }
 
     private static Form144Filing Filing(
-        CommonStock stock,
+        EquityIssuer stock,
         string accessionNumber,
         DateOnly filingDate
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = stock,
             AccessionNumber = accessionNumber,
             FilingDate = filingDate,
             SellerName = "Test Seller",

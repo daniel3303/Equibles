@@ -40,12 +40,11 @@ public class CompanySyncServiceResolveCollisionTests : ParadeDbMcpTestBase
         // Seed the incumbent (parent) with primary ticker ATAI and a lower CIK
         // so the priority chain falls through to the CIK tiebreak (both listed +
         // operating in the metadata returned below).
-        var incumbent = new CommonStock
-        {
-            Cik = "0001719395",
-            Ticker = "ATAI",
-            Name = "ATAI Life Sciences N.V.",
-        };
+        EquityIssuer incumbent = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0001719395",
+            Ticker: "ATAI",
+            Name: "ATAI Life Sciences N.V."
+        );
         DbContext.Add(incumbent);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -101,10 +100,13 @@ public class CompanySyncServiceResolveCollisionTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -124,7 +126,7 @@ public class CompanySyncServiceResolveCollisionTests : ParadeDbMcpTestBase
         await sut.SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         // Only the incumbent must remain; the subsidiary CIK is attached as a
         // SecondaryCik so its filings still flow through.
         stocks.Should().ContainSingle();

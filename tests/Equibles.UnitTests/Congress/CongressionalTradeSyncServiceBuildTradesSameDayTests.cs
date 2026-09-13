@@ -38,19 +38,18 @@ public class CongressionalTradeSyncServiceBuildTradesSameDayTests
             Substitute.For<CongressionalTradeIssuerResolver>(null, null),
             Substitute.For<ICongressMemberIdentityService>()
         );
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "IBM",
-            Name = "International Business Machines",
-            Cik = "0000051143",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "IBM",
+            Name: "International Business Machines",
+            Cik: "0000051143"
+        );
         var member = new CongressMember { Id = Guid.NewGuid(), Name = "Pete Sessions" };
         var sameDay = new DateOnly(2021, 5, 3);
         var tx = new DisclosureTransaction
         {
             MemberName = member.Name,
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
             AssetName = "International Business Machines Corporation (IBM)",
             TransactionType = CongressTransactionType.Purchase,
             OwnerType = "SP",

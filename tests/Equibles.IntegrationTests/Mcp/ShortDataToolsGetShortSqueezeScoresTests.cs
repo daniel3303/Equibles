@@ -21,14 +21,14 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
         new(
             new DailyShortVolumeRepository(DbContext),
             new ShortInterestRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new ShortSqueezeScoreManager(
                 new ShortInterestRepository(DbContext),
                 new DailyShortVolumeRepository(DbContext),
-                new CommonStockRepository(DbContext),
+                new EquityIssuerRepository(DbContext),
                 new StockSplitRepository(DbContext),
                 new FailToDeliverRepository(DbContext),
-                new DailyStockPriceRepository(DbContext),
+                new EquityDailyStockPriceRepository(DbContext),
                 []
             ),
             new StockSplitRepository(DbContext),
@@ -47,34 +47,46 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
     public async Task GetShortSqueezeScores_RanksScoredStocksHighestFirst()
     {
         var settlement = new DateOnly(2026, 4, 15);
-        var hot = new CommonStock
-        {
-            Ticker = "HOT",
-            Name = "Hot Corp",
-            Cik = "0000000101",
-            SharesOutStanding = 1_000_000,
-        };
-        var cold = new CommonStock
-        {
-            Ticker = "COLD",
-            Name = "Cold Corp",
-            Cik = "0000000102",
-            SharesOutStanding = 1_000_000,
-        };
-        DbContext.Set<CommonStock>().AddRange(hot, cold);
+        EquityIssuer hot = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "HOT",
+            Name: "Hot Corp",
+            Cik: "0000000101",
+            SharesOutStanding: 1_000_000
+        );
+        EquityIssuer cold = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "COLD",
+            Name: "Cold Corp",
+            Cik: "0000000102",
+            SharesOutStanding: 1_000_000
+        );
+        DbContext.Set<EquityIssuer>().AddRange(hot, cold);
         DbContext
             .Set<ShortInterest>()
             .AddRange(
                 new ShortInterest
                 {
-                    CommonStockId = hot.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            hot,
+                            hot.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = hot.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 300_000,
                     DaysToCover = 8m,
                 },
                 new ShortInterest
                 {
-                    CommonStockId = cold.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            cold,
+                            cold.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = cold.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 50_000,
                     DaysToCover = 1m,
@@ -105,15 +117,14 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
     public async Task GetShortSqueezeScores_SecondaryTicker_IsRefusedBeforeEmptyUniverse()
     {
         DbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Ticker = "AAXJ",
-                    Name = "iShares Trust",
-                    Cik = "0000000199",
-                    SecondaryTickers = ["SOXX"],
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "AAXJ",
+                    Name: "iShares Trust",
+                    Cik: "0000000199",
+                    SecondaryTickers: ["SOXX"]
+                )
             );
         await DbContext.SaveChangesAsync();
 
@@ -134,36 +145,40 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
     public async Task GetShortSqueezeScores_MinMarketCap_DropsMicroCapsAndUnknowns()
     {
         var settlement = new DateOnly(2026, 4, 15);
-        var large = new CommonStock
-        {
-            Ticker = "BIG",
-            Name = "Big Corp",
-            Cik = "0000000201",
-            SharesOutStanding = 100_000_000,
-            MarketCapitalization = 5_000_000_000,
-        };
-        var micro = new CommonStock
-        {
-            Ticker = "TINY",
-            Name = "Tiny Bio",
-            Cik = "0000000202",
-            SharesOutStanding = 1_000_000,
-            MarketCapitalization = 50_000_000,
-        };
-        var unknown = new CommonStock
-        {
-            Ticker = "NOCAP",
-            Name = "No Cap Corp",
-            Cik = "0000000203",
-            SharesOutStanding = 1_000_000,
-        };
-        DbContext.Set<CommonStock>().AddRange(large, micro, unknown);
+        EquityIssuer large = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BIG",
+            Name: "Big Corp",
+            Cik: "0000000201",
+            SharesOutStanding: 100_000_000,
+            MarketCapitalization: 5_000_000_000
+        );
+        EquityIssuer micro = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TINY",
+            Name: "Tiny Bio",
+            Cik: "0000000202",
+            SharesOutStanding: 1_000_000,
+            MarketCapitalization: 50_000_000
+        );
+        EquityIssuer unknown = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NOCAP",
+            Name: "No Cap Corp",
+            Cik: "0000000203",
+            SharesOutStanding: 1_000_000
+        );
+        DbContext.Set<EquityIssuer>().AddRange(large, micro, unknown);
         DbContext
             .Set<ShortInterest>()
             .AddRange(
                 new ShortInterest
                 {
-                    CommonStockId = large.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            large,
+                            large.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = large.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 10_000_000,
                     AverageDailyVolume = 2_000_000,
@@ -171,14 +186,28 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
                 },
                 new ShortInterest
                 {
-                    CommonStockId = micro.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            micro,
+                            micro.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = micro.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 400_000,
                     DaysToCover = 20m,
                 },
                 new ShortInterest
                 {
-                    CommonStockId = unknown.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            unknown,
+                            unknown.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = unknown.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 300_000,
                     DaysToCover = 15m,
@@ -203,21 +232,27 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
     public async Task GetShortSqueezeScores_MinDollarVolume_NothingClears_ExplainsInsteadOfEmptyTable()
     {
         var settlement = new DateOnly(2026, 4, 15);
-        var stock = new CommonStock
-        {
-            Ticker = "THIN",
-            Name = "Thinly Traded Corp",
-            Cik = "0000000204",
-            SharesOutStanding = 1_000_000,
-            MarketCapitalization = 10_000_000,
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "THIN",
+            Name: "Thinly Traded Corp",
+            Cik: "0000000204",
+            SharesOutStanding: 1_000_000,
+            MarketCapitalization: 10_000_000
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<ShortInterest>()
             .Add(
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 100_000,
                     AverageDailyVolume = 10_000,
@@ -238,34 +273,46 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
     public async Task GetShortSqueezeScores_Ticker_RendersScoreCardWithUniverseRank()
     {
         var settlement = new DateOnly(2026, 4, 15);
-        var hot = new CommonStock
-        {
-            Ticker = "HOT",
-            Name = "Hot Corp",
-            Cik = "0000000301",
-            SharesOutStanding = 1_000_000,
-        };
-        var cold = new CommonStock
-        {
-            Ticker = "COLD",
-            Name = "Cold Corp",
-            Cik = "0000000302",
-            SharesOutStanding = 1_000_000,
-        };
-        DbContext.Set<CommonStock>().AddRange(hot, cold);
+        EquityIssuer hot = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "HOT",
+            Name: "Hot Corp",
+            Cik: "0000000301",
+            SharesOutStanding: 1_000_000
+        );
+        EquityIssuer cold = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "COLD",
+            Name: "Cold Corp",
+            Cik: "0000000302",
+            SharesOutStanding: 1_000_000
+        );
+        DbContext.Set<EquityIssuer>().AddRange(hot, cold);
         DbContext
             .Set<ShortInterest>()
             .AddRange(
                 new ShortInterest
                 {
-                    CommonStockId = hot.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            hot,
+                            hot.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = hot.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 300_000,
                     DaysToCover = 8m,
                 },
                 new ShortInterest
                 {
-                    CommonStockId = cold.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            cold,
+                            cold.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = cold.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 50_000,
                     DaysToCover = 1m,
@@ -286,27 +333,32 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
     public async Task GetShortSqueezeScores_TickerNotScored_ExplainsWhy()
     {
         var settlement = new DateOnly(2026, 4, 15);
-        var scored = new CommonStock
-        {
-            Ticker = "HOT",
-            Name = "Hot Corp",
-            Cik = "0000000303",
-            SharesOutStanding = 1_000_000,
-        };
-        var unscored = new CommonStock
-        {
-            Ticker = "QUIET",
-            Name = "Quiet Corp",
-            Cik = "0000000304",
-            SharesOutStanding = 1_000_000,
-        };
-        DbContext.Set<CommonStock>().AddRange(scored, unscored);
+        EquityIssuer scored = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "HOT",
+            Name: "Hot Corp",
+            Cik: "0000000303",
+            SharesOutStanding: 1_000_000
+        );
+        EquityIssuer unscored = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "QUIET",
+            Name: "Quiet Corp",
+            Cik: "0000000304",
+            SharesOutStanding: 1_000_000
+        );
+        DbContext.Set<EquityIssuer>().AddRange(scored, unscored);
         DbContext
             .Set<ShortInterest>()
             .Add(
                 new ShortInterest
                 {
-                    CommonStockId = scored.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            scored,
+                            scored.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = scored.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 300_000,
                     DaysToCover = 8m,
@@ -326,38 +378,50 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
     public async Task GetShortSqueezeScores_CommodityTrustUnits_ExcludedWhileMlpUnitsRank()
     {
         var settlement = new DateOnly(2026, 4, 15);
-        var mlp = new CommonStock
-        {
-            Ticker = "MLP",
-            Name = "Pipeline Partners LP",
-            Cik = "0000000305",
-            SharesOutStanding = 1_000_000,
-            ListedSecurityType = ListedSecurityType.Units,
-            Sic = "4922",
-        };
-        var trust = new CommonStock
-        {
-            Ticker = "FXZ",
-            Name = "CurrencyShares Test Trust",
-            Cik = "0000000306",
-            SharesOutStanding = 1_000_000,
-            ListedSecurityType = ListedSecurityType.Units,
-            Sic = "6221",
-        };
-        DbContext.Set<CommonStock>().AddRange(mlp, trust);
+        EquityIssuer mlp = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MLP",
+            Name: "Pipeline Partners LP",
+            Cik: "0000000305",
+            SharesOutStanding: 1_000_000,
+            ListedSecurityType: ListedSecurityType.Units,
+            Sic: "4922"
+        );
+        EquityIssuer trust = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "FXZ",
+            Name: "CurrencyShares Test Trust",
+            Cik: "0000000306",
+            SharesOutStanding: 1_000_000,
+            ListedSecurityType: ListedSecurityType.Units,
+            Sic: "6221"
+        );
+        DbContext.Set<EquityIssuer>().AddRange(mlp, trust);
         DbContext
             .Set<ShortInterest>()
             .AddRange(
                 new ShortInterest
                 {
-                    CommonStockId = mlp.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            mlp,
+                            mlp.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = mlp.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 200_000,
                     DaysToCover = 5m,
                 },
                 new ShortInterest
                 {
-                    CommonStockId = trust.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            trust,
+                            trust.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = trust.Presentation.Listing.Ticker,
                     SettlementDate = settlement,
                     CurrentShortPosition = 300_000,
                     DaysToCover = 9m,
@@ -388,20 +452,26 @@ public class ShortDataToolsGetShortSqueezeScoresTests : ParadeDbMcpTestBase
             }
         )
         {
-            var stock = new CommonStock
-            {
-                Ticker = ticker,
-                Name = $"{ticker} Corp",
-                Cik = cik,
-                SharesOutStanding = 1_000_000,
-            };
-            DbContext.Set<CommonStock>().Add(stock);
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: ticker,
+                Name: $"{ticker} Corp",
+                Cik: cik,
+                SharesOutStanding: 1_000_000
+            );
+            DbContext.Set<EquityIssuer>().Add(stock);
             DbContext
                 .Set<ShortInterest>()
                 .Add(
                     new ShortInterest
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(
+                                DbContext,
+                                stock,
+                                stock.Presentation.Listing.Ticker
+                            )
+                            .Id,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         SettlementDate = settlement,
                         CurrentShortPosition = 300_000,
                         DaysToCover = 8m,

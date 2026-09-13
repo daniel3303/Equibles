@@ -158,7 +158,10 @@ public class WebHostFixture : IAsyncLifetime
         await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString()))
         {
             await resetConnection.OpenAsync();
-            await _respawner.ResetAsync(resetConnection);
+            await Equibles.TestSupport.ImmutableEvidenceTestReset.Run(
+                resetConnection,
+                () => _respawner.ResetAsync(resetConnection)
+            );
         }
 
         // The web host runs in this same process against this same database, so its

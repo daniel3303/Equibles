@@ -221,7 +221,7 @@ public class HoldingsValueRecalculatorTests
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = Guid.NewGuid(),
-                    CommonStockId = commonStockId ?? Guid.NewGuid(),
+                    EquityIssuerId = commonStockId ?? Guid.NewGuid(),
                     FilingDate = new DateOnly(2024, 11, 14),
                     ReportDate = reportDate ?? new DateOnly(2024, 9, 30),
                     Value = value,

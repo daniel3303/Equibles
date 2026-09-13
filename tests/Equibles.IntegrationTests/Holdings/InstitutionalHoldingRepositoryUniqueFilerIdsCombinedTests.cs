@@ -87,7 +87,7 @@ public class InstitutionalHoldingRepositoryUniqueFilerIdsCombinedTests : IDispos
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

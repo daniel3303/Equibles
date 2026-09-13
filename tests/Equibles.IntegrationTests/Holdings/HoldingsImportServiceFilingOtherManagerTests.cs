@@ -65,8 +65,8 @@ public class HoldingsImportServiceFilingOtherManagerTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -133,16 +133,15 @@ public class HoldingsImportServiceFilingOtherManagerTests : IAsyncLifetime
     private async Task SeedTrackedStock()
     {
         using var seed = FreshContext();
-        seed.Set<CommonStock>()
+        seed.Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Id = Guid.NewGuid(),
-                    Ticker = "AAPL",
-                    Name = "Apple Inc",
-                    Cik = "0000320193",
-                    Cusip = "037833100",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "AAPL",
+                    Name: "Apple Inc",
+                    Cik: "0000320193",
+                    Cusip: "037833100"
+                )
             );
         await seed.SaveChangesAsync();
     }

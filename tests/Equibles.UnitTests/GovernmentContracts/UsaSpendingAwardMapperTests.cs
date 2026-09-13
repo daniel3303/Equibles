@@ -36,7 +36,7 @@ public class UsaSpendingAwardMapperTests
         var entity = UsaSpendingAwardMapper.Map(SampleRecord(), stockId);
 
         entity.Should().NotBeNull();
-        entity.CommonStockId.Should().Be(stockId);
+        entity.EquityIssuerId.Should().Be(stockId);
         entity.AwardUniqueKey.Should().Be("CONT_AWD_ABC123");
         entity.AwardId.Should().Be("FA8675309");
         entity.RecipientName.Should().Be("Lockheed Martin Corporation");

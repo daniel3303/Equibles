@@ -24,6 +24,7 @@ using Equibles.Media.Data;
 using Equibles.Media.Data.Models;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Equibles.Web.Services;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Data.Models;
@@ -54,14 +55,14 @@ public class DataCountServiceTests : IDisposable
         );
 
         _service = new DataCountService(
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new DocumentRepository(_dbContext),
             new InsiderTransactionRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
             new InstitutionalHoldingRepository(_dbContext),
             new FailToDeliverRepository(_dbContext),
             new FredObservationRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new CftcPositionReportRepository(_dbContext),
             new CboePutCallRatioRepository(_dbContext),
             new CboeVixDailyRepository(_dbContext)
@@ -75,20 +76,19 @@ public class DataCountServiceTests : IDisposable
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
-    private CommonStock CreateStock(
+    private EquityIssuer CreateStock(
         string ticker = "AAPL",
         string name = "Apple Inc.",
         string cik = null
     )
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = cik ?? Guid.NewGuid().ToString()[..10],
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: cik ?? Guid.NewGuid().ToString()[..10]
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
@@ -195,15 +195,14 @@ public class DataCountServiceTests : IDisposable
     [Fact]
     public async Task GetDocumentCount_WithDocuments_ReturnsCorrectCount()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
 
         _dbContext
             .Set<Document>()
             .AddRange(
                 new Document
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     DocumentType = DocumentType.TenK,
                     ReportingDate = new DateOnly(2025, 1, 15),
                     ReportingForDate = new DateOnly(2024, 12, 31),
@@ -212,8 +211,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new Document
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     DocumentType = DocumentType.TenQ,
                     ReportingDate = new DateOnly(2025, 4, 15),
                     ReportingForDate = new DateOnly(2025, 3, 31),
@@ -241,7 +239,7 @@ public class DataCountServiceTests : IDisposable
     [Fact]
     public async Task GetInsiderTransactionCount_WithTransactions_ReturnsCorrectCount()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateInsiderOwner();
 
         _dbContext
@@ -249,7 +247,7 @@ public class DataCountServiceTests : IDisposable
             .AddRange(
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 3, 1),
                     TransactionDate = new DateOnly(2025, 2, 28),
@@ -261,7 +259,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 3, 15),
                     TransactionDate = new DateOnly(2025, 3, 14),
@@ -273,7 +271,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 4, 1),
                     TransactionDate = new DateOnly(2025, 3, 31),
@@ -304,7 +302,7 @@ public class DataCountServiceTests : IDisposable
     [Fact]
     public async Task GetCongressionalTradeCount_WithTrades_ReturnsCorrectCount()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var member = CreateCongressMember();
 
         _dbContext
@@ -312,7 +310,7 @@ public class DataCountServiceTests : IDisposable
             .AddRange(
                 new CongressionalTrade
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     CongressMemberId = member.Id,
                     TransactionDate = new DateOnly(2025, 1, 10),
                     FilingDate = new DateOnly(2025, 2, 1),
@@ -324,7 +322,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new CongressionalTrade
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     CongressMemberId = member.Id,
                     TransactionDate = new DateOnly(2025, 3, 20),
                     FilingDate = new DateOnly(2025, 4, 5),
@@ -355,7 +353,7 @@ public class DataCountServiceTests : IDisposable
     [Fact]
     public async Task GetInstitutionalHoldingCount_WithHoldings_ReturnsCorrectCount()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var holder = CreateInstitutionalHolder();
 
         _dbContext
@@ -363,7 +361,7 @@ public class DataCountServiceTests : IDisposable
             .AddRange(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 2, 14),
                     ReportDate = new DateOnly(2024, 12, 31),
@@ -375,7 +373,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = new DateOnly(2025, 3, 31),
@@ -387,7 +385,7 @@ public class DataCountServiceTests : IDisposable
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 8, 14),
                     ReportDate = new DateOnly(2025, 6, 30),
@@ -418,21 +416,25 @@ public class DataCountServiceTests : IDisposable
     [Fact]
     public async Task GetFailToDeliverCount_WithRecords_ReturnsCorrectCount()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
 
         _dbContext
             .Set<FailToDeliver>()
             .AddRange(
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 2),
                     Quantity = 50_000,
                     Price = 150.25m,
                 },
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 3),
                     Quantity = 30_000,
                     Price = 151.50m,
@@ -502,14 +504,18 @@ public class DataCountServiceTests : IDisposable
     [Fact]
     public async Task GetDailyStockPriceCount_WithPrices_ReturnsCorrectCount()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
 
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2025, 3, 24),
                     Open = 170.00m,
                     High = 172.50m,
@@ -518,9 +524,13 @@ public class DataCountServiceTests : IDisposable
                     AdjustedClose = 171.25m,
                     Volume = 45_000_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2025, 3, 25),
                     Open = 171.25m,
                     High = 173.00m,

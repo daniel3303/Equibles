@@ -37,18 +37,17 @@ public class StocksControllerLoadStockTurkishCultureTests
             new SecTestModuleConfiguration()
         );
 
-        var ibm = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "IBM",
-            Name = "International Business Machines",
-            Cik = "0000051143",
-        };
-        ctx.Set<CommonStock>().Add(ibm);
+        EquityIssuer ibm = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "IBM",
+            Name: "International Business Machines",
+            Cik: "0000051143"
+        );
+        ctx.Set<EquityIssuer>().Add(ibm);
         await ctx.SaveChangesAsync();
 
         var sut = new StocksController(
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             institutionalHolderRepository: null!,
             institutionalHoldingRepository: null!,
             new DocumentRepository(ctx),
@@ -63,14 +62,14 @@ public class StocksControllerLoadStockTurkishCultureTests
         );
 
         var original = CultureInfo.CurrentCulture;
-        CommonStock resolved;
+        EquityIssuer resolved;
         try
         {
             // tr-TR maps lowercase 'i' → 'İ' (U+0130) under ToUpper(), but
             // leaves it as 'I' under ToUpperInvariant(). Row is stored as
             // primary ticker "IBM"; an "İBM" lookup misses entirely.
             CultureInfo.CurrentCulture = new CultureInfo("tr-TR");
-            var task = (Task<CommonStock>)loadStock!.Invoke(sut, ["ibm"]);
+            var task = (Task<EquityIssuer>)loadStock!.Invoke(sut, ["ibm"]);
             resolved = await task;
         }
         finally
@@ -83,6 +82,6 @@ public class StocksControllerLoadStockTurkishCultureTests
             .NotBeNull(
                 "LoadStock must normalize the ticker culture-invariantly so a host running under tr-TR (or any other non-invariant locale where ToUpper differs from ToUpperInvariant) still resolves the row stored as IBM; otherwise every /stocks/<ticker> URL containing a lowercase 'i' 404s in production"
             );
-        resolved.Ticker.Should().Be("IBM");
+        resolved.Presentation.Listing.Ticker.Should().Be("IBM");
     }
 }

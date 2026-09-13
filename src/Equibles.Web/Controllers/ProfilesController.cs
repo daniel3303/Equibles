@@ -80,8 +80,8 @@ public class ProfilesController : BaseController
             .TakeMostRecent(holding => holding.ReportDate, RecentRowLimit)
             .Select(holding => new HoldingRowViewModel
             {
-                Ticker = holding.CommonStock.Ticker,
-                Company = holding.CommonStock.Name,
+                Ticker = holding.Issuer.Presentation.Listing.Ticker,
+                Company = holding.Issuer.Name,
                 ReportDate = holding.ReportDate,
                 Shares = holding.Shares,
                 Value = holding.Value,
@@ -213,7 +213,7 @@ public class ProfilesController : BaseController
         // reads grouped scalar projections and no longer materializes current + prior holdings.
         var currentHoldingsWithIndustry = await _institutionalHoldingRepository
             .Get13FByHolder(holder, latest)
-            .Include(h => h.CommonStock)
+            .Include(h => h.Issuer)
                 .ThenInclude(s => s.Industry)
             .ToListAsync();
         var allocation = IndustryAllocationCalculator.Calculate(currentHoldingsWithIndustry);
@@ -354,7 +354,10 @@ public class ProfilesController : BaseController
             .TakeMostRecent(transaction => transaction.TransactionDate, RecentRowLimit)
             .Select(transaction => new InsiderTradeRowViewModel
             {
-                Ticker = transaction.CommonStock.Ticker,
+                Ticker =
+                    transaction.Issuer.Presentation == null
+                        ? null
+                        : transaction.Issuer.Presentation.Listing.Ticker,
                 TransactionDate = transaction.TransactionDate,
                 SecurityTitle = transaction.SecurityTitle,
                 Shares = transaction.Shares,
@@ -401,7 +404,8 @@ public class ProfilesController : BaseController
             {
                 Ticker =
                     trade.FiledTicker != "" ? trade.FiledTicker
-                    : trade.CommonStock != null ? trade.CommonStock.Ticker
+                    : trade.Issuer != null && trade.Issuer.Presentation != null
+                        ? trade.Issuer.Presentation.Listing.Ticker
                     : null,
                 TransactionDate = trade.TransactionDate,
                 AssetName = trade.AssetName,

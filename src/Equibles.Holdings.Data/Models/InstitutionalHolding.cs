@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Holdings.Data.Models;
 
-[Index(nameof(CommonStockId), nameof(ReportDate))]
+[Index(nameof(EquityIssuerId), nameof(ReportDate))]
 [Index(nameof(InstitutionalHolderId), nameof(ReportDate))]
 [Index(nameof(AccessionNumber))]
 // Unique index configured via Fluent API in EquiblesFinancialDbContext with NULLS NOT DISTINCT.
@@ -25,8 +25,8 @@ public class InstitutionalHolding
     public Guid InstitutionalHolderId { get; set; }
     public virtual InstitutionalHolder InstitutionalHolder { get; set; }
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     public DateOnly FilingDate { get; set; }
     public DateOnly ReportDate { get; set; }

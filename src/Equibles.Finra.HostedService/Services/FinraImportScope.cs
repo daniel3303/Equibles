@@ -6,6 +6,30 @@ namespace Equibles.Finra.HostedService.Services;
 
 public static class FinraImportScope
 {
+    public static string ResolveListingUniverse(
+        IReadOnlyDictionary<string, EquityListingReference> listings
+    ) =>
+        ResolveListingUniverse(
+            listings.ToDictionary(
+                row => row.Key,
+                row => new ListedSecurityKey(row.Value.EquityIssuerId, row.Value.ListedTicker),
+                StringComparer.Ordinal
+            )
+        );
+
+    public static string ResolveListingImportScope(
+        IReadOnlyDictionary<string, EquityListingReference> listings,
+        IReadOnlyCollection<string> configuredTickers
+    ) =>
+        ResolveListingImportScope(
+            listings.ToDictionary(
+                row => row.Key,
+                row => new ListedSecurityKey(row.Value.EquityIssuerId, row.Value.ListedTicker),
+                StringComparer.Ordinal
+            ),
+            configuredTickers
+        );
+
     public static string Resolve(IReadOnlyCollection<string> tickers)
     {
         if (tickers == null || tickers.Count == 0)

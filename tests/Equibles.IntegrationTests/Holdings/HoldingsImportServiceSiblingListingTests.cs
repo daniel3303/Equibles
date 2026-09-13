@@ -24,7 +24,7 @@ namespace Equibles.IntegrationTests.Holdings;
 /// Sibling share classes import as their own rows (#4247). Alphabet is the reference
 /// shape: GOOGL's CUSIP (02079K305) lives on the stock, Class C's (02079K107) matched
 /// nothing, and every GOOG 13F line — ~5,300 positions a quarter — was dropped at
-/// BuildCusipMapping. A <see cref="CommonStockListedCusip"/> row resolves the sibling
+/// BuildCusipMapping. A <see cref="EquityListingCusipEvidence"/> row resolves the sibling
 /// CUSIP to the same filer WITHOUT collapsing the two securities: the holding row is
 /// keyed by ListedTicker and valued from the class's own price series. Merging them
 /// instead would overwrite one class's position with the other's (the upsert key had
@@ -74,8 +74,8 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -149,24 +149,23 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         );
     }
 
-    private async Task<CommonStock> SeedAlphabet()
+    private async Task<EquityIssuer> SeedAlphabet()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GOOGL",
-            Name = "Alphabet Inc",
-            Cik = "1652044",
-            Cusip = "02079K305",
-            SecondaryTickers = ["GOOG"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GOOGL",
+            Name: "Alphabet Inc",
+            Cik: "1652044",
+            Cusip: "02079K305",
+            SecondaryTickers: ["GOOG"]
+        );
         using var seed = FreshContext();
-        seed.Set<CommonStock>().Add(stock);
-        seed.Set<CommonStockListedCusip>()
+        seed.Set<EquityIssuer>().Add(stock);
+        seed.Set<EquityListingCusipEvidence>()
             .Add(
-                new CommonStockListedCusip
+                new EquityListingCusipEvidence
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ListedTicker = "GOOG",
                     Cusip = "02079K107",
                 }
@@ -178,7 +177,7 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
     [Fact]
     public async Task ImportDataSet_BothClassesFiledSameQuarter_ImportsTwoRowsEachOnItsOwnPrice()
     {
-        var stock = await SeedAlphabet();
+        EquityIssuer stock = await SeedAlphabet();
         var reportDate = new DateOnly(2026, 3, 31);
 
         // Distinct closes so a cross-class pricing bug shows up in the derived values,
@@ -204,14 +203,14 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         holdings.Should().HaveCount(2, "the two classes are two securities, never one row");
 
         var primary = holdings.Single(h => h.ListedTicker == null);
-        primary.CommonStockId.Should().Be(stock.Id);
+        primary.EquityIssuerId.Should().Be(stock.Id);
         primary.Cusip.Should().Be("02079K305");
         primary.Shares.Should().Be(1000);
         primary.Value.Should().Be(170_000L);
         primary.ValuePending.Should().BeFalse();
 
         var classC = holdings.Single(h => h.ListedTicker == "GOOG");
-        classC.CommonStockId.Should().Be(stock.Id);
+        classC.EquityIssuerId.Should().Be(stock.Id);
         classC.Cusip.Should().Be("02079K107");
         classC.Shares.Should().Be(500);
         classC.Value.Should().Be(86_000L, "the Class C row prices at ITS class's close");
@@ -222,12 +221,12 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ImportDataSet_SecondaryWithUnattributedPostReportSplit_StaysHonestlyPending()
+    public async Task ImportDataSet_UnattributedPostReportSplit_KeepsBothListingsPending()
     {
         // An issuer split captured without per-series attribution proves nothing about the
         // sibling class's own basis. The secondary row must import its SHARES but refuse a
-        // value; the primary row values normally with the factor applied.
-        var stock = await SeedAlphabet();
+        // value; the primary row also remains pending without exact split attribution.
+        EquityIssuer stock = await SeedAlphabet();
         var reportDate = new DateOnly(2026, 3, 31);
 
         using (var seed = FreshContext())
@@ -236,7 +235,7 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
                 .Add(
                     new StockSplit
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         EffectiveDate = new DateOnly(2026, 4, 20),
                         Numerator = 20m,
                         Denominator = 1m,
@@ -276,8 +275,11 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         holdings.Should().HaveCount(2);
 
         var primary = holdings.Single(h => h.ListedTicker == null);
-        primary.ValuePending.Should().BeFalse();
-        primary.Value.Should().Be((long)(1000 * 20m * 8.50m));
+        primary
+            .ValuePending.Should()
+            .BeTrue("an issuer-only split does not establish the primary listing's share basis");
+        primary.Shares.Should().Be(1000);
+        primary.Value.Should().Be(0L);
 
         var classC = holdings.Single(h => h.ListedTicker == "GOOG");
         classC.Shares.Should().Be(500, "the position itself still imports and displays");
@@ -293,31 +295,29 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
         // Precedence pin, mirroring the alias rule: a CURRENT primary assignment outranks
         // another stock's listed-cusip claim on the same CUSIP (a shape only bad data can
         // produce). Primary > alias > listing.
-        var owner = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAA",
-            Name = "Current Owner Corp",
-            Cik = "0000000001",
-            Cusip = "999999999",
-        };
-        var claimant = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BBB",
-            Name = "Listing Claimant Corp",
-            Cik = "0000000002",
-            Cusip = "888888888",
-            SecondaryTickers = ["BBB-A"],
-        };
+        EquityIssuer owner = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAA",
+            Name: "Current Owner Corp",
+            Cik: "0000000001",
+            Cusip: "999999999"
+        );
+        EquityIssuer claimant = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BBB",
+            Name: "Listing Claimant Corp",
+            Cik: "0000000002",
+            Cusip: "888888888",
+            SecondaryTickers: ["BBB-A"]
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().AddRange(owner, claimant);
-            seed.Set<CommonStockListedCusip>()
+            seed.Set<EquityIssuer>().AddRange(owner, claimant);
+            seed.Set<EquityListingCusipEvidence>()
                 .Add(
-                    new CommonStockListedCusip
+                    new EquityListingCusipEvidence
                     {
-                        CommonStockId = claimant.Id,
+                        EquityIssuerId = claimant.Id,
                         ListedTicker = "BBB-A",
                         Cusip = "999999999",
                     }
@@ -359,7 +359,7 @@ public class HoldingsImportServiceSiblingListingTests : IAsyncLifetime
 
         using var verify = FreshContext();
         var holding = await verify.Set<InstitutionalHolding>().SingleAsync();
-        holding.CommonStockId.Should().Be(owner.Id);
+        holding.EquityIssuerId.Should().Be(owner.Id);
         holding.ListedTicker.Should().BeNull();
     }
 }

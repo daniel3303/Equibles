@@ -33,22 +33,21 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
     public DocumentPersistenceServiceReplaceContentTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private async Task<CommonStock> SeedCompany()
+    private async Task<EquityIssuer> SeedCompany()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         await using (var seed = Fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync();
         }
         DbContext.ChangeTracker.Clear();
-        return await DbContext.Set<CommonStock>().SingleAsync(s => s.Id == apple.Id);
+        return await DbContext.Set<EquityIssuer>().SingleAsync(s => s.Id == apple.Id);
     }
 
     private DocumentPersistenceService BuildSut()
@@ -83,7 +82,7 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ReplaceContent_SwapsBodyAndLineCount_AndDeletesStaleChunks()
     {
-        var apple = await SeedCompany();
+        EquityIssuer apple = await SeedCompany();
 
         // Persist an initial document, then add a chunk for it as the chunking worker would.
         await BuildSut()
@@ -105,7 +104,7 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
         {
             var document = await seed.Set<Document>()
                 .Include(d => d.Content)
-                .SingleAsync(d => d.CommonStockId == apple.Id);
+                .SingleAsync(d => d.EquityIssuerId == apple.Id);
             documentId = document.Id;
             oldContentId = document.ContentId;
             oldContentHash = document.Content.ContentHash;
@@ -121,7 +120,7 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
                         StartLineNumber = 1,
                         Content = "old line",
                         DocumentType = DocumentType.TenK,
-                        Ticker = apple.Ticker,
+                        Ticker = apple.Presentation.Listing.Ticker,
                         ReportingDate = new DateTime(2024, 3, 15, 0, 0, 0, DateTimeKind.Utc),
                     }
                 );
@@ -172,7 +171,7 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
     [Fact]
     public async Task ResetChunks_ClearsChunkedMarkerAndDeletesChunks()
     {
-        var apple = await SeedCompany();
+        EquityIssuer apple = await SeedCompany();
         await BuildSut()
             .Save(
                 company: apple,
@@ -186,7 +185,7 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
 
         var document = await DbContext
             .Set<Document>()
-            .SingleAsync(d => d.CommonStockId == apple.Id);
+            .SingleAsync(d => d.EquityIssuerId == apple.Id);
         DbContext
             .Set<Chunk>()
             .Add(
@@ -196,7 +195,7 @@ public class DocumentPersistenceServiceReplaceContentTests : ParadeDbMcpTestBase
                     Index = 0,
                     Content = "stored body",
                     DocumentType = document.DocumentType,
-                    Ticker = apple.Ticker,
+                    Ticker = apple.Presentation.Listing.Ticker,
                     ReportingDate = document.ReportingDate.ToDateTime(
                         TimeOnly.MinValue,
                         DateTimeKind.Utc

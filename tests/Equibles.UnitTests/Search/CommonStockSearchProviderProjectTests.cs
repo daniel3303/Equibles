@@ -20,7 +20,10 @@ public class CommonStockSearchProviderProjectTests
     public void Project_Stock_EmitsStockKindAndTickerRouteValueForHitUrl()
     {
         var provider = new CommonStockSearchProvider(null);
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
 
         var project = typeof(CommonStockSearchProvider).GetMethod(
             "Project",

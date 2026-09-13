@@ -24,6 +24,7 @@ using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Equibles.Web.Services;
 using Equibles.Web.ViewModels.Stocks;
 using Equibles.Yahoo.Data;
@@ -66,10 +67,10 @@ public class StockTabServiceTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
     }
 
@@ -80,20 +81,19 @@ public class StockTabServiceTests : IDisposable
 
     // ── Helpers ─────────────────────────────────────────────────────────
 
-    private CommonStock CreateStock(
+    private EquityIssuer CreateStock(
         string ticker = "AAPL",
         string name = "Apple Inc.",
         string cik = null
     )
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = cik ?? Guid.NewGuid().ToString()[..10],
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: cik ?? Guid.NewGuid().ToString()[..10]
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
@@ -154,13 +154,20 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadShortVolumeTab_WithVolumes_ReturnsDataOrderedByDateAscending()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext
             .Set<DailyShortVolume>()
             .AddRange(
                 new DailyShortVolume
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = new DateOnly(2025, 3, 10),
                     ShortVolume = 500_000,
                     ShortExemptVolume = 1_000,
@@ -169,7 +176,14 @@ public class StockTabServiceTests : IDisposable
                 },
                 new DailyShortVolume
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = new DateOnly(2025, 3, 11),
                     ShortVolume = 600_000,
                     ShortExemptVolume = 1_500,
@@ -178,7 +192,14 @@ public class StockTabServiceTests : IDisposable
                 },
                 new DailyShortVolume
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     Date = new DateOnly(2025, 3, 12),
                     ShortVolume = 550_000,
                     ShortExemptVolume = 1_200,
@@ -199,7 +220,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadShortVolumeTab_NoVolumes_ReturnsEmptyList()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.LoadShortVolumeTab(stock);
@@ -211,7 +232,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadShortVolumeTab_MoreThan90Records_ReturnsOnly90MostRecent()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         for (var i = 0; i < 100; i++)
         {
             _dbContext
@@ -219,7 +240,14 @@ public class StockTabServiceTests : IDisposable
                 .Add(
                     new DailyShortVolume
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(
+                                _dbContext,
+                                stock,
+                                stock.Presentation.Listing.Ticker
+                            )
+                            .Id,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         Date = new DateOnly(2025, 1, 1).AddDays(i),
                         ShortVolume = 100_000 + i,
                         ShortExemptVolume = 100,
@@ -241,14 +269,21 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadShortVolumeTab_DoesNotReturnOtherStocksData()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.", "0000789019");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.", "0000789019");
         _dbContext
             .Set<DailyShortVolume>()
             .AddRange(
                 new DailyShortVolume
                 {
-                    CommonStockId = apple.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            apple,
+                            apple.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = apple.Presentation.Listing.Ticker,
                     Date = new DateOnly(2025, 3, 10),
                     ShortVolume = 500_000,
                     TotalVolume = 1_200_000,
@@ -256,7 +291,14 @@ public class StockTabServiceTests : IDisposable
                 },
                 new DailyShortVolume
                 {
-                    CommonStockId = msft.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            msft,
+                            msft.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = msft.Presentation.Listing.Ticker,
                     Date = new DateOnly(2025, 3, 10),
                     ShortVolume = 300_000,
                     TotalVolume = 900_000,
@@ -276,13 +318,20 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadShortInterestTab_WithData_ReturnsOrderedBySettlementDateAscending()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext
             .Set<ShortInterest>()
             .AddRange(
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 15),
                     CurrentShortPosition = 10_000_000,
                     PreviousShortPosition = 9_500_000,
@@ -292,7 +341,14 @@ public class StockTabServiceTests : IDisposable
                 },
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 31),
                     CurrentShortPosition = 10_500_000,
                     PreviousShortPosition = 10_000_000,
@@ -302,7 +358,14 @@ public class StockTabServiceTests : IDisposable
                 },
                 new ShortInterest
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            stock.Presentation.Listing.Ticker
+                        )
+                        .Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2025, 2, 14),
                     CurrentShortPosition = 11_000_000,
                     PreviousShortPosition = 10_500_000,
@@ -324,7 +387,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadShortInterestTab_NoData_ReturnsEmptyList()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.LoadShortInterestTab(stock);
@@ -336,7 +399,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadShortInterestTab_MoreThan24Records_ReturnsOnly24MostRecent()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         for (var i = 0; i < 30; i++)
         {
             _dbContext
@@ -344,7 +407,14 @@ public class StockTabServiceTests : IDisposable
                 .Add(
                     new ShortInterest
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(
+                                _dbContext,
+                                stock,
+                                stock.Presentation.Listing.Ticker
+                            )
+                            .Id,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         SettlementDate = new DateOnly(2024, 1, 15).AddDays(i * 15),
                         CurrentShortPosition = 10_000_000 + i * 100_000,
                         PreviousShortPosition = 10_000_000 + (i - 1) * 100_000,
@@ -364,27 +434,33 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadFtdTab_WithData_ReturnsOrderedBySettlementDateAscending()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext
             .Set<FailToDeliver>()
             .AddRange(
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 2),
                     Quantity = 50_000,
                     Price = 150.25m,
                 },
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 3),
                     Quantity = 30_000,
                     Price = 151.50m,
                 },
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
+                    EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = new DateOnly(2025, 1, 6),
                     Quantity = 45_000,
                     Price = 149.75m,
@@ -403,7 +479,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadFtdTab_NoData_ReturnsEmptyList()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.LoadFtdTab(stock);
@@ -415,7 +491,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadFtdTab_MoreThan90Records_ReturnsOnly90MostRecent()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         for (var i = 0; i < 100; i++)
         {
             _dbContext
@@ -423,7 +499,9 @@ public class StockTabServiceTests : IDisposable
                 .Add(
                     new FailToDeliver
                     {
-                        CommonStockId = stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(_dbContext, stock).Id,
+
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         SettlementDate = new DateOnly(2025, 1, 1).AddDays(i),
                         Quantity = 10_000 + i,
                         Price = 150m,
@@ -442,14 +520,13 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadDocumentsTab_WithDocuments_ReturnsDocumentsOrderedByReportingDateDescending()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         _dbContext
             .Set<Document>()
             .AddRange(
                 new Document
                 {
-                    CommonStockId = stock.Id,
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     DocumentType = DocumentType.TenK,
                     ReportingDate = new DateOnly(2025, 2, 15),
                     ReportingForDate = new DateOnly(2024, 12, 31),
@@ -458,8 +535,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new Document
                 {
-                    CommonStockId = stock.Id,
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     DocumentType = DocumentType.TenQ,
                     ReportingDate = new DateOnly(2025, 5, 1),
                     ReportingForDate = new DateOnly(2025, 3, 31),
@@ -480,7 +556,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadDocumentsTab_NoDocuments_ReturnsEmptyList()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.LoadDocumentsTab(stock);
@@ -492,15 +568,14 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadDocumentsTab_DoesNotReturnOtherStocksDocuments()
     {
-        var apple = CreateStock("AAPL", "Apple Inc.");
-        var msft = CreateStock("MSFT", "Microsoft Corp.", "0000789019");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp.", "0000789019");
         _dbContext
             .Set<Document>()
             .AddRange(
                 new Document
                 {
-                    CommonStockId = apple.Id,
-                    CommonStock = apple,
+                    EquityIssuerId = apple.Id,
                     DocumentType = DocumentType.TenK,
                     ReportingDate = new DateOnly(2025, 2, 15),
                     ReportingForDate = new DateOnly(2024, 12, 31),
@@ -509,8 +584,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new Document
                 {
-                    CommonStockId = msft.Id,
-                    CommonStock = msft,
+                    EquityIssuerId = msft.Id,
                     DocumentType = DocumentType.TenQ,
                     ReportingDate = new DateOnly(2025, 5, 1),
                     ReportingForDate = new DateOnly(2025, 3, 31),
@@ -531,14 +605,14 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadInsiderTradingTab_WithTransactions_ReturnsOrderedByTransactionDateDescending()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateInsiderOwner();
         _dbContext
             .Set<InsiderTransaction>()
             .AddRange(
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 3, 1),
                     TransactionDate = new DateOnly(2025, 2, 28),
@@ -550,7 +624,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 3, 15),
                     TransactionDate = new DateOnly(2025, 3, 14),
@@ -574,7 +648,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadInsiderTradingTab_NoTransactions_ReturnsEmptyList()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.LoadInsiderTradingTab(stock);
@@ -586,14 +660,14 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadInsiderTradingTab_IncludesInsiderOwnerNavigation()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var owner = CreateInsiderOwner("Tim Cook", "0001234567");
         _dbContext
             .Set<InsiderTransaction>()
             .Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2025, 3, 1),
                     TransactionDate = new DateOnly(2025, 2, 28),
@@ -617,14 +691,14 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadCongressionalTradesTab_WithTrades_ReturnsOrderedByTransactionDateDescending()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var member = CreateCongressMember("Nancy Pelosi");
         _dbContext
             .Set<CongressionalTrade>()
             .AddRange(
                 new CongressionalTrade
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     CongressMemberId = member.Id,
                     TransactionDate = new DateOnly(2025, 1, 10),
                     FilingDate = new DateOnly(2025, 2, 1),
@@ -636,7 +710,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new CongressionalTrade
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     CongressMemberId = member.Id,
                     TransactionDate = new DateOnly(2025, 3, 20),
                     FilingDate = new DateOnly(2025, 4, 5),
@@ -660,7 +734,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadCongressionalTradesTab_NoTrades_ReturnsEmptyList()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.LoadCongressionalTradesTab(stock);
@@ -672,14 +746,14 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadCongressionalTradesTab_IncludesCongressMemberNavigation()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var member = CreateCongressMember("Dan Crenshaw");
         _dbContext
             .Set<CongressionalTrade>()
             .Add(
                 new CongressionalTrade
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     CongressMemberId = member.Id,
                     TransactionDate = new DateOnly(2025, 2, 15),
                     FilingDate = new DateOnly(2025, 3, 1),
@@ -703,16 +777,20 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_WithPrices_ReturnsPricesAndTechnicalIndicators()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         // Insert enough prices to produce at least one SMA-20 value
         for (var i = 0; i < 30; i++)
         {
             _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            null
+                        ),
                         Date = new DateOnly(2025, 1, 1).AddDays(i),
                         Open = 100m + i,
                         High = 102m + i,
@@ -754,8 +832,8 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_SecondaryListing_ReturnsOnlyItsExactSeries()
     {
-        var stock = CreateStock("BRK-B", "Berkshire Hathaway Inc.");
-        stock.SecondaryTickers = ["BRK-A"];
+        EquityIssuer stock = CreateStock("BRK-B", "Berkshire Hathaway Inc.");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, ["BRK-A"]);
         var date = new DateOnly(2026, 8, 3);
         var epsConcept = new FinancialConcept
         {
@@ -763,12 +841,16 @@ public class StockTabServiceTests : IDisposable
             Tag = "EarningsPerShareDiluted",
         };
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-B",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        "BRK-B"
+                    ),
+                    SourceTicker = "BRK-B",
                     Date = date,
                     Open = 299m,
                     High = 301m,
@@ -777,10 +859,14 @@ public class StockTabServiceTests : IDisposable
                     AdjustedClose = 300m,
                     Volume = 1_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-A",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        "BRK-A"
+                    ),
+                    SourceTicker = "BRK-A",
                     Date = date,
                     Open = 599_000m,
                     High = 601_000m,
@@ -796,7 +882,7 @@ public class StockTabServiceTests : IDisposable
             .Add(
                 new FinancialFact
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = epsConcept.Id,
                     Unit = "USD/shares",
                     PeriodType = FactPeriodType.Duration,
@@ -817,7 +903,7 @@ public class StockTabServiceTests : IDisposable
 
         result.Ticker.Should().Be("BRK-A");
         result.Prices.Should().ContainSingle().Which.Close.Should().Be(600_000m);
-        result.Prices.Should().OnlyContain(price => price.ListedTicker == "BRK-A");
+        result.Prices.Should().OnlyContain(price => price.SourceTicker == "BRK-A");
         metrics.LatestClose.Should().Be(600_000m);
         metrics.EpsDiluted.Should().BeNull();
         metrics.PeRatio.Should().BeNull();
@@ -826,7 +912,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_NoPrices_ReturnsEmptyListsAndEmptyIndicators()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.LoadPriceTab(stock);
@@ -845,14 +931,18 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_PricesReturnedInAscendingDateOrder()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         // Insert out of order
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2025, 3, 3),
                     Open = 103m,
                     High = 105m,
@@ -861,9 +951,13 @@ public class StockTabServiceTests : IDisposable
                     AdjustedClose = 104m,
                     Volume = 10_000_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2025, 3, 1),
                     Open = 100m,
                     High = 102m,
@@ -872,9 +966,13 @@ public class StockTabServiceTests : IDisposable
                     AdjustedClose = 101m,
                     Volume = 12_000_000,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        null
+                    ),
                     Date = new DateOnly(2025, 3, 2),
                     Open = 101m,
                     High = 103m,
@@ -893,16 +991,20 @@ public class StockTabServiceTests : IDisposable
 
     // Add one bar per close, on consecutive days starting at startDate. OHLC are all
     // set to the close so returns (close-based) are exactly the intended values.
-    private void AddDailyPrices(CommonStock stock, DateOnly startDate, params decimal[] closes)
+    private void AddDailyPrices(EquityIssuer stock, DateOnly startDate, params decimal[] closes)
     {
         for (var i = 0; i < closes.Length; i++)
         {
             _dbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            _dbContext,
+                            stock,
+                            null
+                        ),
                         Date = startDate.AddDays(i),
                         Open = closes[i],
                         High = closes[i],
@@ -918,7 +1020,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_ComputesStockReturns()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         // 6 bars: the close 5 bars before the last (100) is the base, latest 110 → +10%.
         AddDailyPrices(stock, new DateOnly(2025, 6, 2), 100m, 102m, 104m, 106m, 108m, 110m);
         await _dbContext.SaveChangesAsync();
@@ -933,8 +1035,8 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_WithBenchmark_ComputesBenchmarkReturns()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
-        var spy = CreateStock("SPY", "SPDR S&P 500 ETF", "0000884394");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer spy = CreateStock("SPY", "SPDR S&P 500 ETF", "0000884394");
         AddDailyPrices(stock, new DateOnly(2025, 6, 2), 100m, 102m, 104m, 106m, 108m, 110m); // +10%
         AddDailyPrices(spy, new DateOnly(2025, 6, 2), 100m, 101m, 102m, 103m, 104m, 105m); // +5%
         await _dbContext.SaveChangesAsync();
@@ -949,7 +1051,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_NoBenchmarkTracked_BenchmarkReturnsNull()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         AddDailyPrices(stock, new DateOnly(2025, 6, 2), 100m, 102m, 104m, 106m, 108m, 110m);
         await _dbContext.SaveChangesAsync();
 
@@ -962,7 +1064,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_StockIsBenchmark_DoesNotCompareToItself()
     {
-        var spy = CreateStock("SPY", "SPDR S&P 500 ETF", "0000884394");
+        EquityIssuer spy = CreateStock("SPY", "SPDR S&P 500 ETF", "0000884394");
         AddDailyPrices(spy, new DateOnly(2025, 6, 2), 100m, 102m, 104m, 106m, 108m, 110m);
         await _dbContext.SaveChangesAsync();
 
@@ -975,8 +1077,8 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadPriceTab_NoPrices_BenchmarkReturnsNullEvenWhenSpyExists()
     {
-        var stock = CreateStock("AAPL", "Apple Inc.");
-        var spy = CreateStock("SPY", "SPDR S&P 500 ETF", "0000884394");
+        EquityIssuer stock = CreateStock("AAPL", "Apple Inc.");
+        EquityIssuer spy = CreateStock("SPY", "SPDR S&P 500 ETF", "0000884394");
         AddDailyPrices(spy, new DateOnly(2025, 6, 2), 100m, 101m, 102m, 103m, 104m, 105m);
         await _dbContext.SaveChangesAsync();
 
@@ -992,7 +1094,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadHoldingsTab_NullDate_SelectsLatestReportDate()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var holder = CreateInstitutionalHolder("Vanguard", "0001234567");
         // Single report date avoids GroupBy path that InMemory provider cannot translate
         _dbContext
@@ -1000,7 +1102,7 @@ public class StockTabServiceTests : IDisposable
             .Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = new DateOnly(2025, 3, 31),
@@ -1027,14 +1129,14 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadHoldingsTab_ExplicitDate_SelectsThatDate()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var holder = CreateInstitutionalHolder("BlackRock", "0009876543");
         _dbContext
             .Set<InstitutionalHolding>()
             .AddRange(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 2, 14),
                     ReportDate = new DateOnly(2024, 12, 31),
@@ -1046,7 +1148,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = new DateOnly(2025, 3, 31),
@@ -1071,7 +1173,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadHoldingsTab_NoHoldings_ReturnsEmptyViewModel()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.LoadHoldingsTab(stock, null);
@@ -1087,7 +1189,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadHoldingsTab_NoPreviousQuarter_AllHoldersInNewBucket()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var holder = CreateInstitutionalHolder("Fidelity", "0004445556");
 
         // Only one quarter of data
@@ -1096,7 +1198,7 @@ public class StockTabServiceTests : IDisposable
             .Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 2, 14),
                     ReportDate = new DateOnly(2024, 12, 31),
@@ -1122,7 +1224,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadHoldingsTab_AvailableDatesOrderedDescending()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var holder = CreateInstitutionalHolder("T. Rowe Price", "0007778889");
 
         var dates = new[]
@@ -1140,7 +1242,7 @@ public class StockTabServiceTests : IDisposable
                 .Add(
                     new InstitutionalHolding
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         InstitutionalHolderId = holder.Id,
                         FilingDate = date.AddMonths(1),
                         ReportDate = date,
@@ -1167,7 +1269,7 @@ public class StockTabServiceTests : IDisposable
     [Fact]
     public async Task LoadHoldingsTab_MultipleHolders_AggregatesCorrectly()
     {
-        var stock = CreateStock();
+        EquityIssuer stock = CreateStock();
         var holder1 = CreateInstitutionalHolder("Vanguard", "0001000001");
         var holder2 = CreateInstitutionalHolder("BlackRock", "0001000002");
         var reportDate = new DateOnly(2025, 3, 31);
@@ -1177,7 +1279,7 @@ public class StockTabServiceTests : IDisposable
             .AddRange(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder1.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = reportDate,
@@ -1189,7 +1291,7 @@ public class StockTabServiceTests : IDisposable
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder2.Id,
                     FilingDate = new DateOnly(2025, 5, 15),
                     ReportDate = reportDate,

@@ -73,6 +73,6 @@ public class HoldingsModuleHolderCoveringIndexIncludesFilingDateTests
                 "the existing portfolio-rollup INCLUDE columns must stay"
             )
             .And.Contain(nameof(InstitutionalHolding.Shares))
-            .And.Contain(nameof(InstitutionalHolding.CommonStockId));
+            .And.Contain(nameof(InstitutionalHolding.EquityIssuerId));
     }
 }

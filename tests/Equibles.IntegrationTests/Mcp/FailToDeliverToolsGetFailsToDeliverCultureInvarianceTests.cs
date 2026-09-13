@@ -5,6 +5,7 @@ using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Mcp.Tools;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 
@@ -16,7 +17,7 @@ public class FailToDeliverToolsGetFailsToDeliverCultureInvarianceTests : ParadeD
     private FailToDeliverTools Sut() =>
         new(
             new FailToDeliverRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new MemoryCache(new MemoryCacheOptions()),
             ErrorManager,
             NullLogger<FailToDeliverTools>()
@@ -35,21 +36,20 @@ public class FailToDeliverToolsGetFailsToDeliverCultureInvarianceTests : ParadeD
     [Fact]
     public async Task GetFailsToDeliver_UnderNonInvariantCulture_RendersQuantityCultureInvariantly()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "GME",
-            Name = "GameStop Corp",
-            Cik = "0001326380",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "GME",
+            Name: "GameStop Corp",
+            Cik: "0001326380"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         var ftd = new FailToDeliver
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+            ListedTicker = stock.Presentation.Listing.Ticker,
             SettlementDate = new DateOnly(2026, 3, 15),
             Quantity = 1_234_567,
             Price = 25.50m,
         };
-        DbContext.Set<CommonStock>().Add(stock);
         DbContext.Set<FailToDeliver>().Add(ftd);
         await DbContext.SaveChangesAsync();
 

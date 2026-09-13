@@ -98,8 +98,8 @@ public class FinraClassShareSymbolsTests
     public void Merge_DottedClassShareSymbol_ResolvesToDashTicker()
     {
         var stockId = Guid.NewGuid();
-        var security = new ListedSecurityKey(stockId, "BRK-B");
-        var tickerMap = new Dictionary<string, ListedSecurityKey>(StringComparer.Ordinal)
+        var security = new EquityListingReference(stockId, Guid.NewGuid(), "BRK-B");
+        var tickerMap = new Dictionary<string, EquityListingReference>(StringComparer.Ordinal)
         {
             ["BRK-B"] = security,
         };
@@ -123,6 +123,6 @@ public class FinraClassShareSymbolsTests
         );
 
         result.Should().ContainSingle();
-        result[security].AtsVolume.Should().Be(5_000);
+        result[security.EquityListingId].AtsVolume.Should().Be(5_000);
     }
 }

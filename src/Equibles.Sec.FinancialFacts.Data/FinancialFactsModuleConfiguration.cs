@@ -20,6 +20,10 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
 
         builder.Entity<FinancialFact>(b =>
         {
+            b.HasOne(row => row.Issuer)
+                .WithMany()
+                .HasForeignKey(row => row.EquityIssuerId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.Property(e => e.Form).HasConversion(docTypeConversion);
         });
 
@@ -27,11 +31,25 @@ public class FinancialFactsModuleConfiguration : Equibles.Data.IFinancialModule
 
         builder.Entity<ReportedFinancialStatement>(b =>
         {
+            b.HasOne(row => row.Issuer)
+                .WithMany()
+                .HasForeignKey(row => row.EquityIssuerId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.Property(e => e.Form).HasConversion(docTypeConversion);
         });
 
-        builder.Entity<FinancialFactsSyncStatus>();
+        builder
+            .Entity<FinancialFactsSyncStatus>()
+            .HasOne(state => state.Issuer)
+            .WithMany()
+            .HasForeignKey(state => state.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
 
-        builder.Entity<ListedSecurity>();
+        builder
+            .Entity<IssuerSecurityRegistration>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

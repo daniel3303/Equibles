@@ -41,22 +41,20 @@ public class StocksShowFilingActivityBadgeTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             db.Add(
-                new CommonStock
-                {
-                    Id = msftId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: msftId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019"
+                )
             );
 
             var filerA = new InstitutionalHolder { Cik = "F0000001", Name = "Filer A" };
@@ -67,7 +65,7 @@ public class StocksShowFilingActivityBadgeTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = filerA.Id,
                     ReportDate = today.AddDays(-15),
                     FilingDate = today.AddDays(-5),
@@ -83,7 +81,7 @@ public class StocksShowFilingActivityBadgeTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = msftId,
+                    EquityIssuerId = msftId,
                     InstitutionalHolderId = filerA.Id,
                     ReportDate = today.AddDays(-15),
                     FilingDate = today.AddDays(-5),
@@ -99,7 +97,7 @@ public class StocksShowFilingActivityBadgeTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = filerB.Id,
                     ReportDate = today.AddDays(-15),
                     FilingDate = today.AddDays(-3),

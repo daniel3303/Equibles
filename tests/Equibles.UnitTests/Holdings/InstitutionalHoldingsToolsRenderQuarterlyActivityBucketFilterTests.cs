@@ -30,7 +30,10 @@ public class InstitutionalHoldingsToolsRenderQuarterlyActivityBucketFilterTests
         );
 
         var holder = new InstitutionalHolder { Name = "Test Fund" };
-        var stock = new CommonStock { Id = Guid.NewGuid(), Ticker = "AAPL" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL"
+        );
         var grouped = new Dictionary<StockPositionChangeType, List<StockPositionChange>>
         {
             [StockPositionChangeType.Initiated] =

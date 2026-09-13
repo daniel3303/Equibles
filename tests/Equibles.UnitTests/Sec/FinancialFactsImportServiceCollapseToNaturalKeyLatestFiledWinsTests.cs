@@ -26,7 +26,7 @@ public class FinancialFactsImportServiceCollapseToNaturalKeyLatestFiledWinsTests
 
         var earlier = new FinancialFact
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = conceptId,
             Unit = "USD",
             PeriodStart = new DateOnly(2024, 1, 1),
@@ -41,7 +41,7 @@ public class FinancialFactsImportServiceCollapseToNaturalKeyLatestFiledWinsTests
         };
         var later = new FinancialFact
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = conceptId,
             Unit = "USD",
             PeriodStart = new DateOnly(2024, 1, 1),

@@ -116,7 +116,7 @@ public class ReportedQuarterPromotionHistoryTests
     ) =>
         new()
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             FinancialConceptId = Guid.NewGuid(),
             Unit = "USD",
             PeriodType = FactPeriodType.Duration,

@@ -22,20 +22,19 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
         new(
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialFactsTools>()
         );
 
-    private static CommonStock Apple() =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+    private static EquityIssuer Apple() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
 
     private FinancialConcept AddConcept(string tag)
     {
@@ -51,7 +50,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
     }
 
     private void AddFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         int fy,
         SecFiscalPeriod period,
@@ -67,7 +66,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = concept.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -94,7 +93,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_UnknownConcept_ListsSupportedAliases()
     {
-        DbContext.Set<CommonStock>().Add(Apple());
+        DbContext.Set<EquityIssuer>().Add(Apple());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetFinancialFact("AAPL", "ebitda");
@@ -106,7 +105,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_NoFacts_ReturnsNotIngestedMessage()
     {
-        DbContext.Set<CommonStock>().Add(Apple());
+        DbContext.Set<EquityIssuer>().Add(Apple());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetFinancialFact("AAPL", "revenue");
@@ -114,24 +113,45 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("No 'revenue' data has been ingested for AAPL");
     }
 
-    [Fact]
-    public async Task GetFinancialFact_PerShareHistory_RestatesValuesFiledBeforeSplit()
+    [Theory]
+    [InlineData("primary")]
+    [InlineData("unresolved")]
+    [InlineData("foreign")]
+    public async Task GetFinancialFact_PerShareHistory_RestatesValuesFiledBeforeSplit(
+        string splitScope
+    )
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "GOOGL",
-            Name = "Alphabet Inc.",
-            Cik = "0001652044",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "GOOGL",
+            Name: "Alphabet Inc.",
+            Cik: "0001652044"
+        );
         var dilutedEps = AddConcept("EarningsPerShareDiluted");
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
+        var splitListingId = (Guid?)stock.Presentation.EquityListingId;
+        if (splitScope == "unresolved")
+            splitListingId = null;
+        if (splitScope == "foreign")
+        {
+            var foreign = new EquityListing
+            {
+                EquitySecurityId = stock.Presentation.Listing.EquitySecurityId,
+                Ticker = "GOOGL",
+                MarketCountryCode = "PT",
+                MarketIdentifierCode = "XLIS",
+            };
+            DbContext.Add(foreign);
+            splitListingId = foreign.Id;
+        }
         DbContext
             .Set<StockSplit>()
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
+                    EquityListingId = splitListingId,
+                    PriceSeriesTicker = splitScope == "unresolved" ? null : "GOOGL",
                     EffectiveDate = new DateOnly(2022, 7, 18),
                     Numerator = 20m,
                     Denominator = 1m,
@@ -142,7 +162,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
             .AddRange(
                 new FinancialFact
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = dilutedEps.Id,
                     Unit = "USD/shares",
                     PeriodType = FactPeriodType.Duration,
@@ -157,7 +177,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
                 },
                 new FinancialFact
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = dilutedEps.Id,
                     Unit = "USD/shares",
                     PeriodType = FactPeriodType.Duration,
@@ -175,19 +195,27 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetFinancialFact("GOOGL", "eps-diluted");
 
-        result
-            .Should()
-            .Contain("| $1.23 | USD/shares |", "24.62 is restated across the 20:1 split");
         result.Should().Contain("| $1.06 | USD/shares |", "the post-split filing stays unchanged");
-        result.Should().NotContain("| $24.62 | USD/shares |");
-        result.Should().Contain("Per-share values are split-adjusted");
+        var expected =
+            splitScope == "primary" ? "$1.23"
+            : splitScope == "unresolved" ? "$24.62 (as filed)"
+            : "$24.62";
+        result.Should().Contain($"| {expected} | USD/shares |");
+        if (splitScope == "primary")
+            result.Should().Contain("Per-share values are split-adjusted");
+        else
+            result.Should().NotContain("Per-share values are split-adjusted");
+        if (splitScope == "unresolved")
+            result.Should().Contain("split attribution is unresolved");
+        else
+            result.Should().NotContain("split attribution is unresolved");
     }
 
     [Fact]
     public async Task GetFinancialFact_RestatementAndTagSwitch_LatestRestatedAcrossAliasTags()
     {
-        var stock = Apple();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Apple();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var revenues = AddConcept("Revenues");
         var asc606 = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
         // FY2022 under the old tag, reported then restated.
@@ -238,8 +266,8 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_AsOriginallyReported_ShowsEarliestFiling()
     {
-        var stock = Apple();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Apple();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var revenues = AddConcept("Revenues");
         AddFact(
             stock,
@@ -273,8 +301,8 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_FormFilter_ReturnsOnlyMatchingForm()
     {
-        var stock = Apple();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Apple();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var revenues = AddConcept("Revenues");
         AddFact(
             stock,
@@ -307,8 +335,8 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_SamePeriodBothAliasTags_PrimaryTagWinsDeterministically()
     {
-        var stock = Apple();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Apple();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var revenues = AddConcept("Revenues");
         var asc606 = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
         // ASC 606 transition: the SAME FY2023 period is tagged under both
@@ -350,8 +378,8 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_LaterProxyDuplicate_DoesNotOutrankPeriodicReport()
     {
-        var stock = Apple();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Apple();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var revenues = AddConcept("Revenues");
         AddFact(
             stock,
@@ -385,8 +413,8 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_AliasLagsCompanyCorpus_AppendsCoverageWarning()
     {
-        var stock = Apple();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Apple();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var revenues = AddConcept("Revenues");
         var assets = AddConcept("Assets");
         AddFact(
@@ -421,7 +449,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_InvalidDate_ReturnsGuidanceNotSilentlyUnfiltered()
     {
-        DbContext.Set<CommonStock>().Add(Apple());
+        DbContext.Set<EquityIssuer>().Add(Apple());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetFinancialFact("AAPL", "revenue", fromDate: "yesterday");
@@ -432,7 +460,7 @@ public class FinancialFactsToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetFinancialFact_BlankConcept_ReturnsConceptRequired()
     {
-        DbContext.Set<CommonStock>().Add(Apple());
+        DbContext.Set<EquityIssuer>().Add(Apple());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetFinancialFact("AAPL", "   ");

@@ -47,13 +47,12 @@ public class StocksPriceSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
 
             db.ChangeTracker.AutoDetectChangesEnabled = false;
@@ -66,10 +65,14 @@ public class StocksPriceSeededTests
             {
                 var close = 100m + i;
                 db.Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stockId,
-                        ListedTicker = "AAPL",
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                            db,
+                            stockId,
+                            "AAPL"
+                        ),
+                        SourceTicker = "AAPL",
                         Date = startDate.AddDays(i),
                         Open = close - 0.5m,
                         High = close + 1m,

@@ -32,13 +32,12 @@ public class CongressMemberProfileSeededTests
 
         await _web.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Id = stockId,
-                Ticker = "MSFT",
-                Name = "Microsoft Corporation",
-                Cik = "0000789019",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: stockId,
+                Ticker: "MSFT",
+                Name: "Microsoft Corporation",
+                Cik: "0000789019"
+            );
             db.Add(stock);
 
             var member = new CongressMember
@@ -52,7 +51,7 @@ public class CongressMemberProfileSeededTests
             db.Add(
                 new CongressionalTrade
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     CongressMemberId = memberId,
                     TransactionDate = new DateOnly(2025, 6, 10),
                     FilingDate = new DateOnly(2025, 7, 1),

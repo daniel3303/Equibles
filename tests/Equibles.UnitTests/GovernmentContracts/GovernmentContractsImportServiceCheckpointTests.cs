@@ -235,12 +235,11 @@ public class GovernmentContractsImportServiceCheckpointTests
         using var seed = NewContext(options);
         // One named company so BuildLookup is non-empty and the empty-universe guard passes.
         seed.Add(
-            new CommonStock
-            {
-                Ticker = "LMT",
-                Name = "Lockheed Martin Corporation",
-                Cik = "1",
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "LMT",
+                Name: "Lockheed Martin Corporation",
+                Cik: "1"
+            )
         );
         seed.SaveChanges();
     }
@@ -282,7 +281,7 @@ public class GovernmentContractsImportServiceCheckpointTests
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => NewContext(options));
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         services.AddScoped<GovernmentContractRepository>();
         services.AddScoped<GovernmentContractsScanStateRepository>();
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();

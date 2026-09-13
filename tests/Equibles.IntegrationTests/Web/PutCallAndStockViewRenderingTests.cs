@@ -62,13 +62,12 @@ public class PutCallAndStockViewRenderingTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Cik = "0000320193",
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Description = "Seeded for view-rendering coverage",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Cik: "0000320193",
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Description: "Seeded for view-rendering coverage"
+                )
             );
             await Task.CompletedTask;
         });
@@ -88,13 +87,12 @@ public class PutCallAndStockViewRenderingTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Cik = "0000789019",
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corporation",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Cik: "0000789019",
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corporation"
+                )
             );
 
             // 40 trading days of strictly rising closes — every day closed higher
@@ -105,9 +103,13 @@ public class PutCallAndStockViewRenderingTests
             {
                 var close = 100m + i;
                 db.Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stockId,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(
+                            db,
+                            stockId,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = close,
                         High = close,

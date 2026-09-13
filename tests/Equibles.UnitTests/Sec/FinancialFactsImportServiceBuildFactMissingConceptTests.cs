@@ -28,7 +28,7 @@ public class FinancialFactsImportServiceBuildFactMissingConceptTests
         parsedFactType.GetProperty("Accession").SetValue(parsed, "0000320193-24-000123");
         parsedFactType.GetProperty("Form").SetValue(parsed, "10-K");
 
-        var stock = new CommonStock { Id = Guid.NewGuid() };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(Id: Guid.NewGuid());
         var conceptIds = new Dictionary<(FactTaxonomy, string), Guid>
         {
             { (FactTaxonomy.UsGaap, "Revenues"), Guid.NewGuid() },

@@ -35,12 +35,12 @@ public class StocksControllerPriceNotFoundTests : IDisposable
     {
         // A different stock exists so the lookup is a real miss, not an empty DB.
         _dbContext
-            .Set<CommonStock>()
-            .Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+            .Set<EquityIssuer>()
+            .Add(Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc."));
         await _dbContext.SaveChangesAsync();
 
         var controller = new StocksController(
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             institutionalHolderRepository: null!,
             institutionalHoldingRepository: null!,
             documentRepository: null!,

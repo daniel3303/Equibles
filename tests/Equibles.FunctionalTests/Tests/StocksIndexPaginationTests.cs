@@ -40,12 +40,11 @@ public class StocksIndexPaginationTests
             for (var i = 0; i < totalStocks; i++)
             {
                 db.Add(
-                    new CommonStock
-                    {
-                        Ticker = $"TST{i:D5}",
-                        Name = $"Test Company {i:D5}",
-                        Cik = $"CIK{i:D7}",
-                    }
+                    Equibles.TestSupport.EquityIssuerSeed.Create(
+                        Ticker: $"TST{i:D5}",
+                        Name: $"Test Company {i:D5}",
+                        Cik: $"CIK{i:D7}"
+                    )
                 );
             }
             await Task.CompletedTask;

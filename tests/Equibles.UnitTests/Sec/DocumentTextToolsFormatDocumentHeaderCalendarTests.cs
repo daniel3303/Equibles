@@ -20,7 +20,14 @@ public class DocumentTextToolsFormatDocumentHeaderCalendarTests
     {
         var document = new Document
         {
-            CommonStock = new CommonStock { Name = "Apple Inc.", Ticker = "AAPL" },
+            Issuer = new EquityIssuer
+            {
+                Name = "Apple Inc.",
+                Presentation = new EquityIssuerPresentation
+                {
+                    Listing = new EquityListing { Ticker = "AAPL" },
+                },
+            },
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2026, 5, 27),
         };

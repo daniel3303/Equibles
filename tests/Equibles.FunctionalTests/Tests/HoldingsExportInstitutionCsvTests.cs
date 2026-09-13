@@ -30,20 +30,18 @@ public class HoldingsExportInstitutionCsvTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                },
-                new CommonStock
-                {
-                    Id = msftId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: msftId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019"
+                )
             );
 
             var holder = new InstitutionalHolder { Cik = holderCik, Name = "Test Fund" };
@@ -52,7 +50,7 @@ public class HoldingsExportInstitutionCsvTests
             db.AddRange(
                 new InstitutionalHolding
                 {
-                    CommonStockId = aaplId,
+                    EquityIssuerId = aaplId,
                     InstitutionalHolderId = holder.Id,
                     ReportDate = reportDate,
                     FilingDate = reportDate.AddDays(45),
@@ -63,7 +61,7 @@ public class HoldingsExportInstitutionCsvTests
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = msftId,
+                    EquityIssuerId = msftId,
                     InstitutionalHolderId = holder.Id,
                     ReportDate = reportDate,
                     FilingDate = reportDate.AddDays(45),

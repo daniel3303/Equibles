@@ -34,7 +34,7 @@ public class StockCombinedQuarterService
 
     /// <summary>Resolves the stock's newest 13F quarter and how it must be presented.</summary>
     public Task<StockQuarterAnchor> Resolve(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken = default
     )
     {
@@ -43,7 +43,7 @@ public class StockCombinedQuarterService
 
     // Explicit-today overload so callers and tests can pin the clock.
     public async Task<StockQuarterAnchor> Resolve(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly today,
         CancellationToken cancellationToken = default
     )
@@ -72,7 +72,7 @@ public class StockCombinedQuarterService
     /// window is open, the as-filed 13F rows afterwards.
     /// </summary>
     public IQueryable<InstitutionalHolding> GetPresentedPositions(
-        CommonStock stock,
+        EquityIssuer stock,
         StockQuarterAnchor anchor
     )
     {
@@ -87,7 +87,7 @@ public class StockCombinedQuarterService
 
     /// <summary>Same positions with the holder navigation eagerly loaded for rendering.</summary>
     public IQueryable<InstitutionalHolding> GetPresentedPositionsWithHolder(
-        CommonStock stock,
+        EquityIssuer stock,
         StockQuarterAnchor anchor
     )
     {
@@ -108,7 +108,7 @@ public class StockCombinedQuarterService
     /// fallback.
     /// </summary>
     public async Task<StockReportedActivity> LoadReportedActivity(
-        CommonStock stock,
+        EquityIssuer stock,
         StockQuarterAnchor anchor,
         CancellationToken cancellationToken = default
     )
@@ -135,7 +135,7 @@ public class StockCombinedQuarterService
         if (asFiled == null || combined == null)
         {
             throw new InvalidOperationException(
-                $"Combined holdings activity is unavailable for {stock.Ticker} on {anchor.ReportDate:yyyy-MM-dd}."
+                $"Combined holdings activity is unavailable for {stock.Presentation.Listing.Ticker} on {anchor.ReportDate:yyyy-MM-dd}."
             );
         }
 
@@ -147,14 +147,14 @@ public class StockCombinedQuarterService
             combined.ListingShares,
             listing => listing.CurrentShares,
             anchor.ReportDate,
-            stock.Ticker,
+            stock.Presentation.Listing.Ticker,
             splits
         );
         var previousShares = MarketActivityShareRestater.RestateListingTotal(
             combined.ListingShares,
             listing => listing.PreviousShares,
             previousReportDate,
-            stock.Ticker,
+            stock.Presentation.Listing.Ticker,
             splits
         );
 

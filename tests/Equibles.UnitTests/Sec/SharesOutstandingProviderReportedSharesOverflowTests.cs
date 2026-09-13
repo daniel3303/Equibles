@@ -48,12 +48,11 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
     public async Task GetReportedSharesOutstanding_FactValueExceedsInt64_DegradesToNullInsteadOfThrowing()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "BIGCO",
-            Name = "Overflow Industries",
-            Cik = "0009999999",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BIGCO",
+            Name: "Overflow Industries",
+            Cik: "0009999999"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -89,12 +88,11 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
     public async Task GetSummedPerClassSharesOutstanding_SumExceedsInt64_DegradesToNullInsteadOfThrowing()
     {
         await using var db = NewDb();
-        var stock = new CommonStock
-        {
-            Ticker = "BIGCO",
-            Name = "Overflow Industries",
-            Cik = "0009999999",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BIGCO",
+            Name: "Overflow Industries",
+            Cik: "0009999999"
+        );
         var concept = new FinancialConcept
         {
             Taxonomy = FactTaxonomy.Dei,
@@ -128,7 +126,7 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
     }
 
     private static FinancialFact ClassFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly filed,
@@ -140,7 +138,7 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
     {
         var fact = new FinancialFact
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Unit = "shares",
             PeriodType = FactPeriodType.Instant,
@@ -159,7 +157,7 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
     }
 
     private static FinancialFact Fact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly filed,
@@ -167,7 +165,7 @@ public class SharesOutstandingProviderReportedSharesOverflowTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Unit = "shares",
             PeriodType = FactPeriodType.Instant,

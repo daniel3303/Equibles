@@ -33,30 +33,31 @@ public class CommonStockManagerCreateDuplicateTickerTests
         // uniqueness check. A real repository is used so GetByPrimaryTicker runs the
         // actual lookup against the seeded row.
         var db = NewDb();
-        db.Set<CommonStock>()
+        db.Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Id = Guid.NewGuid(),
-                    Ticker = "DUP",
-                    Name = "Existing Co",
-                    Cik = "0000000001",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "DUP",
+                    Name: "Existing Co",
+                    Cik: "0000000001"
+                )
             );
         await db.SaveChangesAsync();
 
-        var sut = new CommonStockManager(new CommonStockRepository(db), Substitute.For<IBus>());
-        var incoming = new CommonStock
-        {
-            Ticker = "DUP",
-            Name = "New Co",
-            Cik = "0000000002",
-        };
+        EquityIdentityManager sut = new EquityIdentityManager(
+            new EquityIssuerRepository(db),
+            Substitute.For<IBus>()
+        );
+        EquityIssuer incoming = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "DUP",
+            Name: "New Co",
+            Cik: "0000000002"
+        );
 
         var act = () => sut.Create(incoming);
 
         (await act.Should().ThrowAsync<DomainValidationException>()).WithMessage("*DUP*already*");
         // The incoming company was never persisted — only the pre-seeded row remains.
-        db.Set<CommonStock>().Count(cs => cs.Cik == "0000000002").Should().Be(0);
+        db.Set<EquityIssuer>().Count(cs => cs.Cik == "0000000002").Should().Be(0);
     }
 }

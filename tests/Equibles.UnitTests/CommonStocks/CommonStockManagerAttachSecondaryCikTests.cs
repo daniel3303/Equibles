@@ -29,28 +29,27 @@ public class CommonStockManagerAttachSecondaryCikTests
     }
 
     private static (
-        CommonStockManager Manager,
-        CommonStockRepository Repo,
+        EquityIdentityManager Manager,
+        EquityIssuerRepository Repo,
         IBus Bus,
         EquiblesFinancialDbContext Db
     ) NewSut()
     {
         var db = NewDb();
-        var repo = Substitute.ForPartsOf<CommonStockRepository>(db);
+        EquityIssuerRepository repo = Substitute.ForPartsOf<EquityIssuerRepository>(db);
         var bus = Substitute.For<IBus>();
-        return (new CommonStockManager(repo, bus), repo, bus, db);
+        return (new EquityIdentityManager(repo, bus), repo, bus, db);
     }
 
     [Fact]
     public async Task Attach_NewCik_AppendsNormalizedPublishesAndSaves()
     {
         var (sut, _, bus, db) = NewSut();
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436"
+        );
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -70,12 +69,11 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Attach_PrimaryCikOfSameStock_RefusesWithoutPublishing()
     {
         var (sut, repo, bus, db) = NewSut();
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436"
+        );
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -92,13 +90,12 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Attach_AlreadyAttachedCik_Refuses()
     {
         var (sut, _, bus, db) = NewSut();
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-            SecondaryCiks = ["34088"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436",
+            SecondaryCiks: ["34088"]
+        );
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -112,18 +109,16 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Attach_CikOwnedByAnotherStockAsPrimary_Refuses()
     {
         var (sut, _, bus, db) = NewSut();
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-        };
-        var other = new CommonStock
-        {
-            Ticker = "CVX",
-            Name = "Chevron",
-            Cik = "93410",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436"
+        );
+        EquityIssuer other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "CVX",
+            Name: "Chevron",
+            Cik: "93410"
+        );
         db.Add(stock);
         db.Add(other);
         await db.SaveChangesAsync();
@@ -139,19 +134,17 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Attach_CikOwnedByAnotherStockAsSecondary_Refuses()
     {
         var (sut, _, bus, db) = NewSut();
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-        };
-        var other = new CommonStock
-        {
-            Ticker = "CVX",
-            Name = "Chevron",
-            Cik = "93410",
-            SecondaryCiks = ["34088"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436"
+        );
+        EquityIssuer other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "CVX",
+            Name: "Chevron",
+            Cik: "93410",
+            SecondaryCiks: ["34088"]
+        );
         db.Add(stock);
         db.Add(other);
         await db.SaveChangesAsync();
@@ -166,12 +159,11 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Attach_InvalidCik_Refuses()
     {
         var (sut, _, bus, db) = NewSut();
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436"
+        );
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -185,13 +177,12 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Detach_AttachedCik_RemovesWithoutTouchingOthers()
     {
         var (sut, _, _, db) = NewSut();
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-            SecondaryCiks = ["34088", "99999"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436",
+            SecondaryCiks: ["34088", "99999"]
+        );
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -208,13 +199,12 @@ public class CommonStockManagerAttachSecondaryCikTests
         // zero-padded CIK can live in the column; the detach comparison must
         // normalize BOTH sides or that entry becomes unremovable.
         var (sut, _, _, db) = NewSut();
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-            SecondaryCiks = ["0000034088"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436",
+            SecondaryCiks: ["0000034088"]
+        );
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -228,12 +218,11 @@ public class CommonStockManagerAttachSecondaryCikTests
     public async Task Detach_NotAttachedCik_Refuses()
     {
         var (sut, repo, _, db) = NewSut();
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436"
+        );
         db.Add(stock);
         await db.SaveChangesAsync();
 
@@ -250,7 +239,7 @@ public class CommonStockManagerAttachSecondaryCikTests
     [InlineData("1234567890", "1234567890")]
     public void NormalizeCik_ValidForms_TrimAndDropLeadingZeros(string raw, string expected)
     {
-        CommonStockManager.NormalizeCik(raw).Should().Be(expected);
+        EquityIdentityManager.NormalizeCik(raw).Should().Be(expected);
     }
 
     [Theory]
@@ -264,6 +253,6 @@ public class CommonStockManagerAttachSecondaryCikTests
     [InlineData("-34088")]
     public void NormalizeCik_InvalidForms_ReturnNull(string raw)
     {
-        CommonStockManager.NormalizeCik(raw).Should().BeNull();
+        EquityIdentityManager.NormalizeCik(raw).Should().BeNull();
     }
 }

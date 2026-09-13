@@ -176,7 +176,7 @@ public class Corrupt13FShareCountRepairerTests
     {
         var holding = new InstitutionalHolding
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             InstitutionalHolderId = Guid.NewGuid(),
             FilingDate = filingDate ?? PostRuleFilingDate,
             ReportDate = reportDate ?? ReportDate,
@@ -201,7 +201,7 @@ public class Corrupt13FShareCountRepairerTests
     ) =>
         new()
         {
-            [(row.Holding.CommonStockId, row.Holding.ListedTicker, row.Holding.ReportDate)] =
+            [(row.Holding.EquityIssuerId, row.Holding.ListedTicker, row.Holding.ReportDate)] =
                 closePrice,
         };
 }

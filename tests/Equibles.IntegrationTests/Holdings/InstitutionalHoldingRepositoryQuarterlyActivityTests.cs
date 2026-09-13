@@ -48,7 +48,7 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityTests : IAsyncLifeti
     public async Task GetQuarterlyActivity_HolderIncreasedPosition_ProducesPositiveDeltaForStock()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, ticker: "AAPL");
+        EquityIssuer stock = await SeedStock(seed, ticker: "AAPL");
         var holder = await SeedHolder(seed, cik: "1");
         seed.Add(MakeHolding(stock, holder, Prior, shares: 1_000, value: 1_000_000));
         seed.Add(MakeHolding(stock, holder, Current, shares: 1_500, value: 1_650_000));
@@ -75,7 +75,7 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityTests : IAsyncLifeti
     public async Task GetQuarterlyActivity_HolderReducedPosition_ProducesNegativeDeltaForStock()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, ticker: "MSFT");
+        EquityIssuer stock = await SeedStock(seed, ticker: "MSFT");
         var holder = await SeedHolder(seed, cik: "2");
         seed.Add(MakeHolding(stock, holder, Prior, shares: 1_000, value: 1_000_000));
         seed.Add(MakeHolding(stock, holder, Current, shares: 600, value: 660_000));
@@ -97,7 +97,7 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityTests : IAsyncLifeti
     public async Task GetQuarterlyActivity_NewPositionThisQuarter_PreviousFieldsAreZero()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, ticker: "NVDA");
+        EquityIssuer stock = await SeedStock(seed, ticker: "NVDA");
         var holder = await SeedHolder(seed, cik: "3");
         // No prior-quarter row; current quarter only.
         seed.Add(MakeHolding(stock, holder, Current, shares: 750, value: 825_000));
@@ -121,7 +121,7 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityTests : IAsyncLifeti
     public async Task GetQuarterlyActivity_SoldOutPosition_CurrentFieldsAreZero()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, ticker: "TSLA");
+        EquityIssuer stock = await SeedStock(seed, ticker: "TSLA");
         var holder = await SeedHolder(seed, cik: "4");
         // Prior quarter only; current quarter empty.
         seed.Add(MakeHolding(stock, holder, Prior, shares: 500, value: 500_000));
@@ -145,7 +145,7 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityTests : IAsyncLifeti
     public async Task GetQuarterlyActivity_MultipleFilersPerStock_CountsDistinctHolders()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, ticker: "GOOG");
+        EquityIssuer stock = await SeedStock(seed, ticker: "GOOG");
         var h1 = await SeedHolder(seed, cik: "5");
         var h2 = await SeedHolder(seed, cik: "6");
         var h3 = await SeedHolder(seed, cik: "7");
@@ -168,17 +168,16 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityTests : IAsyncLifeti
         row.CurrentShares.Should().Be(450);
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Test Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Test Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}"
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -196,7 +195,7 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityTests : IAsyncLifeti
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -204,7 +203,7 @@ public class InstitutionalHoldingRepositoryQuarterlyActivityTests : IAsyncLifeti
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

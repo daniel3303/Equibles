@@ -1,10 +1,11 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Equibles.CommonStocks.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.InsiderTrading.Data.Models;
 
-[Index(nameof(CommonStockId), nameof(TransactionDate))]
+[Index(nameof(EquityIssuerId), nameof(TransactionDate))]
 [Index(nameof(InsiderOwnerId), nameof(TransactionDate))]
 [Index(nameof(AccessionNumber), nameof(TransactionOrder), IsUnique = true)]
 // Late-original amendment resolution probes SupersededAccessionNumber for each
@@ -49,8 +50,8 @@ public class InsiderTransaction
     public Guid InsiderOwnerId { get; set; }
     public virtual InsiderOwner InsiderOwner { get; set; }
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     public DateOnly FilingDate { get; set; }
     public DateOnly TransactionDate { get; set; }

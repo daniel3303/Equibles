@@ -54,6 +54,7 @@ public class FinancialFactsToolsRenderComparisonTableEmptyWithSkippedTests
                     rows,
                     skipped,
                     new Dictionary<Guid, List<StockSplit>>(),
+                    new Dictionary<Guid, Guid> { [Guid.Empty] = Guid.NewGuid() },
                 ]
             );
 

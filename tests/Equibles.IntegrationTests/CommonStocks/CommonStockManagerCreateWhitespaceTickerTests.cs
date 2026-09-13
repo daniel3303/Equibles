@@ -11,12 +11,15 @@ namespace Equibles.IntegrationTests.CommonStocks;
 
 public class CommonStockManagerCreateWhitespaceTickerTests
 {
-    private readonly CommonStockManager _sut;
+    private readonly EquityIdentityManager _sut;
 
     public CommonStockManagerCreateWhitespaceTickerTests()
     {
         var context = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _sut = new CommonStockManager(new CommonStockRepository(context), Substitute.For<IBus>());
+        _sut = new EquityIdentityManager(
+            new EquityIssuerRepository(context),
+            Substitute.For<IBus>()
+        );
     }
 
     // Contract: "Ticker is required". Ticker is also the globally-unique key
@@ -26,12 +29,11 @@ public class CommonStockManagerCreateWhitespaceTickerTests
     [Fact]
     public async Task Create_WhitespaceOnlyTicker_IsRejected()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "   ",
-            Name = "Whitespace Ticker Co",
-            Cik = "0001234567",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "   ",
+            Name: "Whitespace Ticker Co",
+            Cik: "0001234567"
+        );
 
         var act = async () => await _sut.Create(stock);
 

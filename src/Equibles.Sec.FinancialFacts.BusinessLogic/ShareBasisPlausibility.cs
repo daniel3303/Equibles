@@ -4,7 +4,7 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic;
 /// Decides whether two share counts for the same issuer can be statements of the same unit, and
 /// whether a stored (market cap, share count) pair credibly sits on the listed-security basis.
 /// Shared by the Yahoo key-stats sync and the financial-facts importer so the two writers of
-/// <c>CommonStock.SharesOutStanding</c> apply one definition of "these figures are on different
+/// <c>EquitySecurity.SharesOutstanding</c> apply one definition of "these figures are on different
 /// bases" and can never fight each other across the same threshold.
 ///
 /// The problem this solves: an issuer can list one security while its EDGAR cover page counts

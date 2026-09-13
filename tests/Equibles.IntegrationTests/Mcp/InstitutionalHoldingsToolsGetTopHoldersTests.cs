@@ -32,12 +32,11 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetTopHolders_TwoHoldersWithLargeRatio_RanksByShareCountWithCorrectPercentages()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var bigHolder = new InstitutionalHolder { Cik = "1", Name = "Vanguard Group Inc." };
         var smallHolder = new InstitutionalHolder { Cik = "2", Name = "Tiny Capital LLC" };
         DbContext.Add(stock);
@@ -55,7 +54,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -79,12 +78,11 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetTopHolders_SiblingListingSplit_RestatesBeforeRankingAndPercentage()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "ACME",
-            Name = "Acme Inc.",
-            Cik = "0000000100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ACME",
+            Name: "Acme Inc.",
+            Cik: "0000000100"
+        );
         var primaryHolder = new InstitutionalHolder { Cik = "101", Name = "Primary Fund" };
         var siblingHolder = new InstitutionalHolder { Cik = "102", Name = "Sibling Fund" };
         var reportDate = new DateOnly(2024, 12, 31);
@@ -98,8 +96,9 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
             .AddRange(
                 new StockSplit
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
+                    EquityListingId = stock.Presentation.EquityListingId,
+                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                     EffectiveDate = new DateOnly(2025, 1, 15),
                     Numerator = 2m,
                     Denominator = 1m,
@@ -107,8 +106,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
                 },
                 new StockSplit
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = "ACME.B",
                     EffectiveDate = new DateOnly(2025, 2, 15),
                     Numerator = 10m,
@@ -123,7 +121,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -154,12 +152,11 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
             .FromDateTime(DateTime.UtcNow)
             .AddDays(-(CombinedQuarterHelper.FilingDeadlineDays - 1));
         var previous = current.AddMonths(-3);
-        var stock = new CommonStock
-        {
-            Ticker = "CARR",
-            Name = "Carried Position Corp.",
-            Cik = "0000000101",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "CARR",
+            Name: "Carried Position Corp.",
+            Cik: "0000000101"
+        );
         var currentFiler = new InstitutionalHolder { Cik = "103", Name = "Current Fund" };
         var carriedFiler = new InstitutionalHolder { Cik = "104", Name = "Carried Fund" };
         DbContext.AddRange(stock, currentFiler, carriedFiler);
@@ -170,7 +167,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
         DbContext.Add(
             new StockSplit
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 PriceSeriesTicker = "CARR.B",
                 EffectiveDate = current.AddDays(-30),
                 Numerator = 10m,
@@ -185,7 +182,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
         var sut = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(verify),
             new InstitutionalHolderRepository(verify),
-            new CommonStockRepository(verify),
+            new EquityIssuerRepository(verify),
             new StockSplitRepository(verify),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(verify),
@@ -195,7 +192,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
             Substitute.For<ILogger<InstitutionalHoldingsTools>>()
         );
 
-        var output = await sut.GetTopHolders(stock.Ticker);
+        var output = await sut.GetTopHolders(stock.Presentation.Listing.Ticker);
 
         output.Should().Contain("Combined view");
         output.Should().Contain("200 shares");
@@ -203,7 +200,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -211,7 +208,7 @@ public class InstitutionalHoldingsToolsGetTopHoldersTests : ParadeDbMcpTestBase
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

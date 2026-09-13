@@ -10,27 +10,28 @@ public class FailToDeliverRepository : BaseRepository<FailToDeliver>
     public FailToDeliverRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<FailToDeliver> GetByStock(CommonStock stock)
-    {
-        return GetAll()
-            .Where(f =>
-                f.CommonStockId == stock.Id
-                && (f.ListedTicker == stock.Ticker || f.ListedTicker == "")
-            );
-    }
+    public IQueryable<FailToDeliver> GetByListingId(Guid listingId) =>
+        GetAll().Where(row => row.EquityListingId == listingId);
 
-    public IQueryable<FailToDeliver> GetByListing(CommonStock stock, string listedTicker)
-    {
-        var isPrimary = string.Equals(
-            listedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
-        return GetAll()
-            .Where(f =>
-                f.CommonStockId == stock.Id
-                && (f.ListedTicker == listedTicker || (isPrimary && f.ListedTicker == ""))
+    public IQueryable<FailToDeliver> GetByStock(EquityIssuer stock) =>
+        GetAll()
+            .Where(row =>
+                row.EquityListingId == row.Listing.Security.Issuer.Presentation.EquityListingId
+                && row.Listing.Security.EquityIssuerId == stock.Id
             );
+
+    public IQueryable<FailToDeliver> GetByListing(EquityIssuer stock, string listedTicker)
+    {
+        var listingIds = DbContext
+            .Set<EquityListing>()
+            .Where(row =>
+                row.Security.EquityIssuerId == stock.Id
+                && row.MarketCountryCode == "US"
+                && row.Ticker == listedTicker
+            )
+            .Select(row => row.Id);
+        return GetAll()
+            .Where(row => listingIds.Count() == 1 && listingIds.Contains(row.EquityListingId));
     }
 
     public IQueryable<DateOnly> GetLatestDate()

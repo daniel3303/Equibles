@@ -31,13 +31,12 @@ public class ProfilesInstitutionQuarterlyActivityTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -73,34 +72,30 @@ public class ProfilesInstitutionQuarterlyActivityTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Id = increasedId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                },
-                new CommonStock
-                {
-                    Id = reducedId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                },
-                new CommonStock
-                {
-                    Id = initiatedId,
-                    Ticker = "NVDA",
-                    Name = "NVIDIA Corp.",
-                    Cik = "0001045810",
-                },
-                new CommonStock
-                {
-                    Id = exitedId,
-                    Ticker = "TSLA",
-                    Name = "Tesla Inc.",
-                    Cik = "0001318605",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: increasedId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: reducedId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: initiatedId,
+                    Ticker: "NVDA",
+                    Name: "NVIDIA Corp.",
+                    Cik: "0001045810"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: exitedId,
+                    Ticker: "TSLA",
+                    Name: "Tesla Inc.",
+                    Cik: "0001318605"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -154,7 +149,7 @@ public class ProfilesInstitutionQuarterlyActivityTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.FunctionalTests.Fixtures;
 using Equibles.Sec.Data.Models;
+using Equibles.TestSupport;
 using FluentAssertions;
 using Microsoft.Playwright;
 using Xunit;
@@ -44,22 +45,24 @@ public class StocksFtdSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
 
+            var listing = NativeListingSeed.ForStockId(db, stockId);
             db.ChangeTracker.AutoDetectChangesEnabled = false;
             for (var i = 0; i < totalSeededDays; i++)
             {
                 db.Add(
                     new FailToDeliver
                     {
-                        CommonStockId = stockId,
+                        EquityListingId = listing.Id,
+
+                        ListedTicker = listing.Ticker,
                         SettlementDate = endDate.AddDays(-i),
                         Quantity = 10_000L + i,
                         Price = 100m + i,

@@ -119,7 +119,7 @@ public static class FiscalCalendar
     /// detected <see cref="CommonStock.FiscalYearEndMonth"/>, or null when the
     /// fiscal year-end has not been detected yet.
     /// </summary>
-    public static FiscalPeriod? GetPeriod(DateOnly date, CommonStock commonStock)
+    public static FiscalPeriod? GetPeriod(DateOnly date, EquityIssuer commonStock)
     {
         ArgumentNullException.ThrowIfNull(commonStock);
 
@@ -135,7 +135,7 @@ public static class FiscalCalendar
     public static DateOnly? GetQuarterEndDate(
         int fiscalYear,
         int fiscalQuarter,
-        CommonStock commonStock
+        EquityIssuer commonStock
     )
     {
         ArgumentNullException.ThrowIfNull(commonStock);

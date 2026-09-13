@@ -26,10 +26,11 @@ public class RecipientResolver
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository repository =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
         var stocks = await repository
-            .GetAll()
+            .GetCurrentUsDirectory()
             .Where(s => s.Name != null)
             .Select(s => new { s.Id, s.Name })
             .ToListAsync(cancellationToken);

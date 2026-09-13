@@ -66,9 +66,9 @@ public class ShortVolumeImportServiceAggregateVolumesByStockNullSymbolTests
         );
 
         var trackedStockId = Guid.NewGuid();
-        var tickerMap = new Dictionary<string, ListedSecurityKey>
+        var tickerMap = new Dictionary<string, EquityListingReference>
         {
-            ["AAPL"] = new(trackedStockId, "AAPL"),
+            ["AAPL"] = new(trackedStockId, Guid.NewGuid(), "AAPL"),
         };
         var records = new List<ShortVolumeRecord>
         {
@@ -82,7 +82,7 @@ public class ShortVolumeImportServiceAggregateVolumesByStockNullSymbolTests
         };
 
         var act = () =>
-            (Dictionary<ListedSecurityKey, DailyShortVolume>)
+            (Dictionary<Guid, DailyShortVolume>)
                 method!.Invoke(null, [records, tickerMap, new DateOnly(2024, 12, 31)]);
 
         var result = act.Should().NotThrow().Subject;

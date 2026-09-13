@@ -389,7 +389,9 @@ public class InsiderTradingFilingProcessorTests
         var filingRepo = new InsiderFilingRepository(dbContext);
         var errorRepo = new ErrorRepository(dbContext);
         var errorManager = new ErrorManager(errorRepo);
-        var dailyStockPriceRepo = new DailyStockPriceRepository(dbContext);
+        EquityDailyStockPriceRepository dailyStockPriceRepo = new EquityDailyStockPriceRepository(
+            dbContext
+        );
         var priceValidator = new InsiderTransactionPriceValidator();
         var secClient = Substitute.For<ISecEdgarClient>();
         var fileManager = Substitute.For<IFileManager>();
@@ -402,7 +404,7 @@ public class InsiderTradingFilingProcessorTests
             (typeof(FailedFilingIngestRepository), new FailedFilingIngestRepository(dbContext)),
             (typeof(IFileManager), fileManager),
             (typeof(ErrorManager), errorManager),
-            (typeof(DailyStockPriceRepository), dailyStockPriceRepo),
+            (typeof(EquityDailyStockPriceRepository), dailyStockPriceRepo),
             (typeof(InsiderTransactionPriceValidator), priceValidator),
             (typeof(StockSplitRepository), new StockSplitRepository(dbContext))
         );
@@ -433,23 +435,27 @@ public class InsiderTradingFilingProcessorTests
         };
     }
 
-    private static CommonStock MakeCompany()
+    private static EquityIssuer MakeCompany()
     {
-        return new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
     }
 
-    [Fact]
-    public async Task Process_ValidForm4_InsertsTransactionsAndOwner()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Process_ValidForm4_InsertsTransactionsAndOwner(bool unlisted)
     {
         var (processor, ownerRepo, txRepo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(ValidForm4Xml);
 
-        var result = await processor.Process(MakeFiling(), MakeCompany());
+        var company = unlisted
+            ? new EquityIssuer { Name = "Unlisted filer", Cik = "0000320193" }
+            : MakeCompany();
+        var result = await processor.Process(MakeFiling(), company);
 
         result.Should().BeTrue();
         var transactions = txRepo.GetAll().ToList();
@@ -666,7 +672,7 @@ public class InsiderTradingFilingProcessorTests
     {
         var (processor, ownerRepo, txRepo, secClient) = CreateProcessorWithDeps();
         secClient.GetDocumentContent(Arg.Any<FilingData>()).Returns(ValidForm4Xml);
-        var company = MakeCompany();
+        EquityIssuer company = MakeCompany();
 
         // First import
         await processor.Process(MakeFiling(accession: "0001-24-000001"), company);

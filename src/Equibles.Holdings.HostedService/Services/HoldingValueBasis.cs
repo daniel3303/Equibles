@@ -35,8 +35,8 @@ internal static class HoldingValueBasis
     /// <para>
     /// <paramref name="listedTicker"/> names the exact security being valued; null is the
     /// filer's primary (<paramref name="primaryTicker"/>). A PRIMARY position uses every split
-    /// captured from its own series — unattributed legacy rows included, since only the primary
-    /// series could produce them. A SECONDARY position's count may only be moved by splits
+    /// captured from its own series; an unattributed observation leaves its basis unresolved.
+    /// A SECONDARY position's count may only be moved by splits
     /// attributed to that listing — and while ANY post-report split of the issuer is attributed
     /// elsewhere (or to no listing), the class's own split history is unknowable from stored
     /// data, so the row honestly stays pending rather than getting a value that assumes the

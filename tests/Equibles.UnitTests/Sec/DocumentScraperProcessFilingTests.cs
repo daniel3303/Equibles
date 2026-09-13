@@ -26,13 +26,12 @@ namespace Equibles.UnitTests.Sec;
 /// </summary>
 public class DocumentScraperProcessFilingTests
 {
-    private static CommonStock Company() =>
-        new()
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+    private static EquityIssuer Company() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
 
     private static FilingData Filing() =>
         new()
@@ -86,7 +85,7 @@ public class DocumentScraperProcessFilingTests
         var persistence = Substitute.For<IDocumentPersistenceService>();
         persistence
             .Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -106,7 +105,7 @@ public class DocumentScraperProcessFilingTests
         var persistence = Substitute.For<IDocumentPersistenceService>();
         var processor = Substitute.For<IFilingProcessor>();
         processor.CanProcess(Arg.Any<DocumentType>()).Returns(true);
-        processor.Process(Arg.Any<FilingData>(), Arg.Any<CommonStock>()).Returns(false);
+        processor.Process(Arg.Any<FilingData>(), Arg.Any<EquityIssuer>()).Returns(false);
 
         var result = await InvokeProcessFiling(Build(persistence, processor), persistence);
 
@@ -120,7 +119,7 @@ public class DocumentScraperProcessFilingTests
         var persistence = Substitute.For<IDocumentPersistenceService>();
         persistence
             .Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -140,7 +139,7 @@ public class DocumentScraperProcessFilingTests
         var persistence = Substitute.For<IDocumentPersistenceService>();
         persistence
             .Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),

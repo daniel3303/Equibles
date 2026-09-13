@@ -98,7 +98,7 @@ public class DocumentScraper : IDocumentScraper
                 targets.Count
             );
 
-            foreach (var companyUntracked in targets)
+            foreach (EquityIssuer companyUntracked in targets)
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
@@ -158,8 +158,8 @@ public class DocumentScraper : IDocumentScraper
     /// whose last enumeration went stale. Discovery targets come first so a
     /// fresh filing is never queued behind a long reconciliation batch.
     /// </summary>
-    private async Task<List<CommonStock>> SelectEventDrivenTargets(
-        List<CommonStock> companies,
+    private async Task<List<EquityIssuer>> SelectEventDrivenTargets(
+        List<EquityIssuer> companies,
         CancellationToken cancellationToken
     )
     {
@@ -186,9 +186,9 @@ public class DocumentScraper : IDocumentScraper
         return [.. discovered, .. reconciliation];
     }
 
-    private async Task<List<CommonStock>> SelectReconciliationBatch(
-        List<CommonStock> companies,
-        List<CommonStock> alreadySelected,
+    private async Task<List<EquityIssuer>> SelectReconciliationBatch(
+        List<EquityIssuer> companies,
+        List<EquityIssuer> alreadySelected,
         CancellationToken cancellationToken
     )
     {
@@ -199,7 +199,7 @@ public class DocumentScraper : IDocumentScraper
         var lastSyncedByCompany = await syncStateRepository
             .GetAll()
             .AsNoTracking()
-            .ToDictionaryAsync(s => s.CommonStockId, s => s.LastSyncedAt, cancellationToken);
+            .ToDictionaryAsync(s => s.EquityIssuerId, s => s.LastSyncedAt, cancellationToken);
 
         return SelectDueCompanies(
             companies,
@@ -215,8 +215,8 @@ public class DocumentScraper : IDocumentScraper
     /// stamped before the cutoff. Never-synced first, then stalest first, so a
     /// cold start drains as an ordered rolling backfill under the cap.
     /// </summary>
-    internal static List<CommonStock> SelectDueCompanies(
-        List<CommonStock> companies,
+    internal static List<EquityIssuer> SelectDueCompanies(
+        List<EquityIssuer> companies,
         Dictionary<Guid, DateTime> lastSyncedByCompany,
         HashSet<Guid> excludedIds,
         DateTime cutoff,
@@ -241,7 +241,7 @@ public class DocumentScraper : IDocumentScraper
     /// reconciliation window (or the next discovery event) rather than every
     /// cycle, which bounds how much budget a persistently failing company burns.
     /// </summary>
-    private async Task StampFilingSyncState(CommonStock company)
+    private async Task StampFilingSyncState(EquityIssuer company)
     {
         try
         {
@@ -249,16 +249,14 @@ public class DocumentScraper : IDocumentScraper
             var syncStateRepository =
                 scope.ServiceProvider.GetRequiredService<CompanyFilingSyncStateRepository>();
 
-            var state = await syncStateRepository
-                .GetByCommonStockId(company.Id)
-                .FirstOrDefaultAsync();
+            var state = await syncStateRepository.GetByIssuerId(company.Id).FirstOrDefaultAsync();
 
             if (state == null)
             {
                 syncStateRepository.Add(
                     new CompanyFilingSyncState
                     {
-                        CommonStockId = company.Id,
+                        EquityIssuerId = company.Id,
                         LastSyncedAt = DateTime.UtcNow,
                     }
                 );
@@ -277,44 +275,53 @@ public class DocumentScraper : IDocumentScraper
             _logger.LogWarning(
                 ex,
                 "Could not stamp filing sync state for {Ticker}",
-                company.Ticker
+                (company.Presentation?.Listing?.Ticker ?? company.Cik)
             );
         }
     }
 
-    private async Task<List<CommonStock>> GetAllCompaniesWithNoTracking()
+    private async Task<List<EquityIssuer>> GetAllCompaniesWithNoTracking()
     {
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var commonStockRepository =
-            scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository commonStockRepository =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
         if (_workerOptions.TickersToSync?.Count > 0)
         {
             return await commonStockRepository
-                .GetByTickers(_workerOptions.TickersToSync)
+                .GetUsByTickers(_workerOptions.TickersToSync)
                 .AsNoTracking()
                 .ToListAsync();
         }
 
-        return await commonStockRepository.GetAll().AsNoTracking().ToListAsync();
+        return await commonStockRepository
+            .GetAll()
+            .Where(issuer =>
+                issuer.Cik != null
+                && (issuer.Presentation == null || issuer.Presentation.Listing.Active)
+            )
+            .AsNoTracking()
+            .ToListAsync();
     }
 
     private async Task<bool> ProcessCompanyDocumentsWithScope(
-        CommonStock companyUntracked,
+        EquityIssuer companyUntracked,
         ScrapingResult result
     )
     {
         var startTime = DateTime.UtcNow;
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var companyRepository = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+        EquityIssuerRepository companyRepository =
+            scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();
         var persistenceService =
             scope.ServiceProvider.GetRequiredService<IDocumentPersistenceService>();
 
-        var commonStockManager = scope.ServiceProvider.GetRequiredService<CommonStockManager>();
+        EquityIdentityManager commonStockManager =
+            scope.ServiceProvider.GetRequiredService<EquityIdentityManager>();
         var documentRepository = scope.ServiceProvider.GetRequiredService<DocumentRepository>();
 
-        CommonStock company = null;
+        EquityIssuer company = null;
 
         try
         {
@@ -323,7 +330,7 @@ public class DocumentScraper : IDocumentScraper
             {
                 _logger.LogInformation(
                     "Skipping documents for {Ticker} ({CompanyId}) because the company was removed after the scrape target list was loaded",
-                    companyUntracked.Ticker,
+                    (companyUntracked.Presentation?.Listing?.Ticker ?? companyUntracked.Cik),
                     companyUntracked.Id
                 );
                 return false;
@@ -331,7 +338,7 @@ public class DocumentScraper : IDocumentScraper
 
             _logger.LogInformation(
                 "Processing documents for company: {Ticker} - {Name}",
-                company.Ticker,
+                (company.Presentation?.Listing?.Ticker ?? company.Cik),
                 company.Name
             );
 
@@ -386,7 +393,7 @@ public class DocumentScraper : IDocumentScraper
             var duration = DateTime.UtcNow - startTime;
             _logger.LogInformation(
                 "Completed processing documents for {Ticker} in {Duration}. Found: {DocumentsFound}, Added: {DocumentsAdded}, Skipped: {DocumentsSkipped}, Errors: {Errors}",
-                company.Ticker,
+                (company.Presentation?.Listing?.Ticker ?? company.Cik),
                 duration,
                 result.DocumentsFound,
                 result.DocumentsAdded,
@@ -396,7 +403,9 @@ public class DocumentScraper : IDocumentScraper
         }
         catch (Exception ex)
         {
-            var ticker = company?.Ticker ?? companyUntracked.Ticker;
+            var ticker =
+                company?.Presentation?.Listing?.Ticker
+                ?? (companyUntracked.Presentation?.Listing?.Ticker ?? companyUntracked.Cik);
             _logger.LogError(ex, "Error processing documents for company {Ticker}", ticker);
             RecordError(result, $"Company {ticker}", ex);
             await ReportError(
@@ -419,9 +428,9 @@ public class DocumentScraper : IDocumentScraper
     /// this metadata is a nice-to-have enrichment.
     /// </summary>
     private async Task UpdateCompanyMetadata(
-        CommonStock company,
+        EquityIssuer company,
         ISecEdgarClient secEdgarClient,
-        CommonStockManager commonStockManager,
+        EquityIdentityManager commonStockManager,
         DocumentRepository documentRepository
     )
     {
@@ -452,7 +461,7 @@ public class DocumentScraper : IDocumentScraper
             // A 10-K's ReportingForDate is the period end, which is the fiscal
             // year-end by definition.
             var latestTenK = await documentRepository
-                .GetByCompany(company)
+                .GetByIssuerId((company).Id)
                 .Where(d => d.DocumentType == DocumentType.TenK)
                 .OrderByDescending(d => d.ReportingForDate)
                 .Select(d => new { d.ReportingForDate })
@@ -462,7 +471,7 @@ public class DocumentScraper : IDocumentScraper
             {
                 _logger.LogInformation(
                     "SEC metadata has no fiscal year-end for {Ticker}; inferred from 10-K period ending {Date}",
-                    company.Ticker,
+                    (company.Presentation?.Listing?.Ticker ?? company.Cik),
                     latestTenK.ReportingForDate
                 );
                 await commonStockManager.SetFiscalYearEnd(
@@ -482,7 +491,7 @@ public class DocumentScraper : IDocumentScraper
                 {
                     _logger.LogInformation(
                         "SEC metadata has no fiscal year-end for {Ticker}; inferred from {Form} report date {Date}",
-                        company.Ticker,
+                        (company.Presentation?.Listing?.Ticker ?? company.Cik),
                         formName,
                         date
                     );
@@ -495,7 +504,7 @@ public class DocumentScraper : IDocumentScraper
             {
                 _logger.LogWarning(
                     "No fiscal year-end source for {Ticker} (CIK: {Cik}): SEC metadata returned null, no 10-K filings exist, and no 20-F/40-F found in recent submissions",
-                    company.Ticker,
+                    (company.Presentation?.Listing?.Ticker ?? company.Cik),
                     company.Cik
                 );
             }
@@ -505,20 +514,20 @@ public class DocumentScraper : IDocumentScraper
             _logger.LogWarning(
                 ex,
                 "Could not update SEC metadata for {Ticker} (CIK: {Cik}): {Message}",
-                company.Ticker,
+                (company.Presentation?.Listing?.Ticker ?? company.Cik),
                 company.Cik,
                 ex.Message
             );
             await ReportError(
                 "UpdateCompanyMetadata",
                 ex,
-                $"ticker: {company.Ticker}, cik: {company.Cik}"
+                $"ticker: {(company.Presentation?.Listing?.Ticker ?? company.Cik)}, cik: {company.Cik}"
             );
         }
     }
 
     private async Task ProcessDocumentTypeForCompany(
-        CommonStock company,
+        EquityIssuer company,
         DocumentType documentType,
         DocumentTypeFilter secFilter,
         ScrapingResult result,
@@ -530,7 +539,7 @@ public class DocumentScraper : IDocumentScraper
         _logger.LogDebug(
             "Fetching {DocumentType} filings for {Ticker}",
             documentType,
-            company.Ticker
+            (company.Presentation?.Listing?.Ticker ?? company.Cik)
         );
 
         try
@@ -584,13 +593,17 @@ public class DocumentScraper : IDocumentScraper
                 ex,
                 "Error processing {DocumentType} documents for company {Ticker}",
                 documentType,
-                company.Ticker
+                (company.Presentation?.Listing?.Ticker ?? company.Cik)
             );
-            RecordError(result, $"Company {company.Ticker} - {documentType}", ex);
+            RecordError(
+                result,
+                $"Company {(company.Presentation?.Listing?.Ticker ?? company.Cik)} - {documentType}",
+                ex
+            );
             await ReportError(
                 "ProcessDocType",
                 ex,
-                $"ticker: {company.Ticker}, type: {documentType}"
+                $"ticker: {(company.Presentation?.Listing?.Ticker ?? company.Cik)}, type: {documentType}"
             );
         }
     }
@@ -599,7 +612,7 @@ public class DocumentScraper : IDocumentScraper
     // (company, type): the processor's known-accession set for processor forms, or the
     // document store's known accessions + legacy pre-accession keys for plain forms.
     private async Task<List<FilingData>> FilterAlreadyIngested(
-        CommonStock company,
+        EquityIssuer company,
         DocumentType documentType,
         List<FilingData> filings,
         IDocumentPersistenceService persistenceService
@@ -649,7 +662,7 @@ public class DocumentScraper : IDocumentScraper
     // operating sub). Their filings belong on the parent's stock page, so we fetch
     // each CIK separately and dedupe by AccessionNumber (globally unique in SEC).
     private async Task<List<FilingData>> CollectFilingsAcrossCiks(
-        CommonStock company,
+        EquityIssuer company,
         DocumentType documentType,
         DocumentTypeFilter secFilter,
         ScrapingResult result,
@@ -682,9 +695,13 @@ public class DocumentScraper : IDocumentScraper
                     "HTTP error fetching {DocumentType} filings for CIK {Cik} ({Ticker})",
                     documentType,
                     cik,
-                    company.Ticker
+                    (company.Presentation?.Listing?.Ticker ?? company.Cik)
                 );
-                RecordError(result, $"Company {company.Ticker} CIK {cik} - {documentType}", ex);
+                RecordError(
+                    result,
+                    $"Company {(company.Presentation?.Listing?.Ticker ?? company.Cik)} CIK {cik} - {documentType}",
+                    ex
+                );
                 continue;
             }
 
@@ -699,7 +716,7 @@ public class DocumentScraper : IDocumentScraper
             "Found {FilingCount} {DocumentType} filings for {Ticker} across {CikCount} CIK(s)",
             filings.Count,
             documentType,
-            company.Ticker,
+            (company.Presentation?.Listing?.Ticker ?? company.Cik),
             ciks.Count
         );
 
@@ -716,7 +733,7 @@ public class DocumentScraper : IDocumentScraper
     }
 
     private async Task ProcessFiling(
-        CommonStock company,
+        EquityIssuer company,
         FilingData filing,
         DocumentType documentType,
         ScrapingResult result,
@@ -731,7 +748,7 @@ public class DocumentScraper : IDocumentScraper
                 _logger.LogWarning(
                     "Unknown form type '{Form}' for {Ticker} - skipping",
                     filing.Form,
-                    company.Ticker
+                    (company.Presentation?.Listing?.Ticker ?? company.Cik)
                 );
                 result.DocumentsSkipped++;
                 return;
@@ -775,7 +792,7 @@ public class DocumentScraper : IDocumentScraper
 
             _logger.LogInformation(
                 "Added document for {Ticker} - {DocumentType} - {FilingDate}",
-                company.Ticker,
+                (company.Presentation?.Listing?.Ticker ?? company.Cik),
                 documentType,
                 filing.FilingDate
             );
@@ -786,7 +803,7 @@ public class DocumentScraper : IDocumentScraper
             _logger.LogWarning(
                 ex,
                 "Deferring document for {Ticker} - {DocumentType} - {FilingDate}: {Message}",
-                company.Ticker,
+                (company.Presentation?.Listing?.Ticker ?? company.Cik),
                 documentType,
                 filing.FilingDate,
                 ex.Message
@@ -798,24 +815,32 @@ public class DocumentScraper : IDocumentScraper
             _logger.LogWarning(
                 ex,
                 "HTTP error processing filing for {Ticker} - {AccessionNumber}",
-                company.Ticker,
+                (company.Presentation?.Listing?.Ticker ?? company.Cik),
                 filing.AccessionNumber
             );
-            RecordError(result, $"Filing {company.Ticker}/{filing.AccessionNumber}", ex);
+            RecordError(
+                result,
+                $"Filing {(company.Presentation?.Listing?.Ticker ?? company.Cik)}/{filing.AccessionNumber}",
+                ex
+            );
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
                 "Error processing filing for {Ticker} - {AccessionNumber}",
-                company.Ticker,
+                (company.Presentation?.Listing?.Ticker ?? company.Cik),
                 filing.AccessionNumber
             );
-            RecordError(result, $"Filing {company.Ticker}/{filing.AccessionNumber}", ex);
+            RecordError(
+                result,
+                $"Filing {(company.Presentation?.Listing?.Ticker ?? company.Cik)}/{filing.AccessionNumber}",
+                ex
+            );
             await ReportError(
                 "ProcessFiling",
                 ex,
-                $"ticker: {company.Ticker}, accession: {filing.AccessionNumber}"
+                $"ticker: {(company.Presentation?.Listing?.Ticker ?? company.Cik)}, accession: {filing.AccessionNumber}"
             );
         }
     }
@@ -851,7 +876,7 @@ public class DocumentScraper : IDocumentScraper
 
                 _logger.LogInformation(
                     "Deferred document succeeded for {Ticker} - {DocumentType} - {FilingDate}",
-                    filing.Company.Ticker,
+                    (filing.Company.Presentation?.Listing?.Ticker ?? filing.Company.Cik),
                     filing.DocumentType,
                     filing.Filing.FilingDate
                 );
@@ -861,7 +886,7 @@ public class DocumentScraper : IDocumentScraper
                 _logger.LogWarning(
                     ex,
                     "Skipping document for {Ticker} - {DocumentType} - {FilingDate} after retry: {Message}",
-                    filing.Company.Ticker,
+                    (filing.Company.Presentation?.Listing?.Ticker ?? filing.Company.Cik),
                     filing.DocumentType,
                     filing.Filing.FilingDate,
                     ex.Message
@@ -924,7 +949,7 @@ public class DocumentScraper : IDocumentScraper
     /// the filing is re-attempted next cycle, exactly as before tombstones.
     /// </summary>
     private async Task RecordFilingIngestFailure(
-        CommonStock company,
+        EquityIssuer company,
         FilingData filing,
         Exception failure
     )
@@ -977,7 +1002,7 @@ public class DocumentScraper : IDocumentScraper
     // the silent skip paths (no extractable content), so callers neither count
     // an add nor clear a failure tombstone for a filing that stored nothing.
     private async Task<bool> CreateDocument(
-        CommonStock companyOutContext,
+        EquityIssuer companyOutContext,
         FilingData filing,
         DocumentType documentType
     )
@@ -995,10 +1020,12 @@ public class DocumentScraper : IDocumentScraper
                     scope.ServiceProvider.GetRequiredService<IPdfTextExtractor>();
                 var persistenceService =
                     scope.ServiceProvider.GetRequiredService<IDocumentPersistenceService>();
-                var companyRepository =
-                    scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+                EquityIssuerRepository companyRepository =
+                    scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
-                var company = await companyRepository.Get(companyOutContext.Id);
+                EquityIssuer company = await companyRepository.GetCurrentUsDirectoryIssuer(
+                    companyOutContext.Id
+                );
 
                 // The caller's dedup check runs OUTSIDE this retry pipeline, and
                 // Save commits its transaction before the post-commit publish.
@@ -1049,7 +1076,10 @@ public class DocumentScraper : IDocumentScraper
                         _logger.LogWarning(
                             ex,
                             "As-filed HTML build failed for {Ticker} - {DocumentType} - {FilingDate}; backfill will retry.",
-                            companyOutContext.Ticker,
+                            (
+                                companyOutContext.Presentation?.Listing?.Ticker
+                                ?? companyOutContext.Cik
+                            ),
                             documentType,
                             filing.FilingDate
                         );
@@ -1077,7 +1107,7 @@ public class DocumentScraper : IDocumentScraper
                 await persistenceService.Save(
                     company,
                     Encoding.UTF8.GetBytes(markdownDocument),
-                    $"{company.Ticker}_{documentType.DisplayName}_{filing.FilingDate:yyyy-MM-dd}.txt",
+                    $"{(company.Presentation?.Listing?.Ticker ?? company.Cik)}_{documentType.DisplayName}_{filing.FilingDate:yyyy-MM-dd}.txt",
                     documentType,
                     filing.FilingDate,
                     filing.ReportDate,
@@ -1091,7 +1121,7 @@ public class DocumentScraper : IDocumentScraper
 
                 _logger.LogInformation(
                     "Created document entity for {Ticker} - {DocumentType} - {FilingDate}",
-                    companyOutContext.Ticker,
+                    (companyOutContext.Presentation?.Listing?.Ticker ?? companyOutContext.Cik),
                     documentType,
                     filing.FilingDate
                 );
@@ -1108,7 +1138,7 @@ public class DocumentScraper : IDocumentScraper
         ISecEdgarClient secEdgarClient,
         IPdfTextExtractor pdfTextExtractor,
         string content,
-        CommonStock companyOutContext,
+        EquityIssuer companyOutContext,
         FilingData filing,
         DocumentType documentType,
         CancellationToken cancellationToken
@@ -1118,7 +1148,7 @@ public class DocumentScraper : IDocumentScraper
         {
             _logger.LogWarning(
                 "Skipping document for {Ticker} - {DocumentType} - {FilingDate}: no content after conversion. URL: {Url}",
-                companyOutContext.Ticker,
+                (companyOutContext.Presentation?.Listing?.Ticker ?? companyOutContext.Cik),
                 documentType,
                 filing.FilingDate,
                 filing.DocumentUrl
@@ -1140,7 +1170,7 @@ public class DocumentScraper : IDocumentScraper
             // missing (404, logged by the client), or it's an image-only scan needing OCR.
             _logger.LogWarning(
                 "Skipping document for {Ticker} - {DocumentType} - {FilingDate}: PDF {Filename} produced no text. URL: {Url}",
-                companyOutContext.Ticker,
+                (companyOutContext.Presentation?.Listing?.Ticker ?? companyOutContext.Cik),
                 documentType,
                 filing.FilingDate,
                 pdfFilename,
@@ -1151,7 +1181,7 @@ public class DocumentScraper : IDocumentScraper
 
         _logger.LogInformation(
             "Extracted PDF text for {Ticker} - {DocumentType} - {FilingDate} from paper filing artifact {Filename}",
-            companyOutContext.Ticker,
+            (companyOutContext.Presentation?.Listing?.Ticker ?? companyOutContext.Cik),
             documentType,
             filing.FilingDate,
             pdfFilename

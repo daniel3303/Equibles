@@ -30,13 +30,13 @@ public class RevenueBreakdownTools
 
     private readonly FinancialFactRepository _financialFactRepository;
     private readonly FinancialConceptRepository _financialConceptRepository;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly McpToolRunner _runner;
 
     public RevenueBreakdownTools(
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         ErrorManager errorManager,
         ILogger<RevenueBreakdownTools> logger
     )
@@ -122,7 +122,7 @@ public class RevenueBreakdownTools
                 // so we keep one candidate total per (period, unit, concept) — latest-filed
                 // wins — and the members need only reconcile to any one of them.
                 var consolidated = await _financialFactRepository
-                    .GetConsolidatedByStock(stock)
+                    .GetConsolidatedByIssuerId(stock.Id)
                     .Where(f =>
                         conceptIds.Contains(f.FinancialConceptId)
                         && f.PeriodType == FactPeriodType.Duration
@@ -186,7 +186,7 @@ public class RevenueBreakdownTools
                 var years = Math.Clamp(maxYears, 1, MaxYearsCap);
                 var result = new StringBuilder();
                 result.AppendLine(
-                    $"Revenue breakdown for {stock.Ticker} ({FactMarkdown.Cell(stock.Name)}) — "
+                    $"Revenue breakdown for {stock.Presentation.Listing.Ticker} ({FactMarkdown.Cell(stock.Name)}) — "
                         + "annual fiscal years, latest restated values:"
                 );
                 if (rows.Count == 0)
@@ -240,7 +240,7 @@ public class RevenueBreakdownTools
                     totals
                 );
                 if (rows.Count == 0 && !hasSegmentOperatingIncome)
-                    return $"{stock.Ticker} has no dimensional revenue or segment operating "
+                    return $"{stock.Presentation.Listing.Ticker} has no dimensional revenue or segment operating "
                         + "income tagging on record.";
 
                 return result.ToString();
@@ -256,13 +256,13 @@ public class RevenueBreakdownTools
     // one allowed extra dimension: it tags the fact as a pure segment total without
     // slicing it.
     private async Task<List<DimensionalRevenueRow>> LoadSingleAxisRows(
-        CommonStock stock,
+        EquityIssuer stock,
         List<Guid> conceptIds,
         string[] axes
     )
     {
         return await _financialFactRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration
@@ -294,12 +294,12 @@ public class RevenueBreakdownTools
     // Annual facts carrying exactly TWO dimensions on known breakdown axes (a cross-cut
     // like product × segment), qualifier tolerated like the single-axis query.
     private async Task<List<CrossCutRevenueRow>> LoadCrossCutRows(
-        CommonStock stock,
+        EquityIssuer stock,
         List<Guid> conceptIds
     )
     {
         var facts = await _financialFactRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration
@@ -352,7 +352,7 @@ public class RevenueBreakdownTools
     // (its own consolidated totals) and never mixed into the revenue tables above.
     private async Task<bool> AppendSegmentOperatingIncome(
         StringBuilder result,
-        CommonStock stock,
+        EquityIssuer stock,
         int years,
         List<DimensionalRevenueRow> revenueRows,
         IReadOnlyDictionary<(DateOnly PeriodEnd, string Unit), IReadOnlyList<decimal>> revenueTotals
@@ -375,7 +375,7 @@ public class RevenueBreakdownTools
             return false;
 
         var consolidated = await _financialFactRepository
-            .GetConsolidatedByStock(stock)
+            .GetConsolidatedByIssuerId(stock.Id)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodType == FactPeriodType.Duration

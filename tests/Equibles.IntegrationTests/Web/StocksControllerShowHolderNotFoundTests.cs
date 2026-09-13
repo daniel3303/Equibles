@@ -43,11 +43,13 @@ public class StocksControllerShowHolderNotFoundTests : IDisposable
     [Fact]
     public async Task ShowHolder_TickerResolvesButCikUnknown_ReturnsNotFound()
     {
-        _dbContext.Set<CommonStock>().Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        _dbContext
+            .Set<EquityIssuer>()
+            .Add(Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc."));
         await _dbContext.SaveChangesAsync();
 
         var controller = new StocksController(
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new InstitutionalHolderRepository(_dbContext),
             institutionalHoldingRepository: null!,
             new DocumentRepository(_dbContext),

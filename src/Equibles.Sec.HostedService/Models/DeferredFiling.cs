@@ -4,4 +4,4 @@ using Equibles.Sec.Data.Models;
 
 namespace Equibles.Sec.HostedService.Models;
 
-public record DeferredFiling(CommonStock Company, FilingData Filing, DocumentType DocumentType);
+public record DeferredFiling(EquityIssuer Company, FilingData Filing, DocumentType DocumentType);

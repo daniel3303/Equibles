@@ -62,9 +62,9 @@ public class StockPriceToolsExtractHighLowCloseProjectionAlignmentTests
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        var records = new List<DailyStockPrice>
+        var records = new List<EquityDailyStockPrice>
         {
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
                 Open = 50m,
                 High = 100m,

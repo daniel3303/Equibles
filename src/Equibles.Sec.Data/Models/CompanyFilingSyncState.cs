@@ -10,17 +10,18 @@ namespace Equibles.Sec.Data.Models;
 /// when the document scraper last listed this company's submissions. No row
 /// means the company was never fully synced (fresh onboarding) and gets a full
 /// historical backfill; a stale row schedules the periodic reconciliation
-/// re-sweep that backstops the real-time discovery feeds. Rows cascade with
-/// the stock, so a replaced company re-onboards from scratch.
+/// re-sweep that backstops the real-time discovery feeds. The checkpoint belongs
+/// to the issuer and survives retirement of a listing or the legacy stock row.
 /// </summary>
 [Index(nameof(LastSyncedAt))]
 public class CompanyFilingSyncState
 {
     [Key]
-    public Guid CommonStockId { get; set; }
+    // Retain the deployed column name until every older binary has retired.
+    public Guid EquityIssuerId { get; set; }
 
-    [ForeignKey(nameof(CommonStockId))]
-    public virtual CommonStock CommonStock { get; set; }
+    [ForeignKey(nameof(EquityIssuerId))]
+    public virtual EquityIssuer Issuer { get; set; }
 
     public DateTime LastSyncedAt { get; set; }
 }

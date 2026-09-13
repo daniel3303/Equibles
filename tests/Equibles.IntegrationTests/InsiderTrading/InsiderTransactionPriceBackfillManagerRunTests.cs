@@ -30,13 +30,12 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
     public async Task Run_RepairsImplausiblePrice_AndKeepsPlausible()
     {
         var date = new DateOnly(2024, 6, 14);
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var owner = new InsiderOwner
         {
             Id = Guid.NewGuid(),
@@ -53,9 +52,9 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         DbContext.Add(stock);
         DbContext.Add(owner);
         DbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = stock.Id,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, stock, null),
                 Date = date,
                 Close = 50m,
                 Volume = 1_000,
@@ -69,7 +68,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         await using var runCtx = Fixture.CreateDbContext();
         var manager = new InsiderTransactionPriceBackfillManager(
             new InsiderTransactionRepository(runCtx),
-            new DailyStockPriceRepository(runCtx),
+            new EquityDailyStockPriceRepository(runCtx),
             new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             runCtx,
@@ -105,21 +104,19 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
     public async Task Run_NoClose_StaysPending_AndZeroShares_IsInvalidNotRepaired()
     {
         var date = new DateOnly(2024, 6, 14);
-        var priced = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer priced = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         // Second stock has no DailyStockPrice on file → no usable close.
-        var unpriced = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "NONE",
-            Name = "Unlisted Co.",
-            Cik = "0000000001",
-        };
+        EquityIssuer unpriced = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NONE",
+            Name: "Unlisted Co.",
+            Cik: "0000000001"
+        );
         var owner = new InsiderOwner
         {
             Id = Guid.NewGuid(),
@@ -138,9 +135,9 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         DbContext.Add(unpriced);
         DbContext.Add(owner);
         DbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = priced.Id,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, priced, null),
                 Date = date,
                 Close = 50m,
                 Volume = 1_000,
@@ -154,7 +151,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         await using var runCtx = Fixture.CreateDbContext();
         var manager = new InsiderTransactionPriceBackfillManager(
             new InsiderTransactionRepository(runCtx),
-            new DailyStockPriceRepository(runCtx),
+            new EquityDailyStockPriceRepository(runCtx),
             new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             runCtx,
@@ -183,7 +180,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
     }
 
     private static InsiderTransaction Transaction(
-        CommonStock stock,
+        EquityIssuer stock,
         InsiderOwner owner,
         DateOnly date,
         decimal pricePerShare,
@@ -193,7 +190,7 @@ public class InsiderTransactionPriceBackfillManagerRunTests : ParadeDbMcpTestBas
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             FilingDate = date,
             TransactionDate = date,

@@ -54,7 +54,7 @@ public class FinancialStatementToolsPickCurrentlyReportedFactQuarterSpanTests
     ) =>
         new()
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             FinancialConceptId = conceptId,
             Value = value,
             Unit = "USD",

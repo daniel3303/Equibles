@@ -39,12 +39,11 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
     {
         var sut = new EmbeddingRepository(DbContext);
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = new File
         {
             Id = Guid.NewGuid(),
@@ -57,7 +56,7 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
         var document = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2024, 3, 15),
@@ -87,7 +86,7 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
             vector: new Vector(new ReadOnlyMemory<float>(new[] { 0f, 0f, 1f }))
         );
 
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<File>().Add(file);
         DbContext.Set<Document>().Add(document);
         DbContext.Set<Chunk>().AddRange(chunkX.chunk, chunkY.chunk, chunkZ.chunk);
@@ -116,19 +115,18 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
     [Fact]
     public async Task SearchSimilarChunks_DateWindowUsesDocumentDateWhenChunkCacheDisagrees()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var insideFile = MakeFile("inside");
         var beforeFile = MakeFile("before");
         var afterFile = MakeFile("after");
         var insideDocument = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = insideFile.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2023, 9, 30),
@@ -138,7 +136,7 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
         var beforeDocument = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = beforeFile.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2023, 6, 30),
@@ -148,7 +146,7 @@ public class EmbeddingRepositoryTests : ParadeDbMcpTestBase
         var afterDocument = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             ContentId = afterFile.Id,
             DocumentType = DocumentType.TenK,
             ReportingDate = new DateOnly(2023, 12, 31),

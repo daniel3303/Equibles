@@ -77,10 +77,61 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RebuildAll_NativeIssuerWithoutListing_PreservesIdentityAcrossRefreshes()
+    {
+        await using var seed = FreshContext();
+        var issuer = new EquityIssuer { Name = "Native fund registrant", Cik = "0000000097" };
+        seed.Add(issuer);
+        var filing = MakeFiling(
+            issuer.Id,
+            null,
+            "0000000097-26-000001",
+            "S000009700",
+            "Native series",
+            issuer.Name,
+            new DateOnly(2026, 6, 30),
+            1234.5678m,
+            2345.6789m,
+            1
+        );
+        AddHolding(filing, "037833100", 1234.5678m);
+        seed.Add(filing);
+        seed.Add(
+            new NCenFiling
+            {
+                EquityIssuerId = issuer.Id,
+                AccessionNumber = "0000000097-26-000002",
+                FilingDate = new DateOnly(2026, 7, 30),
+                InvestmentCompanyType = "N-2",
+            }
+        );
+        await seed.SaveChangesAsync();
+        var service = BuildService();
+        await service.RebuildAllAsync(CancellationToken.None);
+        await using var read = FreshContext();
+        var first = await read.Set<FundSeries>().AsNoTracking().SingleAsync();
+        first.EquityIssuerId.Should().Be(issuer.Id);
+        first.IdentityKey.Should().Be($"cs:{issuer.Id}:S000009700");
+        first.Slug.Should().Be("native-series-s000009700");
+        first.FundType.Should().Be("N-2");
+        first.Ticker.Should().BeNull();
+        first.LatestNportFilingId.Should().Be(filing.Id);
+        first.NetAssets.Should().Be(1234.5678m);
+        first.PositionCount.Should().Be(1);
+        await service.RebuildAllAsync(CancellationToken.None);
+        var second = await read.Set<FundSeries>().AsNoTracking().SingleAsync();
+        second.Id.Should().Be(first.Id);
+        second.IdentityKey.Should().Be(first.IdentityKey);
+        second.Slug.Should().Be(first.Slug);
+        (await read.Set<CommonStock>().CountAsync()).Should().Be(0);
+        (await read.Set<EquityListing>().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task RebuildAll_MaterialisesTrackedAndTrustSeries_WithIdentityStatsAndSlug()
     {
         await using var seed = FreshContext();
-        var cef = await SeedStock(seed, "GAB", "0000038777");
+        EquityIssuer cef = await SeedStock(seed, "GAB", "0000038777");
         var trackedFiling = MakeFiling(
             commonStockId: cef.Id,
             registrantCik: null,
@@ -116,7 +167,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         await BuildService().RebuildAllAsync(CancellationToken.None);
 
         await using var read = FreshContext();
-        var tracked = await read.Set<FundSeries>().SingleAsync(s => s.CommonStockId == cef.Id);
+        var tracked = await read.Set<FundSeries>().SingleAsync(s => s.EquityIssuerId == cef.Id);
         tracked.IdentityKey.Should().Be($"cs:{cef.Id}");
         tracked.Ticker.Should().Be("GAB");
         tracked.Slug.Should().Be("gabelli-equity-trust-gab");
@@ -142,7 +193,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     public async Task RebuildAll_KeepsOnlyTheLatestReportPerSeries()
     {
         await using var seed = FreshContext();
-        var cef = await SeedStock(seed, "ECF", "0000123456");
+        EquityIssuer cef = await SeedStock(seed, "ECF", "0000123456");
         var older = MakeFiling(
             cef.Id,
             null,
@@ -174,7 +225,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         await BuildService().RebuildAllAsync(CancellationToken.None);
 
         await using var read = FreshContext();
-        var row = await read.Set<FundSeries>().SingleAsync(s => s.CommonStockId == cef.Id);
+        var row = await read.Set<FundSeries>().SingleAsync(s => s.EquityIssuerId == cef.Id);
         row.NetAssets.Should().Be(900m, "the newest report wins");
         row.PositionCount.Should().Be(2);
         row.LatestNportFilingId.Should().Be(newer.Id);
@@ -185,7 +236,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     public async Task RebuildAll_DistinctTrackedSeries_UsesSeriesScopedIdentity()
     {
         await using var seed = FreshContext();
-        var trust = await SeedStock(seed, "AAXJ", "0001100663");
+        EquityIssuer trust = await SeedStock(seed, "AAXJ", "0001100663");
         var seriesA = MakeFiling(
             trust.Id,
             null,
@@ -231,7 +282,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
 
         await using var read = FreshContext();
         var rows = await read.Set<FundSeries>()
-            .Where(s => s.CommonStockId == trust.Id)
+            .Where(s => s.EquityIssuerId == trust.Id)
             .OrderBy(s => s.SeriesId)
             .ToListAsync();
         rows.Should().HaveCount(2);
@@ -240,7 +291,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             .Equal($"cs:{trust.Id}:S000002277", $"cs:{trust.Id}:S000004310");
         rows.Select(s => s.Ticker).Should().Equal("IWM", "IVV");
         rows.SelectMany(s => s.ClassTickers).Should().Equal("IWM", "IVV");
-        rows.Select(s => s.Ticker).Should().NotContain(trust.Ticker);
+        rows.Select(s => s.Ticker).Should().NotContain(trust.Presentation.Listing.Ticker);
         rows.Select(s => s.Slug).Should().OnlyHaveUniqueItems();
     }
 
@@ -248,7 +299,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     public async Task RebuildAll_SeriesMovesBetweenPopulations_ReplacesConflictingSlugIdentity()
     {
         await using var seed = FreshContext();
-        var trust = await SeedStock(seed, "AAXJ", "0001100663");
+        EquityIssuer trust = await SeedStock(seed, "AAXJ", "0001100663");
         var tracked = MakeFiling(
             trust.Id,
             null,
@@ -279,7 +330,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
                     LatestNportFilingId = tracked.Id,
                     IdentityKey = $"cs:{trust.Id}:S000002277",
                     Slug = "ishares-russell-2000-etf-s000002277",
-                    CommonStockId = trust.Id,
+                    EquityIssuerId = trust.Id,
                     SeriesId = "S000002277",
                     SeriesName = "iShares Russell 2000 ETF",
                     LatestReportPeriodDate = tracked.ReportPeriodDate,
@@ -294,7 +345,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         var row = await read.Set<FundSeries>().SingleAsync();
         row.IdentityKey.Should().Be("rc:0001100663:S000002277");
         row.Slug.Should().Be("ishares-russell-2000-etf-s000002277");
-        row.CommonStockId.Should().BeNull();
+        row.EquityIssuerId.Should().BeNull();
         row.NetAssets.Should().Be(2_100m);
     }
 
@@ -302,7 +353,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     public async Task RebuildAll_ReprocessedFilingChangesIdentity_ReplacesPriorFilingOwner()
     {
         await using var seed = FreshContext();
-        var stock = await SeedStock(seed, "IVV", "0001100663");
+        EquityIssuer stock = await SeedStock(seed, "IVV", "0001100663");
         var filing = MakeFiling(
             stock.Id,
             null,
@@ -322,7 +373,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
                     LatestNportFilingId = filing.Id,
                     IdentityKey = $"cs:{stock.Id}",
                     Slug = "ishares-trust-ivv",
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     SeriesId = "",
                     SeriesName = "iShares Trust",
                     LatestReportPeriodDate = filing.ReportPeriodDate,
@@ -345,7 +396,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     public async Task RebuildAll_ReplacementUpsertFails_RollsBackConflictingSlugDeletion()
     {
         await using var seed = FreshContext();
-        var trust = await SeedStock(seed, "AAXJ", "0001100663");
+        EquityIssuer trust = await SeedStock(seed, "AAXJ", "0001100663");
         var swept = MakeFiling(
             null,
             "0001100663",
@@ -363,7 +414,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             LatestNportFilingId = Guid.NewGuid(),
             IdentityKey = $"cs:{trust.Id}:S000002277",
             Slug = "ishares-russell-2000-etf-s000002277",
-            CommonStockId = trust.Id,
+            EquityIssuerId = trust.Id,
             SeriesId = "S000002277",
             SeriesName = "iShares Russell 2000 ETF",
             LatestReportPeriodDate = new DateOnly(2024, 12, 31),
@@ -397,7 +448,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     public async Task RebuildAll_PopulatesFundType_FromLatestNCen()
     {
         await using var seed = FreshContext();
-        var cef = await SeedStock(seed, "GAB", "0000038777");
+        EquityIssuer cef = await SeedStock(seed, "GAB", "0000038777");
         var filing = MakeFiling(
             cef.Id,
             null,
@@ -415,7 +466,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
             new NCenFiling
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = cef.Id,
+                EquityIssuerId = cef.Id,
                 AccessionNumber = "0000038777-25-000099",
                 FilingDate = new DateOnly(2025, 2, 1),
                 RegistrantName = "Gabelli Equity Trust",
@@ -428,7 +479,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         await BuildService().RebuildAllAsync(CancellationToken.None);
 
         await using var read = FreshContext();
-        var row = await read.Set<FundSeries>().SingleAsync(s => s.CommonStockId == cef.Id);
+        var row = await read.Set<FundSeries>().SingleAsync(s => s.EquityIssuerId == cef.Id);
         row.FundType.Should().Be("N-2");
     }
 
@@ -436,7 +487,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     public async Task RebuildAll_PrunesStaleRowsAndUpdatesExistingInPlace()
     {
         await using var seed = FreshContext();
-        var cef = await SeedStock(seed, "GAB", "0000038777");
+        EquityIssuer cef = await SeedStock(seed, "GAB", "0000038777");
         var filing = MakeFiling(
             cef.Id,
             null,
@@ -473,7 +524,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
                 LatestNportFilingId = Guid.NewGuid(),
                 IdentityKey = $"cs:{cef.Id}",
                 Slug = "stale-slug",
-                CommonStockId = cef.Id,
+                EquityIssuerId = cef.Id,
                 SeriesId = "",
                 SeriesName = "Gabelli Equity Trust",
                 RegistrantName = "Gabelli Equity Trust",
@@ -492,7 +543,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         await using var read = FreshContext();
         var rows = await read.Set<FundSeries>().ToListAsync();
         rows.Should().ContainSingle("the ghost row with no current filing is pruned");
-        rows[0].CommonStockId.Should().Be(cef.Id);
+        rows[0].EquityIssuerId.Should().Be(cef.Id);
         rows[0].NetAssets.Should().Be(1_000m, "the surviving row is overwritten with fresh stats");
         rows[0].PositionCount.Should().Be(1);
         rows[0].Slug.Should().Be("gabelli-equity-trust-gab");
@@ -590,7 +641,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
     )
     {
         await using var seed = FreshContext();
-        var trust = await SeedStock(seed, "VTI", "0000102909");
+        EquityIssuer trust = await SeedStock(seed, "VTI", "0000102909");
         var filing = MakeFiling(
             trust.Id,
             null,
@@ -630,19 +681,18 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         row.NetAssets.Should().Be(2_000m);
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         EquiblesFinancialDbContext ctx,
         string ticker,
         string cik
     )
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = $"{ticker} Fund",
-            Cik = cik,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: $"{ticker} Fund",
+            Cik: cik
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -663,7 +713,7 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             RegistrantCik = registrantCik,
             AccessionNumber = accession,
             FilingDate = reportPeriod.AddDays(30),

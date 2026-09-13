@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Sec.Data.Models;
@@ -15,7 +16,7 @@ namespace Equibles.Sec.BusinessLogic.Search;
 public class RagManager : IRagManager
 {
     private readonly HybridChunkSearcher _hybridChunkSearcher;
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly ILogger<RagManager> _logger;
     private readonly IDocumentExcerptLinkBuilder _excerptLinkBuilder;
 
@@ -24,7 +25,7 @@ public class RagManager : IRagManager
     // deployment has not registered a public document viewer to link into.
     public RagManager(
         HybridChunkSearcher hybridChunkSearcher,
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         ILogger<RagManager> logger,
         IDocumentExcerptLinkBuilder excerptLinkBuilder = null
     )
@@ -143,7 +144,7 @@ public class RagManager : IRagManager
         var groupedChunks = chunks.GroupBy(c => new
         {
             c.Document.Id,
-            c.Document.CommonStock.Ticker,
+            Ticker = c.Document.Issuer.Presentation?.Listing?.Ticker,
             c.Document.DocumentType,
             c.Document.ReportingDate,
         });
@@ -151,7 +152,7 @@ public class RagManager : IRagManager
         foreach (var group in groupedChunks)
         {
             var firstChunk = group.First();
-            context.AppendLine($"## {firstChunk.Document.CommonStock.Name} ({group.Key.Ticker})");
+            context.AppendLine($"## {firstChunk.Document.Issuer.Name} ({group.Key.Ticker})");
             var filedOn = group.Key.ReportingDate.ToString(
                 "yyyy-MM-dd",
                 CultureInfo.InvariantCulture
@@ -244,7 +245,7 @@ public class RagManager : IRagManager
 
     private async Task<string> ResolvePrimaryTicker(string ticker)
     {
-        var stock = await _commonStockRepository.GetByTicker(ticker);
-        return stock?.Ticker ?? ticker;
+        EquityIssuer stock = await _commonStockRepository.GetUsByTicker(ticker);
+        return stock?.Presentation?.Listing?.Ticker ?? ticker;
     }
 }

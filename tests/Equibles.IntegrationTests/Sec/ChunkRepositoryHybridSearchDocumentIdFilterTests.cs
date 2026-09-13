@@ -29,12 +29,11 @@ public class ChunkRepositoryHybridSearchDocumentIdFilterTests : ParadeDbMcpTestB
     [Fact]
     public async Task HybridSearch_WithDocumentIdFilter_ReturnsOnlyChunksFromThatDocument()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         DbContext.Add(stock);
 
         var doc1 = SeedDocument(stock, new DateOnly(2026, 1, 15));
@@ -42,8 +41,16 @@ public class ChunkRepositoryHybridSearchDocumentIdFilterTests : ParadeDbMcpTestB
 
         // Both documents contain a chunk that matches the BM25 query. Without the
         // documentId predicate, both would rank into the result set.
-        SeedChunk(doc1, "Services revenue grew substantially this quarter.", stock.Ticker);
-        SeedChunk(doc2, "Services revenue continued its strong growth trajectory.", stock.Ticker);
+        SeedChunk(
+            doc1,
+            "Services revenue grew substantially this quarter.",
+            stock.Presentation.Listing.Ticker
+        );
+        SeedChunk(
+            doc2,
+            "Services revenue continued its strong growth trajectory.",
+            stock.Presentation.Listing.Ticker
+        );
 
         await DbContext.SaveChangesAsync();
 
@@ -62,12 +69,11 @@ public class ChunkRepositoryHybridSearchDocumentIdFilterTests : ParadeDbMcpTestB
     [Fact]
     public async Task HybridSearch_DateWindowUsesDocumentDateWhenChunkCacheDisagrees()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         DbContext.Add(stock);
 
         var inside = SeedDocument(stock, new DateOnly(2023, 9, 30));
@@ -76,19 +82,19 @@ public class ChunkRepositoryHybridSearchDocumentIdFilterTests : ParadeDbMcpTestB
         SeedChunk(
             inside,
             "zzqxfiscal transcript supply chain concentration.",
-            stock.Ticker,
+            stock.Presentation.Listing.Ticker,
             new DateOnly(2023, 12, 31)
         );
         SeedChunk(
             before,
             "zzqxfiscal transcript supply chain concentration.",
-            stock.Ticker,
+            stock.Presentation.Listing.Ticker,
             new DateOnly(2023, 9, 30)
         );
         SeedChunk(
             after,
             "zzqxfiscal transcript supply chain concentration.",
-            stock.Ticker,
+            stock.Presentation.Listing.Ticker,
             new DateOnly(2023, 9, 30)
         );
         await DbContext.SaveChangesAsync();
@@ -104,7 +110,7 @@ public class ChunkRepositoryHybridSearchDocumentIdFilterTests : ParadeDbMcpTestB
         results.Should().ContainSingle().Which.DocumentId.Should().Be(inside.Id);
     }
 
-    private Document SeedDocument(CommonStock stock, DateOnly reportingDate)
+    private Document SeedDocument(EquityIssuer stock, DateOnly reportingDate)
     {
         var fileContent = new FileContent { Bytes = "placeholder"u8.ToArray() };
         var file = new File
@@ -120,8 +126,7 @@ public class ChunkRepositoryHybridSearchDocumentIdFilterTests : ParadeDbMcpTestB
 
         var document = new Document
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,

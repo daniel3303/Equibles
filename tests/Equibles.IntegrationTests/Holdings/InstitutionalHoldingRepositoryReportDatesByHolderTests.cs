@@ -78,7 +78,7 @@ public class InstitutionalHoldingRepositoryReportDatesByHolderTests : IDisposabl
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

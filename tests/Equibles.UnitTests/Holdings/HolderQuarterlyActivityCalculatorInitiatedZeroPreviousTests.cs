@@ -22,17 +22,16 @@ public class HolderQuarterlyActivityCalculatorInitiatedZeroPreviousTests
         // could quietly carry forward stale prior-quarter values without that
         // assertion (e.g. surfacing yesterday's `previous` row pointer if the
         // dictionary lookup returned a stale ref).
-        var aapl = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "C0000320",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "C0000320"
+        );
         var current = new InstitutionalHolding
         {
-            CommonStockId = aapl.Id,
-            CommonStock = aapl,
+            EquityIssuerId = aapl.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(null, aapl).Security.Issuer,
             InstitutionalHolderId = Guid.NewGuid(),
             FilingDate = new DateOnly(2025, 1, 15),
             ReportDate = new DateOnly(2024, 12, 31),

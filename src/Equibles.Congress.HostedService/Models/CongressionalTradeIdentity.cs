@@ -8,7 +8,7 @@ internal abstract record CongressionalTradeIdentity
         trade.FilingKind.HasValue && trade.SourceId != null && trade.SourceRowIndex.HasValue
             ? new SourceIdentity(trade.FilingKind.Value, trade.SourceId, trade.SourceRowIndex.Value)
             : new LegacyIdentity(
-                trade.CommonStockId,
+                trade.EquityIssuerId,
                 trade.TransactionDate,
                 trade.TransactionType,
                 trade.AssetName,

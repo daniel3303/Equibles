@@ -138,7 +138,7 @@ public class DocumentNormalizationBackfillService
             {
                 var source = await _secEdgarClient.GetDocumentContent(
                     document.AccessionNumber,
-                    document.CommonStock.Cik,
+                    document.Issuer.Cik,
                     cancellationToken
                 );
                 var normalizedHtml = _normalizer.Normalize(source);

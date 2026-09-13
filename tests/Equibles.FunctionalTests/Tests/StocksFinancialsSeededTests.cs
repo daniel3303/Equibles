@@ -32,13 +32,12 @@ public class StocksFinancialsSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
 
             db.Add(
@@ -54,7 +53,7 @@ public class StocksFinancialsSeededTests
             db.Add(
                 new FinancialFact
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     FinancialConceptId = conceptId,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,

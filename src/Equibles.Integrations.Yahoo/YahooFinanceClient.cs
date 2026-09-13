@@ -91,6 +91,18 @@ public class YahooFinanceClient : IYahooFinanceClient
 
         return new YahooChartData
         {
+            SourceIdentity =
+                result.Meta == null
+                    ? null
+                    : new YahooChartSourceIdentity
+                    {
+                        Symbol = result.Meta.Symbol,
+                        Currency = result.Meta.Currency,
+                        ExchangeCode = result.Meta.ExchangeCode,
+                        ExchangeName = result.Meta.ExchangeName,
+                        InstrumentType = result.Meta.InstrumentType,
+                        ExchangeTimeZone = result.Meta.ExchangeTimezoneName,
+                    },
             FirstTradeDate = result.Meta?.FirstTradeDate is > 0
                 ? FromUnixTimestamp(result.Meta.FirstTradeDate.Value + offsetSeconds)
                 : null,

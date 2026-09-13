@@ -64,21 +64,24 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
             Substitute.For<IBus>()
         );
 
-    private static object BuildState(EquiblesFinancialDbContext db, CommonStock existingStock)
+    private static object BuildState(EquiblesFinancialDbContext db, EquityIssuer existingStock)
     {
         var t = typeof(CompanySyncService).GetNestedType("StockSyncState", BindingFlags.NonPublic);
         var s = Activator.CreateInstance(t);
         void Set(string n, object v) => t.GetProperty(n).SetValue(s, v);
         Set("SecCiks", new HashSet<string> { existingStock.Cik });
-        Set("ExistingStocks", new List<CommonStock> { existingStock });
+        Set("ExistingStocks", new List<EquityIssuer> { existingStock });
         Set("ExistingCiks", new HashSet<string> { existingStock.Cik });
-        Set("ExistingPrimaryTickers", new HashSet<string> { existingStock.Ticker });
-        Set("PrimaryTickerToStock", new Dictionary<string, CommonStock>());
-        Set("SecondaryCikToParent", new Dictionary<string, CommonStock>());
-        Set("CommonStockRepository", new CommonStockRepository(db));
+        Set(
+            "ExistingPrimaryTickers",
+            new HashSet<string> { existingStock.Presentation.Listing.Ticker }
+        );
+        Set("PrimaryTickerToStock", new Dictionary<string, EquityIssuer>());
+        Set("SecondaryCikToParent", new Dictionary<string, EquityIssuer>());
+        Set("CommonStockRepository", new EquityIssuerRepository(db));
         Set(
             "CommonStockManager",
-            new CommonStockManager(new CommonStockRepository(db), Substitute.For<IBus>())
+            new EquityIdentityManager(new EquityIssuerRepository(db), Substitute.For<IBus>())
         );
         Set("DbContext", db);
         return s;
@@ -98,22 +101,25 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
         return (Task)m.Invoke(sut, [secCompany, primaryTicker, new List<string>(), state]);
     }
 
-    private async Task<(EquiblesFinancialDbContext Db, CommonStock Stock)> SeedStock(string website)
+    private async Task<(EquiblesFinancialDbContext Db, EquityIssuer Stock)> SeedStock(
+        string website
+    )
     {
         var db = NewDb();
-        db.Set<CommonStock>()
+        db.Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Cik = _cik,
-                    Ticker = "EXM",
-                    Name = "Example Corp",
-                    Website = website,
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Cik: _cik,
+                    Ticker: "EXM",
+                    Name: "Example Corp",
+                    Website: website
+                )
             );
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
-        var stock = await db.Set<CommonStock>().FirstAsync(s => s.Cik == _cik);
+        EquityIssuer stock = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == _cik);
         return (db, stock);
     }
 
@@ -137,7 +143,9 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
 
         await Invoke(BuildSut(edgar), UnchangedCompanyInfo(), "EXM", BuildState(db, stock));
 
-        var updated = await db.Set<CommonStock>().FirstAsync(s => s.Cik == _cik);
+        EquityIssuer updated = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == _cik);
         updated.Website.Should().Be("https://www.example.com");
     }
 
@@ -151,7 +159,9 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
 
         await Invoke(BuildSut(edgar), UnchangedCompanyInfo(), "EXM", BuildState(db, stock));
 
-        var updated = await db.Set<CommonStock>().FirstAsync(s => s.Cik == _cik);
+        EquityIssuer updated = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == _cik);
         updated.Website.Should().BeNull();
     }
 
@@ -165,7 +175,9 @@ public class CompanySyncServiceUpdateExistingWebsiteRefillTests
         await Invoke(BuildSut(edgar), UnchangedCompanyInfo(), "EXM", BuildState(db, stock));
 
         await edgar.DidNotReceive().GetCompanyMetadata(Arg.Any<string>());
-        var updated = await db.Set<CommonStock>().FirstAsync(s => s.Cik == _cik);
+        EquityIssuer updated = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == _cik);
         updated.Website.Should().Be("https://www.already-set.com");
     }
 }

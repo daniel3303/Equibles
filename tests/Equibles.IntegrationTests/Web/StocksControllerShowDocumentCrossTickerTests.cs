@@ -28,20 +28,18 @@ public class StocksControllerShowDocumentCrossTickerTests
             new SecTestModuleConfiguration()
         );
 
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        ctx.Set<CommonStock>().Add(apple);
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        ctx.Set<EquityIssuer>().Add(apple);
 
         var appleDocument = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = apple.Id,
-            CommonStock = apple,
+            Issuer = apple,
             ContentId = Guid.NewGuid(),
             Content = new File
             {
@@ -58,7 +56,7 @@ public class StocksControllerShowDocumentCrossTickerTests
         await ctx.SaveChangesAsync();
 
         var sut = new StocksController(
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             institutionalHolderRepository: null!,
             institutionalHoldingRepository: null!,
             new DocumentRepository(ctx),

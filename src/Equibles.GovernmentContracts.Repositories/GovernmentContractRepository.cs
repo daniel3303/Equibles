@@ -9,9 +9,9 @@ public class GovernmentContractRepository : BaseRepository<GovernmentContract>
     public GovernmentContractRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<GovernmentContract> GetByCommonStock(CommonStock commonStock)
+    public IQueryable<GovernmentContract> GetByIssuerId(Guid commonStock)
     {
-        return GetAll().Where(c => c.CommonStockId == commonStock.Id);
+        return GetAll().Where(c => c.EquityIssuerId == commonStock);
     }
 
     public IQueryable<GovernmentContract> GetByAwardUniqueKey(string awardUniqueKey)

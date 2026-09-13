@@ -44,7 +44,13 @@ public class NportFilingRepositoryQueryTranslationTests
         var repository = new NportFilingRepository(ctx);
 
         var sql = repository
-            .GetHoldingsByStockCusip(new CommonStock { Id = Guid.NewGuid(), Cusip = "037833100" })
+            .GetHoldingsByStockCusip(
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "TEST",
+                    Id: Guid.NewGuid(),
+                    Cusip: "037833100"
+                )
+            )
             .ToQueryString();
 
         // The current CUSIP must ride inside the alias subquery (UNION), never as a separate

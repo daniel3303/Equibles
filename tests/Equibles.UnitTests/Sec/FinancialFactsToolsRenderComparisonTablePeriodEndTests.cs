@@ -51,6 +51,7 @@ public class FinancialFactsToolsRenderComparisonTablePeriodEndTests
                     tableRows,
                     new List<string>(),
                     new Dictionary<Guid, List<StockSplit>>(),
+                    new Dictionary<Guid, Guid> { [Guid.Empty] = Guid.NewGuid() },
                 ]
             );
     }

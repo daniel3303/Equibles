@@ -13,5 +13,5 @@ internal static class DocumentTextFormat
     }
 
     internal static string Header(Document document) =>
-        $"{document.CommonStock.Name} ({document.CommonStock.Ticker}) {document.DocumentType} filed {McpFormat.Invariant(document.ReportingDate, "yyyy-MM-dd")}";
+        $"{document.Issuer.Name} ({document.Issuer.Presentation?.Listing?.Ticker}) {document.DocumentType} filed {McpFormat.Invariant(document.ReportingDate, "yyyy-MM-dd")}";
 }

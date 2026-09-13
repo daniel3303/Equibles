@@ -38,12 +38,11 @@ public class CompanySyncServiceReplaceObsoleteCaseMismatchTests : ParadeDbMcpTes
     [Fact]
     public async Task SyncCompaniesFromSecApi_TickerCaseMismatch_ResolvesHolderAndReplacesObsoleteStock()
     {
-        var stored = new CommonStock
-        {
-            Cik = "0000000999",
-            Ticker = "REUSED",
-            Name = "Stored Stock Inc.",
-        };
+        EquityIssuer stored = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000999",
+            Ticker: "REUSED",
+            Name: "Stored Stock Inc."
+        );
         DbContext.Add(stored);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -69,10 +68,13 @@ public class CompanySyncServiceReplaceObsoleteCaseMismatchTests : ParadeDbMcpTes
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -92,14 +94,20 @@ public class CompanySyncServiceReplaceObsoleteCaseMismatchTests : ParadeDbMcpTes
         await sut.SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().HaveCount(2, "the retired case variant remains queryable historically");
-        var current = stocks
+        EquityIssuer current = stocks
             .Should()
-            .ContainSingle(stock => stock.Cik == "0000000111" && stock.Active)
+            .ContainSingle(stock => stock.Cik == "0000000111" && stock.Presentation.Listing.Active)
             .Subject;
-        current.Ticker.Should().Be("REUSED", "listed tickers are persisted canonically");
+        current
+            .Presentation.Listing.Ticker.Should()
+            .Be("REUSED", "listed tickers are persisted canonically");
         current.Name.Should().Be("Acquirer Inc.");
-        stocks.Should().ContainSingle(stock => stock.Cik != "0000000111" && !stock.Active);
+        stocks
+            .Should()
+            .ContainSingle(stock =>
+                stock.Cik != "0000000111" && !stock.Presentation.Listing.Active
+            );
     }
 }

@@ -151,8 +151,8 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
         }
 
         await using var current = _fixture.CreateDbContext();
-        var stock = await current.Set<CommonStock>().SingleAsync(s => s.Id == stockId);
-        var repository = new DailyStockPriceRepository(current);
+        var stock = await current.Set<EquityIssuer>().SingleAsync(s => s.Id == stockId);
+        EquityDailyStockPriceRepository repository = new EquityDailyStockPriceRepository(current);
         (await repository.GetByStock(stock).ToListAsync()).Should().BeEmpty();
         (await repository.GetByStock(stock, "GOOGL").ToListAsync()).Should().BeEmpty();
         (await repository.GetByStock(stock, "GOOG").ToListAsync()).Should().BeEmpty();
@@ -168,18 +168,21 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
             await seed.SaveChangesAsync();
         }
 
+        await using var identityContext = _fixture.CreateDbContext();
+        var listingId = (
+            await new EquityIssuerRepository(identityContext).GetEquityListingId(stockId, "AAPL")
+        ).Value;
         var firstDate = new DateOnly(2024, 1, 1);
         var freshRows = Enumerable
             .Range(0, 501)
-            .Select(offset =>
-                Price(
-                    Guid.NewGuid(),
-                    stockId,
-                    firstDate.AddDays(offset),
-                    close: 100m + offset,
-                    listedTicker: "AAPL"
-                )
-            )
+            .Select(offset => new EquityDailyStockPrice
+            {
+                EquityListingId = listingId,
+                SourceTicker = "AAPL",
+                Date = firstDate.AddDays(offset),
+                Close = 100m + offset,
+                Volume = 100,
+            })
             .ToList();
         var saveGate = new FirstPriceBatchSaveGate();
         await using var writer = _fixture.CreateDbContext(options =>
@@ -190,9 +193,9 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
                 ReplacePriceRowsMethod.Invoke(
                     null,
                     [
-                        new DailyStockPriceRepository(writer),
-                        new CommonStockRepository(writer),
-                        new PriceSeriesTarget("AAPL", stockId, IsPrimary: true),
+                        new EquityDailyStockPriceRepository(writer),
+                        new EquityIssuerRepository(writer),
+                        new PriceSeriesTarget("AAPL", stockId, listingId, IsPrimary: true),
                         firstDate,
                         firstDate.AddDays(501),
                         freshRows,
@@ -204,8 +207,8 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
         await using (var concurrentReader = _fixture.CreateDbContext())
         {
             var visible = await concurrentReader
-                .Set<DailyStockPrice>()
-                .CountAsync(price => price.CommonStockId == stockId);
+                .Set<EquityDailyStockPrice>()
+                .CountAsync(price => price.EquityListingId == listingId);
             visible
                 .Should()
                 .Be(0, "the first batch remains hidden inside the uncommitted transaction");
@@ -216,8 +219,8 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
 
         await using var verification = _fixture.CreateDbContext();
         var committed = await verification
-            .Set<DailyStockPrice>()
-            .CountAsync(price => price.CommonStockId == stockId);
+            .Set<EquityDailyStockPrice>()
+            .CountAsync(price => price.EquityListingId == listingId);
         committed.Should().Be(501);
     }
 
@@ -241,7 +244,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
                 new StockSplit
                 {
                     Id = splitId,
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     PriceSeriesTicker = "GOOGL",
                     EffectiveDate = effectiveDate,
                     Numerator = 2m,
@@ -253,13 +256,24 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
             await seed.SaveChangesAsync();
         }
 
+        // The native queue requires the exact attribution established before writer cutover.
+        await using (var attribution = _fixture.CreateDbContext())
+        {
+            var split = await attribution.Set<StockSplit>().SingleAsync(row => row.Id == splitId);
+            split.EquityListingId = await new EquityIssuerRepository(
+                attribution
+            ).GetEquityListingId(stockId, "GOOGL");
+            split.EquityListingId.Should().NotBeNull();
+            await attribution.SaveChangesAsync();
+        }
+
         PendingPriceReconciliationSeries selected;
         await using (var selection = _fixture.CreateDbContext())
         {
             var manager = new CorporateActionPriceReconciliationManager(
                 new StockSplitRepository(selection),
                 new CashDividendRepository(selection),
-                new CommonStockRepository(selection),
+                new EquityIssuerRepository(selection),
                 new CorporateActionPriceReconciliationCursorRepository(selection)
             );
             selected = (
@@ -274,7 +288,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
         var stampingManager = new CorporateActionPriceReconciliationManager(
             new StockSplitRepository(stamping),
             new CashDividendRepository(stamping),
-            new CommonStockRepository(stamping),
+            new EquityIssuerRepository(stamping),
             new CorporateActionPriceReconciliationCursorRepository(stamping)
         );
         var appliedTime = new DateTime(2026, 8, 4, 12, 0, 0, DateTimeKind.Utc);

@@ -5,11 +5,11 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.CommonStocks.Repositories.Search;
 
 /// <summary>Stocks group of the global search. Wraps the existing ticker/name search.</summary>
-public class CommonStockSearchProvider : QueryableSearchProvider<CommonStock>
+public class CommonStockSearchProvider : QueryableSearchProvider<EquityIssuer>
 {
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
 
-    public CommonStockSearchProvider(CommonStockRepository commonStockRepository)
+    public CommonStockSearchProvider(EquityIssuerRepository commonStockRepository)
     {
         _commonStockRepository = commonStockRepository;
     }
@@ -18,20 +18,20 @@ public class CommonStockSearchProvider : QueryableSearchProvider<CommonStock>
 
     public override int Order => 0;
 
-    protected override IQueryable<CommonStock> Filter(SearchRequest request) =>
+    protected override IQueryable<EquityIssuer> Filter(SearchRequest request) =>
         _commonStockRepository.Search(request.Query);
 
-    protected override Task<List<CommonStock>> Materialize(
-        IQueryable<CommonStock> query,
+    protected override Task<List<EquityIssuer>> Materialize(
+        IQueryable<EquityIssuer> query,
         CancellationToken cancellationToken
     ) => query.ToListAsync(cancellationToken);
 
-    protected override SearchHit Project(CommonStock stock) =>
+    protected override SearchHit Project(EquityIssuer stock) =>
         new()
         {
-            Title = stock.Ticker,
+            Title = stock.Presentation.Listing.Ticker,
             Subtitle = stock.Name,
             Kind = "Stock",
-            RouteValues = { ["ticker"] = stock.Ticker },
+            RouteValues = { ["ticker"] = stock.Presentation.Listing.Ticker },
         };
 }

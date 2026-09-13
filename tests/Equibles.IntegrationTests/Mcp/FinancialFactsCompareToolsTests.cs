@@ -22,22 +22,21 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         new(
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialFactsTools>()
         );
 
-    private CommonStock AddStock(string ticker, string name)
+    private EquityIssuer AddStock(string ticker, string name)
     {
-        var s = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = ticker,
-        };
-        DbContext.Set<CommonStock>().Add(s);
+        EquityIssuer s = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: ticker
+        );
+        DbContext.Set<EquityIssuer>().Add(s);
         return s;
     }
 
@@ -59,7 +58,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
     }
 
     private void AddRevenue(
-        CommonStock stock,
+        EquityIssuer stock,
         decimal value,
         DateOnly filed,
         int fy = 2023,
@@ -72,7 +71,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = RevenueConcept().Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -124,7 +123,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         var sut = new FinancialFactsTools(
             new FinancialFactRepository(null),
             new FinancialConceptRepository(null),
-            new CommonStockRepository(null),
+            new EquityIssuerRepository(null),
             new StockSplitRepository(null),
             new Equibles.Errors.BusinessLogic.ErrorManager(null),
             NullLogger<FinancialFactsTools>()
@@ -138,8 +137,8 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task CompareFinancialFact_PeerSet_RendersRowsLatestRestatedAndListsSkipped()
     {
-        var apple = AddStock("AAPL", "Apple Inc.");
-        var msft = AddStock("MSFT", "Microsoft Corp");
+        EquityIssuer apple = AddStock("AAPL", "Apple Inc.");
+        EquityIssuer msft = AddStock("MSFT", "Microsoft Corp");
         AddStock("GOOGL", "Alphabet Inc."); // no facts
         // Apple restated: 380 then 400 (latest filed wins).
         AddRevenue(apple, 380_000_000_000m, new DateOnly(2024, 1, 15), accn: "aapl-orig");
@@ -158,10 +157,15 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
         result.Should().Contain("ZZZZ (not found in the tracked SEC issuer set)");
     }
 
-    [Fact]
-    public async Task CompareFinancialFact_PerShareValue_RestatesEachCompanyAcrossItsSplits()
+    [Theory]
+    [InlineData("primary")]
+    [InlineData("unresolved")]
+    [InlineData("foreign")]
+    public async Task CompareFinancialFact_PerShareValue_RestatesEachCompanyAcrossItsSplits(
+        string splitScope
+    )
     {
-        var alphabet = AddStock("GOOGL", "Alphabet Inc.");
+        EquityIssuer alphabet = AddStock("GOOGL", "Alphabet Inc.");
         var dilutedEps = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -170,12 +174,29 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
             Label = "Diluted EPS",
         };
         DbContext.Set<FinancialConcept>().Add(dilutedEps);
+        var splitListingId = (Guid?)alphabet.Presentation.EquityListingId;
+        if (splitScope == "unresolved")
+            splitListingId = null;
+        if (splitScope == "foreign")
+        {
+            var foreign = new EquityListing
+            {
+                EquitySecurityId = alphabet.Presentation.Listing.EquitySecurityId,
+                Ticker = "GOOGL",
+                MarketCountryCode = "PT",
+                MarketIdentifierCode = "XLIS",
+            };
+            DbContext.Add(foreign);
+            splitListingId = foreign.Id;
+        }
         DbContext
             .Set<StockSplit>()
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = alphabet.Id,
+                    EquityIssuerId = alphabet.Id,
+                    EquityListingId = splitListingId,
+                    PriceSeriesTicker = splitScope == "unresolved" ? null : "GOOGL",
                     EffectiveDate = new DateOnly(2022, 7, 18),
                     Numerator = 20m,
                     Denominator = 1m,
@@ -186,7 +207,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
             .Add(
                 new FinancialFact
                 {
-                    CommonStockId = alphabet.Id,
+                    EquityIssuerId = alphabet.Id,
                     FinancialConceptId = dilutedEps.Id,
                     Unit = "USD/shares",
                     PeriodType = FactPeriodType.Duration,
@@ -204,9 +225,19 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
 
         var result = await Sut().CompareFinancialFact("GOOGL", "eps-diluted", 2021);
 
-        result.Should().Contain("| GOOGL | Alphabet Inc. | $1.00 | USD/shares |");
-        result.Should().NotContain("| $20.00 | USD/shares |");
-        result.Should().Contain("Per-share values are split-adjusted");
+        var expected =
+            splitScope == "primary" ? "$1.00"
+            : splitScope == "unresolved" ? "$20.00 (as filed)"
+            : "$20.00";
+        result.Should().Contain($"| GOOGL | Alphabet Inc. | {expected} | USD/shares |");
+        if (splitScope == "primary")
+            result.Should().Contain("Per-share values are split-adjusted");
+        else
+            result.Should().NotContain("Per-share values are split-adjusted");
+        if (splitScope == "unresolved")
+            result.Should().Contain("split attribution is unresolved");
+        else
+            result.Should().NotContain("split attribution is unresolved");
     }
 
     [Fact]
@@ -224,7 +255,7 @@ public class FinancialFactsCompareToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task CompareFinancialFact_SameDayAmendments_DeterministicByAccession()
     {
-        var apple = AddStock("AAPL", "Apple Inc.");
+        EquityIssuer apple = AddStock("AAPL", "Apple Inc.");
         var filed = new DateOnly(2024, 6, 1);
         // Two filings, SAME filed date — accession is the stable tiebreak.
         AddRevenue(apple, 350_000_000_000m, filed, accn: "0000320193-24-000001");

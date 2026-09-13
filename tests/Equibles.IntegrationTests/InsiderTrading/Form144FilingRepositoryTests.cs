@@ -28,15 +28,14 @@ public class Form144FilingRepositoryTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private static CommonStock CreateStock(string ticker = "AAPL", string cik = "0000320193")
+    private static EquityIssuer CreateStock(string ticker = "AAPL", string cik = "0000320193")
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker,
-            Cik = cik,
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker,
+            Cik: cik
+        );
     }
 
     private static Form144Filing CreateFiling(
@@ -49,7 +48,7 @@ public class Form144FilingRepositoryTests : IDisposable
         return new Form144Filing
         {
             Id = Guid.NewGuid(),
-            CommonStockId = commonStockId,
+            EquityIssuerId = commonStockId,
             AccessionNumber = accessionNumber,
             FilingDate = filingDate ?? new DateOnly(2026, 5, 27),
             SellerName = sellerName,
@@ -67,9 +66,9 @@ public class Form144FilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_ReturnsOnlyFilingsForThatStock()
     {
-        var apple = CreateStock("AAPL", "0000320193");
-        var microsoft = CreateStock("MSFT", "0000789019");
-        _dbContext.Set<CommonStock>().AddRange(apple, microsoft);
+        EquityIssuer apple = CreateStock("AAPL", "0000320193");
+        EquityIssuer microsoft = CreateStock("MSFT", "0000789019");
+        _dbContext.Set<EquityIssuer>().AddRange(apple, microsoft);
         await _dbContext.SaveChangesAsync();
 
         _repository.Add(CreateFiling(apple.Id, "0001921094-26-000555"));
@@ -77,17 +76,17 @@ public class Form144FilingRepositoryTests : IDisposable
         _repository.Add(CreateFiling(microsoft.Id, "0001950047-26-004044"));
         await _repository.SaveChanges();
 
-        var result = await _repository.GetByStock(apple).ToListAsync();
+        var result = await _repository.GetByIssuerId((apple).Id).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Should().OnlyContain(f => f.CommonStockId == apple.Id);
+        result.Should().OnlyContain(f => f.EquityIssuerId == apple.Id);
     }
 
     [Fact]
     public async Task GetByAccessionNumber_ExistingAccession_ReturnsFiling()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
         _repository.Add(CreateFiling(stock.Id, "0001921094-26-000555"));
         await _repository.SaveChanges();
@@ -103,8 +102,8 @@ public class Form144FilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAccessionNumber_NonExistentAccession_ReturnsEmpty()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
         _repository.Add(CreateFiling(stock.Id, "0001921094-26-000555"));
         await _repository.SaveChanges();
@@ -117,8 +116,8 @@ public class Form144FilingRepositoryTests : IDisposable
     [Fact]
     public async Task GetRecent_ReturnsOnlyFilingsOnOrAfterCutoff()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         _repository.Add(CreateFiling(stock.Id, "old", filingDate: new DateOnly(2026, 1, 1)));
@@ -134,8 +133,8 @@ public class Form144FilingRepositoryTests : IDisposable
     [Fact]
     public async Task Add_FilingWithPriorSales_PersistsChildRows()
     {
-        var stock = CreateStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = CreateStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var filing = CreateFiling(stock.Id);

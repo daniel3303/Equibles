@@ -57,21 +57,26 @@ public class LargestShortVolumeNegativeMaxResultsTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "GME",
-                Name = "GameStop Corp",
-                Cik = "0001326380",
-            };
-            db.Set<CommonStock>().Add(stock);
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "GME",
+                Name: "GameStop Corp",
+                Cik: "0001326380"
+            );
+            db.Set<EquityIssuer>().Add(stock);
             await db.SaveChangesAsync();
 
             db.Set<DailyShortVolume>()
                 .Add(
                     new DailyShortVolume
                     {
-                        CommonStock = stock,
-                        CommonStockId = stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(
+                                db,
+                                stock,
+                                stock.Presentation.Listing.Ticker
+                            )
+                            .Id,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         Date = new DateOnly(2026, 4, 1),
                         ShortVolume = 1_200_000,
                         ShortExemptVolume = 50_000,

@@ -266,14 +266,13 @@ public class Form144FilingProcessorTests
         };
     }
 
-    private static CommonStock MakeCompany()
+    private static EquityIssuer MakeCompany()
     {
-        return new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
     }
 
     // A real Apple Form 144 submission (accession 0001921094-26-000555), trimmed to the

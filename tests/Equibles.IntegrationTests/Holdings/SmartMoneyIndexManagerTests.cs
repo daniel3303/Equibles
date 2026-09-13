@@ -35,10 +35,10 @@ public class SmartMoneyIndexManagerTests : IDisposable
             new FundScoreRepository(_dbContext),
             new InstitutionalHolderRepository(_dbContext),
             new InstitutionalHoldingRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new BacktestPriceLoader(
-                new DailyStockPriceRepository(_dbContext),
-                new CommonStockRepository(_dbContext),
+                new EquityDailyStockPriceRepository(_dbContext),
+                new EquityIssuerRepository(_dbContext),
                 new StockSplitRepository(_dbContext)
             )
         );
@@ -53,9 +53,9 @@ public class SmartMoneyIndexManagerTests : IDisposable
     public async Task Build_TopFundsWithConsensus_BuildsEqualWeightedIndexAndTracksPerformance()
     {
         SeedBenchmark();
-        var doubler = AddStock("AAA", "Alpha Co", start: 100m, end: 200m); // doubles
-        var flat = AddStock("BBB", "Beta Co", start: 100m, end: 100m); // flat
-        var solo = AddStock("CCC", "Gamma Co", start: 100m, end: 100m);
+        EquityIssuer doubler = AddStock("AAA", "Alpha Co", start: 100m, end: 200m); // doubles
+        EquityIssuer flat = AddStock("BBB", "Beta Co", start: 100m, end: 100m); // flat
+        EquityIssuer solo = AddStock("CCC", "Gamma Co", start: 100m, end: 100m);
 
         // Three top funds. AAA held by all three, BBB by two, CCC by one.
         SeedFund("0000000001", alpha: 30m, (doubler, 60), (flat, 40));
@@ -114,8 +114,8 @@ public class SmartMoneyIndexManagerTests : IDisposable
     public async Task Build_NoStockMeetsConsensus_ReturnsReason()
     {
         SeedBenchmark();
-        var a = AddStock("AAA", "Alpha Co", 100m, 200m);
-        var b = AddStock("BBB", "Beta Co", 100m, 100m);
+        EquityIssuer a = AddStock("AAA", "Alpha Co", 100m, 200m);
+        EquityIssuer b = AddStock("BBB", "Beta Co", 100m, 100m);
 
         // Two funds with entirely disjoint portfolios — nothing is held by both.
         SeedFund("0000000001", alpha: 30m, (a, 100));
@@ -148,9 +148,9 @@ public class SmartMoneyIndexManagerTests : IDisposable
     public async Task Build_FundWithLater13DGStake_BuildsFromItsLatest13FPortfolio()
     {
         SeedBenchmark();
-        var doubler = AddStock("AAA", "Alpha Co", start: 100m, end: 200m);
-        var flat = AddStock("BBB", "Beta Co", start: 100m, end: 100m);
-        var stake = AddStock("MOON", "Mooning Co", start: 100m, end: 100m);
+        EquityIssuer doubler = AddStock("AAA", "Alpha Co", start: 100m, end: 200m);
+        EquityIssuer flat = AddStock("BBB", "Beta Co", start: 100m, end: 100m);
+        EquityIssuer stake = AddStock("MOON", "Mooning Co", start: 100m, end: 100m);
 
         var first = SeedFund("0000000001", alpha: 30m, (doubler, 60), (flat, 40));
         SeedFund("0000000002", alpha: 20m, (doubler, 50), (flat, 50));
@@ -165,7 +165,7 @@ public class SmartMoneyIndexManagerTests : IDisposable
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = first.Id,
-                    CommonStockId = stake.Id,
+                    EquityIssuerId = stake.Id,
                     ReportDate = new DateOnly(2025, 12, 1),
                     FilingDate = new DateOnly(2025, 12, 6),
                     FilingType = FilingType.Schedule13D,
@@ -197,10 +197,14 @@ public class SmartMoneyIndexManagerTests : IDisposable
         AddStock("SPY", "S&P 500 ETF", start: 100m, end: 100m);
     }
 
-    private CommonStock AddStock(string ticker, string name, decimal start, decimal end)
+    private EquityIssuer AddStock(string ticker, string name, decimal start, decimal end)
     {
-        var stock = new CommonStock { Ticker = ticker, Name = name };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: name
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
+        Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock);
         AddPrice(stock, new DateOnly(2025, 11, 1), start);
         AddPrice(stock, AsOf, end);
         _dbContext.SaveChanges();
@@ -210,7 +214,7 @@ public class SmartMoneyIndexManagerTests : IDisposable
     private InstitutionalHolder SeedFund(
         string cik,
         decimal alpha,
-        params (CommonStock Stock, long Value)[] positions
+        params (EquityIssuer Stock, long Value)[] positions
     )
     {
         var holder = new InstitutionalHolder { Cik = cik, Name = $"Fund {cik}" };
@@ -224,7 +228,7 @@ public class SmartMoneyIndexManagerTests : IDisposable
                     new InstitutionalHolding
                     {
                         InstitutionalHolderId = holder.Id,
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         ReportDate = ReportDate,
                         FilingDate = ReportDate.AddDays(20),
                         Shares = value,
@@ -251,15 +255,19 @@ public class SmartMoneyIndexManagerTests : IDisposable
         return holder;
     }
 
-    private void AddPrice(CommonStock stock, DateOnly date, decimal close)
+    private void AddPrice(EquityIssuer stock, DateOnly date, decimal close)
     {
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = stock.Ticker,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        stock.Presentation.Listing.Ticker
+                    ),
+                    SourceTicker = stock.Presentation.Listing.Ticker,
                     Date = date,
                     Open = close,
                     High = close,

@@ -37,12 +37,11 @@ public class GovernmentContractsImportServiceWindowContinueTests
         using (var seed = NewContext(options))
         {
             seed.Add(
-                new CommonStock
-                {
-                    Ticker = "LMT",
-                    Name = "Lockheed Martin Corporation",
-                    Cik = "1",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "LMT",
+                    Name: "Lockheed Martin Corporation",
+                    Cik: "1"
+                )
             );
             await seed.SaveChangesAsync();
         }
@@ -121,12 +120,11 @@ public class GovernmentContractsImportServiceWindowContinueTests
         using (var seed = NewContext(options))
         {
             seed.Add(
-                new CommonStock
-                {
-                    Ticker = "LMT",
-                    Name = "Lockheed Martin Corporation",
-                    Cik = "1",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "LMT",
+                    Name: "Lockheed Martin Corporation",
+                    Cik: "1"
+                )
             );
             await seed.SaveChangesAsync();
         }
@@ -211,12 +209,11 @@ public class GovernmentContractsImportServiceWindowContinueTests
         using (var seed = NewContext(options))
         {
             seed.Add(
-                new CommonStock
-                {
-                    Ticker = "LMT",
-                    Name = "Lockheed Martin Corporation",
-                    Cik = "1",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "LMT",
+                    Name: "Lockheed Martin Corporation",
+                    Cik: "1"
+                )
             );
             // A caught-up scan: the frontier already reaches yesterday, well ahead of the
             // trailing window about to be re-covered.
@@ -329,12 +326,11 @@ public class GovernmentContractsImportServiceWindowContinueTests
         using (var seed = NewContext(options))
         {
             seed.Add(
-                new CommonStock
-                {
-                    Ticker = "LMT",
-                    Name = "Lockheed Martin Corporation",
-                    Cik = "1",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "LMT",
+                    Name: "Lockheed Martin Corporation",
+                    Cik: "1"
+                )
             );
             await seed.SaveChangesAsync();
         }
@@ -443,7 +439,7 @@ public class GovernmentContractsImportServiceWindowContinueTests
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => NewContext(options));
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         services.AddScoped<ErrorRepository>();
         services.AddScoped<ErrorManager>();
         services.AddScoped<GovernmentContractRepository>();

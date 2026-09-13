@@ -69,8 +69,8 @@ public class HoldingsImportServiceCrossFilingTypeAmendmentTests : IAsyncLifetime
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(ctx));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -125,17 +125,16 @@ public class HoldingsImportServiceCrossFilingTypeAmendmentTests : IAsyncLifetime
     [Fact]
     public async Task ImportDataSet_Schedule13GRestatement_DoesNotDeleteForm13FAtSameReportDate()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-            Cusip = "037833100",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193",
+            Cusip: "037833100"
+        );
         using (var seed = FreshContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync();
         }
 
@@ -195,7 +194,7 @@ public class HoldingsImportServiceCrossFilingTypeAmendmentTests : IAsyncLifetime
         using var verify = FreshContext();
         var holdings = await verify
             .Set<InstitutionalHolding>()
-            .Where(h => h.CommonStockId == stock.Id && h.ReportDate == reportDate)
+            .Where(h => h.EquityIssuerId == stock.Id && h.ReportDate == reportDate)
             .OrderBy(h => h.FilingType)
             .ToListAsync();
 

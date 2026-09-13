@@ -33,13 +33,12 @@ public class FinancialsTabViewRenderingTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             db.Add(
                 new FinancialConcept
@@ -54,7 +53,7 @@ public class FinancialsTabViewRenderingTests
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     FinancialConceptId = conceptId,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,

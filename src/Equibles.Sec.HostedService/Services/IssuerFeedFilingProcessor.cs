@@ -81,11 +81,11 @@ public abstract class IssuerFeedFilingProcessor<TEntity, TRepository> : IFilingP
         return known.ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    public async Task<bool> Process(FilingData filing, CommonStock companyOutContext)
+    public async Task<bool> Process(FilingData filing, EquityIssuer companyOutContext)
     {
         // Capture IDs from the outer-scope entity to avoid leaking untracked entities into inner scope.
         var companyId = companyOutContext.Id;
-        var companyTicker = companyOutContext.Ticker;
+        var companyTicker = companyOutContext.Presentation?.Listing?.Ticker;
 
         await using var scope = _scopeFactory.CreateAsyncScope();
         var secEdgarClient = scope.ServiceProvider.GetRequiredService<ISecEdgarClient>();

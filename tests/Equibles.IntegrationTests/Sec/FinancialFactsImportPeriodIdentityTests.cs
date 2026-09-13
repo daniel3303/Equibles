@@ -52,7 +52,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
     {
         var sharesProvider = Substitute.For<ISharesOutstandingProvider>();
         sharesProvider
-            .GetCurrentSharesOutstanding(Arg.Any<CommonStock>(), Arg.Any<CancellationToken>())
+            .GetCurrentSharesOutstanding(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<long?>(null));
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         scopeFactory
@@ -78,14 +78,13 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
     [Fact]
     public async Task Import_HistoricalCalendarChange_UsesCapturedQuarterMetadataAndKeepsCurrentYearEnd()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "JHG",
-            Name = "Janus Henderson Group",
-            Cik = "0001274173",
-            FiscalYearEndMonth = 6,
-            FiscalYearEndDay = 30,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "JHG",
+            Name: "Janus Henderson Group",
+            Cik: "0001274173",
+            FiscalYearEndMonth: 6,
+            FiscalYearEndDay: 30
+        );
         var annualEnd = new DateOnly(2025, 12, 31);
         var quarterEnd = new DateOnly(2026, 3, 31);
         const string envelope = """
@@ -111,7 +110,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
             seed.Add(
                 new Document
                 {
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     Content = File(),
                     DocumentType = DocumentType.TenK,
                     ReportingForDate = annualEnd,
@@ -122,7 +121,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
             seed.Add(
                 new Document
                 {
-                    CommonStock = stock,
+                    EquityIssuerId = stock.Id,
                     Content = File(),
                     DocumentType = DocumentType.TenQ,
                     ReportingForDate = quarterEnd,
@@ -203,7 +202,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == stock.Id)
+            .Where(f => f.EquityIssuerId == stock.Id)
             .ToListAsync();
         facts.Should().HaveCount(4);
         facts
@@ -216,11 +215,13 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
             .Single(f => f.PeriodEnd == new DateOnly(2025, 3, 31))
             .FiscalPeriod.Should()
             .Be(SecFiscalPeriod.Q1);
-        var storedStock = await verify.Set<CommonStock>().SingleAsync(s => s.Id == stock.Id);
+        EquityIssuer storedStock = await verify
+            .Set<EquityIssuer>()
+            .SingleAsync(s => s.Id == stock.Id);
         storedStock.FiscalYearEndMonth.Should().Be(6);
         var checkpoint = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleAsync(s => s.CommonStockId == stock.Id);
+            .SingleAsync(s => s.EquityIssuerId == stock.Id);
         checkpoint.CalendarEvidenceFingerprint.Should().HaveLength(64);
 
         // A corrected source calendar must replay even when SEC's newest filed date is unchanged.
@@ -237,7 +238,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         verify.ChangeTracker.Clear();
         var replayed = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == stock.Id)
+            .Where(f => f.EquityIssuerId == stock.Id)
             .ToListAsync();
         replayed.Select(f => f.Id).Order().Should().Equal(originalIds);
         replayed
@@ -248,7 +249,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
             );
         var replayCheckpoint = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleAsync(s => s.CommonStockId == stock.Id);
+            .SingleAsync(s => s.EquityIssuerId == stock.Id);
         replayCheckpoint.CalendarEvidenceFingerprint.Should().NotBe(originalFingerprint);
 
         // Unusable source evidence must leave the last successful checkpoint and facts intact.
@@ -262,7 +263,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await sut.Import(stock, CancellationToken.None);
         await verify.Entry(replayCheckpoint).ReloadAsync();
         replayCheckpoint.CalendarEvidenceFingerprint.Should().NotBe(originalFingerprint);
-        (await verify.Set<FinancialFact>().CountAsync(f => f.CommonStockId == stock.Id))
+        (await verify.Set<FinancialFact>().CountAsync(f => f.EquityIssuerId == stock.Id))
             .Should()
             .Be(4);
     }
@@ -272,18 +273,17 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
     {
         // Apple's FYE is Sept 28 (52/53-week filer, so actual end dates
         // wobble within a few days year over year).
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-            FiscalYearEndMonth = 9,
-            FiscalYearEndDay = 28,
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193",
+            FiscalYearEndMonth: 9,
+            FiscalYearEndDay: 28
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
@@ -346,7 +346,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == apple.Id)
+            .Where(f => f.EquityIssuerId == apple.Id)
             .OrderByDescending(f => f.PeriodEnd)
             .ToListAsync(CancellationToken.None);
 
@@ -366,18 +366,17 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
     {
         // A company without ingested fiscal-year-end metadata gets the
         // pre-fix behavior — value.Fy ?? value.End.Year — preserved.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "ZZZZ",
-            Name = "Unknown FYE Corp.",
-            Cik = "0000999999",
-            FiscalYearEndMonth = null,
-            FiscalYearEndDay = null,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "ZZZZ",
+            Name: "Unknown FYE Corp.",
+            Cik: "0000999999",
+            FiscalYearEndMonth: null,
+            FiscalYearEndDay: null
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
@@ -434,7 +433,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var fact = await verify
             .Set<FinancialFact>()
-            .SingleAsync(f => f.CommonStockId == stock.Id, CancellationToken.None);
+            .SingleAsync(f => f.EquityIssuerId == stock.Id, CancellationToken.None);
 
         fact.FiscalYear.Should().Be(2023);
         fact.FiscalPeriod.Should().Be(SecFiscalPeriod.FullYear);
@@ -454,15 +453,14 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         var period = interimInstant ? SecFiscalPeriod.Q1 : SecFiscalPeriod.FullYear;
         var form = interimInstant ? DocumentType.TenQ : DocumentType.TenK;
         var factId = Guid.NewGuid();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "JNJ",
-            Name = "Johnson & Johnson",
-            Cik = "0000200406",
-            FiscalYearEndMonth = 1,
-            FiscalYearEndDay = interimInstant ? 31 : 3,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "JNJ",
+            Name: "Johnson & Johnson",
+            Cik: "0000200406",
+            FiscalYearEndMonth: 1,
+            FiscalYearEndDay: interimInstant ? 31 : 3
+        );
         var concept = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -475,7 +473,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         var documentId = Guid.NewGuid();
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<FinancialConcept>().Add(concept);
             var content = new Equibles.Media.Data.Models.File
             {
@@ -488,7 +486,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                     new Document
                     {
                         Id = documentId,
-                        CommonStock = stock,
+                        EquityIssuerId = stock.Id,
                         Content = content,
                         DocumentType = form,
                         ReportingDate = filed,
@@ -501,7 +499,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                     new FinancialFact
                     {
                         Id = factId,
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         FinancialConceptId = concept.Id,
                         Unit = "USD",
                         PeriodType = interimInstant
@@ -521,7 +519,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                 .Add(
                     new FinancialFactsSyncStatus
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         LastCheckedAt = DateTime.UtcNow,
                         LastFiledDateSeen = filed,
                         ImporterVersion = FinancialFactsImportService.CurrentImporterVersion - 1,
@@ -579,10 +577,10 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var fact = await verify
             .Set<FinancialFact>()
-            .SingleAsync(f => f.CommonStockId == stock.Id, CancellationToken.None);
+            .SingleAsync(f => f.EquityIssuerId == stock.Id, CancellationToken.None);
         var status = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleAsync(s => s.CommonStockId == stock.Id, CancellationToken.None);
+            .SingleAsync(s => s.EquityIssuerId == stock.Id, CancellationToken.None);
         fact.Id.Should().Be(factId, "replay updates the existing natural-key row");
         fact.FiscalYear.Should().Be(expectedYear);
         fact.FiscalPeriod.Should().Be(period);
@@ -593,20 +591,19 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
     [Fact]
     public async Task Import_AnnualDocumentPeriodCorrectsHighSecYearWithoutFyeMetadata()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "DOCP",
-            Name = "Document Period Corp.",
-            Cik = "0000999998",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "DOCP",
+            Name: "Document Period Corp.",
+            Cik: "0000999998"
+        );
         var filed = new DateOnly(2026, 2, 17);
         var periodEnd = new DateOnly(2025, 12, 28);
         const string accession = "0000999998-26-000010";
         var documentId = Guid.NewGuid();
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             var content = new Equibles.Media.Data.Models.File
             {
                 Name = "annual-filing",
@@ -618,7 +615,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                     new Document
                     {
                         Id = documentId,
-                        CommonStock = stock,
+                        EquityIssuerId = stock.Id,
                         Content = content,
                         DocumentType = DocumentType.TenK,
                         ReportingDate = filed,
@@ -678,7 +675,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var fact = await verify
             .Set<FinancialFact>()
-            .SingleAsync(f => f.CommonStockId == stock.Id, CancellationToken.None);
+            .SingleAsync(f => f.EquityIssuerId == stock.Id, CancellationToken.None);
         fact.FiscalYear.Should().Be(2025);
         fact.FiscalPeriod.Should().Be(SecFiscalPeriod.FullYear);
         fact.DocumentId.Should().Be(documentId);
@@ -687,15 +684,14 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
     [Fact]
     public async Task Import_CorroboratedThousandScaleAmendment_RemovesPreviouslyStoredCorruptRow()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "DAWN",
-            Name = "Day One Biopharmaceuticals Inc.",
-            Cik = "0001845337",
-            FiscalYearEndMonth = 12,
-            FiscalYearEndDay = 31,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "DAWN",
+            Name: "Day One Biopharmaceuticals Inc.",
+            Cik: "0001845337",
+            FiscalYearEndMonth: 12,
+            FiscalYearEndDay: 31
+        );
         var concept = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -707,13 +703,13 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         var amendmentFiled = new DateOnly(2024, 5, 1);
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(stock);
+            seed.Set<EquityIssuer>().Add(stock);
             seed.Set<FinancialConcept>().Add(concept);
             seed.Set<FinancialFact>()
                 .Add(
                     new FinancialFact
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         FinancialConceptId = concept.Id,
                         Unit = "USD",
                         PeriodType = FactPeriodType.Duration,
@@ -731,7 +727,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
                 .Add(
                     new FinancialFactsSyncStatus
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         LastCheckedAt = DateTime.UtcNow,
                         LastFiledDateSeen = amendmentFiled,
                         ImporterVersion = FinancialFactsImportService.CurrentImporterVersion - 1,
@@ -847,7 +843,7 @@ public class FinancialFactsImportPeriodIdentityTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == stock.Id)
+            .Where(f => f.EquityIssuerId == stock.Id)
             .ToListAsync(CancellationToken.None);
         facts.Should().Contain(f => f.Value == -107_322_000m);
         facts.Should().NotContain(f => f.Value == -107_322_000_000m);

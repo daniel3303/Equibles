@@ -45,8 +45,8 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     private const long SettledVolume = 1_573_891;
 
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly DailyStockPriceRepository _priceRepo;
-    private readonly CommonStockRepository _stockRepo;
+    private readonly EquityDailyStockPriceRepository _priceRepo;
+    private readonly EquityIssuerRepository _stockRepo;
     private readonly IYahooFinanceClient _yahooClient;
     private readonly YahooPriceImportService _service;
 
@@ -61,8 +61,8 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
-        _priceRepo = new DailyStockPriceRepository(_dbContext);
-        _stockRepo = new CommonStockRepository(_dbContext);
+        _priceRepo = new EquityDailyStockPriceRepository(_dbContext);
+        _stockRepo = new EquityIssuerRepository(_dbContext);
         var splitRepo = new StockSplitRepository(_dbContext);
         var dividendRepo = new CashDividendRepository(_dbContext);
 
@@ -73,8 +73,8 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(DailyStockPriceRepository), _priceRepo),
-            (typeof(CommonStockRepository), _stockRepo),
+            (typeof(EquityDailyStockPriceRepository), _priceRepo),
+            (typeof(EquityIssuerRepository), _stockRepo),
             (typeof(StockSplitRepository), splitRepo),
             (typeof(ISharesOutstandingProvider), Substitute.For<ISharesOutstandingProvider>()),
             (
@@ -111,7 +111,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         // The exact shape of an ordinary daily cycle: the stock holds the previous session and the
         // newest settled one is missing, so the fetch is driven by that new bar. The stored bar's
         // correction has to ride it — nothing else requests that date.
-        var stock = SeedStock("KRC");
+        EquityIssuer stock = SeedStock("KRC");
         var (newest, previous) = TwoMostRecentSettledSessions();
         SeedPrice(stock, previous, UnsettledVolume);
 
@@ -130,9 +130,17 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         // begin after it, and the feed would never be asked to re-serve it.
         requestedStart.Should().BeOnOrBefore(previous);
 
-        _priceRepo.GetAll().Single(p => p.Date == previous).Volume.Should().Be(SettledVolume);
+        _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous)
+            .Volume.Should()
+            .Be(SettledVolume);
         // The new session still lands: the correction must not displace the insert path.
-        _priceRepo.GetAll().Single(p => p.Date == newest).Volume.Should().Be(SettledVolume);
+        _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == newest)
+            .Volume.Should()
+            .Be(SettledVolume);
     }
 
     [Fact]
@@ -140,7 +148,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     {
         // A degraded re-serve (a partial response, a venue dropping out) must never walk a settled
         // figure back down. Without the upgrade-only rule the repair would oscillate with the feed.
-        var stock = SeedStock("KRC");
+        EquityIssuer stock = SeedStock("KRC");
         var (newest, previous) = TwoMostRecentSettledSessions();
         SeedPrice(stock, previous, SettledVolume);
 
@@ -150,15 +158,19 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        _priceRepo.GetAll().Single(p => p.Date == previous).Volume.Should().Be(SettledVolume);
+        _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous)
+            .Volume.Should()
+            .Be(SettledVolume);
     }
 
     [Fact]
     public async Task Import_FeedRevisesRecentOhlc_CorrectsPricesButPreservesAdjustedClose()
     {
-        var stock = SeedStock("CBOE");
+        EquityIssuer stock = SeedStock("CBOE");
         var (newest, previous) = TwoMostRecentSettledSessions();
-        var stored = SeedPrice(stock, previous, UnsettledVolume, 310.23m);
+        EquityDailyStockPrice stored = SeedPrice(stock, previous, UnsettledVolume, 310.23m);
         stored.Open = 287.54m;
         stored.High = 310.88m;
         stored.Low = 287.76m;
@@ -176,7 +188,9 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        var corrected = _priceRepo.GetAll().Single(p => p.Date == previous);
+        EquityDailyStockPrice corrected = _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous);
         corrected.Open.Should().Be(287.54m);
         corrected.High.Should().Be(311.06m);
         corrected.Low.Should().Be(287.54m);
@@ -188,9 +202,9 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     [Fact]
     public async Task RepairInvalidOhlc_AuthoritativeBarExists_ReplacesHistoricalPrices()
     {
-        var stock = SeedStock("CBOE");
+        EquityIssuer stock = SeedStock("CBOE");
         var date = new DateOnly(2026, 7, 31);
-        var stored = SeedPrice(stock, date, UnsettledVolume, 310.23m);
+        EquityDailyStockPrice stored = SeedPrice(stock, date, UnsettledVolume, 310.23m);
         stored.Open = 287.54m;
         stored.High = 310.88m;
         stored.Low = 287.76m;
@@ -204,7 +218,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         var complete = await _service.RepairInvalidOhlc(CancellationToken.None);
 
         complete.Should().BeTrue();
-        var repaired = _priceRepo.GetAll().Single();
+        EquityDailyStockPrice repaired = _priceRepo.GetPrimarySeries().Single();
         repaired.Open.Should().Be(287.54m);
         repaired.High.Should().Be(311.06m);
         repaired.Low.Should().Be(287.54m);
@@ -216,9 +230,9 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     [Fact]
     public async Task RepairInvalidOhlc_NoValidAuthoritativeBar_RemovesKnownBadRow()
     {
-        var stock = SeedStock("CBOE");
+        EquityIssuer stock = SeedStock("CBOE");
         var date = new DateOnly(2026, 7, 31);
-        var stored = SeedPrice(stock, date, UnsettledVolume, 310.23m);
+        EquityDailyStockPrice stored = SeedPrice(stock, date, UnsettledVolume, 310.23m);
         stored.Low = 311m;
         await _priceRepo.SaveChanges();
 
@@ -227,7 +241,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         var complete = await _service.RepairInvalidOhlc(CancellationToken.None);
 
         complete.Should().BeTrue();
-        _priceRepo.GetAll().Should().BeEmpty();
+        _priceRepo.GetPrimarySeries().Should().BeEmpty();
     }
 
     [Fact]
@@ -236,7 +250,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         // The window bounds the repair. A bar from before it keeps its stored volume even when the
         // response carries a different figure for that date, so a cycle can never rewrite
         // arbitrarily deep history off one chart call — only the widened window may.
-        var stock = SeedStock("KRC");
+        EquityIssuer stock = SeedStock("KRC");
         var (newest, previous) = TwoMostRecentSettledSessions();
         var beyondWindow = previous.AddDays(-(WindowDays + 30));
         SeedPrice(stock, beyondWindow, UnsettledVolume);
@@ -254,8 +268,16 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        _priceRepo.GetAll().Single(p => p.Date == beyondWindow).Volume.Should().Be(UnsettledVolume);
-        _priceRepo.GetAll().Single(p => p.Date == previous).Volume.Should().Be(SettledVolume);
+        _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == beyondWindow)
+            .Volume.Should()
+            .Be(UnsettledVolume);
+        _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous)
+            .Volume.Should()
+            .Be(SettledVolume);
     }
 
     [Fact]
@@ -265,7 +287,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         // larger and an adjusted volume 25x smaller than the as-traded session the feed is still
         // serving for that date. The as-traded volume therefore always looks like a settlement
         // upgrade, and writing it would inflate the stock's volume history by the split ratio.
-        var stock = SeedStock("PRPL");
+        EquityIssuer stock = SeedStock("PRPL");
         var (newest, previous) = TwoMostRecentSettledSessions();
         const decimal adjustedClose = 8.05m;
         const long adjustedVolume = 23_560;
@@ -278,7 +300,9 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        var stored = _priceRepo.GetAll().Single(p => p.Date == previous);
+        EquityDailyStockPrice stored = _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous);
         stored.Volume.Should().Be(adjustedVolume);
         stored.Close.Should().Be(adjustedClose);
     }
@@ -292,7 +316,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         // forward split the adjusted volume is ratio-times larger, so without the basis guard it
         // would read as a settlement upgrade and leave a row with an adjusted volume under an
         // as-traded close. Real WLFC 3:1 numbers.
-        var stock = SeedStock("WLFC");
+        EquityIssuer stock = SeedStock("WLFC");
         var (newest, previous) = TwoMostRecentSettledSessions();
         const decimal asTradedClose = 216.98m;
         const long asTradedVolume = 56_300;
@@ -304,7 +328,9 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
 
         await _service.Import(CancellationToken.None);
 
-        var storedRow = _priceRepo.GetAll().Single(p => p.Date == previous);
+        EquityDailyStockPrice storedRow = _priceRepo
+            .GetPrimarySeries()
+            .Single(p => p.Date == previous);
         storedRow.Volume.Should().Be(asTradedVolume);
         storedRow.Close.Should().Be(asTradedClose);
     }
@@ -363,30 +389,29 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
                 .ToList(),
         };
 
-    private CommonStock SeedStock(string ticker)
+    private EquityIssuer SeedStock(string ticker)
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = $"{ticker} Inc.",
-            Cik = $"CIK-{ticker}",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: $"{ticker} Inc.",
+            Cik: $"CIK-{ticker}"
+        );
         _stockRepo.Add(stock);
         _stockRepo.SaveChanges().GetAwaiter().GetResult();
         return stock;
     }
 
-    private DailyStockPrice SeedPrice(
-        CommonStock stock,
+    private EquityDailyStockPrice SeedPrice(
+        EquityIssuer stock,
         DateOnly date,
         long volume,
         decimal close = 39.41m
     )
     {
-        var price = new DailyStockPrice
+        EquityDailyStockPrice price = new EquityDailyStockPrice
         {
-            CommonStockId = stock.Id,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(_dbContext, stock, null),
             Date = date,
             Open = close,
             High = close,

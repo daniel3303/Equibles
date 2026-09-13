@@ -30,7 +30,7 @@ public class CongressionalTradeSyncServiceBuildTradesCleanAssetNameTests
     {
         var sut = CreateService();
         var member = new CongressMember { Name = "Jane Doe" };
-        var stock = new CommonStock();
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create();
         var transaction = new DisclosureTransaction
         {
             MemberName = "Jane Doe",

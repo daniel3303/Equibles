@@ -60,10 +60,13 @@ public class CompanySyncServiceTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -86,13 +89,124 @@ public class CompanySyncServiceTests : ParadeDbMcpTestBase
         // row, not the change-tracker copy. This catches text[] mapping regressions
         // that EF Core's InMemory provider silently glosses over.
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
 
         stocks.Should().ContainSingle();
-        var stock = stocks[0];
+        EquityIssuer stock = stocks[0];
         stock.Cik.Should().Be("0001067983");
-        stock.Ticker.Should().Be("BRK.A");
+        stock.Presentation.Listing.Ticker.Should().Be("BRK.A");
         stock.Name.Should().Be("Berkshire Hathaway Inc.");
-        stock.SecondaryTickers.Should().Equal("BRK.B", "BRK");
+        stock
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US"
+                && (
+                    nativeListing.IsDirectoryListed
+                    && nativeListing.Id != stock.Presentation.EquityListingId
+                )
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .BeEquivalentTo(["BRK.B", "BRK"]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Sync_AttachesUsDirectoryToAnExistingIssuer_PreservingForeignListings(
+        bool foreignPresentation
+    )
+    {
+        var issuer = new EquityIssuer
+        {
+            Name = "Existing issuer",
+            Cik = "0000000042",
+            Website = "https://example.com",
+        };
+        var unrelated = new EquityIssuer { Name = "Unlisted issuer without SEC identity" };
+        var security = new EquitySecurity
+        {
+            Issuer = issuer,
+            EquityIssuerId = issuer.Id,
+            Isin = "PTEDP0AM0009",
+        };
+        var foreign = new EquityListing
+        {
+            Security = security,
+            EquitySecurityId = security.Id,
+            Ticker = "NATIVE",
+            MarketCountryCode = "PT",
+            MarketIdentifierCode = "XLIS",
+            TradingCurrency = "EUR",
+            QuoteUnitMultiplier = 1m,
+        };
+        issuer.Securities.Add(security);
+        security.Listings.Add(foreign);
+        if (foreignPresentation)
+            issuer.Presentation = new EquityIssuerPresentation
+            {
+                Issuer = issuer,
+                EquityIssuerId = issuer.Id,
+                Listing = foreign,
+                EquityListingId = foreign.Id,
+            };
+        DbContext.AddRange(issuer, unrelated);
+        await DbContext.SaveChangesAsync();
+        var foreignBefore = await DbContext
+            .Database.SqlQuery<string>(
+                $"SELECT to_jsonb(l)::text AS \"Value\" FROM \"EquityListing\" l WHERE l.\"Id\" = {foreign.Id}"
+            )
+            .SingleAsync();
+        var sec = Substitute.For<ISecEdgarClient>();
+        sec.GetActiveCompanies()
+            .Returns([
+                new CompanyInfo
+                {
+                    Cik = issuer.Cik,
+                    Name = issuer.Name,
+                    Tickers = ["USNEW"],
+                    EntityType = "operating",
+                },
+            ]);
+        var repository = new EquityIssuerRepository(DbContext);
+        var scope = ServiceScopeSubstitute.Create(
+            (typeof(EquityIssuerRepository), repository),
+            (
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(repository, Substitute.For<IBus>())
+            ),
+            (typeof(EquiblesFinancialDbContext), DbContext)
+        );
+        var sync = new CompanySyncService(
+            scope,
+            sec,
+            Options.Create(new WorkerOptions()),
+            Substitute.For<ILogger<CompanySyncService>>(),
+            new ErrorReporter(
+                Substitute.For<IServiceScopeFactory>(),
+                Substitute.For<ILogger<ErrorReporter>>()
+            ),
+            Substitute.For<IBus>()
+        );
+
+        await sync.SyncCompaniesFromSecApi();
+        DbContext.ChangeTracker.Clear();
+
+        var stored = await repository.Get(issuer.Id);
+        stored.Presentation.Listing.Ticker.Should().Be("USNEW");
+        stored.Presentation.Listing.MarketCountryCode.Should().Be("US");
+        stored.Securities.SelectMany(row => row.Listings).Should().HaveCount(2);
+        (
+            await DbContext
+                .Database.SqlQuery<string>(
+                    $"SELECT to_jsonb(l)::text AS \"Value\" FROM \"EquityListing\" l WHERE l.\"Id\" = {foreign.Id}"
+                )
+                .SingleAsync()
+        )
+            .Should()
+            .Be(foreignBefore);
+        (await DbContext.Set<EquityIssuerTickerAlias>().CountAsync()).Should().Be(0);
+        (await DbContext.Set<EquityIssuer>().CountAsync()).Should().Be(2);
     }
 }

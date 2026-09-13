@@ -105,7 +105,7 @@ internal static class ReportedQuarterPromotion
     private static FinancialFact Promote(FinancialFact fact, int fiscalYear) =>
         new()
         {
-            CommonStockId = fact.CommonStockId,
+            EquityIssuerId = fact.EquityIssuerId,
             FinancialConceptId = fact.FinancialConceptId,
             DocumentId = fact.DocumentId,
             Unit = fact.Unit,

@@ -66,7 +66,7 @@ public class FinancialFactsToolsBuildComparisonRowsNotFoundSkipTests
     public void BuildComparisonRows_UnknownTicker_SkippedAsNotFoundNotNoData()
     {
         var requested = new List<string> { "XYZ" };
-        var stockByTicker = new Dictionary<string, CommonStock>();
+        var stockByTicker = new Dictionary<string, EquityIssuer>();
         var bestByStock = new Dictionary<Guid, FinancialFact>();
 
         var method = typeof(FinancialFactsTools).GetMethod(

@@ -58,8 +58,8 @@ public class CompanySyncServiceUpdateExistingBranchATests
 
     private static object BuildState(
         EquiblesFinancialDbContext db,
-        CommonStock existingStock,
-        CommonStock tickerHolder,
+        EquityIssuer existingStock,
+        EquityIssuer tickerHolder,
         string primaryTicker
     )
     {
@@ -68,18 +68,21 @@ public class CompanySyncServiceUpdateExistingBranchATests
         void Set(string n, object v) => t.GetProperty(n).SetValue(s, v);
         // existingStock is in the feed; tickerHolder's CIK is NOT in SecCiks.
         Set("SecCiks", new HashSet<string> { existingStock.Cik });
-        Set("ExistingStocks", new List<CommonStock> { existingStock });
+        Set("ExistingStocks", new List<EquityIssuer> { existingStock });
         Set("ExistingCiks", new HashSet<string> { existingStock.Cik });
-        Set("ExistingPrimaryTickers", new HashSet<string> { existingStock.Ticker, primaryTicker });
+        Set(
+            "ExistingPrimaryTickers",
+            new HashSet<string> { existingStock.Presentation.Listing.Ticker, primaryTicker }
+        );
         Set(
             "PrimaryTickerToStock",
-            new Dictionary<string, CommonStock> { [primaryTicker] = tickerHolder }
+            new Dictionary<string, EquityIssuer> { [primaryTicker] = tickerHolder }
         );
-        Set("SecondaryCikToParent", new Dictionary<string, CommonStock>());
-        Set("CommonStockRepository", new CommonStockRepository(db));
+        Set("SecondaryCikToParent", new Dictionary<string, EquityIssuer>());
+        Set("CommonStockRepository", new EquityIssuerRepository(db));
         Set(
             "CommonStockManager",
-            new CommonStockManager(new CommonStockRepository(db), Substitute.For<IBus>())
+            new EquityIdentityManager(new EquityIssuerRepository(db), Substitute.For<IBus>())
         );
         Set("DbContext", db);
         return s;
@@ -103,25 +106,27 @@ public class CompanySyncServiceUpdateExistingBranchATests
     public async Task UpdateExistingStock_TickerHeldByOutOfFeedStock_RetiresHolderThenUpdates()
     {
         using var db = NewDb();
-        var existing = new CommonStock
-        {
-            Cik = "0000000002",
-            Ticker = "OLD",
-            Name = "Old Name",
-        };
-        var obsolete = new CommonStock
-        {
-            Cik = "0000000999",
-            Ticker = "NEWT",
-            Name = "Obsolete Holder",
-        };
-        db.Set<CommonStock>().AddRange(existing, obsolete);
+        EquityIssuer existing = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000002",
+            Ticker: "OLD",
+            Name: "Old Name"
+        );
+        EquityIssuer obsolete = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000999",
+            Ticker: "NEWT",
+            Name: "Obsolete Holder"
+        );
+        db.Set<EquityIssuer>().AddRange(existing, obsolete);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
         // Re-read the tracked instances the state will hand to the service.
-        var existingTracked = await db.Set<CommonStock>().FirstAsync(s => s.Cik == "0000000002");
-        var obsoleteTracked = await db.Set<CommonStock>().FirstAsync(s => s.Cik == "0000000999");
+        EquityIssuer existingTracked = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == "0000000002");
+        EquityIssuer obsoleteTracked = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == "0000000999");
         var state = BuildState(db, existingTracked, obsoleteTracked, "NEWT");
         var secCompany = new CompanyInfo
         {
@@ -132,10 +137,16 @@ public class CompanySyncServiceUpdateExistingBranchATests
 
         await Invoke(BuildSut(), secCompany, "NEWT", state);
 
-        var retired = await db.Set<CommonStock>().FirstAsync(s => s.Cik == "0000000999");
-        retired.Active.Should().BeFalse("the historical identity must remain without a live claim");
-        var updated = await db.Set<CommonStock>().FirstAsync(s => s.Cik == "0000000002");
-        updated.Ticker.Should().Be("NEWT");
+        EquityIssuer retired = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == "0000000999");
+        retired
+            .Presentation.Listing.Active.Should()
+            .BeFalse("the historical identity must remain without a live claim");
+        EquityIssuer updated = await new EquityIssuerRepository(db)
+            .GetAll()
+            .FirstAsync(s => s.Cik == "0000000002");
+        updated.Presentation.Listing.Ticker.Should().Be("NEWT");
         updated.Name.Should().Be("Updated Name");
     }
 
@@ -143,19 +154,17 @@ public class CompanySyncServiceUpdateExistingBranchATests
     public async Task UpdateExistingStock_ObsoleteDeleteFails_LogsReportsAndReturns()
     {
         var db = NewDb();
-        var existing = new CommonStock
-        {
-            Cik = "0000000002",
-            Ticker = "OLD",
-            Name = "Old Name",
-        };
-        var obsolete = new CommonStock
-        {
-            Cik = "0000000999",
-            Ticker = "NEWT",
-            Name = "Obsolete Holder",
-        };
-        db.Set<CommonStock>().AddRange(existing, obsolete);
+        EquityIssuer existing = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000002",
+            Ticker: "OLD",
+            Name: "Old Name"
+        );
+        EquityIssuer obsolete = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000999",
+            Ticker: "NEWT",
+            Name: "Obsolete Holder"
+        );
+        db.Set<EquityIssuer>().AddRange(existing, obsolete);
         await db.SaveChangesAsync();
         var state = BuildState(db, existing, obsolete, "NEWT");
         var secCompany = new CompanyInfo
@@ -171,6 +180,8 @@ public class CompanySyncServiceUpdateExistingBranchATests
 
         await Invoke(BuildSut(), secCompany, "NEWT", state);
 
-        existing.Ticker.Should().Be("OLD", "Branch A returned before the main update ran");
+        existing
+            .Presentation.Listing.Ticker.Should()
+            .Be("OLD", "Branch A returned before the main update ran");
     }
 }

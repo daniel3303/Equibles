@@ -37,7 +37,7 @@ public class FtdImportServiceImportCatchTests
             new SecTestModuleConfiguration()
         );
         var tickerMapScopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(dbContext))
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(dbContext))
         );
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(FailToDeliverRepository), new FailToDeliverRepository(dbContext)),

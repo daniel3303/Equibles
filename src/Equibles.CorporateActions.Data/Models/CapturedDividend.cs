@@ -8,5 +8,6 @@ public class CapturedDividend
 {
     public DateOnly ExDate { get; set; }
     public decimal AmountPerShare { get; set; }
+    public string Currency { get; set; }
     public CashDividendSource Source { get; set; }
 }

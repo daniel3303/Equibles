@@ -68,8 +68,8 @@ public class FinancialFactsImportServiceForeignIssuerSharesTests : IAsyncLifetim
                 sp.GetService(typeof(FinancialFactsSyncStatusRepository))
                     .Returns(new FinancialFactsSyncStatusRepository(ctx));
                 sp.GetService(typeof(DocumentRepository)).Returns(new DocumentRepository(ctx));
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(ISharesOutstandingProvider)).Returns(sharesProvider);
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
@@ -131,18 +131,17 @@ public class FinancialFactsImportServiceForeignIssuerSharesTests : IAsyncLifetim
         );
     }
 
-    private async Task<CommonStock> Seed(long sharesOutstanding, string ticker)
+    private async Task<EquityIssuer> Seed(long sharesOutstanding, string ticker)
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker,
-            Cik = "0000320193",
-            SharesOutStanding = sharesOutstanding,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker,
+            Cik: "0000320193",
+            SharesOutStanding: sharesOutstanding
+        );
         await using var seed = _fixture.CreateDbContext();
-        seed.Set<CommonStock>().Add(stock);
+        seed.Set<EquityIssuer>().Add(stock);
         await seed.SaveChangesAsync(CancellationToken.None);
         return stock;
     }
@@ -150,23 +149,23 @@ public class FinancialFactsImportServiceForeignIssuerSharesTests : IAsyncLifetim
     private async Task<long> StoredShares(Guid stockId)
     {
         await using var verify = _fixture.CreateDbContext();
-        var tracked = await verify.Set<CommonStock>().FirstAsync(s => s.Id == stockId);
-        return tracked.SharesOutStanding;
+        EquityIssuer tracked = await verify.Set<EquityIssuer>().FirstAsync(s => s.Id == stockId);
+        return tracked.Presentation.Listing.Security.SharesOutstanding;
     }
 
     [Fact]
     public async Task Import_ForeignPrivateIssuer_LeavesStoredAdrShareCountUntouched()
     {
         // The ADR count the Yahoo importer already maintains for this 20-F filer.
-        var stock = await Seed(606_407_693, "LTM");
+        EquityIssuer stock = await Seed(606_407_693, "LTM");
 
         var sharesProvider = Substitute.For<ISharesOutstandingProvider>();
         // The EDGAR ordinary-share cover-page count — the wrong unit for the US-listed ADR.
         sharesProvider
-            .GetCurrentSharesOutstanding(Arg.Any<CommonStock>(), Arg.Any<CancellationToken>())
+            .GetCurrentSharesOutstanding(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
             .Returns(574_215_983_709L);
         sharesProvider
-            .IsForeignPrivateIssuer(Arg.Any<CommonStock>(), Arg.Any<CancellationToken>())
+            .IsForeignPrivateIssuer(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         await BuildService(sharesProvider).Import(stock, CancellationToken.None);
@@ -180,14 +179,14 @@ public class FinancialFactsImportServiceForeignIssuerSharesTests : IAsyncLifetim
     public async Task Import_DomesticIssuer_RefreshesSharesOutstandingFromCoverPage()
     {
         // Same harness, domestic filer: the cover-page refresh still runs and corrects the count.
-        var stock = await Seed(1, "AAPL");
+        EquityIssuer stock = await Seed(1, "AAPL");
 
         var sharesProvider = Substitute.For<ISharesOutstandingProvider>();
         sharesProvider
-            .GetCurrentSharesOutstanding(Arg.Any<CommonStock>(), Arg.Any<CancellationToken>())
+            .GetCurrentSharesOutstanding(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
             .Returns(14_687_356_000L);
         sharesProvider
-            .IsForeignPrivateIssuer(Arg.Any<CommonStock>(), Arg.Any<CancellationToken>())
+            .IsForeignPrivateIssuer(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         await BuildService(sharesProvider).Import(stock, CancellationToken.None);

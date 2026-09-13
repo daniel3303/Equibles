@@ -30,16 +30,27 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
         var exDate = new DateOnly(2026, 7, 31);
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Add(new CommonStock { Id = stockId, Ticker = "GRTUF" });
+            seed.Add(Equibles.TestSupport.EquityIssuerSeed.Create(Id: stockId, Ticker: "GRTUF"));
+            seed.ChangeTracker.Entries<EquityListing>()
+                .ToList()
+                .ForEach(entry => entry.Entity.TradingCurrency = "USD");
+            await seed.SaveChangesAsync();
             seed.Add(
                 new CashDividend
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
+                    EquityListingId = seed.Set<EquityIssuer>()
+                        .Local.Single()
+                        .Presentation.EquityListingId,
+                    Currency = "USD",
                     ExDate = exDate,
                     AmountPerShare = 0.21222556m,
                     Source = CashDividendSource.External,
                 }
             );
+            seed.ChangeTracker.Entries<EquityListing>()
+                .ToList()
+                .ForEach(entry => entry.Entity.TradingCurrency = "USD");
             await seed.SaveChangesAsync();
         }
 
@@ -55,13 +66,14 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
         {
             var changes = await new CashDividendCaptureManager(
                 new CashDividendRepository(capture),
-                new CommonStockRepository(capture)
+                new EquityIssuerRepository(capture)
             ).Capture(
                 stockId,
                 "GRTUF",
                 [
                     new CapturedDividend
                     {
+                        Currency = "USD",
                         ExDate = exDate,
                         AmountPerShare = 0.21219057m,
                         Source = CashDividendSource.Yahoo,
@@ -80,6 +92,7 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
                     [
                         new CapturedDividend
                         {
+                            Currency = "USD",
                             ExDate = exDate,
                             AmountPerShare = 0.21219057m,
                             Source = CashDividendSource.Yahoo,
@@ -100,13 +113,14 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
 
         var externalReplay = await new CashDividendCaptureManager(
             new CashDividendRepository(verification),
-            new CommonStockRepository(verification)
+            new EquityIssuerRepository(verification)
         ).Capture(
             stockId,
             "GRTUF",
             [
                 new CapturedDividend
                 {
+                    Currency = "USD",
                     ExDate = exDate,
                     AmountPerShare = 0.21222556m,
                     Source = CashDividendSource.External,
@@ -128,7 +142,7 @@ public class CorporateActionPriceReconciliationManagerResponseStampTests : IAsyn
         new(
             new StockSplitRepository(context),
             new CashDividendRepository(context),
-            new CommonStockRepository(context),
+            new EquityIssuerRepository(context),
             new CorporateActionPriceReconciliationCursorRepository(context)
         );
 }

@@ -64,10 +64,10 @@ public class StockTabServiceLoadHolderDetailTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
     }
 
@@ -76,7 +76,10 @@ public class StockTabServiceLoadHolderDetailTests : IDisposable
     [Fact]
     public async Task LoadHolderDetail_FiltersToHolderAndOrdersByReportDateDescending()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var holder = new InstitutionalHolder { Cik = "0001067983", Name = "Berkshire" };
         var otherHolder = new InstitutionalHolder { Cik = "0000102909", Name = "Vanguard" };
         _dbContext.AddRange(stock, holder, otherHolder);
@@ -84,7 +87,7 @@ public class StockTabServiceLoadHolderDetailTests : IDisposable
         InstitutionalHolding Holding(InstitutionalHolder h, DateOnly report, long shares) =>
             new()
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 InstitutionalHolderId = h.Id,
                 FilingDate = report.AddDays(30),
                 ReportDate = report,
@@ -103,7 +106,7 @@ public class StockTabServiceLoadHolderDetailTests : IDisposable
         var result = await _service.LoadHolderDetail(stock, holder);
 
         result.Should().BeOfType<HolderDetailViewModel>();
-        result.Stock.Ticker.Should().Be("AAPL");
+        result.Stock.Presentation.Listing.Ticker.Should().Be("AAPL");
         result.Holder.Name.Should().Be("Berkshire");
         result.Holdings.Should().HaveCount(2);
         result

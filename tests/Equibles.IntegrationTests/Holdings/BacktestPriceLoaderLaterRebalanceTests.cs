@@ -37,18 +37,20 @@ public class BacktestPriceLoaderLaterRebalanceTests : IDisposable
         var from = HoldingsBacktestCalculator.RebalanceDateOf(firstReportDate);
         var secondRebalance = HoldingsBacktestCalculator.RebalanceDateOf(secondReportDate);
         var to = secondRebalance.AddDays(30);
-        var issuer = new CommonStock
-        {
-            Ticker = "PAIR-B",
-            SecondaryTickers = ["PAIR-A"],
-            Name = "Paired Classes",
-        };
-        var benchmark = new CommonStock { Ticker = "SPY", Name = "Benchmark" };
+        EquityIssuer issuer = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "PAIR-B",
+            SecondaryTickers: ["PAIR-A"],
+            Name: "Paired Classes"
+        );
+        EquityIssuer benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SPY",
+            Name: "Benchmark"
+        );
         _dbContext.AddRange(issuer, benchmark);
-        AddPrice(issuer, issuer.Ticker, from, 100m);
-        AddPrice(issuer, issuer.Ticker, to, 110m);
-        AddPrice(benchmark, benchmark.Ticker, from, 100m);
-        AddPrice(benchmark, benchmark.Ticker, to, 100m);
+        AddPrice(issuer, issuer.Presentation.Listing.Ticker, from, 100m);
+        AddPrice(issuer, issuer.Presentation.Listing.Ticker, to, 110m);
+        AddPrice(benchmark, benchmark.Presentation.Listing.Ticker, from, 100m);
+        AddPrice(benchmark, benchmark.Presentation.Listing.Ticker, to, 100m);
         await _dbContext.SaveChangesAsync();
 
         var snapshots = new List<BacktestQuarterSnapshot>
@@ -57,12 +59,18 @@ public class BacktestPriceLoaderLaterRebalanceTests : IDisposable
             Snapshot(secondReportDate, issuer.Id, listedTicker: "PAIR-A"),
         };
         var loader = new BacktestPriceLoader(
-            new DailyStockPriceRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new StockSplitRepository(_dbContext)
         );
 
-        var result = await loader.RunBacktest(snapshots, benchmark, benchmark.Ticker, from, to);
+        var result = await loader.RunBacktest(
+            snapshots,
+            benchmark,
+            benchmark.Presentation.Listing.Ticker,
+            from,
+            to
+        );
 
         result.Points.Should().BeEmpty();
         result.Reason.Should().Contain("rebalance").And.Contain("exact-listing price");
@@ -88,12 +96,16 @@ public class BacktestPriceLoaderLaterRebalanceTests : IDisposable
             ],
         };
 
-    private void AddPrice(CommonStock stock, string listedTicker, DateOnly date, decimal close) =>
+    private void AddPrice(EquityIssuer stock, string listedTicker, DateOnly date, decimal close) =>
         _dbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = stock.Id,
-                ListedTicker = listedTicker,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                    _dbContext,
+                    stock,
+                    listedTicker
+                ),
+                SourceTicker = listedTicker,
                 Date = date,
                 Open = close,
                 High = close,

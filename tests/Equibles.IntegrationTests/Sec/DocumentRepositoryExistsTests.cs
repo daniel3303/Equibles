@@ -24,7 +24,10 @@ public class DocumentRepositoryExistsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Exists_ChangingOnlyReportingForDate_FlipsFromTrueToFalse()
     {
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var file = new File
         {
             Name = "10k",
@@ -35,7 +38,7 @@ public class DocumentRepositoryExistsTests : ParadeDbMcpTestBase
         };
         var seeded = new Document
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenK,
@@ -50,11 +53,13 @@ public class DocumentRepositoryExistsTests : ParadeDbMcpTestBase
 
         await using var verify = Fixture.CreateDbContext();
         // Re-load the tracked stock so reference equality matches the seeded row.
-        var trackedStock = verify.Set<CommonStock>().Single(s => s.Ticker == "AAPL");
+        EquityIssuer trackedStock = verify
+            .Set<EquityIssuer>()
+            .Single(s => s.Presentation.Listing.Ticker == "AAPL");
         var sut = new DocumentRepository(verify);
 
         var exactMatch = await sut.Exists(
-            trackedStock,
+            (trackedStock).Id,
             DocumentType.TenK,
             reportingDate: new DateOnly(2025, 1, 15),
             reportingForDate: new DateOnly(2024, 9, 30)
@@ -64,7 +69,7 @@ public class DocumentRepositoryExistsTests : ParadeDbMcpTestBase
         // ReportingForDate predicate from the AnyAsync expression would mistakenly
         // mark this row as "already present" and skip persisting it.
         var differentReportingFor = await sut.Exists(
-            trackedStock,
+            (trackedStock).Id,
             DocumentType.TenK,
             reportingDate: new DateOnly(2025, 1, 15),
             reportingForDate: new DateOnly(2024, 6, 30)

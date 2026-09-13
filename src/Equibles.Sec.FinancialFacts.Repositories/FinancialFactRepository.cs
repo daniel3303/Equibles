@@ -1,4 +1,3 @@
-using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
@@ -11,14 +10,14 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     public FinancialFactRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<FinancialFact> GetByStock(CommonStock stock)
+    public IQueryable<FinancialFact> GetByIssuerId(Guid issuerId)
     {
-        return GetAll().Where(f => f.CommonStockId == stock.Id);
+        return GetAll().Where(f => f.EquityIssuerId == issuerId);
     }
 
-    public IQueryable<FinancialFact> GetByStocks(IReadOnlyCollection<Guid> stockIds)
+    public IQueryable<FinancialFact> GetByIssuerIds(IReadOnlyCollection<Guid> issuerIds)
     {
-        return GetAll().Where(f => stockIds.Contains(f.CommonStockId));
+        return GetAll().Where(f => issuerIds.Contains(f.EquityIssuerId));
     }
 
     /// <summary>
@@ -30,17 +29,17 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     /// per-concept "latest filed" collapse would otherwise pick a segment value
     /// (e.g. iPhone revenue) in place of the total non-deterministically. Every
     /// statement/figure read path that renders consolidated numbers must use
-    /// this, not <see cref="GetByStock"/>.
+    /// this, not <see cref="GetByIssuerId"/>.
     /// </summary>
-    public IQueryable<FinancialFact> GetConsolidatedByStock(CommonStock stock)
+    public IQueryable<FinancialFact> GetConsolidatedByIssuerId(Guid issuerId)
     {
-        return GetByStock(stock).Where(f => f.DimensionsKey == "");
+        return GetByIssuerId(issuerId).Where(f => f.DimensionsKey == "");
     }
 
-    /// <inheritdoc cref="GetConsolidatedByStock"/>
-    public IQueryable<FinancialFact> GetConsolidatedByStocks(IReadOnlyCollection<Guid> stockIds)
+    /// <inheritdoc cref="GetConsolidatedByIssuerId"/>
+    public IQueryable<FinancialFact> GetConsolidatedByIssuerIds(IReadOnlyCollection<Guid> issuerIds)
     {
-        return GetByStocks(stockIds).Where(f => f.DimensionsKey == "");
+        return GetByIssuerIds(issuerIds).Where(f => f.DimensionsKey == "");
     }
 
     /// <summary>
@@ -50,13 +49,13 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     /// balance sheet, which has no span of its own, can be dated by.
     /// </summary>
     public IQueryable<FinancialFact> GetMeasuredFlows(
-        CommonStock stock,
+        Guid issuerId,
         int fiscalYear,
         SecFiscalPeriod fiscalPeriod,
         IReadOnlyCollection<Guid> flowConceptIds
     )
     {
-        return GetConsolidatedByStock(stock)
+        return GetConsolidatedByIssuerId(issuerId)
             .Where(f =>
                 f.FiscalYear == fiscalYear
                 && f.FiscalPeriod == fiscalPeriod
@@ -72,7 +71,7 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     /// year is named differently a balance sheet sits one bucket away from its own flows.
     /// </summary>
     public IQueryable<FinancialFact> GetStatedNear(
-        CommonStock stock,
+        Guid issuerId,
         IReadOnlyCollection<Guid> conceptIds,
         DateOnly date,
         int toleranceDays
@@ -80,7 +79,7 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     {
         var from = date.AddDays(-toleranceDays);
         var to = date.AddDays(toleranceDays);
-        return GetConsolidatedByStock(stock)
+        return GetConsolidatedByIssuerId(issuerId)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodEnd == f.PeriodStart

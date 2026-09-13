@@ -35,13 +35,12 @@ public class StocksCongressionalTradesSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             db.Add(
                 new CongressMember
@@ -54,7 +53,7 @@ public class StocksCongressionalTradesSeededTests
             db.Add(
                 new CongressionalTrade
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     CongressMemberId = memberId,
                     TransactionDate = transactionDate,
                     FilingDate = transactionDate.AddDays(2),
@@ -68,7 +67,7 @@ public class StocksCongressionalTradesSeededTests
             db.Add(
                 new CongressionalTrade
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     CongressMemberId = memberId,
                     TransactionDate = transactionDate.AddDays(-1),
                     FilingDate = transactionDate.AddDays(1),
@@ -82,7 +81,7 @@ public class StocksCongressionalTradesSeededTests
             db.Add(
                 new CongressionalTrade
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     CongressMemberId = memberId,
                     TransactionDate = transactionDate.AddDays(-2),
                     FilingDate = transactionDate,

@@ -33,7 +33,7 @@ public class StocksControllerShowDocumentNotFoundTests
         );
 
         var sut = new StocksController(
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             institutionalHolderRepository: null!,
             institutionalHoldingRepository: null!,
             new DocumentRepository(ctx),

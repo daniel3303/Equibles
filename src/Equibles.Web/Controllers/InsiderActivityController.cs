@@ -47,7 +47,8 @@ public class InsiderActivityController : BaseController
             {
                 OwnerName = t.InsiderOwner.Name,
                 OwnerCik = t.InsiderOwner.OwnerCik,
-                Ticker = t.CommonStock.Ticker,
+                Ticker =
+                    t.Issuer.Presentation == null ? null : t.Issuer.Presentation.Listing.Ticker,
                 TransactionDate = t.TransactionDate,
                 Shares = t.Shares,
                 PricePerShare = t.PricePerShare,
@@ -64,7 +65,8 @@ public class InsiderActivityController : BaseController
             {
                 OwnerName = t.InsiderOwner.Name,
                 OwnerCik = t.InsiderOwner.OwnerCik,
-                Ticker = t.CommonStock.Ticker,
+                Ticker =
+                    t.Issuer.Presentation == null ? null : t.Issuer.Presentation.Listing.Ticker,
                 TransactionDate = t.TransactionDate,
                 Shares = t.Shares,
                 PricePerShare = t.PricePerShare,
@@ -81,7 +83,8 @@ public class InsiderActivityController : BaseController
             {
                 OwnerName = t.InsiderOwner.Name,
                 OwnerCik = t.InsiderOwner.OwnerCik,
-                Ticker = t.CommonStock.Ticker,
+                Ticker =
+                    t.Issuer.Presentation == null ? null : t.Issuer.Presentation.Listing.Ticker,
                 TransactionDate = t.TransactionDate,
                 Shares = t.Shares,
                 PricePerShare = t.PricePerShare,

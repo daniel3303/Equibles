@@ -61,8 +61,8 @@ public class FinancialFactsImportServiceSecEdgarHttpFailureTests : IAsyncLifetim
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(FinancialConceptRepository))
                     .Returns(new FinancialConceptRepository(ctx));
                 sp.GetService(typeof(FinancialFactsSyncStatusRepository))
@@ -78,16 +78,15 @@ public class FinancialFactsImportServiceSecEdgarHttpFailureTests : IAsyncLifetim
     [Fact]
     public async Task Import_GetCompanyFactsThrowsHttpRequestException_ReturnsWithoutCrashOrWrites()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync(CancellationToken.None);
         }
 
@@ -119,11 +118,11 @@ public class FinancialFactsImportServiceSecEdgarHttpFailureTests : IAsyncLifetim
         conceptCount.Should().Be(0, "no concept upsert may run when the HTTP call failed");
         var factCount = await verify
             .Set<FinancialFact>()
-            .CountAsync(f => f.CommonStockId == apple.Id, CancellationToken.None);
+            .CountAsync(f => f.EquityIssuerId == apple.Id, CancellationToken.None);
         factCount.Should().Be(0, "no fact rows may be written when the HTTP call failed");
         var sync = await verify
             .Set<FinancialFactsSyncStatus>()
-            .SingleOrDefaultAsync(s => s.CommonStockId == apple.Id, CancellationToken.None);
+            .SingleOrDefaultAsync(s => s.EquityIssuerId == apple.Id, CancellationToken.None);
         sync.Should().BeNull("no sync-status checkpoint may be written when the HTTP call failed");
         await errorReporter
             .DidNotReceive()

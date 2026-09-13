@@ -29,7 +29,7 @@ public class AsFiledHtmlBackfillServiceReportingDateTests : IDisposable
     private readonly DocumentRepository _repository;
     private readonly ISecEdgarClient _secEdgarClient;
     private readonly AsFiledHtmlBackfillService _service;
-    private readonly CommonStock _company;
+    private readonly EquityIssuer _company;
 
     public AsFiledHtmlBackfillServiceReportingDateTests()
     {
@@ -49,10 +49,9 @@ public class AsFiledHtmlBackfillServiceReportingDateTests : IDisposable
         _dbContext.Database.EnsureCreated();
         _repository = new DocumentRepository(_dbContext);
 
-        _company = new CommonStock
+        _company = new EquityIssuer
         {
             Id = Guid.NewGuid(),
-            Ticker = "AAPL",
             Name = "Apple Inc.",
             Cik = "0000320193",
         };
@@ -91,7 +90,7 @@ public class AsFiledHtmlBackfillServiceReportingDateTests : IDisposable
             new Document
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = _company.Id,
+                EquityIssuerId = _company.Id,
                 DocumentType = DocumentType.EightK,
                 ReportingDate = reportingDate,
                 AccessionNumber = accessionNumber,

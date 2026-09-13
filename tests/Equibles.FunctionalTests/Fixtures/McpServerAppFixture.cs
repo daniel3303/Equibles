@@ -145,7 +145,10 @@ public class McpServerAppFixture : IAsyncLifetime
         await using (var resetConnection = new NpgsqlConnection(_db.GetConnectionString()))
         {
             await resetConnection.OpenAsync();
-            await _respawner.ResetAsync(resetConnection);
+            await Equibles.TestSupport.ImmutableEvidenceTestReset.Run(
+                resetConnection,
+                () => _respawner.ResetAsync(resetConnection)
+            );
         }
 
         // The server runs in this same process against this same database, so its

@@ -24,7 +24,10 @@ public class DailyShortVolumeNumericCompatibilityTests : ParadeDbMcpTestBase
         DbContext.Add(
             new DailyShortVolume
             {
-                CommonStockId = stock.Id,
+                EquityListingId = Equibles
+                    .TestSupport.NativeListingSeed.ForStock(DbContext, stock, stock.Ticker)
+                    .Id,
+                ListedTicker = stock.Ticker,
                 Date = new DateOnly(2026, 8, 1),
                 ShortVolume = long.MaxValue,
                 ShortExemptVolume = 42,

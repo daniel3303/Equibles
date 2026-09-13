@@ -39,20 +39,18 @@ public class InsiderActivityControllerDashboardInvalidPriceTests
             };
             db.Set<InsiderOwner>().Add(owner);
 
-            var validStock = new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = "ZVALID",
-                Name = "Valid Price Co.",
-            };
-            var invalidStock = new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = "ZINVAL",
-                Name = "Fat Fingered Co.",
-            };
-            db.Set<CommonStock>().Add(validStock);
-            db.Set<CommonStock>().Add(invalidStock);
+            EquityIssuer validStock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "ZVALID",
+                Name: "Valid Price Co."
+            );
+            EquityIssuer invalidStock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "ZINVAL",
+                Name: "Fat Fingered Co."
+            );
+            db.Set<EquityIssuer>().Add(validStock);
+            db.Set<EquityIssuer>().Add(invalidStock);
 
             db.Set<InsiderTransaction>()
                 .Add(MakeBuy(validStock, owner, "0009990002-25-000001", 1_000, 150.00m, true));
@@ -63,7 +61,7 @@ public class InsiderActivityControllerDashboardInvalidPriceTests
             await Task.CompletedTask;
 
             InsiderTransaction MakeBuy(
-                CommonStock s,
+                EquityIssuer s,
                 InsiderOwner o,
                 string accession,
                 long shares,
@@ -73,7 +71,7 @@ public class InsiderActivityControllerDashboardInvalidPriceTests
                 new()
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = s.Id,
+                    EquityIssuerId = s.Id,
                     InsiderOwnerId = o.Id,
                     FilingDate = today,
                     TransactionDate = today.AddDays(-2),

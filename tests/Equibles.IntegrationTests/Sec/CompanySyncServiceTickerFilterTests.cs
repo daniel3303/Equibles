@@ -59,10 +59,13 @@ public class CompanySyncServiceTickerFilterTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -84,8 +87,8 @@ public class CompanySyncServiceTickerFilterTests : ParadeDbMcpTestBase
         // Only AAPL survives the TickersToSync filter — MSFT is dropped before
         // any create, so the DB holds exactly the one allow-listed company.
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
         stocks.Should().ContainSingle();
-        stocks[0].Ticker.Should().Be("AAPL");
+        stocks[0].Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 }

@@ -56,16 +56,15 @@ public class FtdImportServiceSeedCusipsClassShareSymbolTests : IAsyncLifetime
     [Fact]
     public async Task SeedCusips_FeedSymbolWithoutClassSeparator_SeedsCusipOnHyphenatedTicker()
     {
-        var berkshire = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BRK-B",
-            Name = "Berkshire Hathaway Inc",
-            Cik = "0001067983",
-        };
+        EquityIssuer berkshire = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BRK-B",
+            Name: "Berkshire Hathaway Inc",
+            Cik: "0001067983"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(berkshire);
+            seed.Set<EquityIssuer>().Add(berkshire);
             await seed.SaveChangesAsync();
         }
 
@@ -82,8 +81,10 @@ public class FtdImportServiceSeedCusipsClassShareSymbolTests : IAsyncLifetime
 
         seeded.Should().Be(1);
         using var verify = FreshContext();
-        var persisted = await verify.Set<CommonStock>().FirstAsync(s => s.Id == berkshire.Id);
-        persisted.Cusip.Should().Be("084670702");
+        EquityIssuer persisted = await verify
+            .Set<EquityIssuer>()
+            .FirstAsync(s => s.Id == berkshire.Id);
+        persisted.Presentation.Listing.Security.Cusip.Should().Be("084670702");
     }
 
     [Fact]
@@ -93,23 +94,21 @@ public class FtdImportServiceSeedCusipsClassShareSymbolTests : IAsyncLifetime
         // The exact owner of the symbol must win; the class-share stock must
         // NOT be seeded from an ambiguous symbol — guessing would attach the
         // wrong CUSIP to the wrong company.
-        var exact = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BFA",
-            Name = "Exact Symbol Owner Inc",
-            Cik = "0000000010",
-        };
-        var classShare = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "BF-A",
-            Name = "Brown Forman Corp",
-            Cik = "0000014693",
-        };
+        EquityIssuer exact = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BFA",
+            Name: "Exact Symbol Owner Inc",
+            Cik: "0000000010"
+        );
+        EquityIssuer classShare = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "BF-A",
+            Name: "Brown Forman Corp",
+            Cik: "0000014693"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().AddRange(exact, classShare);
+            seed.Set<EquityIssuer>().AddRange(exact, classShare);
             await seed.SaveChangesAsync();
         }
 
@@ -126,10 +125,14 @@ public class FtdImportServiceSeedCusipsClassShareSymbolTests : IAsyncLifetime
 
         seeded.Should().Be(1);
         using var verify = FreshContext();
-        var exactAfter = await verify.Set<CommonStock>().FirstAsync(s => s.Id == exact.Id);
-        var classAfter = await verify.Set<CommonStock>().FirstAsync(s => s.Id == classShare.Id);
-        exactAfter.Cusip.Should().Be("111111111");
-        classAfter.Cusip.Should().BeNull();
+        EquityIssuer exactAfter = await verify
+            .Set<EquityIssuer>()
+            .FirstAsync(s => s.Id == exact.Id);
+        EquityIssuer classAfter = await verify
+            .Set<EquityIssuer>()
+            .FirstAsync(s => s.Id == classShare.Id);
+        exactAfter.Presentation.Listing.Security.Cusip.Should().Be("111111111");
+        classAfter.Presentation.Listing.Security.Cusip.Should().BeNull();
     }
 
     private FtdImportService BuildService()
@@ -141,12 +144,12 @@ public class FtdImportServiceSeedCusipsClassShareSymbolTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
+                sp.GetService(typeof(EquityIdentityManager))
                     .Returns(
-                        new CommonStockManager(
-                            new CommonStockRepository(ctx),
+                        new EquityIdentityManager(
+                            new EquityIssuerRepository(ctx),
                             Substitute.For<IBus>()
                         )
                     );

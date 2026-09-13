@@ -39,13 +39,12 @@ public class StocksShortVolumeTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
 
             db.ChangeTracker.AutoDetectChangesEnabled = false;
@@ -54,7 +53,18 @@ public class StocksShortVolumeTests
                 db.Add(
                     new DailyShortVolume
                     {
-                        CommonStockId = stockId,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStockId(
+                                db,
+                                stockId,
+                                Equibles
+                                    .TestSupport.NativeListingSeed.ForStockId(db, stockId)
+                                    .Ticker
+                            )
+                            .Id,
+                        ListedTicker = Equibles
+                            .TestSupport.NativeListingSeed.ForStockId(db, stockId)
+                            .Ticker,
                         Date = endDate.AddDays(-i),
                         ShortVolume = 1_000_000 + i,
                         ShortExemptVolume = 10_000 + i,
@@ -97,12 +107,11 @@ public class StocksShortVolumeTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
             await Task.CompletedTask;
         });

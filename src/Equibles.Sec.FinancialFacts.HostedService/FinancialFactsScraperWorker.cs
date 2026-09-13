@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
@@ -57,7 +58,8 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
         Dictionary<Guid, int> importerVersionByStock;
         using (var scope = ScopeFactory.CreateScope())
         {
-            var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
+            EquityIssuerRepository stockRepo =
+                scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
             allStockIds = await stockRepo
                 .GetAll()
                 .Where(s => s.Cik != null && s.Cik != "")
@@ -71,17 +73,17 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
                 .AsNoTracking()
                 .Select(s => new
                 {
-                    s.CommonStockId,
+                    s.EquityIssuerId,
                     s.LastCheckedAt,
                     s.ImporterVersion,
                 })
                 .ToListAsync(stoppingToken);
             lastCheckedByStock = syncStatuses.ToDictionary(
-                s => s.CommonStockId,
+                s => s.EquityIssuerId,
                 s => s.LastCheckedAt
             );
             importerVersionByStock = syncStatuses.ToDictionary(
-                s => s.CommonStockId,
+                s => s.EquityIssuerId,
                 s => s.ImporterVersion
             );
         }
@@ -120,8 +122,9 @@ public class FinancialFactsScraperWorker : BaseScraperWorker
             stoppingToken.ThrowIfCancellationRequested();
 
             using var scope = ScopeFactory.CreateScope();
-            var stockRepo = scope.ServiceProvider.GetRequiredService<CommonStockRepository>();
-            var stock = await stockRepo.Get(stockId);
+            EquityIssuerRepository stockRepo =
+                scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+            EquityIssuer stock = await stockRepo.Get(stockId);
             if (stock == null)
                 continue;
 

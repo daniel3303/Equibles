@@ -83,7 +83,7 @@ public class NportFilingProcessor : IssuerFeedFilingProcessor<NportFiling, Nport
 
         var entity = new NportFiling
         {
-            CommonStockId = companyId,
+            EquityIssuerId = companyId,
             AccessionNumber = filing.AccessionNumber,
             FilingDate = filing.FilingDate,
             IsAmendment = ParseIsAmendment(headerData, filing),

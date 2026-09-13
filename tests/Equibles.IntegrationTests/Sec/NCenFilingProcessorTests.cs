@@ -269,14 +269,13 @@ public class NCenFilingProcessorTests
         };
     }
 
-    private static CommonStock MakeCompany()
+    private static EquityIssuer MakeCompany()
     {
-        return new CommonStock
-        {
-            Ticker = "MXF",
-            Name = "Mexico Fund Inc",
-            Cik = "0000065433",
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MXF",
+            Name: "Mexico Fund Inc",
+            Cik: "0000065433"
+        );
     }
 
     // A real N-CEN submission (Mexico Fund Inc, accession 0000065433-24-000002), trimmed to the

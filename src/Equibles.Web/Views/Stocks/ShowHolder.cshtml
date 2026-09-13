@@ -1,8 +1,8 @@
 @model Equibles.Web.ViewModels.Stocks.HolderDetailViewModel
 
 @{
-    ViewData["Title"] = $"{Model.Holder.Name} - {Model.Stock.Ticker}";
-    ViewData["Description"] = $"{Model.Holder.Name} institutional holdings in {Model.Stock.Ticker}. View holding history, share counts, and filing dates.";
+    ViewData["Title"] = $"{Model.Holder.Name} - {Model.Stock.Presentation.Listing.Ticker}";
+    ViewData["Description"] = $"{Model.Holder.Name} institutional holdings in {Model.Stock.Presentation.Listing.Ticker}. View holding history, share counts, and filing dates.";
     var stock = Model.Stock;
     var holder = Model.Holder;
 }
@@ -12,7 +12,7 @@
     <div class="flex items-center justify-between mb-2">
         <breadcrumbs>
             <li><a asp-controller="Stocks" asp-action="Index">Stocks</a></li>
-            <li><a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@stock.Ticker">@stock.Ticker</a></li>
+            <li><a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@stock.Presentation.Listing.Ticker">@stock.Presentation.Listing.Ticker</a></li>
             <li><span class="font-semibold text-base-content">@holder.Name</span></li>
         </breadcrumbs>
     </div>
@@ -44,7 +44,7 @@
                 }
                 <div>
                     <div class="text-xs text-base-content/50 uppercase tracking-wider">Stock</div>
-                    <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@stock.Ticker" class="text-sm text-primary hover:underline">@stock.Ticker — @stock.Name</a>
+                    <a asp-controller="Stocks" asp-action="Show" asp-route-ticker="@stock.Presentation.Listing.Ticker" class="text-sm text-primary hover:underline">@stock.Presentation.Listing.Ticker — @stock.Name</a>
                 </div>
             </div>
         </div>
@@ -55,7 +55,7 @@
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body text-center py-12">
                 <h2 class="text-base-content/60 mb-2">No Holdings History</h2>
-                <p class="text-base-content/40 text-sm">No holdings records found for this institution in @stock.Ticker.</p>
+                <p class="text-base-content/40 text-sm">No holdings records found for this institution in @stock.Presentation.Listing.Ticker.</p>
             </div>
         </div>
     } else {
@@ -65,7 +65,7 @@
             .ToList();
 
         <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-semibold m-0">Holdings in @stock.Ticker</h2>
+            <h2 class="text-lg font-semibold m-0">Holdings in @stock.Presentation.Listing.Ticker</h2>
             <partial name="_CompactToggle" />
         </div>
 

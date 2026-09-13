@@ -78,14 +78,14 @@ public class StatusControllerDeleteNotFoundTests : IDisposable
         var errorRepository = new ErrorRepository(_dbContext);
         var errorManager = Substitute.ForPartsOf<ErrorManager>(errorRepository);
         var dataCountService = new DataCountService(
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new DocumentRepository(_dbContext),
             new InsiderTransactionRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
             new InstitutionalHoldingRepository(_dbContext),
             new FailToDeliverRepository(_dbContext),
             new FredObservationRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new CftcPositionReportRepository(_dbContext),
             new CboePutCallRatioRepository(_dbContext),
             new CboeVixDailyRepository(_dbContext)

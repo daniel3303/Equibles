@@ -9,9 +9,9 @@ public class Form144FilingRepository : BaseRepository<Form144Filing>
     public Form144FilingRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
-    public IQueryable<Form144Filing> GetByStock(CommonStock stock)
+    public IQueryable<Form144Filing> GetByIssuerId(Guid stock)
     {
-        return GetAll().Where(f => f.CommonStockId == stock.Id);
+        return GetAll().Where(f => f.EquityIssuerId == stock);
     }
 
     public IQueryable<Form144Filing> GetByAccessionNumber(string accessionNumber)

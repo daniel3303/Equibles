@@ -79,18 +79,27 @@ public class FinancialFactSplitAdjustmentIsPerShareTests
     public void Restate_NonShareRatioAcrossSplit_StaysAsFiled()
     {
         var fact = Fact("USD/bbl");
+        var listingId = Guid.NewGuid();
         var splits = new List<StockSplit>
         {
             new()
             {
+                EquityListingId = listingId,
                 EffectiveDate = new DateOnly(2022, 7, 18),
                 Numerator = 10m,
                 Denominator = 1m,
             },
         };
 
-        var value = FinancialFactSplitAdjustment.Restate(fact, splits, out var adjusted);
+        var value = FinancialFactSplitAdjustment.Restate(
+            fact,
+            splits,
+            listingId,
+            out var adjusted,
+            out var unresolved
+        );
 
+        unresolved.Should().BeFalse();
         value.Should().Be(100m);
         adjusted.Should().BeFalse();
     }
@@ -99,19 +108,66 @@ public class FinancialFactSplitAdjustmentIsPerShareTests
     public void Restate_ShareDenominatedRatioAcrossSplit_IsDivided()
     {
         var fact = Fact("USD/shares");
+        var listingId = Guid.NewGuid();
         var splits = new List<StockSplit>
         {
             new()
             {
+                EquityListingId = listingId,
                 EffectiveDate = new DateOnly(2022, 7, 18),
                 Numerator = 10m,
                 Denominator = 1m,
             },
         };
 
-        var value = FinancialFactSplitAdjustment.Restate(fact, splits, out var adjusted);
+        var value = FinancialFactSplitAdjustment.Restate(
+            fact,
+            splits,
+            listingId,
+            out var adjusted,
+            out var unresolved
+        );
 
+        unresolved.Should().BeFalse();
         value.Should().Be(10m);
         adjusted.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("unattributed")]
+    [InlineData("invalid")]
+    [InlineData("duplicate")]
+    [InlineData("other-listing")]
+    [InlineData("renamed")]
+    public void Restate_NativeAttribution_PreservesUnresolvedValuesAndIsolatesOtherListings(
+        string scope
+    )
+    {
+        var fact = Fact("USD/shares");
+        var listingId = Guid.NewGuid();
+        var split = new StockSplit
+        {
+            EquityListingId =
+                scope == "unattributed" ? null
+                : scope == "other-listing" ? Guid.NewGuid()
+                : listingId,
+            PriceSeriesTicker = "OLD-SOURCE-SYMBOL",
+            EffectiveDate = new DateOnly(2022, 7, 18),
+            Numerator = scope == "invalid" ? 0 : 10m,
+            Denominator = 1m,
+        };
+        var splits = new List<StockSplit> { split };
+        if (scope == "duplicate")
+            splits.Add(split);
+        var value = FinancialFactSplitAdjustment.Restate(
+            fact,
+            splits,
+            listingId,
+            out var adjusted,
+            out var unresolved
+        );
+        unresolved.Should().Be(scope is "unattributed" or "invalid" or "duplicate");
+        adjusted.Should().Be(scope == "renamed");
+        value.Should().Be(scope == "renamed" ? 10m : 100m);
     }
 }

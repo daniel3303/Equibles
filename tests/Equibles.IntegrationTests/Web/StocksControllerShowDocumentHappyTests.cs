@@ -38,21 +38,19 @@ public class StocksControllerShowDocumentHappyTests
             new SecTestModuleConfiguration()
         );
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        ctx.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        ctx.Set<EquityIssuer>().Add(stock);
 
         var body = "Item 1A. Risk Factors — café"u8.ToArray();
         var document = new Document
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            Issuer = stock,
             ContentId = Guid.NewGuid(),
             Content = new File
             {
@@ -71,7 +69,7 @@ public class StocksControllerShowDocumentHappyTests
         var fileManager = Substitute.For<IFileManager>();
         fileManager.GetContent(Arg.Any<File>()).Returns(ci => ((File)ci[0]).FileContent.Bytes);
         var sut = new StocksController(
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             institutionalHolderRepository: null!,
             institutionalHoldingRepository: null!,
             new DocumentRepository(ctx),

@@ -19,19 +19,20 @@ public class FundOverlapCalculatorBuildStockRowMinValueTests
     public void BuildStockRow_TwoFundsBothHoldStockAtDifferentValues_MinValueIsSmallerOfTheTwo()
     {
         var stockId = Guid.NewGuid();
-        var stock = new CommonStock
-        {
-            Id = stockId,
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: stockId,
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var fund1Aggregate = BuildFundAggregate(
             new InstitutionalHolder { Name = "Fund A" },
             [
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
-                    CommonStock = stock,
+                    EquityIssuerId = stockId,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(null, stock)
+                        .Security.Issuer,
                     Shares = 100,
                     Value = 100,
                 },
@@ -42,8 +43,10 @@ public class FundOverlapCalculatorBuildStockRowMinValueTests
             [
                 new InstitutionalHolding
                 {
-                    CommonStockId = stockId,
-                    CommonStock = stock,
+                    EquityIssuerId = stockId,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(null, stock)
+                        .Security.Issuer,
                     Shares = 300,
                     Value = 300,
                 },

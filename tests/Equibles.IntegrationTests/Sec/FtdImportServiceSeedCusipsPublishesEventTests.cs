@@ -57,16 +57,15 @@ public class FtdImportServiceSeedCusipsPublishesEventTests : IAsyncLifetime
     [Fact]
     public async Task SeedCusips_ResolvesCusipOntoCusiplessStock_PublishesStockCusipChanged()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync();
         }
 
@@ -78,11 +77,11 @@ public class FtdImportServiceSeedCusipsPublishesEventTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
-                sp.GetService(typeof(CommonStockManager))
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
+                sp.GetService(typeof(EquityIdentityManager))
                     .Returns(
-                        new CommonStockManager(new CommonStockRepository(ctx), publishEndpoint)
+                        new EquityIdentityManager(new EquityIssuerRepository(ctx), publishEndpoint)
                     );
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
@@ -133,7 +132,7 @@ public class FtdImportServiceSeedCusipsPublishesEventTests : IAsyncLifetime
             );
 
         using var verify = FreshContext();
-        var persisted = await verify.Set<CommonStock>().FirstAsync(s => s.Id == apple.Id);
-        persisted.Cusip.Should().Be("037833100");
+        EquityIssuer persisted = await verify.Set<EquityIssuer>().FirstAsync(s => s.Id == apple.Id);
+        persisted.Presentation.Listing.Security.Cusip.Should().Be("037833100");
     }
 }

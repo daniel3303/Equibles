@@ -50,7 +50,7 @@ public class WebsiteDiscoveryServiceTests
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => NewContext(options));
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 
@@ -85,7 +85,7 @@ public class WebsiteDiscoveryServiceTests
         );
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         DbContextOptions<EquiblesFinancialDbContext> options,
         string ticker,
         string website = null,
@@ -94,35 +94,34 @@ public class WebsiteDiscoveryServiceTests
     )
     {
         using var ctx = NewContext(options);
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Cik = ticker.PadLeft(10, '0'),
-            Name = ticker + " Inc",
-            Website = website,
-            WebsiteCheckedAt = checkedAt,
-            MarketCapitalization = marketCap,
-        };
-        ctx.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Cik: ticker.PadLeft(10, '0'),
+            Name: ticker + " Inc",
+            Website: website,
+            WebsiteCheckedAt: checkedAt,
+            MarketCapitalization: marketCap
+        );
+        ctx.Set<EquityIssuer>().Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
     }
 
-    private static async Task<CommonStock> Reload(
+    private static async Task<EquityIssuer> Reload(
         DbContextOptions<EquiblesFinancialDbContext> options,
         Guid id
     )
     {
         using var ctx = NewContext(options);
-        return await ctx.Set<CommonStock>().FirstAsync(s => s.Id == id);
+        return await ctx.Set<EquityIssuer>().FirstAsync(s => s.Id == id);
     }
 
     [Fact]
     public async Task HigherPrioritySourceWins_AndLaterSourcesOnlySeeUnfilledStocks()
     {
         var options = NewDbOptions();
-        var filled = await SeedStock(options, "AAA");
-        var leftover = await SeedStock(options, "BBB");
+        EquityIssuer filled = await SeedStock(options, "AAA");
+        EquityIssuer leftover = await SeedStock(options, "BBB");
         var primary = new StubSource(
             priority: 10,
             answers: new Dictionary<string, string> { ["AAA"] = "www.aaa.com" }
@@ -146,11 +145,11 @@ public class WebsiteDiscoveryServiceTests
     public async Task DefinitiveMissAcrossAllSources_StampsTheAttempt()
     {
         var options = NewDbOptions();
-        var stock = await SeedStock(options, "AAA");
+        EquityIssuer stock = await SeedStock(options, "AAA");
 
         await BuildSut(options, [new StubSource(10, [])]).Import(CancellationToken.None);
 
-        var reloaded = await Reload(options, stock.Id);
+        EquityIssuer reloaded = await Reload(options, stock.Id);
         reloaded.Website.Should().BeNull();
         reloaded.WebsiteCheckedAt.Should().NotBeNull();
     }
@@ -159,7 +158,7 @@ public class WebsiteDiscoveryServiceTests
     public async Task FailedProbe_FallsThroughToNextSource()
     {
         var options = NewDbOptions();
-        var stock = await SeedStock(options, "AAA");
+        EquityIssuer stock = await SeedStock(options, "AAA");
         var primary = new StubSource(
             10,
             new Dictionary<string, string> { ["AAA"] = "www.dead-host.com" }
@@ -167,7 +166,7 @@ public class WebsiteDiscoveryServiceTests
 
         await BuildSut(options, [primary], HttpStatusCode.NotFound).Import(CancellationToken.None);
 
-        var reloaded = await Reload(options, stock.Id);
+        EquityIssuer reloaded = await Reload(options, stock.Id);
         reloaded.Website.Should().BeNull("the only candidate failed the reachability probe");
         reloaded
             .WebsiteCheckedAt.Should()
@@ -178,8 +177,8 @@ public class WebsiteDiscoveryServiceTests
     public async Task ThrowingSource_DoesNotBlockOthers_AndSkipsTheMissStamp()
     {
         var options = NewDbOptions();
-        var found = await SeedStock(options, "AAA");
-        var missed = await SeedStock(options, "BBB");
+        EquityIssuer found = await SeedStock(options, "AAA");
+        EquityIssuer missed = await SeedStock(options, "BBB");
         var broken = new ThrowingSource(priority: 10);
         var working = new StubSource(
             20,
@@ -189,7 +188,7 @@ public class WebsiteDiscoveryServiceTests
         await BuildSut(options, [broken, working]).Import(CancellationToken.None);
 
         (await Reload(options, found.Id)).Website.Should().Be("https://www.aaa.com");
-        var reloadedMiss = await Reload(options, missed.Id);
+        EquityIssuer reloadedMiss = await Reload(options, missed.Id);
         reloadedMiss.Website.Should().BeNull();
         reloadedMiss
             .WebsiteCheckedAt.Should()
@@ -201,7 +200,11 @@ public class WebsiteDiscoveryServiceTests
     {
         var options = NewDbOptions();
         await SeedStock(options, "AAA", checkedAt: DateTime.UtcNow.AddDays(-1));
-        var eligible = await SeedStock(options, "BBB", checkedAt: DateTime.UtcNow.AddDays(-90));
+        EquityIssuer eligible = await SeedStock(
+            options,
+            "BBB",
+            checkedAt: DateTime.UtcNow.AddDays(-90)
+        );
         var source = new StubSource(10, new Dictionary<string, string> { ["BBB"] = "www.bbb.com" });
 
         await BuildSut(options, [source]).Import(CancellationToken.None);
