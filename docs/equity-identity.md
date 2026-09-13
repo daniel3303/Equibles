@@ -83,3 +83,8 @@
 - SEC ticker reassignment withdraws every obsolete U.S. directory claim under the locked issuer.
 - Independent reference coverage protects its exact listing; foreign listings and all historical observations remain intact.
 - A newly acquired reference claim on the displaced symbol refuses retirement when the locked graph is refreshed.
+
+## Lisbon capture switch
+
+- `EquityMarkets:LisbonEnabled=false` prevents prices, quotation evidence and corporate actions from being captured for retained verified Lisbon listings.
+- Disabled-market history reconciliation and applied-split audits leave stored observations and applied markers unchanged.

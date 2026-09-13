@@ -18,6 +18,7 @@ using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.HostedService.Configuration;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -64,6 +65,7 @@ public class YahooPriceImportService
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
     private readonly YahooPriceScraperOptions _scraperOptions;
+    private readonly bool _lisbonEnabled;
 
     public bool HasEnrichmentBacklog { get; private set; }
 
@@ -74,7 +76,8 @@ public class YahooPriceImportService
         TickerMapService tickerMapService,
         ErrorReporter errorReporter,
         IOptions<WorkerOptions> workerOptions,
-        IOptions<YahooPriceScraperOptions> scraperOptions
+        IOptions<YahooPriceScraperOptions> scraperOptions,
+        IConfiguration configuration = null
     )
     {
         _scopeFactory = scopeFactory;
@@ -84,6 +87,7 @@ public class YahooPriceImportService
         _errorReporter = errorReporter;
         _workerOptions = workerOptions.Value;
         _scraperOptions = scraperOptions.Value;
+        _lisbonEnabled = configuration?.GetValue<bool>("EquityMarkets:LisbonEnabled") == true;
     }
 
     public Task Import(CancellationToken cancellationToken) =>
@@ -247,12 +251,17 @@ public class YahooPriceImportService
         return targets;
     }
 
+    private bool IsMarketEnabled(PriceSeriesTarget target) =>
+        target.IsUs || _lisbonEnabled && YahooListingSource.IsLisbon(target);
+
     private async Task<List<PriceSeriesTarget>> BuildLisbonPriceTargets(
         CancellationToken cancellationToken
     )
     {
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+        if (!_lisbonEnabled)
+            return [];
         var claims = LisbonClaims(repository);
         var rows = await claims
             .Where(listing =>
@@ -882,7 +891,8 @@ public class YahooPriceImportService
                 Isin: listing.Security.Isin
             );
             if (
-                !YahooListingSource.MatchesListing(target, listing)
+                !IsMarketEnabled(target)
+                || !YahooListingSource.MatchesListing(target, listing)
                 || !await HasCurrentIdentity(stockRepository, target, cancellationToken)
             )
                 return;
@@ -1014,6 +1024,15 @@ public class YahooPriceImportService
             .Where(split =>
                 split.PriceAdjustmentAppliedTime >= appliedSince
                 && split.EquityListingId != null
+                && (
+                    split.Listing.MarketCountryCode == "US"
+                    || _lisbonEnabled
+                        && split.Listing.MarketCountryCode == "PT"
+                        && YahooListingSource.LisbonMarkets.Contains(
+                            split.Listing.MarketIdentifierCode
+                        )
+                        && split.Listing.Security.Isin != null
+                )
                 && split.EffectiveDate < today
                 && split.Numerator > 0m
                 && split.Denominator > 0m
@@ -1614,6 +1633,8 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
+        if (!IsMarketEnabled(target))
+            return false;
         if (!target.IsUs)
         {
             if (!YahooListingSource.MatchesChart(target, identity))
@@ -1742,6 +1763,8 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
+        if (!IsMarketEnabled(target))
+            return NoFetchNeeded;
         using (var identityScope = _scopeFactory.CreateScope())
         {
             var repository =
@@ -2396,7 +2419,7 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        if (splits.Count == 0)
+        if (!IsMarketEnabled(target) || splits.Count == 0)
             return;
 
         // Map Yahoo's split shape onto the source-neutral capture DTO at the
@@ -2456,7 +2479,8 @@ public class YahooPriceImportService
     {
         // Cash amounts require explicit source currency independently of stored price history.
         if (
-            chartData.Dividends.Count == 0
+            !IsMarketEnabled(target)
+            || chartData.Dividends.Count == 0
             || !(
                 target.IsUs
                     ? YahooQuotationIdentity.HasUsDollarEvidence(
