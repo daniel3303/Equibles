@@ -37,13 +37,12 @@ public class InsiderFilingReprocessManagerRule10b5StampTests : ParadeDbMcpTestBa
         var filingDate = new DateOnly(2024, 6, 17);
         var accession = "0000320193-24-000002";
 
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var owner = new InsiderOwner
         {
             Id = Guid.NewGuid(),
@@ -60,7 +59,7 @@ public class InsiderFilingReprocessManagerRule10b5StampTests : ParadeDbMcpTestBa
         var stale = new InsiderTransaction
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             AccessionNumber = accession,
             TransactionOrder = 0,
@@ -116,9 +115,9 @@ public class InsiderFilingReprocessManagerRule10b5StampTests : ParadeDbMcpTestBa
         DbContext.Add(stock);
         DbContext.Add(owner);
         DbContext.Add(
-            new DailyStockPrice
+            new EquityDailyStockPrice
             {
-                CommonStockId = stock.Id,
+                Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, stock, null),
                 Date = reportDate,
                 Close = 55m,
             }
@@ -135,7 +134,7 @@ public class InsiderFilingReprocessManagerRule10b5StampTests : ParadeDbMcpTestBa
         var manager = new InsiderFilingReprocessManager(
             new InsiderTransactionRepository(runCtx),
             new InsiderFilingRepository(runCtx),
-            new DailyStockPriceRepository(runCtx),
+            new EquityDailyStockPriceRepository(runCtx),
             new StockSplitRepository(runCtx),
             new InsiderTransactionPriceValidator(),
             edgar,

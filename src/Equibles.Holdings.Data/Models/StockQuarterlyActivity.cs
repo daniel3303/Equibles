@@ -16,11 +16,11 @@ namespace Equibles.Holdings.Data.Models;
 // quarter goes dirty its whole stock slice is recomputed against the prior
 // quarter and upserted. PreviousReportDate is null for the earliest quarter on
 // record (every filer then counts as new).
-[PrimaryKey(nameof(CommonStockId), nameof(ReportDate))]
+[PrimaryKey(nameof(EquityIssuerId), nameof(ReportDate))]
 [Index(nameof(ReportDate))]
 public class StockQuarterlyActivity
 {
-    public Guid CommonStockId { get; set; }
+    public Guid EquityIssuerId { get; set; }
 
     public DateOnly ReportDate { get; set; }
 

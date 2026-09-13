@@ -125,10 +125,10 @@ public class FundScoringWorkerTests : IDisposable
                     .GetService(typeof(FundScoringManager))
                     .Returns(_ => new FundScoringManager(
                         new InstitutionalHoldingRepository(_dbContext),
-                        new CommonStockRepository(_dbContext),
+                        new EquityIssuerRepository(_dbContext),
                         new BacktestPriceLoader(
-                            new DailyStockPriceRepository(_dbContext),
-                            new CommonStockRepository(_dbContext),
+                            new EquityDailyStockPriceRepository(_dbContext),
+                            new EquityIssuerRepository(_dbContext),
                             new StockSplitRepository(_dbContext)
                         ),
                         new FundScoreRepository(_dbContext)
@@ -144,8 +144,11 @@ public class FundScoringWorkerTests : IDisposable
     {
         SeedBenchmark();
 
-        var held = new CommonStock { Ticker = "AAA", Name = "Alpha Co" };
-        _dbContext.Set<CommonStock>().Add(held);
+        EquityIssuer held = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAA",
+            Name: "Alpha Co"
+        );
+        _dbContext.Set<EquityIssuer>().Add(held);
         AddPrice(held, EarlyPriceDate, 100m);
         AddPrice(held, Today, 200m);
 
@@ -168,7 +171,7 @@ public class FundScoringWorkerTests : IDisposable
                     new InstitutionalHolding
                     {
                         InstitutionalHolderId = holder.Id,
-                        CommonStockId = held.Id,
+                        EquityIssuerId = held.Id,
                         ReportDate = reportDate,
                         FilingDate = reportDate.AddDays(45),
                         Shares = 1000,
@@ -183,22 +186,29 @@ public class FundScoringWorkerTests : IDisposable
 
     private void SeedBenchmark()
     {
-        var benchmark = new CommonStock { Ticker = "SPY", Name = "S&P 500 ETF" };
-        _dbContext.Set<CommonStock>().Add(benchmark);
+        EquityIssuer benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SPY",
+            Name: "S&P 500 ETF"
+        );
+        _dbContext.Set<EquityIssuer>().Add(benchmark);
         AddPrice(benchmark, EarlyPriceDate, 100m);
         AddPrice(benchmark, Today, 100m);
         _dbContext.SaveChanges();
     }
 
-    private void AddPrice(CommonStock stock, DateOnly date, decimal close)
+    private void AddPrice(EquityIssuer stock, DateOnly date, decimal close)
     {
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = stock.Ticker,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        stock.Presentation.Listing.Ticker
+                    ),
+                    SourceTicker = stock.Presentation.Listing.Ticker,
                     Date = date,
                     Open = close,
                     High = close,

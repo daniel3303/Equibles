@@ -355,7 +355,7 @@ public class FinancialFactImportQualityFilterTests
     ) =>
         new()
         {
-            CommonStockId = StockId,
+            EquityIssuerId = StockId,
             FinancialConceptId = conceptId ?? ConceptId,
             Unit = "USD",
             PeriodType = FactPeriodType.Duration,

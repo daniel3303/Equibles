@@ -24,20 +24,18 @@ public class SearchControllerSortTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "GXZ",
-                    Name = "Globex Zeta Corp",
-                    MarketCapitalization = 1_000_000_000d,
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "GXZ",
+                    Name: "Globex Zeta Corp",
+                    MarketCapitalization: 1_000_000_000d
+                )
             );
             db.Add(
-                new CommonStock
-                {
-                    Ticker = "GXA",
-                    Name = "Globex Alpha Corp",
-                    MarketCapitalization = 2_000_000_000d,
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "GXA",
+                    Name: "Globex Alpha Corp",
+                    MarketCapitalization: 2_000_000_000d
+                )
             );
             await Task.CompletedTask;
         });

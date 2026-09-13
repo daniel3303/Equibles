@@ -116,7 +116,7 @@ public class ReportedStatementsParseService
     ) =>
         new()
         {
-            CommonStockId = document.CommonStockId,
+            EquityIssuerId = document.EquityIssuerId,
             DocumentId = document.Id,
             AccessionNumber = document.AccessionNumber,
             Kind = ReportedStatementKindClassifier.Classify(report.ShortName, report.LongName),
@@ -154,8 +154,8 @@ public class ReportedStatementsParseService
         return XbrlFactExtractionService.ResolveFiscalIdentity(
             anchor.PrimaryPeriodStart,
             anchor.PrimaryPeriodEnd,
-            document.CommonStock?.FiscalYearEndMonth,
-            document.CommonStock?.FiscalYearEndDay
+            document.Issuer?.FiscalYearEndMonth,
+            document.Issuer?.FiscalYearEndDay
         );
     }
 }

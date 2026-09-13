@@ -38,7 +38,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
         new(
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             ErrorManager,
             NullLogger<RevenueBreakdownTools>()
         );
@@ -46,7 +46,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     [Fact]
     public async Task GetRevenueBreakdown_SegmentOperatingIncome_LabelsItsOwnTotalAndSkipsTheRevenueOverlapWarning()
     {
-        var stock = AddStock("AAPL");
+        EquityIssuer stock = AddStock("AAPL");
         var revenue = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
         var operatingIncome = AddConcept("OperatingIncomeLoss");
 
@@ -102,7 +102,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     [Fact]
     public async Task GetRevenueBreakdown_IncomeWithoutDimensionalRevenue_StillRendersIncome()
     {
-        var stock = AddStock("SOLO");
+        EquityIssuer stock = AddStock("SOLO");
         var revenue = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
         var operatingIncome = AddConcept("OperatingIncomeLoss");
 
@@ -123,7 +123,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     [Fact]
     public async Task GetRevenueBreakdown_IncomeWithoutAnyRevenueConcept_StillRendersIncome()
     {
-        var stock = AddStock("INCOMEONLY");
+        EquityIssuer stock = AddStock("INCOMEONLY");
         var operatingIncome = AddConcept("OperatingIncomeLoss");
 
         AddFact(stock, operatingIncome, 2024, 20_000_000m);
@@ -142,7 +142,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     [Fact]
     public async Task GetRevenueBreakdown_MultiYearDurationsNeverRenderAsAnnualSegments()
     {
-        var stock = AddStock("SPAN");
+        EquityIssuer stock = AddStock("SPAN");
         var revenue = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
         var operatingIncome = AddConcept("OperatingIncomeLoss");
 
@@ -199,7 +199,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     {
         // A partial amendment can restate one segment without repeating every unchanged member.
         // Treating that one-row filing as the whole roster silently deletes valid segments.
-        var stock = AddStock("NVDA");
+        EquityIssuer stock = AddStock("NVDA");
         var revenue = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
         var operatingIncome = AddConcept("OperatingIncomeLoss");
 
@@ -258,7 +258,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     [Fact]
     public async Task GetRevenueBreakdown_SegmentOperatingIncome_DropsOldMemberAfterCompleteRedisaggregation()
     {
-        var stock = AddStock("DROP");
+        EquityIssuer stock = AddStock("DROP");
         var operatingIncome = AddConcept("OperatingIncomeLoss");
 
         AddFact(stock, operatingIncome, 2024, 20_000_000_000m);
@@ -314,7 +314,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     [Fact]
     public async Task GetRevenueBreakdown_MergesMemberQNameSpellingDriftAcrossYearsBeforeBuildingMargins()
     {
-        var stock = AddStock("AMD");
+        EquityIssuer stock = AddStock("AMD");
         var revenue = AddConcept("RevenueFromContractWithCustomerExcludingAssessedTax");
         var operatingIncome = AddConcept("OperatingIncomeLoss");
 
@@ -356,16 +356,15 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
         );
     }
 
-    private CommonStock AddStock(string ticker)
+    private EquityIssuer AddStock(string ticker)
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = $"{ticker} Inc.",
-            Cik = "0000320193",
-        };
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: $"{ticker} Inc.",
+            Cik: "0000320193"
+        );
+        DbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
@@ -383,7 +382,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     }
 
     private void AddFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         int fy,
         decimal value,
@@ -391,7 +390,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     ) => AddFact(stock, concept, fy, value, 1, dimensions);
 
     private void AddFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         int fy,
         decimal value,
@@ -402,7 +401,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
         var fact = new FinancialFact
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Unit = "USD",
             PeriodType = FactPeriodType.Duration,
@@ -429,7 +428,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
     }
 
     private void AddFactWithSpan(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         DateOnly periodStart,
         DateOnly periodEnd,
@@ -440,7 +439,7 @@ public class RevenueBreakdownToolsSegmentOperatingIncomeTests : ParadeDbMcpTestB
         var fact = new FinancialFact
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Unit = "USD",
             PeriodType = FactPeriodType.Duration,

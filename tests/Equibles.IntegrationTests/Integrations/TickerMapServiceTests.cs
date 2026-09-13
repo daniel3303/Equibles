@@ -11,17 +11,17 @@ namespace Equibles.IntegrationTests.Integrations;
 public class TickerMapServiceTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly CommonStockRepository _stockRepo;
+    private readonly EquityIssuerRepository _stockRepo;
     private readonly TickerMapService _service;
     private readonly TickerMapService _clientEvalService;
 
     public TickerMapServiceTests()
     {
         _dbContext = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _stockRepo = new CommonStockRepository(_dbContext);
+        _stockRepo = new EquityIssuerRepository(_dbContext);
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), _stockRepo)
+            (typeof(EquityIssuerRepository), _stockRepo)
         );
         _service = new TickerMapService(scopeFactory);
 
@@ -30,7 +30,7 @@ public class TickerMapServiceTests : IDisposable
         // by the EF Core in-memory provider.
         var clientEvalRepo = new ClientEvalStockRepository(_dbContext);
         var clientEvalScopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), clientEvalRepo)
+            (typeof(EquityIssuerRepository), clientEvalRepo)
         );
         _clientEvalService = new TickerMapService(clientEvalScopeFactory);
     }
@@ -40,18 +40,17 @@ public class TickerMapServiceTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private static CommonStock CreateStock(string ticker, string name, string cik = null)
+    private static EquityIssuer CreateStock(string ticker, string name, string cik = null)
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = cik ?? $"CIK-{ticker}",
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: cik ?? $"CIK-{ticker}"
+        );
     }
 
-    private async Task SeedStocks(params CommonStock[] stocks)
+    private async Task SeedStocks(params EquityIssuer[] stocks)
     {
         _stockRepo.AddRange(stocks);
         await _stockRepo.SaveChanges();
@@ -80,8 +79,8 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_NullTickerList_ReturnsAllStocks()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
-        var msft = CreateStock("MSFT", "Microsoft Corp");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp");
         await SeedStocks(apple, msft);
 
         var result = await _service.Build(null, CancellationToken.None);
@@ -94,8 +93,8 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_EmptyTickerList_ReturnsAllStocks()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
-        var goog = CreateStock("GOOG", "Alphabet Inc");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer goog = CreateStock("GOOG", "Alphabet Inc");
         await SeedStocks(apple, goog);
 
         var result = await _service.Build([], CancellationToken.None);
@@ -108,13 +107,13 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_PrimaryWithAuthoritativeDelistedClaim_ExcludesHistoricalSymbol()
     {
-        var stock = CreateStock("OLD", "Still Listed Under Another Symbol");
+        EquityIssuer stock = CreateStock("OLD", "Still Listed Under Another Symbol");
         await SeedStocks(stock);
         _stockRepo.AddDelistedListing(
-            new CommonStockDelistedListing
+            new EquityListingRetirementEvidence
             {
-                CommonStockId = stock.Id,
-                ListedTicker = stock.Ticker,
+                EquityIssuerId = stock.Id,
+                ListedTicker = stock.Presentation.Listing.Ticker,
                 DelistedOn = new DateOnly(2023, 1, 10),
             }
         );
@@ -132,9 +131,9 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_WithTickerFilter_ReturnsOnlyMatchingStocks()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
-        var msft = CreateStock("MSFT", "Microsoft Corp");
-        var goog = CreateStock("GOOG", "Alphabet Inc");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp");
+        EquityIssuer goog = CreateStock("GOOG", "Alphabet Inc");
         await SeedStocks(apple, msft, goog);
 
         var result = await _clientEvalService.Build(["AAPL", "GOOG"], CancellationToken.None);
@@ -148,8 +147,8 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_WithSingleTickerFilter_ReturnsSingleMapping()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
-        var msft = CreateStock("MSFT", "Microsoft Corp");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp");
         await SeedStocks(apple, msft);
 
         var result = await _clientEvalService.Build(["MSFT"], CancellationToken.None);
@@ -160,7 +159,7 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_WithNonExistentTicker_ReturnsEmptyDictionary()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
         await SeedStocks(apple);
 
         var result = await _clientEvalService.Build(["ZZZZ"], CancellationToken.None);
@@ -173,9 +172,9 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_MapsTickerToCorrectId()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
-        var msft = CreateStock("MSFT", "Microsoft Corp");
-        var goog = CreateStock("GOOG", "Alphabet Inc");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp");
+        EquityIssuer goog = CreateStock("GOOG", "Alphabet Inc");
         await SeedStocks(apple, msft, goog);
 
         var result = await _service.Build(null, CancellationToken.None);
@@ -190,7 +189,7 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_ReturnsCaseInsensitiveDictionary()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
         await SeedStocks(apple);
 
         var result = await _service.Build(null, CancellationToken.None);
@@ -207,7 +206,7 @@ public class TickerMapServiceTests : IDisposable
         // FINRA writes preferred/when-issued suffixes in lowercase (TpC is a different
         // security from TPC), so its importers request an ordinal map: a case-variant
         // lookup must MISS instead of folding two securities onto one stock.
-        var tpc = CreateStock("TPC", "Tutor Perini Corp");
+        EquityIssuer tpc = CreateStock("TPC", "Tutor Perini Corp");
         await SeedStocks(tpc);
 
         var result = await _service.Build(null, CancellationToken.None, StringComparer.Ordinal);
@@ -222,8 +221,8 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_FilterMatchesSecondaryTicker_IncludesStock()
     {
-        var brk = CreateStock("BRK.A", "Berkshire Hathaway");
-        brk.SecondaryTickers = ["BRK.B"];
+        EquityIssuer brk = CreateStock("BRK.A", "Berkshire Hathaway");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(brk, ["BRK.B"]);
         await SeedStocks(brk);
 
         var result = await _clientEvalService.Build(["BRK.B"], CancellationToken.None);
@@ -234,8 +233,8 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task BuildListed_MapsAuthoritativeEtfTickerToExactListingIdentity()
     {
-        var trust = CreateStock("VB", "Vanguard Index Funds");
-        trust.ReferenceTickers = ["VB", "VOO", "VTI"];
+        EquityIssuer trust = CreateStock("VB", "Vanguard Index Funds");
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(trust, ["VB", "VOO", "VTI"]);
         await SeedStocks(trust);
 
         var result = await _service.BuildListed(null, CancellationToken.None);
@@ -247,8 +246,8 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task BuildListed_FilterKeepsOnlyRequestedExactListing()
     {
-        var trust = CreateStock("VB", "Vanguard Index Funds");
-        trust.ReferenceTickers = ["VB", "VOO", "VTI"];
+        EquityIssuer trust = CreateStock("VB", "Vanguard Index Funds");
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(trust, ["VB", "VOO", "VTI"]);
         await SeedStocks(trust);
 
         var result = await _service.BuildListed(["VOO"], CancellationToken.None);
@@ -263,10 +262,10 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task BuildListed_DuplicateTickerClaimsFailClosed()
     {
-        var first = CreateStock("ONE", "First Trust");
-        first.ReferenceTickers = ["CLASH"];
-        var second = CreateStock("TWO", "Second Trust");
-        second.ReferenceTickers = ["CLASH"];
+        EquityIssuer first = CreateStock("ONE", "First Trust");
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(first, ["CLASH"]);
+        EquityIssuer second = CreateStock("TWO", "Second Trust");
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(second, ["CLASH"]);
         await SeedStocks(first, second);
 
         var result = await _service.BuildListed(null, CancellationToken.None);
@@ -278,13 +277,13 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task BuildListed_DotDashPrimaryAliasCannotEvadeDelisting()
     {
-        var stock = CreateStock("BRK-B", "Berkshire Hathaway");
-        stock.ReferenceTickers = ["BRK.B"];
+        EquityIssuer stock = CreateStock("BRK-B", "Berkshire Hathaway");
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(stock, ["BRK.B"]);
         await SeedStocks(stock);
         _stockRepo.AddDelistedListing(
-            new CommonStockDelistedListing
+            new EquityListingRetirementEvidence
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ListedTicker = "BRK.B",
                 DelistedOn = new DateOnly(2026, 1, 1),
             }
@@ -300,14 +299,14 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task BuildListed_DelistedPrimaryDoesNotHideActiveSiblingListing()
     {
-        var trust = CreateStock("OLD", "Trust With Active Series");
-        trust.ReferenceTickers = ["LIVEETF"];
+        EquityIssuer trust = CreateStock("OLD", "Trust With Active Series");
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(trust, ["LIVEETF"]);
         await SeedStocks(trust);
         _stockRepo.AddDelistedListing(
-            new CommonStockDelistedListing
+            new EquityListingRetirementEvidence
             {
-                CommonStockId = trust.Id,
-                ListedTicker = trust.Ticker,
+                EquityIssuerId = trust.Id,
+                ListedTicker = trust.Presentation.Listing.Ticker,
                 DelistedOn = new DateOnly(2026, 1, 1),
             }
         );
@@ -323,8 +322,8 @@ public class TickerMapServiceTests : IDisposable
     public async Task BuildListed_AcceptsTheFullListedTickerContractLength()
     {
         var ticker = new string('X', TickerNormalizer.MaxListedLength);
-        var trust = CreateStock("FUND", "Long Symbol Trust");
-        trust.ReferenceTickers = [ticker];
+        EquityIssuer trust = CreateStock("FUND", "Long Symbol Trust");
+        Equibles.TestSupport.EquityIssuerSeed.SetReferenceTickers(trust, [ticker]);
         await SeedStocks(trust);
 
         var result = await _service.BuildListed([ticker], CancellationToken.None);
@@ -346,9 +345,13 @@ public class TickerMapServiceTests : IDisposable
         var result = await _service.Build(null, CancellationToken.None);
 
         result.Should().HaveCount(50);
-        foreach (var stock in stocks)
+        foreach (EquityIssuer stock in stocks)
         {
-            result.Should().ContainKey(stock.Ticker).WhoseValue.Should().Be(stock.Id);
+            result
+                .Should()
+                .ContainKey(stock.Presentation.Listing.Ticker)
+                .WhoseValue.Should()
+                .Be(stock.Id);
         }
     }
 
@@ -357,7 +360,7 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_CancelledToken_ThrowsOperationCancelled()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
         await SeedStocks(apple);
 
         var cts = new CancellationTokenSource();
@@ -373,13 +376,13 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_CalledAfterNewStockAdded_ReflectsNewData()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
         await SeedStocks(apple);
 
         var firstResult = await _service.Build(null, CancellationToken.None);
         firstResult.Should().ContainSingle();
 
-        var msft = CreateStock("MSFT", "Microsoft Corp");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp");
         await SeedStocks(msft);
 
         var secondResult = await _service.Build(null, CancellationToken.None);
@@ -390,14 +393,14 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_CalledAfterStockRemoved_ReflectsRemoval()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
-        var msft = CreateStock("MSFT", "Microsoft Corp");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp");
         await SeedStocks(apple, msft);
 
         var firstResult = await _service.Build(null, CancellationToken.None);
         firstResult.Should().HaveCount(2);
 
-        _stockRepo.Delete(apple);
+        apple.Presentation.Listing.Active = false;
         await _stockRepo.SaveChanges();
 
         var secondResult = await _service.Build(null, CancellationToken.None);
@@ -409,7 +412,7 @@ public class TickerMapServiceTests : IDisposable
     [Fact]
     public async Task Build_FilterWithMixedExistingAndNonExisting_ReturnsOnlyExisting()
     {
-        var apple = CreateStock("AAPL", "Apple Inc");
+        EquityIssuer apple = CreateStock("AAPL", "Apple Inc");
         await SeedStocks(apple);
 
         var result = await _clientEvalService.Build(
@@ -427,14 +430,14 @@ public class TickerMapServiceTests : IDisposable
     /// so GetAll returns a TestAsyncQueryable that supports both LINQ-to-Objects
     /// evaluation and IAsyncEnumerable for EF Core async methods.
     /// </summary>
-    private sealed class ClientEvalStockRepository : CommonStockRepository
+    private sealed class ClientEvalStockRepository : EquityIssuerRepository
     {
         public ClientEvalStockRepository(EquiblesFinancialDbContext dbContext)
             : base(dbContext) { }
 
-        public override IQueryable<CommonStock> GetAll()
+        public override IQueryable<EquityIssuer> GetCurrentUsDirectory()
         {
-            return new TestAsyncQueryable<CommonStock>(base.GetAll().ToList());
+            return new TestAsyncQueryable<EquityIssuer>(base.GetCurrentUsDirectory().ToList());
         }
     }
 }

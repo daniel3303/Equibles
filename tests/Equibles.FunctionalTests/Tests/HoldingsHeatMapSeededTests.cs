@@ -34,13 +34,12 @@ public class HoldingsHeatMapSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
 
             var filerA = new InstitutionalHolder { Cik = "0001067983", Name = "Fund Alpha" };
@@ -61,7 +60,7 @@ public class HoldingsHeatMapSeededTests
             db.Add(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stockId,
+                    EquityIssuerId = stockId,
                     ReportDate = latest,
                     PreviousReportDate = prior,
                     CurrentShares = 450,
@@ -113,7 +112,7 @@ public class HoldingsHeatMapSeededTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

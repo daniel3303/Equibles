@@ -34,7 +34,7 @@ public class CongressionalTradeSyncServiceBuildTradesMissingMemberTests
         CongressionalTradeSyncService sut,
         DisclosureTransaction tx,
         Dictionary<string, CongressMember> members,
-        CommonStock stock
+        EquityIssuer stock
     )
     {
         var method = typeof(CongressionalTradeSyncService).GetMethod(
@@ -61,17 +61,16 @@ public class CongressionalTradeSyncServiceBuildTradesMissingMemberTests
     public void BuildTrades_MemberMissingFromUpsertedSet_SkipsTradeWithoutThrowing()
     {
         var sut = CreateSut();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "IBM",
-            Name = "International Business Machines",
-            Cik = "0000051143",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "IBM",
+            Name: "International Business Machines",
+            Cik: "0000051143"
+        );
         var tx = new DisclosureTransaction
         {
             MemberName = "Unmatched Member",
-            Ticker = stock.Ticker,
+            Ticker = stock.Presentation.Listing.Ticker,
             AssetName = "International Business Machines Corporation (IBM)",
             TransactionType = CongressTransactionType.Purchase,
             OwnerType = "SP",

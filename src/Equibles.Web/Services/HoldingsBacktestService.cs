@@ -1,3 +1,4 @@
+using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.BusinessLogic;
@@ -22,11 +23,11 @@ public class HoldingsBacktestService
         "VOO",
     ];
 
-    private readonly CommonStockRepository _stockRepository;
+    private readonly EquityIssuerRepository _stockRepository;
     private readonly HoldingsCloneBacktestProvider _backtestProvider;
 
     public HoldingsBacktestService(
-        CommonStockRepository stockRepository,
+        EquityIssuerRepository stockRepository,
         HoldingsCloneBacktestProvider backtestProvider
     )
     {
@@ -75,7 +76,7 @@ public class HoldingsBacktestService
         var options = new List<BacktestBenchmarkOption>();
         foreach (var ticker in CandidateBenchmarks)
         {
-            var stock = await _stockRepository.GetByTicker(ticker);
+            EquityIssuer stock = await _stockRepository.GetUsByTicker(ticker);
             if (stock != null)
                 options.Add(new BacktestBenchmarkOption { Ticker = ticker, Name = stock.Name });
         }

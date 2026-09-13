@@ -77,16 +77,15 @@ public class FinancialFactsImportServiceDedupTests : IAsyncLifetime
     [Fact]
     public async Task Import_DuplicateConceptPeriodAccessionTuples_CollapsesToLatestFiledOneRow()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
-            seed.Set<CommonStock>().Add(apple);
+            seed.Set<EquityIssuer>().Add(apple);
             await seed.SaveChangesAsync();
         }
 
@@ -154,7 +153,7 @@ public class FinancialFactsImportServiceDedupTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var facts = await verify
             .Set<FinancialFact>()
-            .Where(f => f.CommonStockId == apple.Id)
+            .Where(f => f.EquityIssuerId == apple.Id)
             .ToListAsync(CancellationToken.None);
 
         facts.Should().HaveCount(1, "duplicate tuples must collapse to one row");

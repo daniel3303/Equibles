@@ -23,8 +23,8 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockUnknownSymbolTests
     public void MergeRecordsByStock_SymbolNotInTickerMap_IsSkippedNotPersisted()
     {
         var trackedStockId = Guid.NewGuid();
-        var security = new ListedSecurityKey(trackedStockId, "AAPL");
-        var tickerMap = new Dictionary<string, ListedSecurityKey> { ["AAPL"] = security };
+        var security = new EquityListingReference(trackedStockId, Guid.NewGuid(), "AAPL");
+        var tickerMap = new Dictionary<string, EquityListingReference> { ["AAPL"] = security };
         var records = new List<OffExchangeWeeklyRecord>
         {
             new()
@@ -46,11 +46,11 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockUnknownSymbolTests
         var result = OffExchangeVolumeMerger.Merge(
             records,
             tickerMap,
-            new Dictionary<string, ListedSecurityKey>(),
+            new Dictionary<string, EquityListingReference>(),
             new DateOnly(2024, 3, 4)
         );
 
         result.Should().ContainSingle();
-        result[security].AtsVolume.Should().Be(1_000);
+        result[security.EquityListingId].AtsVolume.Should().Be(1_000);
     }
 }

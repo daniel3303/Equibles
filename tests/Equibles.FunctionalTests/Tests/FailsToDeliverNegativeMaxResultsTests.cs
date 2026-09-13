@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.FunctionalTests.Fixtures;
 using Equibles.Sec.Data.Models;
+using Equibles.TestSupport;
 using FluentAssertions;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -55,20 +56,19 @@ public class FailsToDeliverNegativeMaxResultsTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "GME",
-                Name = "GameStop Corp",
-                Cik = "0001326380",
-            };
-            db.Set<CommonStock>().Add(stock);
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "GME",
+                Name: "GameStop Corp",
+                Cik: "0001326380"
+            );
+            db.Set<EquityIssuer>().Add(stock);
 
             db.Set<FailToDeliver>()
                 .Add(
                     new FailToDeliver
                     {
-                        CommonStock = stock,
-                        CommonStockId = stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(db, stock).Id,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         SettlementDate = new DateOnly(2026, 4, 1),
                         Quantity = 100_000,
                         Price = 25.50m,

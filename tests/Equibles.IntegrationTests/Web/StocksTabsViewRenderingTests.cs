@@ -29,18 +29,17 @@ public class StocksTabsViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Cik = "0000320193",
-                Ticker = Ticker,
-                Name = "Apple Inc.",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Cik: "0000320193",
+                Ticker: Ticker,
+                Name: "Apple Inc."
+            );
             var holder = new InstitutionalHolder { Cik = HolderCik, Name = "Berkshire Hathaway" };
             db.AddRange(stock, holder);
             db.AddRange(
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2026, 1, 31),
                     ReportDate = new DateOnly(2025, 12, 31),
@@ -49,7 +48,7 @@ public class StocksTabsViewRenderingTests
                 },
                 new InstitutionalHolding
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InstitutionalHolderId = holder.Id,
                     FilingDate = new DateOnly(2025, 10, 31),
                     ReportDate = new DateOnly(2025, 9, 30),
@@ -91,12 +90,11 @@ public class StocksTabsViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Cik = "0000320193",
-                Ticker = Ticker,
-                Name = "Apple Inc.",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Cik: "0000320193",
+                Ticker: Ticker,
+                Name: "Apple Inc."
+            );
             var owner = new InsiderOwner
             {
                 OwnerCik = "0001214156",
@@ -108,7 +106,7 @@ public class StocksTabsViewRenderingTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     InsiderOwnerId = owner.Id,
                     FilingDate = new DateOnly(2026, 1, 5),
                     TransactionDate = new DateOnly(2026, 1, 2),
@@ -134,17 +132,16 @@ public class StocksTabsViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Cik = "0000320193",
-                Ticker = Ticker,
-                Name = "Apple Inc.",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Cik: "0000320193",
+                Ticker: Ticker,
+                Name: "Apple Inc."
+            );
             db.Add(stock);
             db.Add(
                 new Form144Filing
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     AccessionNumber = "0001921094-26-000555",
                     FilingDate = new DateOnly(2026, 5, 27),
                     SellerName = "Levinson Arthur D",
@@ -174,17 +171,16 @@ public class StocksTabsViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Cik = "0000320193",
-                Ticker = Ticker,
-                Name = "Apple Inc.",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Cik: "0000320193",
+                Ticker: Ticker,
+                Name: "Apple Inc."
+            );
             db.Add(stock);
             db.Add(
                 new FormDFiling
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     AccessionNumber = "0002058722-25-000001",
                     FilingDate = new DateOnly(2025, 2, 28),
                     IsAmendment = false,
@@ -220,17 +216,16 @@ public class StocksTabsViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Cik = "0000320193",
-                Ticker = Ticker,
-                Name = "Apple Inc.",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Cik: "0000320193",
+                Ticker: Ticker,
+                Name: "Apple Inc."
+            );
             db.Add(stock);
             db.Add(
                 new NCenFiling
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     AccessionNumber = "0000065433-24-000002",
                     FilingDate = new DateOnly(2025, 1, 15),
                     IsAmendment = false,
@@ -270,17 +265,16 @@ public class StocksTabsViewRenderingTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Cik = "0000320193",
-                Ticker = Ticker,
-                Name = "Apple Inc.",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Cik: "0000320193",
+                Ticker: Ticker,
+                Name: "Apple Inc."
+            );
             db.Add(stock);
             db.Add(
                 new NportFiling
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     AccessionNumber = "0000036405-25-000002",
                     FilingDate = new DateOnly(2025, 1, 31),
                     IsAmendment = false,

@@ -16,27 +16,27 @@ namespace Equibles.Web.Services;
 [Service]
 public class DataCountService
 {
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly DocumentRepository _documentRepository;
     private readonly InsiderTransactionRepository _insiderTransactionRepository;
     private readonly CongressionalTradeRepository _congressionalTradeRepository;
     private readonly InstitutionalHoldingRepository _institutionalHoldingRepository;
     private readonly FailToDeliverRepository _failToDeliverRepository;
     private readonly FredObservationRepository _fredObservationRepository;
-    private readonly DailyStockPriceRepository _dailyStockPriceRepository;
+    private readonly EquityDailyStockPriceRepository _dailyStockPriceRepository;
     private readonly CftcPositionReportRepository _cftcPositionReportRepository;
     private readonly CboePutCallRatioRepository _cboePutCallRatioRepository;
     private readonly CboeVixDailyRepository _cboeVixDailyRepository;
 
     public DataCountService(
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         DocumentRepository documentRepository,
         InsiderTransactionRepository insiderTransactionRepository,
         CongressionalTradeRepository congressionalTradeRepository,
         InstitutionalHoldingRepository institutionalHoldingRepository,
         FailToDeliverRepository failToDeliverRepository,
         FredObservationRepository fredObservationRepository,
-        DailyStockPriceRepository dailyStockPriceRepository,
+        EquityDailyStockPriceRepository dailyStockPriceRepository,
         CftcPositionReportRepository cftcPositionReportRepository,
         CboePutCallRatioRepository cboePutCallRatioRepository,
         CboeVixDailyRepository cboeVixDailyRepository

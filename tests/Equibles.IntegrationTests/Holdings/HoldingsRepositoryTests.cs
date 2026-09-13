@@ -209,15 +209,14 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
         _dbContext.Dispose();
     }
 
-    private static CommonStock CreateStock(string ticker = "AAPL", string name = "Apple Inc")
+    private static EquityIssuer CreateStock(string ticker = "AAPL", string name = "Apple Inc")
     {
-        return new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = Guid.NewGuid().ToString()[..10],
-        };
+        return Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: Guid.NewGuid().ToString()[..10]
+        );
     }
 
     private static InstitutionalHolder CreateHolder(
@@ -233,8 +232,8 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
         };
     }
 
-    private static InstitutionalHolding CreateHolding(
-        CommonStock stock,
+    private InstitutionalHolding CreateHolding(
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         DateOnly? filingDate = null,
@@ -246,8 +245,10 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
         return new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles
+                .TestSupport.NativeListingSeed.ForStock(_dbContext, stock)
+                .Security.Issuer,
             InstitutionalHolderId = holder.Id,
             InstitutionalHolder = holder,
             ReportDate = reportDate,
@@ -262,15 +263,15 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
         };
     }
 
-    private async Task<(CommonStock stock, InstitutionalHolder holder)> SeedStockAndHolder(
+    private async Task<(EquityIssuer stock, InstitutionalHolder holder)> SeedStockAndHolder(
         string ticker = "AAPL",
         string holderCik = "0001067983",
         string holderName = "Berkshire Hathaway Inc"
     )
     {
-        var stock = CreateStock(ticker);
+        EquityIssuer stock = CreateStock(ticker);
         var holder = CreateHolder(holderCik, holderName);
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InstitutionalHolder>().Add(holder);
         await _dbContext.SaveChangesAsync();
         return (stock, holder);
@@ -308,10 +309,10 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_MultipleHolders_ReturnsAllForDate()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         var berkshire = CreateHolder("0001067983", "Berkshire Hathaway");
         var blackrock = CreateHolder("0001166559", "BlackRock Inc");
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(berkshire, blackrock);
         await _dbContext.SaveChangesAsync();
 
@@ -345,10 +346,10 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_FiltersOutDifferentStocks()
     {
-        var apple = CreateStock("AAPL");
-        var msft = CreateStock("MSFT", "Microsoft Corp");
+        EquityIssuer apple = CreateStock("AAPL");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp");
         var holder = CreateHolder();
-        _dbContext.Set<CommonStock>().AddRange(apple, msft);
+        _dbContext.Set<EquityIssuer>().AddRange(apple, msft);
         _dbContext.Set<InstitutionalHolder>().Add(holder);
         await _dbContext.SaveChangesAsync();
 
@@ -363,7 +364,7 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
 
         var result = await _repository.GetByStock(apple, reportDate).ToListAsync();
 
-        result.Should().ContainSingle().Which.CommonStockId.Should().Be(apple.Id);
+        result.Should().ContainSingle().Which.EquityIssuerId.Should().Be(apple.Id);
     }
 
     // ── GetHistoryByStock ───────────────────────────────────────────────
@@ -418,10 +419,10 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByStock_ExcludesOtherStocks()
     {
-        var apple = CreateStock("AAPL");
-        var msft = CreateStock("MSFT", "Microsoft Corp");
+        EquityIssuer apple = CreateStock("AAPL");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp");
         var holder = CreateHolder();
-        _dbContext.Set<CommonStock>().AddRange(apple, msft);
+        _dbContext.Set<EquityIssuer>().AddRange(apple, msft);
         _dbContext.Set<InstitutionalHolder>().Add(holder);
         await _dbContext.SaveChangesAsync();
 
@@ -445,7 +446,7 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
 
         var result = await _repository.GetHistoryByStock(apple).ToListAsync();
 
-        result.Should().ContainSingle().Which.CommonStockId.Should().Be(apple.Id);
+        result.Should().ContainSingle().Which.EquityIssuerId.Should().Be(apple.Id);
     }
 
     // ── GetByHolder ─────────────────────────────────────────────────────
@@ -461,7 +462,7 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
 
         var result = await _repository.GetByHolder(holder, reportDate).ToListAsync();
 
-        result.Should().ContainSingle().Which.CommonStockId.Should().Be(stock.Id);
+        result.Should().ContainSingle().Which.EquityIssuerId.Should().Be(stock.Id);
     }
 
     [Fact]
@@ -482,10 +483,10 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByHolder_MultipleStocks_ReturnsAllForDate()
     {
-        var apple = CreateStock("AAPL");
-        var msft = CreateStock("MSFT", "Microsoft Corp");
+        EquityIssuer apple = CreateStock("AAPL");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp");
         var holder = CreateHolder();
-        _dbContext.Set<CommonStock>().AddRange(apple, msft);
+        _dbContext.Set<EquityIssuer>().AddRange(apple, msft);
         _dbContext.Set<InstitutionalHolder>().Add(holder);
         await _dbContext.SaveChangesAsync();
 
@@ -506,10 +507,10 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByHolder_FiltersOutOtherHolders()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         var berkshire = CreateHolder("0001067983", "Berkshire Hathaway");
         var blackrock = CreateHolder("0001166559", "BlackRock Inc");
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(berkshire, blackrock);
         await _dbContext.SaveChangesAsync();
 
@@ -580,10 +581,10 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
     [Fact]
     public async Task GetHistoryByHolder_ExcludesOtherHolders()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         var berkshire = CreateHolder("0001067983", "Berkshire Hathaway");
         var blackrock = CreateHolder("0001166559", "BlackRock Inc");
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(berkshire, blackrock);
         await _dbContext.SaveChangesAsync();
 
@@ -655,10 +656,10 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
     [Fact]
     public async Task GetAvailableReportDates_DuplicateDates_ReturnsDistinct()
     {
-        var stock = CreateStock("AAPL");
+        EquityIssuer stock = CreateStock("AAPL");
         var berkshire = CreateHolder("0001067983", "Berkshire Hathaway");
         var blackrock = CreateHolder("0001166559", "BlackRock Inc");
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(berkshire, blackrock);
         await _dbContext.SaveChangesAsync();
 
@@ -733,10 +734,10 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAccessionNumber_MultipleHoldingsSameAccession_ReturnsAll()
     {
-        var apple = CreateStock("AAPL");
-        var msft = CreateStock("MSFT", "Microsoft Corp");
+        EquityIssuer apple = CreateStock("AAPL");
+        EquityIssuer msft = CreateStock("MSFT", "Microsoft Corp");
         var holder = CreateHolder();
-        _dbContext.Set<CommonStock>().AddRange(apple, msft);
+        _dbContext.Set<EquityIssuer>().AddRange(apple, msft);
         _dbContext.Set<InstitutionalHolder>().Add(holder);
         await _dbContext.SaveChangesAsync();
 
@@ -752,7 +753,7 @@ public class InstitutionalHoldingRepositoryTests : IDisposable
         var result = await _repository.GetByAccessionNumber(accession).ToListAsync();
 
         result.Should().HaveCount(2);
-        result.Select(h => h.CommonStockId).Should().BeEquivalentTo([apple.Id, msft.Id]);
+        result.Select(h => h.EquityIssuerId).Should().BeEquivalentTo([apple.Id, msft.Id]);
     }
 
     [Fact]

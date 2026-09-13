@@ -7,6 +7,12 @@ public class GovernmentContractsModuleConfiguration : Equibles.Data.IFinancialMo
 {
     public void ConfigureEntities(ModelBuilder builder)
     {
+        builder
+            .Entity<GovernmentContract>()
+            .HasOne(row => row.Issuer)
+            .WithMany()
+            .HasForeignKey(row => row.EquityIssuerId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<GovernmentContract>();
         builder.Entity<GovernmentContractsScanState>();
         builder.Entity<GovernmentContractRecipientParent>();

@@ -6,14 +6,15 @@ using Microsoft.EntityFrameworkCore;
 namespace Equibles.Sec.Data.Models;
 
 [Table("TranscriptCheckStatuses")]
-[Index(nameof(CommonStockId), IsUnique = true)]
+[Index(nameof(EquityIssuerId), IsUnique = true)]
 public class TranscriptCheckStatus
 {
     [Key]
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    // Retain the deployed column name until every older binary has retired.
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     public DateTime LastCheckedAt { get; set; }
 

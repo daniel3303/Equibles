@@ -15,12 +15,12 @@ namespace Equibles.IntegrationTests.CommonStocks;
 public class CommonStockRepositoryExtensionsGetExistingIdsTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly CommonStockRepository _repository;
+    private readonly EquityIssuerRepository _repository;
 
     public CommonStockRepositoryExtensionsGetExistingIdsTests()
     {
         _dbContext = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _repository = new CommonStockRepository(_dbContext);
+        _repository = new EquityIssuerRepository(_dbContext);
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -31,15 +31,14 @@ public class CommonStockRepositoryExtensionsGetExistingIdsTests : IDisposable
         var liveId = Guid.NewGuid();
         var orphanId = Guid.NewGuid();
         _dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Id = liveId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: liveId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc",
+                    Cik: "0000320193"
+                )
             );
         await _dbContext.SaveChangesAsync();
 

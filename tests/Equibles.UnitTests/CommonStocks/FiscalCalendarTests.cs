@@ -54,7 +54,7 @@ public class FiscalCalendarTests
     [Fact]
     public void GetPeriod_StockWithoutDetectedFiscalYearEnd_ReturnsNull()
     {
-        var stock = new CommonStock { FiscalYearEndMonth = null };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(FiscalYearEndMonth: null);
 
         var period = FiscalCalendar.GetPeriod(new DateOnly(2024, 1, 1), stock);
 
@@ -64,7 +64,7 @@ public class FiscalCalendarTests
     [Fact]
     public void GetPeriod_StockWithDetectedFiscalYearEnd_ReturnsPeriod()
     {
-        var stock = new CommonStock { FiscalYearEndMonth = 9 };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(FiscalYearEndMonth: 9);
 
         var period = FiscalCalendar.GetPeriod(new DateOnly(2023, 10, 1), stock);
 
@@ -74,7 +74,7 @@ public class FiscalCalendarTests
     [Fact]
     public void GetPeriod_NullStock_Throws()
     {
-        var act = () => FiscalCalendar.GetPeriod(new DateOnly(2024, 1, 1), (CommonStock)null);
+        var act = () => FiscalCalendar.GetPeriod(new DateOnly(2024, 1, 1), (EquityIssuer)null);
 
         act.Should().Throw<ArgumentNullException>();
     }

@@ -20,8 +20,8 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockAtsOnlyTests
     public void MergeRecordsByStock_AtsRowWithNoOtcRow_YieldsEntityWithNonAtsOtcZero()
     {
         var stockId = Guid.NewGuid();
-        var security = new ListedSecurityKey(stockId, "AAPL");
-        var tickerMap = new Dictionary<string, ListedSecurityKey> { ["AAPL"] = security };
+        var security = new EquityListingReference(stockId, Guid.NewGuid(), "AAPL");
+        var tickerMap = new Dictionary<string, EquityListingReference> { ["AAPL"] = security };
         var records = new List<OffExchangeWeeklyRecord>
         {
             new()
@@ -36,12 +36,12 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockAtsOnlyTests
         var result = OffExchangeVolumeMerger.Merge(
             records,
             tickerMap,
-            new Dictionary<string, ListedSecurityKey>(),
+            new Dictionary<string, EquityListingReference>(),
             new DateOnly(2024, 3, 4)
         );
 
         result.Should().ContainSingle();
-        var merged = result[security];
+        var merged = result[security.EquityListingId];
         merged.AtsVolume.Should().Be(5_000);
         merged.AtsTradeCount.Should().Be(50);
         merged.NonAtsOtcVolume.Should().Be(0);

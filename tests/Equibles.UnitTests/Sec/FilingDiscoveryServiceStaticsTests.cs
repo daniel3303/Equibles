@@ -49,7 +49,10 @@ public class FilingDiscoveryServiceStaticsTests
     [Fact]
     public void BuildCikMap_MatchesPaddedAndBareCiks()
     {
-        var company = new CommonStock { Ticker = "AAPL", Cik = "320193" };
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Cik: "320193"
+        );
 
         var map = FilingDiscoveryService.BuildCikMap([company]);
 
@@ -61,12 +64,11 @@ public class FilingDiscoveryServiceStaticsTests
     [Fact]
     public void BuildCikMap_IncludesSecondaryCiks()
     {
-        var company = new CommonStock
-        {
-            Ticker = "ATAI",
-            Cik = "1840904",
-            SecondaryCiks = ["0002012345"],
-        };
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ATAI",
+            Cik: "1840904",
+            SecondaryCiks: ["0002012345"]
+        );
 
         var map = FilingDiscoveryService.BuildCikMap([company]);
 
@@ -77,7 +79,10 @@ public class FilingDiscoveryServiceStaticsTests
     [Fact]
     public void BuildCikMap_IgnoresUnparseableCiks()
     {
-        var company = new CommonStock { Ticker = "BAD", Cik = "not-a-cik" };
+        EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BAD",
+            Cik: "not-a-cik"
+        );
 
         FilingDiscoveryService.BuildCikMap([company]).Should().BeEmpty();
     }

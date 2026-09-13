@@ -40,7 +40,7 @@ public class FinancialStatementToolsPickCurrentlyReportedFactInstantTests
     private static FinancialFact MakeInstant(Guid conceptId, decimal value, DateOnly periodEnd) =>
         new()
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             FinancialConceptId = conceptId,
             Value = value,
             Unit = "USD",

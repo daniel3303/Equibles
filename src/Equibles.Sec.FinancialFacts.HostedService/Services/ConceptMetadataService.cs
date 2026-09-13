@@ -47,7 +47,7 @@ public class ConceptMetadataService
         _options = options.Value;
     }
 
-    public async Task ProcessStock(CommonStock stock, CancellationToken cancellationToken)
+    public async Task ProcessStock(EquityIssuer stock, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(stock.Cik))
             return;
@@ -72,7 +72,7 @@ public class ConceptMetadataService
                 _logger.LogWarning(
                     ex,
                     "MetaLinks download failed for {Ticker} {Accession}, skipping",
-                    stock.Ticker,
+                    stock.Presentation?.Listing?.Ticker,
                     accession
                 );
                 continue;
@@ -94,7 +94,7 @@ public class ConceptMetadataService
                 _logger.LogWarning(
                     ex,
                     "MetaLinks parse failed for {Ticker} {Accession}, skipping",
-                    stock.Ticker,
+                    stock.Presentation?.Listing?.Ticker,
                     accession
                 );
             }
@@ -108,14 +108,14 @@ public class ConceptMetadataService
     // The company's newest distinct filings that produced facts, newest first —
     // the latest 10-K plus recent 10-Qs cover annual-only and quarterly tags.
     private async Task<List<string>> LoadRecentAccessions(
-        CommonStock stock,
+        EquityIssuer stock,
         CancellationToken cancellationToken
     )
     {
         using var scope = _scopeFactory.CreateScope();
         var factRepository = scope.ServiceProvider.GetRequiredService<FinancialFactRepository>();
         return await factRepository
-            .GetByStock(stock)
+            .GetByIssuerId(stock.Id)
             .GroupBy(f => f.AccessionNumber)
             .Select(g => new { Accession = g.Key, Filed = g.Max(f => f.FiledDate) })
             .OrderByDescending(a => a.Filed)
@@ -270,20 +270,20 @@ public class ConceptMetadataService
         }
     }
 
-    private async Task StampChecked(CommonStock stock, CancellationToken cancellationToken)
+    private async Task StampChecked(EquityIssuer stock, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
         var status = new FinancialFactsSyncStatus
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             LastCheckedAt = DateTime.UtcNow,
             ConceptMetadataCheckedAt = DateTime.UtcNow,
         };
         await dbContext
             .Set<FinancialFactsSyncStatus>()
             .UpsertRange(status)
-            .On(s => s.CommonStockId)
+            .On(s => s.EquityIssuerId)
             .WhenMatched(
                 (existing, incoming) =>
                     new FinancialFactsSyncStatus

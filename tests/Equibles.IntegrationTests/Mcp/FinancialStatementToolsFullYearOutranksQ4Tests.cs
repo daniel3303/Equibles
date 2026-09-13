@@ -33,7 +33,7 @@ public class FinancialStatementToolsFullYearOutranksQ4Tests : ParadeDbMcpTestBas
         new(
             new FinancialFactRepository(DbContext),
             new FinancialConceptRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<FinancialStatementTools>()
@@ -42,13 +42,12 @@ public class FinancialStatementToolsFullYearOutranksQ4Tests : ParadeDbMcpTestBas
     [Fact]
     public async Task GetFinancialStatement_BothQ4AndFullYearReported_DefaultsToFullYear()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var revenue = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -56,7 +55,7 @@ public class FinancialStatementToolsFullYearOutranksQ4Tests : ParadeDbMcpTestBas
             Tag = "Revenues",
             Label = "Revenues",
         };
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext.Set<FinancialConcept>().Add(revenue);
         DbContext
             .Set<FinancialFact>()
@@ -64,7 +63,7 @@ public class FinancialStatementToolsFullYearOutranksQ4Tests : ParadeDbMcpTestBas
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenue.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -80,7 +79,7 @@ public class FinancialStatementToolsFullYearOutranksQ4Tests : ParadeDbMcpTestBas
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenue.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,

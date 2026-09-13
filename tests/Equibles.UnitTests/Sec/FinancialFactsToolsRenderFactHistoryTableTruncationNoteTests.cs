@@ -22,7 +22,10 @@ public class FinancialFactsToolsRenderFactHistoryTableTruncationNoteTests
             "RenderFactHistoryTable",
             BindingFlags.NonPublic | BindingFlags.Static
         );
-        var stock = new CommonStock { Ticker = "NVDA", Name = "NVIDIA Corp" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp"
+        );
         var perPeriod = Enumerable
             .Range(0, shown)
             .Select(i => new FinancialFact

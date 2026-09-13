@@ -19,13 +19,8 @@ public class CommonStockRepositorySearchRankingTests : ParadeDbMcpTestBase
     public CommonStockRepositorySearchRankingTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private static CommonStock Stock(string ticker, string name) =>
-        new()
-        {
-            Ticker = ticker,
-            Name = name,
-            Cik = ticker,
-        };
+    private static EquityIssuer Stock(string ticker, string name) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: ticker, Name: name, Cik: ticker);
 
     [Fact]
     public async Task Search_ExactTickerMatch_RanksFirstEvenWhenAlphabeticallyLast()
@@ -40,9 +35,9 @@ public class CommonStockRepositorySearchRankingTests : ParadeDbMcpTestBase
         );
         await DbContext.SaveChangesAsync();
 
-        var results = new CommonStockRepository(DbContext).Search("ARE").ToList();
+        var results = new EquityIssuerRepository(DbContext).Search("ARE").ToList();
 
-        Assert.Equal("ARE", results[0].Ticker);
+        Assert.Equal("ARE", results[0].Presentation.Listing.Ticker);
     }
 
     [Fact]
@@ -54,9 +49,9 @@ public class CommonStockRepositorySearchRankingTests : ParadeDbMcpTestBase
         );
         await DbContext.SaveChangesAsync();
 
-        var results = new CommonStockRepository(DbContext).Search("are").ToList();
+        var results = new EquityIssuerRepository(DbContext).Search("are").ToList();
 
-        Assert.Equal("ARE", results[0].Ticker);
+        Assert.Equal("ARE", results[0].Presentation.Listing.Ticker);
     }
 
     [Fact]
@@ -70,9 +65,9 @@ public class CommonStockRepositorySearchRankingTests : ParadeDbMcpTestBase
         );
         await DbContext.SaveChangesAsync();
 
-        var results = new CommonStockRepository(DbContext).Search("AR").ToList();
+        var results = new EquityIssuerRepository(DbContext).Search("AR").ToList();
 
-        Assert.Equal("ARLP", results[0].Ticker);
+        Assert.Equal("ARLP", results[0].Presentation.Listing.Ticker);
     }
 
     [Fact]
@@ -83,8 +78,11 @@ public class CommonStockRepositorySearchRankingTests : ParadeDbMcpTestBase
 
         // Both match only via their name token ("Group"); with no ticker exact/prefix hit they fall
         // back to alphabetical ticker order.
-        var results = new CommonStockRepository(DbContext).Search("Group").ToList();
+        var results = new EquityIssuerRepository(DbContext).Search("Group").ToList();
 
-        Assert.Equal(new[] { "BETA", "ZETA" }, results.Select(s => s.Ticker).ToArray());
+        Assert.Equal(
+            new[] { "BETA", "ZETA" },
+            results.Select(s => s.Presentation.Listing.Ticker).ToArray()
+        );
     }
 }

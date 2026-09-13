@@ -110,16 +110,19 @@ public static class HolderQuarterlyActivityCalculator
     )
     {
         return holdings
-            .GroupBy(h => new SecurityKey(h.CommonStockId, h.ListedTicker ?? h.CommonStock?.Ticker))
+            .GroupBy(h => new SecurityKey(
+                h.EquityIssuerId,
+                h.ListedTicker ?? h.Issuer?.Presentation?.Listing?.Ticker
+            ))
             .ToDictionary(
                 g => g.Key,
                 g => new StockAggregate
                 {
                     StockId = g.Key.CommonStockId,
-                    PrimaryTicker = g.First().CommonStock?.Ticker,
+                    PrimaryTicker = g.First().Issuer?.Presentation?.Listing?.Ticker,
                     ListedTicker = g.Key.ListedTicker,
                     Ticker = g.Key.ListedTicker,
-                    Name = g.First().CommonStock?.Name,
+                    Name = g.First().Issuer?.Name,
                     Shares = g.Sum(h => h.Shares),
                     Value = g.Sum(h => h.Value),
                 }

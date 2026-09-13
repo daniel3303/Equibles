@@ -166,7 +166,8 @@ public class HoldingsImportServiceTests
             .Returns(_ =>
             {
                 var sp = Substitute.For<IServiceProvider>();
-                sp.GetService(typeof(CommonStockRepository)).Returns(new CommonStockRepository(db));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(db));
                 sp.GetService(typeof(InstitutionalHolderRepository))
                     .Returns(new InstitutionalHolderRepository(db));
                 sp.GetService(typeof(InstitutionalHoldingRepository))
@@ -321,15 +322,14 @@ public class HoldingsImportServiceTests
         var infoTableTsv = "ACCESSION_NUMBER\tCUSIP\n" + "ACC-001\t999999999\n"; // CUSIP not in DB
 
         using var db = CreateDb();
-        db.Set<CommonStock>()
+        db.Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Id = Guid.NewGuid(),
-                    Ticker = "AAPL",
-                    Name = "Apple",
-                    Cusip = "037833100",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "AAPL",
+                    Name: "Apple",
+                    Cusip: "037833100"
+                )
             );
         await db.SaveChangesAsync();
 

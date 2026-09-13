@@ -63,7 +63,9 @@ public class StocksControllerShortInterestTabTests : IDisposable
     [Fact]
     public async Task ShortInterest_ExistingTicker_ReturnsShowViewWithShortInterestTab()
     {
-        _dbContext.Set<CommonStock>().Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc." });
+        _dbContext
+            .Set<EquityIssuer>()
+            .Add(Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc."));
         await _dbContext.SaveChangesAsync();
 
         var stockTabService = new StockTabService(
@@ -79,13 +81,13 @@ public class StocksControllerShortInterestTabTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
         var controller = new StocksController(
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new InstitutionalHolderRepository(_dbContext),
             new InstitutionalHoldingRepository(_dbContext),
             new DocumentRepository(_dbContext),

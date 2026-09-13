@@ -30,15 +30,18 @@ public class CommonStockManagerSetFiscalYearEndTests
         );
     }
 
-    private static CommonStockManager NewManager(CommonStockRepository repository) =>
+    private static EquityIdentityManager NewManager(EquityIssuerRepository repository) =>
         new(repository, Substitute.For<IBus>());
 
     [Fact]
     public async Task SetFiscalYearEnd_PreviouslyUndetected_PersistsMonthAndDay()
     {
         var db = NewDb();
-        var repository = Substitute.For<CommonStockRepository>(db);
-        var stock = new CommonStock { FiscalYearEndMonth = null, FiscalYearEndDay = null };
+        EquityIssuerRepository repository = Substitute.For<EquityIssuerRepository>(db);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            FiscalYearEndMonth: null,
+            FiscalYearEndDay: null
+        );
 
         await NewManager(repository).SetFiscalYearEnd(stock, 9, 28);
 
@@ -51,8 +54,11 @@ public class CommonStockManagerSetFiscalYearEndTests
     public async Task SetFiscalYearEnd_UnchangedValue_PersistsNothing()
     {
         var db = NewDb();
-        var repository = Substitute.For<CommonStockRepository>(db);
-        var stock = new CommonStock { FiscalYearEndMonth = 6, FiscalYearEndDay = 30 };
+        EquityIssuerRepository repository = Substitute.For<EquityIssuerRepository>(db);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            FiscalYearEndMonth: 6,
+            FiscalYearEndDay: 30
+        );
 
         await NewManager(repository).SetFiscalYearEnd(stock, 6, 30);
 
@@ -63,8 +69,11 @@ public class CommonStockManagerSetFiscalYearEndTests
     public async Task SetFiscalYearEnd_NullDayMatchesStoredNullDay_PersistsNothing()
     {
         var db = NewDb();
-        var repository = Substitute.For<CommonStockRepository>(db);
-        var stock = new CommonStock { FiscalYearEndMonth = 12, FiscalYearEndDay = null };
+        EquityIssuerRepository repository = Substitute.For<EquityIssuerRepository>(db);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            FiscalYearEndMonth: 12,
+            FiscalYearEndDay: null
+        );
 
         await NewManager(repository).SetFiscalYearEnd(stock, 12, null);
 
@@ -79,8 +88,8 @@ public class CommonStockManagerSetFiscalYearEndTests
     public async Task SetFiscalYearEnd_InvalidValue_ThrowsAndPersistsNothing(int month, int day)
     {
         var db = NewDb();
-        var repository = Substitute.For<CommonStockRepository>(db);
-        var stock = new CommonStock();
+        EquityIssuerRepository repository = Substitute.For<EquityIssuerRepository>(db);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create();
 
         var act = () => NewManager(repository).SetFiscalYearEnd(stock, month, day);
 
@@ -92,7 +101,7 @@ public class CommonStockManagerSetFiscalYearEndTests
     public async Task SetFiscalYearEnd_NullStock_Throws()
     {
         var db = NewDb();
-        var repository = Substitute.For<CommonStockRepository>(db);
+        EquityIssuerRepository repository = Substitute.For<EquityIssuerRepository>(db);
 
         var act = () => NewManager(repository).SetFiscalYearEnd(null, 9, 28);
 

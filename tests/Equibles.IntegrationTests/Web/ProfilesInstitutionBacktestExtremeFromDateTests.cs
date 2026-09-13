@@ -33,20 +33,18 @@ public class ProfilesInstitutionBacktestExtremeFromDateTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.AddRange(
-                new CommonStock
-                {
-                    Id = aaplId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                },
-                new CommonStock
-                {
-                    Id = spyId,
-                    Ticker = "SPY",
-                    Name = "SPDR S&P 500 ETF",
-                    Cik = "0000884394",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: aaplId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                ),
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: spyId,
+                    Ticker: "SPY",
+                    Name: "SPDR S&P 500 ETF",
+                    Cik: "0000884394"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -59,8 +57,8 @@ public class ProfilesInstitutionBacktestExtremeFromDateTests
             db.Add(MakeHolding(aaplId, holderId, q1, shares: 10_000, value: 1_000_000));
             for (var d = rebalanceQ1.AddDays(-7); d <= rebalanceQ1.AddDays(30); d = d.AddDays(1))
             {
-                db.Add(MakePrice(aaplId, d, 100m));
-                db.Add(MakePrice(spyId, d, 400m));
+                db.Add(MakePrice(db, aaplId, d, 100m));
+                db.Add(MakePrice(db, spyId, d, 400m));
             }
             await Task.CompletedTask;
         });
@@ -86,7 +84,7 @@ public class ProfilesInstitutionBacktestExtremeFromDateTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),
@@ -97,10 +95,15 @@ public class ProfilesInstitutionBacktestExtremeFromDateTests
             AccessionNumber = $"acc-{stockId:N}".Substring(0, 12) + $"-{reportDate:yyyyMMdd}",
         };
 
-    private static DailyStockPrice MakePrice(Guid stockId, DateOnly date, decimal close) =>
+    private static EquityDailyStockPrice MakePrice(
+        Equibles.Data.EquiblesFinancialDbContext db,
+        Guid stockId,
+        DateOnly date,
+        decimal close
+    ) =>
         new()
         {
-            CommonStockId = stockId,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStockId(db, stockId),
             Date = date,
             Open = close,
             High = close,

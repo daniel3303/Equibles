@@ -33,12 +33,11 @@ public class CompanySyncServiceReplaceObsoleteCatchTests : ParadeDbMcpTestBase
     [Fact]
     public async Task SyncCompaniesFromSecApi_ReplacementFailsValidation_RetainsInactiveIdentity()
     {
-        var obsolete = new CommonStock
-        {
-            Cik = "0000000999",
-            Ticker = "REUSED",
-            Name = "Defunct Old Inc.",
-        };
+        EquityIssuer obsolete = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Cik: "0000000999",
+            Ticker: "REUSED",
+            Name: "Defunct Old Inc."
+        );
         DbContext.Add(obsolete);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -64,10 +63,13 @@ public class CompanySyncServiceReplaceObsoleteCatchTests : ParadeDbMcpTestBase
             );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(CommonStockRepository), new CommonStockRepository(DbContext)),
+            (typeof(EquityIssuerRepository), new EquityIssuerRepository(DbContext)),
             (
-                typeof(CommonStockManager),
-                new CommonStockManager(new CommonStockRepository(DbContext), Substitute.For<IBus>())
+                typeof(EquityIdentityManager),
+                new EquityIdentityManager(
+                    new EquityIssuerRepository(DbContext),
+                    Substitute.For<IBus>()
+                )
             ),
             (typeof(EquiblesFinancialDbContext), DbContext)
         );
@@ -87,10 +89,10 @@ public class CompanySyncServiceReplaceObsoleteCatchTests : ParadeDbMcpTestBase
         await sut.SyncCompaniesFromSecApi();
 
         await using var verify = Fixture.CreateDbContext();
-        var stocks = await verify.Set<CommonStock>().AsNoTracking().ToListAsync();
-        var retained = stocks.Should().ContainSingle().Which;
+        var stocks = await verify.Set<EquityIssuer>().AsNoTracking().ToListAsync();
+        EquityIssuer retained = stocks.Should().ContainSingle().Which;
         retained.Cik.Should().Be(obsolete.Cik);
-        retained.Ticker.Should().Be(obsolete.Ticker);
-        retained.Active.Should().BeFalse();
+        retained.Presentation.Listing.Ticker.Should().Be(obsolete.Presentation.Listing.Ticker);
+        retained.Presentation.Listing.Active.Should().BeFalse();
     }
 }

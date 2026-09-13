@@ -22,7 +22,7 @@ public static class BalanceSheetDateResolver
     public static async Task<DateOnly?> Resolve(
         FinancialFactRepository financialFactRepository,
         FinancialConceptRepository financialConceptRepository,
-        CommonStock stock,
+        EquityIssuer stock,
         int fiscalYear,
         SecFiscalPeriod fiscalPeriod,
         CancellationToken cancellationToken = default
@@ -59,7 +59,7 @@ public static class BalanceSheetDateResolver
         // on a provider upgrade. The flow end is weighed the same way the stated date is, or
         // one re-stamped span ending latest dates the sheet by itself.
         var measured = await financialFactRepository
-            .GetMeasuredFlows(stock, fiscalYear, fiscalPeriod, flowConceptIds)
+            .GetMeasuredFlows(stock.Id, fiscalYear, fiscalPeriod, flowConceptIds)
             .Select(f => new { f.PeriodEnd, f.FinancialConceptId })
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -71,7 +71,7 @@ public static class BalanceSheetDateResolver
 
         var stated = await financialFactRepository
             .GetStatedNear(
-                stock,
+                stock.Id,
                 balanceSheetConceptIds,
                 periodEnd,
                 StatementLineFacts.BalanceSheetDateToleranceDays

@@ -14,7 +14,7 @@ public class Corrupt13FShareCountRepairerPre2023VotingFallbackTests
     {
         var holding = new InstitutionalHolding
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             InstitutionalHolderId = Guid.NewGuid(),
             FilingDate = new DateOnly(2021, 8, 12),
             ReportDate = new DateOnly(2021, 6, 30),

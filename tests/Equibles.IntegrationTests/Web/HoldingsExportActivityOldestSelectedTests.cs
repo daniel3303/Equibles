@@ -33,13 +33,12 @@ public class HoldingsExportActivityOldestSelectedTests
         await _fixture.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "OLDS",
-                    Name = "Oldest Selected Co.",
-                    Cik = "0008870501",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "OLDS",
+                    Name: "Oldest Selected Co.",
+                    Cik: "0008870501"
+                )
             );
             db.Add(
                 new InstitutionalHolder
@@ -70,7 +69,7 @@ public class HoldingsExportActivityOldestSelectedTests
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

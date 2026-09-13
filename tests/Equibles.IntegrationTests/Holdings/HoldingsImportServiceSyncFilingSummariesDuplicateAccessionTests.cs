@@ -41,7 +41,10 @@ public class HoldingsImportServiceSyncFilingSummariesDuplicateAccessionTests : I
     public async Task SyncFilingSummaries_AccessionWithMixedAmendmentFlag_UpsertsSingleSummaryRow()
     {
         var holder = new InstitutionalHolder { Cik = Cik, Name = "Test Capital" };
-        var stock = new CommonStock { Ticker = "TST", Name = "Test Corp" };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TST",
+            Name: "Test Corp"
+        );
         await using (var seed = _fixture.CreateDbContext())
         {
             seed.Add(holder);
@@ -82,7 +85,7 @@ public class HoldingsImportServiceSyncFilingSummariesDuplicateAccessionTests : I
 
     private static InstitutionalHolding MakeHolding(
         InstitutionalHolder holder,
-        CommonStock stock,
+        EquityIssuer stock,
         ShareType shareType,
         bool isAmendment,
         long value
@@ -90,7 +93,7 @@ public class HoldingsImportServiceSyncFilingSummariesDuplicateAccessionTests : I
         new InstitutionalHolding
         {
             InstitutionalHolderId = holder.Id,
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             AccessionNumber = Accession,
             FilingDate = new DateOnly(2026, 5, 15),
             ReportDate = ReportDate,

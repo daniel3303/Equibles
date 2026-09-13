@@ -39,13 +39,12 @@ public class CongressionalTradeSyncServiceBuildTradesTests
         );
 
         var member = new CongressMember { Id = Guid.NewGuid(), Name = "Jane Smith" };
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
         var tx = new DisclosureTransaction
         {
             MemberName = "Jane Smith",
@@ -82,7 +81,7 @@ public class CongressionalTradeSyncServiceBuildTradesTests
             .AssetName.Should()
             .Be("", "a null asset name must be coalesced, never persisted as null");
         trade.CongressMemberId.Should().Be(member.Id);
-        trade.CommonStockId.Should().Be(stock.Id);
+        trade.EquityIssuerId.Should().Be(stock.Id);
         trade.AmountFrom.Should().Be(1001);
         trade.AmountTo.Should().Be(15000);
         trade.AssetType.Should().Be("OP");
@@ -127,7 +126,7 @@ public class CongressionalTradeSyncServiceBuildTradesTests
         );
 
         var trade = trades.Should().ContainSingle().Which;
-        trade.CommonStockId.Should().BeNull();
+        trade.EquityIssuerId.Should().BeNull();
         trade.FiledTicker.Should().Be("GOLD");
         trade.SourceId.Should().Be("20018567");
         trade.SourceRowIndex.Should().Be(3);

@@ -88,6 +88,7 @@ services:
       ConnectionStrings__TransportConnection: "Host=db;Database=equibles;Username=postgres;Password=postgres"
       MassTransit__RunMigration: "true"
       Sec__ContactEmail: ${SEC_CONTACT_EMAIL}
+      EquityMarkets__LisbonEnabled: ${EQUITY_MARKETS_LISBON_ENABLED:-false}
       MinimumLogLevel: ${MINIMUM_LOG_LEVEL:-Warning}
     depends_on:
       web:

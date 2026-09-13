@@ -14,12 +14,12 @@ namespace Equibles.IntegrationTests.CommonStocks;
 public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly CommonStockRepository _repository;
+    private readonly EquityIssuerRepository _repository;
 
     public CommonStockRepositoryExtensionsResolveByTickerTests()
     {
         _dbContext = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _repository = new CommonStockRepository(_dbContext);
+        _repository = new EquityIssuerRepository(_dbContext);
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -28,22 +28,21 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     public async Task ResolveByTicker_TickerSuppliedInLowercase_ResolvesStoredUppercaseStock()
     {
         _dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Id = Guid.NewGuid(),
-                    Ticker = "AAPL",
-                    Name = "Apple Inc",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "AAPL",
+                    Name: "Apple Inc",
+                    Cik: "0000320193"
+                )
             );
         await _dbContext.SaveChangesAsync();
 
         var (stock, error) = await _repository.ResolveByTicker("  aapl  ");
 
         stock.Should().NotBeNull();
-        stock.Ticker.Should().Be("AAPL");
+        stock.Presentation.Listing.Ticker.Should().Be("AAPL");
         error.Should().BeNull();
     }
 
@@ -51,19 +50,18 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     public async Task ResolveByTicker_DottedClassShareFallsBackToStoredDashForm()
     {
         _dbContext.Add(
-            new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = "BRK-B",
-                Name = "Berkshire Hathaway Class B",
-                Cik = "0001067983",
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "BRK-B",
+                Name: "Berkshire Hathaway Class B",
+                Cik: "0001067983"
+            )
         );
         await _dbContext.SaveChangesAsync();
 
         var (stock, error) = await _repository.ResolveByTicker("BRK.B");
 
-        stock!.Ticker.Should().Be("BRK-B");
+        stock!.Presentation.Listing.Ticker.Should().Be("BRK-B");
         error.Should().BeNull();
     }
 
@@ -71,20 +69,18 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     public async Task ResolveByTicker_ExactDottedTickerWinsBeforeDashFallback()
     {
         _dbContext.AddRange(
-            new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = "TEST.B",
-                Name = "Exact",
-                Cik = "1001",
-            },
-            new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = "TEST-B",
-                Name = "Fallback",
-                Cik = "1002",
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "TEST.B",
+                Name: "Exact",
+                Cik: "1001"
+            ),
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "TEST-B",
+                Name: "Fallback",
+                Cik: "1002"
+            )
         );
         await _dbContext.SaveChangesAsync();
 
@@ -97,17 +93,16 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     [Fact]
     public async Task GetByCikTolerant_UnpaddedInputResolvesPaddedPrimaryCik()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
         _dbContext.Add(stock);
         await _dbContext.SaveChangesAsync();
 
-        var resolved = await _repository.GetByCikTolerant("320193");
+        EquityIssuer resolved = await _repository.GetByCikTolerant("320193");
 
         resolved.Should().BeSameAs(stock);
     }
@@ -115,18 +110,17 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     [Fact]
     public async Task GetByCikTolerant_PaddedInputResolvesUnpaddedSecondaryCik()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "SURV",
-            Name = "Surviving filer",
-            Cik = "10",
-            SecondaryCiks = ["320193"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "SURV",
+            Name: "Surviving filer",
+            Cik: "10",
+            SecondaryCiks: ["320193"]
+        );
         _dbContext.Add(stock);
         await _dbContext.SaveChangesAsync();
 
-        var resolved = await _repository.GetByCikTolerant("0000320193");
+        EquityIssuer resolved = await _repository.GetByCikTolerant("0000320193");
 
         resolved.Should().BeSameAs(stock);
     }
@@ -135,20 +129,18 @@ public class CommonStockRepositoryExtensionsResolveByTickerTests : IDisposable
     public async Task GetByCikTolerant_CanonicalCollisionFailsClosed()
     {
         _dbContext.AddRange(
-            new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = "PAD",
-                Name = "Padded",
-                Cik = "0000320193",
-            },
-            new CommonStock
-            {
-                Id = Guid.NewGuid(),
-                Ticker = "PLAIN",
-                Name = "Plain",
-                Cik = "320193",
-            }
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "PAD",
+                Name: "Padded",
+                Cik: "0000320193"
+            ),
+            Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: Guid.NewGuid(),
+                Ticker: "PLAIN",
+                Name: "Plain",
+                Cik: "320193"
+            )
         );
         await _dbContext.SaveChangesAsync();
 

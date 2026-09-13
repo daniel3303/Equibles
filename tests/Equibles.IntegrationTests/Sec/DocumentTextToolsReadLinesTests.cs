@@ -31,7 +31,10 @@ public class DocumentTextToolsReadLinesTests : ParadeDbMcpTestBase
     public async Task ReadDocumentLines_EndLineExceedsDocumentLength_ClampsToTotalAndReturnsRemainingLines()
     {
         var content = "Alpha\nBeta\nGamma"; // 3 lines total
-        var stock = new CommonStock { Ticker = "MSFT", Name = "Microsoft Corp." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp."
+        );
         var file = new File
         {
             Name = "10q",
@@ -42,7 +45,7 @@ public class DocumentTextToolsReadLinesTests : ParadeDbMcpTestBase
         };
         var document = new Document
         {
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
             Content = file,
             ContentId = file.Id,
             DocumentType = DocumentType.TenQ,

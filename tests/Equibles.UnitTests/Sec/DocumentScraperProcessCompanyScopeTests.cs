@@ -64,13 +64,13 @@ public class DocumentScraperProcessCompanyScopeTests
     private DocumentScraper BuildScraper(
         EquiblesFinancialDbContext dbContext,
         DocumentScraperOptions options,
-        CommonStockRepository companyRepository = null
+        EquityIssuerRepository companyRepository = null
     )
     {
         var services = new ServiceCollection();
         services.AddSingleton(dbContext);
         if (companyRepository == null)
-            services.AddScoped<CommonStockRepository>();
+            services.AddScoped<EquityIssuerRepository>();
         else
             services.AddSingleton(companyRepository);
         services.AddScoped<DocumentRepository>();
@@ -80,7 +80,7 @@ public class DocumentScraperProcessCompanyScopeTests
         // SEC-sourced fiscal year-end; IBus is an unrelated ctor
         // dep (SetCusip outbox event) the fiscal-year path never uses.
         services.AddSingleton(Substitute.For<IBus>());
-        services.AddScoped<CommonStockManager>();
+        services.AddScoped<EquityIdentityManager>();
         services.AddSingleton(_secEdgarClient);
         services.AddSingleton(_persistence);
         var provider = services.BuildServiceProvider();
@@ -98,22 +98,21 @@ public class DocumentScraperProcessCompanyScopeTests
         );
     }
 
-    private static CommonStock SeedCompany(EquiblesFinancialDbContext db)
+    private static EquityIssuer SeedCompany(EquiblesFinancialDbContext db)
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        db.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        db.Set<EquityIssuer>().Add(stock);
         db.SaveChanges();
         return stock;
     }
 
     private static async Task<bool> InvokeProcess(
         DocumentScraper scraper,
-        CommonStock company,
+        EquityIssuer company,
         ScrapingResult result
     )
     {
@@ -128,7 +127,7 @@ public class DocumentScraperProcessCompanyScopeTests
     public async Task ProcessCompanyDocumentsWithScope_DocumentTypeWithNoFilterMapping_WarnsAndSkips()
     {
         using var db = NewDbContext();
-        var company = SeedCompany(db);
+        EquityIssuer company = SeedCompany(db);
         // DocumentType.Other has no SEC Edgar filter mapping → the secFilter
         // == null branch logs a warning and continues, no error recorded.
         var scraper = BuildScraper(
@@ -150,7 +149,7 @@ public class DocumentScraperProcessCompanyScopeTests
     public async Task ProcessCompanyDocumentsWithScope_LoopThrows_RecordsCompanyErrorAndContinues()
     {
         using var db = NewDbContext();
-        var company = SeedCompany(db);
+        EquityIssuer company = SeedCompany(db);
         // Null DocumentTypesToSync makes the foreach throw; the per-company
         // catch must convert that into a recorded error (company is loaded, so
         // the catch's company.Ticker access is safe) rather than propagating.
@@ -174,7 +173,7 @@ public class DocumentScraperProcessCompanyScopeTests
     public async Task ProcessCompanyDocumentsWithScope_CompanyRemovedAfterTargetLoad_SkipsWithoutError()
     {
         using var db = NewDbContext();
-        var company = SeedCompany(db);
+        EquityIssuer company = SeedCompany(db);
         var scraper = BuildScraper(
             db,
             new DocumentScraperOptions
@@ -183,7 +182,10 @@ public class DocumentScraperProcessCompanyScopeTests
                 DocumentTypesToSync = [DocumentType.TenK],
             }
         );
-        db.Set<CommonStock>().Remove(company);
+        db.Remove(company.Presentation);
+        db.RemoveRange(company.Securities.SelectMany(security => security.Listings));
+        db.RemoveRange(company.Securities);
+        db.Set<EquityIssuer>().Remove(company);
         db.SaveChanges();
         var result = new ScrapingResult();
 
@@ -200,12 +202,12 @@ public class DocumentScraperProcessCompanyScopeTests
     public async Task ProcessCompanyDocumentsWithScope_CompanyLookupThrows_ReportsSnapshotIdentity()
     {
         using var db = NewDbContext();
-        var company = SeedCompany(db);
-        var companyRepository = Substitute.For<CommonStockRepository>(db);
+        EquityIssuer company = SeedCompany(db);
+        EquityIssuerRepository companyRepository = Substitute.For<EquityIssuerRepository>(db);
         companyRepository
             .Get(Arg.Any<object[]>())
             .Returns(
-                Task.FromException<CommonStock>(new InvalidOperationException("lookup failed"))
+                Task.FromException<EquityIssuer>(new InvalidOperationException("lookup failed"))
             );
         var scraper = BuildScraper(
             db,

@@ -57,7 +57,7 @@ public class InstitutionalHoldingsToolsResolveStockCellsTests
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        var stocks = new Dictionary<Guid, CommonStock>();
+        var stocks = new Dictionary<Guid, EquityIssuer>();
         var missingId = Guid.NewGuid();
 
         var result = ((string Ticker, string Name))method!.Invoke(null, [stocks, missingId]);

@@ -25,6 +25,7 @@ public class HoldingValueBasisReverseSplitTests
         {
             new()
             {
+                PriceSeriesTicker = "TEST",
                 EffectiveDate = new DateOnly(2026, 4, 6),
                 Numerator = 1m,
                 Denominator = 50m,

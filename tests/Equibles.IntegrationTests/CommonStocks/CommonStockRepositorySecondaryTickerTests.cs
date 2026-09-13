@@ -31,30 +31,28 @@ public class CommonStockRepositorySecondaryTickerTests : ParadeDbMcpTestBase
         // historical queries against FB still resolve to the current META row. If
         // Postgres array-Contains translation regresses, this lookup returns null and
         // every MCP tool call against FB silently reports "Stock not found".
-        var meta = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "META",
-            Name = "Meta Platforms Inc.",
-            SecondaryTickers = ["FB"],
-        };
+        EquityIssuer meta = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "META",
+            Name: "Meta Platforms Inc.",
+            SecondaryTickers: ["FB"]
+        );
         // Distractor row with no overlapping tickers — ensures the WHERE clause filters
         // correctly rather than just returning the first row in the table.
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            SecondaryTickers = [],
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            SecondaryTickers: []
+        );
 
-        DbContext.Set<CommonStock>().AddRange(meta, apple);
+        DbContext.Set<EquityIssuer>().AddRange(meta, apple);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
 
-        var sut = new CommonStockRepository(DbContext);
+        EquityIssuerRepository sut = new EquityIssuerRepository(DbContext);
 
-        var result = await sut.GetByTicker("FB");
+        EquityIssuer result = await sut.GetUsByTicker("FB");
 
         result
             .Should()
@@ -62,7 +60,7 @@ public class CommonStockRepositorySecondaryTickerTests : ParadeDbMcpTestBase
                 "the secondary-ticker branch of the WHERE clause must match the FB → META mapping"
             );
         result!
-            .Ticker.Should()
+            .Presentation.Listing.Ticker.Should()
             .Be(
                 "META",
                 "GetByTicker returns the row whose primary OR secondary list contains the query"

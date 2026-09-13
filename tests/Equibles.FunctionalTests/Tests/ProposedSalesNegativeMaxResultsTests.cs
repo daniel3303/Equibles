@@ -56,21 +56,19 @@ public class ProposedSalesNegativeMaxResultsTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple Inc",
-                Cik = "0000320193",
-            };
-            db.Set<CommonStock>().Add(stock);
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple Inc",
+                Cik: "0000320193"
+            );
+            db.Set<EquityIssuer>().Add(stock);
             await db.SaveChangesAsync();
 
             db.Set<Form144Filing>()
                 .Add(
                     new Form144Filing
                     {
-                        CommonStock = stock,
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         AccessionNumber = "0000320193-26-000001",
                         FilingDate = new DateOnly(2026, 4, 1),
                         SellerName = "Jane Affiliate",

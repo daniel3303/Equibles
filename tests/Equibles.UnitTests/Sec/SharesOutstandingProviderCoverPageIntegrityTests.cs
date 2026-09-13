@@ -66,13 +66,12 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
             new StockSplitRepository(db)
         );
 
-    private static CommonStock Stock(string ticker) =>
-        new()
-        {
-            Ticker = ticker,
-            Name = ticker,
-            Cik = "0001000001",
-        };
+    private static EquityIssuer Stock(string ticker) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: ticker,
+            Cik: "0001000001"
+        );
 
     private static FinancialConcept CoverPageConcept() =>
         new() { Taxonomy = FactTaxonomy.Dei, Tag = "EntityCommonStockSharesOutstanding" };
@@ -81,7 +80,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         new() { Taxonomy = FactTaxonomy.UsGaap, Tag = "CommonStockSharesOutstanding" };
 
     private static FinancialFact Fact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly filed,
@@ -91,7 +90,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             FinancialConceptId = concept.Id,
             Unit = "shares",
             PeriodType = FactPeriodType.Instant,
@@ -107,7 +106,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         };
 
     private static FinancialFact ClassFact(
-        CommonStock stock,
+        EquityIssuer stock,
         FinancialConcept concept,
         decimal value,
         DateOnly filed,
@@ -132,7 +131,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // IFRS share-capital axis (Class A multiple voting 42 + Class B subordinate 3,887,729),
         // while the last consolidated cover-page fact is a stale 12 from an older filing. The
         // per-class sum must win.
-        var stock = Stock("QNTM");
+        EquityIssuer stock = Stock("QNTM");
         var coverPage = CoverPageConcept();
         db.AddRange(stock, coverPage);
         db.Add(
@@ -187,7 +186,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // Same shape: the pick is the per-class sum from a 20-F, while the stale consolidated
         // fact is on a non-annual form. The gate must follow the pick, not the consolidated fact,
         // or the importer treats the filer as domestic and overwrites the listed-security count.
-        var stock = Stock("QNTM");
+        EquityIssuer stock = Stock("QNTM");
         var coverPage = CoverPageConcept();
         db.AddRange(stock, coverPage);
         db.Add(
@@ -229,7 +228,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // the previous cover-page fact says 36,632,775 and the SAME filing's balance sheet says
         // 36,431,444. Both anchors contradict the collapse, so the provider returns the
         // balance-sheet count that proved it.
-        var stock = Stock("ARMP");
+        EquityIssuer stock = Stock("ARMP");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
         db.AddRange(stock, coverPage, balanceSheet);
@@ -265,7 +264,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // 9.99x, so a threshold of 10 would miss it; the collapse factor must catch it. But 9.99x
         // is INSIDE the same-unit ratio, where a cover page can still be the one honest figure
         // (the RLBY shape), so the provider abstains rather than writing the balance-sheet count.
-        var stock = Stock("PTCT");
+        EquityIssuer stock = Stock("PTCT");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
         db.AddRange(stock, coverPage, balanceSheet);
@@ -299,7 +298,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // (the authorized count). The two corroborators agree — and both are wrong. At 6.4x the
         // cover page is well inside a same-unit reading, so writing the "correction" would replace
         // the one honest figure in the filing with the mistake. The provider must abstain.
-        var stock = Stock("RLBY");
+        EquityIssuer stock = Stock("RLBY");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
         db.AddRange(stock, coverPage, balanceSheet);
@@ -331,7 +330,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // nominal 1,000-share balance-sheet placeholder is five times it. The placeholder disagrees
         // with the issuer's real history by orders of magnitude, so it must never be promoted to
         // the corrected count; the provider abstains.
-        var stock = Stock("SHEL");
+        EquityIssuer stock = Stock("SHEL");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
         db.AddRange(stock, coverPage, balanceSheet);
@@ -363,7 +362,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // it degenerates to zero — the shape that once admitted any same-accession balance-sheet
         // figure unchecked. With history and the balance sheet agreeing on the real figure, the
         // correction is grounded in two independent statements and proceeds.
-        var stock = Stock("ZERO");
+        EquityIssuer stock = Stock("ZERO");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
         db.AddRange(stock, coverPage, balanceSheet);
@@ -397,7 +396,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // The filing states no consolidated balance-sheet count — only per-class facts on the
         // class-of-stock axis (Class A 112,415,671, an empty Class B at 0) — so the corroboration
         // must sum the classes, and their sum is the corrected answer.
-        var stock = Stock("AL");
+        EquityIssuer stock = Stock("AL");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
         db.AddRange(stock, coverPage, balanceSheet);
@@ -491,7 +490,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // before the window opened is not recent history — an issuer that genuinely shrank long
         // ago must not have its current cover page second-guessed by its distant past, even when
         // a same-filing balance-sheet figure happens to be mis-scaled large.
-        var stock = Stock("TINY");
+        EquityIssuer stock = Stock("TINY");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
         db.AddRange(stock, coverPage, balanceSheet);
@@ -524,7 +523,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // filed 93.9 BILLION) while the cover-page count is continuous with the issuer's history.
         // Only one anchor contradicts, so the cover-page count must stand — abstaining here would
         // hand a correct figure to the fallback source for no reason.
-        var stock = Stock("REGN");
+        EquityIssuer stock = Stock("REGN");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
         db.AddRange(stock, coverPage, balanceSheet);
@@ -555,7 +554,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // QVC, Inc.: a wholly-owned subsidiary whose common stock is genuinely one share held by
         // its parent — every filing agrees. A tiny count is not an artifact when the issuer's own
         // history and balance sheet state the same figure.
-        var stock = Stock("QVCCQ");
+        EquityIssuer stock = Stock("QVCCQ");
         var coverPage = CoverPageConcept();
         var balanceSheet = BalanceSheetConcept();
         db.AddRange(stock, coverPage, balanceSheet);
@@ -587,7 +586,7 @@ public class SharesOutstandingProviderCoverPageIntegrityTests
         // A large drop against history alone is not enough: without the same filing's
         // balance-sheet count as a second anchor it can be a genuine event (going private, a
         // reverse split), so the authoritative cover-page tag stands.
-        var stock = Stock("GONE");
+        EquityIssuer stock = Stock("GONE");
         var coverPage = CoverPageConcept();
         db.AddRange(stock, coverPage);
         db.Add(

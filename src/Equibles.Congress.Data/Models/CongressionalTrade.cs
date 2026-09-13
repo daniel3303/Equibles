@@ -5,12 +5,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.Congress.Data.Models;
 
-[Index(nameof(CommonStockId), nameof(TransactionDate))]
+[Index(nameof(EquityIssuerId), nameof(TransactionDate))]
 [Index(nameof(CongressMemberId), nameof(TransactionDate))]
 // Legacy semantic lookup used only while parser-v5 replay adopts rows written before stable
 // source identity. It is intentionally non-unique: the source row key below owns dedup now.
 [Index(
-    nameof(CommonStockId),
+    nameof(EquityIssuerId),
     nameof(CongressMemberId),
     nameof(TransactionDate),
     nameof(TransactionType),
@@ -35,8 +35,8 @@ public class CongressionalTrade
 
     // Derived from the immutable filed ticker and authoritative dated issuer evidence. Null is
     // preferable to attaching a reused symbol to the wrong company.
-    public Guid? CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    public Guid? EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     /// <summary>The ticker exactly as normalized from the congressional filing.</summary>
     [Required]

@@ -20,8 +20,8 @@ public class StockPriceToolsObvTests : ParadeDbMcpTestBase
 
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
@@ -38,7 +38,7 @@ public class StockPriceToolsObvTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetOnBalanceVolume_NoPrices_ReturnsEmptyRangeMessage()
     {
-        DbContext.Set<CommonStock>().Add(MakeStock());
+        DbContext.Set<EquityIssuer>().Add(MakeStock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut()
@@ -50,8 +50,8 @@ public class StockPriceToolsObvTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetOnBalanceVolume_StrictlyRising_AccumulatesAllVolumes()
     {
-        var stock = MakeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = MakeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
 
         // Bars 0..4 with closes 10,11,12,13,14 and volumes 100,200,300,400,500.
@@ -62,11 +62,15 @@ public class StockPriceToolsObvTests : ParadeDbMcpTestBase
         for (var i = 0; i < closes.Length; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = closes[i],
                         High = closes[i],
@@ -97,18 +101,22 @@ public class StockPriceToolsObvTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetOnBalanceVolume_MaxResults_LimitsRowCount()
     {
-        var stock = MakeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = MakeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
         var start = new DateOnly(2025, 1, 6);
         for (var i = 0; i < 30; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m,
                         High = 101m,
@@ -140,18 +148,22 @@ public class StockPriceToolsObvTests : ParadeDbMcpTestBase
         // tests pin the row order — a regression that flipped the loop direction would
         // still pass them. Five increasing dates; first data row in the table must be
         // the latest one.
-        var stock = MakeStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = MakeStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         await DbContext.SaveChangesAsync();
         var start = new DateOnly(2025, 1, 6);
         for (var i = 0; i < 5; i++)
         {
             DbContext
-                .Set<DailyStockPrice>()
+                .Set<EquityDailyStockPrice>()
                 .Add(
-                    new DailyStockPrice
+                    new EquityDailyStockPrice
                     {
-                        CommonStockId = stock.Id,
+                        Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                            DbContext,
+                            stock,
+                            null
+                        ),
                         Date = start.AddDays(i),
                         Open = 100m,
                         High = 101m,
@@ -175,11 +187,10 @@ public class StockPriceToolsObvTests : ParadeDbMcpTestBase
         firstDataRow.Should().StartWith($"| {start.AddDays(4):yyyy-MM-dd} |");
     }
 
-    private static CommonStock MakeStock() =>
-        new()
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+    private static EquityIssuer MakeStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
 }

@@ -55,7 +55,10 @@ public class FinancialFactsToolsRenderFactHistoryTableLatestRestatedLabelTests
             BindingFlags.NonPublic | BindingFlags.Static
         );
 
-        var stock = new CommonStock { Ticker = "AAPL", Name = "Apple Inc." };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var perPeriod = new List<FinancialFact>();
 
         var result = (string)

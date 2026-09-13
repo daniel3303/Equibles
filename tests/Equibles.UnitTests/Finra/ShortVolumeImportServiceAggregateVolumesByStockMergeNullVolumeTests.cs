@@ -24,8 +24,8 @@ public class ShortVolumeImportServiceAggregateVolumesByStockMergeNullVolumeTests
         );
 
         var stockId = Guid.NewGuid();
-        var security = new ListedSecurityKey(stockId, "AAPL");
-        var tickerMap = new Dictionary<string, ListedSecurityKey> { ["AAPL"] = security };
+        var security = new EquityListingReference(stockId, Guid.NewGuid(), "AAPL");
+        var tickerMap = new Dictionary<string, EquityListingReference> { ["AAPL"] = security };
         var records = new List<ShortVolumeRecord>
         {
             new()
@@ -45,11 +45,11 @@ public class ShortVolumeImportServiceAggregateVolumesByStockMergeNullVolumeTests
         };
 
         var result =
-            (Dictionary<ListedSecurityKey, DailyShortVolume>)
+            (Dictionary<Guid, DailyShortVolume>)
                 method.Invoke(null, [records, tickerMap, new DateOnly(2024, 12, 31)]);
 
         result.Should().HaveCount(1);
-        var aggregated = result[security];
+        var aggregated = result[security.EquityListingId];
         aggregated
             .ShortVolume.Should()
             .Be(1_000, "the null second-venue ShortVolume contributes 0");

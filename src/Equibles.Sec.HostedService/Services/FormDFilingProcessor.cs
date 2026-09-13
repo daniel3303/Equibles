@@ -85,7 +85,7 @@ public class FormDFilingProcessor : IssuerFeedFilingProcessor<FormDFiling, FormD
 
         var entity = new FormDFiling
         {
-            CommonStockId = companyId,
+            EquityIssuerId = companyId,
             AccessionNumber = filing.AccessionNumber,
             FilingDate = filing.FilingDate,
             IsAmendment = ParseIsAmendment(typeOfFiling, filing),

@@ -25,7 +25,10 @@ public class FinancialFactsImportServiceInterimIdentityTests
         SecFiscalPeriod expectedPeriod
     )
     {
-        var stock = new CommonStock { FiscalYearEndMonth = month, FiscalYearEndDay = day };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            FiscalYearEndMonth: month,
+            FiscalYearEndDay: day
+        );
         var instant = Parse(stock, null, DateOnly.Parse(end), wireYear, wirePeriod);
         var duration = Parse(
             stock,
@@ -40,7 +43,7 @@ public class FinancialFactsImportServiceInterimIdentityTests
     }
 
     private static (int Year, SecFiscalPeriod Period) Parse(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly? start,
         DateOnly end,
         int year,

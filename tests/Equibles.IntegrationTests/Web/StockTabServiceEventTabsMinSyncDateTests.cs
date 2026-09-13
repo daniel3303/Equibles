@@ -60,7 +60,7 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
     [Fact]
     public async Task LoadHoldingsTab_QuarterBeforeMinSyncDate_DroppedFromDatesStatsAndTrend()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var holder = new InstitutionalHolder { Cik = "H0000001", Name = "Holder" };
         _dbContext.Set<InstitutionalHolder>().Add(holder);
         var preFloorQuarter = new DateOnly(2024, 3, 31);
@@ -87,7 +87,7 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
     [Fact]
     public async Task LoadInsiderTradingTab_TransactionBeforeMinSyncDate_IsExcluded()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var owner = new InsiderOwner { Name = "Insider", OwnerCik = "I0000001" };
         _dbContext.Set<InsiderOwner>().Add(owner);
         _dbContext
@@ -107,7 +107,7 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
     [Fact]
     public async Task LoadCongressionalTradesTab_TradeBeforeMinSyncDate_IsExcluded()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var member = new CongressMember
         {
             Name = "Dan Crenshaw",
@@ -128,7 +128,7 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
     [Fact]
     public async Task LoadInsiderTradingTab_NoMinSyncDateConfigured_RendersFullHistory()
     {
-        var stock = SeedStock();
+        EquityIssuer stock = SeedStock();
         var owner = new InsiderOwner { Name = "Insider", OwnerCik = "I0000001" };
         _dbContext.Set<InsiderOwner>().Add(owner);
         _dbContext
@@ -144,16 +144,15 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
         result.Transactions.Should().HaveCount(2, "no floor means no clamp");
     }
 
-    private CommonStock SeedStock()
+    private EquityIssuer SeedStock()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        _dbContext.Set<EquityIssuer>().Add(stock);
         return stock;
     }
 
@@ -165,7 +164,7 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),
@@ -177,13 +176,13 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
         };
 
     private static InsiderTransaction MakeTransaction(
-        CommonStock stock,
+        EquityIssuer stock,
         InsiderOwner owner,
         DateOnly date
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InsiderOwnerId = owner.Id,
             TransactionDate = date,
             FilingDate = date.AddDays(2),
@@ -195,13 +194,13 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
         };
 
     private static CongressionalTrade MakeTrade(
-        CommonStock stock,
+        EquityIssuer stock,
         CongressMember member,
         DateOnly date
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             CongressMemberId = member.Id,
             TransactionDate = date,
             FilingDate = date.AddDays(10),
@@ -226,10 +225,10 @@ public class StockTabServiceEventTabsMinSyncDateTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             withFloor
                 ? Options.Create(
                     new WorkerOptions { MinSyncDate = Floor.ToDateTime(TimeOnly.MinValue) }

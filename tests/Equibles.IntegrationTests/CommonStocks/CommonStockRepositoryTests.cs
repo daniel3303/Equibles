@@ -11,12 +11,12 @@ namespace Equibles.IntegrationTests.CommonStocks;
 public class CommonStockRepositoryTests : IDisposable
 {
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly CommonStockRepository _repository;
+    private readonly EquityIssuerRepository _repository;
 
     public CommonStockRepositoryTests()
     {
         _dbContext = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _repository = new CommonStockRepository(_dbContext);
+        _repository = new EquityIssuerRepository(_dbContext);
     }
 
     public void Dispose()
@@ -29,7 +29,7 @@ public class CommonStockRepositoryTests : IDisposable
         return new Industry { Id = Guid.NewGuid(), Name = name };
     }
 
-    private static CommonStock MakeStock(
+    private static EquityIssuer MakeStock(
         string ticker = "AAPL",
         string name = "Apple Inc",
         string cik = "0000320193",
@@ -38,48 +38,50 @@ public class CommonStockRepositoryTests : IDisposable
         List<string> secondaryTickers = null
     )
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = name,
-            Cik = cik,
-            Description = description,
-            IndustryId = industry?.Id,
-            Industry = industry,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: name,
+            Cik: cik,
+            Description: description,
+            IndustryId: industry?.Id,
+            Industry: industry
+        );
 
         if (secondaryTickers != null)
-            stock.SecondaryTickers = secondaryTickers;
+            Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(stock, secondaryTickers);
 
         return stock;
     }
 
-    private async Task SeedStocks(params CommonStock[] stocks)
+    private async Task SeedStocks(params EquityIssuer[] stocks)
     {
-        _dbContext.Set<CommonStock>().AddRange(stocks);
+        _dbContext.Set<EquityIssuer>().AddRange(stocks);
         await _dbContext.SaveChangesAsync();
     }
 
     [Fact]
     public async Task GetAll_ExcludesInactiveRows_WhileHistoricalQueryRetainsThem()
     {
-        var active = MakeStock(ticker: "LIVE", cik: "111");
-        var delisted = MakeStock(ticker: "GONE", cik: "222");
-        delisted.Active = false;
-        delisted.DelistedOn = new DateOnly(2024, 6, 14);
+        EquityIssuer active = MakeStock(ticker: "LIVE", cik: "111");
+        EquityIssuer delisted = MakeStock(ticker: "GONE", cik: "222");
+        delisted.Presentation.Listing.Active = false;
+        delisted.Presentation.Listing.DelistedOn = new DateOnly(2024, 6, 14);
         await SeedStocks(active, delisted);
 
-        var liveDirectory = await _repository.GetAll().Select(stock => stock.Ticker).ToListAsync();
+        var liveDirectory = await _repository
+            .GetCurrentUsDirectory()
+            .Select(stock => stock.Presentation.Listing.Ticker)
+            .ToListAsync();
         var retained = await _repository
-            .GetAllIncludingInactive()
-            .Select(stock => stock.Ticker)
+            .GetAll()
+            .Select(stock => stock.Presentation.Listing.Ticker)
             .ToListAsync();
 
         liveDirectory.Should().Equal("LIVE");
         retained.Should().BeEquivalentTo("LIVE", "GONE");
-        (await _repository.Get(delisted.Id)).Should().BeNull();
-        (await _repository.GetIncludingInactive(delisted.Id)).Should().BeSameAs(delisted);
+        (await _repository.GetCurrentUsDirectoryIssuer(delisted.Id)).Should().BeNull();
+        (await _repository.Get(delisted.Id)).Should().BeSameAs(delisted);
     }
 
     // ── GetByCik ────────────────────────────────────────────────────────
@@ -92,10 +94,10 @@ public class CommonStockRepositoryTests : IDisposable
             MakeStock(ticker: "MSFT", cik: "0000789019")
         );
 
-        var result = await _repository.GetByCik("0000320193");
+        EquityIssuer result = await _repository.GetByCik("0000320193");
 
         result.Should().NotBeNull();
-        result.Ticker.Should().Be("AAPL");
+        result.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 
     [Fact]
@@ -103,7 +105,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock());
 
-        var result = await _repository.GetByCik("9999999999");
+        EquityIssuer result = await _repository.GetByCik("9999999999");
 
         result.Should().BeNull();
     }
@@ -111,7 +113,7 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public async Task GetByCik_EmptyDatabase_ReturnsNull()
     {
-        var result = await _repository.GetByCik("0000320193");
+        EquityIssuer result = await _repository.GetByCik("0000320193");
 
         result.Should().BeNull();
     }
@@ -121,7 +123,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(cik: "ABC123"));
 
-        var result = await _repository.GetByCik("abc123");
+        EquityIssuer result = await _repository.GetByCik("abc123");
 
         result.Should().BeNull();
     }
@@ -140,7 +142,7 @@ public class CommonStockRepositoryTests : IDisposable
         var result = _repository.GetByCiks(["111", "333"]).ToList();
 
         result.Should().HaveCount(2);
-        result.Select(s => s.Ticker).Should().BeEquivalentTo(["AAPL", "GOOG"]);
+        result.Select(s => s.Presentation.Listing.Ticker).Should().BeEquivalentTo(["AAPL", "GOOG"]);
     }
 
     [Fact]
@@ -173,7 +175,7 @@ public class CommonStockRepositoryTests : IDisposable
 
         var result = _repository.GetByCiks(["111", "999"]).ToList();
 
-        result.Should().ContainSingle().Which.Ticker.Should().Be("AAPL");
+        result.Should().ContainSingle().Which.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 
     [Fact]
@@ -181,7 +183,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         var result = _repository.GetByCiks(["111"]);
 
-        result.Should().BeAssignableTo<IQueryable<CommonStock>>();
+        result.Should().BeAssignableTo<IQueryable<EquityIssuer>>();
     }
 
     // ── GetByName ───────────────────────────────────────────────────────
@@ -191,7 +193,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(name: "Apple Inc"));
 
-        var result = await _repository.GetByName("Apple Inc");
+        EquityIssuer result = await _repository.GetByName("Apple Inc");
 
         result.Should().NotBeNull();
         result.Name.Should().Be("Apple Inc");
@@ -202,7 +204,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(name: "Apple Inc"));
 
-        var result = await _repository.GetByName("apple inc");
+        EquityIssuer result = await _repository.GetByName("apple inc");
 
         result.Should().NotBeNull();
         result.Name.Should().Be("Apple Inc");
@@ -213,7 +215,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(name: "Apple Inc"));
 
-        var result = await _repository.GetByName("APPLE INC");
+        EquityIssuer result = await _repository.GetByName("APPLE INC");
 
         result.Should().NotBeNull();
     }
@@ -223,7 +225,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(name: "Apple Inc"));
 
-        var result = await _repository.GetByName("Microsoft");
+        EquityIssuer result = await _repository.GetByName("Microsoft");
 
         result.Should().BeNull();
     }
@@ -233,7 +235,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(name: "Apple Inc"));
 
-        var result = await _repository.GetByName("Apple");
+        EquityIssuer result = await _repository.GetByName("Apple");
 
         result.Should().BeNull();
     }
@@ -241,7 +243,7 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public async Task GetByName_EmptyDatabase_ReturnsNull()
     {
-        var result = await _repository.GetByName("Apple Inc");
+        EquityIssuer result = await _repository.GetByName("Apple Inc");
 
         result.Should().BeNull();
     }
@@ -253,10 +255,10 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(ticker: "AAPL"));
 
-        var result = await _repository.GetByTicker("AAPL");
+        EquityIssuer result = await _repository.GetUsByTicker("AAPL");
 
         result.Should().NotBeNull();
-        result.Ticker.Should().Be("AAPL");
+        result.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 
     [Fact]
@@ -264,10 +266,10 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(ticker: "GOOG", secondaryTickers: ["GOOGL", "GOOG-A"]));
 
-        var result = await _repository.GetByTicker("GOOGL");
+        EquityIssuer result = await _repository.GetUsByTicker("GOOGL");
 
         result.Should().NotBeNull();
-        result.Ticker.Should().Be("GOOG");
+        result.Presentation.Listing.Ticker.Should().Be("GOOG");
     }
 
     [Fact]
@@ -275,7 +277,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(ticker: "AAPL", secondaryTickers: ["AAPL-OLD"]));
 
-        var result = await _repository.GetByTicker("MSFT");
+        EquityIssuer result = await _repository.GetUsByTicker("MSFT");
 
         result.Should().BeNull();
     }
@@ -283,7 +285,7 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public async Task GetByTicker_EmptyDatabase_ReturnsNull()
     {
-        var result = await _repository.GetByTicker("AAPL");
+        EquityIssuer result = await _repository.GetUsByTicker("AAPL");
 
         result.Should().BeNull();
     }
@@ -293,10 +295,22 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(ticker: "AAPL"));
 
-        var result = await _repository.GetByTicker("AAPL");
+        EquityIssuer result = await _repository.GetUsByTicker("AAPL");
 
         result.Should().NotBeNull();
-        result.SecondaryTickers.Should().BeEmpty();
+        result
+            .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
+            .Where(nativeListing =>
+                nativeListing.MarketCountryCode == "US"
+                && (
+                    nativeListing.IsDirectoryListed
+                    && nativeListing.Id != result.Presentation.EquityListingId
+                )
+            )
+            .Select(nativeListing => nativeListing.Ticker)
+            .ToList()
+            .Should()
+            .BeEmpty();
     }
 
     [Fact]
@@ -308,10 +322,10 @@ public class CommonStockRepositoryTests : IDisposable
             MakeStock(ticker: "GOOG", cik: "333")
         );
 
-        var result = await _repository.GetByTicker("MSFT");
+        EquityIssuer result = await _repository.GetUsByTicker("MSFT");
 
         result.Should().NotBeNull();
-        result.Ticker.Should().Be("MSFT");
+        result.Presentation.Listing.Ticker.Should().Be("MSFT");
     }
 
     [Fact]
@@ -327,10 +341,10 @@ public class CommonStockRepositoryTests : IDisposable
             )
         );
 
-        var result = await _repository.GetByTicker("SOHOB");
+        EquityIssuer result = await _repository.GetUsByTicker("SOHOB");
 
         result.Should().NotBeNull();
-        result.Ticker.Should().Be("SOHOB");
+        result.Presentation.Listing.Ticker.Should().Be("SOHOB");
         result.Cik.Should().Be("1313536");
     }
 
@@ -349,10 +363,10 @@ public class CommonStockRepositoryTests : IDisposable
             MakeStock(ticker: "SOHOB", name: "Sotherly LP", cik: "1313536")
         );
 
-        var result = await _repository.GetByTicker("SOHOB");
+        EquityIssuer result = await _repository.GetUsByTicker("SOHOB");
 
         result.Should().NotBeNull();
-        result.Ticker.Should().Be("SOHOB");
+        result.Presentation.Listing.Ticker.Should().Be("SOHOB");
         result.Cik.Should().Be("1313536");
     }
 
@@ -363,10 +377,10 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(ticker: "AAPL"));
 
-        var result = await _repository.GetByPrimaryTicker("AAPL");
+        EquityIssuer result = await _repository.GetPrimaryUsByTicker("AAPL");
 
         result.Should().NotBeNull();
-        result.Ticker.Should().Be("AAPL");
+        result.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 
     [Fact]
@@ -374,7 +388,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(ticker: "GOOG", secondaryTickers: ["GOOGL"]));
 
-        var result = await _repository.GetByPrimaryTicker("GOOGL");
+        EquityIssuer result = await _repository.GetPrimaryUsByTicker("GOOGL");
 
         result.Should().BeNull();
     }
@@ -384,7 +398,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(ticker: "AAPL"));
 
-        var result = await _repository.GetByPrimaryTicker("MSFT");
+        EquityIssuer result = await _repository.GetPrimaryUsByTicker("MSFT");
 
         result.Should().BeNull();
     }
@@ -392,7 +406,7 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public async Task GetByPrimaryTicker_EmptyDatabase_ReturnsNull()
     {
-        var result = await _repository.GetByPrimaryTicker("AAPL");
+        EquityIssuer result = await _repository.GetPrimaryUsByTicker("AAPL");
 
         result.Should().BeNull();
     }
@@ -406,19 +420,18 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public void GetByTickers_ReturnsIQueryable_SupportsChaining()
     {
-        var result = _repository.GetByTickers(["AAPL"]);
+        var result = _repository.GetUsByTickers(["AAPL"]);
 
-        result.Should().BeAssignableTo<IQueryable<CommonStock>>();
+        result.Should().BeAssignableTo<IQueryable<EquityIssuer>>();
     }
 
     [Fact]
-    public async Task GetByTickers_WithSecondaryTickerQuery_ThrowsBecauseJsonArrayNotSupportedInMemory()
+    public async Task GetByTickers_ResolvesSecondaryNativeListing()
     {
-        await SeedStocks(MakeStock(ticker: "AAPL"));
-
-        var act = () => _repository.GetByTickers(["AAPL"]).ToList();
-
-        act.Should().Throw<InvalidOperationException>();
+        var issuer = MakeStock(ticker: "PRIMARY");
+        Equibles.TestSupport.EquityIssuerSeed.SetSecondaryTickers(issuer, ["SECONDARY"]);
+        await SeedStocks(issuer);
+        (await _repository.GetUsByTickers(["SECONDARY"]).SingleAsync()).Id.Should().Be(issuer.Id);
     }
 
     // ── GetAllTickers ───────────────────────────────────────────────────
@@ -432,7 +445,7 @@ public class CommonStockRepositoryTests : IDisposable
             MakeStock(ticker: "GOOG", cik: "333")
         );
 
-        var result = _repository.GetAllTickers().ToList();
+        var result = _repository.GetUsPrimaryTickers().ToList();
 
         result.Should().HaveCount(3);
         result.Should().BeEquivalentTo(["AAPL", "MSFT", "GOOG"]);
@@ -441,7 +454,7 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public void GetAllTickers_EmptyDatabase_ReturnsEmpty()
     {
-        var result = _repository.GetAllTickers().ToList();
+        var result = _repository.GetUsPrimaryTickers().ToList();
 
         result.Should().BeEmpty();
     }
@@ -451,7 +464,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         await SeedStocks(MakeStock(ticker: "GOOG", secondaryTickers: ["GOOGL"]));
 
-        var result = _repository.GetAllTickers().ToList();
+        var result = _repository.GetUsPrimaryTickers().ToList();
 
         result.Should().ContainSingle().Which.Should().Be("GOOG");
     }
@@ -459,7 +472,7 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public void GetAllTickers_ReturnsIQueryableOfString()
     {
-        var result = _repository.GetAllTickers();
+        var result = _repository.GetUsPrimaryTickers();
 
         result.Should().BeAssignableTo<IQueryable<string>>();
     }
@@ -492,17 +505,15 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public void GetAllSecondaryTickers_ReturnsIQueryableOfString()
     {
-        var result = _repository.GetAllSecondaryTickers();
+        var result = _repository.GetUsSecondaryTickers();
 
         result.Should().BeAssignableTo<IQueryable<string>>();
     }
 
     [Fact]
-    public void GetAllSecondaryTickers_ThrowsBecauseJsonArrayNotSupportedInMemory()
+    public void GetAllSecondaryTickers_EmptyDirectory_IsEmpty()
     {
-        var act = () => _repository.GetAllSecondaryTickers().ToList();
-
-        act.Should().Throw<InvalidOperationException>();
+        _repository.GetUsSecondaryTickers().Should().BeEmpty();
     }
 
     // ── Search ──────────────────────────────────────────────────────────
@@ -527,7 +538,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         // When search is empty, the ILike branch is skipped entirely
         _dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AddRange(MakeStock(ticker: "AAPL", cik: "111"), MakeStock(ticker: "MSFT", cik: "222"));
         _dbContext.SaveChanges();
 
@@ -539,16 +550,16 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public void Search_DefaultUniverse_ExcludesRetainedDelistedIdentities()
     {
-        var live = MakeStock(ticker: "LIVE", cik: "111");
-        var delisted = MakeStock(ticker: "GONE", cik: "222");
-        delisted.Active = false;
-        _dbContext.Set<CommonStock>().AddRange(live, delisted);
+        EquityIssuer live = MakeStock(ticker: "LIVE", cik: "111");
+        EquityIssuer delisted = MakeStock(ticker: "GONE", cik: "222");
+        delisted.Presentation.Listing.Active = false;
+        _dbContext.Set<EquityIssuer>().AddRange(live, delisted);
         _dbContext.SaveChanges();
 
-        var readers = _repository.Search("").Select(s => s.Ticker).ToList();
+        var readers = _repository.Search("").Select(s => s.Presentation.Listing.Ticker).ToList();
         var operators = _repository
             .Search("", includeInactive: true)
-            .Select(s => s.Ticker)
+            .Select(s => s.Presentation.Listing.Ticker)
             .ToList();
 
         readers.Should().Equal("LIVE");
@@ -559,7 +570,7 @@ public class CommonStockRepositoryTests : IDisposable
     public void Search_WithNull_ReturnsAllStocks()
     {
         _dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AddRange(MakeStock(ticker: "AAPL", cik: "111"), MakeStock(ticker: "MSFT", cik: "222"));
         _dbContext.SaveChanges();
 
@@ -572,7 +583,7 @@ public class CommonStockRepositoryTests : IDisposable
     public void Search_WithEmptyString_ReturnsResultsOrderedByTicker()
     {
         _dbContext
-            .Set<CommonStock>()
+            .Set<EquityIssuer>()
             .AddRange(
                 MakeStock(ticker: "MSFT", cik: "222"),
                 MakeStock(ticker: "AAPL", cik: "111"),
@@ -582,7 +593,7 @@ public class CommonStockRepositoryTests : IDisposable
 
         var result = _repository.Search("").ToList();
 
-        result.Select(s => s.Ticker).Should().BeInAscendingOrder();
+        result.Select(s => s.Presentation.Listing.Ticker).Should().BeInAscendingOrder();
     }
 
     [Fact]
@@ -598,7 +609,7 @@ public class CommonStockRepositoryTests : IDisposable
     {
         var result = _repository.Search("");
 
-        result.Should().BeAssignableTo<IQueryable<CommonStock>>();
+        result.Should().BeAssignableTo<IQueryable<EquityIssuer>>();
     }
 
     // ── Inherited BaseRepository Methods ────────────────────────────────
@@ -608,12 +619,12 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public async Task Add_CommonStock_PersistsViaSave()
     {
-        var stock = MakeStock();
+        EquityIssuer stock = MakeStock();
 
         _repository.Add(stock);
         await _repository.SaveChanges();
 
-        var persisted = await _repository.GetByTicker("AAPL");
+        EquityIssuer persisted = await _repository.GetUsByTicker("AAPL");
         persisted.Should().NotBeNull();
         persisted.Name.Should().Be("Apple Inc");
     }
@@ -630,20 +641,20 @@ public class CommonStockRepositoryTests : IDisposable
         _repository.AddRange(stocks);
         await _repository.SaveChanges();
 
-        _repository.GetAll().Should().HaveCount(2);
+        _repository.GetCurrentUsDirectory().Should().HaveCount(2);
     }
 
     [Fact]
     public async Task Get_ByGuidId_ReturnsCorrectStock()
     {
-        var stock = MakeStock();
+        EquityIssuer stock = MakeStock();
         _repository.Add(stock);
         await _repository.SaveChanges();
 
-        var result = await _repository.Get(stock.Id);
+        EquityIssuer result = await _repository.GetCurrentUsDirectoryIssuer(stock.Id);
 
         result.Should().NotBeNull();
-        result.Ticker.Should().Be("AAPL");
+        result.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 
     [Fact]
@@ -655,7 +666,7 @@ public class CommonStockRepositoryTests : IDisposable
             MakeStock(ticker: "GOOG", cik: "333")
         );
 
-        var result = _repository.GetAll().ToList();
+        var result = _repository.GetCurrentUsDirectory().ToList();
 
         result.Should().HaveCount(3);
     }
@@ -663,7 +674,7 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public async Task Update_ModifiesExistingStock()
     {
-        var stock = MakeStock();
+        EquityIssuer stock = MakeStock();
         _repository.Add(stock);
         await _repository.SaveChanges();
 
@@ -672,25 +683,25 @@ public class CommonStockRepositoryTests : IDisposable
         await _repository.SaveChanges();
 
         _repository.ClearChangeTracker();
-        var updated = await _repository.Get(stock.Id);
+        EquityIssuer updated = await _repository.GetCurrentUsDirectoryIssuer(stock.Id);
         updated.Name.Should().Be("Apple Inc Updated");
     }
 
     [Fact]
-    public async Task Delete_RemovesStockFromDatabase()
+    public async Task Delete_IssuerWithListings_RefusesCascadeLoss()
     {
-        var stock = MakeStock();
+        EquityIssuer stock = MakeStock();
         _repository.Add(stock);
         await _repository.SaveChanges();
 
-        _repository.Delete(stock);
-        await _repository.SaveChanges();
-
-        _repository.GetAll().Should().BeEmpty();
+        var remove = () => _repository.Delete(stock);
+        remove.Should().Throw<InvalidOperationException>();
+        _repository.ClearChangeTracker();
+        (await _repository.Get(stock.Id)).Should().NotBeNull();
     }
 
     [Fact]
-    public async Task Delete_Collection_RemovesMultipleStocks()
+    public async Task Delete_CollectionWithListings_PreservesEveryIssuer()
     {
         var stocks = new[]
         {
@@ -701,10 +712,10 @@ public class CommonStockRepositoryTests : IDisposable
         _repository.AddRange(stocks);
         await _repository.SaveChanges();
 
-        _repository.Delete(stocks.Take(2));
-        await _repository.SaveChanges();
-
-        _repository.GetAll().Should().ContainSingle().Which.Ticker.Should().Be("GOOG");
+        var remove = () => _repository.Delete(stocks.Take(2));
+        remove.Should().Throw<InvalidOperationException>();
+        _repository.ClearChangeTracker();
+        _repository.GetAll().Should().HaveCount(3);
     }
 
     // ── Industry Navigation ─────────────────────────────────────────────
@@ -716,10 +727,10 @@ public class CommonStockRepositoryTests : IDisposable
         _dbContext.Set<Industry>().Add(industry);
         await SeedStocks(MakeStock(ticker: "AAPL", industry: industry));
 
-        var result = await _repository
-            .GetAll()
+        EquityIssuer result = await _repository
+            .GetCurrentUsDirectory()
             .Include(s => s.Industry)
-            .FirstOrDefaultAsync(s => s.Ticker == "AAPL");
+            .FirstOrDefaultAsync(s => s.Presentation.Listing.Ticker == "AAPL");
 
         result.Should().NotBeNull();
         result.Industry.Should().NotBeNull();
@@ -729,39 +740,39 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAnyCik_PrimaryCikMatch_ReturnsStock()
     {
-        _dbContext.Set<CommonStock>().Add(MakeStock(ticker: "AAA", cik: "0000000001"));
+        _dbContext.Set<EquityIssuer>().Add(MakeStock(ticker: "AAA", cik: "0000000001"));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByAnyCik("0000000001");
+        EquityIssuer result = await _repository.GetByAnyCik("0000000001");
 
         result.Should().NotBeNull();
-        result.Ticker.Should().Be("AAA");
+        result.Presentation.Listing.Ticker.Should().Be("AAA");
     }
 
     [Fact]
     public async Task GetByAnyCik_SecondaryCikMatch_ReturnsStock()
     {
-        var stock = MakeStock(ticker: "BBB", cik: "0000000002");
+        EquityIssuer stock = MakeStock(ticker: "BBB", cik: "0000000002");
         stock.SecondaryCiks = ["0000000099"];
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByAnyCik("0000000099");
+        EquityIssuer result = await _repository.GetByAnyCik("0000000099");
 
         result.Should().NotBeNull();
-        result.Ticker.Should().Be("BBB");
+        result.Presentation.Listing.Ticker.Should().Be("BBB");
     }
 
     [Fact]
     public async Task GetByAnyCik_PrimaryAndSecondaryBothMatch_PrefersPrimary()
     {
-        var primary = MakeStock(ticker: "PRIM", cik: "0000000050");
-        var holder = MakeStock(ticker: "HOLD", cik: "0000000060");
+        EquityIssuer primary = MakeStock(ticker: "PRIM", cik: "0000000050");
+        EquityIssuer holder = MakeStock(ticker: "HOLD", cik: "0000000060");
         holder.SecondaryCiks = ["0000000050"];
-        _dbContext.Set<CommonStock>().AddRange(primary, holder);
+        _dbContext.Set<EquityIssuer>().AddRange(primary, holder);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByAnyCik("0000000050");
+        EquityIssuer result = await _repository.GetByAnyCik("0000000050");
 
         result.Should().NotBeNull();
         result.Cik.Should().Be("0000000050", "the primary-CIK match is ordered first");
@@ -770,10 +781,10 @@ public class CommonStockRepositoryTests : IDisposable
     [Fact]
     public async Task GetByAnyCik_NoMatch_ReturnsNull()
     {
-        _dbContext.Set<CommonStock>().Add(MakeStock(ticker: "CCC", cik: "0000000003"));
+        _dbContext.Set<EquityIssuer>().Add(MakeStock(ticker: "CCC", cik: "0000000003"));
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.GetByAnyCik("9999999999");
+        EquityIssuer result = await _repository.GetByAnyCik("9999999999");
 
         result.Should().BeNull();
     }

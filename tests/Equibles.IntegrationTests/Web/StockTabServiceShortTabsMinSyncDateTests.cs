@@ -19,6 +19,7 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Repositories;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Equibles.Web.Services;
 using Equibles.Yahoo.Data;
 using Equibles.Yahoo.Repositories;
@@ -36,7 +37,7 @@ public class StockTabServiceShortTabsMinSyncDateTests : IDisposable
     private static readonly DateOnly Floor = new(2024, 6, 1);
 
     private readonly EquiblesFinancialDbContext _dbContext;
-    private readonly CommonStock _stock;
+    private readonly EquityIssuer _stock;
 
     public StockTabServiceShortTabsMinSyncDateTests()
     {
@@ -53,14 +54,13 @@ public class StockTabServiceShortTabsMinSyncDateTests : IDisposable
             new YahooModuleConfiguration()
         );
 
-        _stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        _dbContext.Set<CommonStock>().Add(_stock);
+        _stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        _dbContext.Set<EquityIssuer>().Add(_stock);
         foreach (var date in new[] { Floor.AddDays(-7), Floor, Floor.AddDays(7) })
         {
             _dbContext
@@ -68,7 +68,14 @@ public class StockTabServiceShortTabsMinSyncDateTests : IDisposable
                 .Add(
                     new DailyShortVolume
                     {
-                        CommonStockId = _stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(
+                                _dbContext,
+                                _stock,
+                                _stock.Presentation.Listing.Ticker
+                            )
+                            .Id,
+                        ListedTicker = _stock.Presentation.Listing.Ticker,
                         Date = date,
                         ShortVolume = 500_000,
                         ShortExemptVolume = 1_000,
@@ -81,7 +88,14 @@ public class StockTabServiceShortTabsMinSyncDateTests : IDisposable
                 .Add(
                     new ShortInterest
                     {
-                        CommonStockId = _stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(
+                                _dbContext,
+                                _stock,
+                                _stock.Presentation.Listing.Ticker
+                            )
+                            .Id,
+                        ListedTicker = _stock.Presentation.Listing.Ticker,
                         SettlementDate = date,
                         CurrentShortPosition = 10_000_000,
                         PreviousShortPosition = 9_500_000,
@@ -95,7 +109,9 @@ public class StockTabServiceShortTabsMinSyncDateTests : IDisposable
                 .Add(
                     new FailToDeliver
                     {
-                        CommonStockId = _stock.Id,
+                        EquityListingId = NativeListingSeed.ForStock(_dbContext, _stock).Id,
+
+                        ListedTicker = _stock.Presentation.Listing.Ticker,
                         SettlementDate = date,
                         Quantity = 50_000,
                         Price = 150.25m,
@@ -156,10 +172,10 @@ public class StockTabServiceShortTabsMinSyncDateTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             withFloor
                 ? Options.Create(
                     new WorkerOptions { MinSyncDate = Floor.ToDateTime(TimeOnly.MinValue) }

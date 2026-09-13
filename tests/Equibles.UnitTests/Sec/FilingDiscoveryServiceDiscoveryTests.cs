@@ -61,13 +61,8 @@ public class FilingDiscoveryServiceDiscoveryTests
             Substitute.For<ILogger<FilingDiscoveryService>>()
         );
 
-    private static CommonStock Tracked(string ticker, string cik) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Cik = cik,
-        };
+    private static EquityIssuer Tracked(string ticker, string cik) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(Id: Guid.NewGuid(), Ticker: ticker, Cik: cik);
 
     private static ISecEdgarClient ClientWithFeed(params EdgarRecentFilingEntry[] entries)
     {
@@ -94,7 +89,7 @@ public class FilingDiscoveryServiceDiscoveryTests
     public async Task Feed_TrackedFilerOfSyncedForm_IsDirtied()
     {
         await using var context = CreateContext();
-        var apple = Tracked("AAPL", "320193");
+        EquityIssuer apple = Tracked("AAPL", "320193");
         var client = ClientWithFeed(
             new EdgarRecentFilingEntry
             {
@@ -113,7 +108,7 @@ public class FilingDiscoveryServiceDiscoveryTests
     public async Task Feed_UntrackedCikOrUnsyncedForm_IsIgnored()
     {
         await using var context = CreateContext();
-        var apple = Tracked("AAPL", "320193");
+        EquityIssuer apple = Tracked("AAPL", "320193");
         var client = ClientWithFeed(
             new EdgarRecentFilingEntry
             {
@@ -138,7 +133,7 @@ public class FilingDiscoveryServiceDiscoveryTests
     public async Task Feed_AlreadySeenEntry_IsNotReDirtied()
     {
         await using var context = CreateContext();
-        var apple = Tracked("AAPL", "320193");
+        EquityIssuer apple = Tracked("AAPL", "320193");
         var client = ClientWithFeed(
             new EdgarRecentFilingEntry
             {
@@ -205,7 +200,7 @@ public class FilingDiscoveryServiceDiscoveryTests
     public async Task DailyIndex_PendingDays_DirtyTrackedFilersAndAdvanceWatermark()
     {
         await using var context = CreateContext();
-        var apple = Tracked("AAPL", "320193");
+        EquityIssuer apple = Tracked("AAPL", "320193");
         var pendingDay = LatestFinalDay;
         context
             .Set<BackfillState>()

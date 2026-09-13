@@ -30,7 +30,7 @@ public class HoldingsModuleStockFilingActivityCoveringIndexTests
                     .SequenceEqual(
                         new[]
                         {
-                            nameof(InstitutionalHolding.CommonStockId),
+                            nameof(InstitutionalHolding.EquityIssuerId),
                             nameof(InstitutionalHolding.FilingDate),
                         }
                     )

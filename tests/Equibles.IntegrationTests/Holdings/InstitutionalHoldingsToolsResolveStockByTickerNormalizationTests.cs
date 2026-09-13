@@ -33,13 +33,15 @@ public class InstitutionalHoldingsToolsResolveStockByTickerNormalizationTests : 
             new HoldingsModuleConfiguration(),
             new CorporateActionsModuleConfiguration()
         );
-        _dbContext.Set<CommonStock>().Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc" });
+        _dbContext
+            .Set<EquityIssuer>()
+            .Add(Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc"));
         _dbContext.SaveChanges();
 
         _tools = new InstitutionalHoldingsTools(
             new InstitutionalHoldingRepository(_dbContext),
             new InstitutionalHolderRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new StockSplitRepository(_dbContext),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(_dbContext),
@@ -52,7 +54,7 @@ public class InstitutionalHoldingsToolsResolveStockByTickerNormalizationTests : 
 
     public void Dispose() => _dbContext.Dispose();
 
-    private async Task<(CommonStock Stock, string Error)> InvokeResolve(string ticker)
+    private async Task<(EquityIssuer Stock, string Error)> InvokeResolve(string ticker)
     {
         var method = typeof(InstitutionalHoldingsTools).GetMethod(
             "ResolveStockByTicker",
@@ -61,7 +63,7 @@ public class InstitutionalHoldingsToolsResolveStockByTickerNormalizationTests : 
         var task = (Task)method!.Invoke(_tools, [ticker])!;
         await task.ConfigureAwait(false);
         var resultProp = task.GetType().GetProperty("Result")!;
-        return ((CommonStock Stock, string Error))resultProp.GetValue(task)!;
+        return ((EquityIssuer Stock, string Error))resultProp.GetValue(task)!;
     }
 
     [Theory]
@@ -76,6 +78,6 @@ public class InstitutionalHoldingsToolsResolveStockByTickerNormalizationTests : 
 
         error.Should().BeNull();
         stock.Should().NotBeNull();
-        stock.Ticker.Should().Be("AAPL");
+        stock.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 }

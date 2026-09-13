@@ -62,10 +62,10 @@ public class StockTabServiceOwnershipTrendTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
     }
 
@@ -74,10 +74,10 @@ public class StockTabServiceOwnershipTrendTests : IDisposable
     [Fact]
     public async Task LoadHoldingsTab_TwoQuarters_BuildsAscendingTrendWithDistinctHolderCounts()
     {
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var holderA = NewHolder("Alpha", "1");
         var holderB = NewHolder("Beta", "2");
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InstitutionalHolder>().AddRange(holderA, holderB);
 
         var prior = new DateOnly(2024, 9, 30);
@@ -113,9 +113,9 @@ public class StockTabServiceOwnershipTrendTests : IDisposable
     [Fact]
     public async Task LoadHoldingsCombinedTab_TwoQuarters_CarriesTheSameTrend()
     {
-        var stock = NewStock();
+        EquityIssuer stock = NewStock();
         var holder = NewHolder("Alpha", "1");
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InstitutionalHolder>().Add(holder);
 
         var prior = new DateOnly(2024, 9, 30);
@@ -138,8 +138,8 @@ public class StockTabServiceOwnershipTrendTests : IDisposable
     [Fact]
     public async Task LoadHoldingsTab_NoHoldings_LeavesTrendEmpty()
     {
-        var stock = NewStock();
-        _dbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = NewStock();
+        _dbContext.Set<EquityIssuer>().Add(stock);
         await _dbContext.SaveChangesAsync();
 
         var result = await _sut.LoadHoldingsTab(stock, date: null);
@@ -147,14 +147,13 @@ public class StockTabServiceOwnershipTrendTests : IDisposable
         result.OwnershipTrend.Should().BeEmpty();
     }
 
-    private static CommonStock NewStock() =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+    private static EquityIssuer NewStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
 
     private static InstitutionalHolder NewHolder(string name, string cik) =>
         new()
@@ -173,7 +172,7 @@ public class StockTabServiceOwnershipTrendTests : IDisposable
     ) =>
         new()
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate.AddDays(45),

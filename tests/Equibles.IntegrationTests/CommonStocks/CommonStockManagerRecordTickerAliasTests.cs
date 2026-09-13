@@ -19,29 +19,28 @@ namespace Equibles.IntegrationTests.CommonStocks;
 /// </summary>
 public class CommonStockManagerRecordTickerAliasTests
 {
-    private readonly CommonStockManager _sut;
-    private readonly CommonStockRepository _repository;
+    private readonly EquityIdentityManager _sut;
+    private readonly EquityIssuerRepository _repository;
 
     public CommonStockManagerRecordTickerAliasTests()
     {
         var context = TestDbContextFactory.Create(new CommonStocksModuleConfiguration());
-        _repository = new CommonStockRepository(context);
-        _sut = new CommonStockManager(_repository, Substitute.For<IBus>());
+        _repository = new EquityIssuerRepository(context);
+        _sut = new EquityIdentityManager(_repository, Substitute.For<IBus>());
     }
 
-    private async Task<CommonStock> SeedStock(
+    private async Task<EquityIssuer> SeedStock(
         string ticker,
         string cik,
         List<string> secondaryTickers = null
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Test Co",
-            Cik = cik,
-            SecondaryTickers = secondaryTickers ?? [],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Test Co",
+            Cik: cik,
+            SecondaryTickers: secondaryTickers ?? []
+        );
         _repository.Add(stock);
         await _repository.SaveChanges();
         return stock;
@@ -51,7 +50,7 @@ public class CommonStockManagerRecordTickerAliasTests
     [Fact]
     public async Task RecordTickerAlias_RetiredTicker_StagesAliasForTheStock()
     {
-        var stock = await SeedStock("HAPN", "1409970");
+        EquityIssuer stock = await SeedStock("HAPN", "1409970");
 
         var staged = await _sut.RecordTickerAlias(stock, "LC");
         await _repository.SaveChanges();
@@ -59,7 +58,7 @@ public class CommonStockManagerRecordTickerAliasTests
         staged.Should().NotBeNull();
         var alias = await _repository.GetTickerAliases().SingleAsync();
         alias.Ticker.Should().Be("LC");
-        alias.CommonStockId.Should().Be(stock.Id);
+        alias.EquityIssuerId.Should().Be(stock.Id);
     }
 
     // THE PRODUCTION ORDERING — the sync calls this MID-RENAME: the stock's row in the
@@ -71,8 +70,8 @@ public class CommonStockManagerRecordTickerAliasTests
     [Fact]
     public async Task RecordTickerAlias_RenameStagedInMemoryOnly_StillStagesTheAlias()
     {
-        var stock = await SeedStock("LC", "1409970");
-        stock.Ticker = "HAPN"; // in-memory only — the database row still says LC
+        EquityIssuer stock = await SeedStock("LC", "1409970");
+        stock.Presentation.Listing.Ticker = "HAPN"; // in-memory only — the database row still says LC
 
         var staged = await _sut.RecordTickerAlias(stock, "LC");
         await _repository.SaveChanges();
@@ -80,7 +79,7 @@ public class CommonStockManagerRecordTickerAliasTests
         staged.Should().NotBeNull();
         var alias = await _repository.GetTickerAliases().SingleAsync();
         alias.Ticker.Should().Be("LC");
-        alias.CommonStockId.Should().Be(stock.Id);
+        alias.EquityIssuerId.Should().Be(stock.Id);
     }
 
     // Re-adoption cleanup (the deletion half of last-writer-wins): renaming BACK to a symbol
@@ -89,12 +88,12 @@ public class CommonStockManagerRecordTickerAliasTests
     [Fact]
     public async Task RecordTickerAlias_RenamingOntoAnAliasedSymbol_DeletesTheStaleAlias()
     {
-        var stock = await SeedStock("HAPN", "1409970");
+        EquityIssuer stock = await SeedStock("HAPN", "1409970");
         await _sut.RecordTickerAlias(stock, "LC");
         await _repository.SaveChanges();
 
         // The round trip: HAPN → LC again (rename staged in memory, mid-sync).
-        stock.Ticker = "LC";
+        stock.Presentation.Listing.Ticker = "LC";
         await _sut.RecordTickerAlias(stock, "HAPN");
         await _repository.SaveChanges();
 
@@ -107,7 +106,7 @@ public class CommonStockManagerRecordTickerAliasTests
     [Fact]
     public async Task RecordTickerAlias_SymbolKeptAsOwnSecondary_StagesNothing()
     {
-        var stock = await SeedStock("ABLZF", "1091587", ["ABBNY"]);
+        EquityIssuer stock = await SeedStock("ABLZF", "1091587", ["ABBNY"]);
 
         var staged = await _sut.RecordTickerAlias(stock, "ABBNY");
 
@@ -120,7 +119,7 @@ public class CommonStockManagerRecordTickerAliasTests
     [Fact]
     public async Task RecordTickerAlias_LowercaseInput_StoresUppercase()
     {
-        var stock = await SeedStock("HAPN", "1409970");
+        EquityIssuer stock = await SeedStock("HAPN", "1409970");
 
         await _sut.RecordTickerAlias(stock, "lc");
         await _repository.SaveChanges();
@@ -133,7 +132,7 @@ public class CommonStockManagerRecordTickerAliasTests
     [Fact]
     public async Task RecordTickerAlias_SymbolIsAnotherStocksLivePrimary_StagesNothing()
     {
-        var renamed = await SeedStock("HAPN", "1409970");
+        EquityIssuer renamed = await SeedStock("HAPN", "1409970");
         await SeedStock("LC", "9999999");
 
         var staged = await _sut.RecordTickerAlias(renamed, "LC");
@@ -146,7 +145,7 @@ public class CommonStockManagerRecordTickerAliasTests
     [Fact]
     public async Task RecordTickerAlias_SymbolIsAnotherStocksLiveSecondary_StagesNothing()
     {
-        var renamed = await SeedStock("HAPN", "1409970");
+        EquityIssuer renamed = await SeedStock("HAPN", "1409970");
         await SeedStock("ABLZF", "1091587", ["LC"]);
 
         var staged = await _sut.RecordTickerAlias(renamed, "LC");
@@ -161,23 +160,23 @@ public class CommonStockManagerRecordTickerAliasTests
     [Fact]
     public async Task RecordTickerAlias_SymbolAliasedToAnotherStock_ReassignsToTheNewHolder()
     {
-        var earlierHolder = await SeedStock("NEWCO", "1111111");
+        EquityIssuer earlierHolder = await SeedStock("NEWCO", "1111111");
         await _sut.RecordTickerAlias(earlierHolder, "XYZ");
         await _repository.SaveChanges();
 
-        var laterHolder = await SeedStock("LATER", "2222222");
+        EquityIssuer laterHolder = await SeedStock("LATER", "2222222");
         await _sut.RecordTickerAlias(laterHolder, "XYZ");
         await _repository.SaveChanges();
 
         var alias = await _repository.GetTickerAliases().SingleAsync(a => a.Ticker == "XYZ");
-        alias.CommonStockId.Should().Be(laterHolder.Id);
+        alias.EquityIssuerId.Should().Be(laterHolder.Id);
     }
 
     // Re-retiring a symbol the stock already has an alias for is a no-op, not a duplicate.
     [Fact]
     public async Task RecordTickerAlias_AlreadyAliasedToSameStock_StagesNothing()
     {
-        var stock = await SeedStock("HAPN", "1409970");
+        EquityIssuer stock = await SeedStock("HAPN", "1409970");
         await _sut.RecordTickerAlias(stock, "LC");
         await _repository.SaveChanges();
 
@@ -192,7 +191,7 @@ public class CommonStockManagerRecordTickerAliasTests
     [Fact]
     public async Task RecordTickerAlias_BlankOrCurrentTicker_StagesNothing()
     {
-        var stock = await SeedStock("HAPN", "1409970");
+        EquityIssuer stock = await SeedStock("HAPN", "1409970");
 
         (await _sut.RecordTickerAlias(stock, null)).Should().BeNull();
         (await _sut.RecordTickerAlias(stock, "  ")).Should().BeNull();

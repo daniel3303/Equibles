@@ -28,7 +28,7 @@ public class FinancialFactsToolsPickBestFactAccessionTiebreakTests
         var conceptId = Guid.NewGuid();
         var earlierAcc = new FinancialFact
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = conceptId,
             Value = 100m,
             FiledDate = new DateOnly(2024, 5, 1),
@@ -43,7 +43,7 @@ public class FinancialFactsToolsPickBestFactAccessionTiebreakTests
         };
         var laterAcc = new FinancialFact
         {
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             FinancialConceptId = conceptId,
             Value = 200m,
             FiledDate = new DateOnly(2024, 5, 1),

@@ -220,7 +220,7 @@ public class StatementLineFactsBalanceSheetDateTests
     private static FinancialFact Span(int days) =>
         new()
         {
-            CommonStockId = Guid.NewGuid(),
+            EquityIssuerId = Guid.NewGuid(),
             FinancialConceptId = Guid.NewGuid(),
             Value = 1m,
             Unit = "USD",

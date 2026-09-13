@@ -27,14 +27,16 @@ public class InsiderTradingToolsResolveStockByTickerNormalizationTests : IDispos
             new CommonStocksModuleConfiguration(),
             new InsiderTradingModuleConfiguration()
         );
-        _dbContext.Set<CommonStock>().Add(new CommonStock { Ticker = "AAPL", Name = "Apple Inc" });
+        _dbContext
+            .Set<EquityIssuer>()
+            .Add(Equibles.TestSupport.EquityIssuerSeed.Create(Ticker: "AAPL", Name: "Apple Inc"));
         _dbContext.SaveChanges();
 
         _tools = new InsiderTradingTools(
             new InsiderTransactionRepository(_dbContext),
             new InsiderOwnerRepository(_dbContext),
             new Form144FilingRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new StockSplitRepository(_dbContext),
             errorManager: null,
             NullLogger<InsiderTradingTools>.Instance
@@ -43,7 +45,7 @@ public class InsiderTradingToolsResolveStockByTickerNormalizationTests : IDispos
 
     public void Dispose() => _dbContext.Dispose();
 
-    private async Task<(CommonStock Stock, string Error)> InvokeResolve(string ticker)
+    private async Task<(EquityIssuer Stock, string Error)> InvokeResolve(string ticker)
     {
         var method = typeof(InsiderTradingTools).GetMethod(
             "ResolveStockByTicker",
@@ -52,7 +54,7 @@ public class InsiderTradingToolsResolveStockByTickerNormalizationTests : IDispos
         var task = (Task)method!.Invoke(_tools, [ticker])!;
         await task.ConfigureAwait(false);
         var resultProp = task.GetType().GetProperty("Result")!;
-        return ((CommonStock Stock, string Error))resultProp.GetValue(task)!;
+        return ((EquityIssuer Stock, string Error))resultProp.GetValue(task)!;
     }
 
     [Theory]
@@ -67,6 +69,6 @@ public class InsiderTradingToolsResolveStockByTickerNormalizationTests : IDispos
 
         error.Should().BeNull();
         stock.Should().NotBeNull();
-        stock.Ticker.Should().Be("AAPL");
+        stock.Presentation.Listing.Ticker.Should().Be("AAPL");
     }
 }

@@ -14,17 +14,17 @@ namespace Equibles.Sec.FinancialFacts.Data.Models;
 /// most-recently-reported value for a period is the one with the latest
 /// <see cref="FiledDate"/>.
 /// </summary>
-[Index(nameof(CommonStockId), nameof(FinancialConceptId), nameof(PeriodEnd))]
+[Index(nameof(EquityIssuerId), nameof(FinancialConceptId), nameof(PeriodEnd))]
 // Concept-first twin of the index above, for the queries that ask about a concept across ALL
 // companies ("has this concept any fact since <date>?"). The company-first index cannot serve
 // those: with CommonStockId unconstrained Postgres restarts the search once per distinct stock,
 // which measured 42.6M index searches and 32s for a single 4,038-concept batch of the concept
 // curation lane. Leading with FinancialConceptId makes each probe one range scan.
 [Index(nameof(FinancialConceptId), nameof(PeriodEnd))]
-[Index(nameof(CommonStockId), nameof(FiscalYear), nameof(FiscalPeriod))]
+[Index(nameof(EquityIssuerId), nameof(FiscalYear), nameof(FiscalPeriod))]
 [Index(nameof(DocumentId))]
 [Index(
-    nameof(CommonStockId),
+    nameof(EquityIssuerId),
     nameof(FinancialConceptId),
     nameof(Unit),
     nameof(PeriodStart),
@@ -41,8 +41,8 @@ public class FinancialFact
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid CommonStockId { get; set; }
-    public virtual CommonStock CommonStock { get; set; }
+    public Guid EquityIssuerId { get; set; }
+    public virtual EquityIssuer Issuer { get; set; }
 
     public Guid FinancialConceptId { get; set; }
     public virtual FinancialConcept FinancialConcept { get; set; }

@@ -85,10 +85,10 @@ public class CongressionalTradeIssuerResolverTests
         result.Should().BeNull();
     }
 
-    private static CommonStockTickerEvidence Evidence(Guid issuerId, DateOnly filedDate) =>
+    private static EquityIssuerTickerEvidence Evidence(Guid issuerId, DateOnly filedDate) =>
         new()
         {
-            CommonStockId = issuerId,
+            EquityIssuerId = issuerId,
             Ticker = "GOLD",
             FiledDate = filedDate,
             SourceDocumentId = Guid.NewGuid(),

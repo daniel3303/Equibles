@@ -70,8 +70,8 @@ public class FinancialFactsImportServiceAdsShareBasisTests : IAsyncLifetime
                 sp.GetService(typeof(FinancialFactsSyncStatusRepository))
                     .Returns(new FinancialFactsSyncStatusRepository(ctx));
                 sp.GetService(typeof(DocumentRepository)).Returns(new DocumentRepository(ctx));
-                sp.GetService(typeof(CommonStockRepository))
-                    .Returns(new CommonStockRepository(ctx));
+                sp.GetService(typeof(EquityIssuerRepository))
+                    .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(ISharesOutstandingProvider)).Returns(sharesProvider);
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
@@ -133,23 +133,22 @@ public class FinancialFactsImportServiceAdsShareBasisTests : IAsyncLifetime
         );
     }
 
-    private async Task<CommonStock> Seed(
+    private async Task<EquityIssuer> Seed(
         long sharesOutstanding,
         double marketCapitalization,
         string ticker
     )
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = ticker,
-            Cik = "0001541157",
-            SharesOutStanding = sharesOutstanding,
-            MarketCapitalization = marketCapitalization,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: ticker,
+            Cik: "0001541157",
+            SharesOutStanding: sharesOutstanding,
+            MarketCapitalization: marketCapitalization
+        );
         await using var seed = _fixture.CreateDbContext();
-        seed.Set<CommonStock>().Add(stock);
+        seed.Set<EquityIssuer>().Add(stock);
         await seed.SaveChangesAsync(CancellationToken.None);
         return stock;
     }
@@ -157,18 +156,18 @@ public class FinancialFactsImportServiceAdsShareBasisTests : IAsyncLifetime
     private async Task<long> StoredShares(Guid stockId)
     {
         await using var verify = _fixture.CreateDbContext();
-        var tracked = await verify.Set<CommonStock>().FirstAsync(s => s.Id == stockId);
-        return tracked.SharesOutStanding;
+        EquityIssuer tracked = await verify.Set<EquityIssuer>().FirstAsync(s => s.Id == stockId);
+        return tracked.Presentation.Listing.Security.SharesOutstanding;
     }
 
     private static ISharesOutstandingProvider DomesticProviderReturning(long coverPageCount)
     {
         var sharesProvider = Substitute.For<ISharesOutstandingProvider>();
         sharesProvider
-            .GetCurrentSharesOutstanding(Arg.Any<CommonStock>(), Arg.Any<CancellationToken>())
+            .GetCurrentSharesOutstanding(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
             .Returns(coverPageCount);
         sharesProvider
-            .IsForeignPrivateIssuer(Arg.Any<CommonStock>(), Arg.Any<CancellationToken>())
+            .IsForeignPrivateIssuer(Arg.Any<EquityIssuer>(), Arg.Any<CancellationToken>())
             .Returns(false);
         return sharesProvider;
     }
@@ -180,7 +179,7 @@ public class FinancialFactsImportServiceAdsShareBasisTests : IAsyncLifetime
         // market cap (implied ~$10.90 — a real quote). The 10-K cover page counts 91.57B ordinary
         // shares; a domestic-form filer, so the FPI guard is blind and only the unit-mismatch
         // guard stands between the ordinary count and the stored ADS base.
-        var stock = await Seed(2_477_000, 27_000_000d, "AKTX");
+        EquityIssuer stock = await Seed(2_477_000, 27_000_000d, "AKTX");
 
         await BuildService(DomesticProviderReturning(91_567_009_533L))
             .Import(stock, CancellationToken.None);
@@ -200,7 +199,7 @@ public class FinancialFactsImportServiceAdsShareBasisTests : IAsyncLifetime
         // implied price (billions per share) proves the stored count is NOT on the listed basis,
         // so the plausibility gate keeps the guard out and the cover-page repair proceeds even
         // though the two counts diverge far beyond the unit-mismatch threshold.
-        var stock = await Seed(1, 2_000_000_000d, "SHEL");
+        EquityIssuer stock = await Seed(1, 2_000_000_000d, "SHEL");
 
         await BuildService(DomesticProviderReturning(14_687_356_000L))
             .Import(stock, CancellationToken.None);
@@ -214,7 +213,7 @@ public class FinancialFactsImportServiceAdsShareBasisTests : IAsyncLifetime
         // An ordinary refresh: stored pair on the listed basis (implied ~$3/share) and a
         // cover-page count 5% away — a buyback landing on EDGAR before Yahoo catches up. Same
         // unit, so the guard stays out and the authoritative count is written.
-        var stock = await Seed(14_000_000_000, 42_000_000_000d, "AAPL");
+        EquityIssuer stock = await Seed(14_000_000_000, 42_000_000_000d, "AAPL");
 
         await BuildService(DomesticProviderReturning(14_687_356_000L))
             .Import(stock, CancellationToken.None);

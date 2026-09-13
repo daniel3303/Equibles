@@ -27,32 +27,51 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
 
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
         );
 
-    private async Task<CommonStock> SeedBerkshire()
+    private async Task<EquityIssuer> SeedBerkshire(bool historicalSource = false)
     {
-        var stock = new CommonStock
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "BRK-B",
+            Name: "Berkshire Hathaway Inc",
+            Cik: "0001067983",
+            SecondaryTickers: ["BRK-A"]
+        );
+        if (historicalSource)
         {
-            Ticker = "BRK-B",
-            Name = "Berkshire Hathaway Inc",
-            Cik = "0001067983",
-            SecondaryTickers = ["BRK-A"],
-        };
-        DbContext.Set<CommonStock>().Add(stock);
-        await DbContext.SaveChangesAsync();
+            var source = new CommonStock
+            {
+                Ticker = "BRK-B",
+                Name = stock.Name,
+                Cik = stock.Cik,
+                SecondaryTickers = ["BRK-A"],
+            };
+            DbContext.Add(source);
+            await DbContext.SaveChangesAsync();
+            stock = await new EquityIssuerRepository(DbContext).Get(source.Id);
+        }
+        else
+        {
+            DbContext.Add(stock);
+            await DbContext.SaveChangesAsync();
+        }
 
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-B",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        "BRK-B"
+                    ),
+                    SourceTicker = "BRK-B",
                     Date = new DateOnly(2026, 7, 31),
                     Open = 510m,
                     High = 512m,
@@ -61,10 +80,14 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
                     AdjustedClose = 511.54m,
                     Volume = 3_934_400,
                 },
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-A",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        "BRK-A"
+                    ),
+                    SourceTicker = "BRK-A",
                     Date = new DateOnly(2026, 7, 31),
                     Open = 748_500m,
                     High = 750_000m,
@@ -91,16 +114,20 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetLatestClosingPrices_LegacyPrimarySplit_DoesNotClipSecondaryRange()
+    public async Task GetLatestClosingPrices_UnknownSplit_AlsoBoundsSecondaryRange()
     {
-        var stock = await SeedBerkshire();
+        EquityIssuer stock = await SeedBerkshire();
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-A",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        "BRK-A"
+                    ),
+                    SourceTicker = "BRK-A",
                     Date = new DateOnly(2025, 8, 1),
                     Open = 900_000m,
                     High = 900_000m,
@@ -115,7 +142,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = null,
                     EffectiveDate = new DateOnly(2026, 1, 2),
                     Numerator = 2m,
@@ -127,21 +154,26 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
 
         var result = await Sut().GetLatestClosingPrices("BRK-A");
 
-        result.Should().Contain("| 900000.00 | 749200.00 |");
-        result.Should().NotContain("latest recorded split");
+        result.Should().Contain("| 749200.00\\* | 749200.00\\* |");
+        result.Should().NotContain("900000.00");
+        result.Should().Contain("latest recorded split");
     }
 
     [Fact]
     public async Task GetLatestClosingPrices_LegacyNullSplit_ClipsPrimaryRange()
     {
-        var stock = await SeedBerkshire();
+        EquityIssuer stock = await SeedBerkshire();
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-B",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        "BRK-B"
+                    ),
+                    SourceTicker = "BRK-B",
                     Date = new DateOnly(2025, 8, 1),
                     Open = 600m,
                     High = 600m,
@@ -156,7 +188,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = null,
                     EffectiveDate = new DateOnly(2026, 1, 2),
                     Numerator = 2m,
@@ -176,14 +208,18 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLatestClosingPrices_SecondarySplit_ClipsOnlyThatSecondaryRange()
     {
-        var stock = await SeedBerkshire();
+        EquityIssuer stock = await SeedBerkshire();
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = "BRK-A",
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        DbContext,
+                        stock,
+                        "BRK-A"
+                    ),
+                    SourceTicker = "BRK-A",
                     Date = new DateOnly(2025, 8, 1),
                     Open = 900_000m,
                     High = 900_000m,
@@ -198,7 +234,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
             .Add(
                 new StockSplit
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = "BRK-A",
                     EffectiveDate = new DateOnly(2026, 1, 2),
                     Numerator = 2m,
@@ -218,7 +254,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_ASecondarySymbol_ServesItsOwnSeries()
     {
-        var stock = await SeedBerkshire();
+        EquityIssuer stock = await SeedBerkshire();
 
         var result = await Sut().GetStockPrices("BRK-A");
 
@@ -233,7 +269,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task LegacyTableRow_CanCoexistButIsNeverPublished()
     {
-        var stock = await SeedBerkshire();
+        var stock = await SeedBerkshire(historicalSource: true);
         var legacyId = Guid.NewGuid();
         var date = new DateOnly(2026, 7, 31);
         var createdAt = DateTime.UtcNow;
@@ -282,7 +318,7 @@ public class StockPriceToolsSecondaryTickerTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetBollingerBands_ASecondarySymbol_UsesTheSecondarySeries()
     {
-        var stock = await SeedBerkshire();
+        EquityIssuer stock = await SeedBerkshire();
 
         // Every indicator shares one resolution path, so none can drift back to primary bars.
         var result = await Sut().GetBollingerBands("BRK-A");

@@ -35,13 +35,12 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task Get13FAvailableReportDates_ExcludesLater13DGEventDates_NewestFirst()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var holder = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -56,7 +55,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         // pollutes the all-filings list and makes "prior" the prior day.
         var event13G = new DateOnly(2024, 11, 14);
 
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<InstitutionalHolder>().Add(holder);
         _dbContext
             .Set<InstitutionalHolding>()
@@ -81,7 +80,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task Get13FAvailableReportDatesCached_UsesSnapshotSpineAndPrependsRefreshLag()
     {
-        var stock = Stock("GLOBAL");
+        EquityIssuer stock = Stock("GLOBAL");
         var holder = Holder("0000000010");
         var snapshotted = new DateOnly(2024, 6, 30);
         var live = new DateOnly(2024, 9, 30);
@@ -103,7 +102,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task Get13FReportDatesByStockSnapshotBacked_ReturnsSnapshotDatesNewestFirst()
     {
-        var stock = Stock("MSFT");
+        EquityIssuer stock = Stock("MSFT");
         var holder = Holder("0000000005");
         var q1 = new DateOnly(2024, 3, 31);
         var q2 = new DateOnly(2024, 6, 30);
@@ -114,13 +113,13 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .AddRange(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = q1,
                     CurrentFilerCount = 1,
                 },
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = q2,
                     CurrentFilerCount = 1,
                 }
@@ -138,7 +137,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task Get13FReportDatesByStockSnapshotBacked_PrependsNewestLiveQuarterDuringRefreshLag()
     {
-        var stock = Stock("NVDA");
+        EquityIssuer stock = Stock("NVDA");
         var holder = Holder("0000000002");
         var snapshotQuarter = new DateOnly(2024, 6, 30);
         var liveQuarter = new DateOnly(2024, 9, 30);
@@ -149,7 +148,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .Add(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = snapshotQuarter,
                     CurrentFilerCount = 1,
                 }
@@ -167,7 +166,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task Get13FReportDatesByStockSnapshotBacked_ExcludesSoldOutSnapshotQuarter()
     {
-        var stock = Stock("EXIT");
+        EquityIssuer stock = Stock("EXIT");
         var holder = Holder("0000000004");
         var heldQuarter = new DateOnly(2024, 3, 31);
         var soldOutQuarter = new DateOnly(2024, 6, 30);
@@ -178,13 +177,13 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .AddRange(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = heldQuarter,
                     CurrentFilerCount = 1,
                 },
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = soldOutQuarter,
                     CurrentFilerCount = 0,
                     PreviousFilerCount = 1,
@@ -204,7 +203,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task Get13FReportDatesByStockSnapshotBacked_DropsSnapshotNewerThanLiveHistory()
     {
-        var stock = Stock("STALE");
+        EquityIssuer stock = Stock("STALE");
         var holder = Holder("0000000006");
         var q1 = new DateOnly(2024, 3, 31);
         var liveQuarter = new DateOnly(2024, 6, 30);
@@ -216,13 +215,13 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .AddRange(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = q1,
                     CurrentFilerCount = 1,
                 },
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = staleSnapshotQuarter,
                     CurrentFilerCount = 1,
                 }
@@ -240,14 +239,14 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task Get13FReportDatesByStockSnapshotBacked_ReturnsEmptyWhenSnapshotHasNoLiveHoldings()
     {
-        var stock = Stock("EMPTY");
+        EquityIssuer stock = Stock("EMPTY");
         _dbContext.Add(stock);
         _dbContext
             .Set<StockQuarterlyActivity>()
             .Add(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = new DateOnly(2024, 9, 30),
                     CurrentFilerCount = 1,
                 }
@@ -262,7 +261,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task Get13FReportDatesByStockSnapshotBacked_FallsBackToLive13FHistoryWithoutSnapshot()
     {
-        var stock = Stock("MU");
+        EquityIssuer stock = Stock("MU");
         var holder = Holder("0000000003");
         var q1 = new DateOnly(2024, 3, 31);
         var q2 = new DateOnly(2024, 6, 30);
@@ -286,7 +285,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task Get13FReportDatesByHolderSnapshotBacked_UsesOnlyThatHolderAndPrependsLive()
     {
-        var stock = Stock("HOLDER");
+        EquityIssuer stock = Stock("HOLDER");
         var holder = Holder("0000000011");
         var other = Holder("0000000012");
         var snapshotted = new DateOnly(2024, 6, 30);
@@ -312,7 +311,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task Get13FReportDatesByHolderSnapshotBacked_FallsBackWithoutSnapshot()
     {
-        var stock = Stock("FALLBACK");
+        EquityIssuer stock = Stock("FALLBACK");
         var holder = Holder("0000000013");
         var q1 = new DateOnly(2024, 3, 31);
         var q2 = new DateOnly(2024, 6, 30);
@@ -334,7 +333,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task GetStockActivitySnapshotsByStockSnapshotBacked_FallsBackToStockScoped13F()
     {
-        var stock = Stock("TREND");
+        EquityIssuer stock = Stock("TREND");
         var first = Holder("0000000014");
         var second = Holder("0000000015");
         var quarter = new DateOnly(2024, 6, 30);
@@ -360,7 +359,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task GetStockActivitySnapshotsByStockSnapshotBacked_MergesImplicitAndExplicitPrimaryListing()
     {
-        var stock = Stock("LBRDK");
+        EquityIssuer stock = Stock("LBRDK");
         var first = Holder("0000000020");
         var second = Holder("0000000021");
         var quarter = new DateOnly(2026, 3, 31);
@@ -378,7 +377,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             FilingType.Form13F,
             "13F-EXPLICIT-PRIMARY"
         );
-        explicitPrimary.ListedTicker = stock.Ticker;
+        explicitPrimary.ListedTicker = stock.Presentation.Listing.Ticker;
         _dbContext.AddRange(stock, first, second, implicitPrimary, explicitPrimary);
         await _dbContext.SaveChangesAsync(CancellationToken.None);
 
@@ -386,14 +385,14 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
 
         var activity = rows.Should().ContainSingle().Which;
         var listing = activity.ListingShares.Should().ContainSingle().Which;
-        listing.PriceSeriesTicker.Should().Be(stock.Ticker);
+        listing.PriceSeriesTicker.Should().Be(stock.Presentation.Listing.Ticker);
         listing.CurrentShares.Should().Be(200);
     }
 
     [Fact]
     public async Task GetStockActivitySnapshotsByStockSnapshotBacked_BoundsStaleRowsAndAppendsRefreshLag()
     {
-        var stock = Stock("TREND-LAG");
+        EquityIssuer stock = Stock("TREND-LAG");
         var first = Holder("0000000018");
         var second = Holder("0000000019");
         var older = new DateOnly(2024, 3, 31);
@@ -407,7 +406,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .AddRange(
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = snapshotted,
                     CurrentShares = 100,
                     CurrentValue = 1000,
@@ -416,7 +415,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
                 },
                 new StockQuarterlyActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = staleFuture,
                     CurrentShares = 999,
                     CurrentValue = 9999,
@@ -429,9 +428,9 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .Add(
                 new StockQuarterlyListingActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = snapshotted,
-                    PriceSeriesTicker = stock.Ticker,
+                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                     CurrentShares = 100,
                     ComputedAt = computedAt,
                 }
@@ -462,7 +461,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
     [Fact]
     public async Task GetCombinedStockActivitySnapshotBacked_LoadsOneVersionedListingGeneration()
     {
-        var stock = Stock("TREND-COMBINED");
+        EquityIssuer stock = Stock("TREND-COMBINED");
         var previous = new DateOnly(2024, 9, 30);
         var current = new DateOnly(2024, 12, 31);
         var computedAt = DateTime.UtcNow;
@@ -470,7 +469,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         _dbContext.Add(
             new StockQuarterlyActivityCombined
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 ReportDate = current,
                 PreviousReportDate = previous,
                 CurrentShares = 2_500,
@@ -487,17 +486,17 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
             .AddRange(
                 new StockQuarterlyListingActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = current,
                     IsCombined = true,
-                    PriceSeriesTicker = stock.Ticker,
+                    PriceSeriesTicker = stock.Presentation.Listing.Ticker,
                     CurrentShares = 1_000,
                     PreviousShares = 900,
                     ComputedAt = computedAt,
                 },
                 new StockQuarterlyListingActivity
                 {
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = current,
                     IsCombined = true,
                     PriceSeriesTicker = "TREND-COMBINED.B",
@@ -520,13 +519,13 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         row.CurrentFilerCount.Should().Be(8);
         row.ListingShares.Select(listing => listing.PriceSeriesTicker)
             .Should()
-            .BeEquivalentTo(stock.Ticker, "TREND-COMBINED.B");
+            .BeEquivalentTo(stock.Presentation.Listing.Ticker, "TREND-COMBINED.B");
     }
 
     [Fact]
     public async Task GetHolderQuarterlySnapshotsSnapshotBacked_FallsBackOnlyForMissingHolder()
     {
-        var stock = Stock("FUNDS");
+        EquityIssuer stock = Stock("FUNDS");
         var snapshotted = Holder("0000000016");
         var missing = Holder("0000000017");
         var quarter = new DateOnly(2024, 6, 30);
@@ -566,14 +565,13 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         fallback.StockCount.Should().Be(1);
     }
 
-    private static CommonStock Stock(string ticker) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Ticker = ticker,
-            Name = $"{ticker} Inc.",
-            Cik = Guid.NewGuid().ToString("N")[..10],
-        };
+    private static EquityIssuer Stock(string ticker) =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            Name: $"{ticker} Inc.",
+            Cik: Guid.NewGuid().ToString("N")[..10]
+        );
 
     private static InstitutionalHolder Holder(string cik) =>
         new()
@@ -593,7 +591,7 @@ public class InstitutionalHoldingRepository13FAvailableReportDatesTests : IDispo
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

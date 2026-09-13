@@ -19,9 +19,9 @@ public class FdaCatalystRepository : BaseRepository<FdaCatalyst>
         return GetAll().Where(c => c.MeetingDate >= startDate && c.MeetingDate <= endDate);
     }
 
-    public IQueryable<FdaCatalyst> GetByStock(Guid commonStockId)
+    public IQueryable<FdaCatalyst> GetByIssuerId(Guid issuerId)
     {
-        return GetAll().Where(c => c.CommonStockId == commonStockId);
+        return GetAll().Where(c => c.EquityIssuerId == issuerId);
     }
 
     public IQueryable<DateOnly> GetLatestMeetingDate()

@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
+using Equibles.TestSupport;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -21,24 +22,23 @@ public class FailToDeliverUpsertWhenMatchedTests : ParadeDbMcpTestBase
     [Fact]
     public async Task UpsertRange_OnExactListingAndSettlementDate_WhenMatched_OverwritesExistingRowQuantityAndPrice()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var settlementDate = new DateOnly(2026, 4, 1);
+        DbContext.Set<EquityIssuer>().Add(stock);
         var existing = new FailToDeliver
         {
-            CommonStockId = stock.Id,
-            ListedTicker = stock.Ticker,
+            EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+            ListedTicker = stock.Presentation.Listing.Ticker,
             SettlementDate = settlementDate,
             Quantity = 999,
             Price = 10.00m,
         };
 
-        DbContext.Set<CommonStock>().Add(stock);
         DbContext.Set<FailToDeliver>().Add(existing);
         await DbContext.SaveChangesAsync();
         DbContext.ChangeTracker.Clear();
@@ -48,19 +48,14 @@ public class FailToDeliverUpsertWhenMatchedTests : ParadeDbMcpTestBase
             .UpsertRange([
                 new FailToDeliver
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = stock.Ticker,
+                    EquityListingId = NativeListingSeed.ForStock(DbContext, stock).Id,
+                    ListedTicker = stock.Presentation.Listing.Ticker,
                     SettlementDate = settlementDate,
                     Quantity = 12345,
                     Price = 187.50m,
                 },
             ])
-            .On(f => new
-            {
-                f.CommonStockId,
-                f.ListedTicker,
-                f.SettlementDate,
-            })
+            .On(f => new { f.EquityListingId, f.SettlementDate })
             .WhenMatched(
                 (existing, incoming) =>
                     new FailToDeliver { Quantity = incoming.Quantity, Price = incoming.Price }

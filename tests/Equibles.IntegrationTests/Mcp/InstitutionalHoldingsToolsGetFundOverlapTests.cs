@@ -37,12 +37,11 @@ public class InstitutionalHoldingsToolsCompareInstitutionPortfoliosTests : Parad
     [Fact]
     public async Task CompareInstitutionPortfolios_NoCommonQuarter_ReportsNoOverlap()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var fundA = new InstitutionalHolder { Cik = "FO00001", Name = "Fund A LP" };
         var fundB = new InstitutionalHolder { Cik = "FO00002", Name = "Fund B LP" };
         DbContext.AddRange(stock, fundA, fundB);
@@ -62,24 +61,21 @@ public class InstitutionalHoldingsToolsCompareInstitutionPortfoliosTests : Parad
     [Fact]
     public async Task CompareInstitutionPortfolios_TwoFundsWithPartialOverlap_RendersStatsAndTable()
     {
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
-        var nvda = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
+        EquityIssuer nvda = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
         var fundA = new InstitutionalHolder { Cik = "FO00003", Name = "Overlap A LP" };
         var fundB = new InstitutionalHolder { Cik = "FO00004", Name = "Overlap B LP" };
         DbContext.AddRange(aapl, msft, nvda, fundA, fundB);
@@ -110,12 +106,11 @@ public class InstitutionalHoldingsToolsCompareInstitutionPortfoliosTests : Parad
     [Fact]
     public async Task CompareInstitutionPortfolios_ExplicitReportDate_HonorsArgument()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "TSLA",
-            Name = "Tesla Inc.",
-            Cik = "0001318605",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TSLA",
+            Name: "Tesla Inc.",
+            Cik: "0001318605"
+        );
         var fundA = new InstitutionalHolder { Cik = "FO00005", Name = "Dated A LP" };
         var fundB = new InstitutionalHolder { Cik = "FO00006", Name = "Dated B LP" };
         DbContext.AddRange(stock, fundA, fundB);
@@ -145,7 +140,7 @@ public class InstitutionalHoldingsToolsCompareInstitutionPortfoliosTests : Parad
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             new StockSplitRepository(ctx),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(ctx),
@@ -156,14 +151,14 @@ public class InstitutionalHoldingsToolsCompareInstitutionPortfoliosTests : Parad
         );
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long value
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

@@ -17,8 +17,8 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockNullQuantityTests
     public void MergeRecordsByStock_TrackedSymbolWithNullQuantities_MergesAsZeroWithoutThrowing()
     {
         var stockId = Guid.NewGuid();
-        var security = new ListedSecurityKey(stockId, "AAPL");
-        var tickerMap = new Dictionary<string, ListedSecurityKey> { ["AAPL"] = security };
+        var security = new EquityListingReference(stockId, Guid.NewGuid(), "AAPL");
+        var tickerMap = new Dictionary<string, EquityListingReference> { ["AAPL"] = security };
         var records = new List<OffExchangeWeeklyRecord>
         {
             new()
@@ -34,13 +34,13 @@ public class OffExchangeVolumeImportServiceMergeRecordsByStockNullQuantityTests
             OffExchangeVolumeMerger.Merge(
                 records,
                 tickerMap,
-                new Dictionary<string, ListedSecurityKey>(),
+                new Dictionary<string, EquityListingReference>(),
                 new DateOnly(2024, 3, 4)
             );
 
         var result = act.Should().NotThrow().Subject;
-        result.Should().ContainKey(security);
-        result[security].AtsVolume.Should().Be(0);
-        result[security].AtsTradeCount.Should().Be(0);
+        result.Should().ContainKey(security.EquityListingId);
+        result[security.EquityListingId].AtsVolume.Should().Be(0);
+        result[security.EquityListingId].AtsTradeCount.Should().Be(0);
     }
 }

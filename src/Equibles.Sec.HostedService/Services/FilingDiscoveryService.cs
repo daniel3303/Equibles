@@ -61,14 +61,14 @@ public class FilingDiscoveryService : IFilingDiscoveryService
         _logger = logger;
     }
 
-    public async Task<List<CommonStock>> DiscoverCompaniesWithNewFilings(
-        IReadOnlyList<CommonStock> trackedCompanies,
+    public async Task<List<EquityIssuer>> DiscoverCompaniesWithNewFilings(
+        IReadOnlyList<EquityIssuer> trackedCompanies,
         CancellationToken cancellationToken = default
     )
     {
         var cikToCompany = BuildCikMap(trackedCompanies);
         var syncedForms = BuildSyncedFormSet();
-        var dirty = new Dictionary<Guid, CommonStock>();
+        var dirty = new Dictionary<Guid, EquityIssuer>();
 
         // Captured before the collectors run so entries seeded during this
         // pass's feed poll can never look retry-due in this same pass, even
@@ -131,15 +131,15 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     /// recovery past that).
     /// </summary>
     private void ReflagPendingAccessions(
-        Dictionary<long, CommonStock> cikToCompany,
-        Dictionary<Guid, CommonStock> dirty,
+        Dictionary<long, EquityIssuer> cikToCompany,
+        Dictionary<Guid, EquityIssuer> dirty,
         DateTime utcNow
     )
     {
         if (PendingFeedAccessions.IsEmpty)
             return;
 
-        var due = new List<(string Key, PendingFeedAccession Pending, CommonStock Company)>();
+        var due = new List<(string Key, PendingFeedAccession Pending, EquityIssuer Company)>();
 
         foreach (var (key, pending) in PendingFeedAccessions)
         {
@@ -161,7 +161,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
 
             // The filer left the tracked universe mid-retry (delisted or
             // dropped by company sync) — nothing to re-enumerate.
-            if (!cikToCompany.TryGetValue(pending.Cik, out var company))
+            if (!cikToCompany.TryGetValue(pending.Cik, out EquityIssuer company))
             {
                 PendingFeedAccessions.TryRemove(key, out _);
                 continue;
@@ -197,7 +197,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                 _logger.LogInformation(
                     "Filing {PendingKey} for {Ticker} was feed-flagged {Minutes:F0} minutes ago but is not yet enumerable in the submissions JSON — keeping the company flagged for re-enumeration",
                     key,
-                    company.Ticker,
+                    company.Presentation?.Listing?.Ticker,
                     (utcNow - pending.FirstSeenAtUtc).TotalMinutes
                 );
             }
@@ -205,7 +205,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
             {
                 _logger.LogDebug(
                     "Re-flagging {Ticker} for pending feed accession {PendingKey}",
-                    company.Ticker,
+                    company.Presentation?.Listing?.Ticker,
                     key
                 );
             }
@@ -220,9 +220,9 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     /// the reconciliation sweep guarantee eventual pickup.
     /// </summary>
     private async Task CollectFromRecentFeed(
-        Dictionary<long, CommonStock> cikToCompany,
+        Dictionary<long, EquityIssuer> cikToCompany,
         HashSet<string> syncedForms,
-        Dictionary<Guid, CommonStock> dirty,
+        Dictionary<Guid, EquityIssuer> dirty,
         CancellationToken cancellationToken
     )
     {
@@ -279,7 +279,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
 
                 if (
                     !long.TryParse(entry.Cik, out var numericCik)
-                    || !cikToCompany.TryGetValue(numericCik, out var company)
+                    || !cikToCompany.TryGetValue(numericCik, out EquityIssuer company)
                 )
                     continue;
 
@@ -326,9 +326,9 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     /// owns historical coverage.
     /// </summary>
     private async Task CollectFromDailyIndex(
-        Dictionary<long, CommonStock> cikToCompany,
+        Dictionary<long, EquityIssuer> cikToCompany,
         HashSet<string> syncedForms,
-        Dictionary<Guid, CommonStock> dirty,
+        Dictionary<Guid, EquityIssuer> dirty,
         CancellationToken cancellationToken
     )
     {
@@ -396,7 +396,7 @@ public class FilingDiscoveryService : IFilingDiscoveryService
                 if (!syncedForms.Contains(entry.FormType))
                     continue;
 
-                if (TryResolveCompany(cikToCompany, entry.Cik, out var company))
+                if (TryResolveCompany(cikToCompany, entry.Cik, out EquityIssuer company))
                     dirty[company.Id] = company;
             }
 
@@ -435,12 +435,12 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     /// keyed numerically because EDGAR surfaces CIKs both zero-padded
     /// ("0000320193") and bare ("320193").
     /// </summary>
-    internal static Dictionary<long, CommonStock> BuildCikMap(
-        IReadOnlyList<CommonStock> trackedCompanies
+    internal static Dictionary<long, EquityIssuer> BuildCikMap(
+        IReadOnlyList<EquityIssuer> trackedCompanies
     )
     {
-        var map = new Dictionary<long, CommonStock>();
-        foreach (var company in trackedCompanies)
+        var map = new Dictionary<long, EquityIssuer>();
+        foreach (EquityIssuer company in trackedCompanies)
         {
             if (long.TryParse(company.Cik, out var primaryCik))
                 map.TryAdd(primaryCik, company);
@@ -469,9 +469,9 @@ public class FilingDiscoveryService : IFilingDiscoveryService
     }
 
     private static bool TryResolveCompany(
-        Dictionary<long, CommonStock> cikToCompany,
+        Dictionary<long, EquityIssuer> cikToCompany,
         string cik,
-        out CommonStock company
+        out EquityIssuer company
     )
     {
         company = null;

@@ -16,11 +16,11 @@ namespace Equibles.Holdings.BusinessLogic;
 [Service]
 public class MarketActivityShareRestater
 {
-    private readonly CommonStockRepository _commonStockRepository;
+    private readonly EquityIssuerRepository _commonStockRepository;
     private readonly StockSplitRepository _stockSplitRepository;
 
     public MarketActivityShareRestater(
-        CommonStockRepository commonStockRepository,
+        EquityIssuerRepository commonStockRepository,
         StockSplitRepository stockSplitRepository
     )
     {
@@ -40,18 +40,18 @@ public class MarketActivityShareRestater
             return;
 
         var primaryTickers = await _commonStockRepository
-            .GetByIds(stockIds)
+            .GetCurrentUsDirectoryByIds(stockIds)
             .AsNoTracking()
-            .Select(stock => new { stock.Id, stock.Ticker })
+            .Select(stock => new { stock.Id, Ticker = stock.Presentation.Listing.Ticker })
             .ToDictionaryAsync(stock => stock.Id, stock => stock.Ticker, cancellationToken);
         var splitsByStock = (
             await _stockSplitRepository
                 .GetEffective(DateOnly.FromDateTime(DateTime.UtcNow))
                 .AsNoTracking()
-                .Where(split => stockIds.Contains(split.CommonStockId))
+                .Where(split => stockIds.Contains(split.EquityIssuerId))
                 .ToListAsync(cancellationToken)
         )
-            .GroupBy(split => split.CommonStockId)
+            .GroupBy(split => split.EquityIssuerId)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<StockSplit>)group.ToList());
 
         foreach (var row in activity)
@@ -85,7 +85,7 @@ public class MarketActivityShareRestater
     }
 
     public async Task RestateStockActivity(
-        CommonStock stock,
+        EquityIssuer stock,
         IReadOnlyList<StockQuarterlyActivity> activity,
         CancellationToken cancellationToken = default
     )
@@ -104,14 +104,14 @@ public class MarketActivityShareRestater
         {
             if (row.ListingShares.Count == 0)
                 throw new InvalidOperationException(
-                    $"Cannot restate holdings activity for {stock.Ticker} without listing-share snapshots."
+                    $"Cannot restate holdings activity for {stock.Presentation.Listing.Ticker} without listing-share snapshots."
                 );
 
             row.CurrentShares = RestateListingTotal(
                 row.ListingShares,
                 listing => listing.CurrentShares,
                 row.ReportDate,
-                stock.Ticker,
+                stock.Presentation.Listing.Ticker,
                 splits
             );
             row.PreviousShares = row.PreviousReportDate is { } previousReportDate
@@ -119,7 +119,7 @@ public class MarketActivityShareRestater
                     row.ListingShares,
                     listing => listing.PreviousShares,
                     previousReportDate,
-                    stock.Ticker,
+                    stock.Presentation.Listing.Ticker,
                     splits
                 )
                 : 0;

@@ -39,12 +39,11 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivityTests : Pa
     [Fact]
     public async Task GetInstitutionQuarterlyActivity_SingleQuarterHolder_ReportsTooFewQuarters()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var holder = new InstitutionalHolder { Cik = "Q00010001", Name = "Single Quarter LP" };
         DbContext.AddRange(stock, holder);
         DbContext.Add(
@@ -64,30 +63,26 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivityTests : Pa
     [Fact]
     public async Task GetInstitutionQuarterlyActivity_TwoQuartersWithMovement_RendersAllSections()
     {
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
-        var nvda = new CommonStock
-        {
-            Ticker = "NVDA",
-            Name = "NVIDIA Corp.",
-            Cik = "0001045810",
-        };
-        var tsla = new CommonStock
-        {
-            Ticker = "TSLA",
-            Name = "Tesla Inc.",
-            Cik = "0001318605",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
+        EquityIssuer nvda = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "NVDA",
+            Name: "NVIDIA Corp.",
+            Cik: "0001045810"
+        );
+        EquityIssuer tsla = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "TSLA",
+            Name: "Tesla Inc.",
+            Cik: "0001318605"
+        );
         var holder = new InstitutionalHolder { Cik = "Q00010002", Name = "Active Allocator LP" };
         DbContext.AddRange(aapl, msft, nvda, tsla, holder);
         var prior = new DateOnly(2024, 9, 30);
@@ -121,18 +116,16 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivityTests : Pa
     [Fact]
     public async Task GetInstitutionQuarterlyActivity_BucketFilter_LimitsToOneSection()
     {
-        var aapl = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
-        var msft = new CommonStock
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-            Cik = "0000789019",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
+        EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corp.",
+            Cik: "0000789019"
+        );
         var holder = new InstitutionalHolder { Cik = "Q00010003", Name = "Filtered LP" };
         DbContext.AddRange(aapl, msft, holder);
         var prior = new DateOnly(2024, 9, 30);
@@ -173,7 +166,7 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivityTests : Pa
         new(
             new InstitutionalHoldingRepository(ctx),
             new InstitutionalHolderRepository(ctx),
-            new CommonStockRepository(ctx),
+            new EquityIssuerRepository(ctx),
             new StockSplitRepository(ctx),
             new StockCombinedQuarterService(
                 new InstitutionalHoldingRepository(ctx),
@@ -184,7 +177,7 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivityTests : Pa
         );
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -192,7 +185,7 @@ public class InstitutionalHoldingsToolsGetInstitutionQuarterlyActivityTests : Pa
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,

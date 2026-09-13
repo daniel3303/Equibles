@@ -14,8 +14,8 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
 {
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
@@ -24,32 +24,32 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     public StockPriceToolsTests(ParadeDbFixture fixture)
         : base(fixture) { }
 
-    private static CommonStock AaplStock() =>
-        new()
-        {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
+    private static EquityIssuer AaplStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
 
-    private static CommonStock MsftStock() =>
-        new()
-        {
-            Ticker = "MSFT",
-            Name = "Microsoft Corporation",
-            Cik = "0000789019",
-        };
+    private static EquityIssuer MsftStock() =>
+        Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MSFT",
+            Name: "Microsoft Corporation",
+            Cik: "0000789019"
+        );
 
-    private static DailyStockPrice PriceFor(
-        CommonStock stock,
+    private EquityDailyStockPrice PriceFor(
+        EquityIssuer stock,
         DateOnly date,
         decimal close = 150.00m,
         long volume = 50_000_000
     ) =>
         new()
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, stock, null),
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock, null)
+                .Id,
             Date = date,
             Open = close - 1m,
             High = close + 1m,
@@ -72,7 +72,7 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_StockWithoutPrices_ReturnsEmptyRangeMessage()
     {
-        DbContext.Set<CommonStock>().Add(AaplStock());
+        DbContext.Set<EquityIssuer>().Add(AaplStock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut()
@@ -84,10 +84,10 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_RendersOhlcvTableAscending()
     {
-        var stock = AaplStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = AaplStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
                 PriceFor(stock, new DateOnly(2026, 4, 1), close: 175.50m, volume: 50_000_000),
                 PriceFor(stock, new DateOnly(2026, 4, 2), close: 176.25m, volume: 45_000_000)
@@ -108,10 +108,10 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_ExcludesZeroVolumeCarryForwardRows()
     {
-        var stock = AaplStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = AaplStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
                 PriceFor(stock, new DateOnly(2026, 4, 1), close: 175.50m),
                 PriceFor(stock, new DateOnly(2026, 4, 2), close: 175.50m, volume: 0)
@@ -128,12 +128,12 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_MaxResultsLimitsRows()
     {
-        var stock = AaplStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = AaplStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         var prices = Enumerable
             .Range(1, 5)
             .Select(i => PriceFor(stock, new DateOnly(2026, 4, i), close: 100m + i));
-        DbContext.Set<DailyStockPrice>().AddRange(prices);
+        DbContext.Set<EquityDailyStockPrice>().AddRange(prices);
         await DbContext.SaveChangesAsync();
 
         var result = await Sut()
@@ -148,7 +148,7 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetStockPrices_TrimsAndUppercasesTicker()
     {
-        DbContext.Set<CommonStock>().Add(AaplStock());
+        DbContext.Set<EquityIssuer>().Add(AaplStock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetStockPrices("  aapl  ");
@@ -195,8 +195,8 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     public async Task GetLatestClosingPrices_InvalidBatchFailsBeforeRepositoryAccess(string tickers)
     {
         var sut = new StockPriceTools(
-            new DailyStockPriceRepository(null),
-            new CommonStockRepository(null),
+            new EquityDailyStockPriceRepository(null),
+            new EquityIssuerRepository(null),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(null),
             new Equibles.Errors.BusinessLogic.ErrorManager(null),
             NullLogger<StockPriceTools>()
@@ -210,11 +210,11 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLatestClosingPrices_KnownTickers_ReturnsLatestRow()
     {
-        var aapl = AaplStock();
-        var msft = MsftStock();
-        DbContext.Set<CommonStock>().AddRange(aapl, msft);
+        EquityIssuer aapl = AaplStock();
+        EquityIssuer msft = MsftStock();
+        DbContext.Set<EquityIssuer>().AddRange(aapl, msft);
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
                 PriceFor(aapl, new DateOnly(2026, 4, 1), close: 100m),
                 // Latest AAPL price — should win.
@@ -244,10 +244,10 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLatestClosingPrices_ExcludesZeroVolumeCarryForwardFromLatestAndRange()
     {
-        var stock = AaplStock();
-        DbContext.Set<CommonStock>().Add(stock);
+        EquityIssuer stock = AaplStock();
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
                 PriceFor(stock, new DateOnly(2026, 4, 1), close: 175.50m),
                 PriceFor(stock, new DateOnly(2026, 4, 2), close: 999.00m, volume: 0)
@@ -267,16 +267,15 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         string priceSeriesTicker
     )
     {
-        var stock = AaplStock();
+        EquityIssuer stock = AaplStock();
         var splitDate = new DateOnly(2026, 8, 4);
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<StockSplit>()
             .Add(
                 new StockSplit
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = priceSeriesTicker,
                     EffectiveDate = splitDate,
                     Numerator = 1m,
@@ -285,7 +284,7 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
                 }
             );
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
                 PriceFor(stock, splitDate.AddDays(-1), close: 120m),
                 PriceFor(stock, splitDate, close: 20m),
@@ -308,16 +307,15 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         string priceSeriesTicker
     )
     {
-        var stock = AaplStock();
+        EquityIssuer stock = AaplStock();
         var splitDate = new DateOnly(2026, 8, 4);
-        DbContext.Set<CommonStock>().Add(stock);
+        DbContext.Set<EquityIssuer>().Add(stock);
         DbContext
             .Set<StockSplit>()
             .Add(
                 new StockSplit
                 {
-                    CommonStock = stock,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     PriceSeriesTicker = priceSeriesTicker,
                     EffectiveDate = splitDate,
                     Numerator = 1m,
@@ -326,7 +324,7 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
                 }
             );
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .AddRange(
                 PriceFor(stock, new DateOnly(2026, 8, 3), close: 100m),
                 PriceFor(stock, splitDate, close: 20m)
@@ -342,9 +340,9 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLatestClosingPrices_UnknownTickerInList_RendersNotFoundRow()
     {
-        var aapl = AaplStock();
-        DbContext.Set<CommonStock>().Add(aapl);
-        DbContext.Set<DailyStockPrice>().Add(PriceFor(aapl, new DateOnly(2026, 4, 1)));
+        EquityIssuer aapl = AaplStock();
+        DbContext.Set<EquityIssuer>().Add(aapl);
+        DbContext.Set<EquityDailyStockPrice>().Add(PriceFor(aapl, new DateOnly(2026, 4, 1)));
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetLatestClosingPrices("AAPL,ZZZZ");
@@ -355,7 +353,7 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLatestClosingPrices_StockWithoutPrices_RendersNoDataRow()
     {
-        DbContext.Set<CommonStock>().Add(AaplStock());
+        DbContext.Set<EquityIssuer>().Add(AaplStock());
         await DbContext.SaveChangesAsync();
 
         var result = await Sut().GetLatestClosingPrices("AAPL");
@@ -366,10 +364,10 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
     [Fact]
     public async Task GetLatestClosingPrices_DeduplicatesTickers()
     {
-        var aapl = AaplStock();
-        DbContext.Set<CommonStock>().Add(aapl);
+        EquityIssuer aapl = AaplStock();
+        DbContext.Set<EquityIssuer>().Add(aapl);
         DbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(PriceFor(aapl, new DateOnly(2026, 4, 5), close: 175.50m));
         await DbContext.SaveChangesAsync();
 
@@ -388,15 +386,15 @@ public class StockPriceToolsTests : ParadeDbMcpTestBase
         // A year holds ~251 trading sessions, so the old default maxResults of 250 silently
         // dropped the oldest day(s) of the tool's own default 1-year window. The default cap
         // must cover a full trading year: seed 251 rows inside the window and expect all back.
-        var aapl = AaplStock();
-        DbContext.Set<CommonStock>().Add(aapl);
+        EquityIssuer aapl = AaplStock();
+        DbContext.Set<EquityIssuer>().Add(aapl);
         var date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-2);
         var seeded = 0;
         while (seeded < 251)
         {
             if (date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
             {
-                DbContext.Set<DailyStockPrice>().Add(PriceFor(aapl, date));
+                DbContext.Set<EquityDailyStockPrice>().Add(PriceFor(aapl, date));
                 seeded++;
             }
             date = date.AddDays(-1);

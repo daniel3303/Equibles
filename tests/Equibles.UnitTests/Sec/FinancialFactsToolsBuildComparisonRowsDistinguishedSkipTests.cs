@@ -19,14 +19,13 @@ public class FinancialFactsToolsBuildComparisonRowsDistinguishedSkipTests
     [Fact]
     public void BuildComparisonRows_KnownStockWithNoFact_SkippedAsNoDataNotNotFound()
     {
-        var apple = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer apple = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var requested = new List<string> { "AAPL" };
-        var stockByTicker = new Dictionary<string, CommonStock> { ["AAPL"] = apple };
+        var stockByTicker = new Dictionary<string, EquityIssuer> { ["AAPL"] = apple };
         var bestByStock = new Dictionary<Guid, FinancialFact>();
 
         var method = typeof(FinancialFactsTools).GetMethod(

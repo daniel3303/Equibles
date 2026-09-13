@@ -4,6 +4,7 @@ using Equibles.Data;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.Repositories;
+using Equibles.TestSupport;
 using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.IntegrationTests.Sec;
@@ -30,24 +31,24 @@ public class FailToDeliverRepositoryTests : IDisposable
     [Fact]
     public async Task GetByStock_MultipleStocksWithFails_ReturnsOnlyTargetStockRecords()
     {
-        var target = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
-        var other = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "MSFT",
-            Name = "Microsoft Corp.",
-        };
-        _dbContext.Set<CommonStock>().AddRange(target, other);
+        EquityIssuer target = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
+        EquityIssuer other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "MSFT",
+            Name: "Microsoft Corp."
+        );
+        _dbContext.Set<EquityIssuer>().AddRange(target, other);
 
         _repository.Add(
             new FailToDeliver
             {
-                CommonStockId = target.Id,
+                EquityListingId = NativeListingSeed.ForStock(_dbContext, target).Id,
+
+                ListedTicker = target.Presentation.Listing.Ticker,
                 SettlementDate = new DateOnly(2025, 10, 1),
                 Quantity = 100,
                 Price = 150m,
@@ -56,7 +57,9 @@ public class FailToDeliverRepositoryTests : IDisposable
         _repository.Add(
             new FailToDeliver
             {
-                CommonStockId = target.Id,
+                EquityListingId = NativeListingSeed.ForStock(_dbContext, target).Id,
+
+                ListedTicker = target.Presentation.Listing.Ticker,
                 SettlementDate = new DateOnly(2025, 10, 2),
                 Quantity = 200,
                 Price = 151m,
@@ -65,7 +68,9 @@ public class FailToDeliverRepositoryTests : IDisposable
         _repository.Add(
             new FailToDeliver
             {
-                CommonStockId = other.Id,
+                EquityListingId = NativeListingSeed.ForStock(_dbContext, other).Id,
+
+                ListedTicker = other.Presentation.Listing.Ticker,
                 SettlementDate = new DateOnly(2025, 10, 1),
                 Quantity = 999,
                 Price = 400m,
@@ -76,6 +81,6 @@ public class FailToDeliverRepositoryTests : IDisposable
         var results = await _repository.GetByStock(target).ToListAsync();
 
         results.Should().HaveCount(2);
-        results.Should().OnlyContain(f => f.CommonStockId == target.Id);
+        results.Should().OnlyContain(f => f.Listing.Security.EquityIssuerId == target.Id);
     }
 }

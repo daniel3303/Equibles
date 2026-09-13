@@ -14,8 +14,8 @@ public class StockPriceToolsGetLatestClosingPricesCultureInvarianceTests : Parad
 {
     private StockPriceTools Sut() =>
         new(
-            new DailyStockPriceRepository(DbContext),
-            new CommonStockRepository(DbContext),
+            new EquityDailyStockPriceRepository(DbContext),
+            new EquityIssuerRepository(DbContext),
             new Equibles.CorporateActions.Repositories.StockSplitRepository(DbContext),
             ErrorManager,
             NullLogger<StockPriceTools>()
@@ -33,16 +33,17 @@ public class StockPriceToolsGetLatestClosingPricesCultureInvarianceTests : Parad
     [Fact]
     public async Task GetLatestClosingPrices_UnderNonInvariantCulture_RendersCloseAndVolumeCultureInvariantly()
     {
-        var stock = new CommonStock
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple Inc",
+            Cik: "0000320193"
+        );
+        EquityDailyStockPrice price = new EquityDailyStockPrice
         {
-            Ticker = "AAPL",
-            Name = "Apple Inc",
-            Cik = "0000320193",
-        };
-        var price = new DailyStockPrice
-        {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, stock, null),
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStock(DbContext, stock, null)
+                .Id,
             Date = new DateOnly(2026, 3, 15),
             Open = 149m,
             High = 151m,
@@ -51,8 +52,7 @@ public class StockPriceToolsGetLatestClosingPricesCultureInvarianceTests : Parad
             AdjustedClose = 150m,
             Volume = 1_234_567,
         };
-        DbContext.Set<CommonStock>().Add(stock);
-        DbContext.Set<DailyStockPrice>().Add(price);
+        DbContext.Set<EquityDailyStockPrice>().Add(price);
         await DbContext.SaveChangesAsync();
 
         // Pin de-DE only for the rendering call; CurrentCulture flows through the

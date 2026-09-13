@@ -57,13 +57,12 @@ public class ShortInterestSnapshotNegativeMaxResultsTests
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "GME",
-                Name = "GameStop Corp",
-                Cik = "0001326380",
-            };
-            db.Set<CommonStock>().Add(stock);
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "GME",
+                Name: "GameStop Corp",
+                Cik: "0001326380"
+            );
+            db.Set<EquityIssuer>().Add(stock);
             await db.SaveChangesAsync();
 
             // DaysToCover and a positive AverageDailyVolume satisfy the snapshot's filters so the
@@ -72,8 +71,14 @@ public class ShortInterestSnapshotNegativeMaxResultsTests
                 .Add(
                     new ShortInterest
                     {
-                        CommonStock = stock,
-                        CommonStockId = stock.Id,
+                        EquityListingId = Equibles
+                            .TestSupport.NativeListingSeed.ForStock(
+                                db,
+                                stock,
+                                stock.Presentation.Listing.Ticker
+                            )
+                            .Id,
+                        ListedTicker = stock.Presentation.Listing.Ticker,
                         SettlementDate = new DateOnly(2026, 4, 15),
                         CurrentShortPosition = 50_000_000,
                         PreviousShortPosition = 49_000_000,

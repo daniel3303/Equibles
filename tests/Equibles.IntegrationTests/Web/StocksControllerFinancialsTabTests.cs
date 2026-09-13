@@ -67,13 +67,12 @@ public class StocksControllerFinancialsTabTests : IDisposable
     [Fact]
     public async Task Financials_ExistingTickerWithFacts_ReturnsShowViewWithLatestFiledIncomeStatement()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var revenueConcept = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -81,7 +80,7 @@ public class StocksControllerFinancialsTabTests : IDisposable
             Tag = "Revenues",
             Label = "Revenues",
         };
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<FinancialConcept>().Add(revenueConcept);
         // Same concept/period reported twice; the restatement (later FiledDate)
         // carries 400 and must win over the original 383.
@@ -91,7 +90,7 @@ public class StocksControllerFinancialsTabTests : IDisposable
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenueConcept.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -107,7 +106,7 @@ public class StocksControllerFinancialsTabTests : IDisposable
                 new FinancialFact
                 {
                     Id = Guid.NewGuid(),
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     FinancialConceptId = revenueConcept.Id,
                     Unit = "USD",
                     PeriodType = FactPeriodType.Duration,
@@ -136,13 +135,13 @@ public class StocksControllerFinancialsTabTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
         var controller = new StocksController(
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new InstitutionalHolderRepository(_dbContext),
             new InstitutionalHoldingRepository(_dbContext),
             new DocumentRepository(_dbContext),
@@ -193,13 +192,12 @@ public class StocksControllerFinancialsTabTests : IDisposable
     [Fact]
     public async Task Financials_MultiplePeriods_OrdersChronologicallyAndDefaultsToLatestAnnual()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var concept = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -207,14 +205,14 @@ public class StocksControllerFinancialsTabTests : IDisposable
             Tag = "Revenues",
             Label = "Revenues",
         };
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<FinancialConcept>().Add(concept);
 
         FinancialFact Fact(int fy, SecFiscalPeriod fp, string accn) =>
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 FinancialConceptId = concept.Id,
                 Unit = "USD",
                 PeriodType = FactPeriodType.Duration,
@@ -253,10 +251,10 @@ public class StocksControllerFinancialsTabTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
 
         var tab = await stockTabService.LoadFinancialsTab(
@@ -285,13 +283,12 @@ public class StocksControllerFinancialsTabTests : IDisposable
         // (400bn): a per-concept "latest filed" collapse that forgot to exclude
         // dimensional rows would surface 39bn, so this pins that they are filtered
         // out at the query (GetConsolidatedByStock), not merely out-sorted.
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
         var revenueConcept = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -299,14 +296,14 @@ public class StocksControllerFinancialsTabTests : IDisposable
             Tag = "Revenues",
             Label = "Revenues",
         };
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<FinancialConcept>().Add(revenueConcept);
 
         FinancialFact Revenue(decimal value, DateOnly filed, string accn, string dimensionsKey) =>
             new()
             {
                 Id = Guid.NewGuid(),
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 FinancialConceptId = revenueConcept.Id,
                 Unit = "USD",
                 PeriodType = FactPeriodType.Duration,
@@ -351,10 +348,10 @@ public class StocksControllerFinancialsTabTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
 
         var tab = await stockTabService.LoadFinancialsTab(
@@ -379,13 +376,12 @@ public class StocksControllerFinancialsTabTests : IDisposable
     [Fact]
     public async Task Financials_OverlongLatestStampDoesNotBecomeTheDefaultPeriod()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "NTAP",
-            Name = "NetApp, Inc.",
-            Cik = "0001002047",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "NTAP",
+            Name: "NetApp, Inc.",
+            Cik: "0001002047"
+        );
         var revenue = new FinancialConcept
         {
             Id = Guid.NewGuid(),
@@ -393,7 +389,7 @@ public class StocksControllerFinancialsTabTests : IDisposable
             Tag = "Revenues",
             Label = "Revenue",
         };
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext.Set<FinancialConcept>().Add(revenue);
 
         FinancialFact Fact(
@@ -405,7 +401,7 @@ public class StocksControllerFinancialsTabTests : IDisposable
         ) =>
             new()
             {
-                CommonStockId = stock.Id,
+                EquityIssuerId = stock.Id,
                 FinancialConceptId = revenue.Id,
                 Unit = "USD",
                 PeriodType = FactPeriodType.Duration,
@@ -452,10 +448,10 @@ public class StocksControllerFinancialsTabTests : IDisposable
             new NCenFilingRepository(_dbContext),
             new NportFilingRepository(_dbContext),
             new CongressionalTradeRepository(_dbContext),
-            new DailyStockPriceRepository(_dbContext),
+            new EquityDailyStockPriceRepository(_dbContext),
             new FinancialFactRepository(_dbContext),
             new FinancialConceptRepository(_dbContext),
-            new CommonStockRepository(_dbContext)
+            new EquityIssuerRepository(_dbContext)
         );
 
         var tab = await stockTabService.LoadFinancialsTab(

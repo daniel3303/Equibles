@@ -12,16 +12,19 @@ public class CashDividendRepository : BaseRepository<CashDividend>
 
     public IQueryable<CashDividend> GetByStock(Guid commonStockId)
     {
-        return GetAll().Where(d => d.CommonStockId == commonStockId);
+        return GetAll().Where(d => d.EquityIssuerId == commonStockId);
     }
 
-    public IQueryable<CashDividend> GetHistory(
-        Guid commonStockId,
+    public IQueryable<CashDividend> GetByListing(Guid listingId) =>
+        GetAll().Where(row => row.EquityListingId == listingId);
+
+    public IQueryable<CashDividend> GetHistoryByListing(
+        Guid listingId,
         DateOnly? startDate = null,
         DateOnly? endDate = null
     )
     {
-        var query = GetByStock(commonStockId);
+        var query = GetByListing(listingId);
         if (startDate.HasValue)
             query = query.Where(d => d.ExDate >= startDate.Value);
         if (endDate.HasValue)

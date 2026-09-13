@@ -20,13 +20,12 @@ public class FinancialFactsImportServiceMultiCikTests
     [Fact]
     public void CiksFor_PrimaryFirstThenSecondaries()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-            SecondaryCiks = ["34088", "99999"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436",
+            SecondaryCiks: ["34088", "99999"]
+        );
 
         FinancialFactsImportService.CiksFor(stock).Should().Equal("2115436", "34088", "99999");
     }
@@ -37,13 +36,12 @@ public class FinancialFactsImportServiceMultiCikTests
         // The company sync's subsidiary attach writes SEC's value verbatim, so a
         // duplicate can exist in the column; reading it twice would double the
         // companyfacts download and the in-memory parsed set.
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-            SecondaryCiks = ["34088", "34088", "2115436"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436",
+            SecondaryCiks: ["34088", "34088", "2115436"]
+        );
 
         FinancialFactsImportService.CiksFor(stock).Should().Equal("2115436", "34088");
     }
@@ -51,13 +49,12 @@ public class FinancialFactsImportServiceMultiCikTests
     [Fact]
     public void CiksFor_NoSecondaries_IsJustThePrimary()
     {
-        var stock = new CommonStock
-        {
-            Ticker = "AAPL",
-            Name = "Apple",
-            Cik = "320193",
-            SecondaryCiks = [],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAPL",
+            Name: "Apple",
+            Cik: "320193",
+            SecondaryCiks: []
+        );
 
         FinancialFactsImportService.CiksFor(stock).Should().Equal("320193");
     }
@@ -85,13 +82,12 @@ public class FinancialFactsImportServiceMultiCikTests
                 Substitute.For<ILogger<ErrorReporter>>()
             )
         );
-        var stock = new CommonStock
-        {
-            Ticker = "XOM",
-            Name = "Exxon Mobil",
-            Cik = "2115436",
-            SecondaryCiks = ["34088"],
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "XOM",
+            Name: "Exxon Mobil",
+            Cik: "2115436",
+            SecondaryCiks: ["34088"]
+        );
 
         await sut.Import(stock, CancellationToken.None);
 

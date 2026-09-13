@@ -14,21 +14,22 @@ public class HolderQuarterlyActivityCalculatorExitedDeltaValueTests
     [Fact]
     public void Group_ExitedPosition_DeltaValueIsNegativePreviousValue()
     {
-        var aapl = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-            Cik = "0000320193",
-        };
+        EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc.",
+            Cik: "0000320193"
+        );
 
         var result = HolderQuarterlyActivityCalculator.Group(
             [],
             [
                 new InstitutionalHolding
                 {
-                    CommonStockId = aapl.Id,
-                    CommonStock = aapl,
+                    EquityIssuerId = aapl.Id,
+                    Issuer = Equibles
+                        .TestSupport.NativeListingSeed.ForStock(null, aapl)
+                        .Security.Issuer,
                     InstitutionalHolderId = Guid.NewGuid(),
                     FilingDate = new DateOnly(2024, 11, 14),
                     ReportDate = new DateOnly(2024, 9, 30),

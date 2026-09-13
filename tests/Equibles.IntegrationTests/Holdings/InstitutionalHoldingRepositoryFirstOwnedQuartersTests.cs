@@ -34,12 +34,11 @@ public class InstitutionalHoldingRepositoryFirstOwnedQuartersTests : IDisposable
     [Fact]
     public async Task GetFirstOwnedQuarters_ReturnsEarliestQuarterPerRequestedHolderOnly()
     {
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = "AAPL",
-            Name = "Apple Inc.",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: "AAPL",
+            Name: "Apple Inc."
+        );
         var requestedOwner = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -62,7 +61,7 @@ public class InstitutionalHoldingRepositoryFirstOwnedQuartersTests : IDisposable
         var q2 = new DateOnly(2024, 6, 30);
         var q3 = new DateOnly(2024, 9, 30);
 
-        _dbContext.Set<CommonStock>().Add(stock);
+        _dbContext.Set<EquityIssuer>().Add(stock);
         _dbContext
             .Set<InstitutionalHolder>()
             .AddRange(requestedOwner, requestedNeverHeld, unrequestedOwner);
@@ -95,7 +94,7 @@ public class InstitutionalHoldingRepositoryFirstOwnedQuartersTests : IDisposable
         new()
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stockId,
+            EquityIssuerId = stockId,
             InstitutionalHolderId = holderId,
             ReportDate = reportDate,
             FilingDate = reportDate,

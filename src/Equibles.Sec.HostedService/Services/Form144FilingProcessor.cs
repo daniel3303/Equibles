@@ -75,7 +75,7 @@ public class Form144FilingProcessor
 
         var entity = new Form144Filing
         {
-            CommonStockId = companyId,
+            EquityIssuerId = companyId,
             AccessionNumber = filing.AccessionNumber,
             FilingDate = filing.FilingDate,
             FilerCik = ParseFilerCik(root),

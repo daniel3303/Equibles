@@ -101,12 +101,11 @@ public class GovernmentContractsImportServiceHttpAbortTests
         using (var seed = NewContext(options))
         {
             seed.Add(
-                new CommonStock
-                {
-                    Ticker = "LMT",
-                    Name = "Lockheed Martin Corporation",
-                    Cik = "1",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "LMT",
+                    Name: "Lockheed Martin Corporation",
+                    Cik: "1"
+                )
             );
             await seed.SaveChangesAsync();
         }
@@ -156,12 +155,11 @@ public class GovernmentContractsImportServiceHttpAbortTests
         using (var seed = NewContext(options))
         {
             seed.Add(
-                new CommonStock
-                {
-                    Ticker = "LMT",
-                    Name = "Lockheed Martin Corporation",
-                    Cik = "1",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "LMT",
+                    Name: "Lockheed Martin Corporation",
+                    Cik: "1"
+                )
             );
             await seed.SaveChangesAsync();
         }
@@ -217,12 +215,11 @@ public class GovernmentContractsImportServiceHttpAbortTests
         {
             // One named company so BuildLookup is non-empty and the empty-universe guard passes.
             seed.Add(
-                new CommonStock
-                {
-                    Ticker = "LMT",
-                    Name = "Lockheed Martin Corporation",
-                    Cik = "1",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Ticker: "LMT",
+                    Name: "Lockheed Martin Corporation",
+                    Cik: "1"
+                )
             );
             await seed.SaveChangesAsync();
         }
@@ -308,7 +305,7 @@ public class GovernmentContractsImportServiceHttpAbortTests
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => NewContext(options));
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         services.AddScoped<ErrorRepository>();
         services.AddScoped<ErrorManager>();
         services.AddScoped<GovernmentContractRepository>();

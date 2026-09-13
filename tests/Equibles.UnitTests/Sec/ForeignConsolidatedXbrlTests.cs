@@ -26,7 +26,7 @@ public class ForeignConsolidatedXbrlTests
             new Document
             {
                 DocumentType = DocumentType.FromValue(form),
-                CommonStock = new CommonStock { Cik = cik },
+                Issuer = new EquityIssuer { Cik = cik },
             }
         );
 

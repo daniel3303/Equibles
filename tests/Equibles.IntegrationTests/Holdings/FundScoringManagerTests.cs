@@ -37,10 +37,10 @@ public class FundScoringManagerTests : IDisposable
         _fundScoreRepository = new FundScoreRepository(_dbContext);
         _manager = new FundScoringManager(
             new InstitutionalHoldingRepository(_dbContext),
-            new CommonStockRepository(_dbContext),
+            new EquityIssuerRepository(_dbContext),
             new BacktestPriceLoader(
-                new DailyStockPriceRepository(_dbContext),
-                new CommonStockRepository(_dbContext),
+                new EquityDailyStockPriceRepository(_dbContext),
+                new EquityIssuerRepository(_dbContext),
                 new StockSplitRepository(_dbContext)
             ),
             _fundScoreRepository
@@ -130,8 +130,11 @@ public class FundScoringManagerTests : IDisposable
         // A Schedule 13D stake filed after the last 13F quarter, on a stock that then 50x's.
         // Treated as a portfolio snapshot it would rotate the whole simulation into that stock;
         // it must be ignored because a 13D/G describes a single stake, not the fund's portfolio.
-        var moon = new CommonStock { Ticker = "MOON", Name = "Mooning Co" };
-        _dbContext.Set<CommonStock>().Add(moon);
+        EquityIssuer moon = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MOON",
+            Name: "Mooning Co"
+        );
+        _dbContext.Set<EquityIssuer>().Add(moon);
         AddPrice(moon, new DateOnly(2025, 6, 1), 1m);
         AddPrice(moon, AsOf, 50m);
         Add13DStake(holder, moon, eventDate: new DateOnly(2025, 6, 1));
@@ -152,8 +155,11 @@ public class FundScoringManagerTests : IDisposable
     public async Task ScoreHolder_CapturedSplit_AdvancesToFirstPostSplitCloseWithoutDroppingHolding()
     {
         SeedBenchmark();
-        var held = new CommonStock { Ticker = "SPLT", Name = "Split Co" };
-        _dbContext.Set<CommonStock>().Add(held);
+        EquityIssuer held = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SPLT",
+            Name: "Split Co"
+        );
+        _dbContext.Set<EquityIssuer>().Add(held);
         var splitDate = new DateOnly(2025, 1, 2);
         var firstComparableClose = splitDate.AddDays(1);
         AddPrice(held, firstComparableClose, close: 50m, adjustedClose: 500m);
@@ -163,8 +169,8 @@ public class FundScoringManagerTests : IDisposable
             .Add(
                 new Equibles.CorporateActions.Data.Models.StockSplit
                 {
-                    CommonStockId = held.Id,
-                    PriceSeriesTicker = held.Ticker,
+                    EquityIssuerId = held.Id,
+                    PriceSeriesTicker = held.Presentation.Listing.Ticker,
                     EffectiveDate = splitDate,
                     Numerator = 2m,
                     Denominator = 1m,
@@ -185,8 +191,8 @@ public class FundScoringManagerTests : IDisposable
                     new InstitutionalHolding
                     {
                         InstitutionalHolderId = holder.Id,
-                        CommonStockId = held.Id,
-                        ListedTicker = held.Ticker,
+                        EquityIssuerId = held.Id,
+                        ListedTicker = held.Presentation.Listing.Ticker,
                         ReportDate = reportDate,
                         FilingDate = reportDate.AddDays(41),
                         Shares = 1_000,
@@ -209,11 +215,17 @@ public class FundScoringManagerTests : IDisposable
         // Benchmark stock exists but has no prices in the window — a transient data gap, not
         // a structural "nothing to score". The previous score must survive the failed cycle;
         // pruning here would wipe the whole leaderboard whenever the price feed lags.
-        var benchmark = new CommonStock { Ticker = "SPY", Name = "S&P 500 ETF" };
-        _dbContext.Set<CommonStock>().Add(benchmark);
+        EquityIssuer benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SPY",
+            Name: "S&P 500 ETF"
+        );
+        _dbContext.Set<EquityIssuer>().Add(benchmark);
 
-        var held = new CommonStock { Ticker = "AAA", Name = "Alpha Co" };
-        _dbContext.Set<CommonStock>().Add(held);
+        EquityIssuer held = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAA",
+            Name: "Alpha Co"
+        );
+        _dbContext.Set<EquityIssuer>().Add(held);
         AddPrice(held, new DateOnly(2022, 12, 20), 100m);
         AddPrice(held, AsOf, 200m);
 
@@ -225,7 +237,7 @@ public class FundScoringManagerTests : IDisposable
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = holder.Id,
-                    CommonStockId = held.Id,
+                    EquityIssuerId = held.Id,
                     ReportDate = new DateOnly(2022, 9, 30),
                     FilingDate = new DateOnly(2022, 11, 10),
                     Shares = 1000,
@@ -263,8 +275,11 @@ public class FundScoringManagerTests : IDisposable
     public async Task ScoreHolder_FilerWithOnly13DGStakes_ReturnsNullAndDeletesStaleScore()
     {
         SeedBenchmark();
-        var moon = new CommonStock { Ticker = "MOON", Name = "Mooning Co" };
-        _dbContext.Set<CommonStock>().Add(moon);
+        EquityIssuer moon = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "MOON",
+            Name: "Mooning Co"
+        );
+        _dbContext.Set<EquityIssuer>().Add(moon);
         AddPrice(moon, new DateOnly(2025, 6, 1), 1m);
         AddPrice(moon, AsOf, 50m);
 
@@ -301,7 +316,7 @@ public class FundScoringManagerTests : IDisposable
         _fundScoreRepository.GetByHolder(activist).Should().BeEmpty();
     }
 
-    private void Add13DStake(InstitutionalHolder holder, CommonStock stock, DateOnly eventDate)
+    private void Add13DStake(InstitutionalHolder holder, EquityIssuer stock, DateOnly eventDate)
     {
         _dbContext
             .Set<InstitutionalHolding>()
@@ -309,7 +324,7 @@ public class FundScoringManagerTests : IDisposable
                 new InstitutionalHolding
                 {
                     InstitutionalHolderId = holder.Id,
-                    CommonStockId = stock.Id,
+                    EquityIssuerId = stock.Id,
                     ReportDate = eventDate,
                     FilingDate = eventDate.AddDays(5),
                     FilingType = FilingType.Schedule13D,
@@ -324,8 +339,11 @@ public class FundScoringManagerTests : IDisposable
     {
         SeedBenchmark();
 
-        var held = new CommonStock { Ticker = "AAA", Name = "Alpha Co" };
-        _dbContext.Set<CommonStock>().Add(held);
+        EquityIssuer held = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "AAA",
+            Name: "Alpha Co"
+        );
+        _dbContext.Set<EquityIssuer>().Add(held);
         AddPrice(held, new DateOnly(2022, 12, 20), 100m);
         AddPrice(held, AsOf, 200m); // doubles over the window
 
@@ -350,7 +368,7 @@ public class FundScoringManagerTests : IDisposable
                     new InstitutionalHolding
                     {
                         InstitutionalHolderId = holder.Id,
-                        CommonStockId = held.Id,
+                        EquityIssuerId = held.Id,
                         ReportDate = reportDate,
                         FilingDate = reportDate.AddDays(41),
                         Shares = 1000,
@@ -365,27 +383,34 @@ public class FundScoringManagerTests : IDisposable
 
     private void SeedBenchmark()
     {
-        var benchmark = new CommonStock { Ticker = "SPY", Name = "S&P 500 ETF" };
-        _dbContext.Set<CommonStock>().Add(benchmark);
+        EquityIssuer benchmark = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "SPY",
+            Name: "S&P 500 ETF"
+        );
+        _dbContext.Set<EquityIssuer>().Add(benchmark);
         AddPrice(benchmark, new DateOnly(2022, 12, 20), 100m);
         AddPrice(benchmark, AsOf, 100m); // flat over the window
         _dbContext.SaveChanges();
     }
 
     private void AddPrice(
-        CommonStock stock,
+        EquityIssuer stock,
         DateOnly date,
         decimal close,
         decimal? adjustedClose = null
     )
     {
         _dbContext
-            .Set<DailyStockPrice>()
+            .Set<EquityDailyStockPrice>()
             .Add(
-                new DailyStockPrice
+                new EquityDailyStockPrice
                 {
-                    CommonStockId = stock.Id,
-                    ListedTicker = stock.Ticker,
+                    Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                        _dbContext,
+                        stock,
+                        stock.Presentation.Listing.Ticker
+                    ),
+                    SourceTicker = stock.Presentation.Listing.Ticker,
                     Date = date,
                     Open = close,
                     High = close,

@@ -128,7 +128,7 @@ public class FundDirectoryTools
 
                 var latest = await _nportRepository
                     .GetSeriesReportsByPeriod(
-                        series.CommonStockId,
+                        series.EquityIssuerId,
                         series.RegistrantCik,
                         series.SeriesId,
                         DateOnly.MinValue
@@ -144,7 +144,7 @@ public class FundDirectoryTools
 
                 var totalHoldings = latest.Holdings.Count;
                 if (totalHoldings == 0)
-                    return $"{MarkdownText(series.SeriesName ?? series.RegistrantName)} has a stored Form NPORT-P report for {latest.ReportPeriodDate:yyyy-MM-dd} with {FormatCount(latest.ReportedHoldingCount)} holdings reported, but no {(latest.CommonStockId == null ? "tracked-stock " : "")}holding rows are stored for that report.";
+                    return $"{MarkdownText(series.SeriesName ?? series.RegistrantName)} has a stored Form NPORT-P report for {latest.ReportPeriodDate:yyyy-MM-dd} with {FormatCount(latest.ReportedHoldingCount)} holdings reported, but no {(latest.EquityIssuerId == null ? "tracked-stock " : "")}holding rows are stored for that report.";
 
                 offset = McpLimit.ClampOffset(offset);
                 var holdings = latest
@@ -166,7 +166,7 @@ public class FundDirectoryTools
                     + $"reported {latest.ReportPeriodDate:yyyy-MM-dd}, "
                     + $"net assets ${FormatAmount(latest.NetAssets)}, total assets ${FormatAmount(latest.TotalAssets)}, "
                     + $"{FormatCount(latest.ReportedHoldingCount)} holdings reported, {latest.Holdings.Count} stored"
-                    + (latest.CommonStockId == null ? " tracked-stock holdings" : " holdings")
+                    + (latest.EquityIssuerId == null ? " tracked-stock holdings" : " holdings")
                     + $", showing stored rows {first}-{last} by value:";
 
                 var result = MarkdownTable.Start(

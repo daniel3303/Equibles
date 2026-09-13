@@ -52,15 +52,14 @@ public class DocumentScraperDeferredRetryTests
             }
         );
         ctx.Database.EnsureCreated();
-        ctx.Set<CommonStock>()
+        ctx.Set<EquityIssuer>()
             .Add(
-                new CommonStock
-                {
-                    Id = Guid.NewGuid(),
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
         await ctx.SaveChangesAsync();
 
@@ -88,7 +87,7 @@ public class DocumentScraperDeferredRetryTests
         var persistence = Substitute.For<IDocumentPersistenceService>();
         persistence
             .Exists(
-                Arg.Any<CommonStock>(),
+                Arg.Any<EquityIssuer>(),
                 Arg.Any<DocumentType>(),
                 Arg.Any<DateOnly>(),
                 Arg.Any<DateOnly>(),
@@ -103,13 +102,13 @@ public class DocumentScraperDeferredRetryTests
 
         var services = new ServiceCollection();
         services.AddSingleton(ctx);
-        services.AddScoped<CommonStockRepository>();
+        services.AddScoped<EquityIssuerRepository>();
         services.AddScoped<DocumentRepository>();
         // DocumentScraper resolves CommonStockManager per scope to persist the
         // SEC-sourced fiscal year-end; IBus is an unrelated ctor
         // dep (SetCusip outbox event) the fiscal-year path never uses.
         services.AddSingleton(Substitute.For<IBus>());
-        services.AddScoped<CommonStockManager>();
+        services.AddScoped<EquityIdentityManager>();
         services.AddSingleton(secEdgar);
         services.AddSingleton(persistence);
         services.AddSingleton(Substitute.For<ISecDocumentHtmlNormalizer>());

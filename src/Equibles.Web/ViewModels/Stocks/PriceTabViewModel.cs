@@ -5,7 +5,7 @@ namespace Equibles.Web.ViewModels.Stocks;
 
 public class PriceTabViewModel : StockTabViewModel
 {
-    public List<DailyStockPrice> Prices { get; set; } = [];
+    public List<EquityDailyStockPrice> Prices { get; set; } = [];
 
     // Trailing- and calendar-window returns for this stock.
     public PriceReturns Returns { get; set; } = new();

@@ -68,12 +68,11 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple Inc",
-                Cik = "0000320193",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple Inc",
+                Cik: "0000320193"
+            );
             var berkshire = new InstitutionalHolder
             {
                 Cik = "0001067983",
@@ -88,15 +87,22 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
                 City = "New York",
                 StateOrCountry = "NY",
             };
-            db.Set<CommonStock>().Add(stock);
+            db.Set<EquityIssuer>().Add(stock);
             db.Set<InstitutionalHolder>().AddRange(berkshire, blackrock);
             await db.SaveChangesAsync();
 
             var reportDate = new DateOnly(2024, 3, 31);
             db.Set<InstitutionalHolding>()
                 .AddRange(
-                    BuildHolding(stock, berkshire, reportDate, shares: 10_000, value: 1_500_000),
-                    BuildHolding(stock, blackrock, reportDate, shares: 5_000, value: 750_000)
+                    BuildHolding(
+                        db,
+                        stock,
+                        berkshire,
+                        reportDate,
+                        shares: 10_000,
+                        value: 1_500_000
+                    ),
+                    BuildHolding(db, stock, blackrock, reportDate, shares: 5_000, value: 750_000)
                 );
         });
 
@@ -117,12 +123,11 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple Inc.",
+                Cik: "0000320193"
+            );
             var owner = new InsiderOwner
             {
                 OwnerCik = "0001214156",
@@ -133,7 +138,7 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
                 IsOfficer = true,
                 OfficerTitle = "CEO",
             };
-            db.Set<CommonStock>().Add(stock);
+            db.Set<EquityIssuer>().Add(stock);
             db.Set<InsiderOwner>().Add(owner);
             await db.SaveChangesAsync();
 
@@ -141,7 +146,7 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
                 .Add(
                     new InsiderTransaction
                     {
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         InsiderOwnerId = owner.Id,
                         TransactionDate = new DateOnly(2024, 3, 15),
                         FilingDate = new DateOnly(2024, 3, 17),
@@ -175,18 +180,17 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "NVDA",
-                Name = "NVIDIA Corporation",
-                Cik = "0001045810",
-            };
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "NVDA",
+                Name: "NVIDIA Corporation",
+                Cik: "0001045810"
+            );
             var member = new CongressMember
             {
                 Name = "Nancy Pelosi",
                 Position = CongressPosition.Representative,
             };
-            db.Set<CommonStock>().Add(stock);
+            db.Set<EquityIssuer>().Add(stock);
             db.Set<CongressMember>().Add(member);
             await db.SaveChangesAsync();
 
@@ -195,7 +199,7 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
                     new CongressionalTrade
                     {
                         CongressMemberId = member.Id,
-                        CommonStockId = stock.Id,
+                        EquityIssuerId = stock.Id,
                         TransactionDate = new DateOnly(2026, 3, 15),
                         FilingDate = new DateOnly(2026, 4, 14),
                         TransactionType = CongressTransactionType.Purchase,
@@ -291,16 +295,15 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
     {
         await _fixture.ResetAndSeedAsync(async db =>
         {
-            var stock = new CommonStock
-            {
-                Ticker = "AAPL",
-                Name = "Apple Inc",
-                Cik = "0000320193",
-            };
-            db.Set<CommonStock>().Add(stock);
+            EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Ticker: "AAPL",
+                Name: "Apple Inc",
+                Cik: "0000320193"
+            );
+            db.Set<EquityIssuer>().Add(stock);
             await db.SaveChangesAsync();
 
-            db.Set<DailyStockPrice>()
+            db.Set<EquityDailyStockPrice>()
                 .AddRange(
                     BuildPrice(stock, new DateOnly(2026, 4, 1), close: 175.50m, volume: 50_000_000),
                     BuildPrice(stock, new DateOnly(2026, 4, 2), close: 176.25m, volume: 45_000_000)
@@ -357,7 +360,8 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
     }
 
     private static InstitutionalHolding BuildHolding(
-        CommonStock stock,
+        Microsoft.EntityFrameworkCore.DbContext db,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long shares,
@@ -365,8 +369,8 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
-            CommonStock = stock,
+            EquityIssuerId = stock.Id,
+            Issuer = Equibles.TestSupport.NativeListingSeed.ForStock(db, stock).Security.Issuer,
             InstitutionalHolderId = holder.Id,
             InstitutionalHolder = holder,
             ReportDate = reportDate,
@@ -380,17 +384,27 @@ public class McpServerToolCorrectnessTests : IClassFixture<McpServerAppFixture>,
             Cusip = "037833100",
         };
 
-    private static DailyStockPrice BuildPrice(
-        CommonStock stock,
+    private static EquityDailyStockPrice BuildPrice(
+        EquityIssuer stock,
         DateOnly date,
         decimal close,
         long volume
     ) =>
         new()
         {
-            CommonStock = stock,
-            CommonStockId = stock.Id,
-            ListedTicker = stock.Ticker,
+            Listing = Equibles.TestSupport.NativeListingSeed.ForStock(
+                null,
+                stock,
+                stock.Presentation.Listing.Ticker
+            ),
+            EquityListingId = Equibles
+                .TestSupport.NativeListingSeed.ForStock(
+                    null,
+                    stock,
+                    stock.Presentation.Listing.Ticker
+                )
+                .Id,
+            SourceTicker = stock.Presentation.Listing.Ticker,
             Date = date,
             Open = close - 1m,
             High = close + 1m,

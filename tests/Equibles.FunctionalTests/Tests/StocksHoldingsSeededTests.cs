@@ -49,13 +49,12 @@ public class StocksHoldingsSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "AAPL",
-                    Name = "Apple Inc.",
-                    Cik = "0000320193",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "AAPL",
+                    Name: "Apple Inc.",
+                    Cik: "0000320193"
+                )
             );
 
             db.ChangeTracker.AutoDetectChangesEnabled = false;
@@ -77,7 +76,7 @@ public class StocksHoldingsSeededTests
                     db.Add(
                         new InstitutionalHolding
                         {
-                            CommonStockId = stockId,
+                            EquityIssuerId = stockId,
                             InstitutionalHolderId = holders[i].Id,
                             ReportDate = reportDate,
                             FilingDate = reportDate.AddDays(45),
@@ -170,26 +169,24 @@ public class StocksHoldingsSeededTests
         await _web.ResetAndSeedAsync(async db =>
         {
             db.Add(
-                new CommonStock
-                {
-                    Id = stockId,
-                    Ticker = "MSFT",
-                    Name = "Microsoft Corp.",
-                    Cik = "0000789019",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: stockId,
+                    Ticker: "MSFT",
+                    Name: "Microsoft Corp.",
+                    Cik: "0000789019"
+                )
             );
             // Anchor stock — gives Holder 3 a Q2 13F filing on a different
             // ticker so the Sold-Out filter recognises them as "filed this
             // quarter, just not for MSFT" (genuine signal) instead of
             // "hasn't filed yet" (which is now correctly excluded).
             db.Add(
-                new CommonStock
-                {
-                    Id = anchorStockId,
-                    Ticker = "ANCH",
-                    Name = "Anchor Corp.",
-                    Cik = "0000999999",
-                }
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: anchorStockId,
+                    Ticker: "ANCH",
+                    Name: "Anchor Corp.",
+                    Cik: "0000999999"
+                )
             );
 
             var holders = new InstitutionalHolder[5];
@@ -209,7 +206,7 @@ public class StocksHoldingsSeededTests
             db.Add(
                 new InstitutionalHolding
                 {
-                    CommonStockId = anchorStockId,
+                    EquityIssuerId = anchorStockId,
                     InstitutionalHolderId = holders[2].Id,
                     ReportDate = latest,
                     FilingDate = latest.AddDays(45),
@@ -226,7 +223,7 @@ public class StocksHoldingsSeededTests
                 db.Add(
                     new InstitutionalHolding
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         InstitutionalHolderId = holders[i].Id,
                         ReportDate = prior,
                         FilingDate = prior.AddDays(45),
@@ -254,7 +251,7 @@ public class StocksHoldingsSeededTests
                 db.Add(
                     new InstitutionalHolding
                     {
-                        CommonStockId = stockId,
+                        EquityIssuerId = stockId,
                         InstitutionalHolderId = holders[i].Id,
                         ReportDate = latest,
                         FilingDate = latest.AddDays(45),

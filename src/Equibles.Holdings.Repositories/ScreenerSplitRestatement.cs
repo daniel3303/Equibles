@@ -37,6 +37,20 @@ public static class ScreenerSplitRestatement
     )
     {
         long restated = 0;
+        if (
+            currentListingShares.Any(slice =>
+                PriceSeriesSplitScope.HasUnresolvedBasis(
+                    splitsSinceCurrent,
+                    slice.ListedTicker ?? row.Ticker,
+                    current
+                )
+            )
+        )
+        {
+            row.CurrentShares = currentListingShares.Sum(slice => slice.Shares);
+            row.PercentOfFloat = null;
+            return;
+        }
         foreach (var slice in currentListingShares)
         {
             var scoped = PriceSeriesSplitScope.ForListing(

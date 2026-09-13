@@ -70,8 +70,8 @@ public class HoldingsAggregateRefreshServiceHolderSnapshotTests : IAsyncLifetime
     {
         await using var seed = FreshContext();
         var industry = await SeedTaxonomy(seed);
-        var aapl = await SeedStock(seed, "AAPL", industry);
-        var msft = await SeedStock(seed, "MSFT", industry);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
+        EquityIssuer msft = await SeedStock(seed, "MSFT", industry);
         var holderA = await SeedHolder(seed, "H001");
         var holderB = await SeedHolder(seed, "H002");
         seed.AddRange(
@@ -106,7 +106,7 @@ public class HoldingsAggregateRefreshServiceHolderSnapshotTests : IAsyncLifetime
     {
         await using var seed = FreshContext();
         var industry = await SeedTaxonomy(seed);
-        var aapl = await SeedStock(seed, "AAPL", industry);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
         var holder13F = await SeedHolder(seed, "H001");
         var holder13D = await SeedHolder(seed, "H002");
         seed.AddRange(
@@ -143,8 +143,8 @@ public class HoldingsAggregateRefreshServiceHolderSnapshotTests : IAsyncLifetime
     {
         await using var seed = FreshContext();
         var industry = await SeedTaxonomy(seed);
-        var aapl = await SeedStock(seed, "AAPL", industry);
-        var msft = await SeedStock(seed, "MSFT", industry);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
+        EquityIssuer msft = await SeedStock(seed, "MSFT", industry);
         var holder = await SeedHolder(seed, "H001");
         var original = MakeHolding(aapl, holder, Q4, 100_000, "acc-orig");
         var amendment = MakeHolding(msft, holder, Q4, 200_000, "acc-amend");
@@ -165,7 +165,7 @@ public class HoldingsAggregateRefreshServiceHolderSnapshotTests : IAsyncLifetime
     {
         await using var seed = FreshContext();
         var industry = await SeedTaxonomy(seed);
-        var aapl = await SeedStock(seed, "AAPL", industry);
+        EquityIssuer aapl = await SeedStock(seed, "AAPL", industry);
         var holder = await SeedHolder(seed, "H001");
         var goneHolder = await SeedHolder(seed, "H002");
         seed.Add(MakeHolding(aapl, holder, Q4, 100_000, "acc-q4"));
@@ -217,19 +217,18 @@ public class HoldingsAggregateRefreshServiceHolderSnapshotTests : IAsyncLifetime
         return industry.Id;
     }
 
-    private static async Task<CommonStock> SeedStock(
+    private static async Task<EquityIssuer> SeedStock(
         Equibles.Data.EquiblesFinancialDbContext ctx,
         string ticker,
         Guid industryId
     )
     {
-        var stock = new CommonStock
-        {
-            Ticker = ticker,
-            Name = $"{ticker} Corp.",
-            Cik = $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
-            IndustryId = industryId,
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: $"{ticker} Corp.",
+            Cik: $"C{Guid.NewGuid().GetHashCode() & int.MaxValue:D8}",
+            IndustryId: industryId
+        );
         ctx.Add(stock);
         await ctx.SaveChangesAsync();
         return stock;
@@ -247,7 +246,7 @@ public class HoldingsAggregateRefreshServiceHolderSnapshotTests : IAsyncLifetime
     }
 
     private static InstitutionalHolding MakeHolding(
-        CommonStock stock,
+        EquityIssuer stock,
         InstitutionalHolder holder,
         DateOnly reportDate,
         long value,
@@ -257,7 +256,7 @@ public class HoldingsAggregateRefreshServiceHolderSnapshotTests : IAsyncLifetime
     ) =>
         new()
         {
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             FilingDate = reportDate.AddDays(45),
             ReportDate = reportDate,
@@ -271,7 +270,7 @@ public class HoldingsAggregateRefreshServiceHolderSnapshotTests : IAsyncLifetime
             // from the stock so the holding-row unique key stays disambiguated
             // across the test seeds.
             Cusip =
-                $"{stock.Ticker[..Math.Min(4, stock.Ticker.Length)]}{stock.Id.GetHashCode():X8}"[
+                $"{stock.Presentation.Listing.Ticker[..Math.Min(4, stock.Presentation.Listing.Ticker.Length)]}{stock.Id.GetHashCode():X8}"[
                     ..9
                 ],
         };

@@ -39,20 +39,18 @@ public class InsiderDashboardSeededTests
 
         await _web.ResetAndSeedAsync(async db =>
         {
-            var aapl = new CommonStock
-            {
-                Id = stockAaplId,
-                Ticker = "AAPL",
-                Name = "Apple Inc.",
-                Cik = "0000320193",
-            };
-            var msft = new CommonStock
-            {
-                Id = stockMsftId,
-                Ticker = "MSFT",
-                Name = "Microsoft Corporation",
-                Cik = "0000789019",
-            };
+            EquityIssuer aapl = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: stockAaplId,
+                Ticker: "AAPL",
+                Name: "Apple Inc.",
+                Cik: "0000320193"
+            );
+            EquityIssuer msft = Equibles.TestSupport.EquityIssuerSeed.Create(
+                Id: stockMsftId,
+                Ticker: "MSFT",
+                Name: "Microsoft Corporation",
+                Cik: "0000789019"
+            );
             db.Add(aapl);
             db.Add(msft);
 
@@ -77,7 +75,7 @@ public class InsiderDashboardSeededTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockAaplId,
+                    EquityIssuerId = stockAaplId,
                     InsiderOwnerId = buyer.Id,
                     TransactionDate = today.AddDays(-5),
                     FilingDate = today.AddDays(-3),
@@ -97,7 +95,7 @@ public class InsiderDashboardSeededTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockMsftId,
+                    EquityIssuerId = stockMsftId,
                     InsiderOwnerId = buyer.Id,
                     TransactionDate = today.AddDays(-10),
                     FilingDate = today.AddDays(-8),
@@ -117,7 +115,7 @@ public class InsiderDashboardSeededTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockAaplId,
+                    EquityIssuerId = stockAaplId,
                     InsiderOwnerId = seller.Id,
                     TransactionDate = today.AddDays(-2),
                     FilingDate = today.AddDays(-1),
@@ -137,7 +135,7 @@ public class InsiderDashboardSeededTests
             db.Add(
                 new InsiderTransaction
                 {
-                    CommonStockId = stockMsftId,
+                    EquityIssuerId = stockMsftId,
                     InsiderOwnerId = seller.Id,
                     TransactionDate = today.AddDays(-15),
                     FilingDate = today.AddDays(-13),

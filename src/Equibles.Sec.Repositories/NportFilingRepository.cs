@@ -9,7 +9,7 @@ namespace Equibles.Sec.Repositories;
 /// Reads and writes NPORT-P portfolio reports. Unlike the other SEC filing repositories this one
 /// does not derive from <c>SecFilingRepositoryBase</c>: an NPORT-P filing is not necessarily
 /// attributed to a tracked stock (multi-series fund-family trusts discovered by the daily-index
-/// sweep carry a <see cref="NportFiling.RegistrantCik"/> instead of a <see cref="NportFiling.CommonStockId"/>),
+/// sweep carry a <see cref="NportFiling.RegistrantCik"/> instead of a <see cref="NportFiling.EquityIssuerId"/>),
 /// so its registrant identity is optional.
 /// </summary>
 public class NportFilingRepository : BaseRepository<NportFiling>
@@ -18,9 +18,9 @@ public class NportFilingRepository : BaseRepository<NportFiling>
         : base(dbContext) { }
 
     /// <summary>The filings attributed to a tracked stock (the fund crawled through its own feed).</summary>
-    public IQueryable<NportFiling> GetByStock(CommonStock stock)
+    public IQueryable<NportFiling> GetByIssuerId(Guid issuerId)
     {
-        return GetAll().Where(f => f.CommonStockId == stock.Id);
+        return GetAll().Where(f => f.EquityIssuerId == issuerId);
     }
 
     public IQueryable<NportFiling> GetByAccessionNumber(string accessionNumber)
@@ -49,7 +49,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
 
     /// <summary>
     /// The reported holding rows carrying the stock's current CUSIP or any of its retired-CUSIP
-    /// aliases (<see cref="CommonStockCusipAlias"/>), across all NPORT filings. After an issuer-level
+    /// aliases (<see cref="EquityIssuerCusipAlias"/>), across all NPORT filings. After an issuer-level
     /// CUSIP change a fund keeps reporting the position under the old CUSIP — a laggard filer for a
     /// quarter or two, and every historical report forever — so the reverse lookup must match the
     /// alias too, mirroring the 13F import-time alias union, or the fund reads as having exited.
@@ -61,18 +61,18 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     /// NPORT identity, so the lookup is empty for them (callers guard, and a NULL never matches
     /// an IN) — cusip-less holding rows (bonds, foreign instruments) are never swept in.
     /// </summary>
-    public IQueryable<NportHolding> GetHoldingsByStockCusip(CommonStock stock)
+    public IQueryable<NportHolding> GetHoldingsByStockCusip(EquityIssuer stock)
     {
-        return GetHoldingsByListingCusip(stock, stock.Ticker);
+        return GetHoldingsByListingCusip(stock, stock.Presentation.Listing.Ticker);
     }
 
     /// <summary>
     /// Holdings carrying the exact listed security's authoritative CUSIP identity. A primary
     /// listing uses the stock's current and retired CUSIPs; a secondary listing uses only its
-    /// <see cref="CommonStockListedCusip"/> rows, so sibling fund series never bleed together.
+    /// <see cref="EquityListingCusipEvidence"/> rows, so sibling fund series never bleed together.
     /// </summary>
     public IQueryable<NportHolding> GetHoldingsByListingCusip(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker
     )
     {
@@ -85,32 +85,40 @@ public class NportFilingRepository : BaseRepository<NportFiling>
             .Where(h => h.Cusip != null && cusips.Contains(h.Cusip));
     }
 
-    private IQueryable<string> GetCusipIdentity(CommonStock stock, string listedTicker)
+    private IQueryable<string> GetCusipIdentity(EquityIssuer stock, string listedTicker)
     {
-        var isPrimary = string.Equals(
-            listedTicker,
-            stock.Ticker,
-            StringComparison.OrdinalIgnoreCase
-        );
-        return isPrimary
-            ? DbContext
-                .Set<CommonStockCusipAlias>()
-                .Where(a => a.CommonStockId == stock.Id)
-                .Select(a => a.Cusip)
-                .Union(
-                    DbContext
-                        .Set<CommonStock>()
-                        .Where(s => s.Id == stock.Id && s.Cusip != null)
-                        .Select(s => s.Cusip)
+        var isPrimary =
+            stock.Presentation?.Listing is { MarketCountryCode: "US" } primary
+            && string.Equals(listedTicker, primary.Ticker, StringComparison.OrdinalIgnoreCase);
+        var native = DbContext
+            .Set<EquitySecurity>()
+            .Where(security =>
+                security.EquityIssuerId == stock.Id
+                && security.Cusip != null
+                && security.Listings.Any(listing =>
+                    listing.MarketCountryCode == "US" && listing.Ticker == listedTicker
                 )
-            : DbContext
-                .Set<CommonStockListedCusip>()
-                .Where(c => c.CommonStockId == stock.Id && c.ListedTicker == listedTicker)
-                .Select(c => c.Cusip);
+            )
+            .Select(security => security.Cusip);
+        return isPrimary
+            ? native.Union(
+                DbContext
+                    .Set<EquityIssuerCusipAlias>()
+                    .Where(alias => alias.EquityIssuerId == stock.Id)
+                    .Select(alias => alias.Cusip)
+            )
+            : native.Union(
+                DbContext
+                    .Set<EquityListingCusipEvidence>()
+                    .Where(evidence =>
+                        evidence.EquityIssuerId == stock.Id && evidence.ListedTicker == listedTicker
+                    )
+                    .Select(evidence => evidence.Cusip)
+            );
     }
 
     public Task<bool> HasCusipIdentity(
-        CommonStock stock,
+        EquityIssuer stock,
         string listedTicker,
         CancellationToken cancellationToken = default
     ) => GetCusipIdentity(stock, listedTicker).AnyAsync(cancellationToken);
@@ -158,7 +166,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
         var wanted = seriesIds.Select(s => s.ToUpperInvariant()).ToList();
 
         return GetAll()
-            .Where(f => f.CommonStockId == null)
+            .Where(f => f.EquityIssuerId == null)
             .Where(f => f.SeriesId != null && wanted.Contains(f.SeriesId.ToUpper()))
             .Where(f => f.ReportedHoldingCount != null)
             .Where(f => f.Holdings.Count < f.ReportedHoldingCount);
@@ -171,7 +179,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     /// stale "latest" report under every spelling.
     ///
     /// A series is normally scoped to its registrant: a filing crawled through a tracked stock's
-    /// feed is scoped by <see cref="NportFiling.CommonStockId"/>; a filing discovered by the
+    /// feed is scoped by <see cref="NportFiling.EquityIssuerId"/>; a filing discovered by the
     /// daily-index sweep is scoped by <see cref="NportFiling.RegistrantCik"/>. A non-empty SEC
     /// <see cref="NportFiling.SeriesId"/> is globally authoritative, however, so if the same series
     /// has reached both ingestion populations only the newest filing survives. Different non-empty
@@ -194,7 +202,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
         // A series-bearing tracked fund first competes globally by SEC series id, then against an
         // id-less filing scoped to the same tracked stock.
         var trackedSeries = filings
-            .Where(f => f.CommonStockId != null && !string.IsNullOrEmpty(f.SeriesId))
+            .Where(f => f.EquityIssuerId != null && !string.IsNullOrEmpty(f.SeriesId))
             .Where(f =>
                 !filings.Any(f2 =>
                     f2.SeriesId == f.SeriesId
@@ -214,7 +222,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
             )
             .Where(f =>
                 !filings.Any(f2 =>
-                    f2.CommonStockId == f.CommonStockId
+                    f2.EquityIssuerId == f.EquityIssuerId
                     && string.IsNullOrEmpty(f2.SeriesId)
                     && (
                         f2.ReportPeriodDate > f.ReportPeriodDate
@@ -234,10 +242,10 @@ public class NportFilingRepository : BaseRepository<NportFiling>
         // An id-less tracked filing represents the stock's whole fund and therefore competes with
         // every filing scoped to that stock.
         var trackedIdless = filings
-            .Where(f => f.CommonStockId != null && string.IsNullOrEmpty(f.SeriesId))
+            .Where(f => f.EquityIssuerId != null && string.IsNullOrEmpty(f.SeriesId))
             .Where(f =>
                 !filings.Any(f2 =>
-                    f2.CommonStockId == f.CommonStockId
+                    f2.EquityIssuerId == f.EquityIssuerId
                     && (
                         f2.ReportPeriodDate > f.ReportPeriodDate
                         || (
@@ -259,7 +267,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
         // "= OR both-null" — which would give the anti-join no hash key again.
         var trustSeries = filings
             .Where(f =>
-                f.CommonStockId == null
+                f.EquityIssuerId == null
                 && f.RegistrantCik != null
                 && !string.IsNullOrEmpty(f.SeriesId)
             )
@@ -282,7 +290,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
             )
             .Where(f =>
                 !filings.Any(f2 =>
-                    f2.CommonStockId == null
+                    f2.EquityIssuerId == null
                     && f.RegistrantCik != null
                     && f2.RegistrantCik == f.RegistrantCik
                     && string.IsNullOrEmpty(f2.SeriesId)
@@ -305,13 +313,13 @@ public class NportFilingRepository : BaseRepository<NportFiling>
         // with every sweep filing scoped to that registrant.
         var trustIdless = filings
             .Where(f =>
-                f.CommonStockId == null
+                f.EquityIssuerId == null
                 && f.RegistrantCik != null
                 && string.IsNullOrEmpty(f.SeriesId)
             )
             .Where(f =>
                 !filings.Any(f2 =>
-                    f2.CommonStockId == null
+                    f2.EquityIssuerId == null
                     && f.RegistrantCik != null
                     && f2.RegistrantCik == f.RegistrantCik
                     && (
@@ -332,10 +340,10 @@ public class NportFilingRepository : BaseRepository<NportFiling>
         // Identity-less filings (no stock, no CIK): they all share one identity, mirroring the
         // original OR form's null-equals-null arm. Empty in practice, kept for equivalence.
         var identityless = filings
-            .Where(f => f.CommonStockId == null && f.RegistrantCik == null)
+            .Where(f => f.EquityIssuerId == null && f.RegistrantCik == null)
             .Where(f =>
                 !filings.Any(f2 =>
-                    f2.CommonStockId == null
+                    f2.EquityIssuerId == null
                     && f2.RegistrantCik == null
                     && (
                         f2.SeriesId == f.SeriesId
@@ -366,7 +374,7 @@ public class NportFilingRepository : BaseRepository<NportFiling>
 
     /// <summary>
     /// All filings of a single fund series, identified the same way as <see cref="GetLatestPerSeries"/>
-    /// — a tracked fund by its <see cref="NportFiling.CommonStockId"/>, a sweep-discovered trust by
+    /// — a tracked fund by its <see cref="NportFiling.EquityIssuerId"/>, a sweep-discovered trust by
     /// its <see cref="NportFiling.RegistrantCik"/>, never name text; an id-less filing belongs to the
     /// registrant's single fund, so an empty <paramref name="seriesId"/> matches the id-less reports.
     /// Pass the series' own <c>CommonStockId</c> (or null for a trust) and its <c>RegistrantCik</c>.
@@ -380,10 +388,10 @@ public class NportFilingRepository : BaseRepository<NportFiling>
         return GetAll()
             .Where(f =>
                 (
-                    (commonStockId != null && f.CommonStockId == commonStockId)
+                    (commonStockId != null && f.EquityIssuerId == commonStockId)
                     || (
                         commonStockId == null
-                        && f.CommonStockId == null
+                        && f.EquityIssuerId == null
                         && f.RegistrantCik == registrantCik
                     )
                 )

@@ -109,12 +109,11 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
     )
     {
         var seedContext = CreateSharedContext();
-        var stock = new CommonStock
-        {
-            Id = Guid.NewGuid(),
-            Ticker = Guid.NewGuid().ToString()[..4],
-            Name = "Issuer",
-        };
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: Guid.NewGuid().ToString()[..4],
+            Name: "Issuer"
+        );
         var holder = new InstitutionalHolder
         {
             Id = Guid.NewGuid(),
@@ -124,7 +123,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         var holding = new InstitutionalHolding
         {
             Id = Guid.NewGuid(),
-            CommonStockId = stock.Id,
+            EquityIssuerId = stock.Id,
             InstitutionalHolderId = holder.Id,
             ReportDate = new DateOnly(2026, 3, 31),
             FilingDate = new DateOnly(2026, 5, 10),
@@ -151,7 +150,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
             ],
         };
 
-        seedContext.Set<CommonStock>().Add(stock);
+        seedContext.Set<EquityIssuer>().Add(stock);
         seedContext.Set<InstitutionalHolder>().Add(holder);
         seedContext.Set<InstitutionalHolding>().Add(holding);
         await seedContext.SaveChangesAsync();
@@ -179,10 +178,15 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
         }
         using (var stockContext = CreateSharedContext())
         {
-            foreach (var stock in await stockContext.Set<CommonStock>().ToListAsync())
+            foreach (
+                EquityIssuer stock in await stockContext
+                    .Set<EquityIssuer>()
+                    .Include(issuer => issuer.Presentation.Listing.Security)
+                    .ToListAsync()
+            )
             {
-                stock.SharesOutStanding = 100_000;
-                stock.MarketCapitalization = 5_000_000;
+                stock.Presentation.Listing.Security.SharesOutstanding = 100_000;
+                stock.Presentation.Listing.Security.MarketCapitalization = 5_000_000;
             }
             await stockContext.SaveChangesAsync();
         }
@@ -235,7 +239,7 @@ public class HoldingValueFallbackRepairServiceTests : IDisposable
     }
 
     private void PriceAt(InstitutionalHolding holding, decimal close) =>
-        _prices[(holding.CommonStockId, holding.ListedTicker, holding.ReportDate)] = close;
+        _prices[(holding.EquityIssuerId, holding.ListedTicker, holding.ReportDate)] = close;
 
     // The production signature (SG Americas / AAPL, 2026-06-30): the filer reports the VALUE
     // column in thousands, the close arrived after the publish decision, and every row froze
