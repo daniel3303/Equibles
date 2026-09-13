@@ -71,3 +71,9 @@
 - Recorded listing attribution is immutable, and reverse directory changes cannot invalidate an action's ownership or dividend denomination.
 - Action validation locks its listing/security while checking ownership; native reads select an exact listing and never include sibling or unattributed events.
 - Capture and reconciliation consumers must complete their native transition before foreign price writes are enabled.
+
+## Mixed-version profile writes
+
+- Legacy updates propagate only changed profile fields and changed per-listing memberships.
+- Unrelated writes preserve newer native share counts, capitalization, checkpoints, lifecycle and presentation choices.
+- Full profile copying remains limited to initial insertion and the historical backfill.

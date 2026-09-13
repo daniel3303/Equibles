@@ -12,6 +12,71 @@ public class NativeEquityProfileTests : ParadeDbMcpTestBase
         : base(fixture) { }
 
     [Fact]
+    public async Task MixedWriters_OnlyChangedLegacyFieldsAndMembershipsReachNativeProfiles()
+    {
+        var source = new CommonStock
+        {
+            Ticker = "ORIGINAL",
+            Name = "Original name",
+            Cik = "0000000123",
+            SharesOutStanding = 100,
+            MarketCapitalization = 1000,
+            SecondaryTickers = ["SECONDARY"],
+            ReferenceTickers = ["REFERENCE"],
+        };
+        DbContext.Add(source);
+        await DbContext.SaveChangesAsync();
+        var issuer = await new EquityIssuerRepository(DbContext).GetByCik(source.Cik);
+        var primary = issuer.Presentation.Listing;
+        var secondary = issuer
+            .Securities.SelectMany(row => row.Listings)
+            .Single(row => row.Ticker == "SECONDARY");
+        var reference = issuer
+            .Securities.SelectMany(row => row.Listings)
+            .Single(row => row.Ticker == "REFERENCE");
+        var checkpoint = new DateTime(2026, 9, 12, 1, 2, 3, DateTimeKind.Utc);
+        issuer.Name = "Native name";
+        issuer.Description = "Native description";
+        primary.Security.SharesOutstanding = 200;
+        primary.Security.MarketCapitalization = 3000;
+        primary.YahooEnrichmentAttemptedAt = checkpoint;
+        primary.PriceHistoryBackfilled = true;
+        secondary.IsDirectoryListed = false;
+        secondary.Active = false;
+        reference.IsReferenceListed = false;
+        issuer.Presentation.Listing = secondary;
+        await DbContext.SaveChangesAsync();
+
+        source.Website = "https://updated.example.com";
+        await DbContext.SaveChangesAsync();
+        // A different legacy membership changes next; unchanged members remain native-owned.
+        source.SecondaryTickers = ["SECONDARY", "NEW-SECONDARY"];
+        await DbContext.SaveChangesAsync();
+        await using var read = Fixture.CreateDbContext();
+        var saved = await new EquityIssuerRepository(read).GetByCik(source.Cik);
+        saved.Name.Should().Be("Native name");
+        saved.Description.Should().Be("Native description");
+        saved.Website.Should().Be(source.Website);
+        saved.Presentation.EquityListingId.Should().Be(secondary.Id);
+        var listings = saved.Securities.SelectMany(row => row.Listings).ToList();
+        var savedPrimary = listings.Single(row => row.Id == primary.Id);
+        savedPrimary.Security.SharesOutstanding.Should().Be(200);
+        savedPrimary.Security.MarketCapitalization.Should().Be(3000);
+        savedPrimary.YahooEnrichmentAttemptedAt.Should().Be(checkpoint);
+        savedPrimary.PriceHistoryBackfilled.Should().BeTrue();
+        listings.Single(row => row.Id == secondary.Id).Active.Should().BeFalse();
+        listings.Single(row => row.Id == secondary.Id).IsDirectoryListed.Should().BeFalse();
+        listings.Single(row => row.Id == reference.Id).IsReferenceListed.Should().BeFalse();
+        listings.Single(row => row.Ticker == "NEW-SECONDARY").IsDirectoryListed.Should().BeTrue();
+
+        source.SharesOutStanding = 250;
+        await DbContext.SaveChangesAsync();
+        await read.Entry(savedPrimary.Security).ReloadAsync();
+        savedPrimary.Security.SharesOutstanding.Should().Be(250);
+        savedPrimary.Security.MarketCapitalization.Should().Be(3000);
+    }
+
+    [Fact]
     public async Task LegacyReactivation_ClearsTheListingCutoffInTheSameWrite()
     {
         var source = new CommonStock
