@@ -1891,6 +1891,44 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("HolderQuarterlySnapshot");
                 });
 
+            modelBuilder.Entity("Equibles.Holdings.Data.Models.HoldingsCorrectionEvidence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CorrectionKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("MigratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OriginalRow")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SourceRecordId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceSchema")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SourceTable")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrectionKey", "SourceTable", "SourceRecordId");
+
+                    b.ToTable("HoldingsCorrectionEvidence");
+                });
+
             modelBuilder.Entity("Equibles.Holdings.Data.Models.HoldingsReconciliationLog", b =>
                 {
                     b.Property<Guid>("Id")
