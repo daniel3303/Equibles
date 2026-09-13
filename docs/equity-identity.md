@@ -77,3 +77,9 @@
 - Legacy updates propagate only changed profile fields and changed per-listing memberships.
 - Unrelated writes preserve newer native share counts, capitalization, checkpoints, lifecycle and presentation choices.
 - Full profile copying remains limited to initial insertion and the historical backfill.
+
+## Obsolete directory claims
+
+- SEC ticker reassignment withdraws every obsolete U.S. directory claim under the locked issuer.
+- Independent reference coverage protects its exact listing; foreign listings and all historical observations remain intact.
+- A newly acquired reference claim on the displaced symbol refuses retirement when the locked graph is refreshed.

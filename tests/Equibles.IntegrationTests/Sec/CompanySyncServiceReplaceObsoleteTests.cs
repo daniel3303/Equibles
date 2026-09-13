@@ -47,6 +47,25 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
             PriceHistoryBackfilledTickers: ["REUSED"],
             HistoricalPriceBackfillAttemptedAt: DateTime.UtcNow
         );
+        var secondary = Equibles.TestSupport.NativeListingSeed.ForStock(
+            DbContext,
+            obsolete,
+            "OLD-B"
+        );
+        secondary.IsDirectoryListed = true;
+        secondary.PriceHistoryBackfilled = true;
+        var reference = Equibles.TestSupport.NativeListingSeed.ForStock(DbContext, obsolete, "REF");
+        reference.IsDirectoryListed = true;
+        reference.IsReferenceListed = true;
+        reference.PriceHistoryBackfilled = true;
+        var foreign = Equibles.TestSupport.NativeListingSeed.ForStock(
+            DbContext,
+            obsolete,
+            "FOREIGN"
+        );
+        foreign.MarketCountryCode = "PT";
+        foreign.IsDirectoryListed = true;
+        foreign.PriceHistoryBackfilled = true;
         var exactPriceId = Guid.NewGuid();
         DbContext.Add(
             new EquityDailyStockPrice
@@ -128,13 +147,30 @@ public class CompanySyncServiceReplaceObsoleteTests : ParadeDbMcpTestBase
         retired
             .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
             .Where(nativeListing =>
-                nativeListing.MarketCountryCode == "US" && (nativeListing.PriceHistoryBackfilled)
+                nativeListing.MarketCountryCode == "US"
+                && !nativeListing.IsReferenceListed
+                && nativeListing.PriceHistoryBackfilled
             )
             .Select(nativeListing => nativeListing.Ticker)
             .ToList()
             .Should()
             .BeEmpty();
         retired.Presentation.Listing.HistoricalPriceBackfillAttemptedAt.Should().BeNull();
+        var retainedListings = await verify
+            .Set<EquityListing>()
+            .Where(row => row.Security.EquityIssuerId == obsolete.Id)
+            .ToListAsync();
+        retainedListings.Single(row => row.Id == secondary.Id).Active.Should().BeFalse();
+        retainedListings.Single(row => row.Id == secondary.Id).IsDirectoryListed.Should().BeFalse();
+        var retainedReference = retainedListings.Single(row => row.Id == reference.Id);
+        retainedReference.Active.Should().BeTrue();
+        retainedReference.IsDirectoryListed.Should().BeFalse();
+        retainedReference.IsReferenceListed.Should().BeTrue();
+        retainedReference.PriceHistoryBackfilled.Should().BeTrue();
+        var retainedForeign = retainedListings.Single(row => row.Id == foreign.Id);
+        retainedForeign.Active.Should().BeTrue();
+        retainedForeign.IsDirectoryListed.Should().BeTrue();
+        retainedForeign.PriceHistoryBackfilled.Should().BeTrue();
         stocks.Should().OnlyContain(stock => stock.Presentation.Listing.Ticker == "REUSED");
         (await verify.Set<EquityDailyStockPrice>().AsNoTracking().ToListAsync())
             .Should()

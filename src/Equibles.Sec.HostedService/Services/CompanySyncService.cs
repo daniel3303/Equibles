@@ -995,16 +995,14 @@ public class CompanySyncService : ICompanySyncService
     }
 
     private static bool HasReferenceCoverage(EquityIssuer stock) =>
-        (
-            stock
-                .Securities.SelectMany(nativeSecurity => nativeSecurity.Listings)
-                .Where(nativeListing =>
-                    nativeListing.MarketCountryCode == "US" && (nativeListing.IsReferenceListed)
-                )
-                .Select(nativeListing => nativeListing.Ticker)
-                .ToList()
-            ?? []
-        ).Any(ticker => TickerNormalizer.NormalizeListed(ticker) != null);
+        stock
+            .Securities.SelectMany(security => security.Listings)
+            .Any(listing =>
+                listing.MarketCountryCode == "US"
+                && listing.IsReferenceListed
+                && listing.Active
+                && listing.Ticker == stock.Presentation.Listing.Ticker
+            );
 
     private static void AddAndTrack(
         EquityIssuer newStock,
@@ -1029,18 +1027,17 @@ public class CompanySyncService : ICompanySyncService
                 IsolationLevel.ReadCommitted
             );
 
-            // BuildSyncState tracks the pre-lock snapshot. Detach it so the locking query
-            // materializes the current database values instead of returning that stale instance
-            // through EF identity resolution.
-            state.DbContext.Entry(stock).State = EntityState.Detached;
+            // Retain the expected identity before the repository refreshes the locked graph.
+            var expectedCik = stock.Cik;
+            var expectedTicker = stock.Presentation.Listing.Ticker;
             EquityIssuer lockedStock = await state.CommonStockRepository.GetForUpdate(stock.Id);
             if (lockedStock != null)
             {
                 if (
-                    !string.Equals(lockedStock.Cik, stock.Cik, StringComparison.Ordinal)
+                    !string.Equals(lockedStock.Cik, expectedCik, StringComparison.Ordinal)
                     || !string.Equals(
                         lockedStock.Presentation.Listing.Ticker,
-                        stock.Presentation.Listing.Ticker,
+                        expectedTicker,
                         StringComparison.Ordinal
                     )
                 )
@@ -1050,11 +1047,15 @@ public class CompanySyncService : ICompanySyncService
                     );
                 }
 
+                if (HasReferenceCoverage(lockedStock))
+                    throw new DbUpdateConcurrencyException(
+                        "The incumbent listing gained reference coverage before retirement."
+                    );
+
                 // A recycled ticker ends the live designation, not the old issuer's identity.
                 // Retain the row and every exact price/holding FK; the authoritative inactive
                 // directory fills DelistedOn before any historical backfill is attempted.
-                lockedStock.Presentation.Listing.Active = false;
-                InvalidateHistoricalPriceCompletion(lockedStock);
+                WithdrawObsoleteDirectoryClaims(lockedStock);
                 await state.CommonStockRepository.SaveChanges();
             }
 
@@ -1062,8 +1063,7 @@ public class CompanySyncService : ICompanySyncService
         }
         else
         {
-            stock.Presentation.Listing.Active = false;
-            InvalidateHistoricalPriceCompletion(stock);
+            WithdrawObsoleteDirectoryClaims(stock);
             await state.CommonStockRepository.SaveChanges();
         }
 
@@ -1080,6 +1080,29 @@ public class CompanySyncService : ICompanySyncService
             && mapped.Id == stock.Id
         )
             state.PrimaryTickerToStock.Remove(stock.Presentation.Listing.Ticker);
+    }
+
+    private static void WithdrawObsoleteDirectoryClaims(EquityIssuer issuer)
+    {
+        foreach (
+            var listing in issuer
+                .Securities.SelectMany(security => security.Listings)
+                .Where(listing =>
+                    listing.MarketCountryCode == "US"
+                    && (
+                        listing.IsDirectoryListed
+                        || listing.Id == issuer.Presentation.EquityListingId
+                    )
+                )
+        )
+        {
+            listing.IsDirectoryListed = false;
+            if (listing.IsReferenceListed)
+                continue;
+            listing.Active = false;
+            listing.PriceHistoryBackfilled = false;
+            listing.HistoricalPriceBackfillAttemptedAt = null;
+        }
     }
 
     private static void InvalidateHistoricalPriceCompletion(EquityIssuer stock)
