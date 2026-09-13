@@ -345,3 +345,28 @@
 - Unknown source price fields, missing archives, changed prices, unvalidated ownership or an unexpected dependent object refuse retirement; no cascading drop hides an unmigrated dependency.
 - Native data, immutable original source versions, aliases, applied migration history and permanent identity/corporate-action guards survive.
 - PostgreSQL regression cases cover successful native writes after retirement and atomic refusal for each incomplete state; restored full-data and deployed checks remain separate gates.
+
+## Large-table owner backfill
+
+- `20260912160400_PrepareCanonicalOwnerBackfill` is a finite preparation for `FinancialFact` and `InstitutionalHolding` rows whose native issuer column is still null.
+- The migration precedes canonical owner expansion in both repositories; already-expanded migration histories skip preparation without recreating compatibility storage.
+- Traverse 1,024 physical heap blocks per transaction; do not sort random UUIDs, cluster a table, or create another full database copy for this correction.
+- Each committed batch persists its physical cursor with its updates; relation OID and file identity must still match before resuming.
+- Existing write mirrors cover inserts and updates during traversal; a conflicting non-null native owner is retained and prevents completion.
+- Validate the exact whole-table owner equality constraint before marking canonical expansion complete; physical traversal alone is not reconciliation.
+- Retire the physical checkpoint table within preparation after both cohorts pass; preserve the applied migration and later retire ordinary expansion progress through the final storage migration.
+- The read-only completion query below must return two validated proofs and no physical checkpoint before continuing; original-field multiset reconciliation remains a separate required gate.
+
+```sql
+SELECT count(*) AS validated_owner_proofs
+FROM pg_constraint
+WHERE conrelid IN ('"FinancialFact"'::regclass, '"InstitutionalHolding"'::regclass)
+  AND conname IN ('CK_FinancialFact_CanonicalOwnerMirror', 'CK_InstitutionalHolding_CanonicalOwnerMirror')
+  AND contype = 'c' AND convalidated
+  AND pg_get_expr(conbin, conrelid) = '(NOT ("EquityIssuerId" IS DISTINCT FROM "CommonStockId"))';
+SELECT to_regclass('"EquityOwnerPhysicalBackfill"') IS NULL AS physical_checkpoint_retired;
+```
+
+- Budget heap growth, index construction, WAL, and temporary files separately from archive sizes; a compressed backup size is not an update-space estimate.
+- Keep one full rehearsal copy at most, and reclaim it only after complete migration and conservation proofs pass, before starting production migration.
+- Retain verified recovery archives and compact reconciliation evidence after reclaiming the rehearsal copy.
