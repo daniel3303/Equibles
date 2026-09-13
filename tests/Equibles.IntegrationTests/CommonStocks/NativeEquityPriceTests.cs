@@ -326,6 +326,9 @@ public class NativeEquityPriceTests : ParadeDbMcpTestBase
         };
         DbContext.AddRange(native, unknown);
         await DbContext.SaveChangesAsync();
+        // Compare the persisted values: PostgreSQL timestamps have microsecond precision.
+        await DbContext.Entry(native).ReloadAsync();
+        await DbContext.Entry(unknown).ReloadAsync();
         DbContext.ChangeTracker.Clear();
         await DbContext.Set<CommonStock>().Where(row => row.Id == stock.Id).ExecuteDeleteAsync();
         (await DbContext.Set<DailyStockPrice>().CountAsync()).Should().Be(1);
