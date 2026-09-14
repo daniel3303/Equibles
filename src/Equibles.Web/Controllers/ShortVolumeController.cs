@@ -73,7 +73,7 @@ public class ShortVolumeController : BaseController
             .Include(d => d.Listing.Security.Issuer)
             // The OSS portal has no ETF shell. Keep its stock board primary-only so exact
             // exchange-traded rows are neither duplicated nor mislabeled as the registrant.
-            .Where(d => d.EquityListingId == d.Listing.Security.Issuer.Presentation.EquityListingId)
+            .Where(d => d.Listing.Presentation != null)
             .Where(d => d.TotalVolume > 0);
 
         var ordered = sort switch

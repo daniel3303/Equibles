@@ -19,10 +19,7 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
     /// </summary>
     public virtual IQueryable<EquityDailyStockPrice> GetPrimarySeries()
     {
-        return GetAllSeries()
-            .Where(p =>
-                p.EquityListingId == p.Listing.Security.Issuer.Presentation.EquityListingId
-            );
+        return GetAllSeries().Where(p => p.Listing.Presentation != null);
     }
 
     /// <summary>

@@ -12,6 +12,10 @@ public class EquityListing : IActivable
     public virtual EquitySecurity Security { get; set; }
     public virtual List<EquityListingTickerAlias> TickerAliases { get; set; } = [];
 
+    // Present only when this listing is its issuer's default listing; readers test
+    // `Presentation != null` instead of walking Security.Issuer.Presentation.
+    public virtual EquityIssuerPresentation Presentation { get; set; }
+
     [MaxLength(4)]
     public string MarketIdentifierCode { get; set; }
 

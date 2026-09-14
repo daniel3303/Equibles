@@ -70,9 +70,7 @@ public class ShortActivityController : BaseController
             .GetBySettlementDate(selectedDate)
             .Include(s => s.Listing.Security.Issuer)
             // The OSS portal has no ETF shell. Keep its derived stock board primary-only.
-            .Where(s =>
-                s.EquityListingId == s.Listing.Security.Issuer.Presentation.EquityListingId
-            );
+            .Where(s => s.Listing.Presentation != null);
 
         // Null DaysToCover coalesces to 0 so it sorts last under descending order.
         var ordered = sort switch

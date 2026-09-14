@@ -26,11 +26,7 @@ public class DailyShortVolumeRepository : BaseRepository<DailyShortVolume>
     ) => GetHistoryByListing(stock, listedTicker).Where(row => row.Date == date);
 
     public IQueryable<DailyShortVolume> GetHistoryByStock(EquityIssuer stock) =>
-        GetAll()
-            .Where(row =>
-                row.Listing.Security.EquityIssuerId == stock.Id
-                && row.EquityListingId == row.Listing.Security.Issuer.Presentation.EquityListingId
-            );
+        GetAll().Where(row => row.Listing.Presentation.EquityIssuerId == stock.Id);
 
     public virtual IQueryable<DailyShortVolume> GetHistoryByListing(
         EquityIssuer stock,

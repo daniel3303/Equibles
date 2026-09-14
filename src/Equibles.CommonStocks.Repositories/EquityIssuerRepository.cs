@@ -418,7 +418,7 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
             .Where(listing =>
                 listing.MarketCountryCode == "US"
                 && listing.IsDirectoryListed
-                && listing.Id != listing.Security.Issuer.Presentation.EquityListingId
+                && listing.Presentation == null
             )
             .Select(listing => listing.Ticker);
 

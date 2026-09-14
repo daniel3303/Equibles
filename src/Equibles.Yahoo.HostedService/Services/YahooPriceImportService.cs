@@ -374,7 +374,7 @@ public class YahooPriceImportService
                 row.Listing.Ticker,
                 row.Evidence.EquityIssuerId,
                 row.Listing.Id,
-                IsPrimary: row.Listing.Id == row.Evidence.Issuer.Presentation.EquityListingId,
+                IsPrimary: row.Listing.Presentation != null,
                 RequiresFullHistory: true,
                 YahooEnrichmentAttemptedAt: null,
                 IsHistorical: true,
