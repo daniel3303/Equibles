@@ -5,10 +5,10 @@ using Npgsql;
 
 namespace Equibles.IntegrationTests.Finra;
 
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class DailyShortVolumeNumericCompatibilityTests : ParadeDbMcpTestBase
 {
-    public DailyShortVolumeNumericCompatibilityTests(ParadeDbFixture fixture)
+    public DailyShortVolumeNumericCompatibilityTests(HistoricalEquityDbFixture fixture)
         : base(fixture) { }
 
     [Fact]

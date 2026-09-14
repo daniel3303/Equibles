@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeDirectoryIdentityEvidenceTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeDirectoryIdentityEvidenceTests(HistoricalEquityDbFixture fixture)
     : ParadeDbMcpTestBase(fixture)
 {
     private static readonly string[] Tables =

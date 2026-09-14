@@ -132,4 +132,10 @@
       Link="Helpers/FinancialEquityRetirementProbe.cs"
     />
   </ItemGroup>
+  <ItemGroup>
+    <Compile
+      Include="../Shared/HoldingsCorrectionRetirementProbe.cs"
+      Link="Helpers/HoldingsCorrectionRetirementProbe.cs"
+    />
+  </ItemGroup>
 </Project>

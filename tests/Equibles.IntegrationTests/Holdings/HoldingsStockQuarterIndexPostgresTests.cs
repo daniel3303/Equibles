@@ -22,7 +22,7 @@ public class HoldingsStockQuarterIndexPostgresTests(ParadeDbFixture fixture)
         definition
             .Should()
             .Contain(
-                "(\"CommonStockId\", \"ReportDate\") INCLUDE (\"InstitutionalHolderId\", \"Value\", \"Shares\", \"ListedTicker\", \"FilingType\", \"OptionType\")"
+                "(\"EquityIssuerId\", \"ReportDate\") INCLUDE (\"InstitutionalHolderId\", \"Value\", \"Shares\", \"ListedTicker\", \"FilingType\", \"OptionType\")"
             );
         var oldIndex = await db
             .Database.SqlQueryRaw<int>(

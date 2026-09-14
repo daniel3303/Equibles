@@ -7,10 +7,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class NativeEquityPriceTests : ParadeDbMcpTestBase
 {
-    public NativeEquityPriceTests(ParadeDbFixture fixture)
+    public NativeEquityPriceTests(HistoricalEquityDbFixture fixture)
         : base(fixture) { }
 
     [Fact]

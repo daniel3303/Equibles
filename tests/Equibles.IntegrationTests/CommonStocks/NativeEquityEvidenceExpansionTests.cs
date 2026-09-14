@@ -7,8 +7,8 @@ using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeEquityEvidenceExpansionTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeEquityEvidenceExpansionTests(HistoricalEquityDbFixture fixture)
 {
     private static readonly (string Previous, string Canonical)[] Tables =
     [

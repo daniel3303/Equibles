@@ -5,6 +5,84 @@ SET LOCAL lock_timeout = '5s';
 SET LOCAL timezone = 'UTC';
 SET LOCAL extra_float_digits = 3;
 
+-- Preserve historical correction evidence without keeping ad hoc backup tables.
+CREATE TABLE "HoldingsCorrectionEvidence" (
+    "Id" uuid NOT NULL,
+    "CorrectionKey" character varying(100) NOT NULL,
+    "SourceTable" character varying(100) NOT NULL,
+    "SourceRecordId" character varying(100),
+    "SourceSchema" jsonb NOT NULL,
+    "OriginalRow" jsonb NOT NULL,
+    "MigratedAt" timestamp with time zone NOT NULL,
+    CONSTRAINT "PK_HoldingsCorrectionEvidence" PRIMARY KEY ("Id")
+);
+CREATE INDEX "IX_HoldingsCorrectionEvidence_CorrectionKey_SourceTable_Source~"
+    ON "HoldingsCorrectionEvidence" ("CorrectionKey", "SourceTable", "SourceRecordId");
+
+DO $correction_evidence$
+DECLARE
+    source_name text;
+    source_schema jsonb;
+    differs boolean;
+BEGIN
+    FOREACH source_name IN ARRAY ARRAY['_backup_issue1535_holdings', '_backup_issue1535_manager_entries']
+    LOOP
+        IF to_regclass(format('public.%I', source_name)) IS NULL THEN
+            CONTINUE;
+        END IF;
+        EXECUTE format('LOCK TABLE public.%I IN ACCESS EXCLUSIVE MODE', source_name);
+        SELECT jsonb_agg(jsonb_build_object(
+            'name', a.attname, 'type', format_type(a.atttypid, a.atttypmod),
+            'ordinal', a.attnum, 'nullable', NOT a.attnotnull
+        ) ORDER BY a.attnum) INTO source_schema
+        FROM pg_attribute a
+        WHERE a.attrelid = to_regclass(format('public.%I', source_name))
+          AND a.attnum > 0 AND NOT a.attisdropped;
+        EXECUTE format($copy$
+            INSERT INTO "HoldingsCorrectionEvidence"
+                ("Id", "CorrectionKey", "SourceTable", "SourceRecordId", "SourceSchema", "OriginalRow", "MigratedAt")
+            SELECT gen_random_uuid(), 'holdings-issue-1535', %L, to_jsonb(original)->>'Id', $1,
+                to_jsonb(original), transaction_timestamp()
+            FROM public.%I original
+        $copy$, source_name, source_name) USING source_schema;
+        -- Reconstituting the ORIGINAL composite catches numeric scale, exact floats,
+        -- microseconds, NULLs and all identifier fields; EXCEPT ALL also preserves duplicates.
+        EXECUTE format($compare$
+            WITH original AS (
+                SELECT sha256(record_send(r)) AS digest FROM public.%I r
+            ), preserved AS (
+                SELECT sha256(record_send(jsonb_populate_record(NULL::public.%I, "OriginalRow"))) AS digest
+                FROM "HoldingsCorrectionEvidence"
+                WHERE "CorrectionKey" = 'holdings-issue-1535' AND "SourceTable" = %L
+            )
+            SELECT EXISTS (
+                SELECT 1 FROM "HoldingsCorrectionEvidence"
+                WHERE "SourceTable" = %L AND (
+                    "CorrectionKey" <> 'holdings-issue-1535' OR "SourceSchema" <> $1
+                    OR "SourceRecordId" IS DISTINCT FROM "OriginalRow"->>'Id'
+                    OR "OriginalRow" <> to_jsonb(jsonb_populate_record(NULL::public.%I, "OriginalRow")))
+            ) OR EXISTS (
+                (SELECT digest FROM original EXCEPT ALL SELECT digest FROM preserved)
+                UNION ALL
+                (SELECT digest FROM preserved EXCEPT ALL SELECT digest FROM original)
+            )
+        $compare$, source_name, source_name, source_name, source_name, source_name) INTO differs USING source_schema;
+        IF differs THEN
+            RAISE EXCEPTION 'Historical holdings correction evidence differs for %', source_name;
+        END IF;
+        -- An unexpected external dependency refuses retirement and rolls back the archive copy.
+        EXECUTE format('DROP TABLE public.%I', source_name);
+    END LOOP;
+END $correction_evidence$;
+
+CREATE FUNCTION "PreserveHoldingsCorrectionEvidence"() RETURNS trigger LANGUAGE plpgsql AS $immutable$
+BEGIN
+    RAISE EXCEPTION 'Historical holdings correction evidence is immutable';
+END $immutable$;
+CREATE TRIGGER "TR_HoldingsCorrectionEvidence_Immutable"
+    BEFORE UPDATE OR DELETE OR TRUNCATE ON "HoldingsCorrectionEvidence"
+    FOR EACH STATEMENT EXECUTE FUNCTION "PreserveHoldingsCorrectionEvidence"();
+
 LOCK TABLE "CommonStock", "CommonStockCusipAlias", "CommonStockDelistedListing", "CommonStockListedCusip", "CommonStockTickerAlias", "CommonStockTickerEvidence", "CorporateActionPriceReconciliationCursor", "DailyShortVolume", "DailyStockPrice", "EquityDailyStockPrice", "EquityDirectorySourceRecord", "EquityIssuer", "EquityIssuerCusipAlias", "EquityIssuerTickerAlias", "EquityIssuerTickerEvidence", "EquityListing", "EquityListingCusipEvidence", "EquityListingRetirementEvidence", "EquitySecurity", "FailToDeliver", "IssuerSecurityRegistration", "LegacyEquityListing", "ListedDailyStockPrice", "ListedSecurity", "OffExchangeVolume", "ShortInterest", "UnattributedDailyStockPrice" IN SHARE ROW EXCLUSIVE MODE;
 
 DO $owners$

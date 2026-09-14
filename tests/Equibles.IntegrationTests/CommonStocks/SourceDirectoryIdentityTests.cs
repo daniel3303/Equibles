@@ -9,8 +9,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class SourceDirectoryIdentityTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class SourceDirectoryIdentityTests(HistoricalEquityDbFixture fixture)
+    : ParadeDbMcpTestBase(fixture)
 {
     private static EquityDirectoryListingInput Input(
         string ticker = "ALTR",

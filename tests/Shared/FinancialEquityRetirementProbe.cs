@@ -13,6 +13,11 @@ public static class FinancialEquityRetirementProbe
 {
     public static async Task Run(DbContext db, DbContext native, string sql, string scenario)
     {
+        if (scenario.StartsWith("correction-", StringComparison.Ordinal))
+        {
+            await HoldingsCorrectionRetirementProbe.Run(db, sql, scenario);
+            return;
+        }
         await using var transaction = await db.Database.BeginTransactionAsync();
         var stock = new CommonStock { Ticker = "RECON", Name = "Original directory owner" };
         db.Add(stock);
@@ -116,6 +121,12 @@ public static class FinancialEquityRetirementProbe
             await RefusesIncompleteState(db, sql, scenario);
             return;
         }
+        string originalCorrection = null;
+        if (scenario == "preserve")
+        {
+            await HoldingsCorrectionRetirementProbe.Seed(db);
+            originalCorrection = await HoldingsCorrectionRetirementProbe.OriginalRows(db);
+        }
         var before = await Snapshot(db);
         var archivedDirectory = await db
             .Database.SqlQueryRaw<string>(
@@ -124,6 +135,8 @@ public static class FinancialEquityRetirementProbe
             .SingleAsync();
         await db.Database.ExecuteSqlRawAsync(sql);
         Require(await Snapshot(db) == before, "Native fields changed during retirement");
+        if (originalCorrection != null)
+            await HoldingsCorrectionRetirementProbe.AssertPreserved(db, originalCorrection);
         Require(
             await db
                 .Database.SqlQueryRaw<int>(
@@ -155,7 +168,7 @@ public static class FinancialEquityRetirementProbe
                         WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e')
                     """
                 )
-                .SingleAsync() == 7,
+                .SingleAsync() == 8,
             "Temporary functions remain or a permanent guard was removed"
         );
         native.Database.SetDbConnection(db.Database.GetDbConnection());

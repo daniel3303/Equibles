@@ -25,4 +25,7 @@
     <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Data\Equibles.Sec.FinancialFacts.Data.csproj" />
     <ProjectReference Include="..\Equibles.GovernmentContracts.Data\Equibles.GovernmentContracts.Data.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Infrastructure/RetireLegacyFinancialEquityStorage20260913.sql" />
+  </ItemGroup>
 </Project>

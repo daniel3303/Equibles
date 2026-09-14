@@ -24,13 +24,13 @@ namespace Equibles.IntegrationTests.Sec;
 /// <summary>
 /// A retired legacy stock cannot discard observations already assigned to a surviving native listing.
 /// </summary>
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class FtdImportServiceMissingCommonStockTests : IAsyncLifetime
 {
     private readonly ParadeDbFixture _fixture;
     private readonly List<EquiblesFinancialDbContext> _contexts = [];
 
-    public FtdImportServiceMissingCommonStockTests(ParadeDbFixture fixture)
+    public FtdImportServiceMissingCommonStockTests(HistoricalEquityDbFixture fixture)
     {
         _fixture = fixture;
     }

@@ -15,12 +15,12 @@ namespace Equibles.IntegrationTests.Migrations;
 /// pg_index after the fixture's MigrateAsync. Plain Npgsql rather than an EF ad-hoc query:
 /// the context runs with proxies, which reject ad-hoc result types.
 /// </summary>
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class PerListing13FIndexSwapMigrationTests
 {
-    private readonly ParadeDbFixture _fixture;
+    private readonly HistoricalEquityDbFixture _fixture;
 
-    public PerListing13FIndexSwapMigrationTests(ParadeDbFixture fixture)
+    public PerListing13FIndexSwapMigrationTests(HistoricalEquityDbFixture fixture)
     {
         _fixture = fixture;
     }

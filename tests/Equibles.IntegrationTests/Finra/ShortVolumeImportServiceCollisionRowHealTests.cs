@@ -155,7 +155,7 @@ public class ShortVolumeImportServiceCollisionRowHealTests : ParadeDbMcpTestBase
         // A native observation can retain a former source symbol after the listing is renamed.
         await DbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""
-            UPDATE "DailyShortVolume" SET "CommonStockId" = NULL, "ListedTicker" = 'FORMER'
+            UPDATE "DailyShortVolume" SET "ListedTicker" = 'FORMER'
             WHERE "Date" = {_corruptDate}
             """
         );

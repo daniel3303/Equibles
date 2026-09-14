@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Equibles.IntegrationTests.Yahoo;
 
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
 {
     private static readonly MethodInfo ReplacePriceRowsMethod =
@@ -24,7 +24,7 @@ public class ListedPriceRollingCompatibilityTests : IAsyncLifetime
 
     private readonly ParadeDbFixture _fixture;
 
-    public ListedPriceRollingCompatibilityTests(ParadeDbFixture fixture)
+    public ListedPriceRollingCompatibilityTests(HistoricalEquityDbFixture fixture)
     {
         _fixture = fixture;
     }

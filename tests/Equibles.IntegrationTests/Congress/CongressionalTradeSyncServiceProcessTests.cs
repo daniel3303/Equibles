@@ -26,10 +26,10 @@ namespace Equibles.IntegrationTests.Congress;
 /// tracked stock upserts the member and persists the trade; an unresolved ticker persists its
 /// source fact without a company link.
 /// </summary>
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class CongressionalTradeSyncServiceProcessTests : ParadeDbMcpTestBase
 {
-    public CongressionalTradeSyncServiceProcessTests(ParadeDbFixture fixture)
+    public CongressionalTradeSyncServiceProcessTests(HistoricalEquityDbFixture fixture)
         : base(fixture) { }
 
     private static readonly MethodInfo ProcessTransactionsMethod =

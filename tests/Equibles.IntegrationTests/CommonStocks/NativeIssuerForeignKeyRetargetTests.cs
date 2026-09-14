@@ -5,8 +5,8 @@ using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeIssuerForeignKeyRetargetTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeIssuerForeignKeyRetargetTests(HistoricalEquityDbFixture fixture)
 {
     [Fact]
     public async Task InterruptedRetargetPreservesFactsAndValidationAllowsConcurrentWrites()

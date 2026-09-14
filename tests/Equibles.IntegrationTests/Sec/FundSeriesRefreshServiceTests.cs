@@ -123,7 +123,15 @@ public class FundSeriesRefreshServiceTests : IAsyncLifetime
         second.Id.Should().Be(first.Id);
         second.IdentityKey.Should().Be(first.IdentityKey);
         second.Slug.Should().Be(first.Slug);
-        (await read.Set<CommonStock>().CountAsync()).Should().Be(0);
+        (
+            await read
+                .Database.SqlQueryRaw<int>(
+                    "SELECT count(*)::int AS \"Value\" FROM pg_class WHERE oid = to_regclass('\"CommonStock\"')"
+                )
+                .SingleAsync()
+        )
+            .Should()
+            .Be(0);
         (await read.Set<EquityListing>().CountAsync()).Should().Be(0);
     }
 

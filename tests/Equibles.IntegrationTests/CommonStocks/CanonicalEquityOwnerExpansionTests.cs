@@ -8,8 +8,8 @@ using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class CanonicalEquityOwnerExpansionTests(ParadeDbFixture fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class CanonicalEquityOwnerExpansionTests(HistoricalEquityDbFixture fixture)
 {
     [Fact]
     public async Task InterruptedBackfillResumesWithoutChangingAnyOriginalFactField()

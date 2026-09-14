@@ -8,10 +8,10 @@ using Xunit;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
+[Collection(HistoricalEquityDbCollection.Name)]
 public class EquityIdentityFoundationTests : ParadeDbMcpTestBase
 {
-    public EquityIdentityFoundationTests(ParadeDbFixture fixture)
+    public EquityIdentityFoundationTests(HistoricalEquityDbFixture fixture)
         : base(fixture) { }
 
     [Fact]

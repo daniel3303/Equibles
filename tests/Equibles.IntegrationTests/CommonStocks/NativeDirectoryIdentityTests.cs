@@ -8,8 +8,9 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeDirectoryIdentityTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeDirectoryIdentityTests(HistoricalEquityDbFixture fixture)
+    : ParadeDbMcpTestBase(fixture)
 {
     [Fact]
     public async Task CountryBackfill_PreservesRows_AndScopesUnqualifiedTickersToUs()

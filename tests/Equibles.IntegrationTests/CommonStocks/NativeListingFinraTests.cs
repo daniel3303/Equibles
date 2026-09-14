@@ -2,13 +2,16 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.Data;
 using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
 namespace Equibles.IntegrationTests.CommonStocks;
 
-[Collection(ParadeDbCollection.Name)]
-public class NativeListingFinraTests(ParadeDbFixture fixture) : ParadeDbMcpTestBase(fixture)
+[Collection(HistoricalEquityDbCollection.Name)]
+public class NativeListingFinraTests(HistoricalEquityDbFixture fixture)
+    : ParadeDbMcpTestBase(fixture)
 {
     private static readonly string[] Tables =
     [
@@ -273,7 +276,10 @@ public class NativeListingFinraTests(ParadeDbFixture fixture) : ParadeDbMcpTestB
         );
     }
 
-    private Task ApplyMigration() => Context.Database.MigrateAsync();
+    private Task ApplyMigration() =>
+        Context
+            .GetService<IMigrator>()
+            .MigrateAsync("20260913025100_PreserveHoldingObservationIdentity");
 
     private async Task<string> Snapshot()
     {
