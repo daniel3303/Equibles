@@ -85,8 +85,8 @@ public class CommonStocksModuleConfiguration : Equibles.Data.IFinancialModule
                 .OnDelete(DeleteBehavior.Cascade);
             presentation
                 .HasOne(row => row.Listing)
-                .WithMany()
-                .HasForeignKey(row => row.EquityListingId)
+                .WithOne(row => row.Presentation)
+                .HasForeignKey<EquityIssuerPresentation>(row => row.EquityListingId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
         builder

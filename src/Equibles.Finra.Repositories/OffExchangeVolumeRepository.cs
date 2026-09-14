@@ -26,11 +26,7 @@ public class OffExchangeVolumeRepository : BaseRepository<OffExchangeVolume>
     ) => GetHistoryByListing(stock, listedTicker).Where(row => row.WeekStartDate == date);
 
     public IQueryable<OffExchangeVolume> GetHistoryByStock(EquityIssuer stock) =>
-        GetAll()
-            .Where(row =>
-                row.Listing.Security.EquityIssuerId == stock.Id
-                && row.EquityListingId == row.Listing.Security.Issuer.Presentation.EquityListingId
-            );
+        GetAll().Where(row => row.Listing.Presentation.EquityIssuerId == stock.Id);
 
     public virtual IQueryable<OffExchangeVolume> GetHistoryByListing(
         EquityIssuer stock,

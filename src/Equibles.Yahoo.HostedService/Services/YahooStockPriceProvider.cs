@@ -57,7 +57,7 @@ public class YahooStockPriceProvider : IStockPriceProvider
                 .Set<EquityDailyStockPrice>()
                 .Where(p => p.Listing.MarketCountryCode == "US")
                 .Where(p =>
-                    p.EquityListingId == p.Listing.Security.Issuer.Presentation.EquityListingId
+                    p.Listing.Presentation != null
                     || !_dbContext
                         .Set<EquityListing>()
                         .Any(other =>
@@ -69,10 +69,7 @@ public class YahooStockPriceProvider : IStockPriceProvider
                 )
                 .Where(p =>
                     stockIds.Contains(p.Listing.Security.EquityIssuerId)
-                    && (
-                        p.EquityListingId == p.Listing.Security.Issuer.Presentation.EquityListingId
-                        || secondaryTickers.Contains(p.SourceTicker)
-                    )
+                    && (p.Listing.Presentation != null || secondaryTickers.Contains(p.SourceTicker))
                     && p.Date >= minDate
                     && p.Date <= date
                     && p.Volume > 0

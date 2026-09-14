@@ -14,11 +14,7 @@ public class FailToDeliverRepository : BaseRepository<FailToDeliver>
         GetAll().Where(row => row.EquityListingId == listingId);
 
     public IQueryable<FailToDeliver> GetByStock(EquityIssuer stock) =>
-        GetAll()
-            .Where(row =>
-                row.EquityListingId == row.Listing.Security.Issuer.Presentation.EquityListingId
-                && row.Listing.Security.EquityIssuerId == stock.Id
-            );
+        GetAll().Where(row => row.Listing.Presentation.EquityIssuerId == stock.Id);
 
     public IQueryable<FailToDeliver> GetByListing(EquityIssuer stock, string listedTicker)
     {

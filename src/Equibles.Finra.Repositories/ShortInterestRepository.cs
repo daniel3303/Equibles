@@ -27,11 +27,7 @@ public class ShortInterestRepository : BaseRepository<ShortInterest>
     ) => GetHistoryByListing(stock, listedTicker).Where(row => row.SettlementDate == date);
 
     public IQueryable<ShortInterest> GetHistoryByStock(EquityIssuer stock) =>
-        GetAll()
-            .Where(row =>
-                row.Listing.Security.EquityIssuerId == stock.Id
-                && row.EquityListingId == row.Listing.Security.Issuer.Presentation.EquityListingId
-            );
+        GetAll().Where(row => row.Listing.Presentation.EquityIssuerId == stock.Id);
 
     public virtual IQueryable<ShortInterest> GetHistoryByListing(
         EquityIssuer stock,
