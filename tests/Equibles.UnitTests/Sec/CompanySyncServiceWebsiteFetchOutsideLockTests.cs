@@ -22,9 +22,9 @@ namespace Equibles.UnitTests.Sec;
 
 /// <summary>
 /// <c>UpdateExistingStock</c> asks EDGAR for a missing website BEFORE it takes the global
-/// directory-write advisory lock: the network call can stall for minutes and every other
-/// identity writer waits on that lock (nine 600 s lock timeouts on 2026-09-14). A refill
-/// that answers nothing for a row already holding null never takes the lock at all.
+/// directory-write advisory lock: a network call must never sit inside a lock every other
+/// identity writer waits on. A refill that answers nothing for a row already holding null
+/// never takes the lock at all.
 /// </summary>
 public class CompanySyncServiceWebsiteFetchOutsideLockTests
 {
