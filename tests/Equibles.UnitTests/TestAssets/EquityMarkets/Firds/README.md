@@ -1,0 +1,7 @@
+# FIRDS captures
+
+- `FULINS_E_sample.xml` keeps the unchanged header of ESMA's `FULINS_E_20260912_01of02.zip` (captured 2026-09-15 from `https://firds.esma.europa.eu/firds/FULINS_E_20260912_01of02.zip`, index MD5 verified) with eight verbatim `RefData` records chosen from its 500,000: a Lisbon-primary share (`PTSLB0AM0010`/XLIS), a Paris-primary share, a share on a secondary venue whose relevant venue is elsewhere (`FI0009800395` on AQEA, relevant DHEL), a share terminated on 2026-09-11, a preference share (`EP`), a depositary receipt (`ED`), a structured product (`EY`) and a partnership unit (`EL`).
+- `DLTINS_sample.xml` keeps the unchanged header of `DLTINS_20260915_01of04.zip` (message `auth.036.001.03`) with one verbatim record per wrapper: `NewRcrd`, `ModfdRcrd`, `TermntdRcrd`, plus a non-equity `RW` record that the importer must drop.
+- `esma_index.json` is the Solr response from `https://registers.esma.europa.eu/solr/esma_registers_firds_files/select` (captured 2026-09-15) trimmed to the `FULINS_E` and `DLTINS` documents published on or after 2026-09-12; `numFound` was rewritten to the kept count so one page lists everything.
+- `fca_index.json` is the unchanged response from `https://api.data.fca.org.uk/fca_data_firds_files` (captured 2026-09-15) for equity full files and deltas published on or after 2026-09-10: 11 hits, one `FULINS_E`, no checksums.
+- FCA files are pretty-printed with the same element names; the reader ignores whitespace, so one fixture set covers both authorities.

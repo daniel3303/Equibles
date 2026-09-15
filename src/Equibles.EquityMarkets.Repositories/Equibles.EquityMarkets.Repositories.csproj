@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="FlexLabs.EntityFrameworkCore.Upsert" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.EquityMarkets.Data\Equibles.EquityMarkets.Data.csproj" />
+  </ItemGroup>
+</Project>

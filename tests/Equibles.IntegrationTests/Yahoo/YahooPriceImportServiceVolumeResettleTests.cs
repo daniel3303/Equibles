@@ -6,6 +6,8 @@ using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
+using Equibles.EquityMarkets.Data;
+using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
@@ -58,6 +60,7 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
     public YahooPriceImportServiceVolumeResettleTests()
     {
         _dbContext = TestDbContextFactory.CreateIgnoringInMemoryTransactions(
+            new EquityMarketsModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
@@ -73,6 +76,10 @@ public class YahooPriceImportServiceVolumeResettleTests : IDisposable
         );
 
         var scopeFactory = ServiceScopeSubstitute.Create(
+            (
+                typeof(EquityMarketRegistrationRepository),
+                new EquityMarketRegistrationRepository(_dbContext)
+            ),
             (typeof(EquityDailyStockPriceRepository), _priceRepo),
             (typeof(EquityIssuerRepository), _stockRepo),
             (typeof(StockSplitRepository), splitRepo),

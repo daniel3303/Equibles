@@ -9,7 +9,7 @@ namespace Equibles.CommonStocks.BusinessLogic.Directory;
 [Service]
 public class EquityDirectorySnapshotManager(IServiceScopeFactory scopeFactory)
 {
-    public async Task<Guid> Reconcile(
+    public virtual async Task<Guid> Reconcile(
         EquityDirectorySnapshotInput input,
         CancellationToken token = default
     )

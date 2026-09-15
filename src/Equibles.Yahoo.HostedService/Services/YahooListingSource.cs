@@ -1,5 +1,6 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories.Models;
+using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.Integrations.Yahoo.Models;
 using Newtonsoft.Json;
 
@@ -7,19 +8,21 @@ namespace Equibles.Yahoo.HostedService.Services;
 
 internal static class YahooListingSource
 {
-    // Yahoo's published exchange suffix directory assigns .LS to Lisbon. A candidate
-    // symbol alone is not a binding: returned chart metadata must also pass MatchesChart.
-    internal static readonly string[] LisbonMarkets = ["XLIS", "ENXL", "ALXL"];
-    internal const string LisbonEvidenceSource = "yahoo-lisbon-chart-v1";
+    // The catalog's suffix is only a candidate symbol: returned chart metadata must also pass MatchesChart,
+    // and the quotation unit the chart reports must be the one the verified listing states.
+    internal static EquityMarket Market(PriceSeriesTarget target)
+    {
+        if (target.IsUs || string.IsNullOrWhiteSpace(target.Isin))
+            return null;
+        var market = EquityMarketCatalog.ByMarketIdentifierCode(target.MarketIdentifierCode);
+        return market?.CountryCode == target.MarketCountryCode ? market : null;
+    }
 
-    internal static bool IsLisbon(PriceSeriesTarget target) =>
-        target.MarketCountryCode == "PT"
-        && LisbonMarkets.Contains(target.MarketIdentifierCode)
-        && !string.IsNullOrWhiteSpace(target.Isin);
+    internal static string EvidenceSource(EquityMarket market) => $"yahoo-{market.Code}-chart-v1";
 
     internal static string ProviderSymbol(PriceSeriesTarget target) =>
         target.IsUs ? target.Ticker
-        : IsLisbon(target) ? target.Ticker + ".LS"
+        : Market(target) is { } market ? target.Ticker + market.YahooSuffix
         : null;
 
     internal static bool MatchesListing(PriceSeriesTarget target, EquityListing listing) =>
@@ -34,49 +37,63 @@ internal static class YahooListingSource
         )
         && (
             target.IsUs
-            || IsLisbon(target)
+            || Market(target) != null
                 && !target.IsHistorical
                 && listing.IdentityState == EquityIdentityState.Verified
                 && listing.MarketIdentifierCode == target.MarketIdentifierCode
                 && listing.Security.Isin == target.Isin
-                && listing.TradingCurrency == "EUR"
-                && listing.QuoteUnitMultiplier == 1m
+                && listing.TradingCurrency != null
+                && listing.TradingCurrency == target.TradingCurrency
+                && listing.QuoteUnitMultiplier != null
+                && listing.QuoteUnitMultiplier == target.QuoteUnitMultiplier
         );
 
     internal static bool MatchesChart(
         PriceSeriesTarget target,
         YahooChartSourceIdentity identity
     ) =>
-        IsLisbon(target)
-        && identity
-            is {
-                Currency: "EUR",
-                ExchangeCode: "LIS",
-                InstrumentType: "EQUITY",
-                ExchangeTimeZone: "Europe/Lisbon"
-            }
+        Market(target) is { } market
+        && identity != null
+        && identity.ExchangeCode == market.YahooExchangeCode
+        && identity.InstrumentType == "EQUITY"
+        && identity.ExchangeTimeZone == market.TimeZoneId
+        && EquityQuotationUnits.Matches(
+            identity.Currency,
+            target.TradingCurrency,
+            target.QuoteUnitMultiplier
+        )
         && string.Equals(identity.Symbol, ProviderSymbol(target), StringComparison.Ordinal);
 
-    internal static EquityListingSourceBinding SourceBinding(PriceSeriesTarget target) =>
-        new(
+    internal static EquityListingSourceBinding SourceBinding(PriceSeriesTarget target)
+    {
+        var market =
+            Market(target)
+            ?? throw new InvalidOperationException("Only catalog markets have a Yahoo binding.");
+        return new(
             target.EquityIssuerId,
             target.EquityListingId,
             target.Ticker,
             target.MarketIdentifierCode,
             target.MarketCountryCode,
             target.Isin,
-            "EUR",
-            1m,
-            LisbonMarkets
+            target.TradingCurrency,
+            target.QuoteUnitMultiplier
+                ?? throw new InvalidOperationException(
+                    "A catalog binding needs the listing's verified quotation unit."
+                ),
+            market.MarketIdentifierCodes.ToArray()
         );
+    }
 
     internal static EquityListingQuotationEvidence QuotationEvidence(
         PriceSeriesTarget target,
         YahooChartSourceIdentity identity
-    ) =>
-        new(
+    )
+    {
+        var market = Market(target);
+        return new(
             SourceBinding(target),
-            LisbonEvidenceSource,
+            EvidenceSource(market),
             JsonConvert.SerializeObject(
                 new
                 {
@@ -85,12 +102,16 @@ internal static class YahooListingSource
                     target.Ticker,
                     target.MarketIdentifierCode,
                     target.Isin,
+                    target.TradingCurrency,
+                    target.QuoteUnitMultiplier,
+                    Market = market.Code,
                     RequestedSymbol = ProviderSymbol(target),
-                    SourceMarkets = LisbonMarkets,
+                    SourceMarkets = market.MarketIdentifierCodes,
                     SourceUrl = "https://query1.finance.yahoo.com/v8/finance/chart/"
                         + Uri.EscapeDataString(ProviderSymbol(target)),
                     SourceIdentity = identity,
                 }
             )
         );
+    }
 }

@@ -9,12 +9,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- `Equibles.EquityMarkets`: a code-owned catalog of European markets (the seven Euronext markets and Xetra live; Nasdaq Nordic, LSE, BME and GPW registered without a directory source yet), one `EquityMarketRegistration` switch row per market, an ESMA plus FCA FIRDS equity universe kept current by `FirdsUniverseWorker`, and `EquityMarketDirectoryWorker` with Euronext and Xetra directory adapters. A directory row becomes a verified listing only when FIRDS lists its ISIN as a live share on the market's venues, the market is the share's home (the directory's stated primary market where it publishes one, FIRDS' relevant venue otherwise) and the GLEIF issuer record agrees with FIRDS on the LEI whenever it states one.
+- `Equibles.Integrations.Esma` (FIRDS file index for both authorities, checksum-verified same-origin downloads, streaming reader for full and delta files) and `Equibles.Integrations.Xetra` (the all-tradable-instruments list, discovered from the publisher's page because its address rotates).
 - `CommonStockRepository.Search` accepts an `includeInactive` flag so operator surfaces can audit retained delisted identities; reader-facing surfaces keep the active-only default.
 - `ListFilings` provides company-scoped or market-wide filing discovery with date, document-type, exact 8-K item-number, and paging filters.
 - `GetDividendHistory` returns stored cash-dividend history newest first with date and paging controls.
 
 ### Changed
 
+- Yahoo price capture for non-US listings reads the market catalog (symbol suffix, exchange code, time zone and quotation unit) instead of Lisbon-only constants, and records new quotation evidence as `yahoo-{market}-chart-v1`.
+- The Lisbon directory worker and the `EquityMarkets:LisbonEnabled` lane switch are replaced by the registration table; the setting now only seeds the `euronext-lisbon` row when it is first created.
 - `ListFilings` replaces the retired `ListCompanyDocuments` public MCP tool; clients with cached tool catalogs must refresh their MCP connection.
 
 ### Fixed

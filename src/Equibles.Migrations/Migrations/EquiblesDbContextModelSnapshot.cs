@@ -1195,6 +1195,159 @@ namespace Equibles.Migrations.Migrations
                     b.ToTable("StockSplit");
                 });
 
+            modelBuilder.Entity("Equibles.EquityMarkets.Data.Models.EquityMarketRegistration", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("DirectoryCurrentCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DirectoryFailedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DirectoryImportedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DirectoryListingCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DirectoryRefreshRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DirectoryRefreshedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DirectorySkippedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Code");
+
+                    b.ToTable("EquityMarketRegistration");
+                });
+
+            modelBuilder.Entity("Equibles.EquityMarkets.Data.Models.FirdsImportRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Authority")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("Checksum")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("PublishedOn")
+                        .HasColumnType("date");
+
+                    b.Property<int>("RowsRead")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RowsStored")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Authority", "FileName")
+                        .IsUnique();
+
+                    b.HasIndex("Authority", "Kind", "PublishedOn");
+
+                    b.ToTable("FirdsImportRun");
+                });
+
+            modelBuilder.Entity("Equibles.EquityMarkets.Data.Models.FirdsInstrumentRecord", b =>
+                {
+                    b.Property<string>("Authority")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("Isin")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<string>("Mic")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("Cfi")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<DateTime?>("FirstTradeDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FullName")
+                        .HasMaxLength(350)
+                        .HasColumnType("character varying(350)");
+
+                    b.Property<string>("Lei")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RelevantCompetentAuthority")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("RelevantTradingVenue")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ShortName")
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)");
+
+                    b.Property<DateTime?>("TerminationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Authority", "Isin", "Mic");
+
+                    b.HasIndex("Isin");
+
+                    b.HasIndex("Lei");
+
+                    b.HasIndex("Authority", "RelevantTradingVenue");
+
+                    b.ToTable("FirdsInstrumentRecord");
+                });
+
             modelBuilder.Entity("Equibles.Errors.Data.Models.Error", b =>
                 {
                     b.Property<Guid>("Id")

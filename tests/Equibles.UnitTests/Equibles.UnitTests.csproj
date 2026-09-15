@@ -107,6 +107,12 @@
     <ProjectReference Include="..\..\src\Equibles.FdaCatalysts.HostedService\Equibles.FdaCatalysts.HostedService.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Euronext\Equibles.Integrations.Euronext.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Gleif\Equibles.Integrations.Gleif.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.Esma\Equibles.Integrations.Esma.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.Xetra\Equibles.Integrations.Xetra.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.EquityMarkets.Data\Equibles.EquityMarkets.Data.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.EquityMarkets.Repositories\Equibles.EquityMarkets.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.EquityMarkets.BusinessLogic\Equibles.EquityMarkets.BusinessLogic.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.EquityMarkets.HostedService\Equibles.EquityMarkets.HostedService.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Shared/NativeListingSeed.cs" Link="Helpers/NativeListingSeed.cs" />

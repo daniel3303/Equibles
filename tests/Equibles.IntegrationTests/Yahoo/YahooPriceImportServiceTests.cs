@@ -7,6 +7,8 @@ using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
+using Equibles.EquityMarkets.Data;
+using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
@@ -130,6 +132,7 @@ public class YahooPriceImportServiceTests : IDisposable
     {
         _dbContext =
             TestDbContextFactory.CreateIgnoringInMemoryTransactionsWithoutPriceSeedDefaults(
+                new EquityMarketsModuleConfiguration(),
                 new CommonStocksModuleConfiguration(),
                 new YahooModuleConfiguration()
             );
@@ -151,6 +154,10 @@ public class YahooPriceImportServiceTests : IDisposable
         // TickerMapService resolves CommonStockRepository from scoped DI.
         // Corporate-action reconciliation and per-ticker action capture resolve from scoped DI.
         var scopeFactory = ServiceScopeSubstitute.Create(
+            (
+                typeof(EquityMarketRegistrationRepository),
+                new EquityMarketRegistrationRepository(_dbContext)
+            ),
             (typeof(EquityDailyStockPriceRepository), _priceRepo),
             (typeof(EquityIssuerRepository), _stockRepo),
             (typeof(EquityListingRepository), new EquityListingRepository(_dbContext)),

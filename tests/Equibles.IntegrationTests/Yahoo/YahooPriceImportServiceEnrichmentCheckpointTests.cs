@@ -4,6 +4,7 @@ using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
+using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
@@ -161,6 +162,10 @@ public class YahooPriceImportServiceEnrichmentCheckpointTests : IAsyncLifetime
         var splitRepository = new StockSplitRepository(context);
         var dividendRepository = new CashDividendRepository(context);
         var scopeFactory = ServiceScopeSubstitute.Create(
+            (
+                typeof(EquityMarketRegistrationRepository),
+                new EquityMarketRegistrationRepository(context)
+            ),
             (typeof(EquityIssuerRepository), stockRepository),
             (typeof(EquityDailyStockPriceRepository), priceRepository),
             (typeof(StockSplitRepository), splitRepository),

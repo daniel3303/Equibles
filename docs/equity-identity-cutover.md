@@ -217,10 +217,10 @@
 - Queue active verified PT listings on XLIS, ENXL or ALXL with explicit EUR major units and an ISIN.
 - Yahoo's published `.LS` suffix supplies only a candidate; exact returned symbol, EUR, LIS, EQUITY and Europe/Lisbon metadata gate prices and actions.
 - A competing active ticker claim in any of the three source MICs blocks capture, including unverified claims.
-- Retain immutable `yahoo-lisbon-chart-v1` metadata evidence and revalidate native identity, ISIN, MIC and units under the directory lock.
+- Retain immutable `yahoo-euronext-lisbon-chart-v1` metadata evidence (rows captured before the market catalog carry `yahoo-lisbon-chart-v1` and stay as written) and revalidate native identity, ISIN, MIC and units under the directory lock.
 - Incremental writes and full-history corporate-action reconciliation retain native listing IDs without requiring issuer presentation or legacy stock rows.
 - Returned settled dates establish observations; no U.S. holidays, inferred Lisbon sessions or synthetic gap bars apply.
-- Explicit worker filters use `MIC:TICKER` for Lisbon; unqualified filters remain U.S.-only.
+- Explicit worker filters use `MIC:TICKER` for catalog markets; unqualified filters remain U.S.-only.
 - Captured-source replay queued 44 verified listings, retained 165 bars across 41 listings with exact parsed OHLCV values, and retained 44 source captures. A second import preserved all IDs and values, and the existing U.S. ADR stayed unchanged.
 - The source replay used an isolated PostgreSQL database; production rollout and final legacy-table retirement remain pending.
 - Each split/dividend transaction revalidates the complete pre-fetch source binding under its own directory lock; an earlier quotation check cannot authorize a later action write.

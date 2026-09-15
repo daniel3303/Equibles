@@ -5,6 +5,7 @@ using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
+using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
@@ -61,6 +62,10 @@ public class YahooDividendReconciliationTests : ParadeDbMcpTestBase
         // TickerMapService resolves CommonStockRepository from scoped DI.
         // Corporate-action reconciliation and per-ticker action capture resolve from scoped DI.
         var scopeFactory = ServiceScopeSubstitute.Create(
+            (
+                typeof(EquityMarketRegistrationRepository),
+                new EquityMarketRegistrationRepository(_dbContext)
+            ),
             (typeof(EquityDailyStockPriceRepository), _priceRepo),
             (typeof(EquityIssuerRepository), _stockRepo),
             (typeof(EquityListingRepository), new EquityListingRepository(_dbContext)),

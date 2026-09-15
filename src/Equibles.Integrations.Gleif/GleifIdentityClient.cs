@@ -11,7 +11,7 @@ public class GleifIdentityClient(HttpClient httpClient)
     private const int MaxResponseBytes = 2_000_000;
     private static readonly Uri Origin = new("https://api.gleif.org");
 
-    public async Task<GleifIssuerIdentity> GetIssuerForIsin(
+    public virtual async Task<GleifIssuerIdentity> GetIssuerForIsin(
         string isin,
         CancellationToken cancellationToken = default
     )

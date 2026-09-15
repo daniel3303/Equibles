@@ -10,7 +10,7 @@ namespace Equibles.CommonStocks.BusinessLogic.Directory;
 [Service]
 public class EquityDirectoryIdentityImporter(IServiceScopeFactory scopeFactory)
 {
-    public async Task<Guid> ImportListing(
+    public virtual async Task<Guid> ImportListing(
         EquityDirectoryListingInput input,
         CancellationToken cancellationToken = default
     )
