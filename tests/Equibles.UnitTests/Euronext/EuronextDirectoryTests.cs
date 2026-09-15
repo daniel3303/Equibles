@@ -44,6 +44,19 @@ public class EuronextDirectoryTests
             .Equal("EUR", "EUR", "USD", "EUR", "EUR");
     }
 
+    [Fact]
+    public async Task CrossListedRows_ToleratePaddedVenueSeparators()
+    {
+        var root = JsonNode.Parse(await ParisFixture("equities.json"));
+        root["aaData"][0][3] = "<div class=\"nowrap pointer\">XBRU,&nbsp;XPAR</div>";
+        root["aaData"][3][3] = "<div class=\"nowrap pointer\">XPAR ,\n XAMS</div>";
+        var page = EuronextDirectoryParser.ReadPage(root.ToJsonString(), EuronextMarket.Paris);
+        page.Listings[0].MarketIdentifierCode.Should().Be("XPAR");
+        page.Listings[0].PrimaryMarketIdentifierCode.Should().Be("XBRU");
+        page.Listings[3].MarketIdentifierCode.Should().Be("XPAR");
+        page.Listings[3].PrimaryMarketIdentifierCode.Should().Be("XPAR");
+    }
+
     [Theory]
     [InlineData("no-own-venue")]
     [InlineData("two-own-venues")]

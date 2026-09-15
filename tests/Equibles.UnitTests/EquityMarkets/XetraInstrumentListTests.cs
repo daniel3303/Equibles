@@ -25,6 +25,12 @@ public class XetraInstrumentListTests
                 "/resource/blob/1528/2dd6b44cb9d8475ac114e10e873a1858/data/t7-xetr-allTradableInstruments.csv",
                 "a cache node that writes the link absolute names the same file"
             );
+        XetraInstrumentListParser
+            .ReadDownloadPath(
+                html + await Fixture("tradable-instruments-page.absolute-link.excerpt.html")
+            )
+            .Should()
+            .Be(XetraInstrumentListParser.ReadDownloadPath(html), "both spellings name one file");
         var none = () => XetraInstrumentListParser.ReadDownloadPath("<html></html>");
         none.Should().Throw<InvalidDataException>();
         var elsewhere = () =>

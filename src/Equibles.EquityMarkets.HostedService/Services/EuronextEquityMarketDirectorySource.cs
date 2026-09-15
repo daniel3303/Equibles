@@ -39,8 +39,8 @@ public class EuronextEquityMarketDirectorySource(EuronextDirectoryClient directo
                     Symbol = listing.Symbol,
                     Name = listing.Name,
                     ReportedCurrency = listing.ReportedCurrency,
-                    // A line Euronext homes on a sibling market states its primary venue is there; a line homed
-                    // here states nothing beyond Euronext, so FIRDS decides its home as before.
+                    // Euronext links every line to the venue it homes it on; only a sibling venue is stated as the
+                    // primary, so a line homed here defers to FIRDS instead of engaging the gate's authority escape.
                     StatedPrimaryMarketIdentifierCode =
                         listing.PrimaryMarketIdentifierCode == listing.MarketIdentifierCode
                             ? null
