@@ -221,6 +221,36 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             )
             .IsCreatedConcurrently();
 
+        // Worklist for the implausible-derivation reset: same shape and lifecycle as the stuck-zero
+        // worklist. The predicate is spelled exactly as EF renders the phase query, because Postgres
+        // serves a query from a partial index only when it can prove the query's WHERE implies the
+        // index's, node for node (1000000.0 is not 1000000). The model name is required: a second
+        // unnamed HasIndex on the same column returns the stuck-zero index and renames it.
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(h => h.Id, "IX_InstitutionalHolding_ImplausibleDerivationRepair")
+            .HasDatabaseName("IX_InstitutionalHolding_ImplausibleDerivationRepair")
+            .HasFilter(
+                "NOT \"ValuePending\" AND \"ShareType\" = 0 AND \"ValueSource\" <> 1 "
+                    + "AND \"Shares\" > 0 AND \"Value\"::numeric > 1000000.0 * \"Shares\"::numeric"
+            )
+            .IsCreatedConcurrently();
+
+        // Candidate index for the impossible-position scan: common-share rows still carrying a
+        // value, keyed by issuer then share count, and only above the scan's floor so it holds the
+        // ~2M largest positions rather than the corpus. Every batch query filters on ShareType,
+        // ValueUnavailable and a Shares floor at or above this literal, which is what keeps it
+        // inside the index; ImpossiblePositionRepairService.CandidateSharesFloor pins the literal.
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(
+                h => new { h.EquityIssuerId, h.Shares },
+                "IX_InstitutionalHolding_ImpossiblePositionRepair"
+            )
+            .HasDatabaseName("IX_InstitutionalHolding_ImpossiblePositionRepair")
+            .HasFilter("\"ShareType\" = 0 AND NOT \"ValueUnavailable\" AND \"Shares\" > 1000000")
+            .IsCreatedConcurrently();
+
         builder.Entity<UnmappedCusip>();
         builder.Entity<FilingOtherManager>();
         builder.Entity<ProcessedDataSet>();
