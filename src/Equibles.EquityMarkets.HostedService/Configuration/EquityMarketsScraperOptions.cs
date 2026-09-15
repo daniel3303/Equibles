@@ -6,7 +6,7 @@ public class EquityMarketsScraperOptions : ScraperOptions
 {
     public EquityMarketsScraperOptions() => SleepIntervalHours = 6;
 
-    /// <summary>How often an enabled market's directory is re-captured when no refresh was requested.</summary>
+    /// <summary>How often a market's directory is re-captured when no refresh was requested.</summary>
     public int DirectoryRefreshIntervalHours { get; set; } = 24;
 
     /// <summary>How often the directory worker checks registrations for work.</summary>

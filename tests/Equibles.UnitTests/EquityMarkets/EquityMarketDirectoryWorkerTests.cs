@@ -16,7 +16,6 @@ public class EquityMarketDirectoryWorkerTests
         new()
         {
             Code = "euronext-paris",
-            Enabled = true,
             DirectoryRefreshedAt = refreshedAt,
             DirectoryRefreshRequestedAt = requestedAt,
         };

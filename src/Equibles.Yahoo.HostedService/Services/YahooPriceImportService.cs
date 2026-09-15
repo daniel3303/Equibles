@@ -9,7 +9,6 @@ using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.EquityMarkets.Data.Catalog;
-using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
@@ -20,7 +19,6 @@ using Equibles.Yahoo.Data.Models;
 using Equibles.Yahoo.HostedService.Configuration;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -67,8 +65,6 @@ public class YahooPriceImportService
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
     private readonly YahooPriceScraperOptions _scraperOptions;
-    private readonly bool _lisbonSeedEnabled;
-    private HashSet<string> _enabledMarkets;
 
     public bool HasEnrichmentBacklog { get; private set; }
 
@@ -79,8 +75,7 @@ public class YahooPriceImportService
         TickerMapService tickerMapService,
         ErrorReporter errorReporter,
         IOptions<WorkerOptions> workerOptions,
-        IOptions<YahooPriceScraperOptions> scraperOptions,
-        IConfiguration configuration = null
+        IOptions<YahooPriceScraperOptions> scraperOptions
     )
     {
         _scopeFactory = scopeFactory;
@@ -90,8 +85,6 @@ public class YahooPriceImportService
         _errorReporter = errorReporter;
         _workerOptions = workerOptions.Value;
         _scraperOptions = scraperOptions.Value;
-        _lisbonSeedEnabled =
-            configuration?.GetValue<bool>(EquityMarketRegistrationSeed.LisbonSetting) == true;
     }
 
     public Task Import(CancellationToken cancellationToken) =>
@@ -108,7 +101,6 @@ public class YahooPriceImportService
     public async Task Import(bool includeEnrichment, CancellationToken cancellationToken)
     {
         HasEnrichmentBacklog = false;
-        _enabledMarkets = null;
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
             cancellationToken
@@ -256,44 +248,18 @@ public class YahooPriceImportService
         return targets;
     }
 
-    // Which catalog markets the operator has switched on, read once per cycle from the registration table.
-    private async Task<HashSet<string>> EnabledMarkets(CancellationToken cancellationToken)
-    {
-        if (_enabledMarkets != null)
-            return _enabledMarkets;
-        using var scope = _scopeFactory.CreateScope();
-        var registrations =
-            scope.ServiceProvider.GetRequiredService<EquityMarketRegistrationRepository>();
-        await registrations.EnsureSeeded(
-            EquityMarketCatalog.All,
-            EquityMarketRegistrationSeed.InitiallyEnabled(_lisbonSeedEnabled),
-            cancellationToken
-        );
-        _enabledMarkets = (await registrations.GetEnabledCodes(cancellationToken)).ToHashSet(
-            StringComparer.Ordinal
-        );
-        return _enabledMarkets;
-    }
-
-    private async Task<bool> IsMarketEnabled(
-        PriceSeriesTarget target,
-        CancellationToken cancellationToken
-    ) =>
-        target.IsUs
-        || YahooListingSource.Market(target) is { } market
-            && (await EnabledMarkets(cancellationToken)).Contains(market.Code);
+    // The lane serves US listings and every catalog market; a verified listing only exists because an adapter created it.
+    private static bool IsCatalogMarket(PriceSeriesTarget target) =>
+        target.IsUs || YahooListingSource.Market(target) != null;
 
     private async Task<List<PriceSeriesTarget>> BuildCatalogPriceTargets(
         CancellationToken cancellationToken
     )
     {
-        var enabled = await EnabledMarkets(cancellationToken);
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var rows = new List<PriceSeriesTarget>();
-        foreach (
-            var market in EquityMarketCatalog.All.Where(market => enabled.Contains(market.Code))
-        )
+        foreach (var market in EquityMarketCatalog.All)
         {
             var claims = MarketClaims(repository, market);
             rows.AddRange(
@@ -939,7 +905,7 @@ public class YahooPriceImportService
                 QuoteUnitMultiplier: listing.QuoteUnitMultiplier
             );
             if (
-                !await IsMarketEnabled(target, cancellationToken)
+                !IsCatalogMarket(target)
                 || !YahooListingSource.MatchesListing(target, listing)
                 || !await HasCurrentIdentity(stockRepository, target, cancellationToken)
             )
@@ -1066,10 +1032,8 @@ public class YahooPriceImportService
         EquityDailyStockPriceRepository priceRepository =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
         var appliedSince = DateTime.UtcNow.AddDays(-AppliedSplitBasisAuditLookbackDays);
-        var enabled = await EnabledMarkets(cancellationToken);
-        var enabledMics = EquityMarketCatalog
-            .All.Where(market => enabled.Contains(market.Code))
-            .SelectMany(market => market.MarketIdentifierCodes)
+        var catalogMics = EquityMarketCatalog
+            .All.SelectMany(market => market.MarketIdentifierCodes)
             .ToList();
 
         var boundaries = await splitRepository
@@ -1079,7 +1043,7 @@ public class YahooPriceImportService
                 && split.EquityListingId != null
                 && (
                     split.Listing.MarketCountryCode == "US"
-                    || enabledMics.Contains(split.Listing.MarketIdentifierCode)
+                    || catalogMics.Contains(split.Listing.MarketIdentifierCode)
                         && split.Listing.Security.Isin != null
                 )
                 && split.EffectiveDate < today
@@ -1682,7 +1646,7 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        if (!await IsMarketEnabled(target, cancellationToken))
+        if (!IsCatalogMarket(target))
             return false;
         if (!target.IsUs)
         {
@@ -1812,7 +1776,7 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        if (!await IsMarketEnabled(target, cancellationToken))
+        if (!IsCatalogMarket(target))
             return NoFetchNeeded;
         using (var identityScope = _scopeFactory.CreateScope())
         {
@@ -2468,7 +2432,7 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        if (splits.Count == 0 || !await IsMarketEnabled(target, cancellationToken))
+        if (splits.Count == 0 || !IsCatalogMarket(target))
             return;
 
         // Map Yahoo's split shape onto the source-neutral capture DTO at the
@@ -2529,7 +2493,7 @@ public class YahooPriceImportService
         // Cash amounts require explicit source currency independently of stored price history.
         if (
             chartData.Dividends.Count == 0
-            || !await IsMarketEnabled(target, cancellationToken)
+            || !IsCatalogMarket(target)
             || !(
                 target.IsUs
                     ? YahooQuotationIdentity.HasUsDollarEvidence(

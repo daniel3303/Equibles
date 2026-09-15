@@ -13,16 +13,9 @@ public class EquityMarketRegistrationRepository(EquiblesFinancialDbContext dbCon
         CancellationToken cancellationToken = default
     ) => GetAll().SingleOrDefaultAsync(row => row.Code == code, cancellationToken);
 
-    public IQueryable<EquityMarketRegistration> GetEnabled() => GetAll().Where(row => row.Enabled);
-
-    public Task<List<string>> GetEnabledCodes(CancellationToken cancellationToken = default) =>
-        GetEnabled().Select(row => row.Code).ToListAsync(cancellationToken);
-
-    // Every catalog market gets a row so the operator page can toggle it; a code listed in
-    // initiallyEnabled is created switched on (the one-time seed for a lane that was already live).
+    // Every catalog market gets a row so its passes have somewhere to land before the first one runs.
     public async Task EnsureSeeded(
         IEnumerable<EquityMarket> markets,
-        IReadOnlySet<string> initiallyEnabled,
         CancellationToken cancellationToken = default
     )
     {
@@ -34,14 +27,7 @@ public class EquityMarketRegistrationRepository(EquiblesFinancialDbContext dbCon
         if (missing.Count == 0)
             return;
         foreach (var code in missing)
-            Add(
-                new EquityMarketRegistration
-                {
-                    Code = code,
-                    Enabled = initiallyEnabled.Contains(code),
-                    UpdatedAt = DateTime.UtcNow,
-                }
-            );
+            Add(new EquityMarketRegistration { Code = code, UpdatedAt = DateTime.UtcNow });
         try
         {
             await DbContext.SaveChangesAsync(cancellationToken);

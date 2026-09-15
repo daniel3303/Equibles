@@ -86,12 +86,12 @@
 - Independent reference coverage protects its exact listing; foreign listings and all historical observations remain intact.
 - A newly acquired reference claim on the displaced symbol refuses retirement when the locked graph is refreshed.
 
-## Market capture switch
+## Market capture
 
-- `EquityMarketRegistration.Enabled=false` prevents prices, quotation evidence and corporate actions from being captured for the market's retained verified listings.
-- `EquityMarkets:LisbonEnabled` (`EQUITY_MARKETS_LISBON_ENABLED` in Compose) is read once, when the `euronext-lisbon` row is first created, so an upgrade keeps a lane that was already live; afterwards only the row counts.
-- Every other market is seeded disabled and this repository ships no operator page, so a self-hoster switches one on in the database: `UPDATE "EquityMarketRegistration" SET "Enabled" = true, "DirectoryRefreshRequestedAt" = now() WHERE "Code" = 'euronext-paris';` runs its first directory pass within a minute, once `FirdsUniverseWorker` has stored a full set for the market's authority.
-- Disabled-market history reconciliation and applied-split audits leave stored observations and applied markers unchanged.
+- Every catalog market with a directory adapter is captured; there is no per-market switch. `EquityMarketDirectoryWorker` runs each such market's directory pass within a minute of start-up, once `FirdsUniverseWorker` has stored a full set for the market's authority, and again once a day.
+- Prices, quotation evidence and corporate actions are captured for every verified listing on a catalog market; a verified listing only exists because a directory pass created it.
+- `EquityMarketRegistration` holds one row per catalog market recording pass state only: the last refresh, the last directory counts, the last error, and a refresh request. Setting `DirectoryRefreshRequestedAt = now()` on a row runs that market's pass on the next control tick.
+- The `Enabled` column is retired and unread; a later migration drops it.
 
 ## Holdings replay identity
 

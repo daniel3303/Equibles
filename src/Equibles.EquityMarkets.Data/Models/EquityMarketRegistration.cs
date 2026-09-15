@@ -2,12 +2,13 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Equibles.EquityMarkets.Data.Models;
 
-// The operator switch for one catalog market; workers read it every cycle, so no host setting decides a lane.
+// The pass state of one catalog market: refresh requests, the last directory counts and the last error.
 public class EquityMarketRegistration
 {
     [Key, MaxLength(32)]
     public string Code { get; set; }
 
+    // Retired: nothing reads it since the per-market switch went away; a later migration drops the column.
     public bool Enabled { get; set; }
 
     public DateTime? DirectoryRefreshRequestedAt { get; set; }
