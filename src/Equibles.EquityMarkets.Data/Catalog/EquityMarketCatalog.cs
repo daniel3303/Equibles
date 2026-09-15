@@ -13,6 +13,8 @@ public static class EquityMarketCatalog
         Euronext("euronext-oslo", "Euronext Oslo", "NO", ["XOSL", "XOAS", "MERK"], ".OL", "OSL", "Europe/Oslo", "OSL", "NOK"),
         Euronext("euronext-milan", "Euronext Milan", "IT", ["MTAA", "MTAH", "EXGM", "ETLX", "BGEM", "MIVX"], ".MI", "MIL", "Europe/Rome", "MIL"),
         Euronext("euronext-lisbon", "Euronext Lisbon", "PT", ["XLIS", "ENXL", "ALXL"], ".LS", "LIS", "Europe/Lisbon", "LIS", close: new(16, 30), auction: new(16, 35)),
+        // FIRDS files Xetra by segment and places a German share's home on Xetra, the Frankfurt floor or a regional
+        // exchange, so home spans Deutsche Börse's venues and the directory's own primary-market column decides.
         new(
             "xetra",
             "Xetra",
@@ -27,7 +29,13 @@ public static class EquityMarketCatalog
             new(17, 35),
             DirectorySource: "xetra",
             DelayedTradeSource: null,
-            DelayedTradeLocationCode: null
+            DelayedTradeLocationCode: null,
+            FirdsVenueCodes: ["XETA", "XETB", "XETS"],
+            HomeVenueCodes:
+            [
+                "XETR", "XETA", "XETB", "XETS", "XETU", "XETV", "XETW",
+                "XFRA", "FRAA", "FRAB", "FRAS", "FRAV", "FRAW",
+            ]
         ),
         Pending("nasdaq-stockholm", "Nasdaq Stockholm", "SE", ["XSTO", "FNSE"], "SEK", ".ST", "STO", "Europe/Stockholm", new(9, 0), new(17, 25), new(17, 30)),
         Pending("nasdaq-helsinki", "Nasdaq Helsinki", "FI", ["XHEL"], "EUR", ".HE", "HEL", "Europe/Helsinki", new(10, 0), new(18, 25), new(18, 30)),

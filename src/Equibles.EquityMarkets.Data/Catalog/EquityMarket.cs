@@ -15,10 +15,28 @@ public sealed record EquityMarket(
     TimeOnly ClosingAuctionEnd,
     string DirectorySource,
     string DelayedTradeSource,
-    string DelayedTradeLocationCode
+    string DelayedTradeLocationCode,
+    IReadOnlyList<string> FirdsVenueCodes = null,
+    IReadOnlyList<string> HomeVenueCodes = null
 )
 {
+    // The venue codes FIRDS records this market's lines under; a regulator files Xetra by segment, never as XETR.
+    public IReadOnlyList<string> FirdsVenueCodes { get; init; } =
+        FirdsVenueCodes ?? MarketIdentifierCodes;
+
+    // Every venue code, operating or segment, that places a share's home market here.
+    public IReadOnlyList<string> HomeVenueCodes { get; init; } =
+        HomeVenueCodes ?? MarketIdentifierCodes;
+
     public bool Contains(string marketIdentifierCode) =>
         marketIdentifierCode != null
         && MarketIdentifierCodes.Contains(marketIdentifierCode, StringComparer.Ordinal);
+
+    public bool IsFirdsVenue(string marketIdentifierCode) =>
+        marketIdentifierCode != null
+        && FirdsVenueCodes.Contains(marketIdentifierCode, StringComparer.Ordinal);
+
+    public bool IsHomeVenue(string marketIdentifierCode) =>
+        marketIdentifierCode != null
+        && HomeVenueCodes.Contains(marketIdentifierCode, StringComparer.Ordinal);
 }

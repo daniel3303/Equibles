@@ -20,7 +20,7 @@ namespace Equibles.UnitTests.EquityMarkets;
 
 /// <summary>
 /// Contract: a market pass waits for the FIRDS universe, reconciles the whole directory first, then
-/// imports only rows FIRDS confirms as the ISIN's primary-venue share, re-verifies an unchanged
+/// imports only rows the gate confirms as the market's own share listings, re-verifies an unchanged
 /// listing monthly rather than daily, and counts a failed row without abandoning the rest.
 /// </summary>
 public class EquityMarketDirectoryImporterTests
@@ -93,7 +93,8 @@ public class EquityMarketDirectoryImporterTests
         string mic = "XPAR",
         string venue = "XPAR",
         string cfi = "ESVUFR",
-        DateTime? terminated = null
+        DateTime? terminated = null,
+        string authority = "FR"
     )
     {
         using var context = NewContext(options);
@@ -107,7 +108,7 @@ public class EquityMarketDirectoryImporterTests
                 Cfi = cfi,
                 Currency = "EUR",
                 FullName = isin,
-                RelevantCompetentAuthority = "FR",
+                RelevantCompetentAuthority = authority,
                 RelevantTradingVenue = venue,
                 TerminationDate = terminated,
                 ObservedAt = DateTime.UtcNow,
@@ -155,7 +156,12 @@ public class EquityMarketDirectoryImporterTests
         await context.SaveChangesAsync();
     }
 
-    private static EquityMarketDirectoryRow Row(string isin, string symbol, string mic = "XPAR") =>
+    private static EquityMarketDirectoryRow Row(
+        string isin,
+        string symbol,
+        string mic = "XPAR",
+        string statedPrimaryMarket = null
+    ) =>
         new()
         {
             Isin = isin,
@@ -163,6 +169,7 @@ public class EquityMarketDirectoryImporterTests
             Symbol = symbol,
             Name = symbol + " SA",
             ReportedCurrency = "EUR",
+            StatedPrimaryMarketIdentifierCode = statedPrimaryMarket,
             SourceUrl = new Uri($"https://live.euronext.com/en/product/equities/{isin}-{mic}"),
         };
 
@@ -188,6 +195,13 @@ public class EquityMarketDirectoryImporterTests
     private static Harness Build(
         DbContextOptions<EquiblesFinancialDbContext> options,
         params EquityMarketDirectoryRow[] rows
+    ) => Build(options, "euronext", "euronext-paris", rows);
+
+    private static Harness Build(
+        DbContextOptions<EquiblesFinancialDbContext> options,
+        string sourceKey,
+        string marketCode,
+        EquityMarketDirectoryRow[] rows
     )
     {
         var scopeFactory = ScopeFactory(options);
@@ -203,7 +217,7 @@ public class EquityMarketDirectoryImporterTests
         gleif
             .GetIssuerForIsin(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(Issuer(call.Arg<string>())));
-        var source = new FakeSource(rows);
+        var source = new FakeSource(rows, sourceKey, marketCode);
         var importer = new EquityMarketDirectoryImporter(
             [source],
             gleif,
@@ -380,6 +394,50 @@ public class EquityMarketDirectoryImporterTests
     }
 
     [Fact]
+    public async Task AXetraRow_IsImportedOnlyWhenTheListAndFirdsAgreeItsHomeIsDeutscheBoerse()
+    {
+        var options = NewDbOptions();
+        await SeedFullImport(options);
+        await SeedFirds(options, "DE0007164600", mic: "XETA", venue: "FRAA", authority: "DE");
+        await SeedFirds(options, "DE0005495626", mic: "XETB", venue: "MUNB", authority: "DE");
+        await SeedFirds(options, "LU2818110020", mic: "XETA", venue: "XETA", authority: "LV");
+        await SeedFirds(options, "ATFREQUENT09", mic: "XETA", venue: "WBAH", authority: "AT");
+        await SeedFirds(options, "AT000000STR1", mic: "XETB", venue: "FRAB", authority: "DE");
+        var rows = new[]
+        {
+            Row("DE0007164600", "SAP", "XETR", "XFRA"),
+            Row("DE0005495626", "GME", "XETR", "FRAB"),
+            Row("LU2818110020", "ELV", "XETR"),
+            Row("ATFREQUENT09", "FQT", "XETR", "XFRA"),
+            Row("AT000000STR1", "XD4", "XETR", "XWBO"),
+        };
+        var harness = Build(options, "xetra", "xetra", rows);
+
+        var result = await harness.Importer.Import(EquityMarketCatalog.TryGet("xetra"), CancellationToken.None);
+
+        result.Error.Should().BeNull();
+        result.Listings.Should().Be(5);
+        result.Imported.Should().Be(3);
+        result.Skipped.Should().Be(2, "a home FIRDS places in Austria and a Vienna-primary share are not Xetra's own listings");
+        result.Failed.Should().Be(0);
+        harness.Source.Resolved.Should().Equal("DE0007164600", "DE0005495626", "LU2818110020");
+        await harness
+            .Identity.Received(1)
+            .ImportListing(
+                Arg.Is<EquityDirectoryListingInput>(input =>
+                    input.Isin == "DE0007164600"
+                    && input.Ticker == "SAP"
+                    && input.Source == "xetra"
+                    && input.MarketIdentifierCode == "XETR"
+                    && input.MarketCountryCode == "DE"
+                    && input.PayloadJson.Contains("\"StatedPrimaryMarketIdentifierCode\":\"XFRA\"")
+                    && input.PayloadJson.Contains("\"RelevantTradingVenue\":\"FRAA\"")
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
     public async Task AMarketWithoutAServingSource_IsRefusedLoudly()
     {
         var options = NewDbOptions();
@@ -388,17 +446,20 @@ public class EquityMarketDirectoryImporterTests
         await import.Should().ThrowAsync<InvalidOperationException>();
     }
 
-    internal sealed class FakeSource(IReadOnlyList<EquityMarketDirectoryRow> rows)
-        : IEquityMarketDirectorySource
+    internal sealed class FakeSource(
+        IReadOnlyList<EquityMarketDirectoryRow> rows,
+        string sourceKey = "euronext",
+        string marketCode = "euronext-paris"
+    ) : IEquityMarketDirectorySource
     {
         public const string DirectoryUrl = "https://live.euronext.com/en/markets/paris/equities/list";
 
         public int Captures { get; private set; }
         public List<string> Resolved { get; } = [];
 
-        public string SourceKey => "euronext";
+        public string SourceKey => sourceKey;
 
-        public bool Supports(EquityMarket market) => market.Code == "euronext-paris";
+        public bool Supports(EquityMarket market) => market.Code == marketCode;
 
         public Task<EquityMarketDirectorySnapshot> Capture(
             EquityMarket market,
@@ -409,7 +470,7 @@ public class EquityMarketDirectoryImporterTests
             return Task.FromResult(
                 new EquityMarketDirectorySnapshot
                 {
-                    EvidenceSource = "fake-euronext-directory-v1",
+                    EvidenceSource = "fake-" + sourceKey + "-directory-v1",
                     SourceUrl = new Uri(DirectoryUrl),
                     CapturedAt = DateTime.UtcNow,
                     PayloadJson = "{\"rows\":" + rows.Count + "}",

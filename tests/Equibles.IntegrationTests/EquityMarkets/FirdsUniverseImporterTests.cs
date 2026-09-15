@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using Equibles.EquityMarkets.BusinessLogic.Firds;
+using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Data.Models;
 using Equibles.EquityMarkets.Repositories;
 using Equibles.Integrations.Esma;
@@ -68,21 +69,30 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         runs.Should().AllSatisfy(run => run.Checksum.Should().Be(index.Checksum(run.FileName)));
         var records = new FirdsInstrumentRecordRepository(DbContext);
         var now = DateTime.UtcNow;
-        (await records.GetPrimaryVenueShare("PTSLB0AM0010", "XLIS", now)).Should().NotBeNull();
-        (await records.GetPrimaryVenueShare("FR0005691656", "XPAR", now)).Should().NotBeNull();
-        (await records.GetPrimaryVenueShare("FI0009800395", "AQEA", now))
+        var lisbon = EquityMarketCatalog.TryGet("euronext-lisbon");
+        var paris = EquityMarketCatalog.TryGet("euronext-paris");
+        (await records.GetLiveShare("PTSLB0AM0010", lisbon.FirdsVenueCodes, now)).Should().NotBeNull();
+        (await records.GetLiveShare("FR0005691656", paris.FirdsVenueCodes, now)).Should().NotBeNull();
+        (await records.GetLiveShare("FR0005691656", lisbon.FirdsVenueCodes, now))
             .Should()
-            .BeNull("its most relevant venue is DHEL");
-        (await records.GetPrimaryVenueShare("SE0030026894", "SSME", now))
+            .BeNull("the line is filed on Paris, not on a Lisbon venue");
+        (await records.GetLiveShare("FI0009800395", ["AQEA"], now))
+            .RelevantTradingVenue.Should()
+            .Be("DHEL", "the line is live on Aquis while its most relevant venue is Helsinki");
+        (await records.GetLiveShare("SE0030026894", ["SSME"], now))
             .Should()
             .BeNull("the line terminated on 2026-09-11");
-        (await records.GetPrimaryVenueShare("CA00791L1067", "DUSB", now))
+        (await records.GetLiveShare("CA00791L1067", ["DUSB"], now))
             .Should()
             .BeNull("a depositary receipt is not a share");
-        (await records.GetPrimaryVenueShare("US7591EP8869", "FRAB", now))
+        (await records.GetLiveShare("US7591EP8869", ["FRAB"], now))
             .Should()
             .NotBeNull("a preference share is a traded share line");
-        (await records.CountPrimaryVenueShares(["XLIS", "XPAR", "AQEA", "DHEL"], now)).Should().Be(2);
+        (await records.CountHomeShares(lisbon, now)).Should().Be(1);
+        (await records.CountHomeShares(paris, now)).Should().Be(1);
+        (await records.CountHomeShares(EquityMarketCatalog.TryGet("nasdaq-helsinki"), now))
+            .Should()
+            .Be(0, "Aquis-quoted Raisio has its home on Nasdaq Helsinki's segment DHEL, which is not catalogued");
         (await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(EsmaFirdsClient.AuthorityCode))
             .Should()
             .Be(FirstFull);
@@ -130,7 +140,7 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var records = new FirdsInstrumentRecordRepository(DbContext);
         var now = DateTime.UtcNow;
         (await records.GetLive(now).CountAsync()).Should().Be(1);
-        (await records.GetPrimaryVenueShare("FR0005691656", "XPAR", now)).Should().BeNull();
+        (await records.GetLiveShare("FR0005691656", ["XPAR"], now)).Should().BeNull();
         (await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(EsmaFirdsClient.AuthorityCode))
             .Should()
             .Be(SecondFull);

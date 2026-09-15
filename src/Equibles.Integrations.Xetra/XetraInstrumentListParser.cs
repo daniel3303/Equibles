@@ -101,7 +101,7 @@ public static partial class XetraInstrumentListParser
                 InstrumentType = Cell("Instrument Type"),
                 Currency = Cell("Currency"),
                 CountryOfIssue = Cell("Country Of Issue"),
-                PrimaryMarketIdentifierCode = Cell("Primary Market MIC Code"),
+                PrimaryMarketIdentifierCode = NullIfEmpty(Cell("Primary Market MIC Code")),
             };
             if (row.MarketIdentifierCode != list.MarketIdentifierCode)
                 throw new InvalidDataException("Xetra instrument row names another market.");
@@ -114,6 +114,8 @@ public static partial class XetraInstrumentListParser
                     || row.Mnemonic.Length > 32
                     || string.IsNullOrWhiteSpace(row.Name)
                     || row.Name.Length > 500
+                    || row.PrimaryMarketIdentifierCode != null
+                        && !IsMarketIdentifierCode(row.PrimaryMarketIdentifierCode)
                 )
                     throw new InvalidDataException(
                         "Xetra share row lacks valid stated listing identity."
@@ -127,6 +129,12 @@ public static partial class XetraInstrumentListParser
             throw new InvalidDataException("Xetra instrument file contains no rows.");
         return list;
     }
+
+    private static string NullIfEmpty(string value) => value.Length == 0 ? null : value;
+
+    private static bool IsMarketIdentifierCode(string value) =>
+        value.Length == 4
+        && value.All(character => character is >= 'A' and <= 'Z' or >= '0' and <= '9');
 
     // Semicolon-separated with optional double quotes; a quoted cell may contain the separator.
     private static List<string> Split(string line)

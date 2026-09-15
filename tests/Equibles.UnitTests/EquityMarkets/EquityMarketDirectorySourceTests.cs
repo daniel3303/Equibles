@@ -56,6 +56,8 @@ public class EquityMarketDirectorySourceTests
         var strabag = snapshot.Rows.Single(row => row.Isin == "AT000000STR1");
         strabag.Symbol.Should().Be("XD4");
         strabag.Name.Should().Be("STRABAG SE");
+        strabag.StatedPrimaryMarketIdentifierCode.Should().Be("XWBO", "the list states each share's primary market");
+        snapshot.Rows.Single(row => row.Isin == "AT0000785407").StatedPrimaryMarketIdentifierCode.Should().Be("XFRA");
         using var payload = JsonDocument.Parse(snapshot.PayloadJson);
         payload.RootElement.GetProperty("SourceUrl").GetString().Should().Contain("/data/t7-xetr-allTradableInstruments.csv");
         payload.RootElement.GetProperty("Rows").GetInt32().Should().Be(36);
@@ -85,13 +87,15 @@ public class EquityMarketDirectorySourceTests
             Symbol = "XD4",
             Name = "STRABAG SE",
             ReportedCurrency = "EUR",
+            StatedPrimaryMarketIdentifierCode = "XWBO",
             SourceUrl = new Uri("https://www.cashmarket.deutsche-boerse.com/cash-en/trading/Tradable-Instruments-Xetra#AT000000STR1-XETR"),
         };
-        var product = await source.Resolve(market, row, Firds("AT000000STR1", "XETR", "529900S9YM61OVI49P57"), CancellationToken.None);
+        var product = await source.Resolve(market, row, Firds("AT000000STR1", "XETB", "529900S9YM61OVI49P57"), CancellationToken.None);
         product.SourceIssuerIdentifier.Should().Be("529900S9YM61OVI49P57");
         product.SourceUrl.Should().Be(row.SourceUrl);
         product.ReportedCurrency.Should().Be("EUR");
-        var withoutLei = () => source.Resolve(market, row, Firds("AT000000STR1", "XETR", null), CancellationToken.None);
+        JsonSerializer.Serialize(product.Evidence).Should().Contain("\"StatedPrimaryMarketIdentifierCode\":\"XWBO\"");
+        var withoutLei = () => source.Resolve(market, row, Firds("AT000000STR1", "XETB", null), CancellationToken.None);
         await withoutLei.Should().ThrowAsync<InvalidDataException>();
     }
 
@@ -116,6 +120,7 @@ public class EquityMarketDirectorySourceTests
         snapshot.EvidenceSource.Should().Be("euronext-lisbon-directory-v1");
         snapshot.SourceUrl.Should().Be(EuronextMarket.Lisbon.DirectoryUrl);
         snapshot.Rows.Should().HaveCount(49);
+        snapshot.Rows.Should().AllSatisfy(row => row.StatedPrimaryMarketIdentifierCode.Should().BeNull("Euronext lists state no primary market"));
         var altri = snapshot.Rows.Single(row => row.Symbol == "ALTR");
         altri.Isin.Should().Be("PTALT0AE0002");
         altri.MarketIdentifierCode.Should().Be("XLIS");

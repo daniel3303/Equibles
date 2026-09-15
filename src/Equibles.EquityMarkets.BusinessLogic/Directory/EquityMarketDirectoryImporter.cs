@@ -15,8 +15,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Equibles.EquityMarkets.BusinessLogic.Directory;
 
-// One pass over a market: the venue's directory is reconciled whole, then each row that FIRDS confirms as a
-// share on its most relevant venue is verified against the source product and GLEIF before it becomes a listing.
+// One pass over a market: the venue's directory is reconciled whole, then each row the gate confirms as the
+// market's own share listing is verified against the source product and GLEIF before it becomes a listing.
 [Service]
 public class EquityMarketDirectoryImporter(
     IEnumerable<IEquityMarketDirectorySource> sources,
@@ -83,13 +83,13 @@ public class EquityMarketDirectoryImporter(
             {
                 var records =
                     scope.ServiceProvider.GetRequiredService<FirdsInstrumentRecordRepository>();
-                firds = await records.GetPrimaryVenueShare(
+                firds = await records.GetLiveShare(
                     row.Isin,
-                    row.MarketIdentifierCode,
+                    market.FirdsVenueCodes,
                     now,
                     cancellationToken
                 );
-                if (firds == null)
+                if (!EquityMarketDirectoryGate.IsHomeShare(market, row, firds))
                 {
                     result.Skipped++;
                     continue;
@@ -137,7 +137,7 @@ public class EquityMarketDirectoryImporter(
             }
         }
         logger.LogInformation(
-            "{Market} directory cycle complete: {Imported} imported, {Current} current, {Skipped} outside FIRDS share universe, {Failed} unresolved, {Total} source listings",
+            "{Market} directory cycle complete: {Imported} imported, {Current} current, {Skipped} not the market's own share listings, {Failed} unresolved, {Total} source listings",
             market.Code,
             result.Imported,
             result.Current,
@@ -200,10 +200,7 @@ public class EquityMarketDirectoryImporter(
             row.SourceUrl == null
             || product.SourceUrl != row.SourceUrl
             || issuer.RequestedIsin != row.Isin
-            || firds.Isin != row.Isin
-            || firds.Mic != row.MarketIdentifierCode
-            || firds.RelevantTradingVenue != row.MarketIdentifierCode
-            || !market.Contains(row.MarketIdentifierCode)
+            || !EquityMarketDirectoryGate.IsHomeShare(market, row, firds)
         )
             throw new InvalidDataException(
                 "Directory identity sources disagree on the requested security."

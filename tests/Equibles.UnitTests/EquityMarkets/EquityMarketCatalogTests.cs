@@ -30,6 +30,34 @@ public class EquityMarketCatalogTests
     }
 
     [Fact]
+    public void VenueCodes_PlaceEveryHomeVenueInExactlyOneMarketAndFileXetraBySegment()
+    {
+        EquityMarketCatalog
+            .All.SelectMany(market => market.HomeVenueCodes)
+            .Should()
+            .OnlyHaveUniqueItems("a venue cannot be the home of two markets");
+        foreach (var market in EquityMarketCatalog.All)
+        {
+            market.FirdsVenueCodes.Should().NotBeEmpty();
+            market.FirdsVenueCodes.Should().AllSatisfy(mic => mic.Should().MatchRegex("^[A-Z0-9]{4}$"));
+            market.HomeVenueCodes.Should().Contain(market.MarketIdentifierCodes);
+            market.HomeVenueCodes.Should().Contain(market.FirdsVenueCodes);
+            if (market.Code != "xetra")
+            {
+                market.FirdsVenueCodes.Should().Equal(market.MarketIdentifierCodes);
+                market.HomeVenueCodes.Should().Equal(market.MarketIdentifierCodes);
+            }
+        }
+        var xetra = EquityMarketCatalog.TryGet("xetra");
+        xetra.FirdsVenueCodes.Should().Equal("XETA", "XETB", "XETS");
+        xetra.HomeVenueCodes.Should().Contain(["XETR", "XFRA", "FRAA", "FRAB"]);
+        xetra.HomeVenueCodes.Should().NotContain(["MUNB", "STUB", "XGAT", "WBAH"]);
+        xetra.IsFirdsVenue("XETR").Should().BeFalse("FIRDS never files a line under the operating MIC");
+        xetra.IsHomeVenue("FRAA").Should().BeTrue();
+        xetra.IsHomeVenue(null).Should().BeFalse();
+    }
+
+    [Fact]
     public void EuronextMarkets_AgreeWithTheEuronextDirectoryDefinitions()
     {
         var catalogued = EquityMarketCatalog

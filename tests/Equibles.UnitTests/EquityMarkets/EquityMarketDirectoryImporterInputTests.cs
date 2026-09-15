@@ -230,6 +230,7 @@ public class EquityMarketDirectoryImporterInputTests
     [InlineData("firds-mic")]
     [InlineData("firds-venue")]
     [InlineData("market-mic")]
+    [InlineData("stated-primary-elsewhere")]
     [InlineData("row-url")]
     public void SourcesDisagreeingOnTheSecurity_FailTheRow(string disagreement)
     {
@@ -258,6 +259,9 @@ public class EquityMarketDirectoryImporterInputTests
                 row.MarketIdentifierCode = "XAMS";
                 firds.Mic = "XAMS";
                 firds.RelevantTradingVenue = "XAMS";
+                break;
+            case "stated-primary-elsewhere":
+                row.StatedPrimaryMarketIdentifierCode = "XAMS";
                 break;
             case "row-url":
                 row.SourceUrl = null;

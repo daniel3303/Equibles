@@ -60,6 +60,7 @@ public class XetraEquityMarketDirectorySource(XetraInstrumentListClient client)
                     Symbol = row.Mnemonic,
                     Name = row.Name,
                     ReportedCurrency = row.Currency,
+                    StatedPrimaryMarketIdentifierCode = row.PrimaryMarketIdentifierCode,
                     SourceUrl = RowUrl(list.PageUrl, row),
                 })
                 .ToList(),
@@ -91,6 +92,7 @@ public class XetraEquityMarketDirectorySource(XetraInstrumentListClient client)
                     row.Symbol,
                     row.Name,
                     row.ReportedCurrency,
+                    row.StatedPrimaryMarketIdentifierCode,
                     FirdsLei = firds.Lei,
                 },
             }

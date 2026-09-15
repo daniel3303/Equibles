@@ -1,4 +1,5 @@
 using Equibles.Data;
+using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Data.Models;
 using FlexLabs.EntityFrameworkCore.Upsert;
 using Microsoft.EntityFrameworkCore;
@@ -18,28 +19,34 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
     public IQueryable<FirdsInstrumentRecord> GetLiveShares(DateTime asOf) =>
         GetLive(asOf).Where(row => row.Cfi.StartsWith("ES") || row.Cfi.StartsWith("EP"));
 
-    // The gate a directory row must pass: a live share whose most relevant venue is this MIC.
-    public Task<FirdsInstrumentRecord> GetPrimaryVenueShare(
+    // The universe check a directory row must pass: a live share line FIRDS records on one of the market's venues.
+    public Task<FirdsInstrumentRecord> GetLiveShare(
         string isin,
-        string mic,
+        IReadOnlyList<string> venueCodes,
         DateTime asOf,
         CancellationToken cancellationToken = default
     ) =>
         GetLiveShares(asOf)
-            .Where(row => row.Isin == isin && row.Mic == mic && row.RelevantTradingVenue == mic)
+            .Where(row => row.Isin == isin && venueCodes.Contains(row.Mic))
             .OrderBy(row => row.Authority)
+            .ThenBy(row => row.Mic)
             .FirstOrDefaultAsync(cancellationToken);
 
-    public Task<int> CountPrimaryVenueShares(
-        IEnumerable<string> mics,
+    // Live shares whose relevant venue is one of the market's home venues; Frankfurt's Freiverkehr is also the first
+    // EU admission of many foreign shares, so for Xetra this counts more than its directory names as home.
+    public Task<int> CountHomeShares(
+        EquityMarket market,
         DateTime asOf,
         CancellationToken cancellationToken = default
-    ) =>
-        GetLiveShares(asOf)
-            .Where(row => mics.Contains(row.Mic) && row.RelevantTradingVenue == row.Mic)
+    )
+    {
+        var homeVenues = market.HomeVenueCodes;
+        return GetLiveShares(asOf)
+            .Where(row => homeVenues.Contains(row.RelevantTradingVenue))
             .Select(row => row.Isin)
             .Distinct()
             .CountAsync(cancellationToken);
+    }
 
     public Task UpsertRange(
         IEnumerable<FirdsInstrumentRecord> rows,

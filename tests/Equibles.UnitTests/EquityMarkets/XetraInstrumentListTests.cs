@@ -57,6 +57,7 @@ public class XetraInstrumentListTests
     [InlineData("no-symbol")]
     [InlineData("duplicate")]
     [InlineData("short-row")]
+    [InlineData("bad-primary-market")]
     public async Task ChangedShapeOrInvalidShareIdentity_RefusesTheWholeFile(string scenario)
     {
         var lines = (await Fixture("t7-xetr-allTradableInstruments.sample.csv")).Split('\n').ToList();
@@ -64,6 +65,7 @@ public class XetraInstrumentListTests
         var isin = header.IndexOf("ISIN");
         var mnemonic = header.IndexOf("Mnemonic");
         var mic = header.IndexOf("MIC Code");
+        var primary = header.IndexOf("Primary Market MIC Code");
         string[] Cells(int line) => lines[line].Split(';');
         void Set(int line, int column, string value)
         {
@@ -94,9 +96,25 @@ public class XetraInstrumentListTests
             case "short-row":
                 lines[3] = lines[3][..lines[3].LastIndexOf(';')];
                 break;
+            case "bad-primary-market":
+                Set(3, primary, "XWB");
+                break;
         }
         var parse = () => XetraInstrumentListParser.Read(string.Join('\n', lines));
         parse.Should().Throw<InvalidDataException>();
+    }
+
+    [Fact]
+    public async Task ABlankPrimaryMarket_IsReadAsUnstatedRatherThanRefused()
+    {
+        var lines = (await Fixture("t7-xetr-allTradableInstruments.sample.csv")).Split('\n').ToList();
+        var header = lines[2].Split(';').ToList();
+        var cells = lines[3].Split(';');
+        cells[header.IndexOf("Primary Market MIC Code")] = "";
+        lines[3] = string.Join(';', cells);
+        var list = XetraInstrumentListParser.Read(string.Join('\n', lines));
+        list.Instruments[0].PrimaryMarketIdentifierCode.Should().BeNull();
+        list.Instruments[1].PrimaryMarketIdentifierCode.Should().Be("XWBO");
     }
 
     [Fact]

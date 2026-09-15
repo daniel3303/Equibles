@@ -8,5 +8,8 @@ public sealed class EquityMarketDirectoryRow
     public string Symbol { get; set; }
     public string Name { get; set; }
     public string ReportedCurrency { get; set; }
+
+    // The primary market the directory itself states for the row; null when the source publishes none.
+    public string StatedPrimaryMarketIdentifierCode { get; set; }
     public Uri SourceUrl { get; set; }
 }
