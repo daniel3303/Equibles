@@ -262,7 +262,7 @@ public class CompanySyncService : ICompanySyncService
         var missingWebsite =
             string.IsNullOrEmpty(existingStock.Website)
             && ShouldAttemptWebsiteFetch(secCompany.Cik);
-        var needsUpdate =
+        var directoryChanged =
             existingStock.Presentation?.Listing?.Active != true
             || existingStock.Presentation.Listing.DelistedOn != null
             || existingStock.Presentation.Listing.Ticker != primaryTicker
@@ -287,10 +287,17 @@ public class CompanySyncService : ICompanySyncService
                 ?? []
             )
                 .ToHashSet(StringComparer.Ordinal)
-                .SetEquals(combinedSecondaryTickers)
-            || missingWebsite;
+                .SetEquals(combinedSecondaryTickers);
 
-        if (!needsUpdate)
+        if (!directoryChanged && !missingWebsite)
+            return;
+
+        // Ask EDGAR BEFORE taking the directory-write lock: the call can stall for minutes
+        // and every other identity writer (Yahoo quotations, holdings) waits on that lock.
+        var fetchedWebsite = missingWebsite ? await FetchWebsite(secCompany.Cik) : null;
+        // A refill that answered nothing for a row already holding null is a no-op; do not
+        // take the lock for it.
+        if (!directoryChanged && fetchedWebsite == null && existingStock.Website == null)
             return;
 
         if (!await TryClearPrimaryTickerCollision(secCompany, existingStock, primaryTicker, state))
@@ -342,7 +349,7 @@ public class CompanySyncService : ICompanySyncService
         try
         {
             if (missingWebsite && string.IsNullOrEmpty(existingStock.Website))
-                existingStock.Website = await FetchWebsite(secCompany.Cik);
+                existingStock.Website = fetchedWebsite;
 
             UsEquityDirectory.SelectPrimary(existingStock, primaryTicker);
             existingStock.Presentation.Listing.Active = true;

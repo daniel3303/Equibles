@@ -71,7 +71,7 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
         return ownedTransaction;
     }
 
-    public async Task<IDbContextTransaction> BeginDirectoryIdentityWrite(
+    public virtual async Task<IDbContextTransaction> BeginDirectoryIdentityWrite(
         CancellationToken cancellationToken = default
     )
     {
@@ -101,6 +101,31 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
                 $"SELECT 1 FROM \"EquityIssuer\" WHERE \"Id\" = {issuerId} FOR UPDATE",
                 cancellationToken
             );
+
+    /// <summary>
+    /// Locks a batch of issuer rows with one set-based FOR NO KEY UPDATE, in Id order. A caller
+    /// that already holds the directory-identity advisory lock needs no reload, and one statement
+    /// avoids the per-row helper's change detection over every tracked entity.
+    /// </summary>
+    public Task LockIssuersForNoKeyUpdate(
+        IReadOnlyCollection<Guid> issuerIds,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (issuerIds == null || issuerIds.Count == 0)
+            return Task.CompletedTask;
+        if (DbContext == null || !DbContext.Database.IsRelational())
+            return Task.CompletedTask;
+        if (DbContext.Database.CurrentTransaction == null)
+            throw new InvalidOperationException(
+                $"{nameof(LockIssuersForNoKeyUpdate)} requires an active transaction"
+            );
+        var ids = issuerIds.ToArray();
+        return DbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM \"EquityIssuer\" WHERE \"Id\" = ANY({ids}) ORDER BY \"Id\" FOR NO KEY UPDATE",
+            cancellationToken
+        );
+    }
 
     public virtual async Task<EquityIssuer> GetCurrentUsDirectoryIssuer(params object[] key)
     {
