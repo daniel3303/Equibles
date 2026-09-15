@@ -73,7 +73,11 @@ internal static class ImpossiblePositionGuard
     /// shares-outstanding rule matches, every one of them a legitimate holding. So the count has
     /// to agree with the market cap stored next to it before it is trusted: the implied per-share
     /// price must look like a share price. When it doesn't, the issuer is simply not judged — the
-    /// guard stays silent rather than guessing which of the two figures is the broken one.
+    /// guard stays silent rather than guessing which of the two figures is the broken one. The
+    /// ratio is blind to a size stored in the wrong unit, where both figures are off together;
+    /// the stored-row scan covers that by refusing an issuer several distinct filers exceed
+    /// (<see cref="ImpossiblePositionRepairService.MinCorroboratingHolders"/>), which a single
+    /// imported row cannot do.
     /// </remarks>
     internal static bool AnchorIsTrustworthy(long sharesOutstanding, double marketCapitalization)
     {

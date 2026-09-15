@@ -221,6 +221,34 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             )
             .IsCreatedConcurrently();
 
+        // Worklist for the implausible-derivation reset, spelled exactly as EF renders the phase
+        // query because Postgres serves a partial index only when it can prove the query's WHERE
+        // implies the index's, node for node. The model name keeps a second index on Id from
+        // renaming the stuck-zero one.
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(h => h.Id, "IX_InstitutionalHolding_ImplausibleDerivationRepair")
+            .HasDatabaseName("IX_InstitutionalHolding_ImplausibleDerivationRepair")
+            .HasFilter(
+                "NOT \"ValuePending\" AND \"ShareType\" = 0 AND \"ValueSource\" <> 1 "
+                    + "AND \"Shares\" > 0 AND \"Value\"::numeric > 1000000.0 * \"Shares\"::numeric"
+            )
+            .IsCreatedConcurrently();
+
+        // Candidate index for the impossible-position scan: common-share rows still carrying a
+        // value, keyed by issuer then share count, only above the scan's floor so it holds the
+        // largest positions rather than the corpus. ImpossiblePositionRepairService.CandidateSharesFloor
+        // pins the literal, and every batch at or above it filters on exactly these clauses.
+        builder
+            .Entity<InstitutionalHolding>()
+            .HasIndex(
+                h => new { h.EquityIssuerId, h.Shares },
+                "IX_InstitutionalHolding_ImpossiblePositionRepair"
+            )
+            .HasDatabaseName("IX_InstitutionalHolding_ImpossiblePositionRepair")
+            .HasFilter("\"ShareType\" = 0 AND NOT \"ValueUnavailable\" AND \"Shares\" > 1000000")
+            .IsCreatedConcurrently();
+
         builder.Entity<UnmappedCusip>();
         builder.Entity<FilingOtherManager>();
         builder.Entity<ProcessedDataSet>();
