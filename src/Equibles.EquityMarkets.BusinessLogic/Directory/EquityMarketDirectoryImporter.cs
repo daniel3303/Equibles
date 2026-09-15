@@ -108,8 +108,10 @@ public class EquityMarketDirectoryImporter(
                     continue;
                 }
             }
+            // Bounds a wedged row; the source and GLEIF clients carry their own two-minute budgets, and a
+            // throttled GLEIF lookup waits out the shared pace and its retries before it resolves.
             using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            attempt.CancelAfter(TimeSpan.FromSeconds(45));
+            attempt.CancelAfter(TimeSpan.FromMinutes(5));
             try
             {
                 var product = await source.Resolve(market, row, firds, attempt.Token);
