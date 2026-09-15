@@ -71,7 +71,7 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
         return ownedTransaction;
     }
 
-    public async Task<IDbContextTransaction> BeginDirectoryIdentityWrite(
+    public virtual async Task<IDbContextTransaction> BeginDirectoryIdentityWrite(
         CancellationToken cancellationToken = default
     )
     {
