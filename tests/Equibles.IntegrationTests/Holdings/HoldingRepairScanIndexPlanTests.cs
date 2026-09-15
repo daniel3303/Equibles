@@ -78,37 +78,39 @@ public class HoldingRepairScanIndexPlanTests(ParadeDbFixture fixture) : IAsyncLi
             NullLogger<ImpossiblePositionRepairService>.Instance
         );
 
-        (await service.Repair(CancellationToken.None)).Should().Be(2);
+        (await service.Repair(CancellationToken.None)).Should().Be(3);
 
         var batches = capture
             .Commands.Where(c =>
                 c.Text.Contains("\"InstitutionalHolding\"") && c.Text.Contains("\"Shares\" >")
             )
             .ToList();
-        batches.Should().ContainSingle("two issuers fit in one batch");
-        batches[0]
-            .Parameters.Should()
-            .Contain(
-                p => Equals(p.Value, ImpossiblePositionRepairService.CandidateSharesFloor),
-                "the micro-float's bar is below the floor, so the batch runs at the index literal"
-            );
-        batches[0]
-            .Text.Should()
-            .NotContain("HoldingManagerEntry")
-            .And.NotContain("\"EquityIssuer\"");
-        foreach (var plan in await Explain(batches))
+        batches.Should().HaveCount(2, "the micro-float sits below the floor and is asked apart");
+        var plans = await Explain(batches);
+        for (var i = 0; i < batches.Count; i++)
         {
-            plan.Should()
-                .Contain("IX_InstitutionalHolding_ImpossiblePositionRepair")
-                .And.NotContain("Seq Scan on \"InstitutionalHolding\"");
+            batches[i]
+                .Text.Should()
+                .NotContain("HoldingManagerEntry")
+                .And.NotContain("\"EquityIssuer\"");
+            plans[i].Should().NotContain("Seq Scan on \"InstitutionalHolding\"");
+            var floor = batches[i].Parameters.Select(p => p.Value).OfType<long>().Single();
+            if (floor >= ImpossiblePositionRepairService.CandidateSharesFloor)
+            {
+                plans[i].Should().Contain("IX_InstitutionalHolding_ImpossiblePositionRepair");
+            }
+            else
+            {
+                floor.Should().Be(600_000, "the micro-float is asked at its own bar");
+            }
         }
     }
 
     // One trustworthy 200M-share issuer with two thousand ordinary positions that sit inside both
     // indexes without matching either scan, two positions bigger than the issuer, and two whose
     // derived value implies a per-share price in the billions; plus a 300k-share micro-float whose
-    // bar is below the scan's floor, so the shared batch runs exactly at the index literal and its
-    // one sub-floor position is never read.
+    // bar is below the scan's floor, so it is asked in its own batch at its true bar and its one
+    // position above that bar is withdrawn too.
     private async Task Seed()
     {
         await using var context = fixture.CreateDbContext();

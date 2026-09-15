@@ -24,10 +24,12 @@ namespace Equibles.Holdings.HostedService.Services;
 /// <para>
 /// The scan starts from the issuer side. A few thousand issuers carry a trustworthy size; their
 /// per-issuer bars are computed in memory and the holdings table is then asked, one issuer batch
-/// at a time, only for the positions above that batch's bar. Every batch query stays inside
+/// at a time, only for the positions above that batch's lowest bar. Batches at or above
+/// <see cref="CandidateSharesFloor"/> stay inside
 /// <c>IX_InstitutionalHolding_ImpossiblePositionRepair</c>, a partial index over the common-share
-/// rows above <see cref="CandidateSharesFloor"/>, which is what turned three whole-table joins
-/// that timed out at ten minutes into a handful of index probes.
+/// rows above the floor, and the few smaller issuers form their own batch served by the
+/// row-identity index; that turned three whole-table joins that timed out at ten minutes into a
+/// handful of index probes.
 /// </para>
 /// </remarks>
 [Service]
@@ -44,11 +46,9 @@ public class ImpossiblePositionRepairService
     internal const int IssuerBatchSize = 250;
 
     /// <summary>
-    /// The smallest share count the scan reads. It is the literal in the partial index's
-    /// predicate, so a batch whose bar is lower is raised to it and every batch query stays
-    /// index-served. Consequence: an issuer with fewer than half this many shares outstanding is
-    /// judged only on positions above the floor, a miss on the smallest floats and never a false
-    /// accusation.
+    /// The literal in the partial index's predicate. Batches whose lowest bar is at or above it
+    /// are read through the index; the few issuers with a smaller bar form their own batch, asked
+    /// at their true bar through the issuer indexes, so no position goes unjudged.
     /// </summary>
     internal const long CandidateSharesFloor = 1_000_000;
 
@@ -160,24 +160,29 @@ public class ImpossiblePositionRepairService
             anchor => anchor.SharesOutStanding * ImpossiblePositionGuard.SharesOutstandingMultiple
         );
 
-        // Candidates only — the coarse "more shares than the issuer has" filter. Whether the
+        // Candidates only, the coarse "more shares than the issuer has" filter. Whether the
         // issuer's own figures are trustworthy enough to act on is decided by the guard below.
         //
         // The filter compares an as-filed count against today's shares outstanding, so it is a
         // superset of the real matches only while restating the count cannot shrink it: that holds
         // for unsplit stocks and for reverse splits, which are exactly the cases where a legitimate
         // position would otherwise be wrongly withdrawn. A forward split moves the count the other
-        // way, so a genuinely impossible position on such a stock can slip past — a miss rather
+        // way, so a genuinely impossible position on such a stock can slip past, a miss rather
         // than a false accusation, and no worse than this pass has ever done.
+        //
+        // Sorted by size, so a batch's first anchor carries its lowest bar. The sub-floor issuers
+        // are batched apart so that every other batch stays inside the partial index.
+        var subFloor = anchors.Where(a => barsByIssuer[a.Id] < CandidateSharesFloor).ToList();
+        var aboveFloor = anchors.Where(a => barsByIssuer[a.Id] >= CandidateSharesFloor).ToList();
         var candidates = new List<CandidatePosition>();
         var batches = 0;
-        foreach (var batch in anchors.Chunk(IssuerBatchSize))
+        foreach (
+            var batch in subFloor.Chunk(IssuerBatchSize).Concat(aboveFloor.Chunk(IssuerBatchSize))
+        )
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Sorted by size, so the first anchor's bar is the batch's lowest; the floor keeps the
-            // query inside the partial index and the exact per-issuer bar is applied in memory.
-            var sharesFloor = Math.Max(barsByIssuer[batch[0].Id], CandidateSharesFloor);
+            var sharesFloor = barsByIssuer[batch[0].Id];
             var rows = await BuildCandidateBatchQuery(
                     dbContext,
                     batch.Select(anchor => anchor.Id).ToArray(),

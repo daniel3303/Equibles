@@ -8,9 +8,9 @@ namespace Equibles.Migrations.Migrations
     /// Adds the two partial indexes behind the daily holdings repair scans: a small Id worklist
     /// for the implausible-derivation reset, spelled exactly as EF renders that phase's WHERE, and
     /// an (issuer, shares) index over common-share rows above one million shares for the
-    /// impossible-position scan. The holdings table is tens of gigabytes in production, so both
-    /// retry cleanup and creation run concurrently; the cleanup makes an interrupted concurrent
-    /// build retry-safe without taking a table write lock.
+    /// impossible-position scan. The holdings table is tens of gigabytes in production, so creation
+    /// runs concurrently and only an invalid leftover of an interrupted build is dropped first, so
+    /// a retry never rebuilds a finished index.
     /// </summary>
     public partial class AddHoldingRepairScanIndexes : Migration
     {
@@ -18,7 +18,10 @@ namespace Equibles.Migrations.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql(
-                "DROP INDEX CONCURRENTLY IF EXISTS \"IX_InstitutionalHolding_ImplausibleDerivationRepair\";",
+                "DO $$ BEGIN "
+                    + "IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid "
+                    + "WHERE c.relname = 'IX_InstitutionalHolding_ImplausibleDerivationRepair' AND NOT i.indisvalid) THEN "
+                    + "EXECUTE 'DROP INDEX \"IX_InstitutionalHolding_ImplausibleDerivationRepair\"'; END IF; END $$;",
                 suppressTransaction: true
             );
             migrationBuilder.Sql(
@@ -29,7 +32,10 @@ namespace Equibles.Migrations.Migrations
                 suppressTransaction: true
             );
             migrationBuilder.Sql(
-                "DROP INDEX CONCURRENTLY IF EXISTS \"IX_InstitutionalHolding_ImpossiblePositionRepair\";",
+                "DO $$ BEGIN "
+                    + "IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid "
+                    + "WHERE c.relname = 'IX_InstitutionalHolding_ImpossiblePositionRepair' AND NOT i.indisvalid) THEN "
+                    + "EXECUTE 'DROP INDEX \"IX_InstitutionalHolding_ImpossiblePositionRepair\"'; END IF; END $$;",
                 suppressTransaction: true
             );
             migrationBuilder.Sql(

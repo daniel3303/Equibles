@@ -221,11 +221,10 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             )
             .IsCreatedConcurrently();
 
-        // Worklist for the implausible-derivation reset: same shape and lifecycle as the stuck-zero
-        // worklist. The predicate is spelled exactly as EF renders the phase query, because Postgres
-        // serves a query from a partial index only when it can prove the query's WHERE implies the
-        // index's, node for node (1000000.0 is not 1000000). The model name is required: a second
-        // unnamed HasIndex on the same column returns the stuck-zero index and renames it.
+        // Worklist for the implausible-derivation reset, spelled exactly as EF renders the phase
+        // query because Postgres serves a partial index only when it can prove the query's WHERE
+        // implies the index's, node for node. The model name keeps a second index on Id from
+        // renaming the stuck-zero one.
         builder
             .Entity<InstitutionalHolding>()
             .HasIndex(h => h.Id, "IX_InstitutionalHolding_ImplausibleDerivationRepair")
@@ -237,10 +236,9 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
             .IsCreatedConcurrently();
 
         // Candidate index for the impossible-position scan: common-share rows still carrying a
-        // value, keyed by issuer then share count, and only above the scan's floor so it holds the
-        // ~2M largest positions rather than the corpus. Every batch query filters on ShareType,
-        // ValueUnavailable and a Shares floor at or above this literal, which is what keeps it
-        // inside the index; ImpossiblePositionRepairService.CandidateSharesFloor pins the literal.
+        // value, keyed by issuer then share count, only above the scan's floor so it holds the
+        // largest positions rather than the corpus. ImpossiblePositionRepairService.CandidateSharesFloor
+        // pins the literal, and every batch at or above it filters on exactly these clauses.
         builder
             .Entity<InstitutionalHolding>()
             .HasIndex(

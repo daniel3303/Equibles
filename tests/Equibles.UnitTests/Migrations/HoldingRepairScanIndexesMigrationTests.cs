@@ -15,7 +15,13 @@ public class HoldingRepairScanIndexesMigrationTests
         var up = migration[..downStart];
         var down = migration[downStart..];
 
-        up.Should().ContainEquivalentOf("DROP INDEX CONCURRENTLY IF EXISTS", Exactly.Twice());
+        up.Should()
+            .ContainEquivalentOf(
+                "NOT i.indisvalid",
+                Exactly.Twice(),
+                "only an interrupted build is dropped; a finished index survives a retry"
+            );
+        up.Should().NotContain("DROP INDEX CONCURRENTLY");
         up.Should().ContainEquivalentOf("CREATE INDEX CONCURRENTLY IF NOT EXISTS", Exactly.Twice());
         up.Should().ContainEquivalentOf("suppressTransaction: true", Exactly.Times(4));
         up.Should().NotContain("CreateIndex(", "the scaffolded form builds under a table lock");

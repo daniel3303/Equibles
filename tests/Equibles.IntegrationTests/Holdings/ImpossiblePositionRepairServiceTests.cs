@@ -15,8 +15,8 @@ namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
 /// Pins the issuer-first impossible-position scan: a position larger than a trustworthy issuer is
-/// withdrawn, an issuer whose own size is nonsense is never judged, and the one-million-share floor
-/// that keeps every batch inside the partial index is a floor, not an exclusion.
+/// withdrawn, an issuer whose own size is nonsense is never judged, and an issuer below the
+/// one-million-share index floor is still judged at its own bar.
 /// </summary>
 public class ImpossiblePositionRepairServiceTests : IDisposable
 {
@@ -61,10 +61,10 @@ public class ImpossiblePositionRepairServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Repair_LeavesASubFloorPositionOnAMicroFloatAlone()
+    public async Task Repair_JudgesAMicroFloatAtItsOwnBarBelowTheFloor()
     {
-        // 700k shares is above twice this issuer's 300k float but below the scan's floor, so the
-        // batch query never reads it: the documented miss on the smallest floats.
+        // 700k shares is above twice this issuer's 300k float but below the index floor: the
+        // issuer is asked apart, at its true bar, so the position is still withdrawn.
         var holding = await SeedHolding(
             sharesOutstanding: 300_000,
             marketCapitalization: 3_000_000,
@@ -72,10 +72,27 @@ public class ImpossiblePositionRepairServiceTests : IDisposable
             value: 7_000_000
         );
 
+        (await CreateService().Repair(CancellationToken.None)).Should().Be(1);
+
+        var actual = await Reload(holding.Id);
+        actual.Value.Should().Be(0L);
+        actual.ValueUnavailable.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Repair_LeavesAMicroFloatPositionInsideItsBarAlone()
+    {
+        var holding = await SeedHolding(
+            sharesOutstanding: 300_000,
+            marketCapitalization: 3_000_000,
+            shares: 500_000,
+            value: 5_000_000
+        );
+
         (await CreateService().Repair(CancellationToken.None)).Should().Be(0);
 
         var actual = await Reload(holding.Id);
-        actual.Value.Should().Be(7_000_000L);
+        actual.Value.Should().Be(5_000_000L);
         actual.ValueUnavailable.Should().BeFalse();
     }
 
