@@ -245,6 +245,258 @@ public class StockSplitCaptureManagerTests
             .Be(2m);
     }
 
+    private static CapturedSplit At(
+        DateOnly date,
+        decimal numerator = 1m,
+        decimal denominator = 50m,
+        StockSplitSource source = StockSplitSource.Yahoo
+    ) =>
+        new()
+        {
+            EffectiveDate = date,
+            Numerator = numerator,
+            Denominator = denominator,
+            Source = source,
+        };
+
+    private static async Task<(EquiblesFinancialDbContext Context, EquityIssuer Stock)> SeedIssuer(
+        string ticker = "DUPE",
+        List<string> secondaryTickers = null
+    )
+    {
+        var context = NewDb();
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Id: Guid.NewGuid(),
+            Ticker: ticker,
+            SecondaryTickers: secondaryTickers
+        );
+        context.Add(stock);
+        await context.SaveChangesAsync();
+        return (context, stock);
+    }
+
+    private static readonly DateOnly Day = new(2026, 1, 1);
+
+    [Fact]
+    public async Task Capture_SameRatioWithinTheWindow_IsOneEventAtTheLaterDate()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        var manager = NewManager(context);
+        var payload = new[] { At(Day), At(Day.AddDays(1)) };
+
+        (await manager.Capture(stock.Id, "DUPE", payload)).Should().Be(2);
+        (await manager.Capture(stock.Id, "DUPE", payload)).Should().Be(0);
+
+        context.ChangeTracker.Clear();
+        var stored = await context.Set<StockSplit>().SingleAsync();
+        stored.EffectiveDate.Should().Be(Day.AddDays(1));
+        stored.Denominator.Should().Be(50m);
+    }
+
+    [Fact]
+    public async Task Capture_SameEventArrivingInEitherOrder_EndsIdentical()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        var manager = NewManager(context);
+
+        await manager.Capture(stock.Id, "DUPE", [At(Day.AddDays(1)), At(Day)]);
+
+        context.ChangeTracker.Clear();
+        var stored = await context.Set<StockSplit>().SingleAsync();
+        stored.EffectiveDate.Should().Be(Day.AddDays(1));
+    }
+
+    [Fact]
+    public async Task Capture_LowerSourceWithinTheWindow_WritesNothing()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        var manager = NewManager(context);
+        await manager.Capture(
+            stock.Id,
+            "DUPE",
+            [At(Day.AddDays(3), source: StockSplitSource.External)]
+        );
+        var applied = new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc);
+        (await context.Set<StockSplit>().SingleAsync()).PriceAdjustmentAppliedTime = applied;
+        await context.SaveChangesAsync();
+
+        (await manager.Capture(stock.Id, "DUPE", [At(Day)])).Should().Be(0);
+
+        context.ChangeTracker.Clear();
+        var stored = await context.Set<StockSplit>().SingleAsync();
+        stored.EffectiveDate.Should().Be(Day.AddDays(3));
+        stored.Source.Should().Be(StockSplitSource.External);
+        stored.PriceAdjustmentAppliedTime.Should().Be(applied);
+    }
+
+    [Fact]
+    public async Task Capture_HigherSourceWithinTheWindow_AdoptsItsDateAndReopensReconciliation()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        var manager = NewManager(context);
+        await manager.Capture(stock.Id, "DUPE", [At(Day)]);
+        (await context.Set<StockSplit>().SingleAsync()).PriceAdjustmentAppliedTime =
+            DateTime.UtcNow;
+        await context.SaveChangesAsync();
+
+        (
+            await manager.Capture(
+                stock.Id,
+                "DUPE",
+                [At(Day.AddDays(3), source: StockSplitSource.External)]
+            )
+        )
+            .Should()
+            .Be(1);
+
+        context.ChangeTracker.Clear();
+        var stored = await context.Set<StockSplit>().SingleAsync();
+        stored.EffectiveDate.Should().Be(Day.AddDays(3));
+        stored.Source.Should().Be(StockSplitSource.External);
+        stored.PriceAdjustmentAppliedTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Capture_SameRatioOutsideTheWindow_StaysTwoEvents()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+
+        await NewManager(context)
+            .Capture(
+                stock.Id,
+                "DUPE",
+                [At(Day), At(Day.AddDays(StockSplitCaptureManager.SameEventWindowDays + 1))]
+            );
+
+        (await context.Set<StockSplit>().CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Capture_DifferentRatioWithinTheWindow_StaysTwoEvents()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+
+        await NewManager(context)
+            .Capture(stock.Id, "DUPE", [At(Day), At(Day.AddDays(1), denominator: 10m)]);
+
+        (await context.Set<StockSplit>().CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Capture_SameRatioOnASiblingListing_StaysSeparate()
+    {
+        var (context, stock) = await SeedIssuer(secondaryTickers: ["DUPE-B"]);
+        await using var _ = context;
+        var manager = NewManager(context);
+
+        await manager.Capture(stock.Id, "DUPE", [At(Day)]);
+        await manager.Capture(stock.Id, "DUPE-B", [At(Day.AddDays(1))]);
+
+        (await context.Set<StockSplit>().CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Capture_CollapsesStoredDuplicatesOfTheEventItObserves()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        var listingId = stock.Presentation.EquityListingId;
+        foreach (var date in new[] { Day, Day.AddDays(1) })
+            context.Add(
+                new StockSplit
+                {
+                    EquityIssuerId = stock.Id,
+                    EquityListingId = listingId,
+                    PriceSeriesTicker = "DUPE",
+                    EffectiveDate = date,
+                    Numerator = 1m,
+                    Denominator = 50m,
+                    Source = StockSplitSource.Yahoo,
+                    PriceAdjustmentAppliedTime = DateTime.UtcNow,
+                }
+            );
+        await context.SaveChangesAsync();
+
+        (await NewManager(context).Capture(stock.Id, "DUPE", [At(Day.AddDays(1))])).Should().Be(1);
+
+        context.ChangeTracker.Clear();
+        var stored = await context.Set<StockSplit>().SingleAsync();
+        stored.EffectiveDate.Should().Be(Day.AddDays(1));
+        stored.PriceAdjustmentAppliedTime.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Capture_DoesNotMoveASurvivorOntoADateAnotherRatioHolds()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        var manager = NewManager(context);
+        await manager.Capture(stock.Id, "DUPE", [At(Day), At(Day.AddDays(3), denominator: 10m)]);
+
+        await manager.Capture(
+            stock.Id,
+            "DUPE",
+            [At(Day.AddDays(3), source: StockSplitSource.External)]
+        );
+
+        context.ChangeTracker.Clear();
+        var stored = await context
+            .Set<StockSplit>()
+            .OrderBy(row => row.EffectiveDate)
+            .ToListAsync();
+        stored.Select(row => row.EffectiveDate).Should().Equal(Day, Day.AddDays(3));
+        stored[1].Denominator.Should().Be(50m, "the exact-date row is replaced by precedence");
+        stored[1].Source.Should().Be(StockSplitSource.External);
+    }
+
+    [Fact]
+    public async Task Capture_AttributesALegacyRowBeforeCollapsingItsTwin()
+    {
+        var (context, stock) = await SeedIssuer();
+        await using var _ = context;
+        context.Add(
+            new StockSplit
+            {
+                EquityIssuerId = stock.Id,
+                PriceSeriesTicker = "DUPE",
+                EffectiveDate = Day,
+                Numerator = 1m,
+                Denominator = 50m,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        context.Add(
+            new StockSplit
+            {
+                EquityIssuerId = stock.Id,
+                EquityListingId = stock.Presentation.EquityListingId,
+                PriceSeriesTicker = "DUPE",
+                EffectiveDate = Day.AddDays(1),
+                Numerator = 1m,
+                Denominator = 50m,
+                Source = StockSplitSource.Yahoo,
+            }
+        );
+        await context.SaveChangesAsync();
+        var manager = NewManager(context);
+
+        (await manager.Capture(stock.Id, "DUPE", [At(Day)])).Should().Be(1);
+        context.ChangeTracker.Clear();
+        (await context.Set<StockSplit>().CountAsync(row => row.EquityListingId == null))
+            .Should()
+            .Be(0, "the legacy row is attributed first");
+
+        (await manager.Capture(stock.Id, "DUPE", [At(Day)])).Should().Be(1);
+        context.ChangeTracker.Clear();
+        (await context.Set<StockSplit>().SingleAsync()).EffectiveDate.Should().Be(Day.AddDays(1));
+    }
+
     [Theory]
     [InlineData(0, 1)]
     [InlineData(-2, 1)]
