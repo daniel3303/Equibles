@@ -1447,10 +1447,9 @@ public class InstitutionalHoldingRepository : BaseRepository<InstitutionalHoldin
             })
             .ToListAsync(cancellationToken);
         var splitsByStock = (
-            await DbContext
-                .Set<StockSplit>()
+            await StockSplitQueries
+                .ForIssuers(DbContext, commonStockIds)
                 .AsNoTracking()
-                .Where(split => commonStockIds.Contains(split.EquityIssuerId))
                 .ToListAsync(cancellationToken)
         )
             .GroupBy(split => split.EquityIssuerId)

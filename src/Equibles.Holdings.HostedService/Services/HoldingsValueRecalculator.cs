@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Contracts;
+using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
@@ -92,9 +93,8 @@ public class HoldingsValueRecalculator
         // same reason (see HoldingValueBasis).
         var pendingStockIds = pendingPairs.Select(p => p.EquityIssuerId).Distinct().ToList();
         var splitsByStock = (
-            await lookupContext
-                .Set<StockSplit>()
-                .Where(s => pendingStockIds.Contains(s.EquityIssuerId))
+            await StockSplitQueries
+                .ForIssuers(lookupContext, pendingStockIds)
                 .ToListAsync(cancellationToken)
         )
             .GroupBy(s => s.EquityIssuerId)

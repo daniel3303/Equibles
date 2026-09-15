@@ -260,9 +260,8 @@ public class ImpossiblePositionRepairService
         // perfectly good value is withdrawn.
         var candidateStockIds = candidates.Select(c => c.EquityIssuerId).Distinct().ToList();
         var splitsByStock = (
-            await dbContext
-                .Set<StockSplit>()
-                .Where(s => candidateStockIds.Contains(s.EquityIssuerId))
+            await StockSplitQueries
+                .ForIssuers(dbContext, candidateStockIds)
                 .ToListAsync(cancellationToken)
         )
             .GroupBy(s => s.EquityIssuerId)

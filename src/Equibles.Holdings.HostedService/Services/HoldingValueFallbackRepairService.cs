@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.Data.Models;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Contracts;
+using Equibles.CorporateActions.Data;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
@@ -324,10 +325,7 @@ public class HoldingValueFallbackRepairService
 
         var stockIds = rows.Select(h => h.EquityIssuerId).Distinct().ToList();
         var splitsByStock = (
-            await dbContext
-                .Set<StockSplit>()
-                .Where(s => stockIds.Contains(s.EquityIssuerId))
-                .ToListAsync(cancellationToken)
+            await StockSplitQueries.ForIssuers(dbContext, stockIds).ToListAsync(cancellationToken)
         )
             .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());
