@@ -39,6 +39,12 @@ public class EuronextEquityMarketDirectorySource(EuronextDirectoryClient directo
                     Symbol = listing.Symbol,
                     Name = listing.Name,
                     ReportedCurrency = listing.ReportedCurrency,
+                    // A line Euronext homes on a sibling market states its primary venue is there; a line homed
+                    // here states nothing beyond Euronext, so FIRDS decides its home as before.
+                    StatedPrimaryMarketIdentifierCode =
+                        listing.PrimaryMarketIdentifierCode == listing.MarketIdentifierCode
+                            ? null
+                            : listing.PrimaryMarketIdentifierCode,
                     SourceUrl = listing.SourceUrl,
                 })
                 .ToList(),

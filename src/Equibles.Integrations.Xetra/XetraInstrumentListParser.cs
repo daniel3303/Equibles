@@ -7,8 +7,9 @@ namespace Equibles.Integrations.Xetra;
 
 public static partial class XetraInstrumentListParser
 {
+    // The publisher's cache nodes write the same link root-relative or absolute on its own host.
     [GeneratedRegex(
-        @"href=""(?<href>/resource/blob/\d+/[0-9a-f]+/data/t7-xetr-allTradableInstruments\.csv)""",
+        @"href=""(?:https://www\.cashmarket\.deutsche-boerse\.com)?(?<href>/resource/blob/\d+/[0-9a-f]+/data/t7-xetr-allTradableInstruments\.csv)""",
         RegexOptions.IgnoreCase
     )]
     private static partial Regex DownloadLink();

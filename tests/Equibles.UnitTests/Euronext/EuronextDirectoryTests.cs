@@ -10,6 +10,82 @@ public class EuronextDirectoryTests
             Path.Combine(AppContext.BaseDirectory, "TestAssets", "Euronext", "Lisbon", name)
         );
 
+    private static Task<string> ParisFixture(string name) =>
+        File.ReadAllTextAsync(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Euronext", "Paris", name)
+        );
+
+    [Fact]
+    public async Task CrossListedRows_KeepTheMarketsOwnVenueAndStateTheLinkedPrimaryVenue()
+    {
+        var page = EuronextDirectoryParser.ReadPage(
+            await ParisFixture("equities.json"),
+            EuronextMarket.Paris
+        );
+        page.TotalRecords.Should().Be(5);
+        page.Listings.Select(row =>
+                (
+                    row.Symbol,
+                    row.MarketIdentifierCode,
+                    row.PrimaryMarketIdentifierCode,
+                    row.SourceUrl.AbsolutePath
+                )
+            )
+            .Should()
+            .Equal(
+                ("ABO", "XPAR", "XBRU", "/en/product/equities/BE0974278104-XBRU"),
+                ("AC", "XPAR", "XPAR", "/en/product/equities/FR0000120404-XPAR"),
+                ("ACMC", "XPMC", "XPMC", "/en/product/equities/FR0000120404-XPMC"),
+                ("AF", "XPAR", "XPAR", "/en/product/equities/FR001400J770-XPAR"),
+                ("AI", "XPAR", "XPAR", "/en/product/equities/FR0000120073-XPAR")
+            );
+        page.Listings.Select(row => row.ReportedCurrency)
+            .Should()
+            .Equal("EUR", "EUR", "USD", "EUR", "EUR");
+    }
+
+    [Theory]
+    [InlineData("no-own-venue")]
+    [InlineData("two-own-venues")]
+    [InlineData("repeated-venue")]
+    [InlineData("unknown-venue")]
+    [InlineData("link-outside-cell")]
+    public async Task CrossListedRows_WithoutOneOwnVenueOrALinkedVenue_AreRefused(string scenario)
+    {
+        var root = JsonNode.Parse(await ParisFixture("equities.json"));
+        var abo = root["aaData"][0];
+        if (scenario == "no-own-venue")
+            abo[3] = "XBRU, XAMS";
+        if (scenario == "two-own-venues")
+            abo[3] = "XBRU, XPAR, ALXP";
+        if (scenario == "repeated-venue")
+            abo[3] = "XBRU, XPAR, XPAR";
+        if (scenario == "unknown-venue")
+            abo[3] = "XBRU, XPAR, XLON";
+        if (scenario == "link-outside-cell")
+            abo[0] = "<a href='/en/product/equities/BE0974278104-XAMS'>ABO GROUP</a>";
+        var parse = () =>
+            EuronextDirectoryParser.ReadPage(root.ToJsonString(), EuronextMarket.Paris);
+        parse.Should().Throw<InvalidDataException>();
+    }
+
+    [Theory]
+    [InlineData(2467, true)]
+    [InlineData(5000, true)]
+    [InlineData(5001, false)]
+    public async Task ReportedTotal_IsBoundedAboveMilansDirectorySize(int total, bool accepted)
+    {
+        var root = JsonNode.Parse(await ParisFixture("equities.json"));
+        root["iTotalRecords"] = total;
+        root["iTotalDisplayRecords"] = total;
+        var parse = () =>
+            EuronextDirectoryParser.ReadPage(root.ToJsonString(), EuronextMarket.Paris);
+        if (accepted)
+            parse().TotalRecords.Should().Be(total);
+        else
+            parse.Should().Throw<InvalidDataException>();
+    }
+
     [Fact]
     public async Task CapturedDirectory_ContainsEveryReportedListingAndItsExactSourceIdentity()
     {

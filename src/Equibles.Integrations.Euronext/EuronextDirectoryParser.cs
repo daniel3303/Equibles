@@ -55,6 +55,10 @@ public static class EuronextDirectoryParser
         return uri;
     }
 
+    // Milan alone lists about 2,500 lines because its global equity segment quotes foreign shares; the bound guards
+    // runaway paging, while the gateway's venue query is what proves the list unfiltered.
+    private const int MaxTotalRecords = 5000;
+
     public static EuronextDirectoryPage ReadPage(string body, EuronextMarket market)
     {
         ArgumentNullException.ThrowIfNull(market);
@@ -67,7 +71,7 @@ public static class EuronextDirectoryParser
             || !displayedValue.TryGetInt32(out var displayed)
             || total <= 0
             || total != displayed
-            || total > 2000
+            || total > MaxTotalRecords
         )
             throw new InvalidDataException(
                 "Euronext directory must report a non-empty, unfiltered bounded total."
@@ -96,24 +100,33 @@ public static class EuronextDirectoryParser
             var name = links?.Count == 1 ? Text(links[0]) : null;
             var isin = PlainCell(row[1].GetString());
             var symbol = PlainCell(row[2].GetString());
-            var mic = PlainCell(row[3].GetString());
+            // A cross-listed line names every Euronext venue quoting it ("XBRU, XPAR"); the one venue in this
+            // market's set is the row's listing.
+            var venues = PlainCell(row[3].GetString())
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            var own = venues.Where(market.MarketIdentifierCodes.Contains).ToList();
             if (
                 string.IsNullOrWhiteSpace(name)
                 || name.Length > 500
                 || !InternationalSecurityIdentifiers.IsValidIsin(isin)
                 || string.IsNullOrWhiteSpace(symbol)
                 || symbol.Length > 32
-                || !market.MarketIdentifierCodes.Contains(mic)
+                || venues.Length == 0
+                || venues.Distinct(StringComparer.Ordinal).Count() != venues.Length
+                || venues.Any(venue => EuronextMarket.ByMarketIdentifierCode(venue) == null)
+                || own.Count != 1
             )
                 throw new InvalidDataException(
                     "Euronext directory row lacks valid stated listing identity."
                 );
+            var mic = own[0];
             var source = SameOrigin(links[0].GetAttributeValue("href", null));
-            if (
-                source.AbsolutePath != $"/en/product/equities/{isin}-{mic}"
-                || source.Query.Length != 0
-                || source.Fragment.Length != 0
-            )
+            // The link is the product page of the venue Euronext homes the instrument on, which for a cross-listed
+            // line is a sibling market's.
+            var primary = venues.FirstOrDefault(venue =>
+                source.AbsolutePath == $"/en/product/equities/{isin}-{venue}"
+            );
+            if (primary == null || source.Query.Length != 0 || source.Fragment.Length != 0)
                 throw new InvalidDataException(
                     "Euronext product link conflicts with its stated ISIN and market."
                 );
@@ -141,6 +154,7 @@ public static class EuronextDirectoryParser
                     Isin = isin,
                     Symbol = symbol,
                     MarketIdentifierCode = mic,
+                    PrimaryMarketIdentifierCode = primary,
                     ReportedCurrency = currency,
                     SourceUrl = source,
                 }

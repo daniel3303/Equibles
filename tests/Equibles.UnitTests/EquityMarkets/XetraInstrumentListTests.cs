@@ -18,8 +18,20 @@ public class XetraInstrumentListTests
             .ReadDownloadPath(html)
             .Should()
             .MatchRegex(@"^/resource/blob/\d+/[0-9a-f]+/data/t7-xetr-allTradableInstruments\.csv$");
+        XetraInstrumentListParser
+            .ReadDownloadPath(await Fixture("tradable-instruments-page.absolute-link.excerpt.html"))
+            .Should()
+            .Be(
+                "/resource/blob/1528/2dd6b44cb9d8475ac114e10e873a1858/data/t7-xetr-allTradableInstruments.csv",
+                "a cache node that writes the link absolute names the same file"
+            );
         var none = () => XetraInstrumentListParser.ReadDownloadPath("<html></html>");
         none.Should().Throw<InvalidDataException>();
+        var elsewhere = () =>
+            XetraInstrumentListParser.ReadDownloadPath(
+                "<a href=\"https://example.com/resource/blob/1528/ffff/data/t7-xetr-allTradableInstruments.csv\">x</a>"
+            );
+        elsewhere.Should().Throw<InvalidDataException>();
         var two = () =>
             XetraInstrumentListParser.ReadDownloadPath(
                 html
