@@ -58,7 +58,10 @@ public static class FirdsDownloader
             throw new InvalidDataException("FIRDS download was redirected.");
         if (response.Content.Headers.ContentLength > MaxZipBytes)
             throw new InvalidDataException("FIRDS file exceeds its download limit.");
-        var path = Path.Combine(Path.GetTempPath(), FilePrefix + Guid.NewGuid().ToString("N") + ".zip");
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            FilePrefix + Guid.NewGuid().ToString("N") + ".zip"
+        );
         try
         {
             long total = 0;
@@ -83,7 +86,9 @@ public static class FirdsDownloader
                 file.Checksum != null
                 && !string.Equals(digest, file.Checksum, StringComparison.OrdinalIgnoreCase)
             )
-                throw new InvalidDataException("FIRDS file checksum does not match its index entry.");
+                throw new InvalidDataException(
+                    "FIRDS file checksum does not match its index entry."
+                );
             return new FirdsDownload(file, path, total);
         }
         catch
@@ -92,7 +97,8 @@ public static class FirdsDownloader
             {
                 File.Delete(path);
             }
-            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            { }
             throw;
         }
     }

@@ -12,9 +12,7 @@ namespace Equibles.UnitTests.EquityMarkets;
 public class EquityMarketDirectorySourceTests
 {
     private static Task<string> Fixture(params string[] path) =>
-        File.ReadAllTextAsync(
-            Path.Combine([AppContext.BaseDirectory, "TestAssets", .. path])
-        );
+        File.ReadAllTextAsync(Path.Combine([AppContext.BaseDirectory, "TestAssets", .. path]));
 
     private static FirdsInstrumentRecord Firds(string isin, string mic, string lei) =>
         new()
@@ -31,7 +29,11 @@ public class EquityMarketDirectorySourceTests
     public async Task Xetra_CapturesOnlyTradableSharesUnderAStableRowAddress()
     {
         var page = await Fixture("EquityMarkets", "Xetra", "tradable-instruments-page.html");
-        var csv = await Fixture("EquityMarkets", "Xetra", "t7-xetr-allTradableInstruments.sample.csv");
+        var csv = await Fixture(
+            "EquityMarkets",
+            "Xetra",
+            "t7-xetr-allTradableInstruments.sample.csv"
+        );
         using var http = new HttpClient(new EuronextDirectoryTestHandler([page, csv]));
         var source = new XetraEquityMarketDirectorySource(new XetraInstrumentListClient(http));
         var market = EquityMarketCatalog.TryGet("xetra");
@@ -42,24 +44,41 @@ public class EquityMarketDirectorySourceTests
         var snapshot = await source.Capture(market, CancellationToken.None);
 
         snapshot.EvidenceSource.Should().Be("xetra-all-tradable-instruments-v1");
-        snapshot.SourceUrl.AbsoluteUri.Should().Be(
-            "https://www.cashmarket.deutsche-boerse.com/cash-en/trading/Tradable-Instruments-Xetra"
-        );
-        snapshot.Rows.Should().HaveCount(30, "the share pending deletion and the funds are not directory listings");
-        snapshot.Rows.Should().AllSatisfy(row =>
-        {
-            row.MarketIdentifierCode.Should().Be("XETR");
-            row.ReportedCurrency.Should().Be("EUR");
-            row.SourceUrl.GetLeftPart(UriPartial.Path).Should().Be(snapshot.SourceUrl.AbsoluteUri);
-            row.SourceUrl.Fragment.Should().Be($"#{row.Isin}-XETR");
-        });
+        snapshot
+            .SourceUrl.AbsoluteUri.Should()
+            .Be(
+                "https://www.cashmarket.deutsche-boerse.com/cash-en/trading/Tradable-Instruments-Xetra"
+            );
+        snapshot
+            .Rows.Should()
+            .HaveCount(30, "the share pending deletion and the funds are not directory listings");
+        snapshot
+            .Rows.Should()
+            .AllSatisfy(row =>
+            {
+                row.MarketIdentifierCode.Should().Be("XETR");
+                row.ReportedCurrency.Should().Be("EUR");
+                row.SourceUrl.GetLeftPart(UriPartial.Path)
+                    .Should()
+                    .Be(snapshot.SourceUrl.AbsoluteUri);
+                row.SourceUrl.Fragment.Should().Be($"#{row.Isin}-XETR");
+            });
         var strabag = snapshot.Rows.Single(row => row.Isin == "AT000000STR1");
         strabag.Symbol.Should().Be("XD4");
         strabag.Name.Should().Be("STRABAG SE");
-        strabag.StatedPrimaryMarketIdentifierCode.Should().Be("XWBO", "the list states each share's primary market");
-        snapshot.Rows.Single(row => row.Isin == "AT0000785407").StatedPrimaryMarketIdentifierCode.Should().Be("XFRA");
+        strabag
+            .StatedPrimaryMarketIdentifierCode.Should()
+            .Be("XWBO", "the list states each share's primary market");
+        snapshot
+            .Rows.Single(row => row.Isin == "AT0000785407")
+            .StatedPrimaryMarketIdentifierCode.Should()
+            .Be("XFRA");
         using var payload = JsonDocument.Parse(snapshot.PayloadJson);
-        payload.RootElement.GetProperty("SourceUrl").GetString().Should().Contain("/data/t7-xetr-allTradableInstruments.csv");
+        payload
+            .RootElement.GetProperty("SourceUrl")
+            .GetString()
+            .Should()
+            .Contain("/data/t7-xetr-allTradableInstruments.csv");
         payload.RootElement.GetProperty("Rows").GetInt32().Should().Be(36);
         payload.RootElement.GetProperty("Shares").GetArrayLength().Should().Be(30);
     }
@@ -68,17 +87,26 @@ public class EquityMarketDirectorySourceTests
     public async Task Xetra_RefusesAFileThatGivesOneSymbolToTwoShares()
     {
         var page = await Fixture("EquityMarkets", "Xetra", "tradable-instruments-page.html");
-        var csv = await Fixture("EquityMarkets", "Xetra", "t7-xetr-allTradableInstruments.sample.csv");
-        using var http = new HttpClient(new EuronextDirectoryTestHandler([page, csv.Replace(";RAW;", ";XD4;")]));
+        var csv = await Fixture(
+            "EquityMarkets",
+            "Xetra",
+            "t7-xetr-allTradableInstruments.sample.csv"
+        );
+        using var http = new HttpClient(
+            new EuronextDirectoryTestHandler([page, csv.Replace(";RAW;", ";XD4;")])
+        );
         var source = new XetraEquityMarketDirectorySource(new XetraInstrumentListClient(http));
-        var capture = () => source.Capture(EquityMarketCatalog.TryGet("xetra"), CancellationToken.None);
+        var capture = () =>
+            source.Capture(EquityMarketCatalog.TryGet("xetra"), CancellationToken.None);
         await capture.Should().ThrowAsync<InvalidDataException>().WithMessage("*one symbol*");
     }
 
     [Fact]
     public async Task Xetra_ResolvesTheIssuerOnlyThroughTheFirdsLei()
     {
-        var source = new XetraEquityMarketDirectorySource(new XetraInstrumentListClient(new HttpClient()));
+        var source = new XetraEquityMarketDirectorySource(
+            new XetraInstrumentListClient(new HttpClient())
+        );
         var market = EquityMarketCatalog.TryGet("xetra");
         var row = new EquityMarketDirectoryRow
         {
@@ -88,14 +116,30 @@ public class EquityMarketDirectorySourceTests
             Name = "STRABAG SE",
             ReportedCurrency = "EUR",
             StatedPrimaryMarketIdentifierCode = "XWBO",
-            SourceUrl = new Uri("https://www.cashmarket.deutsche-boerse.com/cash-en/trading/Tradable-Instruments-Xetra#AT000000STR1-XETR"),
+            SourceUrl = new Uri(
+                "https://www.cashmarket.deutsche-boerse.com/cash-en/trading/Tradable-Instruments-Xetra#AT000000STR1-XETR"
+            ),
         };
-        var product = await source.Resolve(market, row, Firds("AT000000STR1", "XETB", "529900S9YM61OVI49P57"), CancellationToken.None);
+        var product = await source.Resolve(
+            market,
+            row,
+            Firds("AT000000STR1", "XETB", "529900S9YM61OVI49P57"),
+            CancellationToken.None
+        );
         product.SourceIssuerIdentifier.Should().Be("529900S9YM61OVI49P57");
         product.SourceUrl.Should().Be(row.SourceUrl);
         product.ReportedCurrency.Should().Be("EUR");
-        JsonSerializer.Serialize(product.Evidence).Should().Contain("\"StatedPrimaryMarketIdentifierCode\":\"XWBO\"");
-        var withoutLei = () => source.Resolve(market, row, Firds("AT000000STR1", "XETB", null), CancellationToken.None);
+        JsonSerializer
+            .Serialize(product.Evidence)
+            .Should()
+            .Contain("\"StatedPrimaryMarketIdentifierCode\":\"XWBO\"");
+        var withoutLei = () =>
+            source.Resolve(
+                market,
+                row,
+                Firds("AT000000STR1", "XETB", null),
+                CancellationToken.None
+            );
         await withoutLei.Should().ThrowAsync<InvalidDataException>();
     }
 
@@ -120,12 +164,19 @@ public class EquityMarketDirectorySourceTests
         snapshot.EvidenceSource.Should().Be("euronext-lisbon-directory-v1");
         snapshot.SourceUrl.Should().Be(EuronextMarket.Lisbon.DirectoryUrl);
         snapshot.Rows.Should().HaveCount(49);
-        snapshot.Rows.Should().AllSatisfy(row => row.StatedPrimaryMarketIdentifierCode.Should().BeNull("Euronext lists state no primary market"));
+        snapshot
+            .Rows.Should()
+            .AllSatisfy(row =>
+                row.StatedPrimaryMarketIdentifierCode.Should()
+                    .BeNull("Euronext lists state no primary market")
+            );
         var altri = snapshot.Rows.Single(row => row.Symbol == "ALTR");
         altri.Isin.Should().Be("PTALT0AE0002");
         altri.MarketIdentifierCode.Should().Be("XLIS");
         altri.ReportedCurrency.Should().Be("EUR");
-        altri.SourceUrl.AbsoluteUri.Should().Be("https://live.euronext.com/en/product/equities/PTALT0AE0002-XLIS");
+        altri
+            .SourceUrl.AbsoluteUri.Should()
+            .Be("https://live.euronext.com/en/product/equities/PTALT0AE0002-XLIS");
         snapshot.PayloadJson.Should().Contain("\"MarketSlug\":\"lisbon\"");
 
         var row = new EquityMarketDirectoryRow
@@ -137,7 +188,12 @@ public class EquityMarketDirectorySourceTests
             ReportedCurrency = "EUR",
             SourceUrl = new Uri("https://live.euronext.com/en/product/equities/FR0000120271-XPAR"),
         };
-        var resolved = await source.Resolve(paris, row, Firds("FR0000120271", "XPAR", "529900S21EQ1BO4ESM68"), CancellationToken.None);
+        var resolved = await source.Resolve(
+            paris,
+            row,
+            Firds("FR0000120271", "XPAR", "529900S21EQ1BO4ESM68"),
+            CancellationToken.None
+        );
         resolved.SourceIssuerIdentifier.Should().Be("002816");
         resolved.Name.Should().Be("TOTALENERGIES");
         resolved.SourceUrl.Should().Be(row.SourceUrl);
@@ -159,7 +215,12 @@ public class EquityMarketDirectorySourceTests
             SourceUrl = new Uri("https://live.euronext.com/en/product/equities/FR0000120271-XPAR"),
         };
         var resolve = () =>
-            source.Resolve(EquityMarketCatalog.TryGet("euronext-paris"), row, Firds("FR0000120271", "XPAR", null), CancellationToken.None);
+            source.Resolve(
+                EquityMarketCatalog.TryGet("euronext-paris"),
+                row,
+                Firds("FR0000120271", "XPAR", null),
+                CancellationToken.None
+            );
         await resolve.Should().ThrowAsync<InvalidDataException>();
     }
 }

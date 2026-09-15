@@ -39,7 +39,9 @@ public class EquityMarketDirectoryWorker(
             try
             {
                 await Task.Delay(
-                    TimeSpan.FromMinutes(Math.Max(1, options.Value.DirectoryControlIntervalMinutes)),
+                    TimeSpan.FromMinutes(
+                        Math.Max(1, options.Value.DirectoryControlIntervalMinutes)
+                    ),
                     stoppingToken
                 );
             }
@@ -65,8 +67,12 @@ public class EquityMarketDirectoryWorker(
                 stoppingToken
             );
             var enabled = await registrations.GetEnabledCodes(stoppingToken);
-            var interval = TimeSpan.FromHours(Math.Max(1, options.Value.DirectoryRefreshIntervalHours));
-            var retry = TimeSpan.FromMinutes(Math.Max(1, options.Value.DirectoryRetryIntervalMinutes));
+            var interval = TimeSpan.FromHours(
+                Math.Max(1, options.Value.DirectoryRefreshIntervalHours)
+            );
+            var retry = TimeSpan.FromMinutes(
+                Math.Max(1, options.Value.DirectoryRetryIntervalMinutes)
+            );
             var now = DateTime.UtcNow;
             due = [];
             foreach (var market in EquityMarketCatalog.All)
@@ -78,7 +84,9 @@ public class EquityMarketDirectoryWorker(
                     row != null
                     && IsDue(
                         row,
-                        _lastAttempt.TryGetValue(market.Code, out var attemptedAt) ? attemptedAt : null,
+                        _lastAttempt.TryGetValue(market.Code, out var attemptedAt)
+                            ? attemptedAt
+                            : null,
                         now,
                         interval,
                         retry
@@ -106,14 +114,18 @@ public class EquityMarketDirectoryWorker(
     {
         if (row.DirectoryRefreshRequestedAt != null)
             return true;
-        var stale = row.DirectoryRefreshedAt == null || row.DirectoryRefreshedAt < now - refreshInterval;
+        var stale =
+            row.DirectoryRefreshedAt == null || row.DirectoryRefreshedAt < now - refreshInterval;
         var recentlyTried = attemptedAt != null && attemptedAt > now - retryInterval;
         return stale && !recentlyTried;
     }
 
     // A request is cleared only by a pass that served it; one raised during the pass or a failed pass keeps it.
-    internal static bool RequestServed(DateTime? requestedBefore, DateTime? requestedNow, bool succeeded) =>
-        succeeded && requestedNow == requestedBefore;
+    internal static bool RequestServed(
+        DateTime? requestedBefore,
+        DateTime? requestedNow,
+        bool succeeded
+    ) => succeeded && requestedNow == requestedBefore;
 
     private async Task RunMarket(
         EquityMarket market,
@@ -152,7 +164,9 @@ public class EquityMarketDirectoryWorker(
                 return;
             if (RequestServed(requestedAt, row.DirectoryRefreshRequestedAt, result.Error == null))
                 row.DirectoryRefreshRequestedAt = null;
-            row.LastError = result.Error is { Length: > 1000 } ? result.Error[..1000] : result.Error;
+            row.LastError = result.Error is { Length: > 1000 }
+                ? result.Error[..1000]
+                : result.Error;
             row.UpdatedAt = DateTime.UtcNow;
             // A pass that never captured the directory leaves the previous counts and refresh time alone.
             if (result.Error == null)

@@ -5,6 +5,7 @@ using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
+using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
@@ -33,6 +34,10 @@ public class NativePriceTargetTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         var splitRepository = new StockSplitRepository(DbContext);
         var dividendRepository = new CashDividendRepository(DbContext);
         var scope = ServiceScopeSubstitute.Create(
+            (
+                typeof(EquityMarketRegistrationRepository),
+                new EquityMarketRegistrationRepository(DbContext)
+            ),
             (typeof(StockSplitRepository), splitRepository),
             (
                 typeof(CorporateActionPriceReconciliationManager),

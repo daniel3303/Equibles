@@ -6,13 +6,79 @@ public static class EquityMarketCatalog
 {
     public static readonly IReadOnlyList<EquityMarket> All =
     [
-        Euronext("euronext-paris", "Euronext Paris", "FR", ["XPAR", "ALXP", "XMLI", "XPMC"], ".PA", "PAR", "Europe/Paris", "PAR"),
-        Euronext("euronext-amsterdam", "Euronext Amsterdam", "NL", ["XAMS", "TNLA", "XAMC"], ".AS", "AMS", "Europe/Amsterdam", "AMS"),
-        Euronext("euronext-brussels", "Euronext Brussels", "BE", ["XBRU", "ALXB", "ENXB", "MLXB", "TNLB"], ".BR", "BRU", "Europe/Brussels", "BRU"),
-        Euronext("euronext-dublin", "Euronext Dublin", "IE", ["XMSM", "XESM", "XACD", "XATL"], ".IR", "ISE", "Europe/Dublin", "DUB"),
-        Euronext("euronext-oslo", "Euronext Oslo", "NO", ["XOSL", "XOAS", "MERK"], ".OL", "OSL", "Europe/Oslo", "OSL", "NOK"),
-        Euronext("euronext-milan", "Euronext Milan", "IT", ["MTAA", "MTAH", "EXGM", "ETLX", "BGEM", "MIVX"], ".MI", "MIL", "Europe/Rome", "MIL"),
-        Euronext("euronext-lisbon", "Euronext Lisbon", "PT", ["XLIS", "ENXL", "ALXL"], ".LS", "LIS", "Europe/Lisbon", "LIS", close: new(16, 30), auction: new(16, 35)),
+        Euronext(
+            "euronext-paris",
+            "Euronext Paris",
+            "FR",
+            ["XPAR", "ALXP", "XMLI", "XPMC"],
+            ".PA",
+            "PAR",
+            "Europe/Paris",
+            "PAR"
+        ),
+        Euronext(
+            "euronext-amsterdam",
+            "Euronext Amsterdam",
+            "NL",
+            ["XAMS", "TNLA", "XAMC"],
+            ".AS",
+            "AMS",
+            "Europe/Amsterdam",
+            "AMS"
+        ),
+        Euronext(
+            "euronext-brussels",
+            "Euronext Brussels",
+            "BE",
+            ["XBRU", "ALXB", "ENXB", "MLXB", "TNLB"],
+            ".BR",
+            "BRU",
+            "Europe/Brussels",
+            "BRU"
+        ),
+        Euronext(
+            "euronext-dublin",
+            "Euronext Dublin",
+            "IE",
+            ["XMSM", "XESM", "XACD", "XATL"],
+            ".IR",
+            "ISE",
+            "Europe/Dublin",
+            "DUB"
+        ),
+        Euronext(
+            "euronext-oslo",
+            "Euronext Oslo",
+            "NO",
+            ["XOSL", "XOAS", "MERK"],
+            ".OL",
+            "OSL",
+            "Europe/Oslo",
+            "OSL",
+            "NOK"
+        ),
+        Euronext(
+            "euronext-milan",
+            "Euronext Milan",
+            "IT",
+            ["MTAA", "MTAH", "EXGM", "ETLX", "BGEM", "MIVX"],
+            ".MI",
+            "MIL",
+            "Europe/Rome",
+            "MIL"
+        ),
+        Euronext(
+            "euronext-lisbon",
+            "Euronext Lisbon",
+            "PT",
+            ["XLIS", "ENXL", "ALXL"],
+            ".LS",
+            "LIS",
+            "Europe/Lisbon",
+            "LIS",
+            close: new(16, 30),
+            auction: new(16, 35)
+        ),
         // FIRDS files Xetra by segment and places a German share's home on Xetra, the Frankfurt floor or a regional
         // exchange, so home spans Deutsche Börse's venues and the directory's own primary-market column decides.
         new(
@@ -33,16 +99,100 @@ public static class EquityMarketCatalog
             FirdsVenueCodes: ["XETA", "XETB", "XETS"],
             HomeVenueCodes:
             [
-                "XETR", "XETA", "XETB", "XETS", "XETU", "XETV", "XETW",
-                "XFRA", "FRAA", "FRAB", "FRAS", "FRAV", "FRAW",
+                "XETR",
+                "XETA",
+                "XETB",
+                "XETS",
+                "XETU",
+                "XETV",
+                "XETW",
+                "XFRA",
+                "FRAA",
+                "FRAB",
+                "FRAS",
+                "FRAV",
+                "FRAW",
             ]
         ),
-        Pending("nasdaq-stockholm", "Nasdaq Stockholm", "SE", ["XSTO", "FNSE"], "SEK", ".ST", "STO", "Europe/Stockholm", new(9, 0), new(17, 25), new(17, 30)),
-        Pending("nasdaq-helsinki", "Nasdaq Helsinki", "FI", ["XHEL"], "EUR", ".HE", "HEL", "Europe/Helsinki", new(10, 0), new(18, 25), new(18, 30)),
-        Pending("nasdaq-copenhagen", "Nasdaq Copenhagen", "DK", ["XCSE"], "DKK", ".CO", "CPH", "Europe/Copenhagen", new(9, 0), new(16, 55), new(17, 0)),
-        Pending("lse", "London Stock Exchange", "GB", ["XLON"], "GBP", ".L", "LSE", "Europe/London", new(8, 0), new(16, 30), new(16, 35), firdsAuthority: "FCA"),
-        Pending("bme", "Bolsas y Mercados Españoles", "ES", ["XMAD"], "EUR", ".MC", "MCE", "Europe/Madrid", new(9, 0), new(17, 30), new(17, 35)),
-        Pending("gpw", "Warsaw Stock Exchange", "PL", ["XWAR"], "PLN", ".WA", "WSE", "Europe/Warsaw", new(9, 0), new(17, 0), new(17, 5)),
+        Pending(
+            "nasdaq-stockholm",
+            "Nasdaq Stockholm",
+            "SE",
+            ["XSTO", "FNSE"],
+            "SEK",
+            ".ST",
+            "STO",
+            "Europe/Stockholm",
+            new(9, 0),
+            new(17, 25),
+            new(17, 30)
+        ),
+        Pending(
+            "nasdaq-helsinki",
+            "Nasdaq Helsinki",
+            "FI",
+            ["XHEL"],
+            "EUR",
+            ".HE",
+            "HEL",
+            "Europe/Helsinki",
+            new(10, 0),
+            new(18, 25),
+            new(18, 30)
+        ),
+        Pending(
+            "nasdaq-copenhagen",
+            "Nasdaq Copenhagen",
+            "DK",
+            ["XCSE"],
+            "DKK",
+            ".CO",
+            "CPH",
+            "Europe/Copenhagen",
+            new(9, 0),
+            new(16, 55),
+            new(17, 0)
+        ),
+        Pending(
+            "lse",
+            "London Stock Exchange",
+            "GB",
+            ["XLON"],
+            "GBP",
+            ".L",
+            "LSE",
+            "Europe/London",
+            new(8, 0),
+            new(16, 30),
+            new(16, 35),
+            firdsAuthority: "FCA"
+        ),
+        Pending(
+            "bme",
+            "Bolsas y Mercados Españoles",
+            "ES",
+            ["XMAD"],
+            "EUR",
+            ".MC",
+            "MCE",
+            "Europe/Madrid",
+            new(9, 0),
+            new(17, 30),
+            new(17, 35)
+        ),
+        Pending(
+            "gpw",
+            "Warsaw Stock Exchange",
+            "PL",
+            ["XWAR"],
+            "PLN",
+            ".WA",
+            "WSE",
+            "Europe/Warsaw",
+            new(9, 0),
+            new(17, 0),
+            new(17, 5)
+        ),
     ];
 
     private static readonly IReadOnlyDictionary<string, EquityMarket> ByCode = All.ToDictionary(
@@ -50,8 +200,8 @@ public static class EquityMarketCatalog
         StringComparer.Ordinal
     );
 
-    private static readonly IReadOnlyDictionary<string, EquityMarket> ByMic = All.SelectMany(market =>
-            market.MarketIdentifierCodes.Select(mic => (mic, market))
+    private static readonly IReadOnlyDictionary<string, EquityMarket> ByMic = All.SelectMany(
+            market => market.MarketIdentifierCodes.Select(mic => (mic, market))
         )
         .ToDictionary(pair => pair.mic, pair => pair.market, StringComparer.Ordinal);
 

@@ -94,7 +94,15 @@ public class EquityMarketDirectoryImporter(
                     result.Skipped++;
                     continue;
                 }
-                if (await IsCurrent(scope.ServiceProvider, source.SourceKey, row, now, cancellationToken))
+                if (
+                    await IsCurrent(
+                        scope.ServiceProvider,
+                        source.SourceKey,
+                        row,
+                        now,
+                        cancellationToken
+                    )
+                )
                 {
                     result.Current++;
                     continue;

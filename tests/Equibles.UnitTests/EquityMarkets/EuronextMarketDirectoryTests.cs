@@ -32,7 +32,9 @@ public class EuronextMarketDirectoryTests
             MarketIdentifierCode = "XPAR",
             SourceUrl = new Uri("https://live.euronext.com/en/product/equities/FR0000120271-XPAR"),
         };
-        var handler = new EuronextDirectoryTestHandler([await Fixture("Paris", "totalenergies.html")]);
+        var handler = new EuronextDirectoryTestHandler([
+            await Fixture("Paris", "totalenergies.html"),
+        ]);
         using var http = new HttpClient(handler);
         var identity = await new EuronextDirectoryClient(http).GetInstrumentIdentity(listing);
         identity.Name.Should().Be("TOTALENERGIES");
@@ -45,20 +47,31 @@ public class EuronextMarketDirectoryTests
     public void EveryMarket_HasAUniqueSlugDisjointVenuesAndALocationCode()
     {
         EuronextMarket.All.Select(market => market.Slug).Should().OnlyHaveUniqueItems();
-        EuronextMarket.All.SelectMany(market => market.MarketIdentifierCodes).Should().OnlyHaveUniqueItems();
-        EuronextMarket.All.Select(market => market.TradesLocationCode).Should().OnlyHaveUniqueItems();
+        EuronextMarket
+            .All.SelectMany(market => market.MarketIdentifierCodes)
+            .Should()
+            .OnlyHaveUniqueItems();
+        EuronextMarket
+            .All.Select(market => market.TradesLocationCode)
+            .Should()
+            .OnlyHaveUniqueItems();
         EuronextMarket.FromSlug("lisbon").Should().BeSameAs(EuronextMarket.Lisbon);
         EuronextMarket.FromSlug("frankfurt").Should().BeNull();
         EuronextMarket.ByMarketIdentifierCode("XPAR").Should().BeSameAs(EuronextMarket.Paris);
         EuronextMarket.ByMarketIdentifierCode("XETR").Should().BeNull();
-        EuronextMarket.Milan.DirectoryUrl.AbsoluteUri.Should().Be("https://live.euronext.com/en/markets/milan/equities/list");
+        EuronextMarket
+            .Milan.DirectoryUrl.AbsoluteUri.Should()
+            .Be("https://live.euronext.com/en/markets/milan/equities/list");
     }
 
     [Fact]
     public async Task LisbonPage_IsRefusedUnderAnotherMarketsVenueSet()
     {
         var body = await Fixture("Lisbon", "equities.json");
-        EuronextDirectoryParser.ReadPage(body, EuronextMarket.Lisbon).Listings.Should().HaveCount(49);
+        EuronextDirectoryParser
+            .ReadPage(body, EuronextMarket.Lisbon)
+            .Listings.Should()
+            .HaveCount(49);
         var paris = () => EuronextDirectoryParser.ReadPage(body, EuronextMarket.Paris);
         paris.Should().Throw<InvalidDataException>();
     }

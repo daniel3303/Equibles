@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json.Nodes;
 using Equibles.Integrations.Esma;
 using Equibles.Integrations.Esma.Models;
 using Equibles.UnitTests.Euronext;
@@ -20,19 +21,30 @@ public class FirdsFileIndexTests
         var files = await new EsmaFirdsClient(http).ListEquityFiles(new DateOnly(2026, 9, 12));
         files.Should().NotBeEmpty();
         files.Should().BeInAscendingOrder(file => file.PublishedOn);
-        files.Should().AllSatisfy(file =>
-        {
-            file.Authority.Should().Be("ESMA");
-            file.DownloadUrl.Host.Should().Be("firds.esma.europa.eu");
-            file.Checksum.Should().MatchRegex("^[0-9a-f]{32}$");
-        });
-        files.Where(file => file.FileType == FirdsFileType.Full)
+        files
+            .Should()
+            .AllSatisfy(file =>
+            {
+                file.Authority.Should().Be("ESMA");
+                file.DownloadUrl.Host.Should().Be("firds.esma.europa.eu");
+                file.Checksum.Should().MatchRegex("^[0-9a-f]{32}$");
+            });
+        files
+            .Where(file => file.FileType == FirdsFileType.Full)
             .Select(file => file.FileName)
             .Should()
             .Equal("FULINS_E_20260912_01of02.zip", "FULINS_E_20260912_02of02.zip");
         files.Should().NotContain(file => file.FileName.StartsWith("FULINS_D"));
-        handler.Requests.Should().ContainSingle().Which.Url.Host.Should().Be("registers.esma.europa.eu");
-        handler.Requests[0].Url.Query.Should().Contain("publication_date").And.Contain("2026-09-12");
+        handler
+            .Requests.Should()
+            .ContainSingle()
+            .Which.Url.Host.Should()
+            .Be("registers.esma.europa.eu");
+        handler
+            .Requests[0]
+            .Url.Query.Should()
+            .Contain("publication_date")
+            .And.Contain("2026-09-12");
     }
 
     [Fact]
@@ -43,14 +55,33 @@ public class FirdsFileIndexTests
         var files = await new FcaFirdsClient(http).ListEquityFiles(new DateOnly(2026, 9, 10));
         files.Should().HaveCount(11);
         files.Should().BeInAscendingOrder(file => file.PublishedOn);
-        files.Single(file => file.FileType == FirdsFileType.Full).FileName.Should().Be("FULINS_E_20260912_01of01.zip");
-        files.Should().AllSatisfy(file =>
-        {
-            file.Authority.Should().Be("FCA");
-            file.DownloadUrl.Host.Should().Be("data.fca.org.uk");
-            file.Checksum.Should().BeNull();
-        });
+        files
+            .Single(file => file.FileType == FirdsFileType.Full)
+            .FileName.Should()
+            .Be("FULINS_E_20260912_01of01.zip");
+        files
+            .Should()
+            .AllSatisfy(file =>
+            {
+                file.Authority.Should().Be("FCA");
+                file.DownloadUrl.Host.Should().Be("data.fca.org.uk");
+                file.Checksum.Should().BeNull();
+            });
         handler.Requests.Should().ContainSingle().Which.Url.Host.Should().Be("api.data.fca.org.uk");
+    }
+
+    [Fact]
+    public async Task FcaIndex_EndsOnAShortPageWhenTheTotalIsAbsent()
+    {
+        var index = JsonNode.Parse(await Fixture("fca_index.json")).AsObject();
+        index["hits"].AsObject().Remove("total").Should().BeTrue();
+        var handler = new EuronextDirectoryTestHandler([index.ToJsonString()]);
+        using var http = new HttpClient(handler);
+        var files = await new FcaFirdsClient(http).ListEquityFiles(new DateOnly(2026, 9, 10));
+        files.Should().HaveCount(11);
+        handler
+            .Requests.Should()
+            .ContainSingle("a page shorter than the size asked for ends the walk");
     }
 
     [Fact]
@@ -76,7 +107,13 @@ public class FirdsFileIndexTests
     {
         var xml = await Fixture("FULINS_E_sample.xml");
         using var zipBytes = new MemoryStream();
-        using (var archive = new System.IO.Compression.ZipArchive(zipBytes, System.IO.Compression.ZipArchiveMode.Create, true))
+        using (
+            var archive = new System.IO.Compression.ZipArchive(
+                zipBytes,
+                System.IO.Compression.ZipArchiveMode.Create,
+                true
+            )
+        )
         {
             await using var entry = archive.CreateEntry("FULINS_E_20260912_01of02.xml").Open();
             await entry.WriteAsync(System.Text.Encoding.UTF8.GetBytes(xml));
@@ -89,7 +126,9 @@ public class FirdsFileIndexTests
             FileName = "FULINS_E_20260912_01of02.zip",
             FileType = FirdsFileType.Full,
             PublishedOn = new DateOnly(2026, 9, 12),
-            DownloadUrl = new Uri("https://firds.esma.europa.eu/firds/FULINS_E_20260912_01of02.zip"),
+            DownloadUrl = new Uri(
+                "https://firds.esma.europa.eu/firds/FULINS_E_20260912_01of02.zip"
+            ),
             Checksum = checksum,
         };
         using (var http = new HttpClient(new BytesHandler(bytes)))

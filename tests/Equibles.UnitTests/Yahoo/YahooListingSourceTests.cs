@@ -56,9 +56,10 @@ public class YahooListingSourceTests
         YahooListingSource.MatchesChart(target, null).Should().BeFalse();
         identity.ExchangeCode = "NMS";
         YahooListingSource.MatchesChart(target, identity).Should().BeFalse();
-        YahooListingSource.EvidenceSource(YahooListingSource.Market(target)).Should().Be(
-            "yahoo-" + EquityMarketCatalog.ByMarketIdentifierCode(mic).Code + "-chart-v1"
-        );
+        YahooListingSource
+            .EvidenceSource(YahooListingSource.Market(target))
+            .Should()
+            .Be("yahoo-" + EquityMarketCatalog.ByMarketIdentifierCode(mic).Code + "-chart-v1");
     }
 
     [Fact]
@@ -163,7 +164,10 @@ public class YahooListingSourceTests
     [Fact]
     public void SourceBinding_RefusesATargetWithoutAVerifiedQuotationUnit()
     {
-        var binding = () => YahooListingSource.SourceBinding(Target("TTE", "FR", "XPAR", "FR0000120271", "EUR", null));
+        var binding = () =>
+            YahooListingSource.SourceBinding(
+                Target("TTE", "FR", "XPAR", "FR0000120271", "EUR", null)
+            );
         binding.Should().Throw<InvalidOperationException>().WithMessage("*quotation unit*");
     }
 
@@ -174,12 +178,17 @@ public class YahooListingSourceTests
         var binding = YahooListingSource.SourceBinding(target);
         binding.Currency.Should().Be("EUR");
         binding.QuoteUnitMultiplier.Should().Be(1m);
-        binding.SourceMarketIdentifierCodes.Should().BeEquivalentTo(["XPAR", "ALXP", "XMLI", "XPMC"]);
+        binding
+            .SourceMarketIdentifierCodes.Should()
+            .BeEquivalentTo(["XPAR", "ALXP", "XMLI", "XPMC"]);
         var evidence = YahooListingSource.QuotationEvidence(
             target,
             new YahooChartSourceIdentity { Symbol = "TTE.PA", Currency = "EUR" }
         );
         evidence.Source.Should().Be("yahoo-euronext-paris-chart-v1");
-        evidence.PayloadJson.Should().Contain("\"RequestedSymbol\":\"TTE.PA\"").And.Contain("TTE.PA");
+        evidence
+            .PayloadJson.Should()
+            .Contain("\"RequestedSymbol\":\"TTE.PA\"")
+            .And.Contain("TTE.PA");
     }
 }

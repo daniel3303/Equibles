@@ -41,7 +41,9 @@ public class FirdsRecordReaderTests
         secondary.Mic.Should().Be("AQEA");
         secondary.RelevantTradingVenue.Should().Be("DHEL");
         var terminated = records.Single(record => record.Isin == "SE0030026894");
-        terminated.TerminationDate.Should().Be(new DateTime(2026, 9, 11, 23, 59, 59, DateTimeKind.Utc));
+        terminated
+            .TerminationDate.Should()
+            .Be(new DateTime(2026, 9, 11, 23, 59, 59, DateTimeKind.Utc));
         records
             .Select(record => record.Cfi[..2])
             .Should()
@@ -53,14 +55,23 @@ public class FirdsRecordReaderTests
     {
         var records = await Read("DLTINS_sample.xml");
         records.Should().HaveCount(4);
-        records.Single(record => record.Kind == FirdsRecordKind.New).Isin.Should().Be("US30609A1097");
-        records.Single(record => record.Kind == FirdsRecordKind.Modified).Isin.Should().Be("DE0005218309");
+        records
+            .Single(record => record.Kind == FirdsRecordKind.New)
+            .Isin.Should()
+            .Be("US30609A1097");
+        records
+            .Single(record => record.Kind == FirdsRecordKind.Modified)
+            .Isin.Should()
+            .Be("DE0005218309");
         records
             .Where(record => record.Kind == FirdsRecordKind.Terminated)
             .Select(record => record.Isin)
             .Should()
             .BeEquivalentTo(["DE0005558696", "DE000BD22B23"]);
-        records.Single(record => record.Isin == "DE0005558696").TerminationDate.Should().NotBeNull();
+        records
+            .Single(record => record.Isin == "DE0005558696")
+            .TerminationDate.Should()
+            .NotBeNull();
         records.Single(record => record.Cfi.StartsWith("RW")).Isin.Should().Be("DE000BD22B23");
     }
 
@@ -83,10 +94,19 @@ public class FirdsRecordReaderTests
     [InlineData("<Id>PTSLB0AM0011</Id>", "<Id>PTSLB0AM0010</Id>")]
     [InlineData("<Issr>BAD</Issr>", "<Issr>213800EDIKU4Z4I1R529</Issr>")]
     [InlineData("<TermntnDt>tomorrow</TermntnDt>", "<TermntnDt>2026-09-11T23:59:59Z</TermntnDt>")]
-    public async Task InvalidIdentifiersOrDates_AreRefusedRatherThanStored(string broken, string valid)
+    public async Task InvalidIdentifiersOrDates_AreRefusedRatherThanStored(
+        string broken,
+        string valid
+    )
     {
         var xml = await File.ReadAllTextAsync(
-            Path.Combine(AppContext.BaseDirectory, "TestAssets", "EquityMarkets", "Firds", "FULINS_E_sample.xml")
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "EquityMarkets",
+                "Firds",
+                "FULINS_E_sample.xml"
+            )
         );
         xml.Should().Contain(valid);
         await using var stream = new MemoryStream(

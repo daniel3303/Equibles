@@ -108,7 +108,8 @@ public class EuronextDirectoryTests
         using var http = new HttpClient(
             new EuronextDirectoryTestHandler([html, first.ToJsonString(), next.ToJsonString()])
         );
-        Func<Task> fetch = () => new EuronextDirectoryClient(http).GetEquities(EuronextMarket.Lisbon);
+        Func<Task> fetch = () =>
+            new EuronextDirectoryClient(http).GetEquities(EuronextMarket.Lisbon);
         await fetch.Should().ThrowAsync<InvalidDataException>();
     }
 
@@ -146,7 +147,8 @@ public class EuronextDirectoryTests
             rows[0][1] = "PTALT0AE0003";
         if (scenario == "missing-column")
             rows[0].AsArray().RemoveAt(6);
-        var parse = () => EuronextDirectoryParser.ReadPage(root.ToJsonString(), EuronextMarket.Lisbon);
+        var parse = () =>
+            EuronextDirectoryParser.ReadPage(root.ToJsonString(), EuronextMarket.Lisbon);
         parse.Should().Throw<InvalidDataException>();
     }
 

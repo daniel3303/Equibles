@@ -36,7 +36,10 @@ public static class ServiceCollectionExtensions
     }
 
     // No source is ever followed off its origin; each client checks the final request URI itself.
-    private static void AddSourceClient<TClient>(IServiceCollection services, TimeSpan? timeout = null)
+    private static void AddSourceClient<TClient>(
+        IServiceCollection services,
+        TimeSpan? timeout = null
+    )
         where TClient : class =>
         services
             .AddHttpClient<TClient>(client =>

@@ -55,7 +55,8 @@ public class EquityMarketDirectoryGateTests
         var other = Firds("XPAR", "XPAR", "FR");
         other.Isin = "FR0000120073";
         EquityMarketDirectoryGate.IsHomeShare(market, row, other).Should().BeFalse();
-        var gate = () => EquityMarketDirectoryGate.IsHomeShare(null, row, Firds("XPAR", "XPAR", "FR"));
+        var gate = () =>
+            EquityMarketDirectoryGate.IsHomeShare(null, row, Firds("XPAR", "XPAR", "FR"));
         gate.Should().Throw<ArgumentNullException>();
     }
 
@@ -71,7 +72,11 @@ public class EquityMarketDirectoryGateTests
             SourceUrl = new Uri("https://live.euronext.com/en/product/equities/FR0000120271-XPAR"),
         };
 
-    private static FirdsInstrumentRecord Firds(string mic, string relevantVenue, string authority) =>
+    private static FirdsInstrumentRecord Firds(
+        string mic,
+        string relevantVenue,
+        string authority
+    ) =>
         new()
         {
             Authority = "ESMA",

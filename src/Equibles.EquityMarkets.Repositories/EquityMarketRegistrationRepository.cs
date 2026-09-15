@@ -13,8 +13,7 @@ public class EquityMarketRegistrationRepository(EquiblesFinancialDbContext dbCon
         CancellationToken cancellationToken = default
     ) => GetAll().SingleOrDefaultAsync(row => row.Code == code, cancellationToken);
 
-    public IQueryable<EquityMarketRegistration> GetEnabled() =>
-        GetAll().Where(row => row.Enabled);
+    public IQueryable<EquityMarketRegistration> GetEnabled() => GetAll().Where(row => row.Enabled);
 
     public Task<List<string>> GetEnabledCodes(CancellationToken cancellationToken = default) =>
         GetEnabled().Select(row => row.Code).ToListAsync(cancellationToken);

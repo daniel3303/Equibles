@@ -35,12 +35,14 @@ public class FcaFirdsClient(HttpClient httpClient) : IFirdsFileIndex
             using var document = JsonDocument.Parse(
                 await Read(new Uri(IndexOrigin, query), cancellationToken)
             );
-            var total = document.RootElement.GetProperty("hits").GetProperty("total");
-            var found =
-                total.ValueKind == JsonValueKind.Object
+            var page = document.RootElement.GetProperty("hits");
+            // The total arrives as a number or an ES7 {value, relation} object; without one a short page ends the walk.
+            int? found = page.TryGetProperty("total", out var total)
+                ? total.ValueKind == JsonValueKind.Object
                     ? total.GetProperty("value").GetInt32()
-                    : total.GetInt32();
-            var hits = document.RootElement.GetProperty("hits").GetProperty("hits");
+                    : total.GetInt32()
+                : null;
+            var hits = page.GetProperty("hits");
             foreach (var hit in hits.EnumerateArray())
             {
                 var source = hit.GetProperty("_source");
@@ -65,7 +67,7 @@ public class FcaFirdsClient(HttpClient httpClient) : IFirdsFileIndex
             if (returned == 0)
                 break;
             from += returned;
-            if (from >= found)
+            if (found == null ? returned < PageSize : from >= found)
                 break;
         }
         return files.OrderBy(file => file.PublishedOn).ThenBy(file => file.FileName).ToList();

@@ -20,7 +20,9 @@ public class EquityMarketCatalogTests
             market.CountryCode.Should().MatchRegex("^[A-Z]{2}$");
             market.Currency.Should().MatchRegex("^[A-Z]{3}$");
             market.MarketIdentifierCodes.Should().NotBeEmpty();
-            market.MarketIdentifierCodes.Should().AllSatisfy(mic => mic.Should().MatchRegex("^[A-Z0-9]{4}$"));
+            market
+                .MarketIdentifierCodes.Should()
+                .AllSatisfy(mic => mic.Should().MatchRegex("^[A-Z0-9]{4}$"));
             market.YahooSuffix.Should().StartWith(".");
             market.YahooExchangeCode.Should().NotBeNullOrWhiteSpace();
             TimeZoneInfo.FindSystemTimeZoneById(market.TimeZoneId).Should().NotBeNull();
@@ -37,10 +39,18 @@ public class EquityMarketCatalogTests
             .All.SelectMany(market => market.HomeVenueCodes)
             .Should()
             .OnlyHaveUniqueItems("a venue cannot be the home of two markets");
+        EquityMarketCatalog
+            .All.Select(market => market.CountryCode)
+            .Should()
+            .OnlyHaveUniqueItems(
+                "the gate's competent-authority escape assumes one catalog market per country"
+            );
         foreach (var market in EquityMarketCatalog.All)
         {
             market.FirdsVenueCodes.Should().NotBeEmpty();
-            market.FirdsVenueCodes.Should().AllSatisfy(mic => mic.Should().MatchRegex("^[A-Z0-9]{4}$"));
+            market
+                .FirdsVenueCodes.Should()
+                .AllSatisfy(mic => mic.Should().MatchRegex("^[A-Z0-9]{4}$"));
             market.HomeVenueCodes.Should().Contain(market.MarketIdentifierCodes);
             market.HomeVenueCodes.Should().Contain(market.FirdsVenueCodes);
             if (market.Code != "xetra")
@@ -50,15 +60,22 @@ public class EquityMarketCatalogTests
             }
         }
         foreach (var market in EquityMarketCatalog.All)
-            market.FirdsAuthority.Should().Be(
-                market.CountryCode == "GB" ? FcaFirdsClient.AuthorityCode : EsmaFirdsClient.AuthorityCode,
-                "a UK venue's universe is the FCA's register, every EEA venue's is ESMA's"
-            );
+            market
+                .FirdsAuthority.Should()
+                .Be(
+                    market.CountryCode == "GB"
+                        ? FcaFirdsClient.AuthorityCode
+                        : EsmaFirdsClient.AuthorityCode,
+                    "a UK venue's universe is the FCA's register, every EEA venue's is ESMA's"
+                );
         var xetra = EquityMarketCatalog.TryGet("xetra");
         xetra.FirdsVenueCodes.Should().Equal("XETA", "XETB", "XETS");
         xetra.HomeVenueCodes.Should().Contain(["XETR", "XFRA", "FRAA", "FRAB"]);
         xetra.HomeVenueCodes.Should().NotContain(["MUNB", "STUB", "XGAT", "WBAH"]);
-        xetra.IsFirdsVenue("XETR").Should().BeFalse("FIRDS never files a line under the operating MIC");
+        xetra
+            .IsFirdsVenue("XETR")
+            .Should()
+            .BeFalse("FIRDS never files a line under the operating MIC");
         xetra.IsHomeVenue("FRAA").Should().BeTrue();
         xetra.IsHomeVenue(null).Should().BeFalse();
     }

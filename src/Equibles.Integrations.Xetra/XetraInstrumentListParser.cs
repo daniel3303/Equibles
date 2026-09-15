@@ -125,7 +125,9 @@ public static partial class XetraInstrumentListParser
                         "Xetra share row lacks valid stated listing identity."
                     );
                 if (!identities.Add((row.Isin, row.MarketIdentifierCode)))
-                    throw new InvalidDataException("Xetra instrument file repeats a share identity.");
+                    throw new InvalidDataException(
+                        "Xetra instrument file repeats a share identity."
+                    );
             }
             list.Instruments.Add(row);
         }

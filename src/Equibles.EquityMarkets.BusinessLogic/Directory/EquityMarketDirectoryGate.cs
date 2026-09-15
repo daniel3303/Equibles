@@ -26,6 +26,8 @@ public static class EquityMarketDirectoryGate
             return false;
         if (row.StatedPrimaryMarketIdentifierCode == null)
             return market.IsHomeVenue(firds.RelevantTradingVenue);
+        // The authority escape admits a share FIRDS files on a regional venue of the same country, which is only
+        // unambiguous while the catalog holds one market per country (pinned by EquityMarketCatalogTests).
         return market.IsHomeVenue(row.StatedPrimaryMarketIdentifierCode)
             && (
                 market.IsHomeVenue(firds.RelevantTradingVenue)

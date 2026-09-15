@@ -22,7 +22,8 @@ public class XetraInstrumentListTests
         none.Should().Throw<InvalidDataException>();
         var two = () =>
             XetraInstrumentListParser.ReadDownloadPath(
-                html + "<a href=\"/resource/blob/1528/ffff/data/t7-xetr-allTradableInstruments.csv\">x</a>"
+                html
+                    + "<a href=\"/resource/blob/1528/ffff/data/t7-xetr-allTradableInstruments.csv\">x</a>"
             );
         two.Should().Throw<InvalidDataException>();
     }
@@ -36,11 +37,17 @@ public class XetraInstrumentListTests
         list.MarketIdentifierCode.Should().Be("XETR");
         list.LastUpdate.Should().Be(new DateOnly(2026, 9, 15));
         list.Instruments.Should().HaveCount(36);
-        list.Instruments.Select(row => row.InstrumentType).Distinct().Should().BeEquivalentTo(["CS", "ETF", "ETN"]);
+        list.Instruments.Select(row => row.InstrumentType)
+            .Distinct()
+            .Should()
+            .BeEquivalentTo(["CS", "ETF", "ETN"]);
         var shares = list.Instruments.Where(row => row.InstrumentType == "CS").ToList();
         shares.Should().HaveCount(31);
         shares.Count(row => row.InstrumentStatus == "Active").Should().Be(30);
-        shares.Single(row => row.InstrumentStatus != "Active").InstrumentStatus.Should().Be("PendingDeletion");
+        shares
+            .Single(row => row.InstrumentStatus != "Active")
+            .InstrumentStatus.Should()
+            .Be("PendingDeletion");
         var strabag = shares.Single(row => row.Isin == "AT000000STR1");
         strabag.Mnemonic.Should().Be("XD4");
         strabag.Name.Should().Be("STRABAG SE");
@@ -60,7 +67,9 @@ public class XetraInstrumentListTests
     [InlineData("bad-primary-market")]
     public async Task ChangedShapeOrInvalidShareIdentity_RefusesTheWholeFile(string scenario)
     {
-        var lines = (await Fixture("t7-xetr-allTradableInstruments.sample.csv")).Split('\n').ToList();
+        var lines = (await Fixture("t7-xetr-allTradableInstruments.sample.csv"))
+            .Split('\n')
+            .ToList();
         var header = lines[2].Split(';').ToList();
         var isin = header.IndexOf("ISIN");
         var mnemonic = header.IndexOf("Mnemonic");
@@ -116,7 +125,9 @@ public class XetraInstrumentListTests
     [Fact]
     public async Task ABlankPrimaryMarket_IsReadAsUnstatedRatherThanRefused()
     {
-        var lines = (await Fixture("t7-xetr-allTradableInstruments.sample.csv")).Split('\n').ToList();
+        var lines = (await Fixture("t7-xetr-allTradableInstruments.sample.csv"))
+            .Split('\n')
+            .ToList();
         var header = lines[2].Split(';').ToList();
         var cells = lines[3].Split(';');
         cells[header.IndexOf("Primary Market MIC Code")] = "";
@@ -135,9 +146,10 @@ public class XetraInstrumentListTests
         using var http = new HttpClient(handler);
         var list = await new XetraInstrumentListClient(http).GetInstruments();
         list.Instruments.Should().HaveCount(36);
-        list.PageUrl.AbsoluteUri.Should().Be(
-            "https://www.cashmarket.deutsche-boerse.com/cash-en/trading/Tradable-Instruments-Xetra"
-        );
+        list.PageUrl.AbsoluteUri.Should()
+            .Be(
+                "https://www.cashmarket.deutsche-boerse.com/cash-en/trading/Tradable-Instruments-Xetra"
+            );
         list.SourceUrl.Host.Should().Be("www.cashmarket.deutsche-boerse.com");
         list.SourceUrl.AbsolutePath.Should().EndWith("/data/t7-xetr-allTradableInstruments.csv");
         handler.Requests.Should().HaveCount(2);

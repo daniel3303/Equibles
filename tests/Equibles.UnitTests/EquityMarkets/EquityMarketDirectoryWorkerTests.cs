@@ -9,7 +9,10 @@ public class EquityMarketDirectoryWorkerTests
     private static readonly TimeSpan Refresh = TimeSpan.FromHours(24);
     private static readonly TimeSpan Retry = TimeSpan.FromMinutes(15);
 
-    private static EquityMarketRegistration Row(DateTime? refreshedAt, DateTime? requestedAt = null) =>
+    private static EquityMarketRegistration Row(
+        DateTime? refreshedAt,
+        DateTime? requestedAt = null
+    ) =>
         new()
         {
             Code = "euronext-paris",
@@ -54,10 +57,7 @@ public class EquityMarketDirectoryWorkerTests
             .RequestServed(Now.AddMinutes(-10), Now, true)
             .Should()
             .BeFalse("an operator asked again while the pass ran");
-        EquityMarketDirectoryWorker
-            .RequestServed(null, Now, true)
-            .Should()
-            .BeFalse();
+        EquityMarketDirectoryWorker.RequestServed(null, Now, true).Should().BeFalse();
     }
 
     [Fact]

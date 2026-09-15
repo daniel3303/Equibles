@@ -6,6 +6,8 @@ using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Data;
+using Equibles.EquityMarkets.Data;
+using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
@@ -42,6 +44,7 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
     public YahooPriceImportServiceCompanyProfileTests()
     {
         _dbContext = TestDbContextFactory.CreateIgnoringInMemoryTransactions(
+            new EquityMarketsModuleConfiguration(),
             new CommonStocksModuleConfiguration(),
             new YahooModuleConfiguration()
         );
@@ -60,6 +63,10 @@ public class YahooPriceImportServiceCompanyProfileTests : IDisposable
         var splitRepo = new StockSplitRepository(_dbContext);
         var dividendRepo = new CashDividendRepository(_dbContext);
         var scopeFactory = ServiceScopeSubstitute.Create(
+            (
+                typeof(EquityMarketRegistrationRepository),
+                new EquityMarketRegistrationRepository(_dbContext)
+            ),
             (typeof(EquityDailyStockPriceRepository), priceRepo),
             (typeof(EquityIssuerRepository), _stockRepo),
             (typeof(StockSplitRepository), splitRepo),

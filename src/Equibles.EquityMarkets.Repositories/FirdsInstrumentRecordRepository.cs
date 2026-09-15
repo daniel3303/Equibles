@@ -47,7 +47,9 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
         var authority = market.FirdsAuthority;
         var homeVenues = market.HomeVenueCodes;
         return GetLiveShares(asOf)
-            .Where(row => row.Authority == authority && homeVenues.Contains(row.RelevantTradingVenue))
+            .Where(row =>
+                row.Authority == authority && homeVenues.Contains(row.RelevantTradingVenue)
+            )
             .Select(row => row.Isin)
             .Distinct()
             .CountAsync(cancellationToken);

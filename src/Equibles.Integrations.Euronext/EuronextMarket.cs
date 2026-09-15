@@ -57,7 +57,9 @@ public sealed record EuronextMarket(
         All.FirstOrDefault(market => market.Slug == slug);
 
     public static EuronextMarket ByMarketIdentifierCode(string mic) =>
-        mic == null ? null : All.FirstOrDefault(market => market.MarketIdentifierCodes.Contains(mic));
+        mic == null
+            ? null
+            : All.FirstOrDefault(market => market.MarketIdentifierCodes.Contains(mic));
 
     public Uri DirectoryUrl => new(Origin, $"/en/markets/{Slug}/equities/list");
     public string GatewayPath => $"/en/product_directory/data/stocks-{Slug}";

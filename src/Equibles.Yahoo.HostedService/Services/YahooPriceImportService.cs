@@ -8,9 +8,9 @@ using Equibles.Core.Configuration;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
-using Equibles.Errors.BusinessLogic;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Repositories;
+using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
@@ -291,7 +291,9 @@ public class YahooPriceImportService
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
         var rows = new List<PriceSeriesTarget>();
-        foreach (var market in EquityMarketCatalog.All.Where(market => enabled.Contains(market.Code)))
+        foreach (
+            var market in EquityMarketCatalog.All.Where(market => enabled.Contains(market.Code))
+        )
         {
             var claims = MarketClaims(repository, market);
             rows.AddRange(

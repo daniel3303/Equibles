@@ -13,7 +13,10 @@ public class FirdsImportRunRepository(EquiblesFinancialDbContext dbContext)
         CancellationToken cancellationToken = default
     ) =>
         GetAll()
-            .AnyAsync(row => row.Authority == authority && row.FileName == fileName, cancellationToken);
+            .AnyAsync(
+                row => row.Authority == authority && row.FileName == fileName,
+                cancellationToken
+            );
 
     public Task<DateOnly?> GetLatestFullPublication(
         string authority,
@@ -24,7 +27,10 @@ public class FirdsImportRunRepository(EquiblesFinancialDbContext dbContext)
             .Select(row => (DateOnly?)row.PublishedOn)
             .MaxAsync(cancellationToken);
 
-    public Task<bool> HasFullImport(string authority, CancellationToken cancellationToken = default) =>
+    public Task<bool> HasFullImport(
+        string authority,
+        CancellationToken cancellationToken = default
+    ) =>
         GetAll()
             .AnyAsync(
                 row => row.Authority == authority && row.Kind == FirdsFileKind.Full,

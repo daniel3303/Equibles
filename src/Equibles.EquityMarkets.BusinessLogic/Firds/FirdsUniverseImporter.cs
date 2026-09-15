@@ -80,7 +80,9 @@ public class FirdsUniverseImporter(
         }
         foreach (
             var delta in files
-                .Where(file => file.FileType == FirdsFileType.Delta && file.PublishedOn >= latestFull)
+                .Where(file =>
+                    file.FileType == FirdsFileType.Delta && file.PublishedOn >= latestFull
+                )
                 .OrderBy(file => file.PublishedOn)
                 .ThenBy(file => file.FileName)
         )

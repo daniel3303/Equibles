@@ -8,7 +8,8 @@ namespace Equibles.UnitTests.EquityMarkets;
 
 public class EquityMarketDirectoryImporterInputTests
 {
-    private const string ProductUrl = "https://live.euronext.com/en/product/equities/FR0000120271-XPAR";
+    private const string ProductUrl =
+        "https://live.euronext.com/en/product/equities/FR0000120271-XPAR";
     private const string Lei = "529900S21EQ1BO4ESM68";
 
     private static EquityMarket Paris => EquityMarketCatalog.TryGet("euronext-paris");
@@ -90,9 +91,24 @@ public class EquityMarketDirectoryImporterInputTests
         using var payload = JsonDocument.Parse(input.PayloadJson);
         payload.RootElement.GetProperty("Market").GetString().Should().Be("euronext-paris");
         payload.RootElement.GetProperty("Firds").GetProperty("Lei").GetString().Should().Be(Lei);
-        payload.RootElement.GetProperty("Firds").GetProperty("Cfi").GetString().Should().Be("ESVUFR");
-        payload.RootElement.GetProperty("Product").GetProperty("issuer_code").GetString().Should().Be("002816");
-        payload.RootElement.GetProperty("Issuer").GetProperty("LegalName").GetString().Should().Be("TotalEnergies SE");
+        payload
+            .RootElement.GetProperty("Firds")
+            .GetProperty("Cfi")
+            .GetString()
+            .Should()
+            .Be("ESVUFR");
+        payload
+            .RootElement.GetProperty("Product")
+            .GetProperty("issuer_code")
+            .GetString()
+            .Should()
+            .Be("002816");
+        payload
+            .RootElement.GetProperty("Issuer")
+            .GetProperty("LegalName")
+            .GetString()
+            .Should()
+            .Be("TotalEnergies SE");
     }
 
     [Theory]
@@ -200,7 +216,10 @@ public class EquityMarketDirectoryImporterInputTests
     [InlineData("INACTIVE", "ISSUED")]
     [InlineData("ACTIVE", "RETIRED")]
     [InlineData("ACTIVE", "DUPLICATE")]
-    public void ARetiredOrInactiveLegalEntity_FailsTheRow(string entityStatus, string registrationStatus)
+    public void ARetiredOrInactiveLegalEntity_FailsTheRow(
+        string entityStatus,
+        string registrationStatus
+    )
     {
         var create = () =>
             EquityMarketDirectoryImporter.CreateInput(
@@ -218,7 +237,14 @@ public class EquityMarketDirectoryImporterInputTests
     public void ALapsedRegistration_StillIdentifiesTheIssuer()
     {
         EquityMarketDirectoryImporter
-            .CreateInput(Paris, "euronext", Row(), Product(), Firds(), Issuer(registrationStatus: "LAPSED"))
+            .CreateInput(
+                Paris,
+                "euronext",
+                Row(),
+                Product(),
+                Firds(),
+                Issuer(registrationStatus: "LAPSED")
+            )
             .LegalEntityIdentifier.Should()
             .Be(Lei);
     }
@@ -241,7 +267,9 @@ public class EquityMarketDirectoryImporterInputTests
         switch (disagreement)
         {
             case "product-url":
-                product.SourceUrl = new Uri("https://live.euronext.com/en/product/equities/FR0000120073-XPAR");
+                product.SourceUrl = new Uri(
+                    "https://live.euronext.com/en/product/equities/FR0000120073-XPAR"
+                );
                 break;
             case "gleif-isin":
                 issuer.RequestedIsin = "FR0000120073";
@@ -268,7 +296,14 @@ public class EquityMarketDirectoryImporterInputTests
                 break;
         }
         var create = () =>
-            EquityMarketDirectoryImporter.CreateInput(Paris, "euronext", row, product, firds, issuer);
+            EquityMarketDirectoryImporter.CreateInput(
+                Paris,
+                "euronext",
+                row,
+                product,
+                firds,
+                issuer
+            );
         create.Should().Throw<InvalidDataException>().WithMessage("*sources disagree*");
     }
 }

@@ -25,9 +25,13 @@ public class XetraEquityMarketDirectorySource(XetraInstrumentListClient client)
     {
         var list = await client.GetInstruments(cancellationToken);
         if (!market.Contains(list.MarketIdentifierCode))
-            throw new InvalidDataException("Xetra instrument file names a market outside the catalog.");
+            throw new InvalidDataException(
+                "Xetra instrument file names a market outside the catalog."
+            );
         var shares = list
-            .Instruments.Where(row => row.InstrumentType == "CS" && row.InstrumentStatus == "Active")
+            .Instruments.Where(row =>
+                row.InstrumentType == "CS" && row.InstrumentStatus == "Active"
+            )
             .ToList();
         var symbols = new HashSet<string>(StringComparer.Ordinal);
         foreach (var row in shares)

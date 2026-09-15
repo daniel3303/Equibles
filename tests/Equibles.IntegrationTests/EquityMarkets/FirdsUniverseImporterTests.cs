@@ -31,13 +31,20 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
             [index],
             ServiceScopeSubstitute.Create(
                 (typeof(FirdsImportRunRepository), new FirdsImportRunRepository(DbContext)),
-                (typeof(FirdsInstrumentRecordRepository), new FirdsInstrumentRecordRepository(DbContext))
+                (
+                    typeof(FirdsInstrumentRecordRepository),
+                    new FirdsInstrumentRecordRepository(DbContext)
+                )
             ),
             NullLogger<FirdsUniverseImporter>()
         );
 
     private Task<List<FirdsInstrumentRecord>> Rows() =>
-        DbContext.Set<FirdsInstrumentRecord>().AsNoTracking().OrderBy(row => row.Isin).ToListAsync();
+        DbContext
+            .Set<FirdsInstrumentRecord>()
+            .AsNoTracking()
+            .OrderBy(row => row.Isin)
+            .ToListAsync();
 
     [Fact]
     public async Task FullSetThenDeltas_StoreEveryEquityLineOnceAndAnswerThePrimaryVenueGate()
@@ -50,15 +57,24 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         await Importer(index).Import(CancellationToken.None);
 
         var rows = await Rows();
-        rows.Should().HaveCount(10, "seven equity lines from the full set plus three delta records; the structured product and the bond are not equities");
-        rows.Should().AllSatisfy(row =>
-        {
-            row.Authority.Should().Be(EsmaFirdsClient.AuthorityCode);
-            row.RemovedAt.Should().BeNull();
-            row.Cfi.Should().StartWith("E").And.NotMatch("EY*");
-        });
+        rows.Should()
+            .HaveCount(
+                10,
+                "seven equity lines from the full set plus three delta records; the structured product and the bond are not equities"
+            );
+        rows.Should()
+            .AllSatisfy(row =>
+            {
+                row.Authority.Should().Be(EsmaFirdsClient.AuthorityCode);
+                row.RemovedAt.Should().BeNull();
+                row.Cfi.Should().StartWith("E").And.NotMatch("EY*");
+            });
         rows.Single(row => row.Isin == "DE0005558696").TerminationDate.Should().NotBeNull();
-        var runs = await DbContext.Set<FirdsImportRun>().AsNoTracking().OrderBy(run => run.FileName).ToListAsync();
+        var runs = await DbContext
+            .Set<FirdsImportRun>()
+            .AsNoTracking()
+            .OrderBy(run => run.FileName)
+            .ToListAsync();
         runs.Select(run => (run.FileName, run.Kind, run.RowsRead, run.RowsStored))
             .Should()
             .Equal(
@@ -71,9 +87,34 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var now = DateTime.UtcNow;
         var lisbon = EquityMarketCatalog.TryGet("euronext-lisbon");
         var paris = EquityMarketCatalog.TryGet("euronext-paris");
-        (await records.GetLiveShare("PTSLB0AM0010", lisbon.FirdsAuthority, lisbon.FirdsVenueCodes, now)).Should().NotBeNull();
-        (await records.GetLiveShare("FR0005691656", paris.FirdsAuthority, paris.FirdsVenueCodes, now)).Should().NotBeNull();
-        (await records.GetLiveShare("FR0005691656", lisbon.FirdsAuthority, lisbon.FirdsVenueCodes, now))
+        (
+            await records.GetLiveShare(
+                "PTSLB0AM0010",
+                lisbon.FirdsAuthority,
+                lisbon.FirdsVenueCodes,
+                now
+            )
+        )
+            .Should()
+            .NotBeNull();
+        (
+            await records.GetLiveShare(
+                "FR0005691656",
+                paris.FirdsAuthority,
+                paris.FirdsVenueCodes,
+                now
+            )
+        )
+            .Should()
+            .NotBeNull();
+        (
+            await records.GetLiveShare(
+                "FR0005691656",
+                lisbon.FirdsAuthority,
+                lisbon.FirdsVenueCodes,
+                now
+            )
+        )
             .Should()
             .BeNull("the line is filed on Paris, not on a Lisbon venue");
         (await records.GetLiveShare("FI0009800395", EsmaFirdsClient.AuthorityCode, ["AQEA"], now))
@@ -90,13 +131,27 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
             .NotBeNull("a preference share is a traded share line");
         (await records.CountHomeShares(lisbon, now)).Should().Be(1);
         (await records.CountHomeShares(paris, now)).Should().Be(1);
-        (await records.GetLiveShare("FR0005691656", FcaFirdsClient.AuthorityCode, paris.FirdsVenueCodes, now))
+        (
+            await records.GetLiveShare(
+                "FR0005691656",
+                FcaFirdsClient.AuthorityCode,
+                paris.FirdsVenueCodes,
+                now
+            )
+        )
             .Should()
             .BeNull("the FCA register stores nothing for a Paris line");
         (await records.CountHomeShares(EquityMarketCatalog.TryGet("nasdaq-helsinki"), now))
             .Should()
-            .Be(0, "Aquis-quoted Raisio has its home on Nasdaq Helsinki's segment DHEL, which is not catalogued");
-        (await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(EsmaFirdsClient.AuthorityCode))
+            .Be(
+                0,
+                "Aquis-quoted Raisio has its home on Nasdaq Helsinki's segment DHEL, which is not catalogued"
+            );
+        (
+            await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(
+                EsmaFirdsClient.AuthorityCode
+            )
+        )
             .Should()
             .Be(FirstFull);
     }
@@ -114,7 +169,9 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         await Importer(index).Import(CancellationToken.None);
 
         index.Downloads.Should().HaveCount(3);
-        index.ListedSince.Should().Equal(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-14), FirstFull);
+        index
+            .ListedSince.Should()
+            .Equal(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-14), FirstFull);
         (await Rows()).Should().HaveCount(10);
         (await DbContext.Set<FirdsImportRun>().CountAsync()).Should().Be(3);
     }
@@ -143,8 +200,14 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var records = new FirdsInstrumentRecordRepository(DbContext);
         var now = DateTime.UtcNow;
         (await records.GetLive(now).CountAsync()).Should().Be(1);
-        (await records.GetLiveShare("FR0005691656", EsmaFirdsClient.AuthorityCode, ["XPAR"], now)).Should().BeNull();
-        (await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(EsmaFirdsClient.AuthorityCode))
+        (await records.GetLiveShare("FR0005691656", EsmaFirdsClient.AuthorityCode, ["XPAR"], now))
+            .Should()
+            .BeNull();
+        (
+            await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(
+                EsmaFirdsClient.AuthorityCode
+            )
+        )
             .Should()
             .Be(SecondFull);
         (await DbContext.Set<FirdsImportRun>().CountAsync()).Should().Be(4);
@@ -161,7 +224,11 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
 
         await Importer(index).Import(CancellationToken.None);
 
-        (await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(EsmaFirdsClient.AuthorityCode))
+        (
+            await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(
+                EsmaFirdsClient.AuthorityCode
+            )
+        )
             .Should()
             .Be(FirstFull);
         (await Rows()).Should().HaveCount(7).And.AllSatisfy(row => row.RemovedAt.Should().BeNull());
@@ -178,11 +245,14 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
 
         await Importer(index).Import(CancellationToken.None);
 
-        (await Rows()).Should().HaveCount(records).And.AllSatisfy(row =>
-        {
-            row.Mic.Should().Be("XLIS");
-            row.RemovedAt.Should().BeNull();
-        });
+        (await Rows())
+            .Should()
+            .HaveCount(records)
+            .And.AllSatisfy(row =>
+            {
+                row.Mic.Should().Be("XLIS");
+                row.RemovedAt.Should().BeNull();
+            });
         var run = await DbContext.Set<FirdsImportRun>().AsNoTracking().SingleAsync();
         (run.RowsRead, run.RowsStored).Should().Be((records, records));
     }
@@ -193,7 +263,8 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var full = Fixture("FULINS_E_sample.xml");
         var index = new FakeIndex();
         index.AddFull(FirstFull, full, EmptyFull(full));
-        var undated = Fixture("DLTINS_sample.xml").Replace("<TermntnDt>2020-12-31T22:59:59Z</TermntnDt>", "");
+        var undated = Fixture("DLTINS_sample.xml")
+            .Replace("<TermntnDt>2020-12-31T22:59:59Z</TermntnDt>", "");
         undated.Should().NotBe(Fixture("DLTINS_sample.xml"));
         index.AddDelta(new DateOnly(2026, 9, 15), 1, 1, undated);
 
@@ -201,7 +272,9 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
 
         var paragon = (await Rows()).Single(row => row.Isin == "DE0005558696");
         paragon.TerminationDate.Should().BeNull();
-        paragon.RemovedAt.Should().NotBeNull("a terminated record without a date is no longer live");
+        paragon
+            .RemovedAt.Should()
+            .NotBeNull("a terminated record without a date is no longer live");
         var records = new FirdsInstrumentRecordRepository(DbContext);
         (await records.GetLive(DateTime.UtcNow).Select(row => row.Isin).ToListAsync())
             .Should()
@@ -213,7 +286,8 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
     private static string Synthetic(string full, int count)
     {
         var start = full.IndexOf("<RefData", StringComparison.Ordinal);
-        var firstEnd = full.IndexOf("</RefData>", start, StringComparison.Ordinal) + "</RefData>".Length;
+        var firstEnd =
+            full.IndexOf("</RefData>", start, StringComparison.Ordinal) + "</RefData>".Length;
         var end = full.LastIndexOf("</RefData>", StringComparison.Ordinal) + "</RefData>".Length;
         var template = full[start..firstEnd];
         template.Should().Contain("PTSLB0AM0010");
@@ -226,7 +300,11 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
     private static string Isin(string country, int number)
     {
         var body = country + number.ToString("D9");
-        var digits = string.Concat(body.Select(character => char.IsLetter(character) ? (character - 'A' + 10).ToString() : character.ToString()));
+        var digits = string.Concat(
+            body.Select(character =>
+                char.IsLetter(character) ? (character - 'A' + 10).ToString() : character.ToString()
+            )
+        );
         var sum = 0;
         var doubleIt = true;
         for (var index = digits.Length - 1; index >= 0; index--)
@@ -255,7 +333,8 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
     private static string OnlyFirstRecord(string full)
     {
         var start = full.IndexOf("<RefData", StringComparison.Ordinal);
-        var firstEnd = full.IndexOf("</RefData>", start, StringComparison.Ordinal) + "</RefData>".Length;
+        var firstEnd =
+            full.IndexOf("</RefData>", start, StringComparison.Ordinal) + "</RefData>".Length;
         var end = full.LastIndexOf("</RefData>", StringComparison.Ordinal) + "</RefData>".Length;
         return full[..firstEnd] + full[end..];
     }
@@ -276,18 +355,33 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         }
 
         public void AddPart(DateOnly publishedOn, int part, int of, string xml) =>
-            Add($"FULINS_E_{publishedOn:yyyyMMdd}_{part:00}of{of:00}.zip", FirdsFileType.Full, publishedOn, xml);
+            Add(
+                $"FULINS_E_{publishedOn:yyyyMMdd}_{part:00}of{of:00}.zip",
+                FirdsFileType.Full,
+                publishedOn,
+                xml
+            );
 
         public void AddDelta(DateOnly publishedOn, int part, int of, string xml) =>
-            Add($"DLTINS_{publishedOn:yyyyMMdd}_{part:00}of{of:00}.zip", FirdsFileType.Delta, publishedOn, xml);
+            Add(
+                $"DLTINS_{publishedOn:yyyyMMdd}_{part:00}of{of:00}.zip",
+                FirdsFileType.Delta,
+                publishedOn,
+                xml
+            );
 
-        public string Checksum(string fileName) => _files.Single(entry => entry.File.FileName == fileName).File.Checksum;
+        public string Checksum(string fileName) =>
+            _files.Single(entry => entry.File.FileName == fileName).File.Checksum;
 
         private void Add(string name, FirdsFileType type, DateOnly publishedOn, string xml)
         {
             using var buffer = new MemoryStream();
             using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, true))
-            using (var writer = new StreamWriter(archive.CreateEntry(Path.ChangeExtension(name, ".xml")).Open()))
+            using (
+                var writer = new StreamWriter(
+                    archive.CreateEntry(Path.ChangeExtension(name, ".xml")).Open()
+                )
+            )
                 writer.Write(xml);
             var zip = buffer.ToArray();
             _files.Add(
@@ -299,7 +393,9 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
                         FileType = type,
                         PublishedOn = publishedOn,
                         DownloadUrl = new Uri("https://firds.esma.europa.eu/firds/" + name),
-                        Checksum = Convert.ToHexStringLower(System.Security.Cryptography.MD5.HashData(zip)),
+                        Checksum = Convert.ToHexStringLower(
+                            System.Security.Cryptography.MD5.HashData(zip)
+                        ),
                     },
                     zip
                 )
@@ -321,11 +417,17 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
             return Task.FromResult(listed);
         }
 
-        public async Task<FirdsDownload> Download(FirdsFile file, CancellationToken cancellationToken = default)
+        public async Task<FirdsDownload> Download(
+            FirdsFile file,
+            CancellationToken cancellationToken = default
+        )
         {
             Downloads.Add(file.FileName);
             var zip = _files.Single(entry => entry.File.FileName == file.FileName).Zip;
-            var path = Path.Combine(Path.GetTempPath(), "firds-test-" + Guid.NewGuid().ToString("N") + ".zip");
+            var path = Path.Combine(
+                Path.GetTempPath(),
+                "firds-test-" + Guid.NewGuid().ToString("N") + ".zip"
+            );
             await File.WriteAllBytesAsync(path, zip, cancellationToken);
             return new FirdsDownload(file, path, zip.Length);
         }

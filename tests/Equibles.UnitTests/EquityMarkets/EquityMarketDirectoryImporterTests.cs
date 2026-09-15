@@ -269,7 +269,12 @@ public class EquityMarketDirectoryImporterTests
         result.Error.Should().BeNull();
         result.Listings.Should().Be(5);
         result.Imported.Should().Be(1);
-        result.Skipped.Should().Be(4, "a secondary venue, a receipt, a terminated line and an unknown ISIN are not primary-venue shares");
+        result
+            .Skipped.Should()
+            .Be(
+                4,
+                "a secondary venue, a receipt, a terminated line and an unknown ISIN are not primary-venue shares"
+            );
         result.Failed.Should().Be(0);
         result.Current.Should().Be(0);
         harness.Source.Resolved.Should().Equal("FR0000120271");
@@ -283,7 +288,11 @@ public class EquityMarketDirectoryImporterTests
                     && input.MarketCountryCode == "FR"
                     && input.MarketIdentifierCodes.SequenceEqual(Paris.MarketIdentifierCodes)
                     && input.Listings.Count == 5
-                    && input.Listings.Any(key => key.Isin == "FR0000120073" && key.Ticker == "AI" && key.MarketIdentifierCode == "XPAR")
+                    && input.Listings.Any(key =>
+                        key.Isin == "FR0000120073"
+                        && key.Ticker == "AI"
+                        && key.MarketIdentifierCode == "XPAR"
+                    )
                 ),
                 Arg.Any<CancellationToken>()
             );
@@ -325,7 +334,9 @@ public class EquityMarketDirectoryImporterTests
                 Arg.Is<EquityDirectoryListingInput>(input => input.Isin == "FR0000125486"),
                 Arg.Any<CancellationToken>()
             )
-            .Returns<Task<Guid>>(_ => throw new InvalidDataException("symbol owned by another listing"));
+            .Returns<Task<Guid>>(_ =>
+                throw new InvalidDataException("symbol owned by another listing")
+            );
 
         var result = await harness.Importer.Import(Paris, CancellationToken.None);
 
@@ -350,7 +361,9 @@ public class EquityMarketDirectoryImporterTests
         result.Current.Should().Be(1);
         result.Imported.Should().Be(0);
         harness.Source.Resolved.Should().BeEmpty();
-        await harness.Gleif.DidNotReceive().GetIssuerForIsin(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await harness
+            .Gleif.DidNotReceive()
+            .GetIssuerForIsin(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await harness
             .Identity.DidNotReceive()
             .ImportListing(Arg.Any<EquityDirectoryListingInput>(), Arg.Any<CancellationToken>());
@@ -366,7 +379,9 @@ public class EquityMarketDirectoryImporterTests
         await SeedVerifiedListing(
             options,
             row,
-            DateTime.UtcNow - EquityMarketDirectoryImporter.ReverificationInterval - TimeSpan.FromHours(1)
+            DateTime.UtcNow
+                - EquityMarketDirectoryImporter.ReverificationInterval
+                - TimeSpan.FromHours(1)
         );
         var harness = Build(options, row);
 
@@ -413,12 +428,20 @@ public class EquityMarketDirectoryImporterTests
         };
         var harness = Build(options, "xetra", "xetra", rows);
 
-        var result = await harness.Importer.Import(EquityMarketCatalog.TryGet("xetra"), CancellationToken.None);
+        var result = await harness.Importer.Import(
+            EquityMarketCatalog.TryGet("xetra"),
+            CancellationToken.None
+        );
 
         result.Error.Should().BeNull();
         result.Listings.Should().Be(5);
         result.Imported.Should().Be(3);
-        result.Skipped.Should().Be(2, "a home FIRDS places in Austria and a Vienna-primary share are not Xetra's own listings");
+        result
+            .Skipped.Should()
+            .Be(
+                2,
+                "a home FIRDS places in Austria and a Vienna-primary share are not Xetra's own listings"
+            );
         result.Failed.Should().Be(0);
         harness.Source.Resolved.Should().Equal("DE0007164600", "DE0005495626", "LU2818110020");
         await harness
@@ -442,7 +465,8 @@ public class EquityMarketDirectoryImporterTests
     {
         var options = NewDbOptions();
         var harness = Build(options);
-        var import = () => harness.Importer.Import(EquityMarketCatalog.TryGet("xetra"), CancellationToken.None);
+        var import = () =>
+            harness.Importer.Import(EquityMarketCatalog.TryGet("xetra"), CancellationToken.None);
         await import.Should().ThrowAsync<InvalidOperationException>();
     }
 
@@ -452,7 +476,8 @@ public class EquityMarketDirectoryImporterTests
         string marketCode = "euronext-paris"
     ) : IEquityMarketDirectorySource
     {
-        public const string DirectoryUrl = "https://live.euronext.com/en/markets/paris/equities/list";
+        public const string DirectoryUrl =
+            "https://live.euronext.com/en/markets/paris/equities/list";
 
         public int Captures { get; private set; }
         public List<string> Resolved { get; } = [];

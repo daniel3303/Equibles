@@ -83,7 +83,8 @@ public class EuronextEquityMarketDirectorySource(EuronextDirectoryClient directo
     }
 
     private static EuronextMarket Market(EquityMarket market) =>
-        market?.DirectorySource == Key && market.Code.StartsWith(CodePrefix, StringComparison.Ordinal)
+        market?.DirectorySource == Key
+        && market.Code.StartsWith(CodePrefix, StringComparison.Ordinal)
             ? EuronextMarket.FromSlug(market.Code[CodePrefix.Length..])
             : null;
 

@@ -3,6 +3,7 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Configuration;
 using Equibles.Data;
+using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.IntegrationTests.Helpers;
@@ -98,6 +99,10 @@ public class YahooPriceImportServiceConcurrentWriterTests : ParadeDbMcpTestBase
     private YahooPriceImportService BuildService(EquiblesFinancialDbContext context)
     {
         var scopeFactory = ServiceScopeSubstitute.Create(
+            (
+                typeof(EquityMarketRegistrationRepository),
+                new EquityMarketRegistrationRepository(DbContext)
+            ),
             (typeof(EquityIssuerRepository), new EquityIssuerRepository(context)),
             (typeof(EquityDailyStockPriceRepository), new EquityDailyStockPriceRepository(context))
         );

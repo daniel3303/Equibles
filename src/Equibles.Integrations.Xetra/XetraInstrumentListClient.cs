@@ -40,9 +40,7 @@ public class XetraInstrumentListClient(HttpClient httpClient)
         if (
             response.RequestMessage?.RequestUri is { } actual
             && (
-                actual.Scheme != "https"
-                || actual.Host != ListingPage.Host
-                || !actual.IsDefaultPort
+                actual.Scheme != "https" || actual.Host != ListingPage.Host || !actual.IsDefaultPort
             )
         )
             throw new InvalidDataException("Xetra response left its official HTTPS origin.");
