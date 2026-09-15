@@ -33,7 +33,7 @@ Everything marked **Self-hosted** is scraped, stored, and served by this repo �
 | **Short Data** | SEC / FINRA | ✅ | ✅ | Fails-to-deliver (SEC), daily short volume and short interest (FINRA) |
 | **Economic Indicators** | FRED (Federal Reserve) | ✅ | ✅ | Interest rates, inflation, employment, GDP, yield spreads, and more |
 | **Stock Prices** | Yahoo Finance | ✅ | ✅ | Daily OHLCV prices with technical indicators (SMA, RSI, MACD) |
-| **European Listings** | ESMA/FCA FIRDS + exchange directories | ✅ | ✅ | Verified share listings on Euronext (Paris, Amsterdam, Brussels, Dublin, Oslo, Milan, Lisbon) and Xetra, keyed by ISIN and venue, with daily prices in the listing's own currency; every market ships switched off and has no MCP tools yet (see `docs/equity-identity.md`) |
+| **European Listings** | ESMA/FCA FIRDS + exchange directories | ✅ | ✅ | Verified share listings on Euronext (Paris, Amsterdam, Brussels, Dublin, Oslo, Milan, Lisbon) and Xetra, keyed by ISIN and venue, with daily prices in the listing's own currency; every market with a directory adapter runs automatically; no MCP tools yet (see `docs/equity-identity.md`) |
 | **Futures Positioning** | CFTC | ✅ | ✅ | Commitments of Traders (COT) data for 30+ futures contracts |
 | **Market Indicators** | CBOE | ✅ | ✅ | VIX volatility index (1990+) and put/call ratios by category |
 | **Government Contracts** | USAspending.gov | ✅ | ✅ | Federal contract awards to public companies — amounts, awarding agencies, dates, and NAICS/PSC codes |
