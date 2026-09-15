@@ -7,26 +7,26 @@ namespace Equibles.Integrations.Euronext;
 
 public class EuronextDirectoryClient(HttpClient httpClient)
 {
-    private static readonly Uri LisbonDirectory = new(
-        "https://live.euronext.com/en/markets/lisbon/equities/list"
-    );
     private const int PageSize = 100;
     private const int MaxResponseBytes = 2_000_000;
     private const int MaxSnapshotBytes = 10_000_000;
 
-    public async Task<EuronextDirectorySnapshot> GetLisbonEquities(
+    public async Task<EuronextDirectorySnapshot> GetEquities(
+        EuronextMarket market,
         CancellationToken cancellationToken = default
     )
     {
+        ArgumentNullException.ThrowIfNull(market);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(2));
         var token = timeout.Token;
-        using var directoryRequest = new HttpRequestMessage(HttpMethod.Get, LisbonDirectory);
+        using var directoryRequest = new HttpRequestMessage(HttpMethod.Get, market.DirectoryUrl);
         var directoryHtml = await Read(directoryRequest, token);
-        var gateway = EuronextDirectoryParser.ReadLisbonGateway(directoryHtml);
+        var gateway = EuronextDirectoryParser.ReadGateway(directoryHtml, market);
         var snapshot = new EuronextDirectorySnapshot
         {
-            SourceUrl = LisbonDirectory,
+            MarketSlug = market.Slug,
+            SourceUrl = market.DirectoryUrl,
             DirectoryHtml = directoryHtml,
         };
         var identities = new HashSet<(string Isin, string Mic)>();
@@ -56,7 +56,7 @@ public class EuronextDirectoryClient(HttpClient httpClient)
                 throw new InvalidDataException(
                     "Euronext snapshot exceeds its aggregate capture limit."
                 );
-            var page = EuronextDirectoryParser.ReadLisbonPage(body);
+            var page = EuronextDirectoryParser.ReadPage(body, market);
             expectedTotal ??= page.TotalRecords;
             if (page.TotalRecords != expectedTotal || page.Listings.Count > PageSize)
                 throw new InvalidDataException(

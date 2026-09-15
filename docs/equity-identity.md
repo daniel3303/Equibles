@@ -50,7 +50,7 @@
 - Currency evidence does not verify a MIC or classify the security; current metadata never establishes retired-symbol denomination.
 - Capture rides existing chart requests; a finite source-metadata backfill remains a rollout prerequisite for consumers requiring explicit units.
 
-## Source issuer identifiers and Lisbon import
+## Source issuer identifiers and market directory import
 
 - `EquityIssuerSourceIdentifier` binds an exact provider issuer code to a native issuer and immutable capture evidence; it contains no route records.
 - Match existing issuers by exact source identifier, LEI, ISIN, or a current U.S. security CUSIP explicitly connected through GLEIF's complete ISIN-to-LEI relationship set; never match names or old CUSIP aliases.
@@ -59,8 +59,10 @@
 - Preserve existing issuer profiles and presentation listings; new venues retain their own prices and symbols, and native rename history remains intact.
 - GLEIF capture requires exact issuer identity, complete unique related ISINs, stable publication/total metadata, and source-provided same-origin pagination without added filters.
 - Validate ISIN check digits and LEI MOD 97-10 at both source and native-import boundaries; malformed related identifiers cannot establish ownership through an embedded CUSIP.
-- `EquityMarkets:LisbonEnabled` (`EQUITY_MARKETS_LISBON_ENABLED` in Compose) enables daily source reconciliation; unresolved records retry after fifteen minutes without deleting retained identities.
-- Enable the worker only after native migrations and exchange-qualified MVC surfaces have passed verification; source acquisition and import alone do not complete the whole-database cutover.
+- Markets are code-owned in `EquityMarketCatalog` (venue set, country, currency, provider identity, session times); each has one `EquityMarketRegistration` row whose `Enabled` flag switches daily directory reconciliation and price capture, and whose `DirectoryRefreshRequestedAt` forces an early pass. Workers read the table every cycle, never a host setting.
+- A directory row becomes a listing only when the FIRDS universe (ESMA plus FCA, refreshed by `FirdsUniverseWorker`) lists its ISIN as a live share (CFI `ES*` or `EP*`) whose relevant trading venue is the row's MIC; every other row is counted as skipped, never failed, and unresolved rows retry on the next pass without deleting retained identities.
+- A verified listing whose directory row, product URL and symbol are unchanged is re-verified against the product page and GLEIF every thirty days; any change re-verifies at once.
+- Enable a market only after native migrations and exchange-qualified MVC surfaces have passed verification; source acquisition and import alone do not complete the whole-database cutover.
 
 ## Corporate action source listings
 
@@ -84,9 +86,10 @@
 - Independent reference coverage protects its exact listing; foreign listings and all historical observations remain intact.
 - A newly acquired reference claim on the displaced symbol refuses retirement when the locked graph is refreshed.
 
-## Lisbon capture switch
+## Market capture switch
 
-- `EquityMarkets:LisbonEnabled=false` prevents prices, quotation evidence and corporate actions from being captured for retained verified Lisbon listings.
+- `EquityMarketRegistration.Enabled=false` prevents prices, quotation evidence and corporate actions from being captured for the market's retained verified listings.
+- `EquityMarkets:LisbonEnabled` (`EQUITY_MARKETS_LISBON_ENABLED` in Compose) is read once, when the `euronext-lisbon` row is first created, so an upgrade keeps a lane that was already live; afterwards only the row counts.
 - Disabled-market history reconciliation and applied-split audits leave stored observations and applied markers unchanged.
 
 ## Holdings replay identity

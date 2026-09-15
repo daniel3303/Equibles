@@ -17,7 +17,7 @@ public class EuronextDirectoryTests
         var body = await Fixture("equities.json");
         var handler = new EuronextDirectoryTestHandler([html, body]);
         using var http = new HttpClient(handler);
-        var snapshot = await new EuronextDirectoryClient(http).GetLisbonEquities();
+        var snapshot = await new EuronextDirectoryClient(http).GetEquities(EuronextMarket.Lisbon);
         snapshot.Listings.Should().HaveCount(49);
         snapshot
             .Listings.GroupBy(row => row.MarketIdentifierCode)
@@ -67,7 +67,7 @@ public class EuronextDirectoryTests
         }
         var handler = new EuronextDirectoryTestHandler(new[] { html }.Concat(bodies));
         using var http = new HttpClient(handler);
-        var snapshot = await new EuronextDirectoryClient(http).GetLisbonEquities();
+        var snapshot = await new EuronextDirectoryClient(http).GetEquities(EuronextMarket.Lisbon);
         snapshot.Listings.Should().HaveCount(49);
         snapshot.ResponseBodies.Should().Equal(bodies);
         handler
@@ -108,7 +108,7 @@ public class EuronextDirectoryTests
         using var http = new HttpClient(
             new EuronextDirectoryTestHandler([html, first.ToJsonString(), next.ToJsonString()])
         );
-        Func<Task> fetch = () => new EuronextDirectoryClient(http).GetLisbonEquities();
+        Func<Task> fetch = () => new EuronextDirectoryClient(http).GetEquities(EuronextMarket.Lisbon);
         await fetch.Should().ThrowAsync<InvalidDataException>();
     }
 
@@ -146,7 +146,7 @@ public class EuronextDirectoryTests
             rows[0][1] = "PTALT0AE0003";
         if (scenario == "missing-column")
             rows[0].AsArray().RemoveAt(6);
-        var parse = () => EuronextDirectoryParser.ReadLisbonPage(root.ToJsonString());
+        var parse = () => EuronextDirectoryParser.ReadPage(root.ToJsonString(), EuronextMarket.Lisbon);
         parse.Should().Throw<InvalidDataException>();
     }
 
@@ -177,7 +177,7 @@ public class EuronextDirectoryTests
             "<script data-drupal-selector='drupal-settings-json'>"
             + System.Text.Json.JsonSerializer.Serialize(settings)
             + "</script>";
-        var parse = () => EuronextDirectoryParser.ReadLisbonGateway(html);
+        var parse = () => EuronextDirectoryParser.ReadGateway(html, EuronextMarket.Lisbon);
         parse.Should().Throw<InvalidDataException>();
     }
 }

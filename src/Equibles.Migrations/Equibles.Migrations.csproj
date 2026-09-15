@@ -24,6 +24,7 @@
     <ProjectReference Include="..\Equibles.Messaging\Equibles.Messaging.csproj" />
     <ProjectReference Include="..\Equibles.Sec.FinancialFacts.Data\Equibles.Sec.FinancialFacts.Data.csproj" />
     <ProjectReference Include="..\Equibles.GovernmentContracts.Data\Equibles.GovernmentContracts.Data.csproj" />
+    <ProjectReference Include="..\Equibles.EquityMarkets.Data\Equibles.EquityMarkets.Data.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Infrastructure/RetireLegacyFinancialEquityStorage20260913.sql" />

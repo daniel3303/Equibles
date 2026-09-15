@@ -1,0 +1,170 @@
+{
+ "took": 2,
+ "timed_out": false,
+ "_shards": {
+  "failed": 0.0,
+  "skipped": 0.0,
+  "successful": 4.0,
+  "total": 4.0
+ },
+ "hits": {
+  "total": 11,
+  "max_score": null,
+  "hits": [
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22889",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/DLTINS_20260910_01of02.zip",
+     "file_type": "DLTINS",
+     "file_name": "DLTINS_20260910_01of02.zip",
+     "publication_date": "2026-09-10",
+     "last_refreshed": "2026-09-10T08:28:57.427Z"
+    },
+    "sort": [
+     1788998400000
+    ]
+   },
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22890",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/DLTINS_20260910_02of02.zip",
+     "file_type": "DLTINS",
+     "file_name": "DLTINS_20260910_02of02.zip",
+     "publication_date": "2026-09-10",
+     "last_refreshed": "2026-09-10T08:28:57.427Z"
+    },
+    "sort": [
+     1788998400000
+    ]
+   },
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22893",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/DLTINS_20260911_02of02.zip",
+     "file_type": "DLTINS",
+     "file_name": "DLTINS_20260911_02of02.zip",
+     "publication_date": "2026-09-11",
+     "last_refreshed": "2026-09-11T08:53:46.169Z"
+    },
+    "sort": [
+     1789084800000
+    ]
+   },
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22892",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/DLTINS_20260911_01of02.zip",
+     "file_type": "DLTINS",
+     "file_name": "DLTINS_20260911_01of02.zip",
+     "publication_date": "2026-09-11",
+     "last_refreshed": "2026-09-11T08:53:46.168Z"
+    },
+    "sort": [
+     1789084800000
+    ]
+   },
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22900",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/FULINS_E_20260912_01of01.zip",
+     "file_type": "FULINS",
+     "file_name": "FULINS_E_20260912_01of01.zip",
+     "publication_date": "2026-09-12",
+     "last_refreshed": "2026-09-12T09:46:22.888Z"
+    },
+    "sort": [
+     1789171200000
+    ]
+   },
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22895",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/DLTINS_20260912_01of01.zip",
+     "file_type": "DLTINS",
+     "file_name": "DLTINS_20260912_01of01.zip",
+     "publication_date": "2026-09-12",
+     "last_refreshed": "2026-09-12T09:46:22.860Z"
+    },
+    "sort": [
+     1789171200000
+    ]
+   },
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22940",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/DLTINS_20260913_01of02.zip",
+     "file_type": "DLTINS",
+     "file_name": "DLTINS_20260913_01of02.zip",
+     "publication_date": "2026-09-13",
+     "last_refreshed": "2026-09-13T05:54:56.812Z"
+    },
+    "sort": [
+     1789257600000
+    ]
+   },
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22941",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/DLTINS_20260913_02of02.zip",
+     "file_type": "DLTINS",
+     "file_name": "DLTINS_20260913_02of02.zip",
+     "publication_date": "2026-09-13",
+     "last_refreshed": "2026-09-13T05:54:56.836Z"
+    },
+    "sort": [
+     1789257600000
+    ]
+   },
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22942",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/DLTINS_20260914_01of01.zip",
+     "file_type": "DLTINS",
+     "file_name": "DLTINS_20260914_01of01.zip",
+     "publication_date": "2026-09-14",
+     "last_refreshed": "2026-09-14T05:38:17.093Z"
+    },
+    "sort": [
+     1789344000000
+    ]
+   },
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22945",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/DLTINS_20260915_02of02.zip",
+     "file_type": "DLTINS",
+     "file_name": "DLTINS_20260915_02of02.zip",
+     "publication_date": "2026-09-15",
+     "last_refreshed": "2026-09-15T08:38:43.408Z"
+    },
+    "sort": [
+     1789430400000
+    ]
+   },
+   {
+    "_index": "fca-firds-downloadfiles",
+    "_id": "22944",
+    "_source": {
+     "download_link": "https://data.fca.org.uk/artefacts/FIRDS/DLTINS_20260915_01of02.zip",
+     "file_type": "DLTINS",
+     "file_name": "DLTINS_20260915_01of02.zip",
+     "publication_date": "2026-09-15",
+     "last_refreshed": "2026-09-15T08:38:43.408Z"
+    },
+    "sort": [
+     1789430400000
+    ]
+   }
+  ]
+ }
+}

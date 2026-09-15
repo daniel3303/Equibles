@@ -1,0 +1,164 @@
+{
+ "responseHeader": {
+  "status": 0,
+  "QTime": 0,
+  "params": {
+   "q": "*",
+   "start": "0",
+   "fq": "publication_date:[2026-09-05T00:00:00Z TO 2026-09-15T23:59:59Z]",
+   "rows": "200",
+   "wt": "json"
+  }
+ },
+ "response": {
+  "numFound": 12,
+  "start": 0,
+  "numFoundExact": true,
+  "docs": [
+   {
+    "_root_": "116612",
+    "id": "116612",
+    "published_instrument_file_id": "116612",
+    "file_name": "FULINS_E_20260912_01of02.zip",
+    "file_type": "FULINS",
+    "publication_date": "2026-09-12T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/FULINS_E_20260912_01of02.zip",
+    "checksum": "f03253df9e67b68079f213406658dd74",
+    "_version_": 1876382540337512502,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116613",
+    "id": "116613",
+    "published_instrument_file_id": "116613",
+    "file_name": "FULINS_E_20260912_02of02.zip",
+    "file_type": "FULINS",
+    "publication_date": "2026-09-12T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/FULINS_E_20260912_02of02.zip",
+    "checksum": "2d2a91f42ddea795e336fe037377545d",
+    "_version_": 1876382540337512503,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116651",
+    "id": "116651",
+    "published_instrument_file_id": "116651",
+    "file_name": "DLTINS_20260912_01of04.zip",
+    "file_type": "DLTINS",
+    "publication_date": "2026-09-12T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260912_01of04.zip",
+    "checksum": "37969945a64de800b296b70205ce1314",
+    "_version_": 1876382540337512537,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116652",
+    "id": "116652",
+    "published_instrument_file_id": "116652",
+    "file_name": "DLTINS_20260912_02of04.zip",
+    "file_type": "DLTINS",
+    "publication_date": "2026-09-12T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260912_02of04.zip",
+    "checksum": "283bca3bfe63d7c1d89b44d189d0f85d",
+    "_version_": 1876382540337512538,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116653",
+    "id": "116653",
+    "published_instrument_file_id": "116653",
+    "file_name": "DLTINS_20260912_03of04.zip",
+    "file_type": "DLTINS",
+    "publication_date": "2026-09-12T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260912_03of04.zip",
+    "checksum": "3326a8ff59d3a75a05a967663803b6ca",
+    "_version_": 1876382540337512539,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116654",
+    "id": "116654",
+    "published_instrument_file_id": "116654",
+    "file_name": "DLTINS_20260912_04of04.zip",
+    "file_type": "DLTINS",
+    "publication_date": "2026-09-12T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260912_04of04.zip",
+    "checksum": "61c47007b061a3ec192711f857126442",
+    "_version_": 1876382540337512540,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116700",
+    "id": "116700",
+    "published_instrument_file_id": "116700",
+    "file_name": "DLTINS_20260913_01of01.zip",
+    "file_type": "DLTINS",
+    "publication_date": "2026-09-13T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260913_01of01.zip",
+    "checksum": "56be79dd1153118fda53bf19e3c494c3",
+    "_version_": 1876382540337512543,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116744",
+    "id": "116744",
+    "published_instrument_file_id": "116744",
+    "file_name": "DLTINS_20260914_01of01.zip",
+    "file_type": "DLTINS",
+    "publication_date": "2026-09-14T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260914_01of01.zip",
+    "checksum": "7ec4dbd07c35f2f07733cab1b6e700ea",
+    "_version_": 1876382540337512548,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116792",
+    "id": "116792",
+    "published_instrument_file_id": "116792",
+    "file_name": "DLTINS_20260915_01of04.zip",
+    "file_type": "DLTINS",
+    "publication_date": "2026-09-15T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260915_01of04.zip",
+    "checksum": "544af9ca9d942d91b4f42a0c0bb57f49",
+    "_version_": 1876382540342755328,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116793",
+    "id": "116793",
+    "published_instrument_file_id": "116793",
+    "file_name": "DLTINS_20260915_02of04.zip",
+    "file_type": "DLTINS",
+    "publication_date": "2026-09-15T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260915_02of04.zip",
+    "checksum": "b3cea7cbc85cd70672fa85d8fa604d97",
+    "_version_": 1876382540342755329,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116794",
+    "id": "116794",
+    "published_instrument_file_id": "116794",
+    "file_name": "DLTINS_20260915_03of04.zip",
+    "file_type": "DLTINS",
+    "publication_date": "2026-09-15T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260915_03of04.zip",
+    "checksum": "7d8bc212df9175565e01de769bdc0c7f",
+    "_version_": 1876382540342755330,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   },
+   {
+    "_root_": "116795",
+    "id": "116795",
+    "published_instrument_file_id": "116795",
+    "file_name": "DLTINS_20260915_04of04.zip",
+    "file_type": "DLTINS",
+    "publication_date": "2026-09-15T00:00:00Z",
+    "download_link": "https://firds.esma.europa.eu/firds/DLTINS_20260915_04of04.zip",
+    "checksum": "e1b85ca11f2cacd80bbbda61fb017b72",
+    "_version_": 1876382540342755331,
+    "timestamp": "2026-09-15T07:37:15.727Z"
+   }
+  ]
+ }
+}

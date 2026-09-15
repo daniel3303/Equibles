@@ -8,12 +8,12 @@ namespace Equibles.Integrations.Euronext;
 public static class EuronextDirectoryParser
 {
     private static readonly Uri Origin = new("https://live.euronext.com");
-    private static readonly HashSet<string> LisbonMarkets = ["XLIS", "ENXL", "ALXL"];
     internal const string DataPoints =
         "name,isin,symbol,market,lastPrice,precentDayChange,lastTradeTime";
 
-    public static Uri ReadLisbonGateway(string html)
+    public static Uri ReadGateway(string html, EuronextMarket market)
     {
+        ArgumentNullException.ThrowIfNull(market);
         var document = Html(html);
         var settings = document.DocumentNode.SelectNodes(
             "//script[@data-drupal-selector='drupal-settings-json']"
@@ -34,13 +34,16 @@ public static class EuronextDirectoryParser
             marketArgument.Length == 2 && marketArgument[0] == "mics"
                 ? Uri.UnescapeDataString(marketArgument[1]).Split(',')
                 : [];
-        if (markets.Length != LisbonMarkets.Count || !LisbonMarkets.SetEquals(markets))
+        if (
+            markets.Length != market.MarketIdentifierCodes.Count
+            || !market.MarketIdentifierCodes.SetEquals(markets)
+        )
             throw new InvalidDataException(
-                "Euronext directory must include all Lisbon markets without additional filters."
+                "Euronext directory must include all of the market's venues without additional filters."
             );
-        if (uri.AbsolutePath != "/en/product_directory/data/stocks-lisbon")
+        if (uri.AbsolutePath != market.GatewayPath)
             throw new InvalidDataException(
-                "Euronext directory gateway does not identify Lisbon equities."
+                "Euronext directory gateway does not identify the requested market's equities."
             );
         if (
             !root.TryGetProperty("datapoints", out var points)
@@ -52,8 +55,9 @@ public static class EuronextDirectoryParser
         return uri;
     }
 
-    public static EuronextDirectoryPage ReadLisbonPage(string body)
+    public static EuronextDirectoryPage ReadPage(string body, EuronextMarket market)
     {
+        ArgumentNullException.ThrowIfNull(market);
         using var json = JsonDocument.Parse(body);
         var root = json.RootElement;
         if (
@@ -99,7 +103,7 @@ public static class EuronextDirectoryParser
                 || !InternationalSecurityIdentifiers.IsValidIsin(isin)
                 || string.IsNullOrWhiteSpace(symbol)
                 || symbol.Length > 32
-                || !LisbonMarkets.Contains(mic)
+                || !market.MarketIdentifierCodes.Contains(mic)
             )
                 throw new InvalidDataException(
                     "Euronext directory row lacks valid stated listing identity."
@@ -150,11 +154,11 @@ public static class EuronextDirectoryParser
         if (
             listing == null
             || !InternationalSecurityIdentifiers.IsValidIsin(listing.Isin)
-            || !LisbonMarkets.Contains(listing.MarketIdentifierCode)
+            || EuronextMarket.ByMarketIdentifierCode(listing.MarketIdentifierCode) == null
             || string.IsNullOrWhiteSpace(listing.Symbol)
             || listing.Symbol.Length > 32
         )
-            throw new InvalidDataException("A stated Lisbon listing identity is required.");
+            throw new InvalidDataException("A stated Euronext listing identity is required.");
         if (listing.SourceUrl is not { IsAbsoluteUri: true })
             throw new InvalidDataException("An absolute source product URL is required.");
         var source = SameOrigin(listing.SourceUrl.AbsoluteUri);

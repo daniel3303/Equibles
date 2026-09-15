@@ -20,6 +20,11 @@
       Link="TestAssets/snex-invalid-dates.xml"
       CopyToOutputDirectory="PreserveNewest"
     />
+    <Content
+      Include="../Equibles.UnitTests/TestAssets/EquityMarkets/Firds/*.xml"
+      Link="TestAssets/EquityMarkets/Firds/%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
     <Content Include="TestAssets\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -83,6 +88,10 @@
     <ProjectReference Include="..\..\src\Equibles.Yahoo.Data\Equibles.Yahoo.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Yahoo.HostedService\Equibles.Yahoo.HostedService.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.EquityMarkets.Data\Equibles.EquityMarkets.Data.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.EquityMarkets.Repositories\Equibles.EquityMarkets.Repositories.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.EquityMarkets.BusinessLogic\Equibles.EquityMarkets.BusinessLogic.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.Esma\Equibles.Integrations.Esma.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Finra.Data\Equibles.Finra.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Finra.Repositories\Equibles.Finra.Repositories.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Finra.HostedService\Equibles.Finra.HostedService.csproj" />

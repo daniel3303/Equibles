@@ -9,6 +9,8 @@ using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.Errors.BusinessLogic;
+using Equibles.EquityMarkets.Data.Catalog;
+using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Yahoo.Contracts;
 using Equibles.Integrations.Yahoo.Models;
@@ -65,7 +67,8 @@ public class YahooPriceImportService
     private readonly ErrorReporter _errorReporter;
     private readonly WorkerOptions _workerOptions;
     private readonly YahooPriceScraperOptions _scraperOptions;
-    private readonly bool _lisbonEnabled;
+    private readonly bool _lisbonSeedEnabled;
+    private HashSet<string> _enabledMarkets;
 
     public bool HasEnrichmentBacklog { get; private set; }
 
@@ -87,7 +90,8 @@ public class YahooPriceImportService
         _errorReporter = errorReporter;
         _workerOptions = workerOptions.Value;
         _scraperOptions = scraperOptions.Value;
-        _lisbonEnabled = configuration?.GetValue<bool>("EquityMarkets:LisbonEnabled") == true;
+        _lisbonSeedEnabled =
+            configuration?.GetValue<bool>(EquityMarketRegistrationSeed.LisbonSetting) == true;
     }
 
     public Task Import(CancellationToken cancellationToken) =>
@@ -104,6 +108,7 @@ public class YahooPriceImportService
     public async Task Import(bool includeEnrichment, CancellationToken cancellationToken)
     {
         HasEnrichmentBacklog = false;
+        _enabledMarkets = null;
         var tickerMap = await _tickerMapService.Build(
             _workerOptions.TickersToSync,
             cancellationToken
@@ -113,7 +118,7 @@ public class YahooPriceImportService
             cancellationToken
         );
         priceTargets.AddRange(await BuildHistoricalPriceTargets(cancellationToken));
-        priceTargets.AddRange(await BuildLisbonPriceTargets(cancellationToken));
+        priceTargets.AddRange(await BuildCatalogPriceTargets(cancellationToken));
         _logger.LogInformation(
             "Starting Yahoo price sync for {SeriesCount} listed symbols across {StockCount} stocks (enrichment: {Enrichment})",
             priceTargets.Count,
@@ -251,41 +256,72 @@ public class YahooPriceImportService
         return targets;
     }
 
-    private bool IsMarketEnabled(PriceSeriesTarget target) =>
-        target.IsUs || _lisbonEnabled && YahooListingSource.IsLisbon(target);
+    // Which catalog markets the operator has switched on, read once per cycle from the registration table.
+    private async Task<HashSet<string>> EnabledMarkets(CancellationToken cancellationToken)
+    {
+        if (_enabledMarkets != null)
+            return _enabledMarkets;
+        using var scope = _scopeFactory.CreateScope();
+        var registrations =
+            scope.ServiceProvider.GetRequiredService<EquityMarketRegistrationRepository>();
+        await registrations.EnsureSeeded(
+            EquityMarketCatalog.All,
+            EquityMarketRegistrationSeed.InitiallyEnabled(_lisbonSeedEnabled),
+            cancellationToken
+        );
+        _enabledMarkets = (await registrations.GetEnabledCodes(cancellationToken)).ToHashSet(
+            StringComparer.Ordinal
+        );
+        return _enabledMarkets;
+    }
 
-    private async Task<List<PriceSeriesTarget>> BuildLisbonPriceTargets(
+    private async Task<bool> IsMarketEnabled(
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    ) =>
+        target.IsUs
+        || YahooListingSource.Market(target) is { } market
+            && (await EnabledMarkets(cancellationToken)).Contains(market.Code);
+
+    private async Task<List<PriceSeriesTarget>> BuildCatalogPriceTargets(
         CancellationToken cancellationToken
     )
     {
+        var enabled = await EnabledMarkets(cancellationToken);
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
-        if (!_lisbonEnabled)
-            return [];
-        var claims = LisbonClaims(repository);
-        var rows = await claims
-            .Where(listing =>
-                listing.IdentityState == EquityIdentityState.Verified
-                && listing.TradingCurrency == "EUR"
-                && listing.QuoteUnitMultiplier == 1m
-                && listing.Security.Isin != null
-                && claims.Count(other => other.Ticker == listing.Ticker) == 1
-            )
-            .Select(listing => new PriceSeriesTarget(
-                listing.Ticker,
-                listing.Security.EquityIssuerId,
-                listing.Id,
-                false,
-                false,
-                null,
-                false,
-                null,
-                null,
-                listing.MarketCountryCode,
-                listing.MarketIdentifierCode,
-                listing.Security.Isin
-            ))
-            .ToListAsync(cancellationToken);
+        var rows = new List<PriceSeriesTarget>();
+        foreach (var market in EquityMarketCatalog.All.Where(market => enabled.Contains(market.Code)))
+        {
+            var claims = MarketClaims(repository, market);
+            rows.AddRange(
+                await claims
+                    .Where(listing =>
+                        listing.IdentityState == EquityIdentityState.Verified
+                        && listing.TradingCurrency != null
+                        && listing.QuoteUnitMultiplier != null
+                        && listing.Security.Isin != null
+                        && claims.Count(other => other.Ticker == listing.Ticker) == 1
+                    )
+                    .Select(listing => new PriceSeriesTarget(
+                        listing.Ticker,
+                        listing.Security.EquityIssuerId,
+                        listing.Id,
+                        false,
+                        false,
+                        null,
+                        false,
+                        null,
+                        null,
+                        listing.MarketCountryCode,
+                        listing.MarketIdentifierCode,
+                        listing.Security.Isin,
+                        listing.TradingCurrency,
+                        listing.QuoteUnitMultiplier
+                    ))
+                    .ToListAsync(cancellationToken)
+            );
+        }
         if (_workerOptions.TickersToSync.Count == 0)
             return rows;
         var requested = _workerOptions.TickersToSync.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -295,15 +331,22 @@ public class YahooPriceImportService
             .ToList();
     }
 
-    private static IQueryable<EquityListing> LisbonClaims(EquityIssuerRepository repository) =>
-        repository
+    // Every active claim on the market's venues; a symbol claimed twice stays unpriced until one retires.
+    private static IQueryable<EquityListing> MarketClaims(
+        EquityIssuerRepository repository,
+        EquityMarket market
+    )
+    {
+        var mics = market.MarketIdentifierCodes.ToList();
+        return repository
             .GetSecurities()
             .SelectMany(security => security.Listings)
             .Where(listing =>
                 listing.Active
-                && listing.MarketCountryCode == "PT"
-                && YahooListingSource.LisbonMarkets.Contains(listing.MarketIdentifierCode)
+                && listing.MarketCountryCode == market.CountryCode
+                && mics.Contains(listing.MarketIdentifierCode)
             );
+    }
 
     private static async Task<bool> HasCurrentIdentity(
         EquityIssuerRepository repository,
@@ -314,9 +357,10 @@ public class YahooPriceImportService
         if (target.IsUs)
             return await repository.GetEquityListingId(target.EquityIssuerId, target.Ticker)
                 == target.EquityListingId;
-        if (!YahooListingSource.IsLisbon(target) || target.IsHistorical)
+        var market = YahooListingSource.Market(target);
+        if (market == null || target.IsHistorical)
             return false;
-        var claims = await LisbonClaims(repository)
+        var claims = await MarketClaims(repository, market)
             .Where(listing => listing.Ticker == target.Ticker)
             .Include(listing => listing.Security)
             .Take(2)
@@ -888,10 +932,12 @@ public class YahooPriceImportService
                 HistoricalEvidenceId: evidence?.Id,
                 MarketCountryCode: listing.MarketCountryCode,
                 MarketIdentifierCode: listing.MarketIdentifierCode,
-                Isin: listing.Security.Isin
+                Isin: listing.Security.Isin,
+                TradingCurrency: listing.TradingCurrency,
+                QuoteUnitMultiplier: listing.QuoteUnitMultiplier
             );
             if (
-                !IsMarketEnabled(target)
+                !await IsMarketEnabled(target, cancellationToken)
                 || !YahooListingSource.MatchesListing(target, listing)
                 || !await HasCurrentIdentity(stockRepository, target, cancellationToken)
             )
@@ -1018,6 +1064,11 @@ public class YahooPriceImportService
         EquityDailyStockPriceRepository priceRepository =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
         var appliedSince = DateTime.UtcNow.AddDays(-AppliedSplitBasisAuditLookbackDays);
+        var enabled = await EnabledMarkets(cancellationToken);
+        var enabledMics = EquityMarketCatalog
+            .All.Where(market => enabled.Contains(market.Code))
+            .SelectMany(market => market.MarketIdentifierCodes)
+            .ToList();
 
         var boundaries = await splitRepository
             .GetAll()
@@ -1026,11 +1077,7 @@ public class YahooPriceImportService
                 && split.EquityListingId != null
                 && (
                     split.Listing.MarketCountryCode == "US"
-                    || _lisbonEnabled
-                        && split.Listing.MarketCountryCode == "PT"
-                        && YahooListingSource.LisbonMarkets.Contains(
-                            split.Listing.MarketIdentifierCode
-                        )
+                    || enabledMics.Contains(split.Listing.MarketIdentifierCode)
                         && split.Listing.Security.Isin != null
                 )
                 && split.EffectiveDate < today
@@ -1633,7 +1680,7 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        if (!IsMarketEnabled(target))
+        if (!await IsMarketEnabled(target, cancellationToken))
             return false;
         if (!target.IsUs)
         {
@@ -1763,7 +1810,7 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        if (!IsMarketEnabled(target))
+        if (!await IsMarketEnabled(target, cancellationToken))
             return NoFetchNeeded;
         using (var identityScope = _scopeFactory.CreateScope())
         {
@@ -2419,7 +2466,7 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        if (!IsMarketEnabled(target) || splits.Count == 0)
+        if (splits.Count == 0 || !await IsMarketEnabled(target, cancellationToken))
             return;
 
         // Map Yahoo's split shape onto the source-neutral capture DTO at the
@@ -2479,8 +2526,8 @@ public class YahooPriceImportService
     {
         // Cash amounts require explicit source currency independently of stored price history.
         if (
-            !IsMarketEnabled(target)
-            || chartData.Dividends.Count == 0
+            chartData.Dividends.Count == 0
+            || !await IsMarketEnabled(target, cancellationToken)
             || !(
                 target.IsUs
                     ? YahooQuotationIdentity.HasUsDollarEvidence(
@@ -3014,7 +3061,7 @@ public class YahooPriceImportService
             ResettleWindowStart(today, _scraperOptions.VolumeResettleWindowDays)
         );
 
-        // Re-request the bounded window; only returned bars prove Lisbon trading dates.
+        // Re-request the bounded window; only returned bars prove the venue's trading dates.
         // U.S. calendar gaps cannot classify another market's absent observations.
         if (!target.IsUs)
             return Min(startDate, today.AddDays(-GapHealWindowDays));

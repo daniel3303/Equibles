@@ -2,6 +2,7 @@ namespace Equibles.Integrations.Euronext.Models;
 
 public class EuronextDirectorySnapshot
 {
+    public string MarketSlug { get; set; }
     public Uri SourceUrl { get; set; }
     public DateTime CapturedAt { get; set; }
     public List<EuronextEquityListing> Listings { get; set; } = [];

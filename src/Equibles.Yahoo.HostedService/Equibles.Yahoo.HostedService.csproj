@@ -15,6 +15,7 @@
     <ProjectReference Include="..\Equibles.CommonStocks.BusinessLogic\Equibles.CommonStocks.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.CorporateActions.BusinessLogic\Equibles.CorporateActions.BusinessLogic.csproj" />
+    <ProjectReference Include="..\Equibles.EquityMarkets.Repositories\Equibles.EquityMarkets.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.CorporateActions.Repositories\Equibles.CorporateActions.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Yahoo\Equibles.Integrations.Yahoo.csproj" />

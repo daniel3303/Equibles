@@ -4,6 +4,7 @@ using Equibles.CommonStocks.Data;
 using Equibles.Congress.Data;
 using Equibles.CorporateActions.Data;
 using Equibles.Data;
+using Equibles.EquityMarkets.Data;
 using Equibles.Errors.Data;
 using Equibles.FdaCatalysts.Data;
 using Equibles.Finra.Data;
@@ -155,6 +156,7 @@ public class ParadeDbFixture : IAsyncLifetime
             new CboeModuleConfiguration(),
             new FdaCatalystsModuleConfiguration(),
             new GovernmentContractsModuleConfiguration(),
+            new EquityMarketsModuleConfiguration(),
             new SecModuleConfiguration(),
             new FinancialFactsModuleConfiguration(),
             new MediaModuleConfiguration(),

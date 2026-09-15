@@ -3,6 +3,9 @@ using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.Calendars;
 using Equibles.Core.Configuration;
+using Equibles.EquityMarkets.Data.Catalog;
+using Equibles.EquityMarkets.Data.Models;
+using Equibles.EquityMarkets.Repositories;
 using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
@@ -16,7 +19,6 @@ using Equibles.Yahoo.HostedService.Configuration;
 using Equibles.Yahoo.HostedService.Services;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -31,13 +33,22 @@ public class LisbonPriceImportTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
     private readonly IYahooFinanceClient _client = Substitute.For<IYahooFinanceClient>();
     private readonly WorkerOptions _options = new() { MinSyncDate = new(2025, 7, 1) };
 
+    private static readonly string LisbonEvidenceSource = YahooListingSource.EvidenceSource(
+        EquityMarketCatalog.TryGet("euronext-lisbon")
+    );
+
     private YahooPriceImportService Service(bool enabled = true)
     {
+        Register("euronext-lisbon", enabled);
         var issuers = new EquityIssuerRepository(DbContext);
         var splits = new StockSplitRepository(DbContext);
         var dividends = new CashDividendRepository(DbContext);
         var scope = ServiceScopeSubstitute.Create(
             (typeof(EquityIssuerRepository), issuers),
+            (
+                typeof(EquityMarketRegistrationRepository),
+                new EquityMarketRegistrationRepository(DbContext)
+            ),
             (typeof(EquityListingRepository), new EquityListingRepository(DbContext)),
             (
                 typeof(EquityDailyStockPriceRepository),
@@ -70,16 +81,19 @@ public class LisbonPriceImportTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Options.Create(_options),
-            Options.Create(new YahooPriceScraperOptions()),
-            new ConfigurationBuilder()
-                .AddInMemoryCollection(
-                    new Dictionary<string, string>
-                    {
-                        ["EquityMarkets:LisbonEnabled"] = enabled.ToString(),
-                    }
-                )
-                .Build()
+            Options.Create(new YahooPriceScraperOptions())
         );
+    }
+
+    // The registration row is the only market switch; the seed setting is deliberately not supplied.
+    private void Register(string code, bool enabled)
+    {
+        var row = DbContext.Set<EquityMarketRegistration>().Find(code);
+        if (row == null)
+            DbContext.Add(new EquityMarketRegistration { Code = code, Enabled = enabled });
+        else
+            row.Enabled = enabled;
+        DbContext.SaveChanges();
     }
 
     [Fact]
@@ -166,7 +180,7 @@ public class LisbonPriceImportTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             .Equal(20m, 10m);
         (
             await read.Set<EquityDirectorySourceRecord>()
-                .CountAsync(row => row.Source == YahooListingSource.LisbonEvidenceSource)
+                .CountAsync(row => row.Source == LisbonEvidenceSource)
         )
             .Should()
             .Be(0);
@@ -180,7 +194,9 @@ public class LisbonPriceImportTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             false,
             MarketCountryCode: listing.MarketCountryCode,
             MarketIdentifierCode: listing.MarketIdentifierCode,
-            Isin: listing.Security.Isin
+            Isin: listing.Security.Isin,
+            TradingCurrency: listing.TradingCurrency,
+            QuoteUnitMultiplier: listing.QuoteUnitMultiplier
         );
 
     private static Task Import(
@@ -197,7 +213,7 @@ public class LisbonPriceImportTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         (Task<List<PriceSeriesTarget>>)
             typeof(YahooPriceImportService)
                 .GetMethod(
-                    "BuildLisbonPriceTargets",
+                    "BuildCatalogPriceTargets",
                     BindingFlags.NonPublic | BindingFlags.Instance
                 )!
                 .Invoke(service, [CancellationToken.None])!;
@@ -331,7 +347,7 @@ public class LisbonPriceImportTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         payments.Single(row => row.EquityListingId == lisbon.Id).AmountPerShare.Should().Be(.25m);
         payments.Single(row => row.Id == originalDividend.Id).AmountPerShare.Should().Be(9);
         var evidence = await read.Set<EquityDirectorySourceRecord>()
-            .Where(row => row.Source == YahooListingSource.LisbonEvidenceSource)
+            .Where(row => row.Source == LisbonEvidenceSource)
             .ToListAsync();
         evidence
             .Should()
