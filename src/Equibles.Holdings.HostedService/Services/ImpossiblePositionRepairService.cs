@@ -31,6 +31,12 @@ namespace Equibles.Holdings.HostedService.Services;
 /// row-identity index; that turned three whole-table joins that timed out at ten minutes into a
 /// handful of index probes.
 /// </para>
+/// <para>
+/// The ratio guard cannot see a size stored in the wrong unit, since both figures are off by the
+/// same factor. So before anything is withdrawn the exceeding positions are grouped by issuer, and
+/// an issuer that <see cref="MinCorroboratingHolders"/> or more distinct filers exceed is left
+/// alone and logged: the filers corroborate each other, and the stored size is what is wrong.
+/// </para>
 /// </remarks>
 [Service]
 public class ImpossiblePositionRepairService
@@ -51,6 +57,15 @@ public class ImpossiblePositionRepairService
     /// at their true bar through the issuer indexes, so no position goes unjudged.
     /// </summary>
     internal const long CandidateSharesFloor = 1_000_000;
+
+    /// <summary>
+    /// Distinct filers that must all exceed one issuer before the issuer's own size is doubted
+    /// instead of the filers. One or two impossible positions are filer errors; three managers
+    /// independently reporting more than the issuer has means the stored size is what is wrong
+    /// (a size stored in thousands passes the ratio guard), and withdrawing their values would
+    /// accuse every holder of a legitimate position.
+    /// </summary>
+    internal const int MinCorroboratingHolders = 3;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ImpossiblePositionRepairService> _logger;
@@ -79,6 +94,7 @@ public class ImpossiblePositionRepairService
     {
         public Guid Id { get; set; }
         public Guid EquityIssuerId { get; set; }
+        public Guid InstitutionalHolderId { get; set; }
         public long Shares { get; set; }
         public DateOnly ReportDate { get; set; }
         public string ListedTicker { get; set; }
@@ -132,6 +148,7 @@ public class ImpossiblePositionRepairService
             {
                 Id = h.Id,
                 EquityIssuerId = h.EquityIssuerId,
+                InstitutionalHolderId = h.InstitutionalHolderId,
                 Shares = h.Shares,
                 ReportDate = h.ReportDate,
                 ListedTicker = h.ListedTicker,
@@ -215,7 +232,7 @@ public class ImpossiblePositionRepairService
             .GroupBy(s => s.EquityIssuerId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var withdrawals = new List<Guid>();
+        var exceeding = new List<CandidatePosition>();
         foreach (var candidate in candidates)
         {
             var anchor = anchorsById[candidate.EquityIssuerId];
@@ -244,9 +261,35 @@ public class ImpossiblePositionRepairService
                 )
             )
             {
-                withdrawals.Add(candidate.Id);
+                exceeding.Add(candidate);
             }
         }
+
+        // Pooled across report dates, because today's size is one figure and every filer that
+        // exceeds it is evidence against that figure. Rows withdrawn on an earlier pass are outside
+        // the candidate set, so they do not corroborate a filer that arrives later; accepted.
+        var doubtedIssuers = exceeding
+            .GroupBy(c => c.EquityIssuerId)
+            .Where(g =>
+                g.Select(c => c.InstitutionalHolderId).Distinct().Count() >= MinCorroboratingHolders
+            )
+            .Select(g => g.Key)
+            .ToHashSet();
+        if (doubtedIssuers.Count > 0)
+        {
+            _logger.LogWarning(
+                "Left {Issuers} issuer(s) unjudged because {MinHolders} or more filers each report "
+                    + "more shares than the stored size, so the size is what is wrong: {Tickers}",
+                doubtedIssuers.Count,
+                MinCorroboratingHolders,
+                string.Join(", ", doubtedIssuers.Select(id => anchorsById[id].Ticker).Order())
+            );
+        }
+
+        var withdrawals = exceeding
+            .Where(c => !doubtedIssuers.Contains(c.EquityIssuerId))
+            .Select(c => c.Id)
+            .ToList();
 
         var repaired = 0;
         foreach (var chunk in withdrawals.Chunk(BatchSize))

@@ -15,8 +15,9 @@ namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
 /// Pins the issuer-first impossible-position scan: a position larger than a trustworthy issuer is
-/// withdrawn, an issuer whose own size is nonsense is never judged, and an issuer below the
-/// one-million-share index floor is still judged at its own bar.
+/// withdrawn, an issuer whose own size is nonsense is never judged, an issuer below the
+/// one-million-share index floor is still judged at its own bar, and an issuer that three distinct
+/// filers exceed is refused instead of every filer being accused.
 /// </summary>
 public class ImpossiblePositionRepairServiceTests : IDisposable
 {
@@ -144,6 +145,69 @@ public class ImpossiblePositionRepairServiceTests : IDisposable
         (await Reload(holding.Id)).Value.Should().Be(3_750_000_000L);
     }
 
+    [Fact]
+    public async Task Repair_LeavesAnIssuerAloneWhenThreeFilersExceedIt()
+    {
+        // NFE: size stored in thousands (114,254 shares beside a $1.88M market cap) passes the
+        // ratio guard, so every real holder reads as impossible. Three independent filers above
+        // it corroborate each other, and the issuer is refused rather than every holder accused.
+        var holdings = await SeedHoldings(
+            sharesOutstanding: 114_254,
+            marketCapitalization: 1_882_904,
+            positions:
+            [
+                (25_559_846, 100_000_000),
+                (12_000_000, 48_000_000),
+                (3_000_000, 12_000_000),
+            ]
+        );
+
+        (await CreateService().Repair(CancellationToken.None)).Should().Be(0);
+
+        foreach (var holding in holdings)
+        {
+            var actual = await Reload(holding.Id);
+            actual.ValueUnavailable.Should().BeFalse();
+            actual.Value.Should().Be(holding.Value);
+        }
+    }
+
+    [Fact]
+    public async Task Repair_WithdrawsWhenOnlyTwoFilersExceedTheIssuer()
+    {
+        var holdings = await SeedHoldings(
+            sharesOutstanding: 114_254,
+            marketCapitalization: 1_882_904,
+            positions: [(25_559_846, 100_000_000), (12_000_000, 48_000_000)]
+        );
+
+        (await CreateService().Repair(CancellationToken.None)).Should().Be(2);
+
+        foreach (var holding in holdings)
+        {
+            (await Reload(holding.Id)).ValueUnavailable.Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public async Task Repair_CountsFilersNotRows_WhenOneFilerExceedsAcrossQuarters()
+    {
+        // One filer over three quarters is one witness, not three: the position is withdrawn.
+        var holdings = await SeedHoldings(
+            sharesOutstanding: 200_000_000,
+            marketCapitalization: 5_000_000_000,
+            positions: [(32_098_694_296, 100_800_000_000)],
+            quarters: 3
+        );
+
+        (await CreateService().Repair(CancellationToken.None)).Should().Be(3);
+
+        foreach (var holding in holdings)
+        {
+            (await Reload(holding.Id)).ValueUnavailable.Should().BeTrue();
+        }
+    }
+
     private ImpossiblePositionRepairService CreateService() =>
         new(CreateScopeFactory(), Substitute.For<ILogger<ImpossiblePositionRepairService>>());
 
@@ -152,6 +216,15 @@ public class ImpossiblePositionRepairServiceTests : IDisposable
         double marketCapitalization,
         long shares,
         long value
+    ) => (await SeedHoldings(sharesOutstanding, marketCapitalization, [(shares, value)]))[0];
+
+    // One issuer, one distinct filer per position, each filer reporting the same position on
+    // every quarter asked for.
+    private async Task<List<InstitutionalHolding>> SeedHoldings(
+        long sharesOutstanding,
+        double marketCapitalization,
+        (long Shares, long Value)[] positions,
+        int quarters = 1
     )
     {
         var seedContext = CreateSharedContext();
@@ -162,41 +235,50 @@ public class ImpossiblePositionRepairServiceTests : IDisposable
             MarketCapitalization: marketCapitalization,
             SharesOutStanding: sharesOutstanding
         );
-        var holder = new InstitutionalHolder
+        seedContext.Set<EquityIssuer>().Add(stock);
+
+        var holdings = new List<InstitutionalHolding>();
+        foreach (var (shares, value) in positions)
         {
-            Id = Guid.NewGuid(),
-            Cik = Guid.NewGuid().ToString()[..10],
-            Name = "Filer",
-        };
-        var holding = new InstitutionalHolding
-        {
-            Id = Guid.NewGuid(),
-            EquityIssuerId = stock.Id,
-            InstitutionalHolderId = holder.Id,
-            ReportDate = new DateOnly(2026, 3, 31),
-            FilingDate = new DateOnly(2026, 5, 10),
-            Shares = shares,
-            Value = value,
-            ShareType = ShareType.Shares,
-            InvestmentDiscretion = InvestmentDiscretion.Sole,
-            AccessionNumber = Guid.NewGuid().ToString()[..20],
-            ManagerEntries =
-            [
-                new HoldingManagerEntry
+            var holder = new InstitutionalHolder
+            {
+                Id = Guid.NewGuid(),
+                Cik = Guid.NewGuid().ToString()[..10],
+                Name = "Filer",
+            };
+            seedContext.Set<InstitutionalHolder>().Add(holder);
+            for (var quarter = 0; quarter < quarters; quarter++)
+            {
+                var holding = new InstitutionalHolding
                 {
-                    ManagerNumber = 1,
-                    ManagerName = "Leg",
+                    Id = Guid.NewGuid(),
+                    EquityIssuerId = stock.Id,
+                    InstitutionalHolderId = holder.Id,
+                    ReportDate = new DateOnly(2026, 3, 31).AddMonths(-3 * quarter),
+                    FilingDate = new DateOnly(2026, 5, 10).AddMonths(-3 * quarter),
                     Shares = shares,
                     Value = value,
-                },
-            ],
-        };
+                    ShareType = ShareType.Shares,
+                    InvestmentDiscretion = InvestmentDiscretion.Sole,
+                    AccessionNumber = Guid.NewGuid().ToString()[..20],
+                    ManagerEntries =
+                    [
+                        new HoldingManagerEntry
+                        {
+                            ManagerNumber = 1,
+                            ManagerName = "Leg",
+                            Shares = shares,
+                            Value = value,
+                        },
+                    ],
+                };
+                seedContext.Set<InstitutionalHolding>().Add(holding);
+                holdings.Add(holding);
+            }
+        }
 
-        seedContext.Set<EquityIssuer>().Add(stock);
-        seedContext.Set<InstitutionalHolder>().Add(holder);
-        seedContext.Set<InstitutionalHolding>().Add(holding);
         await seedContext.SaveChangesAsync();
-        return holding;
+        return holdings;
     }
 
     private async Task<InstitutionalHolding> Reload(Guid holdingId) =>
