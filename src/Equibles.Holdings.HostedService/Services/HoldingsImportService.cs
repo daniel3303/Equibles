@@ -727,9 +727,8 @@ public class HoldingsImportService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
 
-        var splits = await dbContext
-            .Set<StockSplit>()
-            .Where(s => stockIds.Contains(s.EquityIssuerId))
+        var splits = await StockSplitQueries
+            .ForIssuers(dbContext, stockIds)
             .ToListAsync(cancellationToken);
 
         context.StockSplits = splits
