@@ -313,6 +313,37 @@ public class EquityMarketDirectoryImporterTests
     }
 
     [Fact]
+    public async Task ARowEuronextHomesOnASiblingMarket_IsSkippedWithoutAnyLookup()
+    {
+        var options = NewDbOptions();
+        await SeedFullImport(options);
+        await SeedFirds(options, "BE0974278104", authority: "BE");
+        var row = Row("BE0974278104", "ABO", "XPAR", "XBRU");
+        row.SourceUrl = new Uri("https://live.euronext.com/en/product/equities/BE0974278104-XBRU");
+        var harness = Build(options, row);
+
+        var result = await harness.Importer.Import(Paris, CancellationToken.None);
+
+        result.Error.Should().BeNull();
+        result.Listings.Should().Be(1);
+        result
+            .Skipped.Should()
+            .Be(
+                1,
+                "the directory homes the line on Brussels even where FIRDS files its relevant venue on Paris"
+            );
+        result.Imported.Should().Be(0);
+        result.Failed.Should().Be(0);
+        harness.Source.Resolved.Should().BeEmpty();
+        await harness
+            .Identity.DidNotReceive()
+            .ImportListing(Arg.Any<EquityDirectoryListingInput>(), Arg.Any<CancellationToken>());
+        await harness
+            .Gleif.DidNotReceive()
+            .GetIssuerForIsin(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task AFailedRow_IsCountedAndTheRestOfTheMarketStillImports()
     {
         var options = NewDbOptions();

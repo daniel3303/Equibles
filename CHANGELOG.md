@@ -23,6 +23,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Euronext directory capture accepts cross-listed lines whose market cell names several venues (`XBRU, XPAR` on the Paris list): the row keeps the market's own venue and a line Euronext homes on a sibling market is skipped as that market's, instead of one such row failing the whole pass for Paris, Amsterdam and Brussels.
+- Euronext directory capture raises the reported-total bound from 2,000 to 5,000, above Milan's 2,467-line directory, whose rows are all single-venue lines the parser accepts; the gateway's venue query remains the proof the list is unfiltered.
+- Xetra instrument-list discovery reads the download link whether the publisher's cache node writes it root-relative or absolute on its own host.
 - Insider filing replays preserve source-row identity across rejected dates and exclude impossible dates from published trades without guessing replacement dates.
 
 - SEC document chunking now reads an indexed pending-state queue instead of scanning every stored document and probing the chunk corpus on each drained poll. Closes #3823.

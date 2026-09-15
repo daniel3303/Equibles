@@ -168,7 +168,9 @@ public class EquityMarketDirectorySourceTests
             .Rows.Should()
             .AllSatisfy(row =>
                 row.StatedPrimaryMarketIdentifierCode.Should()
-                    .BeNull("Euronext lists state no primary market")
+                    .BeNull(
+                        "a line Euronext homes on this market states no primary beyond Euronext"
+                    )
             );
         var altri = snapshot.Rows.Single(row => row.Symbol == "ALTR");
         altri.Isin.Should().Be("PTALT0AE0002");
@@ -198,6 +200,39 @@ public class EquityMarketDirectorySourceTests
         resolved.Name.Should().Be("TOTALENERGIES");
         resolved.SourceUrl.Should().Be(row.SourceUrl);
         handler.Requests[2].Url.Should().Be(row.SourceUrl);
+    }
+
+    [Fact]
+    public async Task Euronext_StatesTheSiblingMarketAsPrimaryOnlyForACrossListedLine()
+    {
+        var html = await Fixture("Euronext", "Paris", "directory.html");
+        var body = await Fixture("Euronext", "Paris", "equities.json");
+        using var http = new HttpClient(new EuronextDirectoryTestHandler([html, body]));
+        var source = new EuronextEquityMarketDirectorySource(new EuronextDirectoryClient(http));
+        var paris = EquityMarketCatalog.TryGet("euronext-paris");
+
+        var snapshot = await source.Capture(paris, CancellationToken.None);
+
+        snapshot.EvidenceSource.Should().Be("euronext-paris-directory-v1");
+        snapshot
+            .Rows.Select(row =>
+                (row.Symbol, row.MarketIdentifierCode, row.StatedPrimaryMarketIdentifierCode)
+            )
+            .Should()
+            .Equal(
+                ("ABO", "XPAR", "XBRU"),
+                ("AC", "XPAR", null),
+                ("ACMC", "XPMC", null),
+                ("AF", "XPAR", null),
+                ("AI", "XPAR", null)
+            );
+        var abo = snapshot.Rows.Single(row => row.Symbol == "ABO");
+        abo.SourceUrl.AbsolutePath.Should().Be("/en/product/equities/BE0974278104-XBRU");
+        EquityMarketDirectoryGate
+            .IsHomeShare(paris, abo, Firds("BE0974278104", "XPAR", "549300G6XMDT7F5X8D57"))
+            .Should()
+            .BeFalse("a line homed on Brussels is not Paris's own share listing");
+        snapshot.PayloadJson.Should().Contain("\"PrimaryMarketIdentifierCode\":\"XBRU\"");
     }
 
     [Fact]
