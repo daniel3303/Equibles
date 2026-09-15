@@ -4,9 +4,35 @@ using Equibles.Integrations.Esma.Models;
 namespace Equibles.Integrations.Esma;
 
 // Shared download path: same-origin only, byte-capped to disk, checksum verified when the index states one.
-internal static class FirdsDownloader
+public static class FirdsDownloader
 {
     private const long MaxZipBytes = 200_000_000;
+    private const string FilePrefix = "firds-";
+
+    // A crash between creating a temp file and disposing it leaves up to 200 MB behind; the next run reclaims it.
+    public static void SweepStaleFiles(TimeSpan olderThan)
+    {
+        var cutoff = DateTime.UtcNow - olderThan;
+        IEnumerable<string> stale;
+        try
+        {
+            stale = Directory
+                .EnumerateFiles(Path.GetTempPath(), FilePrefix + "*.zip")
+                .Where(path => File.GetLastWriteTimeUtc(path) < cutoff)
+                .ToList();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+        foreach (var path in stale)
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException) { }
+    }
 
     public static async Task<FirdsDownload> Download(
         HttpClient httpClient,
@@ -32,7 +58,7 @@ internal static class FirdsDownloader
             throw new InvalidDataException("FIRDS download was redirected.");
         if (response.Content.Headers.ContentLength > MaxZipBytes)
             throw new InvalidDataException("FIRDS file exceeds its download limit.");
-        var path = Path.Combine(Path.GetTempPath(), "firds-" + Guid.NewGuid().ToString("N") + ".zip");
+        var path = Path.Combine(Path.GetTempPath(), FilePrefix + Guid.NewGuid().ToString("N") + ".zip");
         try
         {
             long total = 0;
@@ -66,7 +92,7 @@ internal static class FirdsDownloader
             {
                 File.Delete(path);
             }
-            catch (IOException) { }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
             throw;
         }
     }

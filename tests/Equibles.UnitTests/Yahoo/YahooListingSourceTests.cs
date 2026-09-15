@@ -161,6 +161,13 @@ public class YahooListingSourceTests
     }
 
     [Fact]
+    public void SourceBinding_RefusesATargetWithoutAVerifiedQuotationUnit()
+    {
+        var binding = () => YahooListingSource.SourceBinding(Target("TTE", "FR", "XPAR", "FR0000120271", "EUR", null));
+        binding.Should().Throw<InvalidOperationException>().WithMessage("*quotation unit*");
+    }
+
+    [Fact]
     public void SourceBinding_CoversEveryVenueOfTheMarket()
     {
         var target = Target("TTE", "FR", "XPAR", "FR0000120271");

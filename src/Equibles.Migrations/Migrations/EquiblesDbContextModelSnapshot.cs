@@ -1201,11 +1201,8 @@ namespace Equibles.Migrations.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<bool>("DelayedTradesEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("DelayedTradesRefreshedAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<int>("DirectoryCurrentCount")
+                        .HasColumnType("integer");
 
                     b.Property<int>("DirectoryFailedCount")
                         .HasColumnType("integer");

@@ -105,6 +105,15 @@ public class XetraInstrumentListTests
     }
 
     [Fact]
+    public async Task AByteOrderMark_NeverReachesThePreambleCheck()
+    {
+        var csv = await Fixture("t7-xetr-allTradableInstruments.sample.csv");
+        var list = XetraInstrumentListParser.Read("\uFEFF" + csv);
+        list.MarketIdentifierCode.Should().Be("XETR");
+        list.Instruments.Should().HaveCount(36);
+    }
+
+    [Fact]
     public async Task ABlankPrimaryMarket_IsReadAsUnstatedRatherThanRefused()
     {
         var lines = (await Fixture("t7-xetr-allTradableInstruments.sample.csv")).Split('\n').ToList();

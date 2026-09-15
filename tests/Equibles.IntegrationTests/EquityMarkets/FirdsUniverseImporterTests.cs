@@ -71,25 +71,28 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var now = DateTime.UtcNow;
         var lisbon = EquityMarketCatalog.TryGet("euronext-lisbon");
         var paris = EquityMarketCatalog.TryGet("euronext-paris");
-        (await records.GetLiveShare("PTSLB0AM0010", lisbon.FirdsVenueCodes, now)).Should().NotBeNull();
-        (await records.GetLiveShare("FR0005691656", paris.FirdsVenueCodes, now)).Should().NotBeNull();
-        (await records.GetLiveShare("FR0005691656", lisbon.FirdsVenueCodes, now))
+        (await records.GetLiveShare("PTSLB0AM0010", lisbon.FirdsAuthority, lisbon.FirdsVenueCodes, now)).Should().NotBeNull();
+        (await records.GetLiveShare("FR0005691656", paris.FirdsAuthority, paris.FirdsVenueCodes, now)).Should().NotBeNull();
+        (await records.GetLiveShare("FR0005691656", lisbon.FirdsAuthority, lisbon.FirdsVenueCodes, now))
             .Should()
             .BeNull("the line is filed on Paris, not on a Lisbon venue");
-        (await records.GetLiveShare("FI0009800395", ["AQEA"], now))
+        (await records.GetLiveShare("FI0009800395", EsmaFirdsClient.AuthorityCode, ["AQEA"], now))
             .RelevantTradingVenue.Should()
             .Be("DHEL", "the line is live on Aquis while its most relevant venue is Helsinki");
-        (await records.GetLiveShare("SE0030026894", ["SSME"], now))
+        (await records.GetLiveShare("SE0030026894", EsmaFirdsClient.AuthorityCode, ["SSME"], now))
             .Should()
             .BeNull("the line terminated on 2026-09-11");
-        (await records.GetLiveShare("CA00791L1067", ["DUSB"], now))
+        (await records.GetLiveShare("CA00791L1067", EsmaFirdsClient.AuthorityCode, ["DUSB"], now))
             .Should()
             .BeNull("a depositary receipt is not a share");
-        (await records.GetLiveShare("US7591EP8869", ["FRAB"], now))
+        (await records.GetLiveShare("US7591EP8869", EsmaFirdsClient.AuthorityCode, ["FRAB"], now))
             .Should()
             .NotBeNull("a preference share is a traded share line");
         (await records.CountHomeShares(lisbon, now)).Should().Be(1);
         (await records.CountHomeShares(paris, now)).Should().Be(1);
+        (await records.GetLiveShare("FR0005691656", FcaFirdsClient.AuthorityCode, paris.FirdsVenueCodes, now))
+            .Should()
+            .BeNull("the FCA register stores nothing for a Paris line");
         (await records.CountHomeShares(EquityMarketCatalog.TryGet("nasdaq-helsinki"), now))
             .Should()
             .Be(0, "Aquis-quoted Raisio has its home on Nasdaq Helsinki's segment DHEL, which is not catalogued");
@@ -140,7 +143,7 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         var records = new FirdsInstrumentRecordRepository(DbContext);
         var now = DateTime.UtcNow;
         (await records.GetLive(now).CountAsync()).Should().Be(1);
-        (await records.GetLiveShare("FR0005691656", ["XPAR"], now)).Should().BeNull();
+        (await records.GetLiveShare("FR0005691656", EsmaFirdsClient.AuthorityCode, ["XPAR"], now)).Should().BeNull();
         (await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(EsmaFirdsClient.AuthorityCode))
             .Should()
             .Be(SecondFull);
@@ -163,6 +166,82 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
             .Be(FirstFull);
         (await Rows()).Should().HaveCount(7).And.AllSatisfy(row => row.RemovedAt.Should().BeNull());
         index.Downloads.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task AFullPartLargerThanOneBatch_IsStoredWholeWithinTheParameterCeiling()
+    {
+        const int records = 5_000;
+        var full = Fixture("FULINS_E_sample.xml");
+        var index = new FakeIndex();
+        index.AddFull(FirstFull, Synthetic(full, records));
+
+        await Importer(index).Import(CancellationToken.None);
+
+        (await Rows()).Should().HaveCount(records).And.AllSatisfy(row =>
+        {
+            row.Mic.Should().Be("XLIS");
+            row.RemovedAt.Should().BeNull();
+        });
+        var run = await DbContext.Set<FirdsImportRun>().AsNoTracking().SingleAsync();
+        (run.RowsRead, run.RowsStored).Should().Be((records, records));
+    }
+
+    [Fact]
+    public async Task ATerminationReportedWithoutADate_LeavesTheLiveUniverseAtOnce()
+    {
+        var full = Fixture("FULINS_E_sample.xml");
+        var index = new FakeIndex();
+        index.AddFull(FirstFull, full, EmptyFull(full));
+        var undated = Fixture("DLTINS_sample.xml").Replace("<TermntnDt>2020-12-31T22:59:59Z</TermntnDt>", "");
+        undated.Should().NotBe(Fixture("DLTINS_sample.xml"));
+        index.AddDelta(new DateOnly(2026, 9, 15), 1, 1, undated);
+
+        await Importer(index).Import(CancellationToken.None);
+
+        var paragon = (await Rows()).Single(row => row.Isin == "DE0005558696");
+        paragon.TerminationDate.Should().BeNull();
+        paragon.RemovedAt.Should().NotBeNull("a terminated record without a date is no longer live");
+        var records = new FirdsInstrumentRecordRepository(DbContext);
+        (await records.GetLive(DateTime.UtcNow).Select(row => row.Isin).ToListAsync())
+            .Should()
+            .NotContain("DE0005558696")
+            .And.Contain("PTSLB0AM0010");
+    }
+
+    // The first record of the full file repeated under fresh, check-digit-valid ISINs.
+    private static string Synthetic(string full, int count)
+    {
+        var start = full.IndexOf("<RefData", StringComparison.Ordinal);
+        var firstEnd = full.IndexOf("</RefData>", start, StringComparison.Ordinal) + "</RefData>".Length;
+        var end = full.LastIndexOf("</RefData>", StringComparison.Ordinal) + "</RefData>".Length;
+        var template = full[start..firstEnd];
+        template.Should().Contain("PTSLB0AM0010");
+        var records = new System.Text.StringBuilder();
+        for (var index = 0; index < count; index++)
+            records.Append(template.Replace("PTSLB0AM0010", Isin("PT", index)));
+        return full[..start] + records + full[end..];
+    }
+
+    private static string Isin(string country, int number)
+    {
+        var body = country + number.ToString("D9");
+        var digits = string.Concat(body.Select(character => char.IsLetter(character) ? (character - 'A' + 10).ToString() : character.ToString()));
+        var sum = 0;
+        var doubleIt = true;
+        for (var index = digits.Length - 1; index >= 0; index--)
+        {
+            var digit = digits[index] - '0';
+            if (doubleIt)
+            {
+                digit *= 2;
+                if (digit > 9)
+                    digit -= 9;
+            }
+            sum += digit;
+            doubleIt = !doubleIt;
+        }
+        return body + (10 - sum % 10) % 10;
     }
 
     // The same header with no records: part two of a set whose equities all sit in part one.

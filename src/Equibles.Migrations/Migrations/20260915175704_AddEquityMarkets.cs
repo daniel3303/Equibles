@@ -17,14 +17,13 @@ namespace Equibles.Migrations.Migrations
                 {
                     Code = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     Enabled = table.Column<bool>(type: "boolean", nullable: false),
-                    DelayedTradesEnabled = table.Column<bool>(type: "boolean", nullable: false),
                     DirectoryRefreshRequestedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     DirectoryRefreshedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     DirectoryListingCount = table.Column<int>(type: "integer", nullable: false),
                     DirectoryImportedCount = table.Column<int>(type: "integer", nullable: false),
+                    DirectoryCurrentCount = table.Column<int>(type: "integer", nullable: false),
                     DirectorySkippedCount = table.Column<int>(type: "integer", nullable: false),
                     DirectoryFailedCount = table.Column<int>(type: "integer", nullable: false),
-                    DelayedTradesRefreshedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     LastError = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },

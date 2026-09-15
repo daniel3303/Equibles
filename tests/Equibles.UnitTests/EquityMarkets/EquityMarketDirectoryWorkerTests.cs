@@ -42,6 +42,25 @@ public class EquityMarketDirectoryWorkerTests
     }
 
     [Fact]
+    public void ARequest_IsClearedOnlyByASuccessfulPassThatStartedAfterIt()
+    {
+        EquityMarketDirectoryWorker.RequestServed(Now, Now, true).Should().BeTrue();
+        EquityMarketDirectoryWorker.RequestServed(null, null, true).Should().BeTrue();
+        EquityMarketDirectoryWorker
+            .RequestServed(Now, Now, false)
+            .Should()
+            .BeFalse("a failed pass leaves the request for the retry");
+        EquityMarketDirectoryWorker
+            .RequestServed(Now.AddMinutes(-10), Now, true)
+            .Should()
+            .BeFalse("an operator asked again while the pass ran");
+        EquityMarketDirectoryWorker
+            .RequestServed(null, Now, true)
+            .Should()
+            .BeFalse();
+    }
+
+    [Fact]
     public void ARefreshedMarket_RunsAgainOnlyWhenItsDirectoryIsOlderThanTheInterval()
     {
         EquityMarketDirectoryWorker

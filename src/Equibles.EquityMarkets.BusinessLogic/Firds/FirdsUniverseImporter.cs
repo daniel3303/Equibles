@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.Core.AutoWiring;
 using Equibles.EquityMarkets.Data.Models;
 using Equibles.EquityMarkets.Repositories;
@@ -18,11 +19,14 @@ public class FirdsUniverseImporter(
     ILogger<FirdsUniverseImporter> logger
 ) : IImporter
 {
-    private const int BatchSize = 5_000;
+    // Npgsql binds at most 65,535 parameters per statement and every row binds fourteen, so a batch stays well below.
+    private const int BatchSize = 1_000;
+    private static readonly TimeSpan StaleDownloadAge = TimeSpan.FromDays(1);
     private static readonly TimeSpan IndexLookback = TimeSpan.FromDays(14);
 
     public async Task Import(CancellationToken cancellationToken)
     {
+        FirdsDownloader.SweepStaleFiles(StaleDownloadAge);
         foreach (var index in indexes)
         {
             try
@@ -56,7 +60,7 @@ public class FirdsUniverseImporter(
         var fullSets = files
             .Where(file => file.FileType == FirdsFileType.Full)
             .GroupBy(file => file.PublishedOn)
-            .Where(set => IsCompleteSet(set.ToList()))
+            .Where(set => IsCompleteSet(index.Authority, set.Key, set.ToList()))
             .OrderByDescending(set => set.Key)
             .ToList();
         var newest = fullSets.FirstOrDefault();
@@ -89,16 +93,33 @@ public class FirdsUniverseImporter(
         }
     }
 
-    // Parts are named NNofMM; a set is complete only when every part is listed.
-    private static bool IsCompleteSet(List<FirdsFile> parts)
+    // Parts are named NNofMM; a set is complete only when every part is listed once and all agree on the total.
+    private bool IsCompleteSet(string authority, DateOnly publishedOn, List<FirdsFile> parts)
     {
-        var expected = parts
-            .Select(part => int.Parse(part.FileName[^6..^4]))
+        var totals = parts
+            .Select(part => int.Parse(part.FileName[^6..^4], CultureInfo.InvariantCulture))
             .Distinct()
-            .SingleOrDefault();
-        return expected > 0
-            && parts.Select(part => part.FileName).Distinct().Count() == expected
-            && parts.Count == expected;
+            .ToList();
+        var names = parts.Select(part => part.FileName).Distinct().Count();
+        if (totals.Count == 1 && totals[0] > 0 && names == parts.Count && parts.Count == totals[0])
+            return true;
+        if (totals.Count == 1 && names == parts.Count && parts.Count < totals[0])
+            logger.LogDebug(
+                "{Authority} full set {PublishedOn} lists {Parts} of {Expected} parts so far",
+                authority,
+                publishedOn,
+                parts.Count,
+                totals[0]
+            );
+        else
+            logger.LogWarning(
+                "{Authority} full set {PublishedOn} is inconsistent ({Parts} entries, totals {Totals}) and is ignored until the index is coherent",
+                authority,
+                publishedOn,
+                parts.Count,
+                string.Join(",", totals)
+            );
+        return false;
     }
 
     private async Task ImportFullSet(
@@ -210,6 +231,11 @@ public class FirdsUniverseImporter(
             RelevantCompetentAuthority = Clip(record.RelevantCompetentAuthority, 2),
             RelevantTradingVenue = Clip(record.RelevantTradingVenue, 4),
             ObservedAt = observedAt,
+            // A termination the delta reports without a date leaves the live universe from this observation on.
+            RemovedAt =
+                record.Kind == FirdsRecordKind.Terminated && record.TerminationDate == null
+                    ? observedAt
+                    : null,
         };
 
     private static string Clip(string value, int length) =>

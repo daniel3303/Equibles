@@ -22,7 +22,8 @@ public class FcaFirdsClient(HttpClient httpClient) : IFirdsFileIndex
     {
         var files = new List<FirdsFile>();
         var since = publishedOnOrAfter.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        for (var from = 0; from < 100_000; from += PageSize)
+        // The index may answer fewer hits than requested; the cursor advances by what it returned.
+        for (var from = 0; from < 100_000; )
         {
             var query =
                 "/fca_data_firds_files?q="
@@ -34,6 +35,11 @@ public class FcaFirdsClient(HttpClient httpClient) : IFirdsFileIndex
             using var document = JsonDocument.Parse(
                 await Read(new Uri(IndexOrigin, query), cancellationToken)
             );
+            var total = document.RootElement.GetProperty("hits").GetProperty("total");
+            var found =
+                total.ValueKind == JsonValueKind.Object
+                    ? total.GetProperty("value").GetInt32()
+                    : total.GetInt32();
             var hits = document.RootElement.GetProperty("hits").GetProperty("hits");
             foreach (var hit in hits.EnumerateArray())
             {
@@ -55,7 +61,11 @@ public class FcaFirdsClient(HttpClient httpClient) : IFirdsFileIndex
                     }
                 );
             }
-            if (hits.GetArrayLength() < PageSize)
+            var returned = hits.GetArrayLength();
+            if (returned == 0)
+                break;
+            from += returned;
+            if (from >= found)
                 break;
         }
         return files.OrderBy(file => file.PublishedOn).ThenBy(file => file.FileName).ToList();

@@ -40,7 +40,7 @@ public static class EquityMarketCatalog
         Pending("nasdaq-stockholm", "Nasdaq Stockholm", "SE", ["XSTO", "FNSE"], "SEK", ".ST", "STO", "Europe/Stockholm", new(9, 0), new(17, 25), new(17, 30)),
         Pending("nasdaq-helsinki", "Nasdaq Helsinki", "FI", ["XHEL"], "EUR", ".HE", "HEL", "Europe/Helsinki", new(10, 0), new(18, 25), new(18, 30)),
         Pending("nasdaq-copenhagen", "Nasdaq Copenhagen", "DK", ["XCSE"], "DKK", ".CO", "CPH", "Europe/Copenhagen", new(9, 0), new(16, 55), new(17, 0)),
-        Pending("lse", "London Stock Exchange", "GB", ["XLON"], "GBP", ".L", "LSE", "Europe/London", new(8, 0), new(16, 30), new(16, 35)),
+        Pending("lse", "London Stock Exchange", "GB", ["XLON"], "GBP", ".L", "LSE", "Europe/London", new(8, 0), new(16, 30), new(16, 35), firdsAuthority: "FCA"),
         Pending("bme", "Bolsas y Mercados Españoles", "ES", ["XMAD"], "EUR", ".MC", "MCE", "Europe/Madrid", new(9, 0), new(17, 30), new(17, 35)),
         Pending("gpw", "Warsaw Stock Exchange", "PL", ["XWAR"], "PLN", ".WA", "WSE", "Europe/Warsaw", new(9, 0), new(17, 0), new(17, 5)),
     ];
@@ -105,7 +105,8 @@ public static class EquityMarketCatalog
         string timeZone,
         TimeOnly open,
         TimeOnly close,
-        TimeOnly auction
+        TimeOnly auction,
+        string firdsAuthority = "ESMA"
     ) =>
         new(
             code,
@@ -121,6 +122,7 @@ public static class EquityMarketCatalog
             auction,
             DirectorySource: null,
             DelayedTradeSource: null,
-            DelayedTradeLocationCode: null
+            DelayedTradeLocationCode: null,
+            FirdsAuthority: firdsAuthority
         );
 }

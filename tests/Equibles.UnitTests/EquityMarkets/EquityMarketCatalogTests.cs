@@ -1,4 +1,5 @@
 using Equibles.EquityMarkets.Data.Catalog;
+using Equibles.Integrations.Esma;
 using Equibles.Integrations.Euronext;
 
 namespace Equibles.UnitTests.EquityMarkets;
@@ -48,6 +49,11 @@ public class EquityMarketCatalogTests
                 market.HomeVenueCodes.Should().Equal(market.MarketIdentifierCodes);
             }
         }
+        foreach (var market in EquityMarketCatalog.All)
+            market.FirdsAuthority.Should().Be(
+                market.CountryCode == "GB" ? FcaFirdsClient.AuthorityCode : EsmaFirdsClient.AuthorityCode,
+                "a UK venue's universe is the FCA's register, every EEA venue's is ESMA's"
+            );
         var xetra = EquityMarketCatalog.TryGet("xetra");
         xetra.FirdsVenueCodes.Should().Equal("XETA", "XETB", "XETS");
         xetra.HomeVenueCodes.Should().Contain(["XETR", "XFRA", "FRAA", "FRAB"]);

@@ -58,6 +58,23 @@ public class XetraInstrumentListClient(HttpClient httpClient)
                 throw new InvalidDataException("Xetra response exceeds the capture limit.");
             output.Write(buffer, 0, read);
         }
-        return Encoding.UTF8.GetString(output.GetBuffer(), 0, checked((int)output.Length));
+        return Decode(
+            response.Content.Headers.ContentType?.CharSet,
+            output.GetBuffer(),
+            checked((int)output.Length)
+        );
+    }
+
+    // The publisher declares UTF-8 today; the declared charset is honoured and an unknown one falls back to it.
+    private static string Decode(string charSet, byte[] bytes, int length)
+    {
+        var encoding = Encoding.UTF8;
+        if (!string.IsNullOrWhiteSpace(charSet))
+            try
+            {
+                encoding = Encoding.GetEncoding(charSet.Trim('"'));
+            }
+            catch (ArgumentException) { }
+        return encoding.GetString(bytes, 0, length);
     }
 }

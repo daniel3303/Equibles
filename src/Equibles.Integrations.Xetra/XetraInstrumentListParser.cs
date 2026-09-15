@@ -45,7 +45,11 @@ public static partial class XetraInstrumentListParser
 
     public static XetraInstrumentList Read(string csv)
     {
-        var lines = (csv ?? "").Split('\n').Select(line => line.TrimEnd('\r')).ToList();
+        var lines = (csv ?? "")
+            .TrimStart('\uFEFF')
+            .Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .ToList();
         if (lines.Count < 4)
             throw new InvalidDataException("Xetra instrument file is too short to be complete.");
         var market = Split(lines[0]);

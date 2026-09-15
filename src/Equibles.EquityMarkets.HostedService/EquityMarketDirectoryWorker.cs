@@ -91,7 +91,7 @@ public class EquityMarketDirectoryWorker(
         {
             stoppingToken.ThrowIfCancellationRequested();
             var market = EquityMarketCatalog.TryGet(row.Code);
-            await RunMarket(market, stoppingToken);
+            await RunMarket(market, row.DirectoryRefreshRequestedAt, stoppingToken);
         }
     }
 
@@ -111,7 +111,15 @@ public class EquityMarketDirectoryWorker(
         return stale && !recentlyTried;
     }
 
-    private async Task RunMarket(EquityMarket market, CancellationToken stoppingToken)
+    // A request is cleared only by a pass that served it; one raised during the pass or a failed pass keeps it.
+    internal static bool RequestServed(DateTime? requestedBefore, DateTime? requestedNow, bool succeeded) =>
+        succeeded && requestedNow == requestedBefore;
+
+    private async Task RunMarket(
+        EquityMarket market,
+        DateTime? requestedAt,
+        CancellationToken stoppingToken
+    )
     {
         _lastAttempt[market.Code] = DateTime.UtcNow;
         EquityMarketDirectoryImportResult result;
@@ -142,7 +150,8 @@ public class EquityMarketDirectoryWorker(
             var row = await registrations.GetByCode(market.Code, stoppingToken);
             if (row == null)
                 return;
-            row.DirectoryRefreshRequestedAt = null;
+            if (RequestServed(requestedAt, row.DirectoryRefreshRequestedAt, result.Error == null))
+                row.DirectoryRefreshRequestedAt = null;
             row.LastError = result.Error is { Length: > 1000 } ? result.Error[..1000] : result.Error;
             row.UpdatedAt = DateTime.UtcNow;
             // A pass that never captured the directory leaves the previous counts and refresh time alone.
@@ -150,7 +159,8 @@ public class EquityMarketDirectoryWorker(
             {
                 row.DirectoryRefreshedAt = DateTime.UtcNow;
                 row.DirectoryListingCount = result.Listings;
-                row.DirectoryImportedCount = result.Imported + result.Current;
+                row.DirectoryImportedCount = result.Imported;
+                row.DirectoryCurrentCount = result.Current;
                 row.DirectorySkippedCount = result.Skipped;
                 row.DirectoryFailedCount = result.Failed;
             }

@@ -9,15 +9,14 @@ public class EquityMarketRegistration
     public string Code { get; set; }
 
     public bool Enabled { get; set; }
-    public bool DelayedTradesEnabled { get; set; }
 
     public DateTime? DirectoryRefreshRequestedAt { get; set; }
     public DateTime? DirectoryRefreshedAt { get; set; }
     public int DirectoryListingCount { get; set; }
     public int DirectoryImportedCount { get; set; }
+    public int DirectoryCurrentCount { get; set; }
     public int DirectorySkippedCount { get; set; }
     public int DirectoryFailedCount { get; set; }
-    public DateTime? DelayedTradesRefreshedAt { get; set; }
 
     [MaxLength(1000)]
     public string LastError { get; set; }

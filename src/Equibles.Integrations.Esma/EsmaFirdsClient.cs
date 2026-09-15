@@ -22,7 +22,8 @@ public class EsmaFirdsClient(HttpClient httpClient) : IFirdsFileIndex
     {
         var files = new List<FirdsFile>();
         var since = publishedOnOrAfter.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        for (var start = 0; start < 100_000; start += PageSize)
+        // The index may answer fewer rows than requested; the cursor advances by what it returned.
+        for (var start = 0; start < 100_000; )
         {
             var query =
                 "/solr/esma_registers_firds_files/select?q=*"
@@ -61,7 +62,11 @@ public class EsmaFirdsClient(HttpClient httpClient) : IFirdsFileIndex
                     }
                 );
             }
-            if (start + docs.GetArrayLength() >= found || docs.GetArrayLength() == 0)
+            var returned = docs.GetArrayLength();
+            if (returned == 0)
+                break;
+            start += returned;
+            if (start >= found)
                 break;
         }
         return files.OrderBy(file => file.PublishedOn).ThenBy(file => file.FileName).ToList();

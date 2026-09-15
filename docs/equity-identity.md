@@ -90,6 +90,7 @@
 
 - `EquityMarketRegistration.Enabled=false` prevents prices, quotation evidence and corporate actions from being captured for the market's retained verified listings.
 - `EquityMarkets:LisbonEnabled` (`EQUITY_MARKETS_LISBON_ENABLED` in Compose) is read once, when the `euronext-lisbon` row is first created, so an upgrade keeps a lane that was already live; afterwards only the row counts.
+- Every other market is seeded disabled and this repository ships no operator page, so a self-hoster switches one on in the database: `UPDATE "EquityMarketRegistration" SET "Enabled" = true, "DirectoryRefreshRequestedAt" = now() WHERE "Code" = 'euronext-paris';` runs its first directory pass within a minute, once `FirdsUniverseWorker` has stored a full set for the market's authority.
 - Disabled-market history reconciliation and applied-split audits leave stored observations and applied markers unchanged.
 
 ## Holdings replay identity

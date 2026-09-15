@@ -6,7 +6,6 @@ using Equibles.Core.AutoWiring;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Data.Models;
 using Equibles.EquityMarkets.Repositories;
-using Equibles.Integrations.Esma;
 using Equibles.Integrations.Gleif;
 using Equibles.Integrations.Gleif.Models;
 using Microsoft.EntityFrameworkCore;
@@ -46,7 +45,7 @@ public class EquityMarketDirectoryImporter(
         using (var scope = scopeFactory.CreateScope())
         {
             var runs = scope.ServiceProvider.GetRequiredService<FirdsImportRunRepository>();
-            if (!await runs.HasFullImport(EsmaFirdsClient.AuthorityCode, cancellationToken))
+            if (!await runs.HasFullImport(market.FirdsAuthority, cancellationToken))
             {
                 result.Error = "FIRDS universe is not loaded yet; the directory pass waits for it.";
                 return result;
@@ -85,6 +84,7 @@ public class EquityMarketDirectoryImporter(
                     scope.ServiceProvider.GetRequiredService<FirdsInstrumentRecordRepository>();
                 firds = await records.GetLiveShare(
                     row.Isin,
+                    market.FirdsAuthority,
                     market.FirdsVenueCodes,
                     now,
                     cancellationToken

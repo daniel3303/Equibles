@@ -19,16 +19,20 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
     public IQueryable<FirdsInstrumentRecord> GetLiveShares(DateTime asOf) =>
         GetLive(asOf).Where(row => row.Cfi.StartsWith("ES") || row.Cfi.StartsWith("EP"));
 
-    // The universe check a directory row must pass: a live share line FIRDS records on one of the market's venues.
+    // The universe check a directory row must pass: a live share line the market's authority records on one of
+    // its venues, the line filed on the relevant venue itself first when there is one.
     public Task<FirdsInstrumentRecord> GetLiveShare(
         string isin,
+        string authority,
         IReadOnlyList<string> venueCodes,
         DateTime asOf,
         CancellationToken cancellationToken = default
     ) =>
         GetLiveShares(asOf)
-            .Where(row => row.Isin == isin && venueCodes.Contains(row.Mic))
-            .OrderBy(row => row.Authority)
+            .Where(row =>
+                row.Authority == authority && row.Isin == isin && venueCodes.Contains(row.Mic)
+            )
+            .OrderBy(row => row.Mic == row.RelevantTradingVenue ? 0 : 1)
             .ThenBy(row => row.Mic)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -40,9 +44,10 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
         CancellationToken cancellationToken = default
     )
     {
+        var authority = market.FirdsAuthority;
         var homeVenues = market.HomeVenueCodes;
         return GetLiveShares(asOf)
-            .Where(row => homeVenues.Contains(row.RelevantTradingVenue))
+            .Where(row => row.Authority == authority && homeVenues.Contains(row.RelevantTradingVenue))
             .Select(row => row.Isin)
             .Distinct()
             .CountAsync(cancellationToken);
@@ -74,7 +79,7 @@ public class FirdsInstrumentRecordRepository(EquiblesFinancialDbContext dbContex
                         RelevantCompetentAuthority = fresh.RelevantCompetentAuthority,
                         RelevantTradingVenue = fresh.RelevantTradingVenue,
                         ObservedAt = fresh.ObservedAt,
-                        RemovedAt = null,
+                        RemovedAt = fresh.RemovedAt,
                     }
             )
             .RunAsync(cancellationToken);

@@ -77,7 +77,10 @@ internal static class YahooListingSource
             target.MarketCountryCode,
             target.Isin,
             target.TradingCurrency,
-            target.QuoteUnitMultiplier ?? 0m,
+            target.QuoteUnitMultiplier
+                ?? throw new InvalidOperationException(
+                    "A catalog binding needs the listing's verified quotation unit."
+                ),
             market.MarketIdentifierCodes.ToArray()
         );
     }
