@@ -3,15 +3,13 @@ using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Data.Models;
 using Equibles.EquityMarkets.HostedService.Configuration;
 using Equibles.EquityMarkets.Repositories;
-using Microsoft.Extensions.Configuration;
 
 namespace Equibles.EquityMarkets.HostedService;
 
-// A control loop over the registration table: an enabled market runs when the operator asks or its
-// directory is a day old, and every outcome lands on the row the operator page reads.
+// A control loop over the registration table: every catalog market with a directory adapter runs when
+// the operator asks or its directory is a day old, and every outcome lands on the row the operator page reads.
 public class EquityMarketDirectoryWorker(
     IServiceScopeFactory scopeFactory,
-    IConfiguration configuration,
     IOptions<EquityMarketsScraperOptions> options,
     ILogger<EquityMarketDirectoryWorker> logger
 ) : BackgroundService
@@ -59,14 +57,7 @@ public class EquityMarketDirectoryWorker(
         {
             var registrations =
                 scope.ServiceProvider.GetRequiredService<EquityMarketRegistrationRepository>();
-            await registrations.EnsureSeeded(
-                EquityMarketCatalog.All,
-                EquityMarketRegistrationSeed.InitiallyEnabled(
-                    configuration.GetValue<bool>(EquityMarketRegistrationSeed.LisbonSetting)
-                ),
-                stoppingToken
-            );
-            var enabled = await registrations.GetEnabledCodes(stoppingToken);
+            await registrations.EnsureSeeded(EquityMarketCatalog.All, stoppingToken);
             var interval = TimeSpan.FromHours(
                 Math.Max(1, options.Value.DirectoryRefreshIntervalHours)
             );
@@ -77,7 +68,7 @@ public class EquityMarketDirectoryWorker(
             due = [];
             foreach (var market in EquityMarketCatalog.All)
             {
-                if (!enabled.Contains(market.Code) || market.DirectorySource == null)
+                if (market.DirectorySource == null)
                     continue;
                 var row = await registrations.GetByCode(market.Code, stoppingToken);
                 if (

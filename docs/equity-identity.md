@@ -59,10 +59,10 @@
 - Preserve existing issuer profiles and presentation listings; new venues retain their own prices and symbols, and native rename history remains intact.
 - GLEIF capture requires exact issuer identity, complete unique related ISINs, stable publication/total metadata, and source-provided same-origin pagination without added filters.
 - Validate ISIN check digits and LEI MOD 97-10 at both source and native-import boundaries; malformed related identifiers cannot establish ownership through an embedded CUSIP.
-- Markets are code-owned in `EquityMarketCatalog` (venue set, country, currency, provider identity, session times); each has one `EquityMarketRegistration` row whose `Enabled` flag switches daily directory reconciliation and price capture, and whose `DirectoryRefreshRequestedAt` forces an early pass. Workers read the table every cycle, never a host setting.
+- Markets are code-owned in `EquityMarketCatalog` (venue set, country, currency, provider identity, session times); each has one `EquityMarketRegistration` row recording its pass state, and `DirectoryRefreshRequestedAt` forces an early pass. Workers read the table every cycle, never a host setting.
 - A directory row becomes a listing only when the FIRDS universe (ESMA plus FCA, refreshed by `FirdsUniverseWorker`) lists its ISIN as a live share (CFI `ES*` or `EP*`) on one of the market's venue codes (`EquityMarket.FirdsVenueCodes`; FIRDS files Xetra by segment, never as `XETR`) and `EquityMarketDirectoryGate` confirms the market is the share's home: a directory that states a primary market (Xetra's `Primary Market MIC Code`) decides, unless FIRDS places the share's relevant venue outside the market's home venues and its competent authority in another country; a directory that states none (Euronext) defers to FIRDS' relevant trading venue. Every other row is counted as skipped, never failed, and unresolved rows retry on the next pass without deleting retained identities.
 - A verified listing whose directory row, product URL and symbol are unchanged is re-verified against the product page and GLEIF every thirty days; any change re-verifies at once.
-- Enable a market only after native migrations and exchange-qualified MVC surfaces have passed verification; source acquisition and import alone do not complete the whole-database cutover.
+- Give a catalog market a `DirectorySource` only after native migrations and exchange-qualified MVC surfaces have passed verification, because that is what starts its capture; source acquisition and import alone do not complete the whole-database cutover.
 
 ## Corporate action source listings
 
@@ -86,12 +86,12 @@
 - Independent reference coverage protects its exact listing; foreign listings and all historical observations remain intact.
 - A newly acquired reference claim on the displaced symbol refuses retirement when the locked graph is refreshed.
 
-## Market capture switch
+## Market capture
 
-- `EquityMarketRegistration.Enabled=false` prevents prices, quotation evidence and corporate actions from being captured for the market's retained verified listings.
-- `EquityMarkets:LisbonEnabled` (`EQUITY_MARKETS_LISBON_ENABLED` in Compose) is read once, when the `euronext-lisbon` row is first created, so an upgrade keeps a lane that was already live; afterwards only the row counts.
-- Every other market is seeded disabled and this repository ships no operator page, so a self-hoster switches one on in the database: `UPDATE "EquityMarketRegistration" SET "Enabled" = true, "DirectoryRefreshRequestedAt" = now() WHERE "Code" = 'euronext-paris';` runs its first directory pass within a minute, once `FirdsUniverseWorker` has stored a full set for the market's authority.
-- Disabled-market history reconciliation and applied-split audits leave stored observations and applied markers unchanged.
+- Every catalog market with a directory adapter is captured; there is no per-market switch. `EquityMarketDirectoryWorker` runs each such market's directory pass within a minute of start-up, once `FirdsUniverseWorker` has stored a full set for the market's authority, and again once a day.
+- Prices, quotation evidence and corporate actions are captured for every verified listing on a catalog market; a verified listing only exists because a directory pass created it.
+- `EquityMarketRegistration` holds one row per catalog market recording pass state only: the last refresh, the last directory counts, the last error, and a refresh request. Setting `DirectoryRefreshRequestedAt = now()` on an adapter market's row runs its pass on the next control tick.
+- The `Enabled` column is retired and unread; a later migration drops it.
 
 ## Holdings replay identity
 

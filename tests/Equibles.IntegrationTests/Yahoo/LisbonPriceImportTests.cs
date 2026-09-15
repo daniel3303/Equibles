@@ -7,7 +7,6 @@ using Equibles.CorporateActions.BusinessLogic;
 using Equibles.CorporateActions.Data.Models;
 using Equibles.CorporateActions.Repositories;
 using Equibles.EquityMarkets.Data.Catalog;
-using Equibles.EquityMarkets.Data.Models;
 using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Yahoo.Contracts;
@@ -37,9 +36,8 @@ public class LisbonPriceImportTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
         EquityMarketCatalog.TryGet("euronext-lisbon")
     );
 
-    private YahooPriceImportService Service(bool enabled = true)
+    private YahooPriceImportService Service()
     {
-        Register("euronext-lisbon", enabled);
         var issuers = new EquityIssuerRepository(DbContext);
         var splits = new StockSplitRepository(DbContext);
         var dividends = new CashDividendRepository(DbContext);
@@ -83,107 +81,6 @@ public class LisbonPriceImportTests(ParadeDbFixture fixture) : ParadeDbMcpTestBa
             Options.Create(_options),
             Options.Create(new YahooPriceScraperOptions())
         );
-    }
-
-    // The registration row is the only market switch; the seed setting is deliberately not supplied.
-    private void Register(string code, bool enabled)
-    {
-        var row = DbContext.Set<EquityMarketRegistration>().Find(code);
-        if (row == null)
-            DbContext.Add(new EquityMarketRegistration { Code = code, Enabled = enabled });
-        else
-            row.Enabled = enabled;
-        DbContext.SaveChanges();
-    }
-
-    [Fact]
-    public async Task Disabled_RetainedVerifiedListingDoesNotFetchOrCapturePricesAndActions()
-    {
-        var listing = await SeedLisbon();
-        var service = Service(enabled: false);
-        var target = Target(listing);
-        var chart = Chart();
-        (await Targets(service)).Should().BeEmpty();
-        await Import(service, target, Session.AddDays(1));
-        await (Task)
-            typeof(YahooPriceImportService)
-                .GetMethod("CaptureSplits", BindingFlags.NonPublic | BindingFlags.Instance)!
-                .Invoke(service, [target, chart.Splits, CancellationToken.None])!;
-        await (Task)
-            typeof(YahooPriceImportService)
-                .GetMethod("CaptureDividends", BindingFlags.NonPublic | BindingFlags.Instance)!
-                .Invoke(service, [target, chart, CancellationToken.None])!;
-        _client.ReceivedCalls().Should().BeEmpty();
-        (await DbContext.Set<EquityDailyStockPrice>().CountAsync()).Should().Be(0);
-        (await DbContext.Set<StockSplit>().CountAsync()).Should().Be(0);
-        (await DbContext.Set<CashDividend>().CountAsync()).Should().Be(0);
-        (await DbContext.Set<EquityDirectorySourceRecord>().CountAsync()).Should().Be(0);
-    }
-
-    [Fact]
-    public async Task Disabled_ReconciliationPreservesPendingAndAppliedActionsAndPrices()
-    {
-        var listing = await SeedLisbon();
-        var split = new StockSplit
-        {
-            Issuer = listing.Security.Issuer,
-            Listing = listing,
-            EffectiveDate = Session,
-            PriceSeriesTicker = listing.Ticker,
-            Numerator = 2,
-            Denominator = 1,
-            PriceAdjustmentAppliedTime = DateTime.UtcNow,
-        };
-        var dividend = new CashDividend
-        {
-            Issuer = listing.Security.Issuer,
-            Listing = listing,
-            ExDate = Session,
-            AmountPerShare = .25m,
-            Currency = "EUR",
-            Source = CashDividendSource.Yahoo,
-        };
-        DbContext.AddRange(
-            split,
-            dividend,
-            Price(listing, Session.AddDays(-1), 20),
-            Price(listing, Session, 10)
-        );
-        await DbContext.SaveChangesAsync();
-        DbContext.ChangeTracker.Clear();
-        var originalMarker = await DbContext
-            .Set<StockSplit>()
-            .Select(row => row.PriceAdjustmentAppliedTime)
-            .SingleAsync();
-        var service = Service(enabled: false);
-        await (Task)
-            typeof(YahooPriceImportService)
-                .GetMethod(
-                    "ReconcilePendingCorporateActions",
-                    BindingFlags.NonPublic | BindingFlags.Instance
-                )!
-                .Invoke(service, [Session.AddDays(1), CancellationToken.None])!;
-
-        _client.ReceivedCalls().Should().BeEmpty();
-        await using var read = Fixture.CreateDbContext();
-        (await read.Set<StockSplit>().SingleAsync())
-            .PriceAdjustmentAppliedTime.Should()
-            .Be(originalMarker);
-        (await read.Set<CashDividend>().SingleAsync()).PriceAdjustmentAppliedTime.Should().BeNull();
-        (
-            await read.Set<EquityDailyStockPrice>()
-                .OrderBy(row => row.Date)
-                .Select(row => row.Close)
-                .ToListAsync()
-        )
-            .Should()
-            .Equal(20m, 10m);
-        (
-            await read.Set<EquityDirectorySourceRecord>()
-                .CountAsync(row => row.Source == LisbonEvidenceSource)
-        )
-            .Should()
-            .Be(0);
     }
 
     private static PriceSeriesTarget Target(EquityListing listing) =>

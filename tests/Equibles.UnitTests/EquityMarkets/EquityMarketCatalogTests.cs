@@ -130,12 +130,10 @@ public class EquityMarketCatalogTests
     }
 
     [Fact]
-    public void Lisbon_KeepsItsEarlierSessionAndTheOneTimeSeed()
+    public void Lisbon_KeepsItsEarlierSession()
     {
-        var lisbon = EquityMarketCatalog.TryGet(EquityMarketRegistrationSeed.LisbonCode);
+        var lisbon = EquityMarketCatalog.TryGet("euronext-lisbon");
         lisbon.SessionClose.Should().Be(new TimeOnly(16, 30));
         lisbon.ClosingAuctionEnd.Should().Be(new TimeOnly(16, 35));
-        EquityMarketRegistrationSeed.InitiallyEnabled(true).Should().Equal("euronext-lisbon");
-        EquityMarketRegistrationSeed.InitiallyEnabled(false).Should().BeEmpty();
     }
 }
