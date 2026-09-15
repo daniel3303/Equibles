@@ -17,7 +17,8 @@ namespace Equibles.IntegrationTests.Holdings;
 /// Pins the issuer-first impossible-position scan: a position larger than a trustworthy issuer is
 /// withdrawn, an issuer whose own size is nonsense is never judged, an issuer below the
 /// one-million-share index floor is still judged at its own bar, and an issuer that three distinct
-/// filers exceed is refused instead of every filer being accused.
+/// filers exceed is refused instead of every filer being accused, as is an issuer whose other
+/// filers together already hold more than its stored size.
 /// </summary>
 public class ImpossiblePositionRepairServiceTests : IDisposable
 {
@@ -206,6 +207,56 @@ public class ImpossiblePositionRepairServiceTests : IDisposable
         {
             (await Reload(holding.Id)).ValueUnavailable.Should().BeTrue();
         }
+    }
+
+    [Fact]
+    public async Task Repair_LeavesAnIssuerAloneWhenTheOtherFilersAlreadyOutholdIt()
+    {
+        // PRPL: 4.36M stored shares, one filer at 20M reads as impossible, but five other filers
+        // inside the bar together hold 40M on the same quarter, so the size is what is wrong.
+        var holdings = await SeedHoldings(
+            sharesOutstanding: 4_359_632,
+            marketCapitalization: 40_000_000,
+            positions:
+            [
+                (20_000_000, 180_000_000),
+                (8_000_000, 72_000_000),
+                (8_000_000, 72_000_000),
+                (8_000_000, 72_000_000),
+                (8_000_000, 72_000_000),
+                (8_000_000, 72_000_000),
+            ]
+        );
+
+        (await CreateService().Repair(CancellationToken.None)).Should().Be(0);
+
+        foreach (var holding in holdings)
+        {
+            (await Reload(holding.Id)).ValueUnavailable.Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task Repair_StillWithdrawsWhenTheOtherFilersFitInsideTheIssuer()
+    {
+        // NaaS beside two ordinary holders: the rest of the market fits in 200M shares, so the
+        // lone 32.1B-share filer is the one that is wrong.
+        var holdings = await SeedHoldings(
+            sharesOutstanding: 200_000_000,
+            marketCapitalization: 5_000_000_000,
+            positions:
+            [
+                (32_098_694_296, 100_800_000_000),
+                (30_000_000, 750_000_000),
+                (20_000_000, 500_000_000),
+            ]
+        );
+
+        (await CreateService().Repair(CancellationToken.None)).Should().Be(1);
+
+        (await Reload(holdings[0].Id)).ValueUnavailable.Should().BeTrue();
+        (await Reload(holdings[1].Id)).ValueUnavailable.Should().BeFalse();
+        (await Reload(holdings[2].Id)).ValueUnavailable.Should().BeFalse();
     }
 
     private ImpossiblePositionRepairService CreateService() =>

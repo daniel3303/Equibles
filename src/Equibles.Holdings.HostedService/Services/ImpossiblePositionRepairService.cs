@@ -35,7 +35,10 @@ namespace Equibles.Holdings.HostedService.Services;
 /// The ratio guard cannot see a size stored in the wrong unit, since both figures are off by the
 /// same factor. So before anything is withdrawn the exceeding positions are grouped by issuer, and
 /// an issuer that <see cref="MinCorroboratingHolders"/> or more distinct filers exceed is left
-/// alone and logged: the filers corroborate each other, and the stored size is what is wrong.
+/// alone and logged: the filers corroborate each other, and the stored size is what is wrong. An
+/// issuer a lone filer accuses is then held against the rest of the market: when the other 13F
+/// filers of the newest quarter together already hold more than the stored size, the issuer is
+/// left alone too.
 /// </para>
 /// </remarks>
 [Service]
@@ -67,6 +70,14 @@ public class ImpossiblePositionRepairService
     /// </summary>
     internal const int MinCorroboratingHolders = 3;
 
+    /// <summary>The 13F float one issuer's filers together report on one report date.</summary>
+    internal sealed class ReportedFloat
+    {
+        public Guid EquityIssuerId { get; set; }
+        public DateOnly ReportDate { get; set; }
+        public long Shares { get; set; }
+    }
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ImpossiblePositionRepairService> _logger;
 
@@ -88,6 +99,31 @@ public class ImpossiblePositionRepairService
         public long SharesOutStanding { get; set; }
         public double MarketCapitalization { get; set; }
     }
+
+    // The rest of the market's float for the issuers still under judgment: every 13F common-share
+    // row except the exceeding ones, summed per report date, so the newest quarter can be held
+    // against the stored size.
+    internal static IQueryable<ReportedFloat> BuildReportedFloatQuery(
+        EquiblesFinancialDbContext dbContext,
+        Guid[] issuerIds,
+        Guid[] excludedHoldingIds
+    ) =>
+        dbContext
+            .Set<InstitutionalHolding>()
+            .Where(h =>
+                issuerIds.Contains(h.EquityIssuerId)
+                && h.FilingType == FilingType.Form13F
+                && h.ShareType == ShareType.Shares
+                && h.OptionType == null
+                && !excludedHoldingIds.Contains(h.Id)
+            )
+            .GroupBy(h => new { h.EquityIssuerId, h.ReportDate })
+            .Select(g => new ReportedFloat
+            {
+                EquityIssuerId = g.Key.EquityIssuerId,
+                ReportDate = g.Key.ReportDate,
+                Shares = g.Sum(h => h.Shares),
+            });
 
     /// <summary>The columns the decision needs; the entity itself is loaded only for the rows being withdrawn.</summary>
     internal sealed class CandidatePosition
@@ -286,8 +322,56 @@ public class ImpossiblePositionRepairService
             );
         }
 
-        var withdrawals = exceeding
-            .Where(c => !doubtedIssuers.Contains(c.EquityIssuerId))
+        // Second witness for the issuers a lone filer accuses: when the OTHER filers of the newest
+        // quarter together already hold more than the stored size, the size is wrong and the lone
+        // filer is not (PRPL stores 4.4M shares against a 62M-share reported float). Refusing a
+        // genuine impossible position this way is a miss, never an accusation.
+        var judged = exceeding.Where(c => !doubtedIssuers.Contains(c.EquityIssuerId)).ToList();
+        var newestFloats = (
+            await BuildReportedFloatQuery(
+                    dbContext,
+                    judged.Select(c => c.EquityIssuerId).Distinct().ToArray(),
+                    judged.Select(c => c.Id).ToArray()
+                )
+                .ToListAsync(cancellationToken)
+        )
+            .GroupBy(f => f.EquityIssuerId)
+            .Select(g => g.MaxBy(f => f.ReportDate)!)
+            .ToList();
+        var outheldIssuers = new HashSet<Guid>();
+        foreach (var reportedFloat in newestFloats)
+        {
+            var anchor = anchorsById[reportedFloat.EquityIssuerId];
+            splitsByStock.TryGetValue(reportedFloat.EquityIssuerId, out var splits);
+            if (
+                !HoldingValueBasis.TryResolveShareCountFactor(
+                    reportedFloat.ReportDate,
+                    splits,
+                    null,
+                    anchor.Ticker,
+                    anchor.SecondaryTickers,
+                    out var floatFactor
+                )
+                || SplitAdjustment.AdjustShareCount(reportedFloat.Shares, floatFactor)
+                    > anchor.SharesOutStanding
+            )
+            {
+                outheldIssuers.Add(reportedFloat.EquityIssuerId);
+            }
+        }
+        if (outheldIssuers.Count > 0)
+        {
+            _logger.LogWarning(
+                "Left {Issuers} issuer(s) unjudged because the rest of their newest-quarter filers "
+                    + "together already hold more than the stored size, so the size is what is "
+                    + "wrong: {Tickers}",
+                outheldIssuers.Count,
+                string.Join(", ", outheldIssuers.Select(id => anchorsById[id].Ticker).Order())
+            );
+        }
+
+        var withdrawals = judged
+            .Where(c => !outheldIssuers.Contains(c.EquityIssuerId))
             .Select(c => c.Id)
             .ToList();
 
