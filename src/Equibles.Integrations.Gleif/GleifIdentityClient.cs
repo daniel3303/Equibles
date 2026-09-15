@@ -5,7 +5,6 @@ using Equibles.Integrations.Common.RateLimiter;
 using Equibles.Integrations.Common.Retry;
 using Equibles.Integrations.Gleif.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Equibles.Integrations.Gleif;
 
@@ -36,9 +35,7 @@ public class GleifIdentityClient
     private readonly HttpClient _httpClient;
     private readonly ILogger<GleifIdentityClient> _logger;
 
-    public GleifIdentityClient(HttpClient httpClient)
-        : this(httpClient, NullLogger<GleifIdentityClient>.Instance) { }
-
+    // One constructor only: typed-client activation refuses a class whose constructors are ambiguous.
     public GleifIdentityClient(HttpClient httpClient, ILogger<GleifIdentityClient> logger)
     {
         _httpClient = httpClient;

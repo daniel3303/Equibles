@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using Equibles.Integrations.Gleif;
 using Equibles.UnitTests.Euronext;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Equibles.UnitTests.Gleif;
 
@@ -9,6 +10,9 @@ public class GleifIdentityTests
 {
     private static Task<string> Fixture(string name) =>
         File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "TestAssets", "Gleif", name));
+
+    private static GleifIdentityClient Client(HttpClient http) =>
+        new(http, NullLogger<GleifIdentityClient>.Instance);
 
     [Fact]
     public async Task CapturedIssuer_ConfirmsTheExactIsinAndRetainsEveryRelatedSecurity()
@@ -20,7 +24,7 @@ public class GleifIdentityTests
         };
         var handler = new EuronextDirectoryTestHandler(bodies);
         using var http = new HttpClient(handler);
-        var identity = await new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        var identity = await Client(http).GetIssuerForIsin("PTALT0AE0002");
         identity.LegalEntityIdentifier.Should().Be("213800AKSTYRLHY3X497");
         identity.LegalName.Should().Be("ALTRI, S.G.P.S., S.A.");
         identity.Jurisdiction.Should().Be("PT");
@@ -52,7 +56,7 @@ public class GleifIdentityTests
             await Fixture("altri-isins.json"),
         ]);
         using var http = new HttpClient(handler);
-        await new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        await Client(http).GetIssuerForIsin("PTALT0AE0002");
         handler
             .Requests[1]
             .Url.AbsoluteUri.Should()
@@ -70,7 +74,7 @@ public class GleifIdentityTests
             (HttpStatusCode.OK, await Fixture("altri-isins.json")),
         ]);
         using var http = new HttpClient(handler);
-        var identity = await new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        var identity = await Client(http).GetIssuerForIsin("PTALT0AE0002");
         identity.LegalEntityIdentifier.Should().Be("213800AKSTYRLHY3X497");
         identity.RelatedIsins.Should().HaveCount(6);
         handler.Requests.Should().HaveCount(3);
@@ -95,7 +99,7 @@ public class GleifIdentityTests
             related.ToJsonString(),
         ]);
         using var http = new HttpClient(handler);
-        var identity = await new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        var identity = await Client(http).GetIssuerForIsin("PTALT0AE0002");
         identity.LegalEntityIdentifier.Should().Be("213800AKSTYRLHY3X497");
         identity.RelatedIsins.Should().Equal("PTALT0AE0002");
         identity.RelatedIsinCount.Should().Be(42_020);
@@ -111,7 +115,7 @@ public class GleifIdentityTests
         root["data"] = new JsonArray();
         var handler = new EuronextDirectoryTestHandler([root.ToJsonString()]);
         using var http = new HttpClient(handler);
-        var identity = await new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        var identity = await Client(http).GetIssuerForIsin("PTALT0AE0002");
         identity.LegalEntityIdentifier.Should().BeNull();
         identity.RelatedIsins.Should().BeEmpty();
         handler.Requests.Should().ContainSingle();
@@ -174,7 +178,7 @@ public class GleifIdentityTests
             related.ToJsonString(),
         ]);
         using var http = new HttpClient(handler);
-        var fetch = () => new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        var fetch = () => Client(http).GetIssuerForIsin("PTALT0AE0002");
         await fetch.Should().ThrowAsync<InvalidDataException>();
         if (scenario.EndsWith("link"))
             handler.Requests.Should().ContainSingle();
@@ -201,7 +205,7 @@ public class GleifIdentityTests
             second.ToJsonString(),
         ]);
         using var http = new HttpClient(handler);
-        var identity = await new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        var identity = await Client(http).GetIssuerForIsin("PTALT0AE0002");
         identity.RelatedIsins.Should().HaveCount(6);
         identity.RelatedIsinCount.Should().Be(6);
         identity.ResponseBodies.Should().HaveCount(3);
