@@ -1,6 +1,8 @@
+using System.Net;
 using System.Text.Json.Nodes;
 using Equibles.Integrations.Gleif;
 using Equibles.UnitTests.Euronext;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Equibles.UnitTests.Gleif;
 
@@ -8,6 +10,9 @@ public class GleifIdentityTests
 {
     private static Task<string> Fixture(string name) =>
         File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "TestAssets", "Gleif", name));
+
+    private static GleifIdentityClient Client(HttpClient http) =>
+        new(http, NullLogger<GleifIdentityClient>.Instance);
 
     [Fact]
     public async Task CapturedIssuer_ConfirmsTheExactIsinAndRetainsEveryRelatedSecurity()
@@ -19,7 +24,7 @@ public class GleifIdentityTests
         };
         var handler = new EuronextDirectoryTestHandler(bodies);
         using var http = new HttpClient(handler);
-        var identity = await new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        var identity = await Client(http).GetIssuerForIsin("PTALT0AE0002");
         identity.LegalEntityIdentifier.Should().Be("213800AKSTYRLHY3X497");
         identity.LegalName.Should().Be("ALTRI, S.G.P.S., S.A.");
         identity.Jurisdiction.Should().Be("PT");
@@ -29,12 +34,77 @@ public class GleifIdentityTests
             .HaveCount(6)
             .And.Contain("PTALT0AE0002")
             .And.Contain("US02209Y1001");
+        identity.RelatedIsinCount.Should().Be(6);
         identity.ResponseBodies.Should().Equal(bodies);
         handler.Requests.Should().HaveCount(2);
         handler
             .Requests[1]
             .Url.AbsoluteUri.Should()
-            .Be("https://api.gleif.org/api/v1/lei-records/213800AKSTYRLHY3X497/isins");
+            .Be(
+                "https://api.gleif.org/api/v1/lei-records/213800AKSTYRLHY3X497/isins?page%5Bsize%5D=200"
+            );
+    }
+
+    [Fact]
+    public async Task RelatedLinkStatingItsOwnPageSize_IsRequestedAsServed()
+    {
+        var issuer = JsonNode.Parse(await Fixture("altri-issuer.json"));
+        issuer["data"][0]["relationships"]["isins"]["links"]["related"] =
+            "https://api.gleif.org/api/v1/lei-records/213800AKSTYRLHY3X497/isins?page%5Bsize%5D=50";
+        var handler = new EuronextDirectoryTestHandler([
+            issuer.ToJsonString(),
+            await Fixture("altri-isins.json"),
+        ]);
+        using var http = new HttpClient(handler);
+        await Client(http).GetIssuerForIsin("PTALT0AE0002");
+        handler
+            .Requests[1]
+            .Url.AbsoluteUri.Should()
+            .Be(
+                "https://api.gleif.org/api/v1/lei-records/213800AKSTYRLHY3X497/isins?page%5Bsize%5D=50"
+            );
+    }
+
+    [Fact]
+    public async Task ThrottledRequest_IsRetriedAfterTheBackoff()
+    {
+        var handler = new StatusTestHandler([
+            (HttpStatusCode.TooManyRequests, ""),
+            (HttpStatusCode.OK, await Fixture("altri-issuer.json")),
+            (HttpStatusCode.OK, await Fixture("altri-isins.json")),
+        ]);
+        using var http = new HttpClient(handler);
+        var identity = await Client(http).GetIssuerForIsin("PTALT0AE0002");
+        identity.LegalEntityIdentifier.Should().Be("213800AKSTYRLHY3X497");
+        identity.RelatedIsins.Should().HaveCount(6);
+        handler.Requests.Should().HaveCount(3);
+        handler
+            .Requests.Take(2)
+            .Select(request => request.AbsoluteUri)
+            .Distinct()
+            .Should()
+            .ContainSingle();
+    }
+
+    [Fact]
+    public async Task IssuerAboveTheEnumerationBound_RecordsOnlyTheRequestedIsinAndTheReportedTotal()
+    {
+        var related = JsonNode.Parse(await Fixture("altri-isins.json"));
+        related["meta"]["pagination"]["total"] = 42_020;
+        related["meta"]["pagination"]["lastPage"] = 211;
+        related["links"]["next"] =
+            "https://api.gleif.org/api/v1/lei-records/213800AKSTYRLHY3X497/isins?page%5Bnumber%5D=2&page%5Bsize%5D=200";
+        var handler = new EuronextDirectoryTestHandler([
+            await Fixture("altri-issuer.json"),
+            related.ToJsonString(),
+        ]);
+        using var http = new HttpClient(handler);
+        var identity = await Client(http).GetIssuerForIsin("PTALT0AE0002");
+        identity.LegalEntityIdentifier.Should().Be("213800AKSTYRLHY3X497");
+        identity.RelatedIsins.Should().Equal("PTALT0AE0002");
+        identity.RelatedIsinCount.Should().Be(42_020);
+        identity.ResponseBodies.Should().HaveCount(2);
+        handler.Requests.Should().HaveCount(2);
     }
 
     [Fact]
@@ -45,7 +115,7 @@ public class GleifIdentityTests
         root["data"] = new JsonArray();
         var handler = new EuronextDirectoryTestHandler([root.ToJsonString()]);
         using var http = new HttpClient(handler);
-        var identity = await new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        var identity = await Client(http).GetIssuerForIsin("PTALT0AE0002");
         identity.LegalEntityIdentifier.Should().BeNull();
         identity.RelatedIsins.Should().BeEmpty();
         handler.Requests.Should().ContainSingle();
@@ -108,7 +178,7 @@ public class GleifIdentityTests
             related.ToJsonString(),
         ]);
         using var http = new HttpClient(handler);
-        var fetch = () => new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        var fetch = () => Client(http).GetIssuerForIsin("PTALT0AE0002");
         await fetch.Should().ThrowAsync<InvalidDataException>();
         if (scenario.EndsWith("link"))
             handler.Requests.Should().ContainSingle();
@@ -135,9 +205,44 @@ public class GleifIdentityTests
             second.ToJsonString(),
         ]);
         using var http = new HttpClient(handler);
-        var identity = await new GleifIdentityClient(http).GetIssuerForIsin("PTALT0AE0002");
+        var identity = await Client(http).GetIssuerForIsin("PTALT0AE0002");
         identity.RelatedIsins.Should().HaveCount(6);
+        identity.RelatedIsinCount.Should().Be(6);
         identity.ResponseBodies.Should().HaveCount(3);
         handler.Requests.Should().HaveCount(3);
+        handler
+            .Requests[1]
+            .Url.AbsoluteUri.Should()
+            .Be(
+                "https://api.gleif.org/api/v1/lei-records/213800AKSTYRLHY3X497/isins?page%5Bsize%5D=200"
+            );
+        handler.Requests[2].Url.AbsoluteUri.Should().Be(first["links"]["next"].GetValue<string>());
+    }
+
+    // Serves each queued status and body in order so a throttled attempt can be followed by a served one.
+    private sealed class StatusTestHandler(
+        IEnumerable<(HttpStatusCode Status, string Body)> replies
+    ) : HttpMessageHandler
+    {
+        private readonly Queue<(HttpStatusCode Status, string Body)> _replies = new(replies);
+        public List<Uri> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            Requests.Add(request.RequestUri);
+            if (_replies.Count == 0)
+                throw new InvalidOperationException("Unexpected HTTP request.");
+            var reply = _replies.Dequeue();
+            return Task.FromResult(
+                new HttpResponseMessage(reply.Status)
+                {
+                    Content = new StringContent(reply.Body),
+                    RequestMessage = request,
+                }
+            );
+        }
     }
 }

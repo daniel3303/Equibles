@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Equibles.UnitTests.EquityMarkets;
@@ -213,7 +214,10 @@ public class EquityMarketDirectoryImporterTests
         snapshots
             .Reconcile(Arg.Any<EquityDirectorySnapshotInput>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(SnapshotId));
-        var gleif = Substitute.For<GleifIdentityClient>(new HttpClient());
+        var gleif = Substitute.For<GleifIdentityClient>(
+            new HttpClient(),
+            NullLogger<GleifIdentityClient>.Instance
+        );
         gleif
             .GetIssuerForIsin(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(Issuer(call.Arg<string>())));

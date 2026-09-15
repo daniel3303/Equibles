@@ -1,15 +1,46 @@
 using System.Text;
 using System.Text.Json;
 using Equibles.Core.Identity;
+using Equibles.Integrations.Common.RateLimiter;
+using Equibles.Integrations.Common.Retry;
 using Equibles.Integrations.Gleif.Models;
+using Microsoft.Extensions.Logging;
 
 namespace Equibles.Integrations.Gleif;
 
 // Exact identifier relationships only; legal names are descriptive, never matching keys.
-public class GleifIdentityClient(HttpClient httpClient)
+public class GleifIdentityClient
 {
     private const int MaxResponseBytes = 2_000_000;
+    private const int MaxRetries = 3;
+    private const int MaxRelatedPages = 100;
+
+    // GLEIF throttled an unpaced sequential pass from about 240 requests a minute; the typed client is
+    // transient, so the pace is shared statically, as FRED's is.
+    internal const int RequestsPerMinute = 60;
+
+    // The related-securities page size GLEIF honours; its default of 15 cost most issuers several calls.
+    internal const int RelatedPageSize = 200;
+
+    // Above this total an issuer (BNP Paribas lists 42,020 ISINs, mostly notes) is not enumerated: only the
+    // requested ISIN, which the lookup itself confirmed, and the reported total are recorded.
+    internal const int MaxRelatedIsins = 2_000;
+
     private static readonly Uri Origin = new("https://api.gleif.org");
+    private static readonly IRateLimiter Pace = new Common.RateLimiter.RateLimiter(
+        RequestsPerMinute,
+        TimeSpan.FromMinutes(1)
+    );
+
+    private readonly HttpClient _httpClient;
+    private readonly ILogger<GleifIdentityClient> _logger;
+
+    // One constructor only: typed-client activation refuses a class whose constructors are ambiguous.
+    public GleifIdentityClient(HttpClient httpClient, ILogger<GleifIdentityClient> logger)
+    {
+        _httpClient = httpClient;
+        _logger = logger;
+    }
 
     public virtual async Task<GleifIssuerIdentity> GetIssuerForIsin(
         string isin,
@@ -71,7 +102,7 @@ public class GleifIdentityClient(HttpClient httpClient)
         result.RegistrationStatus = Text(attributes.GetProperty("registration"), "status");
         var related = record.GetProperty("relationships").GetProperty("isins").GetProperty("links");
         var path = $"/api/v1/lei-records/{lei}/isins";
-        var next = ValidateRelatedUrl(Text(related, "related"), path);
+        var next = WithPageSize(ValidateRelatedUrl(Text(related, "related"), path));
         var publishDate = Text(root.GetProperty("meta").GetProperty("goldenCopy"), "publishDate");
         await ReadRelatedIsins(result, next, path, publishDate, timeout.Token);
         if (!result.RelatedIsins.Contains(isin, StringComparer.Ordinal))
@@ -93,7 +124,7 @@ public class GleifIdentityClient(HttpClient httpClient)
         var seen = new HashSet<string>();
         int? expected = null;
         var bytes = Encoding.UTF8.GetByteCount(result.ResponseBodies[0]);
-        for (var page = 0; next != null && page < 100; page++)
+        for (var page = 0; next != null && page < MaxRelatedPages; page++)
         {
             if (!visited.Add(next.AbsoluteUri))
                 throw new InvalidDataException("GLEIF pagination repeated a page.");
@@ -109,7 +140,6 @@ public class GleifIdentityClient(HttpClient httpClient)
             expected ??= total;
             if (
                 total != expected
-                || total > 10_000
                 || Text(root.GetProperty("meta").GetProperty("goldenCopy"), "publishDate")
                     != publishDate
             )
@@ -117,6 +147,7 @@ public class GleifIdentityClient(HttpClient httpClient)
             var rows = Records(root);
             if (rows.GetArrayLength() == 0)
                 throw new InvalidDataException("GLEIF returned an incomplete securities page.");
+            var isins = new List<string>();
             foreach (var row in rows.EnumerateArray())
             {
                 var attributes = row.GetProperty("attributes");
@@ -130,9 +161,26 @@ public class GleifIdentityClient(HttpClient httpClient)
                     throw new InvalidDataException(
                         "GLEIF related security identity is invalid, conflicting, or repeated."
                     );
-                result.RelatedIsins.Add(isin);
+                isins.Add(isin);
             }
             result.ResponseBodies.Add(body);
+            if (page == 0)
+            {
+                result.RelatedIsinCount = total;
+                if (total > MaxRelatedIsins)
+                {
+                    _logger.LogInformation(
+                        "GLEIF issuer {Lei} lists {Total} ISINs, above the {Bound} enumeration bound; only {Isin} is recorded as related",
+                        result.LegalEntityIdentifier,
+                        total,
+                        MaxRelatedIsins,
+                        result.RequestedIsin
+                    );
+                    result.RelatedIsins.Add(result.RequestedIsin);
+                    return;
+                }
+            }
+            result.RelatedIsins.AddRange(isins);
             var links = root.GetProperty("links");
             next =
                 links.TryGetProperty("next", out var value) && value.ValueKind != JsonValueKind.Null
@@ -148,6 +196,20 @@ public class GleifIdentityClient(HttpClient httpClient)
         }
         if (next != null)
             throw new InvalidDataException("GLEIF pagination exceeded its page limit.");
+    }
+
+    // The first page is requested at our page size when the source's link states none; later pages follow
+    // the served links as they are.
+    private static Uri WithPageSize(Uri uri)
+    {
+        var stated = uri
+            .Query.TrimStart('?')
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Any(part => Uri.UnescapeDataString(part.Split('=', 2)[0]) == "page[size]");
+        if (stated)
+            return uri;
+        var separator = uri.Query.Length == 0 ? "?" : "&";
+        return new Uri(uri.AbsoluteUri + separator + "page%5Bsize%5D=" + RelatedPageSize);
     }
 
     private static Uri ValidateRelatedUrl(string value, string path)
@@ -188,13 +250,33 @@ public class GleifIdentityClient(HttpClient httpClient)
 
     private async Task<string> Read(Uri uri, CancellationToken token)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        using var response = await httpClient.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
+        using var response = await HttpRetry.Send(
+            () =>
+                _httpClient.SendAsync(
+                    new HttpRequestMessage(HttpMethod.Get, uri),
+                    HttpCompletionOption.ResponseHeadersRead,
+                    token
+                ),
+            Pace,
+            MaxRetries,
+            "GLEIF request retries exhausted.",
+            (attempt, delay) =>
+                _logger.LogWarning(
+                    "GLEIF rate limited (429), retrying in {Delay}s (attempt {Attempt}/{Max})",
+                    delay.TotalSeconds,
+                    attempt + 1,
+                    MaxRetries
+                ),
+            (statusCode, attempt, delay) =>
+                _logger.LogWarning(
+                    "GLEIF server error ({StatusCode}), retrying in {Delay}s (attempt {Attempt}/{Max})",
+                    statusCode,
+                    delay.TotalSeconds,
+                    attempt + 1,
+                    MaxRetries
+                ),
             token
         );
-        response.EnsureSuccessStatusCode();
         if (response.RequestMessage?.RequestUri is { } actual && actual != uri)
             throw new InvalidDataException("GLEIF identity response was redirected.");
         if (response.Content.Headers.ContentLength > MaxResponseBytes)
