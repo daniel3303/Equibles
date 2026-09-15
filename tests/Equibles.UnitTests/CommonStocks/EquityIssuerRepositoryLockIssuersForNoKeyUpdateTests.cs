@@ -26,8 +26,7 @@ public class EquityIssuerRepositoryLockIssuersForNoKeyUpdateTests
             new IModuleConfiguration[] { new CommonStocksModuleConfiguration() }
         );
 
-        var act = () =>
-            new EquityIssuerRepository(db).LockIssuersForNoKeyUpdate([Guid.NewGuid()]);
+        var act = () => new EquityIssuerRepository(db).LockIssuersForNoKeyUpdate([Guid.NewGuid()]);
 
         await act.Should().NotThrowAsync();
     }
@@ -37,8 +36,7 @@ public class EquityIssuerRepositoryLockIssuersForNoKeyUpdateTests
     {
         await using var db = NpgsqlContext();
 
-        var act = () =>
-            new EquityIssuerRepository(db).LockIssuersForNoKeyUpdate([Guid.NewGuid()]);
+        var act = () => new EquityIssuerRepository(db).LockIssuersForNoKeyUpdate([Guid.NewGuid()]);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*transaction*");
     }
