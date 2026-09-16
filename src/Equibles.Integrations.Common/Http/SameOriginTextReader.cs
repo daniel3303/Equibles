@@ -15,51 +15,19 @@ public static class SameOriginTextReader
         string accept = null
     )
     {
-        ArgumentNullException.ThrowIfNull(httpClient);
-        ArgumentNullException.ThrowIfNull(origin);
-        ArgumentNullException.ThrowIfNull(uri);
-        if (!IsOnOrigin(origin, uri))
-            throw new InvalidDataException($"{uri} is not on {origin.Host}.");
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        if (accept != null)
-            request.Headers.Accept.ParseAdd(accept);
-        using var response = await httpClient.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken
+        var payload = await SameOriginBinaryReader.Read(
+            httpClient,
+            origin,
+            uri,
+            maxBytes,
+            cancellationToken,
+            accept
         );
-        response.EnsureSuccessStatusCode();
-        if (response.RequestMessage?.RequestUri is { } actual && !IsOnOrigin(origin, actual))
-            throw new InvalidDataException($"{origin.Host} response left its official origin.");
-        if (response.Content.Headers.ContentLength > maxBytes)
-            throw new InvalidDataException($"{origin.Host} response exceeds the capture limit.");
-        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var output = new MemoryStream();
-        var buffer = new byte[16_384];
-        int read;
-        while ((read = await input.ReadAsync(buffer, cancellationToken)) > 0)
-        {
-            if (output.Length + read > maxBytes)
-                throw new InvalidDataException(
-                    $"{origin.Host} response exceeds the capture limit."
-                );
-            output.Write(buffer, 0, read);
-        }
-        return Decode(
-            response.Content.Headers.ContentType?.CharSet,
-            output.GetBuffer(),
-            checked((int)output.Length)
-        );
+        return Decode(payload.CharSet, payload.Bytes);
     }
 
-    private static bool IsOnOrigin(Uri origin, Uri uri) =>
-        uri.IsAbsoluteUri
-        && uri.Scheme == Uri.UriSchemeHttps
-        && string.Equals(uri.Host, origin.Host, StringComparison.OrdinalIgnoreCase)
-        && uri.IsDefaultPort;
-
     // The declared charset is honoured; an unknown or missing one reads as UTF-8.
-    private static string Decode(string charSet, byte[] bytes, int length)
+    private static string Decode(string charSet, byte[] bytes)
     {
         var encoding = Encoding.UTF8;
         if (!string.IsNullOrWhiteSpace(charSet))
@@ -68,6 +36,6 @@ public static class SameOriginTextReader
                 encoding = Encoding.GetEncoding(charSet.Trim('"'));
             }
             catch (ArgumentException) { }
-        return encoding.GetString(bytes, 0, length);
+        return encoding.GetString(bytes);
     }
 }

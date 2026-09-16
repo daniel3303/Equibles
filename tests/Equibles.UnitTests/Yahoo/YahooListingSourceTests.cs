@@ -27,6 +27,59 @@ public class YahooListingSourceTests
             QuoteUnitMultiplier: multiplier
         );
 
+    [Fact]
+    public void LondonQuotesInPenceAndAFewOfItsLinesInAnotherCurrency()
+    {
+        var pence = Target("BT-A", "GB", "XLON", "GB0030913577", "GBP", 0.01m);
+        pence.ProviderSymbol.Should().Be("BT-A.L");
+        var identity = new YahooChartSourceIdentity
+        {
+            Symbol = "BT-A.L",
+            Currency = "GBp",
+            ExchangeCode = "LSE",
+            InstrumentType = "EQUITY",
+            ExchangeTimeZone = "Europe/London",
+        };
+        YahooListingSource.MatchesChart(pence, identity).Should().BeTrue();
+        identity.Currency = "GBP";
+        YahooListingSource
+            .MatchesChart(pence, identity)
+            .Should()
+            .BeFalse("a pound quote is a different line of the same security");
+
+        var dollars = Target("BPCR", "GB", "XLON", "GB00BDGKMY29", "USD", 1m);
+        YahooListingSource
+            .MatchesChart(
+                dollars,
+                new YahooChartSourceIdentity
+                {
+                    Symbol = "BPCR.L",
+                    Currency = "USD",
+                    ExchangeCode = "LSE",
+                    InstrumentType = "EQUITY",
+                    ExchangeTimeZone = "Europe/London",
+                }
+            )
+            .Should()
+            .BeTrue();
+
+        var growth = Target("4BB", "GB", "AIMX", "GB00BMCLYF79", "GBP", 0.01m);
+        YahooListingSource
+            .MatchesChart(
+                growth,
+                new YahooChartSourceIdentity
+                {
+                    Symbol = "4BB.L",
+                    Currency = "GBp",
+                    ExchangeCode = "LSE",
+                    InstrumentType = "EQUITY",
+                    ExchangeTimeZone = "Europe/London",
+                }
+            )
+            .Should()
+            .BeTrue("the growth market shares the exchange's provider identity");
+    }
+
     [Theory]
     [InlineData("XLIS", "PT", "ALTR.LS", "LIS", "Europe/Lisbon")]
     [InlineData("ENXL", "PT", "ALTR.LS", "LIS", "Europe/Lisbon")]
@@ -73,6 +126,8 @@ public class YahooListingSourceTests
     [InlineData("NOKIA", "FI", "XHEL", "NOKIA.HE")]
     [InlineData("GRF-P", "ES", "XMAD", "GRF-P.MC")]
     [InlineData("11B", "PL", "XWAR", "11B.WA")]
+    [InlineData("4BB", "GB", "AIMX", "4BB.L")]
+    [InlineData("BT-A", "GB", "XLON", "BT-A.L")]
     [InlineData("NESN", "CH", "XSWX", null)]
     [InlineData("AIR", "FR", "XETR", null)]
     [InlineData("AIR", "FR", null, null)]

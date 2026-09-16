@@ -114,13 +114,11 @@ public class EquityMarketCatalogTests
     }
 
     [Fact]
-    public void DirectorySources_ServeEveryMarketButLondonWhichRunsLast()
+    public void DirectorySources_ServeEveryMarketAndLondonRunsLast()
     {
         EquityMarketCatalog
-            .All.Where(market => market.DirectorySource == null)
-            .Select(market => market.Code)
-            .Should()
-            .Equal("lse");
+            .All.Should()
+            .AllSatisfy(market => market.DirectorySource.Should().NotBeNull());
         EquityMarketCatalog
             .All.Last()
             .Code.Should()
@@ -132,7 +130,23 @@ public class EquityMarketCatalogTests
             .All.Select(market => market.DirectorySource)
             .Distinct()
             .Should()
-            .BeEquivalentTo(["euronext", "xetra", "nasdaq-nordic", "bme", "gpw", null]);
+            .BeEquivalentTo(["euronext", "xetra", "nasdaq-nordic", "bme", "gpw", "lse"]);
+    }
+
+    [Fact]
+    public void London_IsTheOneMarketTheUnitedKingdomAuthorityRecords()
+    {
+        var london = EquityMarketCatalog.TryGet("lse");
+        london.FirdsAuthority.Should().Be("FCA");
+        london.MarketIdentifierCodes.Should().Equal("XLON", "AIMX");
+        london.FirdsVenueCodes.Should().Equal("XLON", "AIMX");
+        london.HomeVenueCodes.Should().Equal("XLON", "AIMX");
+        london.Currency.Should().Be("GBP");
+        EquityMarketCatalog
+            .All.Where(market => market.FirdsAuthority != "ESMA")
+            .Select(market => market.Code)
+            .Should()
+            .Equal("lse");
     }
 
     [Fact]

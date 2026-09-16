@@ -48,6 +48,13 @@ public class EquityMarketDirectoryGateTests
     [InlineData("gpw", "XWAR", null, "XWAR", "XWAR", "PL", true)]
     [InlineData("gpw", "XWAR", null, "XWAR", "XPAR", "FR", false)]
     [InlineData("gpw", "XNCO", null, "XWAR", "XWAR", "PL", false)]
+    [InlineData("lse", "XLON", null, "XLON", "XLON", "GB", true)]
+    [InlineData("lse", "AIMX", null, "AIMX", "AIMX", "GB", true)]
+    [InlineData("lse", "AIMX", null, "AIMX", "XLON", "GB", true)]
+    [InlineData("lse", "XLON", null, "XLON", "AIMX", "GB", true)]
+    [InlineData("lse", "XLON", null, "XLOM", "XLON", "GB", false)]
+    [InlineData("lse", "XLON", null, "XLON", "XLOM", "GB", false)]
+    [InlineData("lse", "XLON", null, "XLON", "XSTO", "SE", false)]
     public void IsHomeShare_CombinesTheDirectorysPrimaryMarketWithFirds(
         string marketCode,
         string rowMic,

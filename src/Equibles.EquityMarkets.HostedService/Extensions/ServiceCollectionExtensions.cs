@@ -7,6 +7,7 @@ using Equibles.Integrations.Esma;
 using Equibles.Integrations.Euronext;
 using Equibles.Integrations.Gleif;
 using Equibles.Integrations.Gpw;
+using Equibles.Integrations.Lse;
 using Equibles.Integrations.NasdaqNordic;
 using Equibles.Integrations.Xetra;
 
@@ -24,6 +25,7 @@ public static class ServiceCollectionExtensions
         AddSourceClient<NasdaqNordicClient>(services);
         AddSourceClient<BmeClient>(services);
         AddSourceClient<GpwClient>(services);
+        AddSourceClient<LseInstrumentListClient>(services);
         AddSourceClient<EsmaFirdsClient>(services, TimeSpan.FromMinutes(20));
         AddSourceClient<FcaFirdsClient>(services, TimeSpan.FromMinutes(20));
         services.AddTransient<IFirdsFileIndex>(provider =>
@@ -38,6 +40,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEquityMarketDirectorySource, NasdaqNordicEquityMarketDirectorySource>();
         services.AddScoped<IEquityMarketDirectorySource, BmeEquityMarketDirectorySource>();
         services.AddScoped<IEquityMarketDirectorySource, GpwEquityMarketDirectorySource>();
+        services.AddScoped<IEquityMarketDirectorySource, LseEquityMarketDirectorySource>();
 
         services.AddHostedService<FirdsUniverseWorker>();
         services.AddHostedService<EquityMarketDirectoryWorker>();
