@@ -302,7 +302,9 @@ public class VenueDirectorySourceTests
             await Bme("share-details.ES0171996095.json"),
         ]);
         using var http = new HttpClient(handler);
-        var source = new BmeEquityMarketDirectorySource(new BmeClient(http));
+        var source = new BmeEquityMarketDirectorySource(
+            new BmeClient(http) { Pace = new CountingRateLimiter() }
+        );
         var market = EquityMarketCatalog.TryGet("bme");
         source.SourceKey.Should().Be(market.DirectorySource);
         source.Supports(market).Should().BeTrue();
@@ -360,7 +362,9 @@ public class VenueDirectorySourceTests
         using var http = new HttpClient(
             new EuronextDirectoryTestHandler([await Bme("share-details.ES0171996095.json")])
         );
-        var source = new BmeEquityMarketDirectorySource(new BmeClient(http));
+        var source = new BmeEquityMarketDirectorySource(
+            new BmeClient(http) { Pace = new CountingRateLimiter() }
+        );
 
         var product = await source.Resolve(
             market,
@@ -379,7 +383,9 @@ public class VenueDirectorySourceTests
             new EuronextDirectoryTestHandler([await Bme("share-details.ES0171996095.json")])
         );
         var mismatch = () =>
-            new BmeEquityMarketDirectorySource(new BmeClient(other)).Resolve(
+            new BmeEquityMarketDirectorySource(
+                new BmeClient(other) { Pace = new CountingRateLimiter() }
+            ).Resolve(
                 market,
                 new EquityMarketDirectoryRow
                 {

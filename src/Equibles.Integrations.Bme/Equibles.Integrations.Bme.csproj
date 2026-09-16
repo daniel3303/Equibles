@@ -3,4 +3,7 @@
     <ProjectReference Include="../Equibles.Core/Equibles.Core.csproj" />
     <ProjectReference Include="../Equibles.Integrations.Common/Equibles.Integrations.Common.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equibles.UnitTests" />
+  </ItemGroup>
 </Project>

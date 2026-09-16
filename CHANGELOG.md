@@ -36,6 +36,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- BME directory capture asks the venue one instrument a second. A capture reads one details reply per listed company, and the unpaced first production pass was refused at its twenty-sixth request after running at about fifteen a second, which failed the whole Madrid market; the client now shares a pace across the process as the GLEIF client does, which makes a capture about two minutes.
 - Yahoo key-statistics and company-profile requests use the venue-qualified provider symbol like the chart requests do; the bare ticker of a Paris listing named another market's company (`AIR` fetched AAR Corp for Airbus), and a listing outside the catalog is now skipped instead of asked by its bare ticker.
 - Euronext directory capture accepts cross-listed lines whose market cell names several venues (`XBRU, XPAR` on the Paris list): the row keeps the market's own venue and a line Euronext homes on a sibling market is skipped as that market's, instead of one such row failing the whole pass for Paris, Amsterdam and Brussels.
 - Euronext directory capture raises the reported-total bound from 2,000 to 5,000, above Milan's 2,467-line directory, whose rows are all single-venue lines the parser accepts; the gateway's venue query remains the proof the list is unfiltered.
