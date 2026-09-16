@@ -13,7 +13,13 @@ public class NativeEquityModelTests(HistoricalEquityDbFixture fixture)
     [Fact]
     public async Task ProductionModel_HasNoRetiredStorage_AndMatchesItsMigrationSnapshot()
     {
-        await using var native = fixture.CreateNativeDbContext();
+        // The full production model, not the pinned-schema one the fixture hands out for writes.
+        await using var native = fixture.CreateDbContext(
+            null,
+            null,
+            includeLegacyMappings: false,
+            pinnedSchema: false
+        );
         var retired = new[]
         {
             "CommonStock",

@@ -117,10 +117,12 @@ public class ParadeDbFixture : IAsyncLifetime
         Action<DbContextOptionsBuilder<EquiblesFinancialDbContext>> configure,
         Action<Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder> configureNpgsql =
             null,
-        bool? includeLegacyMappings = null
+        bool? includeLegacyMappings = null,
+        bool? pinnedSchema = null
     )
     {
         var legacyMappings = includeLegacyMappings ?? IncludeLegacyMappings;
+        var pinned = pinnedSchema ?? MigrationTarget != null;
         var optionsBuilder = new DbContextOptionsBuilder<EquiblesFinancialDbContext>();
         optionsBuilder.UseNpgsql(
             ConnectionString,
@@ -135,7 +137,7 @@ public class ParadeDbFixture : IAsyncLifetime
                 configureNpgsql?.Invoke(npgsql);
             }
         );
-        if (legacyMappings)
+        if (legacyMappings || pinned)
             optionsBuilder.ConfigureWarnings(warnings =>
                 warnings.Ignore(RelationalEventId.PendingModelChangesWarning)
             );
@@ -165,13 +167,14 @@ public class ParadeDbFixture : IAsyncLifetime
             new ErrorsModuleConfiguration(),
         ];
 
+        IEnumerable<IModuleConfiguration> configured = modules;
+        if (legacyMappings)
+            configured = configured.Append(new Equibles.TestSupport.LegacyEquityTestMappings());
+        if (pinned)
+            configured = configured.Append(new Equibles.TestSupport.PinnedSchemaTestMappings());
         return new EquiblesFinancialDbContext(
             optionsBuilder.Options,
-            new ModuleConfigurationSet<EquiblesFinancialDbContext>(
-                legacyMappings
-                    ? modules.Append(new Equibles.TestSupport.LegacyEquityTestMappings())
-                    : modules
-            )
+            new ModuleConfigurationSet<EquiblesFinancialDbContext>(configured)
         );
     }
 

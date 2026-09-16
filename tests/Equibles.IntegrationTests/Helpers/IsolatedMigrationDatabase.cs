@@ -23,7 +23,10 @@ internal sealed class IsolatedMigrationDatabase : IAsyncDisposable
             Pooling = false,
         };
         ConnectionString = connection.ConnectionString;
-        Context = fixture.CreateDbContext(options => options.UseNpgsql(ConnectionString));
+        Context = fixture.CreateDbContext(
+            options => options.UseNpgsql(ConnectionString),
+            pinnedSchema: true
+        );
         Context.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
     }
 
