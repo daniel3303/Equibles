@@ -96,7 +96,9 @@ public class EquityMarketDirectoryWorker(
         }
     }
 
-    // An operator request always runs; otherwise a stale directory runs unless this process tried it recently.
+    // An operator request runs at once, but only once per press: a failed pass leaves the request standing so
+    // the page still shows it outstanding, and without this the market would run every control tick for ever.
+    // Otherwise a stale directory runs unless this process tried it recently.
     internal static bool IsDue(
         EquityMarketRegistration row,
         DateTime? attemptedAt,
@@ -106,7 +108,10 @@ public class EquityMarketDirectoryWorker(
         TimeSpan retryInterval
     )
     {
-        if (row.DirectoryRefreshRequestedAt != null)
+        if (
+            row.DirectoryRefreshRequestedAt != null
+            && (attemptedAt == null || row.DirectoryRefreshRequestedAt > attemptedAt)
+        )
             return true;
         var stale =
             row.DirectoryRefreshedAt == null || row.DirectoryRefreshedAt < now - refreshInterval;
@@ -124,9 +129,12 @@ public class EquityMarketDirectoryWorker(
         int consecutiveFailures
     )
     {
-        if (consecutiveFailures < 2)
-            return retryInterval;
-        var wait = retryInterval * Math.Pow(2, Math.Min(consecutiveFailures - 1, 16));
+        if (retryInterval <= TimeSpan.Zero || retryInterval >= refreshInterval)
+            return refreshInterval;
+        var wait = retryInterval;
+        // Doubling in place stops at the cap, so no configuration can overflow the multiplication.
+        for (var doubling = 1; doubling < consecutiveFailures && wait < refreshInterval; doubling++)
+            wait += wait;
         return wait < refreshInterval ? wait : refreshInterval;
     }
 
