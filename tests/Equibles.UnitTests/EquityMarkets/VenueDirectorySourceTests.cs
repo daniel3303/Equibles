@@ -227,7 +227,39 @@ public class VenueDirectorySourceTests
             .Should()
             .ThrowAsync<InvalidDataException>(
                 "the auction spelling of one list never confirms a row of the other"
+            )
+            .WithMessage("*First North GM Sweden Auction*");
+    }
+
+    [Theory]
+    [InlineData("First North GM Sweden Auction X")]
+    [InlineData("first north gm sweden auction")]
+    [InlineData("First North GM Sweden Observation")]
+    [InlineData("First North GM Denmark Auction")]
+    public async Task Nasdaq_RefusesAnExchangeLabelOutsideItsCategorysPair(string exchange)
+    {
+        var reply = (await Nasdaq("instrument-info.AINO.json")).Replace(
+            "\"exchange\":\"First North GM Sweden Auction\"",
+            $"\"exchange\":\"{exchange}\"",
+            StringComparison.Ordinal
+        );
+        reply.Should().Contain(exchange);
+        using var http = new HttpClient(new EuronextDirectoryTestHandler([reply]));
+        var resolve = () =>
+            new NasdaqNordicEquityMarketDirectorySource(new NasdaqNordicClient(http)).Resolve(
+                EquityMarketCatalog.TryGet("nasdaq-stockholm"),
+                new EquityMarketDirectoryRow
+                {
+                    Isin = "SE0009242555",
+                    MarketIdentifierCode = "FNSE",
+                    Symbol = "AINO",
+                    ReportedCurrency = "SEK",
+                    SourceUrl = NasdaqNordicClient.InstrumentUrl("TX2255610"),
+                },
+                Firds("SE0009242555", "SSME", Lei),
+                CancellationToken.None
             );
+        await resolve.Should().ThrowAsync<InvalidDataException>().WithMessage("*conflict*");
     }
 
     [Theory]
