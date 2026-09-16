@@ -12,8 +12,10 @@ public sealed class XlsxWorkbook : IDisposable
     private const string RelationshipsPath = "xl/_rels/workbook.xml.rels";
     private const string SharedStringsPath = "xl/sharedStrings.xml";
 
-    // The format's own last column, XFD.
+    // The format's own last column, XFD, and a ceiling on the cells one sheet may lay out. A sheet states its
+    // own widths, so without the second bound a few kilobytes of references can ask for gigabytes of rows.
     private const int MaxColumns = 16_384;
+    private const int MaxCells = 4_000_000;
     private const string RelationshipNamespace =
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
@@ -50,6 +52,7 @@ public sealed class XlsxWorkbook : IDisposable
         var path = ResolveSheetPath(relationshipId);
         var strings = SharedStrings();
         var rows = new List<XlsxRow>();
+        var cells = 0;
         using var reader = OpenXml(path);
         while (reader.Read())
         {
@@ -62,7 +65,13 @@ public sealed class XlsxWorkbook : IDisposable
                 rows.Add(new XlsxRow(number, []));
                 continue;
             }
-            rows.Add(new XlsxRow(number, ReadCells(reader.ReadSubtree(), strings)));
+            var row = ReadCells(reader.ReadSubtree(), strings);
+            cells += row.Count;
+            if (cells > MaxCells)
+                throw new InvalidDataException(
+                    $"Workbook sheet \"{sheetName}\" is larger than it may be."
+                );
+            rows.Add(new XlsxRow(number, row));
         }
         return rows;
     }

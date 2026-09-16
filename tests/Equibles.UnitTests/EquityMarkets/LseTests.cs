@@ -90,6 +90,13 @@ public class LseTests
                 "a reference past column XFD would size a row of that width"
             );
 
+        var wide = Workbook("<c r=\"XFD1\" t=\"inlineStr\"><is><t>wide</t></is></c>", 300);
+        var many = () => XlsxWorkbook.Open(wide, MaxPartBytes).ReadSheet("Sheet1");
+        many.Should()
+            .Throw<InvalidDataException>(
+                "a few kilobytes of references may not ask the reader for millions of cells"
+            );
+
         var last = Workbook("<c r=\"XFD1\" t=\"inlineStr\"><is><t>last</t></is></c>");
         using var document = XlsxWorkbook.Open(last, MaxPartBytes);
         var rows = document.ReadSheet("Sheet1");
@@ -99,7 +106,7 @@ public class LseTests
 
     // A one-sheet workbook holding the given cells, written so a reference this narrow file could not
     // otherwise carry can be read back through the same reader.
-    private static byte[] Workbook(string cells)
+    private static byte[] Workbook(string cells, int rows = 1)
     {
         using var buffer = new MemoryStream();
         using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, true))
@@ -122,7 +129,11 @@ public class LseTests
                 archive,
                 "xl/worksheets/sheet1.xml",
                 "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
-                    + $"<sheetData><row r=\"1\">{cells}</row></sheetData></worksheet>"
+                    + "<sheetData>"
+                    + string.Concat(
+                        Enumerable.Range(1, rows).Select(row => $"<row r=\"{row}\">{cells}</row>")
+                    )
+                    + "</sheetData></worksheet>"
             );
         }
         return buffer.ToArray();
