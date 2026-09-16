@@ -1,0 +1,6 @@
+# BME continuous-market captures
+
+- Captured on 2026-09-16 with plain GETs (user agent `Equibles/1.0`, `Accept: application/json`, no cookies) from `https://apiweb.bolsasymercados.es`, the market API the exchange's own listed-companies page calls.
+- `listed-companies.sample.json` is the reply of `/Market/v1/EQ/ListedCompanies?ISIN=&sectorKey=&subsectorKey=&tradingSystem=SIBE&mtfSegment=&page=0&pageSize=0` (123 companies that day, `hasMoreResults` false) trimmed to 5 verbatim rows: ACCIONA, ACS, Banco Santander, Ferrovial N.V. (a Dutch ISIN the ESMA register homes on Euronext Amsterdam) and Grifols class A. `totalResults` is rewritten to the kept count. The reply names one line per company and carries no ticker.
+- `share-details.{ISIN}.json` are unchanged replies of `/Market/v1/EQ/ShareDetailsInfo?ISIN={ISIN}` for those five lines and for Grifols class B (`ES0171996095`, ticker `GRF.P`), which the listed-companies reply omits and the class A reply names under `otherSharesFromIssuer` with an empty `active` and `exclusionDate`; the cancelled lines in the same array carry `active` `C` and their exclusion date.
+- Every line states `tradingSystem` `SIBE` (the continuous market, MIC XMAD), `market` `02`, `currency` `EUR` and an `issuerCode` shared by both Grifols classes.

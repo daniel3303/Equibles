@@ -144,9 +144,12 @@ public class FirdsUniverseImporterTests(ParadeDbFixture fixture) : ParadeDbMcpTe
         (await records.CountHomeShares(EquityMarketCatalog.TryGet("nasdaq-helsinki"), now))
             .Should()
             .Be(
-                0,
-                "Aquis-quoted Raisio has its home on Nasdaq Helsinki's segment DHEL, which is not catalogued"
+                1,
+                "Aquis-quoted Raisio has its home on Nasdaq Helsinki's Nordic@Mid segment DHEL, a catalogued home venue"
             );
+        (await records.CountHomeShares(EquityMarketCatalog.TryGet("nasdaq-stockholm"), now))
+            .Should()
+            .Be(0, "no Stockholm line is in the fixture");
         (
             await new FirdsImportRunRepository(DbContext).GetLatestFullPublication(
                 EsmaFirdsClient.AuthorityCode

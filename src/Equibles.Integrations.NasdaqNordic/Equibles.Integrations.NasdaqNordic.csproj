@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Equibles.Core/Equibles.Core.csproj" />
+    <ProjectReference Include="../Equibles.Integrations.Common/Equibles.Integrations.Common.csproj" />
+  </ItemGroup>
+</Project>

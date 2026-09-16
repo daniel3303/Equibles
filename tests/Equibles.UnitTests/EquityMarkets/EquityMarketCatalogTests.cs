@@ -1,6 +1,7 @@
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.Integrations.Esma;
 using Equibles.Integrations.Euronext;
+using Equibles.Integrations.NasdaqNordic;
 
 namespace Equibles.UnitTests.EquityMarkets;
 
@@ -53,7 +54,7 @@ public class EquityMarketCatalogTests
                 .AllSatisfy(mic => mic.Should().MatchRegex("^[A-Z0-9]{4}$"));
             market.HomeVenueCodes.Should().Contain(market.MarketIdentifierCodes);
             market.HomeVenueCodes.Should().Contain(market.FirdsVenueCodes);
-            if (market.Code != "xetra")
+            if (!SegmentFiledMarkets.Contains(market.Code))
             {
                 market.FirdsVenueCodes.Should().Equal(market.MarketIdentifierCodes);
                 market.HomeVenueCodes.Should().Equal(market.MarketIdentifierCodes);
@@ -80,6 +81,78 @@ public class EquityMarketCatalogTests
         xetra.IsHomeVenue(null).Should().BeFalse();
     }
 
+    // The markets FIRDS files under segment codes rather than the operating MIC alone.
+    private static readonly string[] SegmentFiledMarkets =
+    [
+        "xetra",
+        "nasdaq-stockholm",
+        "nasdaq-helsinki",
+        "nasdaq-copenhagen",
+        "bme",
+    ];
+
+    // A Nordic main-market line is filed on the lit book and its Nordic@Mid and Auction on Demand segments, a
+    // First North line on the latter two and the SME growth-market code; Madrid adds its dark midpoint book.
+    [Theory]
+    [InlineData("nasdaq-stockholm", "XSTO,FNSE", "XSTO,DSTO,MSTO,FNSE,DNSE,MNSE,SSME")]
+    [InlineData("nasdaq-helsinki", "XHEL,FNFI", "XHEL,DHEL,MHEL,FNFI,DNFI,MNFI,FSME")]
+    [InlineData("nasdaq-copenhagen", "XCSE,FNDK", "XCSE,DCSE,MCSE,FNDK,DNDK,MNDK,DSME")]
+    [InlineData("bme", "XMAD", "XMAD,DMAD")]
+    [InlineData("gpw", "XWAR", "XWAR")]
+    public void SegmentFiledMarkets_HomeEveryVenueCodeTheRegisterFilesThemUnder(
+        string code,
+        string mics,
+        string venues
+    )
+    {
+        var market = EquityMarketCatalog.TryGet(code);
+        market.MarketIdentifierCodes.Should().Equal(mics.Split(','));
+        market.FirdsVenueCodes.Should().Equal(venues.Split(','));
+        market.HomeVenueCodes.Should().Equal(venues.Split(','));
+        market.DirectorySource.Should().NotBeNull();
+        market.FirdsAuthority.Should().Be(EsmaFirdsClient.AuthorityCode);
+    }
+
+    [Fact]
+    public void DirectorySources_ServeEveryMarketButLondonWhichRunsLast()
+    {
+        EquityMarketCatalog
+            .All.Where(market => market.DirectorySource == null)
+            .Select(market => market.Code)
+            .Should()
+            .Equal("lse");
+        EquityMarketCatalog
+            .All.Last()
+            .Code.Should()
+            .Be(
+                "lse",
+                "the EEA directories hold an issuer's presentation before its London line arrives"
+            );
+        EquityMarketCatalog
+            .All.Select(market => market.DirectorySource)
+            .Distinct()
+            .Should()
+            .BeEquivalentTo(["euronext", "xetra", "nasdaq-nordic", "bme", "gpw", null]);
+    }
+
+    [Fact]
+    public void NasdaqMarkets_AgreeWithTheNasdaqNordicDefinitions()
+    {
+        var catalogued = EquityMarketCatalog
+            .All.Where(market => market.DirectorySource == "nasdaq-nordic")
+            .ToList();
+        catalogued.Should().HaveCount(NasdaqNordicMarket.All.Count);
+        foreach (var market in catalogued)
+        {
+            var nasdaq = NasdaqNordicMarket.FromSlug(market.Code["nasdaq-".Length..]);
+            nasdaq.Should().NotBeNull(market.Code);
+            market
+                .MarketIdentifierCodes.Should()
+                .Equal(nasdaq.MainMarketIdentifierCode, nasdaq.FirstNorthIdentifierCode);
+            market.DelayedTradeSource.Should().BeNull();
+        }
+    }
+
     [Fact]
     public void EuronextMarkets_AgreeWithTheEuronextDirectoryDefinitions()
     {
@@ -102,6 +175,10 @@ public class EquityMarketCatalogTests
     [InlineData("ALXP", "euronext-paris", "FR", ".PA", "PAR", "Europe/Paris")]
     [InlineData("XETR", "xetra", "DE", ".DE", "GER", "Europe/Berlin")]
     [InlineData("XLON", "lse", "GB", ".L", "LSE", "Europe/London")]
+    [InlineData("FNSE", "nasdaq-stockholm", "SE", ".ST", "STO", "Europe/Stockholm")]
+    [InlineData("XCSE", "nasdaq-copenhagen", "DK", ".CO", "CPH", "Europe/Copenhagen")]
+    [InlineData("XMAD", "bme", "ES", ".MC", "MCE", "Europe/Madrid")]
+    [InlineData("XWAR", "gpw", "PL", ".WA", "WSE", "Europe/Warsaw")]
     public void ByMarketIdentifierCode_ReturnsTheVerifiedProviderIdentity(
         string mic,
         string code,

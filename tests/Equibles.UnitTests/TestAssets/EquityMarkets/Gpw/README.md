@@ -1,0 +1,8 @@
+# GPW main-market captures
+
+- Captured on 2026-09-16 with plain GETs (user agent `Equibles/1.0`, no cookies) from `https://www.gpw.pl`. The exchange's firewall resets a browser user agent that arrives without a browser and rejects every POST to the table loader; these addresses answer a plain client.
+- `quotations.continuous.sample.html` is the continuous-trading table of `/ajaxindex.php?action=GPWQuotations&start=showTable&tab=all&lang=EN&type=&full=1&format=html` (370 rows that day) trimmed to its table element with 6 verbatim rows: 11BIT, KGHM, MODIVO, PKNORLEN, PKOBP and PZU. Each row links the company page under `col2` (`company-factsheet?isin=`), and states the ISIN (`col3`), the shortcut (`col4`), the currency (`col5`) and the MIC (`col21`); the bid and ask groups repeat the `col15` and `col16` classes.
+- `quotations.fix1.html` is the unchanged single-price-system table of `start=listSingle&type=fix1` (3 rows, one of them the Swedish ISIN of Ronson); `quotations.fix2.sample.html` is the `type=fix2` table (29 rows that day) trimmed to its first 3. Their ISINs do not appear in the continuous table, so the directory is the union of the three.
+- `company-factsheet.PL11BTS00015.excerpt.html` keeps the two elements of `/company-factsheet?isin=PL11BTS00015` the parser reads, the `h1#setH1` heading "NAME (ISIN)" and the hidden `input#glsSkrot` shortcut, inside a minimal document.
+- `quotations.empty.derived.html` is `quotations.fix1.html` with its three rows removed (the only derived file here): the header with the column classes the parser reads over an empty body, the shape a single-price auction table takes on a day no line is quoted in it.
+- Both endpoints declare `Content-Type: text/html; charset=UTF-8`.

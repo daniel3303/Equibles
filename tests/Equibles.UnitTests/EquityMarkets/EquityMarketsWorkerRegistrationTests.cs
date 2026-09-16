@@ -1,7 +1,10 @@
 using Equibles.EquityMarkets.HostedService.Extensions;
+using Equibles.Integrations.Bme;
 using Equibles.Integrations.Esma;
 using Equibles.Integrations.Euronext;
 using Equibles.Integrations.Gleif;
+using Equibles.Integrations.Gpw;
+using Equibles.Integrations.NasdaqNordic;
 using Equibles.Integrations.Xetra;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,6 +18,9 @@ public class EquityMarketsWorkerRegistrationTests
     [InlineData(typeof(GleifIdentityClient))]
     [InlineData(typeof(EuronextDirectoryClient))]
     [InlineData(typeof(XetraInstrumentListClient))]
+    [InlineData(typeof(NasdaqNordicClient))]
+    [InlineData(typeof(BmeClient))]
+    [InlineData(typeof(GpwClient))]
     [InlineData(typeof(EsmaFirdsClient))]
     [InlineData(typeof(FcaFirdsClient))]
     public void EverySourceClient_ResolvesAsATypedHttpClient(Type client)

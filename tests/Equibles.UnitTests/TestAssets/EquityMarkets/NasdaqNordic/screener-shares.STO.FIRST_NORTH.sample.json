@@ -1,0 +1,363 @@
+{
+  "data": {
+    "instrumentListing": {
+      "headers": {
+        "fullName": "Name",
+        "currency": "CCY",
+        "lastSalePrice": "Last",
+        "netChange": "Net Change",
+        "percentageChange": "% Change",
+        "bidPrice": "Bid",
+        "askPrice": "Ask",
+        "volume": "Volume",
+        "turnover": "Turnover",
+        "greenEquityDesignation": "Green Equity Designation",
+        "sector": "Sector"
+      },
+      "rows": [
+        {
+          "fullName": "4C Group",
+          "currency": "SEK",
+          "priceNotation": "",
+          "micCode": "",
+          "netChange": "-0.15",
+          "percentageChange": "-2.06%",
+          "bidPrice": "7.13",
+          "askPrice": "7.20",
+          "lastSalePrice": "7.13",
+          "high": "",
+          "low": "",
+          "volume": "24,024",
+          "reportedVolume": "",
+          "turnover": "172,951",
+          "tradesCount": "",
+          "lastTraded": "",
+          "time": "",
+          "netAssetValue": "",
+          "navUpdatedTime": "",
+          "totalExpenseRatio": "",
+          "orderbookId": "TX4391034",
+          "assetClass": "SHARES",
+          "symbol": "4C",
+          "sector": "Technology",
+          "isin": "SE0017936891",
+          "greenEquityDesignation": "",
+          "deltaIndicator": "down",
+          "contractSize": "",
+          "openInterest": "",
+          "expirationDate": "",
+          "strikePrice": "",
+          "noteCode": "",
+          "issuerFullName": "",
+          "allTradesAvgPrice": "",
+          "couponRate": "",
+          "exchangeSymbol": "",
+          "noteDescription": "",
+          "type": "",
+          "settlementPrice": "",
+          "totalVolume": "",
+          "lastTradedDate": ""
+        },
+        {
+          "fullName": "AAC Clyde Space",
+          "currency": "SEK",
+          "priceNotation": "",
+          "micCode": "",
+          "netChange": "+1.20",
+          "percentageChange": "+1.14%",
+          "bidPrice": "105.00",
+          "askPrice": "106.00",
+          "lastSalePrice": "106.00",
+          "high": "",
+          "low": "",
+          "volume": "13,998",
+          "reportedVolume": "",
+          "turnover": "1,467,406",
+          "tradesCount": "",
+          "lastTraded": "",
+          "time": "",
+          "netAssetValue": "",
+          "navUpdatedTime": "",
+          "totalExpenseRatio": "",
+          "orderbookId": "TX2258732",
+          "assetClass": "SHARES",
+          "symbol": "AAC",
+          "sector": "Telecommunications",
+          "isin": "SE0021020716",
+          "greenEquityDesignation": "",
+          "deltaIndicator": "up",
+          "contractSize": "",
+          "openInterest": "",
+          "expirationDate": "",
+          "strikePrice": "",
+          "noteCode": "",
+          "issuerFullName": "",
+          "allTradesAvgPrice": "",
+          "couponRate": "",
+          "exchangeSymbol": "",
+          "noteDescription": "",
+          "type": "",
+          "settlementPrice": "",
+          "totalVolume": "",
+          "lastTradedDate": ""
+        },
+        {
+          "fullName": "Absolent Air Care Group",
+          "currency": "SEK",
+          "priceNotation": "",
+          "micCode": "",
+          "netChange": "-4.00",
+          "percentageChange": "-1.86%",
+          "bidPrice": "210.00",
+          "askPrice": "213.00",
+          "lastSalePrice": "210.00",
+          "high": "",
+          "low": "",
+          "volume": "429",
+          "reportedVolume": "",
+          "turnover": "90,513",
+          "tradesCount": "",
+          "lastTraded": "",
+          "time": "",
+          "netAssetValue": "",
+          "navUpdatedTime": "",
+          "totalExpenseRatio": "",
+          "orderbookId": "TX1649284",
+          "assetClass": "SHARES",
+          "symbol": "ABSO",
+          "sector": "Industrials",
+          "isin": "SE0006256558",
+          "greenEquityDesignation": "",
+          "deltaIndicator": "down",
+          "contractSize": "",
+          "openInterest": "",
+          "expirationDate": "",
+          "strikePrice": "",
+          "noteCode": "",
+          "issuerFullName": "",
+          "allTradesAvgPrice": "",
+          "couponRate": "",
+          "exchangeSymbol": "",
+          "noteDescription": "",
+          "type": "",
+          "settlementPrice": "",
+          "totalVolume": "",
+          "lastTradedDate": ""
+        },
+        {
+          "fullName": "Acarix",
+          "currency": "SEK",
+          "priceNotation": "",
+          "micCode": "",
+          "netChange": "-0.006",
+          "percentageChange": "-2.84%",
+          "bidPrice": "0.203",
+          "askPrice": "0.205",
+          "lastSalePrice": "0.205",
+          "high": "",
+          "low": "",
+          "volume": "3,515,806",
+          "reportedVolume": "",
+          "turnover": "717,695",
+          "tradesCount": "",
+          "lastTraded": "",
+          "time": "",
+          "netAssetValue": "",
+          "navUpdatedTime": "",
+          "totalExpenseRatio": "",
+          "orderbookId": "TX2257094",
+          "assetClass": "SHARES",
+          "symbol": "ACARIX",
+          "sector": "Health Care",
+          "isin": "SE0009268717",
+          "greenEquityDesignation": "",
+          "deltaIndicator": "down",
+          "contractSize": "",
+          "openInterest": "",
+          "expirationDate": "",
+          "strikePrice": "",
+          "noteCode": "",
+          "issuerFullName": "",
+          "allTradesAvgPrice": "",
+          "couponRate": "",
+          "exchangeSymbol": "",
+          "noteDescription": "",
+          "type": "",
+          "settlementPrice": "",
+          "totalVolume": "",
+          "lastTradedDate": ""
+        }
+      ]
+    },
+    "pagination": {
+      "paginationId": "",
+      "total": 4,
+      "size": 1000,
+      "page": 1,
+      "totalPages": 1
+    },
+    "filters": [
+      {
+        "displayName": "Market",
+        "key": "market",
+        "options": [
+          {
+            "default": true,
+            "displayName": "Nordic",
+            "value": ""
+          },
+          {
+            "default": false,
+            "displayName": "CPH",
+            "value": "CPH"
+          },
+          {
+            "default": false,
+            "displayName": "STO",
+            "value": "STO"
+          },
+          {
+            "default": false,
+            "displayName": "HEL",
+            "value": "HEL"
+          },
+          {
+            "default": false,
+            "displayName": "ICE",
+            "value": "ICE"
+          }
+        ]
+      },
+      {
+        "displayName": "Segment",
+        "key": "segment",
+        "options": [
+          {
+            "default": true,
+            "displayName": "First North Premier GM",
+            "value": "FN_PREMIER"
+          },
+          {
+            "default": true,
+            "displayName": "First North GM",
+            "value": "FN_GM"
+          },
+          {
+            "default": false,
+            "displayName": "Trading List Norway",
+            "value": "TL_NORWAY"
+          },
+          {
+            "default": false,
+            "displayName": "Cooperatives",
+            "value": "CO_OP"
+          }
+        ]
+      },
+      {
+        "displayName": "Other",
+        "key": "other",
+        "options": [
+          {
+            "default": false,
+            "displayName": "Auction Trading",
+            "value": "AUCTION_TRADING"
+          },
+          {
+            "default": false,
+            "displayName": "Observation Status",
+            "value": "OBSERVATION_STATUS"
+          },
+          {
+            "default": false,
+            "displayName": "Liquidity Provider",
+            "value": "LIQUIDITY_PROVIDER"
+          },
+          {
+            "default": false,
+            "displayName": "Green Equity Designation",
+            "value": "GREEN_EQUITY"
+          },
+          {
+            "default": false,
+            "displayName": "Green Equity Transition Designation",
+            "value": "GREEN_EQUITY_TRANSITION"
+          },
+          {
+            "default": false,
+            "displayName": "US restricted (Reg S Cat 3)",
+            "value": "US_RESTRICTED"
+          }
+        ]
+      },
+      {
+        "displayName": "Sector",
+        "key": "sector",
+        "options": [
+          {
+            "default": false,
+            "displayName": "Energy",
+            "value": "60"
+          },
+          {
+            "default": false,
+            "displayName": "Basic Materials",
+            "value": "55"
+          },
+          {
+            "default": false,
+            "displayName": "Industrials",
+            "value": "50"
+          },
+          {
+            "default": false,
+            "displayName": "Consumer Staples",
+            "value": "45"
+          },
+          {
+            "default": false,
+            "displayName": "Consumer Discretionary",
+            "value": "40"
+          },
+          {
+            "default": false,
+            "displayName": "Health Care",
+            "value": "20"
+          },
+          {
+            "default": false,
+            "displayName": "Telecommunications",
+            "value": "15"
+          },
+          {
+            "default": false,
+            "displayName": "Utilities",
+            "value": "65"
+          },
+          {
+            "default": false,
+            "displayName": "Financials",
+            "value": "30"
+          },
+          {
+            "default": false,
+            "displayName": "Technology",
+            "value": "10"
+          },
+          {
+            "default": false,
+            "displayName": "Real Estate",
+            "value": "35"
+          }
+        ]
+      }
+    ]
+  },
+  "messages": null,
+  "status": {
+    "timestamp": "2026-09-16T17:10:08+0200",
+    "rCode": 200,
+    "bCodeMessage": null,
+    "developerMessage": ""
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "yearOfPriceData": 2026,
+  "totalResults": 5,
+  "params": {
+    "tradingSystem": "SIBE",
+    "mtfSegment": null,
+    "sectorKey": null,
+    "subsectorKey": null,
+    "companyKey": null,
+    "isin": null,
+    "page": 0,
+    "pageSize": 0
+  },
+  "hasMoreResults": false,
+  "data": [
+    {
+      "name": "ACCIONA,S.A.",
+      "companyKey": "25220",
+      "isin": "ES0125220311",
+      "shareName": "ACCIONA",
+      "sector": "02",
+      "subsector": "03",
+      "tradingSystem": "SIBE",
+      "indices": "IBEX 35®, IGBM, IBEX TOP Dividendo®",
+      "annualDifference": 0.1092,
+      "capitalisation": 11081043906,
+      "navCommunicationDay": "-"
+    },
+    {
+      "name": "ACS,ACTIVIDADES DE CONST.Y SERVICIOS S.A",
+      "companyKey": "67050",
+      "isin": "ES0167050915",
+      "shareName": "ACS ACTIVIDADES CONST.Y SERVICIOS",
+      "sector": "02",
+      "subsector": "03",
+      "tradingSystem": "SIBE",
+      "indices": "IBEX 35®, IGBM",
+      "annualDifference": 0.0984,
+      "capitalisation": 25340601583.25,
+      "navCommunicationDay": "-"
+    },
+    {
+      "name": "BANCO SANTANDER, S.A.",
+      "companyKey": "13900",
+      "isin": "ES0113900J37",
+      "shareName": "BANCO SANTANDER",
+      "sector": "05",
+      "subsector": "01",
+      "tradingSystem": "SIBE",
+      "indices": "IBEX 35®, IGBM",
+      "annualDifference": 0.2634,
+      "capitalisation": 184372411157.47,
+      "navCommunicationDay": "-"
+    },
+    {
+      "name": "FERROVIAL N.V.",
+      "companyKey": "15001",
+      "isin": "NL0015001FS8",
+      "shareName": "FERROVIAL N.V.",
+      "sector": "02",
+      "subsector": "03",
+      "tradingSystem": "SIBE",
+      "indices": "IBEX 35®, IGBM",
+      "annualDifference": -0.1334,
+      "capitalisation": 34449604665.84,
+      "navCommunicationDay": "-"
+    },
+    {
+      "name": "GRIFOLS, S.A.",
+      "companyKey": "71996",
+      "isin": "ES0171996087",
+      "shareName": "GRIFOLS CLASE A",
+      "sector": "03",
+      "subsector": "05",
+      "tradingSystem": "SIBE",
+      "indices": "IBEX 35®, IGBM",
+      "annualDifference": -0.1092,
+      "capitalisation": 4118970627.47,
+      "navCommunicationDay": "-"
+    }
+  ]
+}

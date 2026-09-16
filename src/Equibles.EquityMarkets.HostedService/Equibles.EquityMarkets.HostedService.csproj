@@ -14,9 +14,12 @@
     <ProjectReference Include="..\Equibles.EquityMarkets.BusinessLogic\Equibles.EquityMarkets.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.EquityMarkets.Repositories\Equibles.EquityMarkets.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.Errors.BusinessLogic\Equibles.Errors.BusinessLogic.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.Bme\Equibles.Integrations.Bme.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Esma\Equibles.Integrations.Esma.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Euronext\Equibles.Integrations.Euronext.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Gleif\Equibles.Integrations.Gleif.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.Gpw\Equibles.Integrations.Gpw.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.NasdaqNordic\Equibles.Integrations.NasdaqNordic.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Xetra\Equibles.Integrations.Xetra.csproj" />
     <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />
   </ItemGroup>

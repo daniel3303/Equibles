@@ -2,9 +2,12 @@ using System.Net;
 using Equibles.Core.AutoWiring;
 using Equibles.EquityMarkets.BusinessLogic.Directory;
 using Equibles.EquityMarkets.HostedService.Services;
+using Equibles.Integrations.Bme;
 using Equibles.Integrations.Esma;
 using Equibles.Integrations.Euronext;
 using Equibles.Integrations.Gleif;
+using Equibles.Integrations.Gpw;
+using Equibles.Integrations.NasdaqNordic;
 using Equibles.Integrations.Xetra;
 
 namespace Equibles.EquityMarkets.HostedService.Extensions;
@@ -18,6 +21,9 @@ public static class ServiceCollectionExtensions
         AddSourceClient<EuronextDirectoryClient>(services);
         AddSourceClient<GleifIdentityClient>(services);
         AddSourceClient<XetraInstrumentListClient>(services);
+        AddSourceClient<NasdaqNordicClient>(services);
+        AddSourceClient<BmeClient>(services);
+        AddSourceClient<GpwClient>(services);
         AddSourceClient<EsmaFirdsClient>(services, TimeSpan.FromMinutes(20));
         AddSourceClient<FcaFirdsClient>(services, TimeSpan.FromMinutes(20));
         services.AddTransient<IFirdsFileIndex>(provider =>
@@ -29,6 +35,9 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IEquityMarketDirectorySource, EuronextEquityMarketDirectorySource>();
         services.AddScoped<IEquityMarketDirectorySource, XetraEquityMarketDirectorySource>();
+        services.AddScoped<IEquityMarketDirectorySource, NasdaqNordicEquityMarketDirectorySource>();
+        services.AddScoped<IEquityMarketDirectorySource, BmeEquityMarketDirectorySource>();
+        services.AddScoped<IEquityMarketDirectorySource, GpwEquityMarketDirectorySource>();
 
         services.AddHostedService<FirdsUniverseWorker>();
         services.AddHostedService<EquityMarketDirectoryWorker>();
