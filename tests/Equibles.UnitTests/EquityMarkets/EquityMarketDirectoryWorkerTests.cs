@@ -24,7 +24,14 @@ public class EquityMarketDirectoryWorkerTests
     public void AnOperatorRequest_AlwaysRuns_EvenRightAfterAFailedAttempt()
     {
         EquityMarketDirectoryWorker
-            .IsDue(Row(Now.AddHours(-1), requestedAt: Now), Now.AddMinutes(-1), Now, Refresh, Retry)
+            .IsDue(
+                Row(Now.AddHours(-1), requestedAt: Now),
+                Now.AddMinutes(-1),
+                9,
+                Now,
+                Refresh,
+                Retry
+            )
             .Should()
             .BeTrue();
     }
@@ -32,13 +39,16 @@ public class EquityMarketDirectoryWorkerTests
     [Fact]
     public void ANeverRefreshedMarket_RunsOnce_ThenWaitsTheRetryIntervalAfterAPassThatCapturedNothing()
     {
-        EquityMarketDirectoryWorker.IsDue(Row(null), null, Now, Refresh, Retry).Should().BeTrue();
         EquityMarketDirectoryWorker
-            .IsDue(Row(null), Now.AddMinutes(-5), Now, Refresh, Retry)
+            .IsDue(Row(null), null, 0, Now, Refresh, Retry)
+            .Should()
+            .BeTrue();
+        EquityMarketDirectoryWorker
+            .IsDue(Row(null), Now.AddMinutes(-5), 1, Now, Refresh, Retry)
             .Should()
             .BeFalse("the source or FIRDS was not ready five minutes ago and the row is unchanged");
         EquityMarketDirectoryWorker
-            .IsDue(Row(null), Now.AddMinutes(-16), Now, Refresh, Retry)
+            .IsDue(Row(null), Now.AddMinutes(-16), 1, Now, Refresh, Retry)
             .Should()
             .BeTrue();
     }
@@ -60,14 +70,66 @@ public class EquityMarketDirectoryWorkerTests
     }
 
     [Fact]
-    public void ARefreshedMarket_RunsAgainOnlyWhenItsDirectoryIsOlderThanTheInterval()
+    public void AStandingRequest_RunsOncePerPress_NotEveryControlTick()
     {
+        var requested = Now.AddMinutes(-30);
         EquityMarketDirectoryWorker
-            .IsDue(Row(Now.AddHours(-23)), Now.AddHours(-23), Now, Refresh, Retry)
+            .IsDue(Row(null, requestedAt: requested), null, 0, Now, Refresh, Retry)
+            .Should()
+            .BeTrue("nothing has tried it since the operator asked");
+        EquityMarketDirectoryWorker
+            .IsDue(Row(null, requestedAt: requested), Now.AddMinutes(-1), 3, Now, Refresh, Retry)
+            .Should()
+            .BeFalse(
+                "the request was served a minute ago and the pass failed; it is not a licence to loop"
+            );
+        EquityMarketDirectoryWorker
+            .IsDue(Row(null, requestedAt: Now), Now.AddMinutes(-1), 3, Now, Refresh, Retry)
+            .Should()
+            .BeTrue("the operator asked again after that attempt");
+    }
+
+    [Fact]
+    public void ARepeatedlyFailingMarket_WaitsLongerEachTimeUpToTheRefreshInterval()
+    {
+        EquityMarketDirectoryWorker.RetryWait(Retry, Refresh, 0).Should().Be(Retry);
+        EquityMarketDirectoryWorker.RetryWait(Retry, Refresh, 1).Should().Be(Retry);
+        EquityMarketDirectoryWorker.RetryWait(Retry, Refresh, 2).Should().Be(Retry * 2);
+        EquityMarketDirectoryWorker.RetryWait(Retry, Refresh, 4).Should().Be(Retry * 8);
+        EquityMarketDirectoryWorker
+            .RetryWait(Retry, Refresh, 9)
+            .Should()
+            .Be(Refresh, "the wait never exceeds the interval the market would run at anyway");
+        EquityMarketDirectoryWorker.RetryWait(Retry, Refresh, int.MaxValue).Should().Be(Refresh);
+        EquityMarketDirectoryWorker
+            .RetryWait(TimeSpan.FromHours(48), Refresh, 0)
+            .Should()
+            .Be(
+                Refresh,
+                "a retry interval longer than the refresh interval is the refresh interval"
+            );
+        EquityMarketDirectoryWorker.RetryWait(TimeSpan.Zero, Refresh, 3).Should().Be(Refresh);
+        // A source that refuses its own data on the fourth try is left alone for two hours, not asked again
+        // in fifteen minutes, because the capture that failed cost hundreds of requests.
+        EquityMarketDirectoryWorker
+            .IsDue(Row(null), Now.AddMinutes(-16), 4, Now, Refresh, Retry)
             .Should()
             .BeFalse();
         EquityMarketDirectoryWorker
-            .IsDue(Row(Now.AddHours(-25)), Now.AddHours(-25), Now, Refresh, Retry)
+            .IsDue(Row(null), Now.AddMinutes(-121), 4, Now, Refresh, Retry)
+            .Should()
+            .BeTrue();
+    }
+
+    [Fact]
+    public void ARefreshedMarket_RunsAgainOnlyWhenItsDirectoryIsOlderThanTheInterval()
+    {
+        EquityMarketDirectoryWorker
+            .IsDue(Row(Now.AddHours(-23)), Now.AddHours(-23), 0, Now, Refresh, Retry)
+            .Should()
+            .BeFalse();
+        EquityMarketDirectoryWorker
+            .IsDue(Row(Now.AddHours(-25)), Now.AddHours(-25), 0, Now, Refresh, Retry)
             .Should()
             .BeTrue();
     }

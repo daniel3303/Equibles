@@ -17,6 +17,7 @@ public class EquityMarketDirectoryWorker(
     // A pass that captured nothing (source down, FIRDS not loaded yet) leaves the row's refresh time alone
     // so the operator sees it is stale; this keeps such a market from being retried every control tick.
     private readonly Dictionary<string, DateTime> _lastAttempt = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _consecutiveFailures = new(StringComparer.Ordinal);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -78,6 +79,7 @@ public class EquityMarketDirectoryWorker(
                         _lastAttempt.TryGetValue(market.Code, out var attemptedAt)
                             ? attemptedAt
                             : null,
+                        _consecutiveFailures.GetValueOrDefault(market.Code),
                         now,
                         interval,
                         retry
@@ -94,21 +96,46 @@ public class EquityMarketDirectoryWorker(
         }
     }
 
-    // An operator request always runs; otherwise a stale directory runs unless this process tried it recently.
+    // An operator request runs at once, but only once per press: a failed pass leaves the request standing so
+    // the page still shows it outstanding, and without this the market would run every control tick for ever.
+    // Otherwise a stale directory runs unless this process tried it recently.
     internal static bool IsDue(
         EquityMarketRegistration row,
         DateTime? attemptedAt,
+        int consecutiveFailures,
         DateTime now,
         TimeSpan refreshInterval,
         TimeSpan retryInterval
     )
     {
-        if (row.DirectoryRefreshRequestedAt != null)
+        if (
+            row.DirectoryRefreshRequestedAt != null
+            && (attemptedAt == null || row.DirectoryRefreshRequestedAt > attemptedAt)
+        )
             return true;
         var stale =
             row.DirectoryRefreshedAt == null || row.DirectoryRefreshedAt < now - refreshInterval;
-        var recentlyTried = attemptedAt != null && attemptedAt > now - retryInterval;
+        var wait = RetryWait(retryInterval, refreshInterval, consecutiveFailures);
+        var recentlyTried = attemptedAt != null && attemptedAt > now - wait;
         return stale && !recentlyTried;
+    }
+
+    // The wait after a failed pass doubles with each consecutive failure up to the refresh interval: a source
+    // that refuses its own data refuses it again on the next call, and a capture can cost hundreds of requests.
+    // An operator request still runs at once, so nothing is stuck behind the backoff.
+    internal static TimeSpan RetryWait(
+        TimeSpan retryInterval,
+        TimeSpan refreshInterval,
+        int consecutiveFailures
+    )
+    {
+        if (retryInterval <= TimeSpan.Zero || retryInterval >= refreshInterval)
+            return refreshInterval;
+        var wait = retryInterval;
+        // Doubling in place stops at the cap, so no configuration can overflow the multiplication.
+        for (var doubling = 1; doubling < consecutiveFailures && wait < refreshInterval; doubling++)
+            wait += wait;
+        return wait < refreshInterval ? wait : refreshInterval;
     }
 
     // A request is cleared only by a pass that served it; one raised during the pass or a failed pass keeps it.
@@ -171,5 +198,10 @@ public class EquityMarketDirectoryWorker(
             }
             await registrations.SaveChanges();
         }
+        if (result.Error == null)
+            _consecutiveFailures.Remove(market.Code);
+        else
+            _consecutiveFailures[market.Code] =
+                _consecutiveFailures.GetValueOrDefault(market.Code) + 1;
     }
 }
