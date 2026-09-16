@@ -17,6 +17,7 @@ public class EquityMarketDirectoryWorker(
     // A pass that captured nothing (source down, FIRDS not loaded yet) leaves the row's refresh time alone
     // so the operator sees it is stale; this keeps such a market from being retried every control tick.
     private readonly Dictionary<string, DateTime> _lastAttempt = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _consecutiveFailures = new(StringComparer.Ordinal);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -78,6 +79,7 @@ public class EquityMarketDirectoryWorker(
                         _lastAttempt.TryGetValue(market.Code, out var attemptedAt)
                             ? attemptedAt
                             : null,
+                        _consecutiveFailures.GetValueOrDefault(market.Code),
                         now,
                         interval,
                         retry
@@ -98,6 +100,7 @@ public class EquityMarketDirectoryWorker(
     internal static bool IsDue(
         EquityMarketRegistration row,
         DateTime? attemptedAt,
+        int consecutiveFailures,
         DateTime now,
         TimeSpan refreshInterval,
         TimeSpan retryInterval
@@ -107,8 +110,24 @@ public class EquityMarketDirectoryWorker(
             return true;
         var stale =
             row.DirectoryRefreshedAt == null || row.DirectoryRefreshedAt < now - refreshInterval;
-        var recentlyTried = attemptedAt != null && attemptedAt > now - retryInterval;
+        var wait = RetryWait(retryInterval, refreshInterval, consecutiveFailures);
+        var recentlyTried = attemptedAt != null && attemptedAt > now - wait;
         return stale && !recentlyTried;
+    }
+
+    // The wait after a failed pass doubles with each consecutive failure up to the refresh interval: a source
+    // that refuses its own data refuses it again on the next call, and a capture can cost hundreds of requests.
+    // An operator request still runs at once, so nothing is stuck behind the backoff.
+    internal static TimeSpan RetryWait(
+        TimeSpan retryInterval,
+        TimeSpan refreshInterval,
+        int consecutiveFailures
+    )
+    {
+        if (consecutiveFailures < 2)
+            return retryInterval;
+        var wait = retryInterval * Math.Pow(2, Math.Min(consecutiveFailures - 1, 16));
+        return wait < refreshInterval ? wait : refreshInterval;
     }
 
     // A request is cleared only by a pass that served it; one raised during the pass or a failed pass keeps it.
@@ -171,5 +190,10 @@ public class EquityMarketDirectoryWorker(
             }
             await registrations.SaveChanges();
         }
+        if (result.Error == null)
+            _consecutiveFailures.Remove(market.Code);
+        else
+            _consecutiveFailures[market.Code] =
+                _consecutiveFailures.GetValueOrDefault(market.Code) + 1;
     }
 }
