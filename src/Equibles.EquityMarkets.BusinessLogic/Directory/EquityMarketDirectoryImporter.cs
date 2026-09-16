@@ -53,6 +53,7 @@ public class EquityMarketDirectoryImporter(
         }
         var snapshot = await source.Capture(market, cancellationToken);
         result.Listings = snapshot.Rows.Count;
+        result.Excluded = snapshot.Excluded;
         var snapshotId = await snapshotManager.Reconcile(
             new EquityDirectorySnapshotInput
             {
@@ -147,12 +148,13 @@ public class EquityMarketDirectoryImporter(
             }
         }
         logger.LogInformation(
-            "{Market} directory cycle complete: {Imported} imported, {Current} current, {Skipped} not the market's own share listings, {Failed} unresolved, {Total} source listings",
+            "{Market} directory cycle complete: {Imported} imported, {Current} current, {Skipped} not the market's own share listings, {Failed} unresolved, {Excluded} share lines the source could not carry, {Total} source listings",
             market.Code,
             result.Imported,
             result.Current,
             result.Skipped,
             result.Failed,
+            result.Excluded,
             result.Listings
         );
         return result;

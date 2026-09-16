@@ -47,13 +47,13 @@ public class YahooListingSourceTests
             .Should()
             .BeFalse("a pound quote is a different line of the same security");
 
-        var dollars = Target("BPCR", "GB", "XLON", "GB00BDGKMY29", "USD", 1m);
+        var dollars = Target("AOF", "GB", "XLON", "KYG012921535", "USD", 1m);
         YahooListingSource
             .MatchesChart(
                 dollars,
                 new YahooChartSourceIdentity
                 {
-                    Symbol = "BPCR.L",
+                    Symbol = "AOF.L",
                     Currency = "USD",
                     ExchangeCode = "LSE",
                     InstrumentType = "EQUITY",

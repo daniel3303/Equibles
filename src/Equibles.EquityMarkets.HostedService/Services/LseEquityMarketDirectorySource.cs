@@ -33,16 +33,20 @@ public class LseEquityMarketDirectorySource(LseInstrumentListClient client)
             .ToList();
         var rows = new List<EquityMarketDirectoryRow>();
         var symbols = new HashSet<string>(StringComparer.Ordinal);
-        foreach (
-            var line in shares
-                .GroupBy(row => (row.Isin, row.MarketIdentifierCode))
-                .Select(group => Primary(market, group.ToList()))
-                .Where(line => line != null)
-        )
+        // A share line the adapter cannot carry is absent from the snapshot, and absence withdraws a listing, so
+        // the count travels with the capture rather than living only in its payload.
+        var excluded = list.Instruments.Count(row =>
+            row.MifirIdentifier == "SHRS" && !market.Contains(row.MarketIdentifierCode)
+        );
+        foreach (var group in shares.GroupBy(row => (row.Isin, row.MarketIdentifierCode)))
         {
-            var symbol = EquityMarketDirectorySymbol.Normalize(line.Tidm);
+            var line = Primary(market, group.ToList());
+            var symbol = line == null ? null : EquityMarketDirectorySymbol.Normalize(line.Tidm);
             if (symbol == null)
+            {
+                excluded += group.Count();
                 continue;
+            }
             if (!symbols.Add(line.MarketIdentifierCode + ":" + symbol))
                 throw new InvalidDataException(
                     "London instrument list gives one symbol multiple security identities."
@@ -80,9 +84,11 @@ public class LseEquityMarketDirectorySource(LseInstrumentListClient client)
                     Rows = list.Instruments.Count,
                     Shares = shares,
                     Listed = rows.Count,
+                    Excluded = excluded,
                 }
             ),
             Rows = rows,
+            Excluded = excluded,
         };
     }
 

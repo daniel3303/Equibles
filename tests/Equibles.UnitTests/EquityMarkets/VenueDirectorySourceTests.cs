@@ -529,26 +529,26 @@ public class VenueDirectorySourceTests
         await withoutLei.Should().ThrowAsync<InvalidDataException>();
     }
 
+    private static LseInstrumentListTestHandler LseHandler(byte[] workbook) =>
+        new(
+            new Dictionary<string, (HttpStatusCode, string, byte[])>
+            {
+                [
+                    LseInstrumentListClient
+                        .EditionUrl(LseInstrumentListClient.FirstEdition)
+                        .AbsoluteUri
+                ] = (
+                    HttpStatusCode.OK,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    workbook
+                ),
+            }
+        );
+
     [Fact]
     public async Task Lse_KeepsOneLinePerSecurityQuotedInTheVenuesOwnCurrency()
     {
-        var workbook = await Lse("instrument-list.trimmed.xlsx");
-        using var http = new HttpClient(
-            new LseInstrumentListTestHandler(
-                new Dictionary<string, (HttpStatusCode, string, byte[])>
-                {
-                    [
-                        LseInstrumentListClient
-                            .EditionUrl(LseInstrumentListClient.FirstEdition)
-                            .AbsoluteUri
-                    ] = (
-                        HttpStatusCode.OK,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        workbook
-                    ),
-                }
-            )
-        );
+        using var http = new HttpClient(LseHandler(await Lse("instrument-list.trimmed.xlsx")));
         var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
         var market = EquityMarketCatalog.TryGet("lse");
         source.SourceKey.Should().Be(market.DirectorySource);
@@ -618,11 +618,56 @@ public class VenueDirectorySourceTests
                 row => row.Isin == "GB0009895292",
                 "the gate, not the adapter, decides the home"
             );
+        snapshot
+            .Excluded.Should()
+            .Be(3, "the three lines of the dollar-only register triple are not carried");
         using var payload = JsonDocument.Parse(snapshot.PayloadJson);
         payload.RootElement.GetProperty("Edition").GetInt32().Should().Be(81);
         payload.RootElement.GetProperty("AsAt").GetString().Should().Be("2026-07-31");
         payload.RootElement.GetProperty("StatedCount").GetInt32().Should().Be(18);
         payload.RootElement.GetProperty("Shares").GetArrayLength().Should().Be(18);
+    }
+
+    [Fact]
+    public async Task Lse_LeavesOutASecurityWhoseLinesNameNoSinglePrimaryOne()
+    {
+        using var http = new HttpClient(
+            LseHandler(await Lse("instrument-list.two-sterling-lines.derived.xlsx"))
+        );
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
+
+        var snapshot = await source.Capture(
+            EquityMarketCatalog.TryGet("lse"),
+            CancellationToken.None
+        );
+
+        snapshot
+            .Rows.Should()
+            .NotContain(
+                row => row.Isin == "GB00BDGKMY29",
+                "a pence line and a pound line are both quoted in the venue's own currency"
+            );
+        snapshot.Rows.Should().HaveCount(11);
+        snapshot
+            .Excluded.Should()
+            .Be(5, "the register triple and both sterling lines are not carried");
+    }
+
+    [Fact]
+    public async Task Lse_RefusesAWorkbookWhoseMnemonicsNameOneSymbolTwice()
+    {
+        using var http = new HttpClient(
+            LseHandler(await Lse("instrument-list.symbol-collision.derived.xlsx"))
+        );
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
+
+        var capture = () =>
+            source.Capture(EquityMarketCatalog.TryGet("lse"), CancellationToken.None);
+
+        await capture
+            .Should()
+            .ThrowAsync<InvalidDataException>()
+            .WithMessage("*one symbol multiple security identities*");
     }
 
     [Fact]

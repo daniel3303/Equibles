@@ -11,6 +11,9 @@ public sealed class XlsxWorkbook : IDisposable
     private const string WorkbookPath = "xl/workbook.xml";
     private const string RelationshipsPath = "xl/_rels/workbook.xml.rels";
     private const string SharedStringsPath = "xl/sharedStrings.xml";
+
+    // The format's own last column, XFD.
+    private const int MaxColumns = 16_384;
     private const string RelationshipNamespace =
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
@@ -128,7 +131,8 @@ public sealed class XlsxWorkbook : IDisposable
         return strings[index];
     }
 
-    // A1-style reference: the letters are the column. A cell without one continues from the previous cell.
+    // A1-style reference: the letters are the column. A cell without one continues from the previous cell, and
+    // one naming a column past the format's last is refused rather than sized into an array of that width.
     private static int ColumnIndex(string reference, int fallback)
     {
         if (string.IsNullOrEmpty(reference))
@@ -141,6 +145,8 @@ public sealed class XlsxWorkbook : IDisposable
                 break;
             index = index * 26 + (character - 'A' + 1);
             letters++;
+            if (index > MaxColumns)
+                throw new InvalidDataException("Workbook cell names a column outside the sheet.");
         }
         return letters == 0 ? fallback : index - 1;
     }

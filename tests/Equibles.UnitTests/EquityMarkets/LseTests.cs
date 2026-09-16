@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using Equibles.Integrations.Lse;
 using Equibles.Integrations.Lse.Xlsx;
@@ -77,6 +78,60 @@ public class LseTests
         small
             .Should()
             .Throw<InvalidDataException>("a part past the read limit is never decompressed");
+    }
+
+    [Fact]
+    public void ACellOutsideTheSheet_IsRefusedRatherThanSizedInto()
+    {
+        var far = Workbook("<c r=\"AAAAAAA1\" t=\"inlineStr\"><is><t>far</t></is></c>");
+        var read = () => XlsxWorkbook.Open(far, MaxPartBytes).ReadSheet("Sheet1");
+        read.Should()
+            .Throw<InvalidDataException>(
+                "a reference past column XFD would size a row of that width"
+            );
+
+        var last = Workbook("<c r=\"XFD1\" t=\"inlineStr\"><is><t>last</t></is></c>");
+        using var document = XlsxWorkbook.Open(last, MaxPartBytes);
+        var rows = document.ReadSheet("Sheet1");
+        rows.Should().ContainSingle();
+        rows[0].Cell(16_383).Should().Be("last", "the format's own last column is still readable");
+    }
+
+    // A one-sheet workbook holding the given cells, written so a reference this narrow file could not
+    // otherwise carry can be read back through the same reader.
+    private static byte[] Workbook(string cells)
+    {
+        using var buffer = new MemoryStream();
+        using (var archive = new ZipArchive(buffer, ZipArchiveMode.Create, true))
+        {
+            Write(
+                archive,
+                "xl/workbook.xml",
+                "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" "
+                    + "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">"
+                    + "<sheets><sheet name=\"Sheet1\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>"
+            );
+            Write(
+                archive,
+                "xl/_rels/workbook.xml.rels",
+                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                    + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" "
+                    + "Target=\"worksheets/sheet1.xml\"/></Relationships>"
+            );
+            Write(
+                archive,
+                "xl/worksheets/sheet1.xml",
+                "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
+                    + $"<sheetData><row r=\"1\">{cells}</row></sheetData></worksheet>"
+            );
+        }
+        return buffer.ToArray();
+    }
+
+    private static void Write(ZipArchive archive, string path, string content)
+    {
+        using var entry = new StreamWriter(archive.CreateEntry(path).Open());
+        entry.Write(content);
     }
 
     [Fact]
