@@ -7,7 +7,8 @@ public static class DailyBarGuards
     // numeric(18,4) ceiling of the stored price columns.
     public const decimal MaxPriceValue = 99_999_999_999_999.9999m;
 
-    // Relative half-width of the same-basis close comparison; full rationale on IsSameSplitBasis.
+    // Relative half-width of the same-basis close comparison, wide enough for a revised close and
+    // far below any split ratio.
     public const decimal SameBasisCloseTolerance = 0.01m;
 
     // One last-digit tick of absolute headroom on top of the relative tolerance. Both closes are
