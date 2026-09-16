@@ -1,5 +1,6 @@
 using Equibles.Integrations.Bme.Models;
 using Equibles.Integrations.Common.Http;
+using Equibles.Integrations.Common.RateLimiter;
 
 namespace Equibles.Integrations.Bme;
 
@@ -11,6 +12,20 @@ public class BmeClient(HttpClient httpClient)
     private const string Accept = "application/json";
     private const int MaxListBytes = 4_000_000;
     private const int MaxDetailsBytes = 1_000_000;
+
+    // A capture asks for one instrument per listed company, and the venue refused the twenty-sixth reply of
+    // a first pass that had been asking about fifteen times a second. One request a second is the pace.
+    internal const int MinimumRequestIntervalSeconds = 1;
+
+    // The typed client is transient, so the pace is shared statically, as GLEIF's is. The interval is a
+    // constant, so no ordering between static fields can leave this limiter pacing nothing.
+    private static readonly IRateLimiter VenuePace = new RateLimiter(
+        1,
+        TimeSpan.FromSeconds(MinimumRequestIntervalSeconds)
+    );
+
+    // Every request the client makes waits its turn here; a caller may hold it to a pace of its own.
+    internal IRateLimiter Pace { get; init; } = VenuePace;
 
     public static readonly Uri ListedCompaniesUrl = new(
         Origin,
@@ -24,15 +39,11 @@ public class BmeClient(HttpClient httpClient)
         CancellationToken cancellationToken = default
     )
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromMinutes(2));
-        var json = await SameOriginTextReader.Read(
-            httpClient,
-            Origin,
+        var json = await Read(
             ListedCompaniesUrl,
             MaxListBytes,
-            timeout.Token,
-            Accept
+            TimeSpan.FromMinutes(2),
+            cancellationToken
         );
         var list = BmeParser.ReadListedCompanies(json);
         list.SourceUrl = ListedCompaniesUrl;
@@ -47,21 +58,33 @@ public class BmeClient(HttpClient httpClient)
     {
         if (!Core.Identity.InternationalSecurityIdentifiers.IsValidIsin(isin))
             throw new InvalidDataException("BME share details need a valid ISIN.");
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(30));
         var url = ShareDetailsUrl(isin);
-        var json = await SameOriginTextReader.Read(
-            httpClient,
-            Origin,
-            url,
-            MaxDetailsBytes,
-            timeout.Token,
-            Accept
-        );
+        var json = await Read(url, MaxDetailsBytes, TimeSpan.FromSeconds(30), cancellationToken);
         var details = BmeParser.ReadShareDetails(json);
         if (details.Isin != isin)
             throw new InvalidDataException("BME share details answer for another security.");
         details.SourceUrl = url;
         return details;
+    }
+
+    // The wait runs on the caller's token, so time spent queueing is not charged against the reply's budget.
+    private async Task<string> Read(
+        Uri url,
+        int maxBytes,
+        TimeSpan budget,
+        CancellationToken cancellationToken
+    )
+    {
+        await Pace.WaitAsync(cancellationToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(budget);
+        return await SameOriginTextReader.Read(
+            httpClient,
+            Origin,
+            url,
+            maxBytes,
+            timeout.Token,
+            Accept
+        );
     }
 }

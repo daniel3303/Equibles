@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Equibles.Integrations.Bme;
 using Equibles.UnitTests.Euronext;
 
@@ -89,7 +90,8 @@ public class BmeTests
             await Fixture("share-details.ES0125220311.json"),
         ]);
         using var http = new HttpClient(handler);
-        var client = new BmeClient(http);
+        var pace = new CountingRateLimiter();
+        var client = new BmeClient(http) { Pace = pace };
         var list = await client.GetListedCompanies();
         list.SourceUrl.Should().Be(BmeClient.ListedCompaniesUrl);
         list.Companies.Should().HaveCount(5);
@@ -106,13 +108,33 @@ public class BmeTests
                 request.Method.Should().Be(HttpMethod.Get);
                 request.Url.Host.Should().Be("apiweb.bolsasymercados.es");
             });
+        pace.Waits.Should().Be(2);
         using var other = new HttpClient(
             new EuronextDirectoryTestHandler([await Fixture("share-details.ES0125220311.json")])
         );
-        var mismatch = () => new BmeClient(other).GetShareDetails("ES0113900J37");
+        var mismatch = () =>
+            new BmeClient(other) { Pace = new CountingRateLimiter() }.GetShareDetails(
+                "ES0113900J37"
+            );
         await mismatch
             .Should()
             .ThrowAsync<InvalidDataException>()
             .WithMessage("*another security*");
+    }
+
+    [Fact]
+    public async Task Client_LeavesASecondBetweenRequestsWhicheverInstanceMakesThem()
+    {
+        BmeClient.MinimumRequestIntervalSeconds.Should().Be(1);
+        using var first = new HttpClient(
+            new EuronextDirectoryTestHandler([await Fixture("share-details.ES0125220311.json")])
+        );
+        using var second = new HttpClient(
+            new EuronextDirectoryTestHandler([await Fixture("share-details.ES0113900J37.json")])
+        );
+        var started = Stopwatch.GetTimestamp();
+        await new BmeClient(first).GetShareDetails("ES0125220311");
+        await new BmeClient(second).GetShareDetails("ES0113900J37");
+        Stopwatch.GetElapsedTime(started).Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(1));
     }
 }
