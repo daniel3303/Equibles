@@ -21,8 +21,10 @@ public static class NasdaqNordicParser
             !data.TryGetProperty("pagination", out var pagination)
             || pagination.ValueKind != JsonValueKind.Object
             || !pagination.TryGetProperty("total", out var total)
+            || total.ValueKind != JsonValueKind.Number
             || !total.TryGetInt32(out var totalRows)
             || !pagination.TryGetProperty("totalPages", out var pages)
+            || pages.ValueKind != JsonValueKind.Number
             || !pages.TryGetInt32(out var totalPages)
         )
             throw new InvalidDataException("Nasdaq screener reply has changed shape.");

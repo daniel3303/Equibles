@@ -84,6 +84,8 @@ public class NasdaqNordicTests
     [InlineData("status", "\"rCode\": 200", "\"rCode\": 500")]
     [InlineData("partial", "\"total\": 10", "\"total\": 411")]
     [InlineData("paged", "\"totalPages\": 1", "\"totalPages\": 2")]
+    [InlineData("total-text", "\"total\": 10", "\"total\": \"10\"")]
+    [InlineData("no-pagination", "\"pagination\"", "\"paging\"")]
     [InlineData("asset-class", "\"assetClass\": \"SHARES\"", "\"assetClass\": \"ETF\"")]
     [InlineData("bad-isin", "\"isin\": \"SE0000115446\"", "\"isin\": \"SE0000115447\"")]
     [InlineData("no-symbol", "\"symbol\": \"VOLV B\"", "\"symbol\": \"\"")]
