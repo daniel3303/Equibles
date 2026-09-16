@@ -114,7 +114,7 @@ public class NasdaqNordicEquityMarketDirectorySource(NasdaqNordicClient client)
         )
             throw new InvalidDataException(
                 "Nasdaq instrument identity conflicts with the directory record: the reply states "
-                    + $"{instrument.Isin} {EquityMarketDirectorySymbol.Normalize(instrument.Symbol)} "
+                    + $"{instrument.Isin} {EquityMarketDirectorySymbol.Normalize(instrument.Symbol) ?? instrument.Symbol} "
                     + $"{instrument.Currency} on \"{instrument.Exchange}\" where the row states "
                     + $"{row.Isin} {row.Symbol} {row.ReportedCurrency} on "
                     + $"\"{string.Join("\" or \"", nasdaq.ExchangeLabels(category))}\"."
