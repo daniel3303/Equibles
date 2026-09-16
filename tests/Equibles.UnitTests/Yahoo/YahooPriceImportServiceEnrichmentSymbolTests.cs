@@ -48,6 +48,11 @@ public class YahooPriceImportServiceEnrichmentSymbolTests
             BindingFlags.NonPublic | BindingFlags.Instance
         )!;
 
+    private static readonly MethodInfo EnrichTarget = typeof(YahooPriceImportService).GetMethod(
+        "EnrichTarget",
+        BindingFlags.NonPublic | BindingFlags.Instance
+    )!;
+
     private static PriceSeriesTarget Paris(bool isPrimary = true) =>
         new(
             "AIR",
@@ -145,6 +150,19 @@ public class YahooPriceImportServiceEnrichmentSymbolTests
 
         await client.DidNotReceive().GetKeyStatistics(Arg.Any<string>());
         await client.DidNotReceive().GetCompanyProfile(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task StampFailure_CostsTheTarget_NotTheBatch()
+    {
+        // Outside the catalog neither Yahoo call runs, so the stamp is the only statement that
+        // touches the database; its failure must stay inside EnrichTarget so the loop continues.
+        var (sut, client) = BuildSut();
+
+        var act = () => Invoke(EnrichTarget, sut, Zurich());
+
+        await act.Should().NotThrowAsync();
+        await client.DidNotReceive().GetKeyStatistics(Arg.Any<string>());
     }
 
     [Fact]

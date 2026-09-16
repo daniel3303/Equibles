@@ -657,7 +657,25 @@ public class YahooPriceImportService
             await _errorReporter.Report(ErrorSource.YahooPriceScraper, $"Enrich({ticker})", ex);
         }
 
-        await StampEnrichmentAttempt(target, DateTime.UtcNow, cancellationToken);
+        // A venue target stamps under the directory-identity lock, which a long reference pass can
+        // hold past the command timeout; that failure costs this target its stamp, not the batch.
+        try
+        {
+            await StampEnrichmentAttempt(target, DateTime.UtcNow, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error stamping the enrichment attempt for {Ticker}", ticker);
+            await _errorReporter.Report(
+                ErrorSource.YahooPriceScraper,
+                $"StampEnrichmentAttempt({ticker})",
+                ex
+            );
+        }
     }
 
     private async Task StampEnrichmentAttempt(
