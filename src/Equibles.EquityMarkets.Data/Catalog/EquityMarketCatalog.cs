@@ -120,11 +120,14 @@ public static class EquityMarketCatalog
                 "FRAW",
             ]
         ),
-        Pending(
+        // FIRDS files a Nasdaq main-market share under the lit book and its Nordic@Mid and Auction on Demand
+        // segments, and a First North share under those two segments alone; the home is any of the six.
+        Nasdaq(
             "nasdaq-stockholm",
             "Nasdaq Stockholm",
             "SE",
             ["XSTO", "FNSE"],
+            ["XSTO", "DSTO", "MSTO", "FNSE", "DNSE", "MNSE"],
             "SEK",
             ".ST",
             "STO",
@@ -133,11 +136,12 @@ public static class EquityMarketCatalog
             new(17, 25),
             new(17, 30)
         ),
-        Pending(
+        Nasdaq(
             "nasdaq-helsinki",
             "Nasdaq Helsinki",
             "FI",
-            ["XHEL"],
+            ["XHEL", "FNFI"],
+            ["XHEL", "DHEL", "MHEL", "FNFI", "DNFI", "MNFI"],
             "EUR",
             ".HE",
             "HEL",
@@ -146,11 +150,12 @@ public static class EquityMarketCatalog
             new(18, 25),
             new(18, 30)
         ),
-        Pending(
+        Nasdaq(
             "nasdaq-copenhagen",
             "Nasdaq Copenhagen",
             "DK",
-            ["XCSE"],
+            ["XCSE", "FNDK"],
+            ["XCSE", "DCSE", "MCSE", "FNDK", "DNDK", "MNDK"],
             "DKK",
             ".CO",
             "CPH",
@@ -159,6 +164,43 @@ public static class EquityMarketCatalog
             new(16, 55),
             new(17, 0)
         ),
+        // FIRDS also files a Madrid share on DMAD, the continuous market's dark midpoint book.
+        new(
+            "bme",
+            "Bolsas y Mercados Españoles",
+            "ES",
+            ["XMAD"],
+            "EUR",
+            ".MC",
+            "MCE",
+            "Europe/Madrid",
+            new(9, 0),
+            new(17, 30),
+            new(17, 35),
+            DirectorySource: "bme",
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsVenueCodes: ["XMAD", "DMAD"],
+            HomeVenueCodes: ["XMAD", "DMAD"]
+        ),
+        new(
+            "gpw",
+            "Warsaw Stock Exchange",
+            "PL",
+            ["XWAR"],
+            "PLN",
+            ".WA",
+            "WSE",
+            "Europe/Warsaw",
+            new(9, 0),
+            new(17, 0),
+            new(17, 5),
+            DirectorySource: "gpw",
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null
+        ),
+        // Last on purpose: the FCA register homes the EEA issuers' London lines too, so their EEA directories
+        // run first and hold the presentation before a London listing of the same share arrives.
         Pending(
             "lse",
             "London Stock Exchange",
@@ -172,32 +214,6 @@ public static class EquityMarketCatalog
             new(16, 30),
             new(16, 35),
             firdsAuthority: "FCA"
-        ),
-        Pending(
-            "bme",
-            "Bolsas y Mercados Españoles",
-            "ES",
-            ["XMAD"],
-            "EUR",
-            ".MC",
-            "MCE",
-            "Europe/Madrid",
-            new(9, 0),
-            new(17, 30),
-            new(17, 35)
-        ),
-        Pending(
-            "gpw",
-            "Warsaw Stock Exchange",
-            "PL",
-            ["XWAR"],
-            "PLN",
-            ".WA",
-            "WSE",
-            "Europe/Warsaw",
-            new(9, 0),
-            new(17, 0),
-            new(17, 5)
         ),
     ];
 
@@ -250,6 +266,41 @@ public static class EquityMarketCatalog
             DirectorySource: "euronext",
             DelayedTradeSource: "euronext",
             DelayedTradeLocationCode: location
+        );
+
+    // The directory names a main-market or First North line by its exchange; the lit MIC of each is what the
+    // adapter states and the segment codes are where FIRDS files the same line.
+    private static EquityMarket Nasdaq(
+        string code,
+        string name,
+        string country,
+        string[] mics,
+        string[] venues,
+        string currency,
+        string suffix,
+        string exchange,
+        string timeZone,
+        TimeOnly open,
+        TimeOnly close,
+        TimeOnly auction
+    ) =>
+        new(
+            code,
+            name,
+            country,
+            mics,
+            currency,
+            suffix,
+            exchange,
+            timeZone,
+            open,
+            close,
+            auction,
+            DirectorySource: "nasdaq-nordic",
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsVenueCodes: venues,
+            HomeVenueCodes: venues
         );
 
     // Catalogued so registrations, prices and pages can name the market before its directory adapter lands.
