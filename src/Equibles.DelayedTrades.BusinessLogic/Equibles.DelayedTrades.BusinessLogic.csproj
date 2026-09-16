@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equibles.UnitTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Equibles.Core.AutoWiring" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.CommonStocks.Repositories\Equibles.CommonStocks.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.DelayedTrades.Repositories\Equibles.DelayedTrades.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.EquityMarkets.Repositories\Equibles.EquityMarkets.Repositories.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.DelayedTrades\Equibles.Integrations.DelayedTrades.csproj" />
+    <ProjectReference Include="..\Equibles.Yahoo.Repositories\Equibles.Yahoo.Repositories.csproj" />
+  </ItemGroup>
+</Project>

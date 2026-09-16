@@ -22,5 +22,12 @@ public class EquityMarketRegistration
     [MaxLength(1000)]
     public string LastError { get; set; }
 
+    // Delayed-trades pass state: the last served fetch, the last settled session and the last fault.
+    public DateTime? DelayedTradesCapturedAt { get; set; }
+    public DateOnly? DelayedTradesSessionDate { get; set; }
+
+    [MaxLength(1000)]
+    public string DelayedTradesLastError { get; set; }
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

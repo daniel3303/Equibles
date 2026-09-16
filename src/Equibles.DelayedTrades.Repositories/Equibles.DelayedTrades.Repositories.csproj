@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Equibles.DelayedTrades.Data\Equibles.DelayedTrades.Data.csproj" />
+  </ItemGroup>
+</Project>

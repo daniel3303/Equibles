@@ -10,6 +10,7 @@ using Equibles.Congress.HostedService.Extensions;
 using Equibles.Core.AutoWiring;
 using Equibles.Core.Configuration;
 using Equibles.Data.Extensions;
+using Equibles.DelayedTrades.HostedService.Extensions;
 using Equibles.EquityMarkets.HostedService.Configuration;
 using Equibles.EquityMarkets.HostedService.Extensions;
 using Equibles.Errors.Data.Extensions;
@@ -128,6 +129,9 @@ builder.Services.Configure<Equibles.Cboe.HostedService.Configuration.CboeScraper
 builder.Services.Configure<EquityMarketsScraperOptions>(
     builder.Configuration.GetSection("EquityMarketsScraper")
 );
+builder.Services.Configure<Equibles.DelayedTrades.BusinessLogic.Configuration.DelayedTradeScraperOptions>(
+    builder.Configuration.GetSection("DelayedTradeScraper")
+);
 builder.Services.Configure<WebsiteDiscoveryOptions>(
     builder.Configuration.GetSection("WebsiteDiscovery")
 );
@@ -176,6 +180,7 @@ builder.Services.AddHoldingsWorker();
 builder.Services.AddMediaWorker();
 builder.Services.AddCommonStocksWorker();
 builder.Services.AddEquityMarketsWorker();
+builder.Services.AddDelayedTradesWorker();
 
 // Reads the stealth browser registered by AddCommonStocksWorker above to render the
 // client-side FDA.gov advisory-committee calendar.

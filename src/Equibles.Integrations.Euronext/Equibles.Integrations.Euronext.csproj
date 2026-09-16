@@ -4,5 +4,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Equibles.Core/Equibles.Core.csproj" />
+    <ProjectReference Include="../Equibles.Integrations.Common/Equibles.Integrations.Common.csproj" />
+    <ProjectReference Include="../Equibles.Integrations.DelayedTrades/Equibles.Integrations.DelayedTrades.csproj" />
   </ItemGroup>
 </Project>

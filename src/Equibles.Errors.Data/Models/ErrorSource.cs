@@ -29,6 +29,7 @@ public sealed class ErrorSource
     public static readonly ErrorSource WebsiteDiscovery = new("WebsiteDiscovery");
     public static readonly ErrorSource FdaCatalystScraper = new("FdaCatalystScraper");
     public static readonly ErrorSource EquityMarketsScraper = new("EquityMarketsScraper");
+    public static readonly ErrorSource DelayedTradeScraper = new("DelayedTradeScraper");
     public static readonly ErrorSource Authentication = new("Authentication");
     public static readonly ErrorSource Alvis = new("Alvis");
     public static readonly ErrorSource WebRequest = new("WebRequest");
@@ -69,6 +70,7 @@ public sealed class ErrorSource
             WebsiteDiscovery,
             FdaCatalystScraper,
             EquityMarketsScraper,
+            DelayedTradeScraper,
             Authentication,
             Alvis,
             WebRequest,
