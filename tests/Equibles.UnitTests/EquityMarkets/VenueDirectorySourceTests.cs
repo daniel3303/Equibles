@@ -175,6 +175,61 @@ public class VenueDirectorySourceTests
         await withoutLei.Should().ThrowAsync<InvalidDataException>();
     }
 
+    [Fact]
+    public async Task Nasdaq_ConfirmsALineQuotedInAuctionsOnTheSameVenue()
+    {
+        var market = EquityMarketCatalog.TryGet("nasdaq-stockholm");
+        var row = new EquityMarketDirectoryRow
+        {
+            Isin = "SE0009242555",
+            MarketIdentifierCode = "FNSE",
+            Symbol = "AINO",
+            Name = "Aino Health",
+            ReportedCurrency = "SEK",
+            SourceUrl = NasdaqNordicClient.InstrumentUrl("TX2255610"),
+        };
+        using var http = new HttpClient(
+            new EuronextDirectoryTestHandler([await Nasdaq("instrument-info.AINO.json")])
+        );
+        var source = new NasdaqNordicEquityMarketDirectorySource(new NasdaqNordicClient(http));
+
+        var product = await source.Resolve(
+            market,
+            row,
+            Firds(row.Isin, "SSME", Lei),
+            CancellationToken.None
+        );
+
+        product.Name.Should().Be("Aino Health");
+        JsonSerializer
+            .Serialize(product.Evidence)
+            .Should()
+            .Contain("\"Exchange\":\"First North GM Sweden Auction\"");
+
+        using var mainMarket = new HttpClient(
+            new EuronextDirectoryTestHandler([await Nasdaq("instrument-info.AINO.json")])
+        );
+        var otherList = () =>
+            new NasdaqNordicEquityMarketDirectorySource(new NasdaqNordicClient(mainMarket)).Resolve(
+                market,
+                new EquityMarketDirectoryRow
+                {
+                    Isin = row.Isin,
+                    MarketIdentifierCode = "XSTO",
+                    Symbol = row.Symbol,
+                    ReportedCurrency = row.ReportedCurrency,
+                    SourceUrl = row.SourceUrl,
+                },
+                Firds(row.Isin, "XSTO", Lei),
+                CancellationToken.None
+            );
+        await otherList
+            .Should()
+            .ThrowAsync<InvalidDataException>(
+                "the auction spelling of one list never confirms a row of the other"
+            );
+    }
+
     [Theory]
     [InlineData("isin", "SE0000115447")]
     [InlineData("symbol", "VOLV-A")]

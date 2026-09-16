@@ -107,11 +107,15 @@ public class NasdaqNordicEquityMarketDirectorySource(NasdaqNordicClient client)
         if (
             instrument.Isin != row.Isin
             || EquityMarketDirectorySymbol.Normalize(instrument.Symbol) != row.Symbol
-            || instrument.Exchange != nasdaq.ExchangeLabel(category)
+            || !nasdaq
+                .ExchangeLabels(category)
+                .Contains(instrument.Exchange, StringComparer.Ordinal)
             || instrument.Currency != row.ReportedCurrency
         )
             throw new InvalidDataException(
-                "Nasdaq instrument identity conflicts with the directory record."
+                $"Nasdaq instrument identity conflicts with the directory record: the reply states "
+                    + $"{instrument.Isin} {instrument.Symbol} {instrument.Currency} on \"{instrument.Exchange}\" "
+                    + $"where the row states {row.Isin} {row.Symbol} {row.ReportedCurrency} on {row.MarketIdentifierCode}."
             );
         return new EquityMarketDirectoryProduct
         {
