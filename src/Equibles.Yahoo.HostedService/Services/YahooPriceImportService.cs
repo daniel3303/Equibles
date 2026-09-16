@@ -271,13 +271,15 @@ public class YahooPriceImportService
                         && listing.Security.Isin != null
                         && claims.Count(other => other.Ticker == listing.Ticker) == 1
                     )
+                    // The presentation listing is the issuer's enrichment target and carries the
+                    // attempt stamp, so a verified venue issuer enriches once per interval, not per pass.
                     .Select(listing => new PriceSeriesTarget(
                         listing.Ticker,
                         listing.Security.EquityIssuerId,
                         listing.Id,
+                        listing.Presentation != null,
                         false,
-                        false,
-                        null,
+                        listing.Presentation != null ? listing.YahooEnrichmentAttemptedAt : null,
                         false,
                         null,
                         null,
@@ -418,7 +420,10 @@ public class YahooPriceImportService
         )
             return null;
         if (!target.IsUs)
-            return new LockedPriceSeries(stock, false);
+            return new LockedPriceSeries(
+                stock,
+                stock.Presentation?.EquityListingId == target.EquityListingId
+            );
         EquityListingRetirementEvidence historicalListing = null;
         if (target.IsHistorical)
         {
@@ -631,7 +636,7 @@ public class YahooPriceImportService
 
     private async Task EnrichTarget(PriceSeriesTarget target, CancellationToken cancellationToken)
     {
-        var ticker = target.Ticker;
+        var ticker = target.ProviderSymbol ?? target.Ticker;
 
         try
         {
@@ -652,7 +657,25 @@ public class YahooPriceImportService
             await _errorReporter.Report(ErrorSource.YahooPriceScraper, $"Enrich({ticker})", ex);
         }
 
-        await StampEnrichmentAttempt(target, DateTime.UtcNow, cancellationToken);
+        // A venue target stamps under the directory-identity lock, which a long reference pass can
+        // hold past the command timeout; that failure costs this target its stamp, not the batch.
+        try
+        {
+            await StampEnrichmentAttempt(target, DateTime.UtcNow, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error stamping the enrichment attempt for {Ticker}", ticker);
+            await _errorReporter.Report(
+                ErrorSource.YahooPriceScraper,
+                $"StampEnrichmentAttempt({ticker})",
+                ex
+            );
+        }
     }
 
     private async Task StampEnrichmentAttempt(
@@ -2611,7 +2634,11 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        var ticker = target.Ticker;
+        // Yahoo is asked by the venue-qualified symbol: the bare ticker of a Paris listing names
+        // another market's company. A listing outside the catalog has no symbol and is skipped.
+        var ticker = target.ProviderSymbol;
+        if (ticker == null)
+            return;
         // Yahoo has NOTHING for some listings (closed-end funds like PSUS, fresh IPOs): no stats
         // modules at all, or every field zero. That used to end the sync, leaving the stored pair
         // at 0/0 forever — even when EDGAR carries an authoritative cover-page count and this same
@@ -2844,7 +2871,9 @@ public class YahooPriceImportService
         CancellationToken cancellationToken
     )
     {
-        var ticker = target.Ticker;
+        var ticker = target.ProviderSymbol;
+        if (ticker == null)
+            return;
         var profile = await _yahooClient.GetCompanyProfile(ticker);
         if (profile == null || string.IsNullOrWhiteSpace(profile.Industry))
             return;
@@ -2916,7 +2945,7 @@ public class YahooPriceImportService
         catch (DbUpdateConcurrencyException)
         {
             var stillExists = await stockRepo
-                .GetCurrentUsDirectory()
+                .GetCurrentDirectory()
                 .AsNoTracking()
                 .AnyAsync(s => s.Id == commonStockId, cancellationToken);
             if (stillExists)

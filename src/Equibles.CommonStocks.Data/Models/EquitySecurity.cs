@@ -25,6 +25,9 @@ public class EquitySecurity
     public string RegistrationTitle { get; set; }
 
     public long SharesOutstanding { get; set; }
+
+    // Stored as the provider reports it, in major units of the presentation listing's trading currency
+    // (USD for a US listing, EUR on Euronext, GBP on London); rank-only readers tolerate the mix, sums may not.
     public double MarketCapitalization { get; set; }
     public virtual List<EquityListing> Listings { get; set; } = [];
 

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
 using Equibles.Integrations.Wikidata.Contracts;
@@ -10,11 +11,12 @@ namespace Equibles.Integrations.Wikidata;
 
 /// <summary>
 /// Reads company facts from the Wikidata SPARQL endpoint. Wikidata stores the
-/// SEC CIK (property P5531) zero-padded to 10 digits, which makes it an
-/// exact-match join key — no ticker or name fuzziness.
+/// SEC CIK (property P5531) zero-padded to 10 digits and the Legal Entity
+/// Identifier (property P1278) as issued, which makes both exact-match join
+/// keys, no ticker or name fuzziness.
 /// </summary>
 [Service(ServiceLifetime.Scoped, typeof(IWikidataClient))]
-public class WikidataClient : IWikidataClient
+public partial class WikidataClient : IWikidataClient
 {
     private const string Endpoint = "https://query.wikidata.org/sparql";
 
@@ -22,7 +24,10 @@ public class WikidataClient : IWikidataClient
     // contact address; anonymous clients get throttled or blocked.
     private const string UserAgent = "EquiblesBot/1.0 (+https://equibles.com)";
 
-    // CIKs per SPARQL VALUES clause. Bounded so the GET URL stays well under
+    private const string CikProperty = "P5531";
+    private const string LeiProperty = "P1278";
+
+    // Keys per SPARQL VALUES clause. Bounded so the GET URL stays well under
     // length limits and a single query stays cheap for the endpoint.
     private const int ChunkSize = 200;
 
@@ -48,68 +53,96 @@ public class WikidataClient : IWikidataClient
         _logger = logger;
     }
 
-    public async Task<IReadOnlyDictionary<string, string>> GetOfficialWebsitesByCik(
+    public Task<IReadOnlyDictionary<string, string>> GetOfficialWebsitesByCik(
         IReadOnlyCollection<string> ciks,
         CancellationToken cancellationToken
     )
     {
         // Padded → as-passed, so results key back to the caller's format. Only
         // digit-shaped CIKs are queryable (and safe to inline in the query).
-        var paddedToOriginal = new Dictionary<string, string>();
+        var queryKeyToOriginal = new Dictionary<string, string>();
         foreach (var cik in ciks)
         {
             var trimmed = cik?.Trim();
             if (!string.IsNullOrEmpty(trimmed) && trimmed.All(char.IsAsciiDigit))
-                paddedToOriginal.TryAdd(trimmed.PadLeft(PaddedCikLength, '0'), cik);
+                queryKeyToOriginal.TryAdd(trimmed.PadLeft(PaddedCikLength, '0'), cik);
         }
+        return ResolveWebsites(CikProperty, "CIKs", queryKeyToOriginal, cancellationToken);
+    }
 
+    public Task<IReadOnlyDictionary<string, string>> GetOfficialWebsitesByLei(
+        IReadOnlyCollection<string> leis,
+        CancellationToken cancellationToken
+    )
+    {
+        // An LEI is 20 upper-case alphanumerics (ISO 17442); anything else is neither a
+        // Wikidata key nor safe to inline in the query.
+        var queryKeyToOriginal = new Dictionary<string, string>();
+        foreach (var lei in leis)
+        {
+            var trimmed = lei?.Trim();
+            if (!string.IsNullOrEmpty(trimmed) && LeiShape().IsMatch(trimmed))
+                queryKeyToOriginal.TryAdd(trimmed, lei);
+        }
+        return ResolveWebsites(LeiProperty, "LEIs", queryKeyToOriginal, cancellationToken);
+    }
+
+    private async Task<IReadOnlyDictionary<string, string>> ResolveWebsites(
+        string property,
+        string identifierLabel,
+        Dictionary<string, string> queryKeyToOriginal,
+        CancellationToken cancellationToken
+    )
+    {
         var websites = new Dictionary<string, string>();
-        foreach (var chunk in paddedToOriginal.Keys.Chunk(ChunkSize))
+        foreach (var chunk in queryKeyToOriginal.Keys.Chunk(ChunkSize))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            foreach (var binding in await Query(chunk, cancellationToken))
+            foreach (var binding in await Query(property, chunk, cancellationToken))
             {
-                var paddedCik = binding.Cik?.Value;
+                var key = binding.Key?.Value;
                 var website = binding.Website?.Value;
-                if (paddedCik == null || string.IsNullOrWhiteSpace(website))
+                if (key == null || string.IsNullOrWhiteSpace(website))
                     continue;
-                if (!paddedToOriginal.TryGetValue(paddedCik, out var originalCik))
+                if (!queryKeyToOriginal.TryGetValue(key, out var original))
                     continue;
 
                 // P856 often holds many localised variants (apple.com/de/, …);
                 // the shortest URL is the canonical root. Ordinal tie-break keeps
                 // the pick deterministic.
                 if (
-                    !websites.TryGetValue(originalCik, out var current)
+                    !websites.TryGetValue(original, out var current)
                     || website.Length < current.Length
                     || (
                         website.Length == current.Length
                         && string.CompareOrdinal(website, current) < 0
                     )
                 )
-                    websites[originalCik] = website;
+                    websites[original] = website;
             }
         }
 
         _logger.LogDebug(
-            "Wikidata resolved websites for {Found} of {Requested} CIKs",
+            "Wikidata resolved websites for {Found} of {Requested} {Identifier}",
             websites.Count,
-            paddedToOriginal.Count
+            queryKeyToOriginal.Count,
+            identifierLabel
         );
         return websites;
     }
 
     private async Task<List<SparqlBinding>> Query(
-        IReadOnlyCollection<string> paddedCiks,
+        string property,
+        IReadOnlyCollection<string> keys,
         CancellationToken cancellationToken
     )
     {
-        var values = string.Join(' ', paddedCiks.Select(cik => $"\"{cik}\""));
+        var values = string.Join(' ', keys.Select(key => $"\"{key}\""));
         var sparql =
-            "SELECT ?cik ?website WHERE { "
-            + $"VALUES ?cik {{ {values} }} "
-            + "?item wdt:P5531 ?cik ; wdt:P856 ?website . }";
+            "SELECT ?key ?website WHERE { "
+            + $"VALUES ?key {{ {values} }} "
+            + $"?item wdt:{property} ?key ; wdt:P856 ?website . }}";
 
         await RateLimiter.WaitAsync();
 
@@ -127,4 +160,7 @@ public class WikidataClient : IWikidataClient
         var parsed = JsonConvert.DeserializeObject<SparqlResultsResponse>(json);
         return parsed?.Results?.Bindings ?? [];
     }
+
+    [GeneratedRegex("^[A-Z0-9]{20}$")]
+    private static partial Regex LeiShape();
 }

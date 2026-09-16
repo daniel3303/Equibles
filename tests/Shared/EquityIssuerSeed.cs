@@ -38,7 +38,14 @@ internal static class EquityIssuerSeed
         string Sic = null,
         string EntityType = null,
         Guid? IndustryId = null,
-        Industry Industry = null
+        Industry Industry = null,
+        string LegalEntityIdentifier = null,
+        string Isin = null,
+        string MarketCountryCode = "US",
+        string MarketIdentifierCode = null,
+        EquityIdentityState IdentityState = EquityIdentityState.Legacy,
+        string TradingCurrency = null,
+        decimal? QuoteUnitMultiplier = null
     )
     {
         var issuer = new EquityIssuer
@@ -47,6 +54,7 @@ internal static class EquityIssuerSeed
             Name = Name,
             Description = Description,
             Cik = Cik,
+            LegalEntityIdentifier = LegalEntityIdentifier,
             Website = Website,
             WebsiteCheckedAt = WebsiteCheckedAt,
             SecondaryCiks = SecondaryCiks ?? [],
@@ -59,10 +67,20 @@ internal static class EquityIssuerSeed
         };
         if (Ticker != null)
         {
-            // Empty symbols remain possible in validation tests, before persistence.
-            var primary = string.IsNullOrWhiteSpace(Ticker)
-                ? AddInvalidListing(issuer, Ticker)
-                : UsEquityDirectory.SelectPrimary(issuer, Ticker);
+            // Empty symbols remain possible in validation tests, before persistence. A venue
+            // listing is built directly: the US directory helper hard-codes the US market.
+            var primary =
+                string.IsNullOrWhiteSpace(Ticker) || MarketCountryCode != "US"
+                    ? AddPresentationListing(
+                        issuer,
+                        Ticker,
+                        MarketCountryCode,
+                        MarketIdentifierCode,
+                        IdentityState,
+                        TradingCurrency,
+                        QuoteUnitMultiplier
+                    )
+                    : UsEquityDirectory.SelectPrimary(issuer, Ticker);
             primary.IsDirectoryListed = true;
             primary.Active = Active;
             primary.DelistedOn = DelistedOn;
@@ -75,6 +93,7 @@ internal static class EquityIssuerSeed
             primary.YahooEnrichmentAttemptedAt = YahooEnrichmentAttemptedAt;
 
             primary.Security.Cusip = Cusip;
+            primary.Security.Isin = Isin;
             primary.Security.MarketCapitalization = MarketCapitalization;
             primary.Security.SharesOutstanding = SharesOutStanding;
             primary.Security.RegistrationType = ListedSecurityType;
@@ -130,7 +149,15 @@ internal static class EquityIssuerSeed
             listing.PriceHistoryBackfilled = tickers.Contains(listing.Ticker);
     }
 
-    private static EquityListing AddInvalidListing(EquityIssuer issuer, string ticker)
+    private static EquityListing AddPresentationListing(
+        EquityIssuer issuer,
+        string ticker,
+        string marketCountryCode,
+        string marketIdentifierCode,
+        EquityIdentityState identityState,
+        string tradingCurrency,
+        decimal? quoteUnitMultiplier
+    )
     {
         var security = new EquitySecurity { Issuer = issuer, EquityIssuerId = issuer.Id };
         var listing = new EquityListing
@@ -138,7 +165,11 @@ internal static class EquityIssuerSeed
             Security = security,
             EquitySecurityId = security.Id,
             Ticker = ticker,
-            MarketCountryCode = "US",
+            MarketCountryCode = marketCountryCode,
+            MarketIdentifierCode = marketIdentifierCode,
+            IdentityState = identityState,
+            TradingCurrency = tradingCurrency,
+            QuoteUnitMultiplier = quoteUnitMultiplier,
         };
         security.Listings.Add(listing);
         issuer.Securities.Add(security);

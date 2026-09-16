@@ -6,10 +6,11 @@ namespace Equibles.Yahoo.HostedService.Services;
 
 /// <summary>
 /// Last-resort website source backed by the Yahoo Finance asset profile, keyed
-/// by ticker. Lowest priority: it only sees the long tail the filings and
-/// Wikidata sources left unfilled, keeping the dependency on Yahoo's unofficial
-/// endpoint as small as possible. One profile request per stock, so a
-/// per-ticker failure must not sink the rest of the batch.
+/// by the venue-qualified provider symbol (the bare ticker for a US listing, the
+/// catalog suffix for a verified venue listing). Lowest priority: it only sees the
+/// long tail the filings and Wikidata sources left unfilled, keeping the
+/// dependency on Yahoo's unofficial endpoint as small as possible. One profile
+/// request per stock, so a per-symbol failure must not sink the rest of the batch.
 /// </summary>
 public class YahooWebsiteSource : IWebsiteSource
 {
@@ -41,7 +42,14 @@ public class YahooWebsiteSource : IWebsiteSource
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(stock.Ticker))
+            // A listing outside the catalog has no Yahoo symbol; its bare ticker would name
+            // another market's company.
+            var symbol = YahooListingSource.ProviderSymbol(
+                stock.Ticker,
+                stock.MarketCountryCode,
+                stock.MarketIdentifierCode
+            );
+            if (symbol == null)
                 continue;
 
             try
@@ -53,7 +61,7 @@ public class YahooWebsiteSource : IWebsiteSource
                 // abandons the slow ticker and keeps the batch moving.
                 var website = (
                     await _yahooClient
-                        .GetCompanyProfile(stock.Ticker)
+                        .GetCompanyProfile(symbol)
                         .WaitAsync(LookupTimeout, cancellationToken)
                 )?.Website;
                 if (!string.IsNullOrWhiteSpace(website))
@@ -66,21 +74,13 @@ public class YahooWebsiteSource : IWebsiteSource
             catch (TimeoutException ex)
             {
                 // The lookup outran LookupTimeout — skip this ticker, keep the batch.
-                _logger.LogDebug(
-                    ex,
-                    "Yahoo asset profile lookup timed out for {Ticker}",
-                    stock.Ticker
-                );
+                _logger.LogDebug(ex, "Yahoo asset profile lookup timed out for {Symbol}", symbol);
             }
             catch (HttpRequestException ex)
             {
                 // An unknown ticker or transient Yahoo hiccup is expected for the
                 // long tail this source serves; skip the stock, keep the batch.
-                _logger.LogDebug(
-                    ex,
-                    "Yahoo asset profile lookup failed for {Ticker}",
-                    stock.Ticker
-                );
+                _logger.LogDebug(ex, "Yahoo asset profile lookup failed for {Symbol}", symbol);
             }
         }
 

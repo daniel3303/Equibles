@@ -62,6 +62,25 @@ public class YahooListingSourceTests
             .Be("yahoo-" + EquityMarketCatalog.ByMarketIdentifierCode(mic).Code + "-chart-v1");
     }
 
+    [Theory]
+    [InlineData("AIR", "US", null, "AIR")]
+    [InlineData("AIR", "FR", "XPAR", "AIR.PA")]
+    [InlineData("SAP", "DE", "XETR", "SAP.DE")]
+    [InlineData("SHEL", "GB", "XLON", "SHEL.L")]
+    [InlineData("NESN", "CH", "XSWX", null)]
+    [InlineData("AIR", "FR", "XETR", null)]
+    [InlineData("AIR", "FR", null, null)]
+    [InlineData(" ", "US", null, null)]
+    public void VenueSymbol_QualifiesByCatalogSuffix_OrRefusesAnUnknownVenue(
+        string ticker,
+        string country,
+        string mic,
+        string expected
+    )
+    {
+        YahooListingSource.ProviderSymbol(ticker, country, mic).Should().Be(expected);
+    }
+
     [Fact]
     public void PenceQuotedChart_MatchesOnlyAListingStoredAsPoundsWithTheHundredthMultiplier()
     {

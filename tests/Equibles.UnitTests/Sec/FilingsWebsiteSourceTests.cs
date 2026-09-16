@@ -208,6 +208,33 @@ public class FilingsWebsiteSourceTests
     }
 
     [Fact]
+    public async Task CiklessIssuer_IsNeverRead_EvenWhenADocumentCarriesItsId()
+    {
+        // A verified venue issuer has no SEC registration, so the source skips it before any
+        // document query; a document that happens to carry its id must not leak a website.
+        var options = NewDbOptions();
+        var venueIssuer = Guid.NewGuid();
+        await SeedFiling(
+            options,
+            venueIssuer,
+            DocumentType.TenK,
+            new DateOnly(2025, 9, 27),
+            "Our website address is www.should-not-be-read.com."
+        );
+        var stock = new WebsiteSourceStock(
+            venueIssuer,
+            "AIR",
+            null,
+            MarketIdentifierCode: "XPAR",
+            MarketCountryCode: "FR"
+        );
+
+        var results = await BuildSut(options).FindWebsites([stock], CancellationToken.None);
+
+        results.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task StocksWithoutFilingsOrDisclosures_AreAbsentFromTheResult()
     {
         var options = NewDbOptions();

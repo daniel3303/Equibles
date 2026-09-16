@@ -25,6 +25,21 @@ internal static class YahooListingSource
         : Market(target) is { } market ? target.Ticker + market.YahooSuffix
         : null;
 
+    // The provider symbol for a listing named by its venue alone; a market outside the catalog has no Yahoo identity.
+    internal static string ProviderSymbol(
+        string ticker,
+        string marketCountryCode,
+        string marketIdentifierCode
+    )
+    {
+        if (string.IsNullOrWhiteSpace(ticker))
+            return null;
+        if (marketCountryCode == "US")
+            return ticker;
+        var market = EquityMarketCatalog.ByMarketIdentifierCode(marketIdentifierCode);
+        return market?.CountryCode == marketCountryCode ? ticker + market.YahooSuffix : null;
+    }
+
     internal static bool MatchesListing(PriceSeriesTarget target, EquityListing listing) =>
         listing.Id == target.EquityListingId
         && listing.Security.EquityIssuerId == target.EquityIssuerId

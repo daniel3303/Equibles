@@ -18,13 +18,12 @@ using Microsoft.Extensions.Options;
 namespace Equibles.CommonStocks.HostedService.Services;
 
 /// <summary>
-/// Fills in <c>CommonStock.Website</c> for stocks that don't have one yet, one
-/// bounded batch per cycle. Candidate URLs come from the registered
-/// <see cref="IWebsiteSource"/> implementations, consulted in priority order so
-/// each source only sees the stocks every more-authoritative source left
-/// unfilled; the first candidate that survives a reachability probe wins.
-/// Upstream of IR discovery: stocks without a website can never get an IR page,
-/// news, events, or call artefacts.
+/// Fills in <c>EquityIssuer.Website</c> for issuers of the current directory, US and verified
+/// venue listings alike, that don't have one yet, one bounded batch per cycle. Candidate URLs
+/// come from the registered <see cref="IWebsiteSource"/> implementations, consulted in priority
+/// order so each source only sees the issuers every more-authoritative source left unfilled;
+/// the first candidate that survives a reachability probe wins. Upstream of IR discovery:
+/// issuers without a website can never get an IR page, news, events, or call artefacts.
 /// </summary>
 [Service]
 public class WebsiteDiscoveryService : IImporter
@@ -140,8 +139,8 @@ public class WebsiteDiscoveryService : IImporter
                     if (validated != null && await Persist(stock.Id, validated))
                     {
                         _logger.LogDebug(
-                            "Discovered website for {Ticker} via {Source}: {Url}",
-                            stock.Ticker,
+                            "Discovered website for {Symbol} via {Source}: {Url}",
+                            stock.Symbol,
                             source.Name,
                             validated
                         );
@@ -184,13 +183,14 @@ public class WebsiteDiscoveryService : IImporter
             scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
         var cutoff = DateTime.UtcNow.AddDays(-_options.CheckCooldownDays);
-        // Largest companies first: a single bad bulk run can leave thousands of stocks pending,
+        // Largest companies first: a single bad bulk run can leave thousands of issuers pending,
         // and alphabetical order buries the high-value ones (e.g. TSLA, WMT) behind obscure
         // tickers for hours. Market cap is the priority signal; unknown caps (0) drain last,
-        // tie-broken alphabetically for a stable order.
-        var rows = await repo.GetCurrentUsDirectory()
+        // tie-broken by venue then ticker for a stable order across markets.
+        var rows = await repo.GetCurrentDirectory()
             .Where(PendingDiscovery(cutoff))
             .OrderByDescending(s => s.Presentation.Listing.Security.MarketCapitalization)
+            .ThenBy(s => s.Presentation.Listing.MarketIdentifierCode ?? "")
             .ThenBy(s => s.Presentation.Listing.Ticker)
             .Take(_options.BatchSize)
             .Select(s => new
@@ -198,10 +198,23 @@ public class WebsiteDiscoveryService : IImporter
                 s.Id,
                 Ticker = s.Presentation.Listing.Ticker,
                 s.Cik,
+                s.LegalEntityIdentifier,
+                s.Presentation.Listing.Security.Isin,
+                s.Presentation.Listing.MarketIdentifierCode,
+                s.Presentation.Listing.MarketCountryCode,
             })
             .ToListAsync(cancellationToken);
 
-        return rows.Select(r => new WebsiteSourceStock(r.Id, r.Ticker, r.Cik)).ToList();
+        return rows.Select(r => new WebsiteSourceStock(
+                r.Id,
+                r.Ticker,
+                r.Cik,
+                r.LegalEntityIdentifier,
+                r.Isin,
+                r.MarketIdentifierCode,
+                r.MarketCountryCode
+            ))
+            .ToList();
     }
 
     private async Task<bool> Persist(Guid commonStockId, string website)
@@ -210,8 +223,8 @@ public class WebsiteDiscoveryService : IImporter
         EquityIssuerRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
-        EquityIssuer stock = await repo.GetCurrentUsDirectoryIssuer(commonStockId);
-        // The stock may have been deleted, or filled in by an overlapping run,
+        EquityIssuer stock = await repo.GetCurrentDirectoryIssuer(commonStockId);
+        // The issuer may have been deleted, or filled in by an overlapping run,
         // between loading the batch and persisting — leave an existing value alone.
         if (stock == null || !string.IsNullOrEmpty(stock.Website))
             return false;
@@ -225,8 +238,14 @@ public class WebsiteDiscoveryService : IImporter
         // commits (financial-domain event, bypasses any bus outbox); the consumer is idempotent and
         // a reconciliation backstop in IR discovery's candidate query catches a publish lost to a
         // crash, so at-least-once delivery is safe.
+        EquityListing listing = stock.Presentation.Listing;
         await _bus.Publish(
-            new StockWebsiteDiscovered(stock.Id, stock.Presentation.Listing.Ticker, website)
+            new StockWebsiteDiscovered(
+                stock.Id,
+                listing.Ticker,
+                website,
+                listing.MarketCountryCode == "US" ? null : listing.MarketIdentifierCode
+            )
         );
         return true;
     }
@@ -237,7 +256,7 @@ public class WebsiteDiscoveryService : IImporter
         EquityIssuerRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
-        EquityIssuer stock = await repo.GetCurrentUsDirectoryIssuer(commonStockId);
+        EquityIssuer stock = await repo.GetCurrentDirectoryIssuer(commonStockId);
         if (stock == null)
             return;
 

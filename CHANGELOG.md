@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- `EquityIssuerRepository.GetCurrentDirectory()`, the live directory across markets (active US presentations plus verified venue presentations), with `GetCurrentDirectoryIssuer` and `GetCurrentDirectoryByIds` alongside; `GetCurrentUsDirectory()` keeps its US-only universe. `EquityListingSymbol` spells a listing as its bare ticker or `MIC:TICKER`. `IWikidataClient.GetOfficialWebsitesByLei` joins a company to its official website by Legal Entity Identifier (Wikidata property P1278).
 - `Equibles.EquityMarkets`: a code-owned catalog of European markets (the seven Euronext markets and Xetra live; Nasdaq Nordic, LSE, BME and GPW registered without a directory source yet), one `EquityMarketRegistration` pass-state row per market, an ESMA plus FCA FIRDS equity universe kept current by `FirdsUniverseWorker`, and `EquityMarketDirectoryWorker` with Euronext and Xetra directory adapters. A directory row becomes a verified listing only when FIRDS lists its ISIN as a live share on the market's venues, the market is the share's home (the directory's stated primary market where it publishes one, FIRDS' relevant venue otherwise) and the GLEIF issuer record agrees with FIRDS on the LEI whenever it states one.
 - `Equibles.Integrations.Esma` (FIRDS file index for both authorities, checksum-verified same-origin downloads, streaming reader for full and delta files) and `Equibles.Integrations.Xetra` (the all-tradable-instruments list, discovered from the publisher's page because its address rotates).
 - `CommonStockRepository.Search` accepts an `includeInactive` flag so operator surfaces can audit retained delisted identities; reader-facing surfaces keep the active-only default.
@@ -17,12 +18,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Website discovery covers verified venue issuers: candidates come from the current directory, `WebsiteSourceStock` carries the LEI, ISIN, venue code and market country, Wikidata joins a CIK-less issuer on its LEI, the Yahoo profile source asks by the catalog symbol, the SEC filings source skips CIK-less issuers, and `StockWebsiteDiscovered` names the venue of a verified listing. `SparqlBinding.Cik` is renamed `Key` because the one query shape now serves both identifiers.
+- Yahoo enrichment (key statistics and company profile) runs for the presentation listing of every verified venue issuer on the same attempt cadence as US listings; the market capitalization is stored in major units of the presentation listing's trading currency, and a failed attempt stamp costs that target alone, never the rest of the batch.
 - Yahoo price capture for non-US listings reads the market catalog (symbol suffix, exchange code, time zone and quotation unit) instead of Lisbon-only constants, and records new quotation evidence as `yahoo-{market}-chart-v1`.
 - The Lisbon directory worker and the `EquityMarkets:LisbonEnabled` lane switch are removed: every catalog market with a directory adapter is captured without a per-market switch, and `EquityMarketRegistration` records each market's pass state.
 - `ListFilings` replaces the retired `ListCompanyDocuments` public MCP tool; clients with cached tool catalogs must refresh their MCP connection.
 
 ### Fixed
 
+- Yahoo key-statistics and company-profile requests use the venue-qualified provider symbol like the chart requests do; the bare ticker of a Paris listing named another market's company (`AIR` fetched AAR Corp for Airbus), and a listing outside the catalog is now skipped instead of asked by its bare ticker.
 - Euronext directory capture accepts cross-listed lines whose market cell names several venues (`XBRU, XPAR` on the Paris list): the row keeps the market's own venue and a line Euronext homes on a sibling market is skipped as that market's, instead of one such row failing the whole pass for Paris, Amsterdam and Brussels.
 - Euronext directory capture raises the reported-total bound from 2,000 to 5,000, above Milan's 2,467-line directory, whose rows are all single-venue lines the parser accepts; the gateway's venue query remains the proof the list is unfiltered.
 - Xetra instrument-list discovery reads the download link whether the publisher's cache node writes it root-relative or absolute on its own host.

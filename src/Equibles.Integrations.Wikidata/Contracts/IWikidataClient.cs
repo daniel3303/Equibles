@@ -13,4 +13,15 @@ public interface IWikidataClient
         IReadOnlyCollection<string> ciks,
         CancellationToken cancellationToken
     );
+
+    /// <summary>
+    /// Returns the official website (P856) of each company whose Legal Entity Identifier
+    /// (P1278) appears in <paramref name="leis"/>, keyed by the LEI as passed in. Only a
+    /// well-formed 20-character LEI is queried; LEIs Wikidata doesn't know (or knows without
+    /// a website) are absent from the result.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> GetOfficialWebsitesByLei(
+        IReadOnlyCollection<string> leis,
+        CancellationToken cancellationToken
+    );
 }

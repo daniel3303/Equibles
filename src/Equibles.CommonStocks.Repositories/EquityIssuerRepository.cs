@@ -26,6 +26,38 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
                 && issuer.Presentation.Listing.Active
             );
 
+    /// <summary>
+    /// The live stock directory across every market: an issuer whose presentation listing is
+    /// active and is either a US listing or a venue listing a directory adapter verified.
+    /// </summary>
+    public virtual IQueryable<EquityIssuer> GetCurrentDirectory() =>
+        GetAll()
+            .Where(issuer =>
+                issuer.Presentation != null
+                && issuer.Presentation.Listing.Active
+                && (
+                    issuer.Presentation.Listing.MarketCountryCode == "US"
+                    || issuer.Presentation.Listing.IdentityState == EquityIdentityState.Verified
+                )
+            );
+
+    public virtual IQueryable<EquityIssuer> GetCurrentDirectoryByIds(IEnumerable<Guid> ids) =>
+        GetCurrentDirectory().Where(issuer => ids.Contains(issuer.Id));
+
+    public virtual async Task<EquityIssuer> GetCurrentDirectoryIssuer(params object[] key)
+    {
+        EquityIssuer issuer = await Get(key);
+        return IsCurrentDirectoryIssuer(issuer) ? issuer : null;
+    }
+
+    // The in-memory twin of GetCurrentDirectory for an already loaded issuer graph.
+    public static bool IsCurrentDirectoryIssuer(EquityIssuer issuer) =>
+        issuer?.Presentation?.Listing is { Active: true } listing
+        && (
+            listing.MarketCountryCode == "US"
+            || listing.IdentityState == EquityIdentityState.Verified
+        );
+
     public IQueryable<EquityIssuerSourceIdentifier> GetSourceIdentifiers() =>
         DbContext.Set<EquityIssuerSourceIdentifier>();
 
@@ -316,7 +348,7 @@ public class EquityIssuerRepository : BaseRepository<EquityIssuer>
                 )
             );
 
-    public IQueryable<EquityIssuer> GetCurrentUsDirectoryByIds(IEnumerable<Guid> ids)
+    public virtual IQueryable<EquityIssuer> GetCurrentUsDirectoryByIds(IEnumerable<Guid> ids)
     {
         return GetCurrentUsDirectory().Where(cs => ids.Contains(cs.Id));
     }

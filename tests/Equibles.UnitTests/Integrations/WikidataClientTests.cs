@@ -13,15 +13,16 @@ namespace Equibles.UnitTests.Integrations;
 /// Wikidata's 10-digit P5531 format for the query but keys results by the CIK as
 /// passed, picks the canonical root among P856's many localised variants (the
 /// shortest URL, ordinal tie-break), chunks large inputs into bounded queries,
-/// and never queries non-digit CIKs.
+/// and never queries non-digit CIKs. <c>GetOfficialWebsitesByLei</c> joins on
+/// P1278 with the same chunking and pick rule and never queries a malformed LEI.
 /// </summary>
 public class WikidataClientTests
 {
-    private static string SparqlJson(params (string Cik, string Website)[] rows)
+    private static string SparqlJson(params (string Key, string Website)[] rows)
     {
         var bindings = rows.Select(r => new
         {
-            cik = new { type = "literal", value = r.Cik },
+            key = new { type = "literal", value = r.Key },
             website = new { type = "uri", value = r.Website },
         });
         return JsonConvert.SerializeObject(new { results = new { bindings } });
@@ -111,6 +112,64 @@ public class WikidataClientTests
 
         result.Should().BeEmpty();
         handler.RequestedQueries.Should().BeEmpty("nothing digit-shaped was left to query");
+    }
+
+    [Fact]
+    public async Task CikQuery_JoinsOnTheCikProperty()
+    {
+        var (client, handler) = BuildSut(SparqlJson());
+
+        await client.GetOfficialWebsitesByCik(["320193"], CancellationToken.None);
+
+        handler.RequestedQueries.Should().ContainSingle().Which.Should().Contain("wdt:P5531 ?key");
+    }
+
+    [Fact]
+    public async Task Lei_JoinsOnTheLeiProperty_AndKeysTheResultAsPassed()
+    {
+        // Verified live 2026-09-16: P1278 R0MUWSFPU8MPRO8K5P83 resolves BNP Paribas' website.
+        var (client, handler) = BuildSut(
+            SparqlJson(
+                ("R0MUWSFPU8MPRO8K5P83", "https://group.bnpparibas/en/"),
+                ("R0MUWSFPU8MPRO8K5P83", "https://group.bnpparibas")
+            )
+        );
+
+        var result = await client.GetOfficialWebsitesByLei(
+            [" R0MUWSFPU8MPRO8K5P83 "],
+            CancellationToken.None
+        );
+
+        handler
+            .RequestedQueries.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("wdt:P1278 ?key")
+            .And.Contain("\"R0MUWSFPU8MPRO8K5P83\"");
+        result
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(
+                new KeyValuePair<string, string>(
+                    " R0MUWSFPU8MPRO8K5P83 ",
+                    "https://group.bnpparibas"
+                )
+            );
+    }
+
+    [Fact]
+    public async Task MalformedLeis_AreNeverQueried()
+    {
+        var (client, handler) = BuildSut(SparqlJson());
+
+        var result = await client.GetOfficialWebsitesByLei(
+            ["r0muwsfpu8mpro8k5p83", "R0MUWSFPU8MPRO8K5P8", "R0MUWSFPU8MPRO8K5P83\" }", "", null],
+            CancellationToken.None
+        );
+
+        result.Should().BeEmpty();
+        handler.RequestedQueries.Should().BeEmpty("nothing LEI-shaped was left to query");
     }
 
     [Fact]

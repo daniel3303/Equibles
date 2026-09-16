@@ -7,9 +7,10 @@ using Xunit;
 namespace Equibles.UnitTests.CommonStocks;
 
 /// <summary>
-/// Contract: <c>WikidataWebsiteSource</c> queries the client by the stocks' CIKs
-/// and maps the answers back to stock ids; stocks without a CIK are skipped
-/// without a query, and an empty batch never hits the client.
+/// Contract: <c>WikidataWebsiteSource</c> queries the client by the stocks' CIKs,
+/// and by LEI for the CIK-less issuers that carry one, and maps the answers back
+/// to stock ids; stocks with neither key are skipped without a query, and an
+/// empty batch never hits the client.
 /// </summary>
 public class WikidataWebsiteSourceTests
 {
@@ -62,7 +63,7 @@ public class WikidataWebsiteSourceTests
     }
 
     [Fact]
-    public async Task StocksWithoutCik_AreNotQueried()
+    public async Task StocksWithoutCikOrLei_AreNotQueried()
     {
         var noCik = new WebsiteSourceStock(Guid.NewGuid(), "AAA", null);
         var blankCik = new WebsiteSourceStock(Guid.NewGuid(), "BBB", " ");
@@ -78,6 +79,111 @@ public class WikidataWebsiteSourceTests
             .DidNotReceive()
             .GetOfficialWebsitesByCik(
                 Arg.Any<IReadOnlyCollection<string>>(),
+                Arg.Any<CancellationToken>()
+            );
+        await client
+            .DidNotReceive()
+            .GetOfficialWebsitesByLei(
+                Arg.Any<IReadOnlyCollection<string>>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task CiklessIssuerWithLei_IsQueriedByLei()
+    {
+        var paris = new WebsiteSourceStock(
+            Guid.NewGuid(),
+            "BNP",
+            null,
+            LegalEntityIdentifier: "R0MUWSFPU8MPRO8K5P83",
+            Isin: "FR0000131104",
+            MarketIdentifierCode: "XPAR",
+            MarketCountryCode: "FR"
+        );
+        var client = Substitute.For<IWikidataClient>();
+        client
+            .GetOfficialWebsitesByLei(
+                Arg.Is<IReadOnlyCollection<string>>(c => c.Contains("R0MUWSFPU8MPRO8K5P83")),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new Dictionary<string, string>
+                {
+                    ["R0MUWSFPU8MPRO8K5P83"] = "https://group.bnpparibas",
+                }
+            );
+
+        var result = await new WikidataWebsiteSource(client).FindWebsites(
+            [paris],
+            CancellationToken.None
+        );
+
+        result
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new KeyValuePair<Guid, string>(paris.Id, "https://group.bnpparibas"));
+        await client
+            .DidNotReceive()
+            .GetOfficialWebsitesByCik(
+                Arg.Any<IReadOnlyCollection<string>>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task MixedBatch_QueriesEachKeyKindOnce_AndAnSecRegistrantNeverJoinsByLei()
+    {
+        // A registrant with both keys goes by CIK only, so a stale Wikidata LEI can never
+        // override the SEC-keyed answer; the CIK-less issuer goes by LEI.
+        var registrant = new WebsiteSourceStock(
+            Guid.NewGuid(),
+            "AAPL",
+            "320193",
+            LegalEntityIdentifier: "HWUPKR0MPOU8FGXBT394"
+        );
+        var venueOnly = new WebsiteSourceStock(
+            Guid.NewGuid(),
+            "BNP",
+            null,
+            LegalEntityIdentifier: "R0MUWSFPU8MPRO8K5P83",
+            MarketIdentifierCode: "XPAR",
+            MarketCountryCode: "FR"
+        );
+        var client = Substitute.For<IWikidataClient>();
+        client
+            .GetOfficialWebsitesByCik(
+                Arg.Any<IReadOnlyCollection<string>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new Dictionary<string, string> { ["320193"] = "https://apple.com/" });
+        client
+            .GetOfficialWebsitesByLei(
+                Arg.Any<IReadOnlyCollection<string>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new Dictionary<string, string>
+                {
+                    ["R0MUWSFPU8MPRO8K5P83"] = "https://group.bnpparibas",
+                }
+            );
+
+        var result = await new WikidataWebsiteSource(client).FindWebsites(
+            [registrant, venueOnly],
+            CancellationToken.None
+        );
+
+        result.Should().HaveCount(2);
+        result[registrant.Id].Should().Be("https://apple.com/");
+        result[venueOnly.Id].Should().Be("https://group.bnpparibas");
+        await client
+            .Received(1)
+            .GetOfficialWebsitesByLei(
+                Arg.Is<IReadOnlyCollection<string>>(c =>
+                    c.Count == 1 && c.Contains("R0MUWSFPU8MPRO8K5P83")
+                ),
                 Arg.Any<CancellationToken>()
             );
     }

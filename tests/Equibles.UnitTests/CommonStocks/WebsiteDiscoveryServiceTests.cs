@@ -7,6 +7,8 @@ using Equibles.CommonStocks.HostedService.Services;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Messaging.Contracts.CommonStocks;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,7 +24,9 @@ namespace Equibles.UnitTests.CommonStocks;
 /// <c>IWebsiteSource</c>s in priority order, only hands later sources the stocks
 /// earlier sources left unfilled, persists the first candidate that survives the
 /// reachability probe, stamps definitive misses for the cooldown back-off, and
-/// skips the stamp when a source errored so those stocks retry cleanly.
+/// skips the stamp when a source errored so those stocks retry cleanly. Its
+/// candidates are the current directory across markets: a verified venue issuer
+/// is handed over with its venue identity, a legacy non-US presentation never is.
 /// </summary>
 public class WebsiteDiscoveryServiceTests
 {
@@ -58,7 +62,8 @@ public class WebsiteDiscoveryServiceTests
         DbContextOptions<EquiblesFinancialDbContext> options,
         IEnumerable<IWebsiteSource> sources,
         HttpStatusCode probeStatus = HttpStatusCode.OK,
-        int? batchSize = null
+        int? batchSize = null,
+        IBus bus = null
     )
     {
         var stealth = Substitute.For<IStealthBrowserClient>();
@@ -81,8 +86,33 @@ public class WebsiteDiscoveryServiceTests
             ),
             Substitute.For<ILogger<WebsiteDiscoveryService>>(),
             Options.Create(discoveryOptions),
-            Substitute.For<MassTransit.IBus>()
+            bus ?? Substitute.For<IBus>()
         );
+    }
+
+    private static async Task<EquityIssuer> SeedVenueStock(
+        DbContextOptions<EquiblesFinancialDbContext> options,
+        string ticker,
+        EquityIdentityState state,
+        string lei = "R0MUWSFPU8MPRO8K5P83",
+        string isin = "FR0000131104"
+    )
+    {
+        using var ctx = NewContext(options);
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: ticker,
+            Name: ticker + " SA",
+            LegalEntityIdentifier: lei,
+            Isin: isin,
+            MarketCountryCode: "FR",
+            MarketIdentifierCode: "XPAR",
+            IdentityState: state,
+            TradingCurrency: "EUR",
+            QuoteUnitMultiplier: 1m
+        );
+        ctx.Set<EquityIssuer>().Add(stock);
+        await ctx.SaveChangesAsync();
+        return stock;
     }
 
     private static async Task<EquityIssuer> SeedStock(
@@ -249,6 +279,66 @@ public class WebsiteDiscoveryServiceTests
             );
     }
 
+    [Fact]
+    public async Task VerifiedVenueIssuer_IsACandidate_WithItsVenueIdentity_AndTheEventNamesItsVenue()
+    {
+        var options = NewDbOptions();
+        EquityIssuer paris = await SeedVenueStock(options, "BNP", EquityIdentityState.Verified);
+        EquityIssuer nyse = await SeedStock(options, "BNP");
+        var source = new StubSource(
+            10,
+            new Dictionary<string, string> { ["BNP"] = "www.example-bank.com" }
+        );
+        var bus = Substitute.For<IBus>();
+
+        await BuildSut(options, [source], bus: bus).Import(CancellationToken.None);
+
+        var venueStock = source.SeenStocks.Should().ContainSingle(s => s.Id == paris.Id).Subject;
+        venueStock.Cik.Should().BeNull();
+        venueStock.LegalEntityIdentifier.Should().Be("R0MUWSFPU8MPRO8K5P83");
+        venueStock.Isin.Should().Be("FR0000131104");
+        venueStock.MarketIdentifierCode.Should().Be("XPAR");
+        venueStock.MarketCountryCode.Should().Be("FR");
+        venueStock.Symbol.Should().Be("XPAR:BNP");
+        var usStock = source.SeenStocks.Should().ContainSingle(s => s.Id == nyse.Id).Subject;
+        usStock.MarketCountryCode.Should().Be("US");
+        usStock.MarketIdentifierCode.Should().BeNull();
+        usStock.Symbol.Should().Be("BNP");
+
+        (await Reload(options, paris.Id)).Website.Should().Be("https://www.example-bank.com");
+        await bus.Received(1)
+            .Publish(
+                Arg.Is<StockWebsiteDiscovered>(e =>
+                    e.CommonStockId == paris.Id
+                    && e.Ticker == "BNP"
+                    && e.MarketIdentifierCode == "XPAR"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+        await bus.Received(1)
+            .Publish(
+                Arg.Is<StockWebsiteDiscovered>(e =>
+                    e.CommonStockId == nyse.Id && e.MarketIdentifierCode == null
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task LegacyVenuePresentation_IsNeverACandidate()
+    {
+        var options = NewDbOptions();
+        EquityIssuer legacy = await SeedVenueStock(options, "OLD", EquityIdentityState.Legacy);
+        var source = new StubSource(10, new Dictionary<string, string> { ["OLD"] = "www.old.com" });
+
+        await BuildSut(options, [source]).Import(CancellationToken.None);
+
+        source.SeenTickers.Should().BeEmpty("an unverified non-US presentation is not directory");
+        EquityIssuer reloaded = await Reload(options, legacy.Id);
+        reloaded.Website.Should().BeNull();
+        reloaded.WebsiteCheckedAt.Should().BeNull();
+    }
+
     private sealed class StubSource : IWebsiteSource
     {
         private readonly Dictionary<string, string> _answers;
@@ -261,6 +351,8 @@ public class WebsiteDiscoveryServiceTests
 
         public List<string> SeenTickers { get; } = [];
 
+        public List<WebsiteSourceStock> SeenStocks { get; } = [];
+
         public int Priority { get; }
 
         public string Name => $"stub-{Priority}";
@@ -271,6 +363,7 @@ public class WebsiteDiscoveryServiceTests
         )
         {
             SeenTickers.AddRange(stocks.Select(s => s.Ticker));
+            SeenStocks.AddRange(stocks);
             IReadOnlyDictionary<Guid, string> result = stocks
                 .Where(s => _answers.ContainsKey(s.Ticker))
                 .ToDictionary(s => s.Id, s => _answers[s.Ticker]);
