@@ -13,13 +13,15 @@ public class EquityDailyStockPriceRepository : BaseRepository<EquityDailyStockPr
         : base(dbContext) { }
 
     /// <summary>
-    /// Current-primary series only. Existing issuer-level consumers deliberately retain
-    /// their original semantics after independently keyed listed-symbol rows are added. Legacy
-    /// rows are never guessed into the current primary because their source listing is ambiguous.
+    /// The US current-primary series only: rows of a US presentation listing. Every issuer-level
+    /// consumer is a US aggregate, and venue listings are read by listing id, so a verified venue
+    /// presentation never leaks its series into a US figure. Legacy rows are never guessed into
+    /// the current primary because their source listing is ambiguous.
     /// </summary>
     public virtual IQueryable<EquityDailyStockPrice> GetPrimarySeries()
     {
-        return GetAllSeries().Where(p => p.Listing.Presentation != null);
+        return GetAllSeries()
+            .Where(p => p.Listing.Presentation != null && p.Listing.MarketCountryCode == "US");
     }
 
     /// <summary>
