@@ -31,6 +31,18 @@ public class NasdaqNordicTests
             .Should()
             .Be("First North GM Finland");
         helsinki.CategoryOf("FNFI").Should().Be(NasdaqNordicCategory.FirstNorth);
+        foreach (var market in NasdaqNordicMarket.All)
+        foreach (var category in NasdaqNordicMarket.Categories)
+            market
+                .ExchangeLabels(category)
+                .Should()
+                .Equal(market.ExchangeLabel(category), market.ExchangeLabel(category) + " Auction");
+        NasdaqNordicMarket
+            .All.SelectMany(market =>
+                NasdaqNordicMarket.Categories.SelectMany(market.ExchangeLabels)
+            )
+            .Should()
+            .OnlyHaveUniqueItems("no label may confirm a row of another list or another market");
         helsinki.CategoryOf("XSTO").Should().BeNull();
         NasdaqNordicClient
             .ShareListUrl(NasdaqNordicMarket.Copenhagen, NasdaqNordicCategory.FirstNorth)

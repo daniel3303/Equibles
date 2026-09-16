@@ -11,6 +11,8 @@ public sealed record NasdaqNordicMarket(
     string FirstNorthExchange
 )
 {
+    private const string AuctionSuffix = " Auction";
+
     public static readonly NasdaqNordicMarket Stockholm = new(
         "stockholm",
         "STO",
@@ -59,6 +61,11 @@ public sealed record NasdaqNordicMarket(
 
     public string ExchangeLabel(NasdaqNordicCategory category) =>
         category == NasdaqNordicCategory.MainMarket ? MainMarketExchange : FirstNorthExchange;
+
+    // A line too illiquid for continuous trading is quoted in periodic auctions, and the instrument reply names
+    // the trading model after the exchange: the venue is the same one, so both spellings confirm the same list.
+    public IReadOnlyList<string> ExchangeLabels(NasdaqNordicCategory category) =>
+        [ExchangeLabel(category), ExchangeLabel(category) + AuctionSuffix];
 
     public NasdaqNordicCategory? CategoryOf(string marketIdentifierCode) =>
         marketIdentifierCode == MainMarketIdentifierCode ? NasdaqNordicCategory.MainMarket
