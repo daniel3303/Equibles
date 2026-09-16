@@ -28,7 +28,8 @@ namespace Equibles.UnitTests.Yahoo;
 /// Pins the Yahoo lane's side of venue-row ownership in the shared price store. A venue-derived
 /// bar (SourceTicker `MIC:ISIN`) is never deleted by a series replacement unless the restated
 /// series moved it onto another split basis, is never resettled from the feed, and never counts
-/// as stored Yahoo history, so the deep backfill still runs after a venue wrote first. The
+/// as stored Yahoo history or as the feed's own latest date, so the deep backfill still runs
+/// after a venue wrote first and the fetch window stays open while the venue runs ahead. The
 /// unique (listing, date) index means a retained venue row's date must leave the insert batch.
 /// </summary>
 public class YahooPriceImportServiceVenueRowTests
@@ -54,6 +55,11 @@ public class YahooPriceImportServiceVenueRowTests
             "ResettleStoredBars",
             BindingFlags.NonPublic | BindingFlags.Instance
         );
+
+    private static readonly MethodInfo GetSyncStartDate = typeof(YahooPriceImportService).GetMethod(
+        "GetSyncStartDate",
+        BindingFlags.NonPublic | BindingFlags.Instance
+    );
 
     [Fact]
     public async Task Replace_SameBasisVenueRow_KeepsItWithTheFreshAdjustedCloseAndSkipsItsInsert()
@@ -189,6 +195,37 @@ public class YahooPriceImportServiceVenueRowTests
 
         withVenueOnly.Should().BeFalse();
         withYahooRow.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SyncStartDate_IgnoresVenueRows_SoAVenueBarAheadOfTheFeedKeepsTheWindowOpen()
+    {
+        // A venue bar lands on the session's own UTC date, one day before the feed admits that
+        // session, so counting it would put the start date at today on every cycle and the
+        // listing would never be fetched again.
+        var (sut, options, stockId) = await BuildSutWithStock();
+        var empty = await Invoke<DateOnly>(GetSyncStartDate, sut, Target(options, stockId));
+
+        await using (var seed = NewContext(options))
+        {
+            seed.Add(Row(seed, stockId, Today.AddDays(-1), 41m, VenueKey));
+            await seed.SaveChangesAsync();
+        }
+        var venueOnly = await Invoke<DateOnly>(GetSyncStartDate, sut, Target(options, stockId));
+
+        await using (var seed = NewContext(options))
+        {
+            seed.Add(Row(seed, stockId, Today.AddDays(-4), 40m));
+            await seed.SaveChangesAsync();
+        }
+        var behindTheVenue = await Invoke<DateOnly>(
+            GetSyncStartDate,
+            sut,
+            Target(options, stockId)
+        );
+
+        venueOnly.Should().Be(empty, "a venue bar is not stored Yahoo history");
+        behindTheVenue.Should().Be(Today.AddDays(-3), "the feed resumes after its own last bar");
     }
 
     [Fact]

@@ -1552,6 +1552,7 @@ public class YahooPriceImportService
         }
 
         var recycledRows = await repo.GetByListing(target.EquityListingId)
+            .YahooOwned()
             .Where(price => price.Date > target.HistoryEndDate!.Value)
             .ToListAsync(cancellationToken);
         if (recycledRows.Count > 0)
@@ -2270,6 +2271,7 @@ public class YahooPriceImportService
             EquityDailyStockPriceRepository repo =
                 scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
             targets = await repo.GetUsSeries()
+                .YahooOwned()
                 .AsNoTracking()
                 .Where(p =>
                     (
@@ -2389,6 +2391,7 @@ public class YahooPriceImportService
                     validSeries.Add(series.EquityListingId);
             }
             var storedRows = await repo.GetUsSeries()
+                .YahooOwned()
                 .Where(p => targetIds.Contains(p.Id))
                 .ToListAsync(cancellationToken);
 
@@ -3151,8 +3154,11 @@ public class YahooPriceImportService
         return await SyncStartDate.Resolve<EquityDailyStockPriceRepository>(
             _scopeFactory,
             _workerOptions,
+            // A venue bar lands on the session's own UTC date, one day ahead of what the feed
+            // admits, so an unscoped latest date would close the fetch window for ever.
             repo =>
                 repo.GetByListing(target.EquityListingId)
+                    .YahooOwned()
                     .Select(p => p.Date)
                     .OrderByDescending(d => d),
             cancellationToken

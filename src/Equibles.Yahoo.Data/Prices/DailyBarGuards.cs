@@ -46,21 +46,9 @@ public static class DailyBarGuards
 
     public static bool ExceedsPriceRange(decimal price) => Math.Abs(price) > MaxPriceValue;
 
-    // Two records of the same session are only comparable when they are on the same split basis,
-    // and the close is what proves it: a split moves price and volume by the SAME ratio in
-    // opposite directions, so a basis mismatch shows up as a close that differs by that ratio.
-    //
-    // The stored series and the feed genuinely disagree here, in BOTH orderings, so the guard
-    // stays direction-agnostic: before a reconcile the stored pre-split rows are still as-traded
-    // while the feed already serves them adjusted, and after one the feed can go back to serving
-    // the window as-traded (observed on WLFC's 3:1). Which basis each side holds varies by stock
-    // and over time, so only this value comparison is safe; a mismatch means skip, never rewrite.
-    //
-    // Tolerance: both closes are rounded to 4 decimals at ingest, so same-basis values differ only
-    // by a genuine minor revision, well inside 1%, while the split ratios Yahoo emits for real
-    // splits (5:4 = 25%, 21:20 = 4.76%) sit far outside it. The one family inside the tolerance is
-    // a tiny stock dividend recorded as a split (101:100 = 0.99%); accepting it bounds the volume
-    // error at about 1%, negligible against the 10-29% unsettled shortfall the resettle fixes.
+    // A split moves price and volume by the same ratio in opposite directions, so two records of
+    // one session are on the same basis only when their closes agree within a minor revision; the
+    // guard is direction-agnostic because the store and the feed disagree in both orderings.
     public static bool IsSameSplitBasis(decimal storedClose, decimal fetchedClose)
     {
         // Nothing to compare against, so the basis is unproven rather than matching, and a zero
