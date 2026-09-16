@@ -36,7 +36,7 @@ public class BmeEquityMarketDirectorySource(BmeClient client) : IEquityMarketDir
                 throw new InvalidDataException(
                     "BME listed company is not admitted to the continuous market."
                 );
-            if (isins.Add(details.Isin) && string.IsNullOrEmpty(details.Active))
+            if (isins.Add(details.Isin))
                 lines.Add(details);
             // A second share class is a line of its own; a cancelled line and one admitted elsewhere are not. A
             // live subscription-rights line is read too and the FIRDS share gate leaves it out by its CFI.
@@ -45,10 +45,7 @@ public class BmeEquityMarketDirectorySource(BmeClient client) : IEquityMarketDir
                 if (!isins.Add(other.Isin))
                     continue;
                 var line = await client.GetShareDetails(other.Isin, cancellationToken);
-                if (
-                    line.TradingSystem == BmeParser.ContinuousMarket
-                    && string.IsNullOrEmpty(line.Active)
-                )
+                if (line.TradingSystem == BmeParser.ContinuousMarket)
                     lines.Add(line);
             }
         }
@@ -112,7 +109,6 @@ public class BmeEquityMarketDirectorySource(BmeClient client) : IEquityMarketDir
             || details.SourceUrl != row.SourceUrl
             || EquityMarketDirectorySymbol.Normalize(details.Ticker) != row.Symbol
             || details.TradingSystem != BmeParser.ContinuousMarket
-            || !string.IsNullOrEmpty(details.Active)
             || details.Currency != row.ReportedCurrency
         )
             throw new InvalidDataException("BME share details conflict with the directory record.");

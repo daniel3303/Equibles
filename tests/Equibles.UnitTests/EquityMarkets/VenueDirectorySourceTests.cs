@@ -354,6 +354,76 @@ public class VenueDirectorySourceTests
     }
 
     [Fact]
+    public async Task Bme_KeepsAFlaggedSecondShareClassItsFirstClassNames()
+    {
+        var classB = await Bme("share-details.ES0171996095.json");
+        classB.Should().Contain("\"currency\":\"EUR\",\"active\":\"\"");
+        using var http = new HttpClient(
+            new EuronextDirectoryTestHandler([
+                await Bme("listed-companies.sample.json"),
+                await Bme("share-details.ES0125220311.json"),
+                await Bme("share-details.ES0167050915.json"),
+                await Bme("share-details.ES0113900J37.json"),
+                await Bme("share-details.NL0015001FS8.json"),
+                await Bme("share-details.ES0171996087.json"),
+                classB.Replace(
+                    "\"currency\":\"EUR\",\"active\":\"\"",
+                    "\"currency\":\"EUR\",\"active\":\"S\""
+                ),
+            ])
+        );
+        var source = new BmeEquityMarketDirectorySource(
+            new BmeClient(http) { Pace = new CountingRateLimiter() }
+        );
+
+        var snapshot = await source.Capture(
+            EquityMarketCatalog.TryGet("bme"),
+            CancellationToken.None
+        );
+
+        snapshot.Rows.Should().HaveCount(6);
+        snapshot
+            .Rows.Should()
+            .Contain(
+                row => row.Isin == "ES0171996095",
+                "the marker on the line itself is not a listing state on a second class either"
+            );
+    }
+
+    [Fact]
+    public async Task Bme_KeepsALineTheVenueFlagsButStillQuotes()
+    {
+        var market = EquityMarketCatalog.TryGet("bme");
+        using var http = new HttpClient(
+            new EuronextDirectoryTestHandler([
+                await Bme("listed-companies.flagged.json"),
+                await Bme("share-details.ES0182280018.json"),
+            ])
+        );
+        var source = new BmeEquityMarketDirectorySource(
+            new BmeClient(http) { Pace = new CountingRateLimiter() }
+        );
+
+        var snapshot = await source.Capture(market, CancellationToken.None);
+
+        var row = snapshot.Rows.Should().ContainSingle().Subject;
+        row.Isin.Should().Be("ES0182280018");
+        row.Symbol.Should().Be("UBS");
+        row.MarketIdentifierCode.Should().Be("XMAD");
+        row.ReportedCurrency.Should().Be("EUR");
+
+        using var confirming = new HttpClient(
+            new EuronextDirectoryTestHandler([await Bme("share-details.ES0182280018.json")])
+        );
+        var product = await new BmeEquityMarketDirectorySource(
+            new BmeClient(confirming) { Pace = new CountingRateLimiter() }
+        ).Resolve(market, row, Firds(row.Isin, "XMAD", Lei), CancellationToken.None);
+
+        product.SourceIssuerIdentifier.Should().Be("82280");
+        JsonSerializer.Serialize(product.Evidence).Should().Contain("\"Active\":\"S\"");
+    }
+
+    [Fact]
     public async Task Bme_ConfirmsARowAgainstItsDetailsAndNamesTheIssuerByItsCode()
     {
         var market = EquityMarketCatalog.TryGet("bme");

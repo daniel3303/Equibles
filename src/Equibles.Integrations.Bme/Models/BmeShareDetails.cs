@@ -11,6 +11,9 @@ public sealed class BmeShareDetails
     public string Market { get; set; }
     public string TradingSystem { get; set; }
     public string Currency { get; set; }
+
+    // The venue's own marker on the line itself, kept as evidence and never read as a listing state, unlike the
+    // marker on an issuer's other lines. Whether a line is current comes from the venue's list and the FIRDS gate.
     public string Active { get; set; }
     public List<BmeIssuerShare> OtherSharesFromIssuer { get; set; } = [];
     public Uri SourceUrl { get; set; }
