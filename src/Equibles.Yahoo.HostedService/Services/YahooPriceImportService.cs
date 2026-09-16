@@ -16,6 +16,7 @@ using Equibles.Integrations.Yahoo.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
 using Equibles.Worker;
 using Equibles.Yahoo.Data.Models;
+using Equibles.Yahoo.Data.Prices;
 using Equibles.Yahoo.HostedService.Configuration;
 using Equibles.Yahoo.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,9 @@ internal readonly record struct LockedPriceSeries(
     bool IsPrimary,
     EquityListingRetirementEvidence HistoricalListing = null
 );
+
+// What a series replacement did with the venue-derived bars it found in its window.
+internal readonly record struct VenueRowReconciliation(int Retained, int Rebased, int Unrefreshed);
 
 internal readonly record struct AppliedSplitBoundary(
     Guid SplitId,
@@ -56,7 +60,6 @@ public class YahooPriceImportService
     private const decimal MaterialSplitRatioFloor = 0.5m;
     private const decimal MaterialSplitRatioCeiling = 2m;
     private const decimal SplitRatioMatchTolerance = 0.25m;
-    private const decimal MaxPriceValue = 99_999_999_999_999.9999m; // numeric(18,4) ceiling
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<YahooPriceImportService> _logger;
@@ -1465,6 +1468,7 @@ public class YahooPriceImportService
                 replaceThrough,
                 freshRows,
                 currentSeries,
+                _logger,
                 cancellationToken
             );
             await transaction.CommitAsync(cancellationToken);
@@ -1548,6 +1552,7 @@ public class YahooPriceImportService
         }
 
         var recycledRows = await repo.GetByListing(target.EquityListingId)
+            .YahooOwned()
             .Where(price => price.Date > target.HistoryEndDate!.Value)
             .ToListAsync(cancellationToken);
         if (recycledRows.Count > 0)
@@ -1599,6 +1604,7 @@ public class YahooPriceImportService
                 replaceThrough,
                 freshRows,
                 lockedSeries.Value,
+                logger: null,
                 cancellationToken
             );
 
@@ -1612,7 +1618,11 @@ public class YahooPriceImportService
         }
     }
 
-    private static async Task ReplaceLockedPriceRows(
+    // Swaps the Yahoo-owned rows in the window for the fresh series while keeping venue-derived
+    // bars: a same-basis venue row takes the fresh AdjustedClose and its date is not reinserted,
+    // and a venue row whose close no longer matches the restated series is deleted, because the
+    // venue cannot re-derive an old session on the new basis.
+    private static async Task<VenueRowReconciliation> ReplaceLockedPriceRows(
         EquityDailyStockPriceRepository repo,
         EquityIssuerRepository stockRepo,
         PriceSeriesTarget target,
@@ -1620,6 +1630,7 @@ public class YahooPriceImportService
         DateOnly replaceThrough,
         List<EquityDailyStockPrice> freshRows,
         LockedPriceSeries lockedSeries,
+        ILogger logger,
         CancellationToken cancellationToken
     )
     {
@@ -1641,13 +1652,47 @@ public class YahooPriceImportService
                 )
             )
             .ToListAsync(cancellationToken);
-        if (existing.Count > 0)
+
+        var freshByDate = new Dictionary<DateOnly, EquityDailyStockPrice>();
+        foreach (EquityDailyStockPrice row in freshRows)
+            freshByDate[row.Date] = row;
+
+        var toDelete = new List<EquityDailyStockPrice>();
+        var retainedDates = new HashSet<DateOnly>();
+        var rebased = 0;
+        var unrefreshed = 0;
+        foreach (EquityDailyStockPrice row in existing)
         {
-            repo.Delete(existing);
-            await repo.SaveChanges();
+            if (!VenuePriceSource.IsVenueOwned(row))
+            {
+                toDelete.Add(row);
+                continue;
+            }
+            if (!freshByDate.TryGetValue(row.Date, out EquityDailyStockPrice fresh))
+            {
+                unrefreshed++;
+                continue;
+            }
+            if (DailyBarGuards.IsSameSplitBasis(row.Close, fresh.Close))
+            {
+                row.AdjustedClose = fresh.AdjustedClose;
+                retainedDates.Add(row.Date);
+                continue;
+            }
+            toDelete.Add(row);
+            rebased++;
         }
 
-        foreach (var batch in freshRows.Chunk(InsertBatchSize))
+        if (toDelete.Count > 0)
+            repo.Delete(toDelete);
+        if (toDelete.Count > 0 || retainedDates.Count > 0)
+            await repo.SaveChanges();
+
+        foreach (
+            var batch in freshRows
+                .Where(row => !retainedDates.Contains(row.Date))
+                .Chunk(InsertBatchSize)
+        )
         {
             repo.AddRange(batch);
             await repo.SaveChanges();
@@ -1661,6 +1706,20 @@ public class YahooPriceImportService
             completedListing.PriceHistoryBackfilled = true;
             await stockRepo.SaveChanges();
         }
+
+        if (rebased > 0)
+            logger?.LogWarning(
+                "Deleted {Count} venue bars for {Ticker}: their close no longer matches the restated series",
+                rebased,
+                target.Ticker
+            );
+        if (unrefreshed > 0)
+            logger?.LogInformation(
+                "Kept {Count} venue bars for {Ticker} on dates the restated series did not serve",
+                unrefreshed,
+                target.Ticker
+            );
+        return new VenueRowReconciliation(retainedDates.Count, rebased, unrefreshed);
     }
 
     private async Task<bool> CaptureQuotationBasis(
@@ -1740,14 +1799,10 @@ public class YahooPriceImportService
             .ToList();
     }
 
-    // Yahoo's daily chart includes the current, still-open trading day as a live candle: a partial
-    // OHLC quartet and partial volume that keep changing until the session closes. Persisting it is
-    // wrong twice over — the "Close" is really an intraday snapshot, and the importer is insert-only
-    // (a date already present is never updated, see PersistPrices), so that partial bar freezes and
-    // the real close never overwrites it. Only store bars strictly before the current UTC date; the
-    // day's settled bar is appended by the first pass over the stock after the date has rolled over
-    // (always after a US market close), so the daily series holds settled closes only.
-    private static bool IsSettledDailyBar(DateOnly barDate, DateOnly today) => barDate < today;
+    // Forwarder kept by name for the reflection tests; the rule lives in DailyBarGuards. Only
+    // settled bars are stored because the importer is insert-only, so a partial bar would freeze.
+    private static bool IsSettledDailyBar(DateOnly barDate, DateOnly today) =>
+        DailyBarGuards.IsSettledDailyBar(barDate, today);
 
     // A chart fetch can only yield new rows when at least one NYSE trading day lies in
     // [startDate, today) — the dates that are both unsynced and already settled. Gating the fetch
@@ -2070,7 +2125,10 @@ public class YahooPriceImportService
         using var scope = _scopeFactory.CreateScope();
         EquityDailyStockPriceRepository repo =
             scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
-        return await repo.GetByListing(target.EquityListingId).AnyAsync(cancellationToken);
+        // Only Yahoo-owned rows count: a venue bar written first must not stop the deep backfill.
+        return await repo.GetByListing(target.EquityListingId)
+            .YahooOwned()
+            .AnyAsync(cancellationToken);
     }
 
     // Corrects stored bars that were captured before the feed settled them.
@@ -2124,7 +2182,9 @@ public class YahooPriceImportService
             );
             return 0;
         }
+        // Venue-derived bars are the venue's own settled figures; the feed never resettles them.
         var stored = await repo.GetByListing(target.EquityListingId)
+            .YahooOwned()
             .Where(p => p.Date >= windowStart && p.Date < today)
             .ToListAsync(cancellationToken);
 
@@ -2211,6 +2271,7 @@ public class YahooPriceImportService
             EquityDailyStockPriceRepository repo =
                 scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
             targets = await repo.GetUsSeries()
+                .YahooOwned()
                 .AsNoTracking()
                 .Where(p =>
                     (
@@ -2330,6 +2391,7 @@ public class YahooPriceImportService
                     validSeries.Add(series.EquityListingId);
             }
             var storedRows = await repo.GetUsSeries()
+                .YahooOwned()
                 .Where(p => targetIds.Contains(p.Id))
                 .ToListAsync(cancellationToken);
 
@@ -2388,56 +2450,12 @@ public class YahooPriceImportService
         DateOnly Date
     );
 
-    // Settled volume only ever accrues, so a fetched figure below the stored one is a degraded
-    // response (a partial re-serve, a venue dropping out), never a correction. Accepting only
-    // upgrades makes the repair monotone: a flaky feed can never walk a good figure back down.
-    private static bool IsVolumeUpgrade(long stored, long fetched) => fetched > stored;
+    // Forwarders kept by name for the reflection tests; both rules live in DailyBarGuards.
+    private static bool IsVolumeUpgrade(long stored, long fetched) =>
+        DailyBarGuards.IsVolumeUpgrade(stored, fetched);
 
-    // Relative half-width of the same-basis close comparison; full rationale on IsSameSplitBasis.
-    private const decimal SameBasisCloseTolerance = 0.01m;
-
-    // One last-digit tick of absolute headroom on top of the relative tolerance. Both closes are
-    // rounded to 4 decimals at ingest, so a genuine minor revision of a sub-cent close moves it by
-    // a full 0.0001 — more than 1% of the price — and a purely relative tolerance would freeze the
-    // resettle out of the OTC tail. One tick stays orders of magnitude below any split ratio.
-    private const decimal SameBasisCloseTickHeadroom = 0.0001m;
-
-    // Two records of the same session are only comparable when they are on the same split basis,
-    // and the close is what proves it: a split moves price and volume by the SAME ratio in
-    // opposite directions, so a basis mismatch shows up as a close that differs by that ratio.
-    //
-    // The stored series and the feed genuinely disagree here, in BOTH orderings — the guard must
-    // stay direction-agnostic:
-    //  - Pre-reconcile (the window EVERY split passes through): CaptureSplits records a split at
-    //    the end of the same cycle whose ReconcilePendingCorporateActions pass already ran, so until the
-    //    next cycle the stored pre-split rows are still as-traded while the feed already serves
-    //    them adjusted. On a forward split the adjusted volume is ratio-times LARGER, so it reads
-    //    as a settlement upgrade and would leave a row whose volume is adjusted under an as-traded
-    //    close.
-    //  - Post-reconcile (observed on WLFC's 3:1): the reconcile stored the adjusted basis and the
-    //    feed later went back to serving the window as-traded. On a reverse split the as-traded
-    //    volume is ratio-times larger than the stored adjusted one, so it reads as an upgrade and
-    //    would inflate the stock's volume history by the split ratio.
-    // Which basis each side holds varies by stock and over time (PRPL's reconciled series is
-    // as-traded while WLFC's is adjusted, minutes apart), so only this value comparison is safe —
-    // a split-table lookup would guess wrong on real data. A mismatch means skip, never rewrite:
-    // volume basis belongs to the split reconcile, which rewrites the series as a whole.
-    //
-    // Tolerance: both closes are rounded to 4 decimals at ingest, so same-basis values differ only
-    // by a genuine minor revision — well inside 1% — while the split ratios Yahoo emits for real
-    // splits (5:4 = 25%, 21:20 = 4.76%) sit far outside it. The one family inside the tolerance is
-    // a tiny stock dividend recorded as a split (101:100 = 0.99%); accepting it bounds the volume
-    // error at ~1%, negligible against the 10-29% unsettled shortfall the resettle exists to fix.
-    private static bool IsSameSplitBasis(decimal storedClose, decimal fetchedClose)
-    {
-        // Nothing to compare against, so the basis is unproven rather than matching — and a zero
-        // stored close would collapse the relative tolerance to exact equality.
-        if (storedClose <= 0m || fetchedClose <= 0m)
-            return false;
-
-        return Math.Abs(fetchedClose - storedClose)
-            <= storedClose * SameBasisCloseTolerance + SameBasisCloseTickHeadroom;
-    }
+    private static bool IsSameSplitBasis(decimal storedClose, decimal fetchedClose) =>
+        DailyBarGuards.IsSameSplitBasis(storedClose, fetchedClose);
 
     // The oldest date whose stored volume is still re-read. Pure so the boundary is pinnable, and
     // clamped so a zero or negative setting degrades to "today only" — which the settled-bar guard
@@ -3136,8 +3154,11 @@ public class YahooPriceImportService
         return await SyncStartDate.Resolve<EquityDailyStockPriceRepository>(
             _scopeFactory,
             _workerOptions,
+            // A venue bar lands on the session's own UTC date, one day ahead of what the feed
+            // admits, so an unscoped latest date would close the fetch window for ever.
             repo =>
                 repo.GetByListing(target.EquityListingId)
+                    .YahooOwned()
                     .Select(p => p.Date)
                     .OrderByDescending(d => d),
             cancellationToken
@@ -3196,22 +3217,14 @@ public class YahooPriceImportService
     }
 
     private static bool IsInvalidOhlc(HistoricalPrice price) =>
-        price.Open <= 0
-        || price.High <= 0
-        || price.Low <= 0
-        || price.Close <= 0
-        || price.High < price.Open
-        || price.High < price.Close
-        || price.Low > price.Open
-        || price.Low > price.Close
-        || price.High < price.Low;
+        !DailyBarGuards.IsValidOhlc(price.Open, price.High, price.Low, price.Close);
 
     private static bool HasOverflowPrice(HistoricalPrice p) =>
-        Math.Abs(p.Open) > MaxPriceValue
-        || Math.Abs(p.High) > MaxPriceValue
-        || Math.Abs(p.Low) > MaxPriceValue
-        || Math.Abs(p.Close) > MaxPriceValue
-        || Math.Abs(p.AdjustedClose) > MaxPriceValue;
+        DailyBarGuards.ExceedsPriceRange(p.Open)
+        || DailyBarGuards.ExceedsPriceRange(p.High)
+        || DailyBarGuards.ExceedsPriceRange(p.Low)
+        || DailyBarGuards.ExceedsPriceRange(p.Close)
+        || DailyBarGuards.ExceedsPriceRange(p.AdjustedClose);
 
     private async Task<HashSet<DateOnly>> GetExistingDates(
         PriceSeriesTarget target,
