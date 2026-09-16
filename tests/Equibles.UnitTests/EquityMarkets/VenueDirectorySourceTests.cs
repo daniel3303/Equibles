@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using Equibles.EquityMarkets.BusinessLogic.Directory;
 using Equibles.EquityMarkets.Data.Catalog;
@@ -5,12 +6,13 @@ using Equibles.EquityMarkets.Data.Models;
 using Equibles.EquityMarkets.HostedService.Services;
 using Equibles.Integrations.Bme;
 using Equibles.Integrations.Gpw;
+using Equibles.Integrations.Lse;
 using Equibles.Integrations.NasdaqNordic;
 using Equibles.UnitTests.Euronext;
 
 namespace Equibles.UnitTests.EquityMarkets;
 
-// The Nasdaq Nordic, BME and GPW adapters over their trimmed real captures.
+// The Nasdaq Nordic, BME, GPW and London adapters over their trimmed real captures.
 public class VenueDirectorySourceTests
 {
     private const string Lei = "529900S9YM61OVI49P57";
@@ -24,6 +26,11 @@ public class VenueDirectorySourceTests
     private static Task<string> Bme(string name) => Fixture("EquityMarkets", "Bme", name);
 
     private static Task<string> Gpw(string name) => Fixture("EquityMarkets", "Gpw", name);
+
+    private static Task<byte[]> Lse(string name) =>
+        File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "EquityMarkets", "Lse", name)
+        );
 
     private static FirdsInstrumentRecord Firds(string isin, string mic, string lei) =>
         new()
@@ -519,6 +526,184 @@ public class VenueDirectorySourceTests
         await mismatch.Should().ThrowAsync<InvalidDataException>().WithMessage("*conflict*");
         var withoutLei = () =>
             source.Resolve(market, row, Firds(row.Isin, "XWAR", null), CancellationToken.None);
+        await withoutLei.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    private static LseInstrumentListTestHandler LseHandler(byte[] workbook) =>
+        new(
+            new Dictionary<string, (HttpStatusCode, string, byte[])>
+            {
+                [
+                    LseInstrumentListClient
+                        .EditionUrl(LseInstrumentListClient.FirstEdition)
+                        .AbsoluteUri
+                ] = (
+                    HttpStatusCode.OK,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    workbook
+                ),
+            }
+        );
+
+    [Fact]
+    public async Task Lse_KeepsOneLinePerSecurityQuotedInTheVenuesOwnCurrency()
+    {
+        using var http = new HttpClient(LseHandler(await Lse("instrument-list.trimmed.xlsx")));
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
+        var market = EquityMarketCatalog.TryGet("lse");
+        source.SourceKey.Should().Be(market.DirectorySource);
+        source.Supports(market).Should().BeTrue();
+        source.Supports(EquityMarketCatalog.TryGet("bme")).Should().BeFalse();
+
+        var snapshot = await source.Capture(market, CancellationToken.None);
+
+        snapshot.EvidenceSource.Should().Be("lse-instrument-list-v1");
+        snapshot.SourceUrl.Should().Be(LseInstrumentListClient.PublisherPage);
+        snapshot
+            .Rows.Should()
+            .HaveCount(
+                12,
+                "three currency pairs collapse onto their sterling line and one dollar-only register triple is left out"
+            );
+        snapshot
+            .Rows.Should()
+            .AllSatisfy(row =>
+            {
+                row.StatedPrimaryMarketIdentifierCode.Should().BeNull();
+                row.SourceUrl.Should()
+                    .Be(
+                        new Uri(
+                            LseInstrumentListClient.PublisherPage,
+                            $"#{row.Isin}-{row.MarketIdentifierCode}"
+                        )
+                    );
+            });
+        var group = snapshot.Rows.Single(row => row.Isin == "GB00B1YW4409");
+        group.Symbol.Should().Be("III");
+        group.MarketIdentifierCode.Should().Be("XLON");
+        group.Name.Should().Be("3I GROUP PLC");
+        group.ReportedCurrency.Should().Be("GBX");
+        snapshot
+            .Rows.Single(row => row.Isin == "GB00BMCLYF79")
+            .MarketIdentifierCode.Should()
+            .Be("AIMX");
+        snapshot
+            .Rows.Single(row => row.Isin == "GB0030913577")
+            .Symbol.Should()
+            .Be("BT-A", "the venue writes the share class after a dot");
+        snapshot
+            .Rows.Single(row => row.Isin == "GB00B63H8491")
+            .Symbol.Should()
+            .Be("RR", "the venue pads a short mnemonic with a trailing dot");
+        snapshot
+            .Rows.Single(row => row.Isin == "GB00BK6RLF66")
+            .Symbol.Should()
+            .Be("AERS", "the sterling line of a two-currency security is the one the venue means");
+        snapshot.Rows.Single(row => row.Isin == "GB00BDGKMY29").ReportedCurrency.Should().Be("GBX");
+        snapshot
+            .Rows.Should()
+            .NotContain(
+                row => row.Isin == "BMG2624N1535",
+                "three register lines quoted only in dollars name no primary line"
+            );
+        snapshot
+            .Rows.Should()
+            .Contain(
+                row => row.Isin == "KYG012921535" && row.ReportedCurrency == "USD",
+                "a security with one line keeps the currency it is quoted in"
+            );
+        snapshot
+            .Rows.Should()
+            .Contain(
+                row => row.Isin == "GB0009895292",
+                "the gate, not the adapter, decides the home"
+            );
+        snapshot
+            .Excluded.Should()
+            .Be(3, "the three lines of the dollar-only register triple are not carried");
+        using var payload = JsonDocument.Parse(snapshot.PayloadJson);
+        payload.RootElement.GetProperty("Edition").GetInt32().Should().Be(81);
+        payload.RootElement.GetProperty("AsAt").GetString().Should().Be("2026-07-31");
+        payload.RootElement.GetProperty("StatedCount").GetInt32().Should().Be(18);
+        payload.RootElement.GetProperty("Shares").GetArrayLength().Should().Be(18);
+    }
+
+    [Fact]
+    public async Task Lse_LeavesOutASecurityWhoseLinesNameNoSinglePrimaryOne()
+    {
+        using var http = new HttpClient(
+            LseHandler(await Lse("instrument-list.two-sterling-lines.derived.xlsx"))
+        );
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
+
+        var snapshot = await source.Capture(
+            EquityMarketCatalog.TryGet("lse"),
+            CancellationToken.None
+        );
+
+        snapshot
+            .Rows.Should()
+            .NotContain(
+                row => row.Isin == "GB00BDGKMY29",
+                "a pence line and a pound line are both quoted in the venue's own currency"
+            );
+        snapshot.Rows.Should().HaveCount(11);
+        snapshot
+            .Excluded.Should()
+            .Be(5, "the register triple and both sterling lines are not carried");
+    }
+
+    [Fact]
+    public async Task Lse_RefusesAWorkbookWhoseMnemonicsNameOneSymbolTwice()
+    {
+        using var http = new HttpClient(
+            LseHandler(await Lse("instrument-list.symbol-collision.derived.xlsx"))
+        );
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
+
+        var capture = () =>
+            source.Capture(EquityMarketCatalog.TryGet("lse"), CancellationToken.None);
+
+        await capture
+            .Should()
+            .ThrowAsync<InvalidDataException>()
+            .WithMessage("*one symbol multiple security identities*");
+    }
+
+    [Fact]
+    public async Task Lse_NamesTheIssuerByTheLeiFirdsStates()
+    {
+        var market = EquityMarketCatalog.TryGet("lse");
+        var row = new EquityMarketDirectoryRow
+        {
+            Isin = "GB0030913577",
+            MarketIdentifierCode = "XLON",
+            Symbol = "BT-A",
+            Name = "BT GROUP PLC",
+            ReportedCurrency = "GBX",
+            SourceUrl = new(LseInstrumentListClient.PublisherPage, "#GB0030913577-XLON"),
+        };
+        using var http = new HttpClient(
+            new LseInstrumentListTestHandler(
+                new Dictionary<string, (HttpStatusCode, string, byte[])>()
+            )
+        );
+        var source = new LseEquityMarketDirectorySource(new LseInstrumentListClient(http));
+
+        var product = await source.Resolve(
+            market,
+            row,
+            Firds(row.Isin, "XLON", Lei),
+            CancellationToken.None
+        );
+
+        product.SourceIssuerIdentifier.Should().Be(Lei);
+        product.Name.Should().Be("BT GROUP PLC");
+        product.SourceUrl.Should().Be(row.SourceUrl);
+        product.ReportedCurrency.Should().Be("GBX");
+        JsonSerializer.Serialize(product.Evidence).Should().Contain("\"Symbol\":\"BT-A\"");
+        var withoutLei = () =>
+            source.Resolve(market, row, Firds(row.Isin, "XLON", null), CancellationToken.None);
         await withoutLei.Should().ThrowAsync<InvalidDataException>();
     }
 }

@@ -4,6 +4,7 @@ using Equibles.Integrations.Esma;
 using Equibles.Integrations.Euronext;
 using Equibles.Integrations.Gleif;
 using Equibles.Integrations.Gpw;
+using Equibles.Integrations.Lse;
 using Equibles.Integrations.NasdaqNordic;
 using Equibles.Integrations.Xetra;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +22,7 @@ public class EquityMarketsWorkerRegistrationTests
     [InlineData(typeof(NasdaqNordicClient))]
     [InlineData(typeof(BmeClient))]
     [InlineData(typeof(GpwClient))]
+    [InlineData(typeof(LseInstrumentListClient))]
     [InlineData(typeof(EsmaFirdsClient))]
     [InlineData(typeof(FcaFirdsClient))]
     public void EverySourceClient_ResolvesAsATypedHttpClient(Type client)

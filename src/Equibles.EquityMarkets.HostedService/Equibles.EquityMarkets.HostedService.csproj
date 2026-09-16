@@ -19,6 +19,7 @@
     <ProjectReference Include="..\Equibles.Integrations.Euronext\Equibles.Integrations.Euronext.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Gleif\Equibles.Integrations.Gleif.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Gpw\Equibles.Integrations.Gpw.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.Lse\Equibles.Integrations.Lse.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.NasdaqNordic\Equibles.Integrations.NasdaqNordic.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Xetra\Equibles.Integrations.Xetra.csproj" />
     <ProjectReference Include="..\Equibles.Worker\Equibles.Worker.csproj" />

@@ -200,12 +200,13 @@ public static class EquityMarketCatalog
             DelayedTradeLocationCode: null
         ),
         // Last on purpose: the FCA register homes the EEA issuers' London lines too, so their EEA directories
-        // run first and hold the presentation before a London listing of the same share arrives.
-        Pending(
+        // run first and hold the presentation before a London listing of the same share arrives. AIM is its own
+        // venue code, so the growth market is a market identifier here rather than a segment of XLON.
+        new(
             "lse",
             "London Stock Exchange",
             "GB",
-            ["XLON"],
+            ["XLON", "AIMX"],
             "GBP",
             ".L",
             "LSE",
@@ -213,7 +214,10 @@ public static class EquityMarketCatalog
             new(8, 0),
             new(16, 30),
             new(16, 35),
-            firdsAuthority: "FCA"
+            DirectorySource: "lse",
+            DelayedTradeSource: null,
+            DelayedTradeLocationCode: null,
+            FirdsAuthority: "FCA"
         ),
     ];
 
@@ -301,38 +305,5 @@ public static class EquityMarketCatalog
             DelayedTradeLocationCode: null,
             FirdsVenueCodes: venues,
             HomeVenueCodes: venues
-        );
-
-    // Catalogued so registrations, prices and pages can name the market before its directory adapter lands.
-    private static EquityMarket Pending(
-        string code,
-        string name,
-        string country,
-        string[] mics,
-        string currency,
-        string suffix,
-        string exchange,
-        string timeZone,
-        TimeOnly open,
-        TimeOnly close,
-        TimeOnly auction,
-        string firdsAuthority = "ESMA"
-    ) =>
-        new(
-            code,
-            name,
-            country,
-            mics,
-            currency,
-            suffix,
-            exchange,
-            timeZone,
-            open,
-            close,
-            auction,
-            DirectorySource: null,
-            DelayedTradeSource: null,
-            DelayedTradeLocationCode: null,
-            FirdsAuthority: firdsAuthority
         );
 }
