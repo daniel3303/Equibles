@@ -11,6 +11,41 @@ public class EquityListingRepository : BaseRepository<EquityListing>
     public EquityListingRepository(EquiblesFinancialDbContext dbContext)
         : base(dbContext) { }
 
+    // A cadence stamp, not identity: one row-scoped update that re-checks the listing still carries the
+    // ticker on the venue it was fetched for, so no identity lock is taken and a stale target stamps nothing.
+    public async Task<bool> StampPriceSyncAttempt(
+        Guid listingId,
+        string marketIdentifierCode,
+        string ticker,
+        DateTime attemptedAt,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var current = GetAll()
+            .Where(listing =>
+                listing.Id == listingId
+                && listing.Active
+                && listing.IdentityState == EquityIdentityState.Verified
+                && listing.MarketIdentifierCode == marketIdentifierCode
+                && listing.Ticker == ticker
+            );
+        if (DbContext.Database.IsRelational())
+            return await current.ExecuteUpdateAsync(
+                    setters =>
+                        setters.SetProperty(
+                            listing => listing.YahooPriceSyncAttemptedAt,
+                            attemptedAt
+                        ),
+                    cancellationToken
+                ) == 1;
+        var listing = await current.SingleOrDefaultAsync(cancellationToken);
+        if (listing == null)
+            return false;
+        listing.YahooPriceSyncAttemptedAt = attemptedAt;
+        await DbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     // The caller supplies source-validated USD evidence; the database revalidates exact
     // current U.S. ownership under the same lock used by directory writers.
     public async Task<bool> RecordUsDollarQuotation(

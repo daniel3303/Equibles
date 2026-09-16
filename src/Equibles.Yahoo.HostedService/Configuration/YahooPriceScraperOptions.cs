@@ -37,6 +37,14 @@ public class YahooPriceScraperOptions : ScraperOptions
     /// </summary>
     public int OhlcRepairBatchSize { get; set; } = 100;
 
+    /// <summary>
+    /// Minimum hours between chart requests for a catalog listing whose series a venue already keeps
+    /// current. Such a listing's Yahoo-owned latest date never advances, so without this bound the
+    /// forward-only start date opens a window on every cycle. The per-listing stamp persists across
+    /// restarts; a listing with no Yahoo-owned rows still fetches its full history on the next cycle.
+    /// </summary>
+    public int CoveredListingFetchIntervalHours { get; set; } = 24;
+
     /// <summary>Maximum inactive listings attempted per price cycle.</summary>
     public int HistoricalBackfillBatchSize { get; set; } = 25;
 

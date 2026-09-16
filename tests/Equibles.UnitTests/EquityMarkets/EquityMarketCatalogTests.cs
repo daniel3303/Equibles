@@ -129,11 +129,29 @@ public class EquityMarketCatalogTests
         EquityMarketCatalog.TryGet(null).Should().BeNull();
     }
 
-    [Fact]
-    public void Lisbon_KeepsItsEarlierSession()
+    // Pinned to the first and last continuous prints and the closing-auction cluster of each market's
+    // delayed-trades file for 2026-09-15, read in the market's own time zone.
+    [Theory]
+    [InlineData("euronext-paris", 9, 0, 17, 30, 17, 35)]
+    [InlineData("euronext-amsterdam", 9, 0, 17, 30, 17, 35)]
+    [InlineData("euronext-brussels", 9, 0, 17, 30, 17, 35)]
+    [InlineData("euronext-milan", 9, 0, 17, 30, 17, 35)]
+    [InlineData("euronext-dublin", 8, 0, 16, 28, 16, 30)]
+    [InlineData("euronext-lisbon", 8, 0, 16, 30, 16, 35)]
+    [InlineData("euronext-oslo", 9, 0, 16, 20, 16, 25)]
+    public void EuronextSessions_MatchTheVenuesOwnPrints(
+        string code,
+        int openHour,
+        int openMinute,
+        int closeHour,
+        int closeMinute,
+        int auctionHour,
+        int auctionMinute
+    )
     {
-        var lisbon = EquityMarketCatalog.TryGet("euronext-lisbon");
-        lisbon.SessionClose.Should().Be(new TimeOnly(16, 30));
-        lisbon.ClosingAuctionEnd.Should().Be(new TimeOnly(16, 35));
+        var market = EquityMarketCatalog.TryGet(code);
+        market.SessionOpen.Should().Be(new TimeOnly(openHour, openMinute));
+        market.SessionClose.Should().Be(new TimeOnly(closeHour, closeMinute));
+        market.ClosingAuctionEnd.Should().Be(new TimeOnly(auctionHour, auctionMinute));
     }
 }

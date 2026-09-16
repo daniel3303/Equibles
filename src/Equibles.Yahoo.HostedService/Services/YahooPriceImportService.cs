@@ -290,7 +290,8 @@ public class YahooPriceImportService
                         listing.MarketIdentifierCode,
                         listing.Security.Isin,
                         listing.TradingCurrency,
-                        listing.QuoteUnitMultiplier
+                        listing.QuoteUnitMultiplier,
+                        listing.YahooPriceSyncAttemptedAt
                     ))
                     .ToListAsync(cancellationToken)
             );
@@ -502,8 +503,7 @@ public class YahooPriceImportService
             catch (HttpRequestException ex)
             {
                 _logger.LogWarning(ex, "Failed to fetch prices for {Ticker}, skipping", ticker);
-                if (target.IsHistorical)
-                    await StampHistoricalBackfillAttempt(target, cancellationToken);
+                await StampFailedAttempt(target, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -514,8 +514,7 @@ public class YahooPriceImportService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error importing prices for {Ticker}", ticker);
-                if (target.IsHistorical)
-                    await StampHistoricalBackfillAttempt(target, cancellationToken);
+                await StampFailedAttempt(target, cancellationToken);
                 await _errorReporter.Report(
                     ErrorSource.YahooPriceScraper,
                     $"ImportTicker({ticker})",
@@ -712,6 +711,49 @@ public class YahooPriceImportService
         )
             return;
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    private async Task StampPriceSyncAttempt(
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var listings = scope.ServiceProvider.GetRequiredService<EquityListingRepository>();
+            await listings.StampPriceSyncAttempt(
+                target.EquityListingId,
+                target.MarketIdentifierCode,
+                target.Ticker,
+                DateTime.UtcNow,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Error stamping the price sync attempt for {Ticker}",
+                target.ProviderSymbol
+            );
+        }
+    }
+
+    // A failed fetch is still an attempt: an unserved venue symbol would otherwise refetch from the floor every cycle.
+    private async Task StampFailedAttempt(
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        if (target.IsHistorical)
+            await StampHistoricalBackfillAttempt(target, cancellationToken);
+        if (!target.IsUs)
+            await StampPriceSyncAttempt(target, cancellationToken);
     }
 
     private async Task StampHistoricalBackfillAttempt(
@@ -1875,6 +1917,9 @@ public class YahooPriceImportService
         // events for the window — capture both off the same response, no extra
         // HTTP.
         var chartData = await _yahooClient.GetChart(target.ProviderSymbol, startDate, chartEnd);
+        // Stamped on the attempt, whatever it returned (the failure paths stamp too), or a symbol the feed never serves refetches every cycle.
+        if (!target.IsUs)
+            await StampPriceSyncAttempt(target, cancellationToken);
         if (!await CaptureQuotationBasis(target, chartData.SourceIdentity, cancellationToken))
             return new TickerImportResult(Fetched: true, Inserted: 0);
         if (target.IsHistorical)
@@ -1927,6 +1972,15 @@ public class YahooPriceImportService
         if (startDate == floor)
         {
             await CaptureSplits(target, chartData.Splits, cancellationToken);
+            // A catalog listing's first history is installed whole, so its leading edge is checked here.
+            if (!target.IsUs && !HasCompleteLeadingEdge(chartData, floor, today))
+            {
+                _logger.LogWarning(
+                    "Yahoo returned a full history for {Ticker} that starts after its first trade date; keeping the series pending",
+                    target.ProviderSymbol
+                );
+                return new TickerImportResult(Fetched: true, Inserted: 0);
+            }
             var replaced = await ReplaceStoredPrices(
                 target,
                 floor,
@@ -2058,6 +2112,32 @@ public class YahooPriceImportService
             .Count();
         return coveredSessions
             >= (int)Math.Ceiling(expectedSessions * MinimumReferenceHistoryCoverageShare);
+    }
+
+    // Calendar days of slack between the chart's first trade date and its first storable bar.
+    private const int LeadingEdgeToleranceDays = 7;
+
+    // The feed's known failure on a full history is a missing leading edge, so that is all a catalog
+    // listing is gated on: there is no venue calendar to count sessions against. An unknown first
+    // trade date installs as before, because refusing it would leave every recent venue IPO unpriced.
+    internal static bool HasCompleteLeadingEdge(
+        YahooChartData chartData,
+        DateOnly floor,
+        DateOnly today
+    )
+    {
+        var storableDates = chartData
+            .Prices.Where(price => !HasOverflowPrice(price))
+            .Where(price => !IsInvalidOhlc(price))
+            .Where(price => IsSettledDailyBar(price.Date, today))
+            .Select(price => price.Date)
+            .ToList();
+        if (storableDates.Count == 0)
+            return false;
+        if (chartData.FirstTradeDate is not { } firstTradeDate)
+            return true;
+        var expectedFirst = firstTradeDate > floor ? firstTradeDate : floor;
+        return storableDates.Min() <= expectedFirst.AddDays(LeadingEdgeToleranceDays);
     }
 
     private async Task<int> PersistPrices(
@@ -3048,6 +3128,9 @@ public class YahooPriceImportService
         if (target.RequiresFullHistory)
             return PriceHistoryFloor();
 
+        if (!target.IsUs)
+            return await ResolveCatalogStartDate(target, today, cancellationToken);
+
         var forwardOnly = await GetSyncStartDate(target, cancellationToken);
 
         // The heal only ever RIDES a fetch the forward-only date already demands — it must never
@@ -3073,11 +3156,6 @@ public class YahooPriceImportService
             forwardOnly,
             ResettleWindowStart(today, _scraperOptions.VolumeResettleWindowDays)
         );
-
-        // Re-request the bounded window; only returned bars prove the venue's trading dates.
-        // U.S. calendar gaps cannot classify another market's absent observations.
-        if (!target.IsUs)
-            return Min(startDate, today.AddDays(-GapHealWindowDays));
 
         var windowStart = today.AddDays(-GapHealWindowDays);
         // Already reaching back past the window (a never-synced stock, one mid-backfill, or a
@@ -3113,6 +3191,78 @@ public class YahooPriceImportService
     }
 
     private static DateOnly Min(DateOnly left, DateOnly right) => left < right ? left : right;
+
+    // The catalog-market twin of the US rule above, with one more case. Once a venue keeps a listing's
+    // series current the Yahoo-owned latest date freezes, so the forward-only start would open a window
+    // on every cycle over a range growing by one session a day; a covered listing instead fetches the
+    // bounded resettle-and-heal window once per CoveredListingFetchIntervalHours, and still fetches
+    // from the floor while it has no Yahoo-owned rows at all. There is no venue calendar, so the
+    // window is re-requested as a whole and only returned bars prove the venue's trading dates.
+    private async Task<DateOnly> ResolveCatalogStartDate(
+        PriceSeriesTarget target,
+        DateOnly today,
+        CancellationToken cancellationToken
+    )
+    {
+        DateOnly? latestYahoo;
+        DateOnly? latestVenue;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<EquityDailyStockPriceRepository>();
+            latestYahoo = await repo.GetByListing(target.EquityListingId)
+                .YahooOwned()
+                .MaxAsync(p => (DateOnly?)p.Date, cancellationToken);
+            latestVenue = await repo.GetByListing(target.EquityListingId)
+                .VenueOwned()
+                .MaxAsync(p => (DateOnly?)p.Date, cancellationToken);
+        }
+        return ResolveCatalogStartDate(
+            latestYahoo,
+            latestVenue,
+            target.YahooPriceSyncAttemptedAt,
+            today,
+            DateTime.UtcNow,
+            PriceHistoryFloor(),
+            _scraperOptions
+        );
+    }
+
+    // Pure so the cadence rule is pinnable without a database. Returns today when no fetch is due:
+    // HasFetchWindow treats a start on or after today as "already current" for a catalog market.
+    internal static DateOnly ResolveCatalogStartDate(
+        DateOnly? latestYahooOwned,
+        DateOnly? latestVenueOwned,
+        DateTime? syncAttemptedAt,
+        DateOnly today,
+        DateTime utcNow,
+        DateOnly floor,
+        YahooPriceScraperOptions options
+    )
+    {
+        var covered =
+            latestVenueOwned != null
+            && (latestYahooOwned == null || latestVenueOwned > latestYahooOwned);
+        if (covered)
+        {
+            var interval = TimeSpan.FromHours(
+                Math.Max(1, options.CoveredListingFetchIntervalHours)
+            );
+            if (syncAttemptedAt != null && syncAttemptedAt > utcNow - interval)
+                return today;
+        }
+        if (latestYahooOwned == null)
+            return floor;
+        var bounded = Min(
+            ResettleWindowStart(today, options.VolumeResettleWindowDays),
+            today.AddDays(-GapHealWindowDays)
+        );
+        // A covered listing's feed rows are only ever the pre-venue tail, so its fetch is the recent
+        // window alone instead of everything since the frozen latest date.
+        if (covered)
+            return bounded;
+        var forwardOnly = latestYahooOwned.Value.AddDays(1);
+        return forwardOnly < today ? Min(forwardOnly, bounded) : forwardOnly;
+    }
 
     // The earliest settled trading day in [windowStart, today) with no stored bar, or null when the
     // window is complete. Pure so the rule is pinnable without a database.

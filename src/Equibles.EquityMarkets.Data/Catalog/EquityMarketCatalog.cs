@@ -44,7 +44,10 @@ public static class EquityMarketCatalog
             ".IR",
             "ISE",
             "Europe/Dublin",
-            "DUB"
+            "DUB",
+            open: new(8, 0),
+            close: new(16, 28),
+            auction: new(16, 30)
         ),
         Euronext(
             "euronext-oslo",
@@ -55,7 +58,9 @@ public static class EquityMarketCatalog
             "OSL",
             "Europe/Oslo",
             "OSL",
-            "NOK"
+            "NOK",
+            close: new(16, 20),
+            auction: new(16, 25)
         ),
         Euronext(
             "euronext-milan",
@@ -76,6 +81,7 @@ public static class EquityMarketCatalog
             "LIS",
             "Europe/Lisbon",
             "LIS",
+            open: new(8, 0),
             close: new(16, 30),
             auction: new(16, 35)
         ),
@@ -213,6 +219,8 @@ public static class EquityMarketCatalog
             ? market
             : null;
 
+    // Session times are the venue's own prints: continuous trading opens at SessionOpen, the last continuous print
+    // lands before SessionClose and the closing auction uncrosses at ClosingAuctionEnd (trade-at-last follows it).
     private static EquityMarket Euronext(
         string code,
         string name,
@@ -223,6 +231,7 @@ public static class EquityMarketCatalog
         string timeZone,
         string location,
         string currency = "EUR",
+        TimeOnly? open = null,
         TimeOnly? close = null,
         TimeOnly? auction = null
     ) =>
@@ -235,7 +244,7 @@ public static class EquityMarketCatalog
             suffix,
             exchange,
             timeZone,
-            new(9, 0),
+            open ?? new(9, 0),
             close ?? new(17, 30),
             auction ?? new(17, 35),
             DirectorySource: "euronext",
