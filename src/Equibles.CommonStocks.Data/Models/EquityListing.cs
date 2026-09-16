@@ -43,6 +43,9 @@ public class EquityListing : IActivable
     public bool IsReferenceListed { get; set; }
     public bool PriceHistoryBackfilled { get; set; }
     public DateTime? YahooEnrichmentAttemptedAt { get; set; }
+
+    // Last Yahoo chart request for this listing; bounds the cadence once a venue keeps the series current.
+    public DateTime? YahooPriceSyncAttemptedAt { get; set; }
     public DateTime? HistoricalPriceBackfillAttemptedAt { get; set; }
     public DateTime? HistoricalCusipBackfillRequestedAt { get; set; }
     public List<string> HistoricalCusipBackfillCandidates { get; set; } = [];
