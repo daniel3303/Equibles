@@ -24,4 +24,13 @@ public class DelayedTradeImportPartitionRepository(EquiblesFinancialDbContext db
 
     public IQueryable<DelayedTradeImportPartition> GetByScope(string dataset, string scopeKey) =>
         GetAll().Where(row => row.Dataset == dataset && row.ScopeKey == scopeKey);
+
+    public Task<DelayedTradeImportPartition> GetLatestMarker(
+        string dataset,
+        string scopeKey,
+        CancellationToken cancellationToken = default
+    ) =>
+        GetByScope(dataset, scopeKey)
+            .OrderByDescending(row => row.PartitionDate)
+            .FirstOrDefaultAsync(cancellationToken);
 }

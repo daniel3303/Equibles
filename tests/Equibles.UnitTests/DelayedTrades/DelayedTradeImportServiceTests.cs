@@ -26,6 +26,7 @@ public class DelayedTradeImportServiceTests
     {
         private readonly EuronextDelayedTradeSource _inner = new(new HttpClient());
         public List<(string Location, DelayedTradeWindow Window)> Fetches { get; } = [];
+        public int Parses { get; private set; }
         public string SourceKey => EuronextDelayedTradeTerms.SourceKey;
         public DelayedTradeAttribution Attribution => EuronextDelayedTradeTerms.Attribution;
 
@@ -42,7 +43,11 @@ public class DelayedTradeImportServiceTests
         public IEnumerable<DelayedTradePrint> Parse(
             DelayedTradeFile served,
             DelayedTradeParseCounters counters
-        ) => _inner.Parse(served, counters);
+        )
+        {
+            Parses++;
+            return _inner.Parse(served, counters);
+        }
     }
 
     private static DelayedTradeImportService Service(
@@ -129,6 +134,7 @@ public class DelayedTradeImportServiceTests
             capture.Outcome.Should().Be(DelayedTradeFetchOutcome.Served);
         }
 
+        var parsesAfterFirst = source.Parses;
         var second = await service.SettleSession(
             Lisbon,
             source,
@@ -137,7 +143,24 @@ public class DelayedTradeImportServiceTests
             CancellationToken.None
         );
         second.Outcome.Should().Be(DelayedTradeSettleOutcome.AlreadyImported);
+        second.SessionDate.Should().Be(new DateOnly(2026, 9, 15));
+        second.Partition.FileSha256.Should().Be(partition.FileSha256);
+        source
+            .Parses.Should()
+            .Be(parsesAfterFirst, "the same file is recognised by its hash before any parse");
         db.Prices(db.ListingOf(pharol).Id).Should().ContainSingle();
+        using (var context = db.NewContext())
+        {
+            var captures = context
+                .Set<DelayedTradeFileCapture>()
+                .OrderBy(row => row.FetchedAtUtc)
+                .ToList();
+            captures.Should().HaveCount(2);
+            captures[1]
+                .Rows.Should()
+                .Be(69, "the ledger carries the row count of the file it already parsed");
+            captures[1].SessionDate.Should().Be(new DateOnly(2026, 9, 15));
+        }
 
         var third = await service.SettleSession(
             Lisbon,
@@ -147,6 +170,9 @@ public class DelayedTradeImportServiceTests
             CancellationToken.None
         );
         third.Outcome.Should().Be(DelayedTradeSettleOutcome.Rederived);
+        source
+            .Parses.Should()
+            .BeGreaterThan(parsesAfterFirst, "a recheck re-derives even an unchanged file");
         third.Partition.RederivedCount.Should().Be(1);
         third.Partition.BarsInserted.Should().Be(0);
         using (var context = db.NewContext())
@@ -194,9 +220,18 @@ public class DelayedTradeImportServiceTests
 
         result
             .Outcome.Should()
-            .Be(DelayedTradeSettleOutcome.Imported, "an unsettled bar is counted, not a failure");
+            .Be(
+                DelayedTradeSettleOutcome.Refused,
+                "a session no bar of which landed is not settled"
+            );
+        result.Refusal.Should().StartWith("no bar landed: 1 unsettled");
         result.Partition.BarsUnsettled.Should().Be(1);
         db.Prices(db.ListingOf(pharol).Id).Should().BeEmpty();
+        using var context = db.NewContext();
+        context
+            .Set<DelayedTradeImportPartition>()
+            .Should()
+            .BeEmpty("the next attempt retries the whole session");
     }
 
     [Fact]

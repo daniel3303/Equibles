@@ -503,8 +503,7 @@ public class YahooPriceImportService
             catch (HttpRequestException ex)
             {
                 _logger.LogWarning(ex, "Failed to fetch prices for {Ticker}, skipping", ticker);
-                if (target.IsHistorical)
-                    await StampHistoricalBackfillAttempt(target, cancellationToken);
+                await StampFailedAttempt(target, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -515,8 +514,7 @@ public class YahooPriceImportService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error importing prices for {Ticker}", ticker);
-                if (target.IsHistorical)
-                    await StampHistoricalBackfillAttempt(target, cancellationToken);
+                await StampFailedAttempt(target, cancellationToken);
                 await _errorReporter.Report(
                     ErrorSource.YahooPriceScraper,
                     $"ImportTicker({ticker})",
@@ -744,6 +742,18 @@ public class YahooPriceImportService
                 target.ProviderSymbol
             );
         }
+    }
+
+    // A failed fetch is still an attempt: an unserved venue symbol would otherwise refetch from the floor every cycle.
+    private async Task StampFailedAttempt(
+        PriceSeriesTarget target,
+        CancellationToken cancellationToken
+    )
+    {
+        if (target.IsHistorical)
+            await StampHistoricalBackfillAttempt(target, cancellationToken);
+        if (!target.IsUs)
+            await StampPriceSyncAttempt(target, cancellationToken);
     }
 
     private async Task StampHistoricalBackfillAttempt(
@@ -1907,7 +1917,7 @@ public class YahooPriceImportService
         // events for the window — capture both off the same response, no extra
         // HTTP.
         var chartData = await _yahooClient.GetChart(target.ProviderSymbol, startDate, chartEnd);
-        // Stamped on the attempt, whatever it returned, or a symbol the feed never serves refetches every cycle.
+        // Stamped on the attempt, whatever it returned (the failure paths stamp too), or a symbol the feed never serves refetches every cycle.
         if (!target.IsUs)
             await StampPriceSyncAttempt(target, cancellationToken);
         if (!await CaptureQuotationBasis(target, chartData.SourceIdentity, cancellationToken))

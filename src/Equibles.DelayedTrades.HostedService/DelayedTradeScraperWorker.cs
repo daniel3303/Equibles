@@ -1,6 +1,7 @@
 using Equibles.DelayedTrades.BusinessLogic.Configuration;
 using Equibles.DelayedTrades.BusinessLogic.Import;
 using Equibles.DelayedTrades.BusinessLogic.Schedule;
+using Equibles.DelayedTrades.Repositories;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Repositories;
 using Equibles.Errors.BusinessLogic;
@@ -22,6 +23,7 @@ public class DelayedTradeScraperWorker(
         StringComparer.Ordinal
     );
     private DateOnly? _prunedOn;
+    private DateOnly? _seededOn;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -60,13 +62,16 @@ public class DelayedTradeScraperWorker(
 
     private async Task RunDueMarkets(CancellationToken stoppingToken)
     {
-        await using (var scope = scopeFactory.CreateAsyncScope())
+        var utcNow = DateTime.UtcNow;
+        var today = DateOnly.FromDateTime(utcNow);
+        if (_seededOn != today)
         {
+            await using var scope = scopeFactory.CreateAsyncScope();
             await scope
                 .ServiceProvider.GetRequiredService<EquityMarketRegistrationRepository>()
                 .EnsureSeeded(EquityMarketCatalog.All, stoppingToken);
+            _seededOn = today;
         }
-        var utcNow = DateTime.UtcNow;
         foreach (var market in EquityMarketCatalog.All)
         {
             stoppingToken.ThrowIfCancellationRequested();
@@ -84,7 +89,6 @@ public class DelayedTradeScraperWorker(
                 continue;
             await RunMarket(market, plan, state, utcNow, stoppingToken);
         }
-        var today = DateOnly.FromDateTime(utcNow);
         if (_prunedOn != today)
         {
             await using var scope = scopeFactory.CreateAsyncScope();
@@ -146,13 +150,22 @@ public class DelayedTradeScraperWorker(
                     case DelayedTradeSettleOutcome.Imported:
                     case DelayedTradeSettleOutcome.Rederived:
                     case DelayedTradeSettleOutcome.AlreadyImported:
-                        // A holiday file carries an older, already-marked session; nothing newer exists to wait for.
-                        state.SettledThroughDate = Later(
+                        // An older session than the target is a holiday unless the intraday polls saw the target's
+                        // prints, in which case the venue has not flipped its file yet and the hourly settle stays alive.
+                        var target = DelayedTradeSchedule.SettleTarget(
+                            DelayedTradeClock.Local(utcNow, DelayedTradeClock.Zone(market)),
+                            options.Value
+                        );
+                        var targetSeenIntraday =
+                            result.SessionDate < target
+                            && await scope
+                                .ServiceProvider.GetRequiredService<DelayedTradeFileCaptureRepository>()
+                                .HasSessionCapture(market.Code, target, stoppingToken);
+                        state.SettledThroughDate = DelayedTradeSchedule.SettledThrough(
+                            state.SettledThroughDate,
                             result.SessionDate,
-                            DelayedTradeSchedule.SettleTarget(
-                                DelayedTradeClock.Local(utcNow, DelayedTradeClock.Zone(market)),
-                                options.Value
-                            )
+                            target,
+                            targetSeenIntraday
                         );
                         settledDate = result.SessionDate;
                         break;
@@ -225,7 +238,4 @@ public class DelayedTradeScraperWorker(
         }
         return state;
     }
-
-    private static DateOnly? Later(DateOnly? left, DateOnly right) =>
-        left == null || left < right ? right : left;
 }

@@ -161,7 +161,7 @@ public static class EuronextTradesFileParser
             DateTimeOffset.TryParse(
                 token,
                 CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                DateTimeStyles.AssumeUniversal,
                 out var parsed
             )
             && parsed.Offset == TimeSpan.Zero

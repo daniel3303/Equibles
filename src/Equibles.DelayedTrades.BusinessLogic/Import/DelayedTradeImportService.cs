@@ -58,33 +58,37 @@ public class DelayedTradeImportService(
         var delay = TimeSpan.FromMinutes(Math.Max(0, options.Value.PublicationDelayMinutes));
         var droppedAsFresh = 0;
         var unmatched = new HashSet<(string, string)>();
-        var matched = new List<DelayedTradePrint>();
-        foreach (var print in source.Parse(file, new DelayedTradeParseCounters()))
+        // The second pass streams into the aggregator, so a million-print file is never held as a list;
+        // the counters it fills are complete once Aggregate returns.
+        IEnumerable<DelayedTradePrint> Matched()
         {
-            if (!ledger.IsEffective(print) || !DelayedTradePrintFilter.IsCounted(print))
-                continue;
-            if (!DelayedTradePrintFilter.IsDelayed(print, file.FetchedAtUtc, delay))
+            foreach (var print in source.Parse(file, new DelayedTradeParseCounters()))
             {
-                droppedAsFresh++;
-                continue;
-            }
-            if (!map.TryResolve(print.Isin, print.Venue, out var listing))
-            {
-                unmatched.Add((print.Isin, print.Venue));
-                continue;
-            }
-            if (
-                !DelayedTradePrintFilter.MatchesQuotation(
-                    print,
-                    listing.TradingCurrency,
-                    listing.QuoteUnitMultiplier
+                if (!ledger.IsEffective(print) || !DelayedTradePrintFilter.IsCounted(print))
+                    continue;
+                if (!DelayedTradePrintFilter.IsDelayed(print, file.FetchedAtUtc, delay))
+                {
+                    droppedAsFresh++;
+                    continue;
+                }
+                if (!map.TryResolve(print.Isin, print.Venue, out var listing))
+                {
+                    unmatched.Add((print.Isin, print.Venue));
+                    continue;
+                }
+                if (
+                    !DelayedTradePrintFilter.MatchesQuotation(
+                        print,
+                        listing.TradingCurrency,
+                        listing.QuoteUnitMultiplier
+                    )
                 )
-            )
-                continue;
-            matched.Add(print);
+                    continue;
+                yield return print;
+            }
         }
         var aggregation = DelayedTradeSessionAggregator.Aggregate(
-            matched,
+            Matched(),
             zone,
             options.Value.DetectDuplicateTradeIds
         );
@@ -96,9 +100,7 @@ public class DelayedTradeImportService(
             && (
                 sessionDate < DateOnly.FromDateTime(local)
                 || TimeOnly.FromDateTime(local)
-                    > market.ClosingAuctionEnd.AddMinutes(
-                        Math.Max(0, options.Value.PublicationDelayMinutes) + 1
-                    )
+                    > DelayedTradeSchedule.CompletionTime(market, options.Value)
             );
         var written = await UpsertLatestTrades(
             market,
@@ -158,6 +160,28 @@ public class DelayedTradeImportService(
             );
         }
 
+        if (!rederive)
+        {
+            // The venue still serves the file the latest marker was derived from: nothing new to parse.
+            var latest = await LatestMarker(market, cancellationToken);
+            if (latest != null && latest.FileSha256 == file.Sha256)
+            {
+                await RecordCapture(
+                    market,
+                    file,
+                    await RowsOfFile(market, file, cancellationToken),
+                    latest.PartitionDate,
+                    cancellationToken
+                );
+                return new DelayedTradeSettleResult(
+                    DelayedTradeSettleOutcome.AlreadyImported,
+                    latest.PartitionDate,
+                    latest,
+                    null
+                );
+            }
+        }
+
         var counters = new DelayedTradeParseCounters();
         var ledger = DelayedTradeModificationLedger.Build(source.Parse(file, counters));
         var map = await LoadListings(market, cancellationToken);
@@ -175,35 +199,38 @@ public class DelayedTradeImportService(
         var unmatched = new HashSet<(string, string)>();
         var ambiguous = new HashSet<(string, string)>();
         var isins = new HashSet<string>(StringComparer.Ordinal);
-        var matched = new List<DelayedTradePrint>();
-        foreach (var print in source.Parse(file, new DelayedTradeParseCounters()))
+        // Streams into the aggregator like the intraday pass; the sets and counters are complete once it returns.
+        IEnumerable<DelayedTradePrint> Matched()
         {
-            if (!ledger.IsEffective(print) || !DelayedTradePrintFilter.IsCounted(print))
-                continue;
-            isins.Add(print.Isin);
-            if (!map.TryResolve(print.Isin, print.Venue, out var listing))
+            foreach (var print in source.Parse(file, new DelayedTradeParseCounters()))
             {
-                if (map.IsAmbiguous(print.Isin, print.Venue))
-                    ambiguous.Add((print.Isin, print.Venue));
-                else
-                    unmatched.Add((print.Isin, print.Venue));
-                continue;
-            }
-            if (
-                !DelayedTradePrintFilter.MatchesQuotation(
-                    print,
-                    listing.TradingCurrency,
-                    listing.QuoteUnitMultiplier
+                if (!ledger.IsEffective(print) || !DelayedTradePrintFilter.IsCounted(print))
+                    continue;
+                isins.Add(print.Isin);
+                if (!map.TryResolve(print.Isin, print.Venue, out var listing))
+                {
+                    if (map.IsAmbiguous(print.Isin, print.Venue))
+                        ambiguous.Add((print.Isin, print.Venue));
+                    else
+                        unmatched.Add((print.Isin, print.Venue));
+                    continue;
+                }
+                if (
+                    !DelayedTradePrintFilter.MatchesQuotation(
+                        print,
+                        listing.TradingCurrency,
+                        listing.QuoteUnitMultiplier
+                    )
                 )
-            )
-            {
-                partition.CurrencyMismatchCount++;
-                continue;
+                {
+                    partition.CurrencyMismatchCount++;
+                    continue;
+                }
+                yield return print;
             }
-            matched.Add(print);
         }
         var aggregation = DelayedTradeSessionAggregator.Aggregate(
-            matched,
+            Matched(),
             zone,
             options.Value.DetectDuplicateTradeIds
         );
@@ -257,6 +284,7 @@ public class DelayedTradeImportService(
         var localToday = DelayedTradeClock.LocalDate(utcNow, zone);
         var currencyToken = market.Currency;
         var failures = 0;
+        var unchanged = 0;
         foreach (var bar in aggregation.Bars)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -283,7 +311,10 @@ public class DelayedTradeImportService(
                     localToday,
                     cancellationToken
                 );
-                Count(partition, outcome);
+                if (outcome == DelayedTradeBarOutcome.Unchanged)
+                    unchanged++;
+                else
+                    Count(partition, outcome);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -310,6 +341,29 @@ public class DelayedTradeImportService(
                 partition,
                 "no bar matched a verified listing"
             );
+        // A session no bar of which reached the store is not settled: unsettled or skipped bars are counted, never marked.
+        var landed =
+            partition.BarsInserted
+            + partition.BarsOverwroteYahoo
+            + partition.BarsRederived
+            + unchanged;
+        if (landed == 0)
+        {
+            var refusal =
+                $"no bar landed: {partition.BarsUnsettled} unsettled, {partition.BarsSkippedIdentity} identity skips, {partition.BarsSkippedBasis} basis skips, {partition.BarsSkippedInvalid} invalid";
+            logger.LogWarning(
+                "{Market} settle {Date}: {Refusal}; the session stays unmarked",
+                market.Code,
+                sessionDate,
+                refusal
+            );
+            return new DelayedTradeSettleResult(
+                DelayedTradeSettleOutcome.Refused,
+                sessionDate,
+                partition,
+                refusal
+            );
+        }
         if (failures > 0)
         {
             logger.LogWarning(
@@ -360,7 +414,7 @@ public class DelayedTradeImportService(
         );
     }
 
-    // The session a file describes is the date most of its price-forming prints fall on in the market's zone.
+    // The session a file describes is the date most of its counted prints fall on in the market's zone.
     internal static DateOnly? SessionDateOf(DelayedTradeSessionAggregation aggregation) =>
         aggregation
             .Bars.Where(bar => bar.HasBar)
@@ -396,6 +450,31 @@ public class DelayedTradeImportService(
                 partition.BarsUnsettled++;
                 break;
         }
+    }
+
+    private async Task<DelayedTradeImportPartition> LatestMarker(
+        EquityMarket market,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = scopeFactory.CreateScope();
+        return await scope
+            .ServiceProvider.GetRequiredService<DelayedTradeImportPartitionRepository>()
+            .GetLatestMarker(DelayedTradeDataset.SettledBars, market.Code, cancellationToken);
+    }
+
+    // The row count of a file already parsed once, so the ledger never records a served file as empty.
+    private async Task<int> RowsOfFile(
+        EquityMarket market,
+        DelayedTradeFile file,
+        CancellationToken cancellationToken
+    )
+    {
+        using var scope = scopeFactory.CreateScope();
+        return await scope
+                .ServiceProvider.GetRequiredService<DelayedTradeFileCaptureRepository>()
+                .GetRowsOfFile(market.Code, file.Sha256, cancellationToken)
+            ?? 0;
     }
 
     private async Task<DelayedTradeListingMap> LoadListings(

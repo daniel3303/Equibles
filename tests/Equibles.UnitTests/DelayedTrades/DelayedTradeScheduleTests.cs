@@ -85,6 +85,102 @@ public class DelayedTradeScheduleTests
             .BeTrue();
     }
 
+    [Theory]
+    [InlineData(15, 50, 16, 6, true)] // last poll 16:50 local, before the 16:51 completion time: one closing poll
+    [InlineData(15, 52, 16, 7, false)] // last poll 16:52 local already saw the auction's aged prints
+    [InlineData(16, 6, 16, 22, false)] // the closing poll itself was the last one
+    [InlineData(15, 50, 16, 5, true)] // still inside the window, the cadence alone decides
+    public void Intraday_GrantsOneClosingPoll_WhenTheLastOneRanBeforeTheCompletionTime(
+        int lastHour,
+        int lastMinute,
+        int nowHour,
+        int nowMinute,
+        bool expected
+    )
+    {
+        // Lisbon in September: the window closes 17:05 local (16:05 UTC), the closing auction's prints have aged
+        // past the delay at 16:51 local (15:51 UTC).
+        var state = new DelayedTradeMarketState
+        {
+            SettledThroughDate = new DateOnly(2030, 1, 1),
+            LastRecheckDate = new DateOnly(2026, 9, 16),
+            LastIntradayPollUtc = new DateTime(
+                2026,
+                9,
+                15,
+                lastHour,
+                lastMinute,
+                0,
+                DateTimeKind.Utc
+            ),
+        };
+        Plan(
+            Lisbon,
+            LisbonZone,
+            new DateTime(2026, 9, 15, nowHour, nowMinute, 0, DateTimeKind.Utc),
+            state
+        )
+            .Intraday.Should()
+            .Be(expected);
+    }
+
+    [Fact]
+    public void ClosingPoll_NeverCrossesIntoTheNextDay()
+    {
+        var state = new DelayedTradeMarketState
+        {
+            SettledThroughDate = new DateOnly(2030, 1, 1),
+            LastRecheckDate = new DateOnly(2026, 9, 17),
+            LastIntradayPollUtc = new DateTime(2026, 9, 15, 15, 50, 0, DateTimeKind.Utc),
+        };
+        Plan(Lisbon, LisbonZone, new DateTime(2026, 9, 16, 5, 0, 0, DateTimeKind.Utc), state)
+            .Intraday.Should()
+            .BeFalse("yesterday's short poll is not today's closing poll");
+    }
+
+    [Fact]
+    public void CompletionTime_IsTheAuctionEndPlusTheDelayAndAMinute()
+    {
+        DelayedTradeSchedule.CompletionTime(Lisbon, Options).Should().Be(new TimeOnly(16, 51));
+        DelayedTradeSchedule.CompletionTime(Paris, Options).Should().Be(new TimeOnly(17, 51));
+    }
+
+    public static TheoryData<string, string, string, bool, string> SettledThroughCases =>
+        new()
+        {
+            // The file carried the target: settled through it.
+            { null, "2026-09-14", "2026-09-14", false, "2026-09-14" },
+            { null, "2026-09-14", "2026-09-14", true, "2026-09-14" },
+            // An older session with no intraday sighting of the target: a holiday, nothing to wait for.
+            { null, "2026-09-11", "2026-09-14", false, "2026-09-14" },
+            // An older session while the polls saw the target's prints: the file has not flipped, keep settling.
+            { null, "2026-09-11", "2026-09-14", true, "2026-09-11" },
+            // Never regresses what an earlier pass settled.
+            { "2026-09-14", "2026-09-11", "2026-09-15", true, "2026-09-14" },
+            { "2026-09-15", "2026-09-14", "2026-09-15", false, "2026-09-15" },
+        };
+
+    [Theory]
+    [MemberData(nameof(SettledThroughCases))]
+    public void SettledThrough_WaitsOnlyForASessionThePollsSaw(
+        string current,
+        string sessionDate,
+        string target,
+        bool targetSeenIntraday,
+        string expected
+    )
+    {
+        DelayedTradeSchedule
+            .SettledThrough(
+                current == null ? null : DateOnly.Parse(current),
+                sessionDate == null ? null : DateOnly.Parse(sessionDate),
+                DateOnly.Parse(target),
+                targetSeenIntraday
+            )
+            .Should()
+            .Be(DateOnly.Parse(expected));
+    }
+
     [Fact]
     public void Intraday_RespectsThePollCadence()
     {

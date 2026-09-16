@@ -121,6 +121,24 @@ public class EuronextTradesFileParserTests
     }
 
     [Fact]
+    public void ATimestampWithAnOffset_IsMalformed()
+    {
+        // The feed states UTC with a Z suffix; a zoned token would silently shift the session date.
+        var header = TradesFixture.Csv(TradesFixture.HeaderOnly);
+        var row = TradesFixture.Csv(TradesFixture.LisbonExcerpt).Split('\n')[2];
+        var zoned = row.Replace("Z\"", "+01:00\"");
+        zoned.Should().NotBe(row);
+        var counters = new DelayedTradeParseCounters();
+
+        var prints = EuronextTradesFileParser
+            .Read(TradesFixture.Zip(header + row + "\n" + zoned + "\n"), counters)
+            .ToList();
+
+        prints.Should().ContainSingle();
+        counters.MalformedRows.Should().Be(1);
+    }
+
+    [Fact]
     public void MoreThanTheMalformedAllowance_FailsTheFile()
     {
         var header = TradesFixture.Csv(TradesFixture.HeaderOnly);
