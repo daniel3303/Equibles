@@ -60,6 +60,8 @@ public class GpwEquityMarketDirectorySource(GpwClient client) : IEquityMarketDir
                 }
             );
         }
+        if (rows.Count == 0)
+            throw new InvalidDataException("GPW quotations tables list no share.");
         // The continuous-trading table is the snapshot's address; the auction tables are kept in the payload.
         var continuous = list.Tables[0];
         return new EquityMarketDirectorySnapshot

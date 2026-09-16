@@ -20,9 +20,13 @@ public static class NasdaqNordicParser
         if (
             !data.TryGetProperty("pagination", out var pagination)
             || pagination.ValueKind != JsonValueKind.Object
-            || pagination.GetProperty("total").GetInt32() != rows.GetArrayLength()
-            || pagination.GetProperty("totalPages").GetInt32() != 1
+            || !pagination.TryGetProperty("total", out var total)
+            || !total.TryGetInt32(out var totalRows)
+            || !pagination.TryGetProperty("totalPages", out var pages)
+            || !pages.TryGetInt32(out var totalPages)
         )
+            throw new InvalidDataException("Nasdaq screener reply has changed shape.");
+        if (totalRows != rows.GetArrayLength() || totalPages != 1)
             throw new InvalidDataException("Nasdaq screener reply is not the complete list.");
         var list = new NasdaqNordicShareList { Json = json };
         var isins = new HashSet<string>(StringComparer.Ordinal);

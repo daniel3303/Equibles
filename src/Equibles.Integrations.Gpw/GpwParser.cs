@@ -14,15 +14,20 @@ public static partial class GpwParser
     [GeneratedRegex(@"^(?<name>.+?)\s*\((?<isin>[A-Z0-9]{12})\)$")]
     private static partial Regex Heading();
 
+    private static readonly string[] Columns = ["col2", "col3", "col4", "col5", "col21"];
+
     // Cells are addressed by their column class, never by position: the bid and ask groups repeat col15/col16.
+    // The header proves the table's shape, so an auction table with no line that day reads as empty.
     public static List<GpwQuotation> ReadTable(string html)
     {
         var document = Html(html);
-        var rows = document.DocumentNode.SelectNodes(
-            "//table//tr[contains(concat(' ', normalize-space(@class), ' '), ' trclass ')]"
-        );
-        if (rows == null || rows.Count == 0)
-            throw new InvalidDataException("GPW quotations table contains no rows.");
+        var table = document.DocumentNode.SelectSingleNode("//table[thead//th and tbody]");
+        if (table == null || Columns.Any(column => Header(table, column) == null))
+            throw new InvalidDataException("GPW quotations table has changed shape.");
+        var rows =
+            table.SelectNodes(
+                "./tbody/tr[contains(concat(' ', normalize-space(@class), ' '), ' trclass ')]"
+            ) ?? new HtmlNodeCollection(table);
         var quotations = new List<GpwQuotation>();
         foreach (var row in rows)
         {
@@ -75,6 +80,11 @@ public static partial class GpwParser
             Shortcut = shortcut,
         };
     }
+
+    private static HtmlNode Header(HtmlNode table, string column) =>
+        table.SelectSingleNode(
+            $"./thead//th[contains(concat(' ', normalize-space(@class), ' '), ' {column} ')]"
+        );
 
     private static HtmlNode Cell(HtmlNode row, string column) =>
         row.SelectSingleNode(

@@ -60,7 +60,13 @@ public class VenueDirectorySourceTests
             .Be(
                 "https://api.nasdaq.com/api/nordic/screener/shares?category=MAIN_MARKET&market=STO&tableonly=false"
             );
-        handler.Requests.Select(request => request.Url.Query).Should().HaveCount(2);
+        handler
+            .Requests.Select(request => request.Url.Query)
+            .Should()
+            .Equal(
+                "?category=MAIN_MARKET&market=STO&tableonly=false",
+                "?category=FIRST_NORTH&market=STO&tableonly=false"
+            );
         snapshot.Rows.Should().HaveCount(14);
         snapshot.Rows.Count(row => row.MarketIdentifierCode == "XSTO").Should().Be(10);
         snapshot.Rows.Count(row => row.MarketIdentifierCode == "FNSE").Should().Be(4);
@@ -167,6 +173,33 @@ public class VenueDirectorySourceTests
         var withoutLei = () =>
             source.Resolve(market, row, Firds(row.Isin, "DSTO", null), CancellationToken.None);
         await withoutLei.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [Theory]
+    [InlineData("isin", "SE0000115447")]
+    [InlineData("symbol", "VOLV-A")]
+    [InlineData("currency", "EUR")]
+    public async Task Nasdaq_RefusesAnInstrumentThatDisagreesWithTheRow(string field, string value)
+    {
+        var row = new EquityMarketDirectoryRow
+        {
+            Isin = field == "isin" ? value : "SE0000115446",
+            MarketIdentifierCode = "XSTO",
+            Symbol = field == "symbol" ? value : "VOLV-B",
+            ReportedCurrency = field == "currency" ? value : "SEK",
+            SourceUrl = NasdaqNordicClient.InstrumentUrl("TX100"),
+        };
+        using var http = new HttpClient(
+            new EuronextDirectoryTestHandler([await Nasdaq("instrument-info.VOLV-B.json")])
+        );
+        var resolve = () =>
+            new NasdaqNordicEquityMarketDirectorySource(new NasdaqNordicClient(http)).Resolve(
+                EquityMarketCatalog.TryGet("nasdaq-stockholm"),
+                row,
+                Firds(row.Isin, "DSTO", Lei),
+                CancellationToken.None
+            );
+        await resolve.Should().ThrowAsync<InvalidDataException>().WithMessage("*conflict*");
     }
 
     [Fact]
@@ -328,6 +361,20 @@ public class VenueDirectorySourceTests
                 CancellationToken.None
             );
         await twice.Should().ThrowAsync<InvalidDataException>().WithMessage("*repeat*");
+
+        using var empty = new HttpClient(
+            new EuronextDirectoryTestHandler([
+                await Gpw("quotations.empty.derived.html"),
+                await Gpw("quotations.empty.derived.html"),
+                await Gpw("quotations.empty.derived.html"),
+            ])
+        );
+        var nothing = () =>
+            new GpwEquityMarketDirectorySource(new GpwClient(empty)).Capture(
+                market,
+                CancellationToken.None
+            );
+        await nothing.Should().ThrowAsync<InvalidDataException>().WithMessage("*no share*");
     }
 
     [Fact]

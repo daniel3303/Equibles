@@ -28,6 +28,10 @@ public class GpwTests
         pbg.Shortcut.Should().Be("PBG");
         fix1.Should().Contain(row => row.Isin == "SE0001856519");
         GpwParser.ReadTable(await Fixture("quotations.fix2.sample.html")).Should().HaveCount(3);
+        GpwParser
+            .ReadTable(await Fixture("quotations.empty.derived.html"))
+            .Should()
+            .BeEmpty("an auction table with no line that day still proves its shape by its header");
     }
 
     [Theory]
@@ -48,7 +52,8 @@ public class GpwTests
         "<td class=\"left col21\"  >XWAR</td></tr>",
         "<td class=\"left col21\"  ></td></tr>"
     )]
-    [InlineData("no-rows", "class=\"trclass", "class=\"row")]
+    [InlineData("no-header", "class=\"left col21\">MIC</th>", "class=\"left col22\">MIC</th>")]
+    [InlineData("no-table", "<table ", "<div ")]
     public async Task ChangedShapeOrInvalidRow_RefusesTheWholeTable(
         string scenario,
         string original,

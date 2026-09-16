@@ -121,13 +121,13 @@ public static class EquityMarketCatalog
             ]
         ),
         // FIRDS files a Nasdaq main-market share under the lit book and its Nordic@Mid and Auction on Demand
-        // segments, and a First North share under those two segments alone; the home is any of the six.
+        // segments, and a First North share under those two segments and the SME growth-market code; the home is any.
         Nasdaq(
             "nasdaq-stockholm",
             "Nasdaq Stockholm",
             "SE",
             ["XSTO", "FNSE"],
-            ["XSTO", "DSTO", "MSTO", "FNSE", "DNSE", "MNSE"],
+            ["XSTO", "DSTO", "MSTO", "FNSE", "DNSE", "MNSE", "SSME"],
             "SEK",
             ".ST",
             "STO",
@@ -141,7 +141,7 @@ public static class EquityMarketCatalog
             "Nasdaq Helsinki",
             "FI",
             ["XHEL", "FNFI"],
-            ["XHEL", "DHEL", "MHEL", "FNFI", "DNFI", "MNFI"],
+            ["XHEL", "DHEL", "MHEL", "FNFI", "DNFI", "MNFI", "FSME"],
             "EUR",
             ".HE",
             "HEL",
@@ -155,7 +155,7 @@ public static class EquityMarketCatalog
             "Nasdaq Copenhagen",
             "DK",
             ["XCSE", "FNDK"],
-            ["XCSE", "DCSE", "MCSE", "FNDK", "DNDK", "MNDK"],
+            ["XCSE", "DCSE", "MCSE", "FNDK", "DNDK", "MNDK", "DSME"],
             "DKK",
             ".CO",
             "CPH",

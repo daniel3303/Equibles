@@ -92,11 +92,11 @@ public class EquityMarketCatalogTests
     ];
 
     // A Nordic main-market line is filed on the lit book and its Nordic@Mid and Auction on Demand segments, a
-    // First North line on the latter two only; Madrid adds its dark midpoint book.
+    // First North line on the latter two and the SME growth-market code; Madrid adds its dark midpoint book.
     [Theory]
-    [InlineData("nasdaq-stockholm", "XSTO,FNSE", "XSTO,DSTO,MSTO,FNSE,DNSE,MNSE")]
-    [InlineData("nasdaq-helsinki", "XHEL,FNFI", "XHEL,DHEL,MHEL,FNFI,DNFI,MNFI")]
-    [InlineData("nasdaq-copenhagen", "XCSE,FNDK", "XCSE,DCSE,MCSE,FNDK,DNDK,MNDK")]
+    [InlineData("nasdaq-stockholm", "XSTO,FNSE", "XSTO,DSTO,MSTO,FNSE,DNSE,MNSE,SSME")]
+    [InlineData("nasdaq-helsinki", "XHEL,FNFI", "XHEL,DHEL,MHEL,FNFI,DNFI,MNFI,FSME")]
+    [InlineData("nasdaq-copenhagen", "XCSE,FNDK", "XCSE,DCSE,MCSE,FNDK,DNDK,MNDK,DSME")]
     [InlineData("bme", "XMAD", "XMAD,DMAD")]
     [InlineData("gpw", "XWAR", "XWAR")]
     public void SegmentFiledMarkets_HomeEveryVenueCodeTheRegisterFilesThemUnder(
