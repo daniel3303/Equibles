@@ -52,6 +52,11 @@ public class FilingsWebsiteSource : IWebsiteSource
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            // Only an SEC registrant has filings to read; a venue-only issuer would cost three
+            // document queries for nothing.
+            if (string.IsNullOrWhiteSpace(stock.Cik))
+                continue;
+
             var website = await ExtractForStock(stock.Id, cancellationToken);
             if (website != null)
                 results[stock.Id] = website;

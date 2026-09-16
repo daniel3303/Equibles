@@ -94,6 +94,14 @@
 - `EquityMarketRegistration` holds one row per catalog market recording pass state only: the last refresh, the last directory counts, the last error, and a refresh request. Setting `DirectoryRefreshRequestedAt = now()` on an adapter market's row runs its pass on the next control tick.
 - The `Enabled` column is retired and unread; a later migration drops it.
 
+## Current directory across markets
+
+- `EquityIssuerRepository.GetCurrentDirectory()` is the live directory across every market: an issuer whose presentation listing is active and is either a US listing or a venue listing a directory adapter verified (`IdentityState == Verified`). A legacy non-US presentation belongs to neither directory. `GetCurrentUsDirectory()` keeps its US-only universe for the surfaces that are US by contract (screener, indexes, MCP, REST, ALVIS, sitemaps).
+- `GetCurrentDirectoryIssuer(id)` and `GetCurrentDirectoryByIds(ids)` are the single-issuer and batch forms; `IsCurrentDirectoryIssuer(issuer)` is the in-memory twin for an already loaded graph.
+- `EquityListingSymbol` is the one spelling of a listing for people, logs and file names: the bare ticker for a US listing, `MIC:TICKER` for a venue listing (`MIC-TICKER` where a file name needs it). A directory ticker never contains a colon, so the display form cannot collide with a ticker.
+- Website discovery draws its candidates from the current directory and hands each source the issuer's LEI, ISIN, venue code and market country. The SEC filings source skips a CIK-less issuer, Wikidata joins a CIK-less issuer on its LEI (property P1278) and an SEC registrant on its CIK only, and the Yahoo profile source asks by the catalog provider symbol (`AIR.PA`), never the bare ticker. `StockWebsiteDiscovered` carries the venue code of a verified listing and null for a US listing.
+- Yahoo enrichment (key statistics and company profile) targets the presentation listing of every verified venue issuer, stamped through the same `YahooEnrichmentAttemptedAt` cadence as US listings, and asks Yahoo by the provider symbol; a listing outside the catalog has no symbol and is skipped. `EquitySecurity.MarketCapitalization` is stored as reported, in major units of the presentation listing's trading currency, so rank-only readers tolerate the mix and sums across markets may not.
+
 ## Holdings replay identity
 
 - Native import preflight retains the stored full-grain/CUSIP observation key before assembling both position and manager writes.

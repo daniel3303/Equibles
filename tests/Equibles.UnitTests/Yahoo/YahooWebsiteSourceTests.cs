@@ -10,10 +10,12 @@ using Xunit;
 namespace Equibles.UnitTests.Yahoo;
 
 /// <summary>
-/// Contract: <c>YahooWebsiteSource</c> looks up each stock's asset profile by
-/// ticker and returns the profile website where present; blank websites and
-/// ticker-less stocks are absent from the result, and a per-ticker HTTP failure
-/// skips that stock without sinking the rest of the batch.
+/// Contract: <c>YahooWebsiteSource</c> looks up each stock's asset profile by its
+/// provider symbol (the bare ticker for a US listing, the catalog suffix for a
+/// verified venue listing) and returns the profile website where present; blank
+/// websites, ticker-less stocks and listings outside the catalog are absent from
+/// the result, and a per-symbol HTTP failure skips that stock without sinking the
+/// rest of the batch.
 /// </summary>
 public class YahooWebsiteSourceTests
 {
@@ -65,6 +67,51 @@ public class YahooWebsiteSourceTests
         var client = Substitute.For<IYahooFinanceClient>();
 
         var result = await BuildSut(client).FindWebsites([noTicker], CancellationToken.None);
+
+        result.Should().BeEmpty();
+        await client.DidNotReceive().GetCompanyProfile(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task VerifiedVenueListing_IsLookedUpByItsCatalogSymbol()
+    {
+        // AIR on Euronext Paris is Airbus; the bare ticker would fetch AAR Corp's NYSE profile.
+        var paris = new WebsiteSourceStock(
+            Guid.NewGuid(),
+            "AIR",
+            null,
+            Isin: "NL0000235190",
+            MarketIdentifierCode: "XPAR",
+            MarketCountryCode: "FR"
+        );
+        var client = Substitute.For<IYahooFinanceClient>();
+        client
+            .GetCompanyProfile("AIR.PA")
+            .Returns(new CompanyProfile { Website = "https://www.airbus.com" });
+
+        var result = await BuildSut(client).FindWebsites([paris], CancellationToken.None);
+
+        result
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new KeyValuePair<Guid, string>(paris.Id, "https://www.airbus.com"));
+        await client.DidNotReceive().GetCompanyProfile("AIR");
+    }
+
+    [Fact]
+    public async Task ListingOutsideTheCatalog_IsNeverLookedUp()
+    {
+        var zurich = new WebsiteSourceStock(
+            Guid.NewGuid(),
+            "NESN",
+            null,
+            MarketIdentifierCode: "XSWX",
+            MarketCountryCode: "CH"
+        );
+        var client = Substitute.For<IYahooFinanceClient>();
+
+        var result = await BuildSut(client).FindWebsites([zurich], CancellationToken.None);
 
         result.Should().BeEmpty();
         await client.DidNotReceive().GetCompanyProfile(Arg.Any<string>());

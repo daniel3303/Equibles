@@ -4,12 +4,13 @@ using Equibles.Integrations.Wikidata.Contracts;
 namespace Equibles.CommonStocks.HostedService.Services;
 
 /// <summary>
-/// Website source backed by Wikidata: joins the stocks' SEC CIK to the entity's
-/// official website (one bulk SPARQL query per batch). Secondary to the filings
-/// source — community-maintained rather than self-reported — but an exact-key
-/// match that also covers companies whose stored filings carry no disclosure
-/// (e.g. foreign issuers). A stale entry fails the caller's reachability probe
-/// and falls through to the next source.
+/// Website source backed by Wikidata: joins an SEC registrant's CIK, or a CIK-less
+/// issuer's Legal Entity Identifier, to the entity's official website (one bulk
+/// SPARQL query per key kind per batch). Secondary to the filings source,
+/// community-maintained rather than self-reported, but an exact-key match that
+/// also covers companies whose stored filings carry no disclosure (foreign
+/// issuers, verified venue listings). A stale entry fails the caller's
+/// reachability probe and falls through to the next source.
 /// </summary>
 public class WikidataWebsiteSource : IWebsiteSource
 {
@@ -29,23 +30,55 @@ public class WikidataWebsiteSource : IWebsiteSource
         CancellationToken cancellationToken
     )
     {
-        var stockGroups = stocks
+        var results = new Dictionary<Guid, string>();
+
+        var byCik = stocks
             .Where(s => !string.IsNullOrWhiteSpace(s.Cik))
             .GroupBy(s => s.Cik)
             .ToList();
-        if (stockGroups.Count == 0)
-            return new Dictionary<Guid, string>();
+        if (byCik.Count > 0)
+        {
+            var websitesByCik = await _wikidataClient.GetOfficialWebsitesByCik(
+                byCik.Select(g => g.Key).ToList(),
+                cancellationToken
+            );
+            Merge(results, byCik, websitesByCik);
+        }
 
-        var websitesByCik = await _wikidataClient.GetOfficialWebsitesByCik(
-            stockGroups.Select(g => g.Key).ToList(),
-            cancellationToken
-        );
+        // An issuer with no SEC registration (every verified venue listing) joins on its LEI.
+        var byLei = stocks
+            .Where(s =>
+                string.IsNullOrWhiteSpace(s.Cik)
+                && !string.IsNullOrWhiteSpace(s.LegalEntityIdentifier)
+            )
+            .GroupBy(s => s.LegalEntityIdentifier)
+            .ToList();
+        if (byLei.Count > 0)
+        {
+            var websitesByLei = await _wikidataClient.GetOfficialWebsitesByLei(
+                byLei.Select(g => g.Key).ToList(),
+                cancellationToken
+            );
+            Merge(results, byLei, websitesByLei);
+        }
 
-        // One Wikidata website per CIK fans out to every stock sharing that CIK
-        // (dual-class issuers like GOOGL/GOOG), not just the first one seen.
-        return stockGroups
-            .Where(g => websitesByCik.ContainsKey(g.Key))
-            .SelectMany(g => g.Select(s => (s.Id, Website: websitesByCik[g.Key])))
-            .ToDictionary(x => x.Id, x => x.Website);
+        return results;
+    }
+
+    // One Wikidata website per key fans out to every stock sharing that key
+    // (dual-class issuers like GOOGL/GOOG), not just the first one seen.
+    private static void Merge(
+        Dictionary<Guid, string> results,
+        IEnumerable<IGrouping<string, WebsiteSourceStock>> groups,
+        IReadOnlyDictionary<string, string> websites
+    )
+    {
+        foreach (var group in groups)
+        {
+            if (!websites.TryGetValue(group.Key, out var website))
+                continue;
+            foreach (var stock in group)
+                results[stock.Id] = website;
+        }
     }
 }
