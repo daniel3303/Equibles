@@ -127,6 +127,7 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(NportP.DisplayName, NportP),
             new KeyValuePair<string, DocumentType>(NportPa.DisplayName, NportPa),
             new KeyValuePair<string, DocumentType>(Def14A.DisplayName, Def14A),
+            new KeyValuePair<string, DocumentType>(EsefAnnualReport.DisplayName, EsefAnnualReport),
             new KeyValuePair<string, DocumentType>(Other.DisplayName, Other),
         },
         StringComparer.OrdinalIgnoreCase

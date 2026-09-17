@@ -208,4 +208,20 @@ public class DocumentTypeTests
 
         custom.DisplayName.Should().Be("WireOnly");
     }
+
+    // Both registries are hand-maintained lists, and a type added to one but not the other is reachable
+    // by its stored value and invisible by its name: a caller that only resolves the display name, as
+    // the financial-facts tool does, answers "unknown form" for a type the store holds. EsefAnnualReport
+    // shipped that way.
+    [Fact]
+    public void EveryTypeIsReachableByItsDisplayName()
+    {
+        var unreachable = DocumentType
+            .GetAll()
+            .Where(type => DocumentType.FromDisplayName(type.DisplayName) == null)
+            .Select(type => type.Value)
+            .ToList();
+
+        unreachable.Should().BeEmpty();
+    }
 }
