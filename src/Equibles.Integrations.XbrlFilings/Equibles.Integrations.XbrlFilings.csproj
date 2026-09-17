@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equibles.UnitTests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Equibles.Core/Equibles.Core.csproj" />
+    <ProjectReference Include="../Equibles.Integrations.Common/Equibles.Integrations.Common.csproj" />
+  </ItemGroup>
+</Project>

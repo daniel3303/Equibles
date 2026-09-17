@@ -52,6 +52,14 @@ public sealed class DocumentType
     public static readonly DocumentType NportP = new("NportP", "NPORT-P");
     public static readonly DocumentType NportPa = new("NportPa", "NPORT-P/A");
     public static readonly DocumentType Def14A = new("Def14A", "DEF 14A");
+    // The annual financial report a European issuer files under the ESEF regulation. It is not an SEC filing,
+    // so it stays out of unfiltered filing lists the way registered non-filing types do.
+    public static readonly DocumentType EsefAnnualReport = new(
+        "EsefAnnualReport",
+        "ESEF Annual Report",
+        hiddenFromFilingLists: true
+    );
+
     public static readonly DocumentType Other = new("Other", "Other");
 
     private static readonly ConcurrentDictionary<string, DocumentType> AllByValue = new(
@@ -83,6 +91,10 @@ public sealed class DocumentType
             new KeyValuePair<string, DocumentType>(NportP.Value, NportP),
             new KeyValuePair<string, DocumentType>(NportPa.Value, NportPa),
             new KeyValuePair<string, DocumentType>(Def14A.Value, Def14A),
+            new KeyValuePair<string, DocumentType>(
+                EsefAnnualReport.Value,
+                EsefAnnualReport
+            ),
             new KeyValuePair<string, DocumentType>(Other.Value, Other),
         },
         StringComparer.OrdinalIgnoreCase
