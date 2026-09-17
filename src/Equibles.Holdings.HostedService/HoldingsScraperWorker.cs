@@ -466,6 +466,29 @@ public class HoldingsScraperWorker : BaseScraperWorker
                     cancellationToken
                 );
 
+                if (result.ConflictedFilings.Count > 0)
+                {
+                    // The import skipped these rather than abandoning the whole data set. Nothing
+                    // retries them, so raise them where an operator sees them: the stored rows
+                    // behind each one need their identity corrected by hand.
+                    Logger.LogError(
+                        "Data set {FileName} skipped {Count} filing(s) with conflicting retained "
+                            + "observation identities: {Accessions}",
+                        fileName,
+                        result.ConflictedFilings.Count,
+                        string.Join(", ", result.ConflictedFilings)
+                    );
+                    await ErrorReporter.Report(
+                        ErrorSource,
+                        "Holdings.ObservationConflict",
+                        $"Skipped {result.ConflictedFilings.Count} filing(s) whose positions cannot "
+                            + "be told apart under their retained observation identities; the "
+                            + "stored rows need their identity corrected",
+                        null,
+                        $"file: {fileName}, accessions: {string.Join(", ", result.ConflictedFilings)}"
+                    );
+                }
+
                 if (result.IsComplete)
                 {
                     try

@@ -117,15 +117,21 @@ public class HoldingsImportService
             return new ImportResult(
                 submissionCount,
                 IsComplete: false,
-                InsertedHoldings: holdingsResult.Inserted
+                InsertedHoldings: holdingsResult.Inserted,
+                ConflictedFilings: holdingsResult.ConflictedAccessions
             );
         }
         await SyncFilingSummaries(context, cancellationToken);
         await PublishAffectedQuartersAsync(context, cancellationToken);
+        // A conflicted filing is reported, not retried: its stored identity cannot resolve itself,
+        // so leaving the data set unprocessed would re-run every other filing in it every cycle
+        // and never get further. The set counts as processed with that filing's rows left as they
+        // were, and the caller raises the conflict so the stored rows get repaired.
         return new ImportResult(
             submissionCount,
             IsComplete: true,
-            InsertedHoldings: holdingsResult.Inserted
+            InsertedHoldings: holdingsResult.Inserted,
+            ConflictedFilings: holdingsResult.ConflictedAccessions
         );
     }
 
@@ -1589,6 +1595,7 @@ public class HoldingsImportService
         var totalSkipped = 0;
         var totalDuplicates = 0;
         var totalPending = 0;
+        var conflictedAccessions = new List<string>();
         var skippedStaleParent = false;
         string currentAccession = null;
 
@@ -1622,6 +1629,8 @@ public class HoldingsImportService
                 totalDuplicates += flushed.Duplicates;
                 totalPending += flushed.Pending;
                 skippedStaleParent |= flushed.SkippedStaleParent;
+                if (flushed.Conflicted)
+                    conflictedAccessions.Add(currentAccession);
                 bufferedRows.Clear();
             }
             currentAccession = accession;
@@ -1675,24 +1684,31 @@ public class HoldingsImportService
             totalDuplicates += flushed.Duplicates;
             totalPending += flushed.Pending;
             skippedStaleParent |= flushed.SkippedStaleParent;
+            if (flushed.Conflicted)
+                conflictedAccessions.Add(currentAccession);
             bufferedRows.Clear();
         }
 
         _logger.LogInformation(
-            "Import complete. Inserted: {Inserted}, Skipped (untracked): {Skipped}, Duplicates: {Duplicates}, Pending price: {Pending}",
+            "Import complete. Inserted: {Inserted}, Skipped (untracked): {Skipped}, Duplicates: {Duplicates}, Pending price: {Pending}, Conflicted filings: {Conflicted}",
             totalInserted,
             totalSkipped,
             totalDuplicates,
-            totalPending
+            totalPending,
+            conflictedAccessions.Count
         );
 
         LogValueBasisAudit(context);
         await FlushUnmappedCusips(context, cancellationToken);
 
-        return new HoldingsStreamResult(totalInserted, skippedStaleParent);
+        return new HoldingsStreamResult(totalInserted, skippedStaleParent, conflictedAccessions);
     }
 
-    private readonly record struct HoldingsStreamResult(int Inserted, bool SkippedStaleParent);
+    private readonly record struct HoldingsStreamResult(
+        int Inserted,
+        bool SkippedStaleParent,
+        IReadOnlyList<string> ConflictedAccessions
+    );
 
     // Runs the per-filing share-count repair over one accession's buffered rows,
     // merges them by upsert key, and flushes the batch. Repair must happen here —
@@ -1702,7 +1718,8 @@ public class HoldingsImportService
         int Inserted,
         int Duplicates,
         int Pending,
-        bool SkippedStaleParent
+        bool SkippedStaleParent,
+        bool Conflicted
     )> RepairMergeAndFlush(
         string accession,
         List<BufferedHoldingRow> bufferedRows,
@@ -1739,16 +1756,35 @@ public class HoldingsImportService
             }
         }
 
-        var flushResult = await HoldingsBatchPacer.Complete(
-            holdingsMap.Count > 0
-                ? FlushBatch(holdingsMap.Values.ToList(), cancellationToken)
-                : Task.FromResult(new HoldingsFlushResult(0, SkippedStaleParent: false)),
-            static result => result.Inserted > 0,
-            context.BatchPause,
-            cancellationToken
-        );
+        HoldingsFlushResult flushResult;
+        try
+        {
+            flushResult = await HoldingsBatchPacer.Complete(
+                holdingsMap.Count > 0
+                    ? FlushBatch(holdingsMap.Values.ToList(), cancellationToken)
+                    : Task.FromResult(new HoldingsFlushResult(0, SkippedStaleParent: false)),
+                static result => result.Inserted > 0,
+                context.BatchPause,
+                cancellationToken
+            );
+        }
+        catch (HoldingObservationConflictException conflict)
+        {
+            // FlushBatch owns its scope and transaction, so this batch is already rolled back and
+            // nothing partial was written. A conflicted identity never resolves itself on a retry,
+            // so failing the whole data set would abandon every other filing in it for good — the
+            // refusal is scoped to the one filing instead, and named so it can be repaired.
+            _logger.LogError(
+                conflict,
+                "Filing {Accession} skipped — its positions cannot be told apart under their "
+                    + "retained identities. {Conflict}",
+                accession,
+                conflict.Message
+            );
+            return (0, duplicates, pending, false, true);
+        }
 
-        return (flushResult.Inserted, duplicates, pending, flushResult.SkippedStaleParent);
+        return (flushResult.Inserted, duplicates, pending, flushResult.SkippedStaleParent, false);
     }
 
     // Buffers a parsed row by its upsert key. A 13F holder can split one security
@@ -2190,16 +2226,59 @@ public class HoldingsImportService
             if (row.Cusip == null || !retained.TryGetValue(ObservationKey(row), out var matches))
                 continue;
             if (matches.Count != 1)
-                throw new InvalidOperationException(
-                    "The stored filing security has conflicting observation identities; replay was refused."
+                throw new HoldingObservationConflictException(
+                    "The stored filing security has conflicting observation identities; replay was "
+                        + $"refused. {DescribeObservation(row)}; stored display tickers: "
+                        + string.Join(", ", matches.Select(DescribeTicker))
+                        + "."
                 );
             row.ListedTicker = matches[0].ListedTicker;
         }
-        if (incoming.GroupBy(BuildHoldingKey).Any(group => group.Count() > 1))
-            throw new InvalidOperationException(
-                "Retained observation identities would merge incoming positions; replay was refused."
-            );
+        var collision = FindRetainedIdentityCollision(incoming);
+        if (collision != null)
+            throw collision;
     }
+
+    /// <summary>
+    /// Returns the refusal for the first set of positions that retention has collapsed onto one
+    /// upsert key, or null when every position still stands apart. Retention restores each row's
+    /// stored display ticker, so it can hand two rows the same identity when one CUSIP keeps a
+    /// ticker another CUSIP now claims — writing that would merge two securities into one row.
+    /// </summary>
+    internal static HoldingObservationConflictException FindRetainedIdentityCollision(
+        List<InstitutionalHolding> incoming
+    )
+    {
+        var collision = incoming
+            .GroupBy(BuildHoldingKey)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (collision == null)
+            return null;
+        return new HoldingObservationConflictException(
+            "Retained observation identities would merge incoming positions; replay was "
+                + $"refused. {DescribeObservation(collision.First())}; colliding positions: "
+                + string.Join(
+                    ", ",
+                    collision.Select(row =>
+                        $"CUSIP {row.Cusip ?? "(none)"} -> {DescribeTicker(row)}"
+                    )
+                )
+                + ". One of those CUSIPs keeps a stored display ticker another now claims, so "
+                + "the stored row's identity has to be corrected before this filing replays."
+        );
+    }
+
+    private static string DescribeTicker(InstitutionalHolding row) =>
+        row.ListedTicker ?? "(primary)";
+
+    // Names the position grain the refusal is about. The importer only ever sees the conflict
+    // once, at the moment it skips the filing, so every identifier needed to find the stored
+    // rows again has to be in the message.
+    private static string DescribeObservation(InstitutionalHolding row) =>
+        $"Issuer {row.EquityIssuerId}, holder {row.InstitutionalHolderId}, report date "
+        + $"{row.ReportDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}, CUSIP "
+        + $"{row.Cusip ?? "(none)"}, share type {row.ShareType}, option type "
+        + $"{row.OptionType?.ToString() ?? "(none)"}, filing type {row.FilingType}";
 
     internal static List<InstitutionalHolding> OrderForUpsert(
         IEnumerable<InstitutionalHolding> holdings
