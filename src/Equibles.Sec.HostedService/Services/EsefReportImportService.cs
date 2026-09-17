@@ -27,6 +27,7 @@ public class EsefReportImportService(
     XbrlFilingsClient client,
     EquityIssuerRepository issuerRepository,
     DocumentRepository documentRepository,
+    EsefOversizedReportRepository oversizedRepository,
     IDocumentPersistenceService documentPersistence,
     EquityIdentityManager identityManager,
     ISecDocumentHtmlNormalizer normalizer,
@@ -45,9 +46,10 @@ public class EsefReportImportService(
     /// <summary>
     /// The largest report this lane stores, equal to the extraction sweep's own parse ceiling: past it a
     /// report yields no fact, so storing it would only spend the issuer's one accession on bytes nothing
-    /// reads. The fetch carries the same ceiling, so such a report is abandoned on its response headers
-    /// rather than downloaded, and it is counted as refused rather than stored, which leaves the issuer
-    /// eligible again if that ceiling ever rises. Pinned equal to the extractor's by test.
+    /// reads. The host states no content length, so a report past the ceiling is refused only after this
+    /// many bytes of it have been read; the refusal is therefore recorded in
+    /// <see cref="EsefOversizedReport"/> against this number, which re-opens the filing if the ceiling
+    /// ever rises. Pinned equal to the extractor's by test.
     /// </summary>
     internal const int MaxReportBytes = 50 * 1024 * 1024;
 
@@ -68,6 +70,7 @@ public class EsefReportImportService(
 
         var filings = await ReadCorpus(issuers.Keys, cancellationToken);
         var stored = await LoadStoredReferences(cancellationToken);
+        var refusals = await LoadRefusals(cancellationToken);
 
         var budget = Math.Max(1, options.Value.MaxCapturesPerCycle);
         var captured = 0;
@@ -75,13 +78,16 @@ public class EsefReportImportService(
         var upToDate = 0;
         var withoutFiling = 0;
         var refused = 0;
+        var refusedBefore = 0;
+        var skipped = 0;
 
         foreach (var (lei, issuer) in issuers)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            // A refusal costs at most one response-headers exchange, so it is not charged against the budget;
-            // charging it would let a handful of unusable reports starve every issuer ordered after them.
-            if (captured + failed >= budget)
+            // A refusal is charged: the host states no content length, so reaching the ceiling costs the
+            // ceiling's worth of transfer. It is charged safely only because it is remembered, so one
+            // report spends the budget once rather than every cycle. A skip costs no request and is free.
+            if (captured + failed + refused >= budget)
                 break;
             if (!filings.TryGetValue(lei, out var candidates))
             {
@@ -100,12 +106,31 @@ public class EsefReportImportService(
                 upToDate++;
                 continue;
             }
+            if (refusals.Terminal.Contains(reference))
+            {
+                refusedBefore++;
+                continue;
+            }
             try
             {
-                if (await Capture(issuer, filing, reference, cancellationToken))
-                    captured++;
-                else
-                    refused++;
+                switch (await Capture(issuer, filing, reference, cancellationToken))
+                {
+                    case EsefCaptureOutcome.Stored:
+                        captured++;
+                        // A report refused under a lower ceiling and stored under this one leaves a row
+                        // that contradicts the document, so it is cleared rather than kept.
+                        if (refusals.Any.Contains(reference))
+                            await ForgetOversized(reference);
+                        break;
+                    case EsefCaptureOutcome.Refused:
+                        refused++;
+                        break;
+                    case EsefCaptureOutcome.Skipped:
+                        skipped++;
+                        break;
+                    default:
+                        throw new InvalidOperationException("Unhandled capture outcome.");
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -132,12 +157,15 @@ public class EsefReportImportService(
         }
 
         logger.LogInformation(
-            "ESEF report cycle complete: {Captured} captured, {Failed} failed, {Refused} refused, "
+            "ESEF report cycle complete: {Captured} captured, {Failed} failed, {Refused} refused as too "
+                + "large, {RefusedBefore} refused on an earlier cycle, {Skipped} skipped, "
                 + "{UpToDate} already current, {WithoutFiling} with no filing in the index, "
                 + "{Issuers} verified issuers, {Filings} issuers matched",
             captured,
             failed,
             refused,
+            refusedBefore,
+            skipped,
             upToDate,
             withoutFiling,
             issuers.Count,
@@ -183,6 +211,21 @@ public class EsefReportImportService(
             .Select(document => document.AccessionNumber)
             .ToListAsync(cancellationToken);
         return new HashSet<string>(references, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task<RefusalSets> LoadRefusals(CancellationToken cancellationToken)
+    {
+        var rows = await oversizedRepository.GetRefusals().ToListAsync(cancellationToken);
+        return new RefusalSets(
+            new HashSet<string>(
+                rows.Select(row => row.Reference),
+                StringComparer.OrdinalIgnoreCase
+            ),
+            new HashSet<string>(
+                rows.Where(row => row.CeilingBytes >= MaxReportBytes).Select(row => row.Reference),
+                StringComparer.OrdinalIgnoreCase
+            )
+        );
     }
 
     /// <summary>
@@ -232,9 +275,9 @@ public class EsefReportImportService(
     }
 
     /// <summary>
-    /// Stores one filing, or refuses it for a stated reason. Returns whether a document was written.
+    /// Stores one filing, or declines it for a stated reason.
     /// </summary>
-    private async Task<bool> Capture(
+    private async Task<EsefCaptureOutcome> Capture(
         EsefCandidateIssuer candidate,
         XbrlFiling filing,
         string reference,
@@ -251,7 +294,7 @@ public class EsefReportImportService(
                 sourceUrl.Length,
                 MaxSourceUrlLength
             );
-            return false;
+            return EsefCaptureOutcome.Skipped;
         }
 
         var issuer = await issuerRepository.Get(candidate.Id);
@@ -262,7 +305,7 @@ public class EsefReportImportService(
                 reference,
                 candidate.Id
             );
-            return false;
+            return EsefCaptureOutcome.Skipped;
         }
 
         SameOriginPayload payload;
@@ -270,20 +313,19 @@ public class EsefReportImportService(
         {
             payload = await client.GetReport(filing.ReportUrl, MaxReportBytes, cancellationToken);
         }
-        // Only the ceiling, which is a property of the report rather than a fault: the fetch abandons it on
-        // the response headers, so the refusal costs no download and the issuer stays eligible. An
-        // off-origin address or a redirect off the origin stays a failure, because it is a reason to
-        // re-verify the source.
+        // Only the ceiling, which is a property of the report rather than a fault. An off-origin address or
+        // a redirect off the origin stays a failure, because it is a reason to re-verify the source.
         catch (SameOriginSizeException exception)
         {
             logger.LogWarning(
                 exception,
-                "Skipping the European annual report {Reference}: it is past the {Limit}-byte ceiling "
+                "Refusing the European annual report {Reference}: it is past the {Limit}-byte ceiling "
                     + "the extraction sweep parses.",
                 reference,
                 MaxReportBytes
             );
-            return false;
+            await RememberOversized(reference, sourceUrl);
+            return EsefCaptureOutcome.Refused;
         }
 
         var report = payload.Bytes;
@@ -322,7 +364,61 @@ public class EsefReportImportService(
             reportedStatements: XbrlCaptureStatus.NotPresent,
             cancellationToken: cancellationToken
         );
-        return true;
+        return EsefCaptureOutcome.Stored;
+    }
+
+    /// <summary>
+    /// Records the refusal against the ceiling it was made under, so the report is not fetched again while
+    /// that ceiling stands. Written before the pass moves on, because one scoped context serves the whole
+    /// pass and the next issuer clears the change tracker.
+    /// </summary>
+    private async Task RememberOversized(string reference, string sourceUrl)
+    {
+        var existing = await oversizedRepository.Get(reference);
+        if (existing == null)
+        {
+            oversizedRepository.Add(
+                new EsefOversizedReport
+                {
+                    Reference = reference,
+                    SourceUrl = sourceUrl,
+                    CeilingBytes = MaxReportBytes,
+                    RefusedAt = DateTime.UtcNow,
+                }
+            );
+        }
+        else
+        {
+            // Already tracked by the read above, so the change is saved without re-marking the row.
+            existing.SourceUrl = sourceUrl;
+            existing.CeilingBytes = MaxReportBytes;
+            existing.RefusedAt = DateTime.UtcNow;
+        }
+        await oversizedRepository.SaveChanges();
+    }
+
+    /// <summary>
+    /// Clears a refusal whose report has since been stored. The document is committed either way, so a
+    /// failure here leaves an untidy row rather than making the capture count as a failure too.
+    /// </summary>
+    private async Task ForgetOversized(string reference)
+    {
+        try
+        {
+            var existing = await oversizedRepository.Get(reference);
+            if (existing == null)
+                return;
+            oversizedRepository.Delete(existing);
+            await oversizedRepository.SaveChanges();
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Could not clear the refusal recorded for the European annual report {Reference}.",
+                reference
+            );
+        }
     }
 
     /// <summary>
@@ -339,6 +435,25 @@ public class EsefReportImportService(
             return;
         await identityManager.SetFiscalYearEnd(issuer, periodEnd.Month, periodEnd.Day);
     }
+
+    internal enum EsefCaptureOutcome
+    {
+        /// <summary>The report was stored.</summary>
+        Stored,
+
+        /// <summary>
+        /// The report was read to the ceiling and refused, which costs that many bytes of transfer; the
+        /// refusal is recorded so they are not paid again.
+        /// </summary>
+        Refused,
+
+        /// <summary>Nothing was fetched and nothing decided, so the next cycle looks at the filing again.</summary>
+        Skipped,
+    }
+
+    // Every refusal on record, and the subset refused at or above the ceiling now in force: the first
+    // decides whether a stored report leaves a stale row behind, the second whether to fetch at all.
+    private sealed record RefusalSets(HashSet<string> Any, HashSet<string> Terminal);
 
     internal record EsefCandidateIssuer(
         Guid Id,

@@ -69,6 +69,7 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
             .HasForeignKey(row => row.EquityListingId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.Entity<FailedFilingIngest>();
+        builder.Entity<EsefOversizedReport>();
         builder.Entity<FormAdvAdviser>();
         builder
             .Entity<FormDFiling>()
