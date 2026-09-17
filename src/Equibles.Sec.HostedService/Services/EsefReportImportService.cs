@@ -118,7 +118,7 @@ public class EsefReportImportService(
                     case EsefCaptureOutcome.Stored:
                         captured++;
                         // A report refused under a lower ceiling and stored under this one leaves a row
-                        // that contradicts the document, so it is cleared here rather than kept.
+                        // that contradicts the document, so it is cleared rather than kept.
                         if (refusals.Any.Contains(reference))
                             await ForgetOversized(reference);
                         break;
@@ -397,13 +397,28 @@ public class EsefReportImportService(
         await oversizedRepository.SaveChanges();
     }
 
+    /// <summary>
+    /// Clears a refusal whose report has since been stored. The document is committed either way, so a
+    /// failure here leaves an untidy row rather than making the capture count as a failure too.
+    /// </summary>
     private async Task ForgetOversized(string reference)
     {
-        var existing = await oversizedRepository.Get(reference);
-        if (existing == null)
-            return;
-        oversizedRepository.Delete(existing);
-        await oversizedRepository.SaveChanges();
+        try
+        {
+            var existing = await oversizedRepository.Get(reference);
+            if (existing == null)
+                return;
+            oversizedRepository.Delete(existing);
+            await oversizedRepository.SaveChanges();
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Could not clear the refusal recorded for the European annual report {Reference}.",
+                reference
+            );
+        }
     }
 
     /// <summary>
