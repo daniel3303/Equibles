@@ -160,6 +160,7 @@ public class DocumentScraperTests
                 Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<AsFiledHtmlCaptureResult>(),
+                Arg.Any<XbrlCaptureStatus>(),
                 Arg.Any<CancellationToken>()
             );
         harness.PdfTextExtractor.DidNotReceiveWithAnyArgs().Extract(default);
@@ -375,6 +376,7 @@ public class DocumentScraperTests
                 Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<AsFiledHtmlCaptureResult>(),
+                Arg.Any<XbrlCaptureStatus>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -391,6 +393,7 @@ public class DocumentScraperTests
                 Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<AsFiledHtmlCaptureResult>(),
+                Arg.Any<XbrlCaptureStatus>(),
                 Arg.Any<CancellationToken>()
             );
         await harness
@@ -407,6 +410,7 @@ public class DocumentScraperTests
                 Arg.Any<string>(),
                 Arg.Any<XbrlCaptureResult>(),
                 Arg.Any<AsFiledHtmlCaptureResult>(),
+                Arg.Any<XbrlCaptureStatus>(),
                 Arg.Any<CancellationToken>()
             );
     }

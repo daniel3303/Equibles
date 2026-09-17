@@ -20,7 +20,8 @@ public class XbrlFilingsIndexTests
     {
         var page = FrenchPage();
 
-        page.TotalCount.Should().Be(1179, "the host states the whole country's count on every page");
+        page.TotalCount.Should()
+            .Be(1179, "the host states the whole country's count on every page");
         page.Filings.Should().HaveCount(3);
         page.Filings[0].EntityIdentifier.Should().Be("549300HGBVWX4FC44K67");
         page.Filings[0].EntityName.Should().Be("ATLAND");
@@ -33,7 +34,9 @@ public class XbrlFilingsIndexTests
 
         filing
             .PackageUrl.AbsolutePath.Should()
-            .Be("/549300HGBVWX4FC44K67/2022-12-31/ESEF/FR/0/549300HGBVWX4FC44K67-2022-12-31-fr.zip");
+            .Be(
+                "/549300HGBVWX4FC44K67/2022-12-31/ESEF/FR/0/549300HGBVWX4FC44K67-2022-12-31-fr.zip"
+            );
         filing.ReportUrl.Host.Should().Be("filings.xbrl.org");
         filing.Sha256.Should().NotBeNullOrWhiteSpace();
     }
@@ -61,12 +64,16 @@ public class XbrlFilingsIndexTests
         var page = XbrlFilingsParser.Read(Fixture("filings-ua-page.json"), Origin);
 
         page.Filings.Should()
-            .NotContain(filing => EsefFilingSelection.IsEsefWithLegalEntityIdentifier(filing), "the regime is not ESEF");
+            .NotContain(
+                filing => EsefFilingSelection.IsEsefWithLegalEntityIdentifier(filing),
+                "the regime is not ESEF"
+            );
         page.Filings.Should()
             .OnlyContain(
-                filing => !Equibles.Core.Identity.InternationalSecurityIdentifiers.IsValidLei(
-                    filing.EntityIdentifier
-                ),
+                filing =>
+                    !Equibles.Core.Identity.InternationalSecurityIdentifiers.IsValidLei(
+                        filing.EntityIdentifier
+                    ),
                 "an EDRPOU registry number is not an LEI either"
             );
     }
@@ -86,6 +93,20 @@ public class XbrlFilingsIndexTests
 
         url.Host.Should().Be("filings.xbrl.org");
         url.Query.Should().Contain("filter%5Bcountry%5D=FR").And.Contain("page%5Bnumber%5D=2");
-        url.Query.Should().Contain("include=entity", "the filer's identity comes from the entity resource");
+        url.Query.Should()
+            .Contain("include=entity", "the filer's identity comes from the entity resource");
+    }
+
+    [Fact]
+    public void IndexUrl_ForTheWholeCorpus_CarriesNoCountryFilter()
+    {
+        var url = XbrlFilingsClient.IndexUrl(3, 100);
+
+        url.Host.Should().Be("filings.xbrl.org");
+        // A filing's country is where the report was FILED, which need not be the country of the market the
+        // issuer is listed on, so the capture reads the corpus rather than a list of market countries.
+        url.Query.Should().NotContain("filter");
+        url.Query.Should().Contain("page%5Bnumber%5D=3").And.Contain("page%5Bsize%5D=100");
+        url.Query.Should().Contain("include=entity");
     }
 }
