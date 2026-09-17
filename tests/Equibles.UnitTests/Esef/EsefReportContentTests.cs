@@ -57,6 +57,21 @@ public class EsefReportContentTests
     }
 
     [Fact]
+    public void Build_PastTheRetrievalCeiling_ReturnsNoBodyRatherThanParsingIt()
+    {
+        var filler = new string('a', EsefReportContent.MaxRetrievalHtmlChars + 1);
+
+        EsefReportContent
+            .Build(
+                $"<html><body><p>{filler}</p></body></html>",
+                new SecDocumentHtmlNormalizer(),
+                new SecDocumentHtmlToMarkdownConverter()
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
     public void Build_OnAnEnvelopeWrappedFiling_IsWhatTheSecLaneWouldRead()
     {
         // NormalizeFragment is the only difference from the SEC lane: Normalize selects the allowed forms

@@ -13,6 +13,14 @@ public static class EsefReportContent
     private const string Encoded = ";base64,";
 
     /// <summary>
+    /// How much of a report is turned into retrieval text. Parsing costs about twenty times the input in
+    /// live memory and sixty-seven times it in total allocation, both measured, so a report whose readable
+    /// half runs past this is stored with an empty body rather than parsed. It still keeps its envelope and
+    /// still yields facts; only the text a reader would search is left out.
+    /// </summary>
+    public const int MaxRetrievalHtmlChars = 16 * 1024 * 1024;
+
+    /// <summary>
     /// Drops every encoded payload the report embeds in itself. A European report carries its figures and
     /// its typefaces inline rather than beside it: in one sampled report a font in a style rule was 7.5 MB
     /// of 10.4 MB and the images a further 1.3 MB. None of it is readable text, so it goes before the
@@ -73,7 +81,10 @@ public static class EsefReportContent
     {
         ArgumentNullException.ThrowIfNull(normalizer);
         ArgumentNullException.ThrowIfNull(converter);
-        var normalized = normalizer.NormalizeFragment(StripEmbeddedData(html));
+        var stripped = StripEmbeddedData(html);
+        if (string.IsNullOrEmpty(stripped) || stripped.Length > MaxRetrievalHtmlChars)
+            return [];
+        var normalized = normalizer.NormalizeFragment(stripped);
         return Encoding.UTF8.GetBytes(converter.Convert(normalized) ?? string.Empty);
     }
 }

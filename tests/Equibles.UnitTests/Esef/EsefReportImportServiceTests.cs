@@ -141,6 +141,59 @@ public class EsefReportImportServiceTests
     }
 
     [Fact]
+    public async Task Import_RecordsTheFiscalYearEndEvenWhenTheDocumentCannotBeStored()
+    {
+        var harness = await Harness.Create(Issuer("FR"), saveThrows: true);
+
+        await harness.Service.Import(CancellationToken.None);
+
+        // The pass survives one issuer's failure, and the calendar the report states is already recorded,
+        // so the retry that stores the document cannot label its facts from a missing calendar.
+        harness.Saved.Should().BeEmpty();
+        harness.Context.ChangeTracker.Clear();
+        var stored = await harness.Context.Set<EquityIssuer>().SingleAsync();
+        stored.FiscalYearEndMonth.Should().Be(12);
+        stored.FiscalYearEndDay.Should().Be(31);
+    }
+
+    [Fact]
+    public async Task Import_AReportAddressedPastTheColumnWidth_IsRefusedBeforeItIsFetched()
+    {
+        // The real index with one report path lengthened past Document.SourceUrl, which a save would throw
+        // on and the pass would then retry every cycle for ever.
+        var padding = new string('x', EsefReportImportService.MaxSourceUrlLength);
+        var harness = await Harness.Create(
+            Issuer("FR"),
+            rewriteIndex: index =>
+                index.Replace(
+                    "529900S21EQ1BO4ESM68-2025-12-31-1-fr.xhtml",
+                    padding + "-529900S21EQ1BO4ESM68-2025-12-31-1-fr.xhtml"
+                )
+        );
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().BeEmpty();
+        harness.Handler.Requests.Should().ContainSingle();
+    }
+
+    // The lane stores nothing the extraction sweep would refuse to parse, so the two ceilings are one
+    // number. A report past it yields no fact and the reader refuses it too.
+    [Fact]
+    public void TheCaptureCeilingIsTheExtractionSweepsOwnParseCeiling() =>
+        EsefReportImportService
+            .MaxReportBytes.Should()
+            .Be(
+                Equibles
+                    .Sec
+                    .FinancialFacts
+                    .HostedService
+                    .Services
+                    .XbrlFactExtractionService
+                    .MaxParseableEnvelopeBytes
+            );
+
+    [Fact]
     public async Task Import_AnIssuerWithNoFilingInTheIndex_IsNotAFailure()
     {
         var issuer = Issuer("FR");
@@ -187,7 +240,12 @@ public class EsefReportImportServiceTests
         public List<SavedDocument> Saved { get; } = [];
         public byte[] ReportBytes { get; private init; }
 
-        public static async Task<Harness> Create(EquityIssuer issuer, int capturesPerCycle = 100)
+        public static async Task<Harness> Create(
+            EquityIssuer issuer,
+            int capturesPerCycle = 100,
+            bool saveThrows = false,
+            Func<string, string> rewriteIndex = null
+        )
         {
             var context = NewDb();
             context.Add(issuer);
@@ -201,6 +259,8 @@ public class EsefReportImportServiceTests
                     "filings-one-issuer.json"
                 )
             );
+            if (rewriteIndex != null)
+                index = rewriteIndex(index);
             var report = File.ReadAllBytes(
                 Path.Combine(
                     AppContext.BaseDirectory,
@@ -255,6 +315,8 @@ public class EsefReportImportServiceTests
                 )
                 .Returns(call =>
                 {
+                    if (saveThrows)
+                        throw new InvalidOperationException("the document could not be stored");
                     harness.Saved.Add(
                         new SavedDocument(
                             call.Arg<EquityIssuer>().Id,

@@ -41,6 +41,18 @@ public class EsefReportImportService(
     // written, so a pass that keeps asking for pages past this is reading something other than that index.
     internal const int MaxIndexPages = 2_000;
 
+    /// <summary>
+    /// The largest report this lane stores, equal to the extraction sweep's own parse ceiling. A report
+    /// past it yields no fact and the reader refuses it too, so storing it would only spend the issuer's
+    /// one accession on bytes nothing reads. It is skipped and counted instead, which leaves the issuer
+    /// eligible again if that ceiling ever rises. Pinned equal to the extractor's by test.
+    /// </summary>
+    internal const long MaxReportBytes = 50L * 1024 * 1024;
+
+    // Document.SourceUrl is 500 characters wide. A longer address would throw inside the save, be caught
+    // as a per-issuer failure and be retried every cycle for ever, so it is refused before the fetch.
+    internal const int MaxSourceUrlLength = 500;
+
     public async Task Import(CancellationToken cancellationToken)
     {
         var issuers = await LoadCandidateIssuers(cancellationToken);
@@ -60,6 +72,7 @@ public class EsefReportImportService(
         var failed = 0;
         var upToDate = 0;
         var withoutFiling = 0;
+        var refused = 0;
 
         foreach (var (lei, issuer) in issuers)
         {
@@ -85,8 +98,10 @@ public class EsefReportImportService(
             }
             try
             {
-                await Capture(issuer, filing, reference, cancellationToken);
-                captured++;
+                if (await Capture(issuer, filing, reference, cancellationToken))
+                    captured++;
+                else
+                    refused++;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -107,10 +122,12 @@ public class EsefReportImportService(
         }
 
         logger.LogInformation(
-            "ESEF report cycle complete: {Captured} captured, {Failed} failed, {UpToDate} already current, "
-                + "{WithoutFiling} with no filing in the index, {Issuers} verified issuers, {Filings} issuers matched",
+            "ESEF report cycle complete: {Captured} captured, {Failed} failed, {Refused} refused, "
+                + "{UpToDate} already current, {WithoutFiling} with no filing in the index, "
+                + "{Issuers} verified issuers, {Filings} issuers matched",
             captured,
             failed,
+            refused,
             upToDate,
             withoutFiling,
             issuers.Count,
@@ -204,21 +221,63 @@ public class EsefReportImportService(
         return matched;
     }
 
-    private async Task Capture(
+    /// <summary>
+    /// Stores one filing, or refuses it for a stated reason. Returns whether a document was written.
+    /// </summary>
+    private async Task<bool> Capture(
         EsefCandidateIssuer candidate,
         XbrlFiling filing,
         string reference,
         CancellationToken cancellationToken
     )
     {
+        var sourceUrl = filing.ReportUrl.ToString();
+        if (sourceUrl.Length > MaxSourceUrlLength)
+        {
+            logger.LogWarning(
+                "Skipping the European annual report {Reference}: its address is {Length} characters, "
+                    + "past the {Limit} the document records.",
+                reference,
+                sourceUrl.Length,
+                MaxSourceUrlLength
+            );
+            return false;
+        }
+
         var issuer = await issuerRepository.Get(candidate.Id);
         if (issuer == null)
-            return;
+            return false;
 
         var report = await client.GetReport(filing.ReportUrl, cancellationToken);
+        if (report.LongLength > MaxReportBytes)
+        {
+            logger.LogWarning(
+                "Skipping the European annual report {Reference}: it is {Size} bytes, past the "
+                    + "{Limit}-byte ceiling the extraction sweep parses.",
+                reference,
+                report.LongLength,
+                MaxReportBytes
+            );
+            return false;
+        }
+
         var html = System.Text.Encoding.UTF8.GetString(report);
         var content = EsefReportContent.Build(html, normalizer, converter);
+        if (content.Length == 0)
+        {
+            logger.LogWarning(
+                "The European annual report {Reference} is stored with no retrieval text: its readable "
+                    + "half is {Size} characters. Its facts are unaffected.",
+                reference,
+                html.Length
+            );
+        }
         var periodEnd = filing.PeriodEnd.Value;
+
+        // Before the document, not after. The extraction sweep selects any captured envelope and reads the
+        // issuer fresh, so a document stored first could be labelled from a missing calendar; and a save
+        // that then failed would leave a stored report whose issuer never gets stamped at all.
+        await StampFiscalYearEnd(issuer, periodEnd);
 
         await documentPersistence.Save(
             issuer,
@@ -229,7 +288,7 @@ public class EsefReportImportService(
             // date the source gives beyond the period, and it is never earlier than the filing.
             DateOnly.FromDateTime(filing.AddedAt?.Date ?? periodEnd.ToDateTime(TimeOnly.MinValue)),
             periodEnd,
-            filing.ReportUrl.ToString(),
+            sourceUrl,
             reference,
             xbrl: XbrlCaptureResult.Captured(XbrlType.InlineIxbrl, reference, report),
             // A European report has no SEC rendering of its statements, so the capture lane that fetches
@@ -237,8 +296,7 @@ public class EsefReportImportService(
             reportedStatements: XbrlCaptureStatus.NotPresent,
             cancellationToken: cancellationToken
         );
-
-        await StampFiscalYearEnd(issuer, periodEnd);
+        return true;
     }
 
     /// <summary>
