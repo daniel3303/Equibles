@@ -163,15 +163,16 @@ public class XbrlFilingsIndexTests
         await refuse.Should().ThrowAsync<SameOriginSizeException>();
     }
 
-    // What production actually gets: the host answers chunked and states no length, so the ceiling is only
-    // reached by reading the body and a refusal costs the whole download. That is why the lane records a
-    // refusal instead of repeating it every cycle.
+    // What production actually gets: the host answers chunked and states no length, so the ceiling can only
+    // be reached by reading the body, and the refusal costs that much transfer rather than nothing. It is
+    // bounded there and does not read the whole report, which is why both halves are asserted.
     [Fact]
-    public async Task GetReport_WhenTheHostStatesNoLength_PaysForTheWholeBodyBeforeRefusing()
+    public async Task GetReport_WhenTheHostStatesNoLength_PaysUpToTheCeilingBeforeRefusing()
     {
         const string path = "/report.xhtml";
+        const int bodyLength = 200_000;
         var handler = new EsefIndexTestHandler(
-            new Dictionary<string, string> { [path] = new('a', 4_096) }
+            new Dictionary<string, string> { [path] = new('a', bodyLength) }
         )
         {
             OmitContentLength = true,
@@ -188,5 +189,6 @@ public class XbrlFilingsIndexTests
 
         await refuse.Should().ThrowAsync<SameOriginSizeException>();
         handler.BodyBytesRead.Should().BeGreaterThan(64);
+        handler.BodyBytesRead.Should().BeLessThan(bodyLength);
     }
 }

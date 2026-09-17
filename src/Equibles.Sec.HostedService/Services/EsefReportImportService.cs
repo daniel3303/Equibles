@@ -46,10 +46,10 @@ public class EsefReportImportService(
     /// <summary>
     /// The largest report this lane stores, equal to the extraction sweep's own parse ceiling: past it a
     /// report yields no fact, so storing it would only spend the issuer's one accession on bytes nothing
-    /// reads. The host states no content length, so a report past the ceiling is refused only after its
-    /// whole body has been read; the refusal is therefore recorded in <see cref="EsefOversizedReport"/>
-    /// against this number, which re-opens the filing if the ceiling ever rises. Pinned equal to the
-    /// extractor's by test.
+    /// reads. The host states no content length, so a report past the ceiling is refused only after this
+    /// many bytes of it have been read; the refusal is therefore recorded in
+    /// <see cref="EsefOversizedReport"/> against this number, which re-opens the filing if the ceiling
+    /// ever rises. Pinned equal to the extractor's by test.
     /// </summary>
     internal const int MaxReportBytes = 50 * 1024 * 1024;
 
@@ -70,7 +70,7 @@ public class EsefReportImportService(
 
         var filings = await ReadCorpus(issuers.Keys, cancellationToken);
         var stored = await LoadStoredReferences(cancellationToken);
-        var oversized = await LoadOversizedReferences(cancellationToken);
+        var refusals = await LoadRefusals(cancellationToken);
 
         var budget = Math.Max(1, options.Value.MaxCapturesPerCycle);
         var captured = 0;
@@ -84,9 +84,9 @@ public class EsefReportImportService(
         foreach (var (lei, issuer) in issuers)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            // A refusal is charged: it costs the whole download, because the host states no content length.
-            // It is charged safely only because it is remembered, so one report can spend the budget once
-            // rather than every cycle. A skip costs no request at all and is not charged.
+            // A refusal is charged: the host states no content length, so reaching the ceiling costs the
+            // ceiling's worth of transfer. It is charged safely only because it is remembered, so one
+            // report spends the budget once rather than every cycle. A skip costs no request and is free.
             if (captured + failed + refused >= budget)
                 break;
             if (!filings.TryGetValue(lei, out var candidates))
@@ -106,7 +106,7 @@ public class EsefReportImportService(
                 upToDate++;
                 continue;
             }
-            if (oversized.Contains(reference))
+            if (refusals.Terminal.Contains(reference))
             {
                 refusedBefore++;
                 continue;
@@ -117,13 +117,19 @@ public class EsefReportImportService(
                 {
                     case EsefCaptureOutcome.Stored:
                         captured++;
+                        // A report refused under a lower ceiling and stored under this one leaves a row
+                        // that contradicts the document, so it is cleared here rather than kept.
+                        if (refusals.Any.Contains(reference))
+                            await ForgetOversized(reference);
                         break;
                     case EsefCaptureOutcome.Refused:
                         refused++;
                         break;
-                    default:
+                    case EsefCaptureOutcome.Skipped:
                         skipped++;
                         break;
+                    default:
+                        throw new InvalidOperationException("Unhandled capture outcome.");
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -207,12 +213,19 @@ public class EsefReportImportService(
         return new HashSet<string>(references, StringComparer.OrdinalIgnoreCase);
     }
 
-    private async Task<HashSet<string>> LoadOversizedReferences(CancellationToken cancellationToken)
+    private async Task<RefusalSets> LoadRefusals(CancellationToken cancellationToken)
     {
-        var references = await oversizedRepository
-            .GetReferencesRefusedAtOrAbove(MaxReportBytes)
-            .ToListAsync(cancellationToken);
-        return new HashSet<string>(references, StringComparer.OrdinalIgnoreCase);
+        var rows = await oversizedRepository.GetRefusals().ToListAsync(cancellationToken);
+        return new RefusalSets(
+            new HashSet<string>(
+                rows.Select(row => row.Reference),
+                StringComparer.OrdinalIgnoreCase
+            ),
+            new HashSet<string>(
+                rows.Where(row => row.CeilingBytes >= MaxReportBytes).Select(row => row.Reference),
+                StringComparer.OrdinalIgnoreCase
+            )
+        );
     }
 
     /// <summary>
@@ -376,11 +389,20 @@ public class EsefReportImportService(
         }
         else
         {
+            // Already tracked by the read above, so the change is saved without re-marking the row.
             existing.SourceUrl = sourceUrl;
             existing.CeilingBytes = MaxReportBytes;
             existing.RefusedAt = DateTime.UtcNow;
-            oversizedRepository.Update(existing);
         }
+        await oversizedRepository.SaveChanges();
+    }
+
+    private async Task ForgetOversized(string reference)
+    {
+        var existing = await oversizedRepository.Get(reference);
+        if (existing == null)
+            return;
+        oversizedRepository.Delete(existing);
         await oversizedRepository.SaveChanges();
     }
 
@@ -405,14 +427,18 @@ public class EsefReportImportService(
         Stored,
 
         /// <summary>
-        /// The report was read to the ceiling and refused, which costs its whole download; the refusal is
-        /// recorded so the same bytes are never fetched again.
+        /// The report was read to the ceiling and refused, which costs that many bytes of transfer; the
+        /// refusal is recorded so they are not paid again.
         /// </summary>
         Refused,
 
         /// <summary>Nothing was fetched and nothing decided, so the next cycle looks at the filing again.</summary>
         Skipped,
     }
+
+    // Every refusal on record, and the subset refused at or above the ceiling now in force: the first
+    // decides whether a stored report leaves a stale row behind, the second whether to fetch at all.
+    private sealed record RefusalSets(HashSet<string> Any, HashSet<string> Terminal);
 
     internal record EsefCandidateIssuer(
         Guid Id,

@@ -9,9 +9,12 @@ public class EsefOversizedReportRepository : BaseRepository<EsefOversizedReport>
         : base(dbContext) { }
 
     /// <summary>
-    /// The references refused at or above the caller's own ceiling, which are the ones it must not fetch
-    /// again. A report refused under a lower ceiling is left out, so raising the ceiling re-opens it.
+    /// Every refusal on record with the ceiling it was made under, so one read serves both the skip (a
+    /// refusal at or above the caller's own ceiling) and the cleanup of a row whose report has since been
+    /// stored under a higher one.
     /// </summary>
-    public IQueryable<string> GetReferencesRefusedAtOrAbove(int ceilingBytes) =>
-        GetAll().Where(row => row.CeilingBytes >= ceilingBytes).Select(row => row.Reference);
+    public IQueryable<EsefRefusalRecord> GetRefusals() =>
+        GetAll().Select(row => new EsefRefusalRecord(row.Reference, row.CeilingBytes));
 }
+
+public record EsefRefusalRecord(string Reference, int CeilingBytes);

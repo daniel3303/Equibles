@@ -4,17 +4,17 @@ namespace Equibles.Sec.Data.Models;
 
 /// <summary>
 /// A European annual report larger than the ceiling the extraction sweep parses, remembered so its bytes
-/// are never fetched again. The filing index's host states no content length and serves the report
-/// chunked, so the refusal is only reached after the whole body has been read; without this row the same
-/// reports are downloaded and discarded every cycle. It records the ceiling the report exceeded rather
-/// than its size, which is never learned, so raising that ceiling re-opens every filing refused under a
-/// lower one.
+/// are not fetched again: the filing index's host states no content length, so the refusal costs the
+/// ceiling's worth of transfer every time it is reached. The row records the ceiling the report exceeded
+/// rather than its size, which is never learned, so raising that ceiling re-opens every filing refused
+/// under a lower one.
 /// </summary>
 public class EsefOversizedReport
 {
     /// <summary>
     /// The filing's reference, the same <c>{LEI}-{yyyyMMdd}-{CC}</c> the stored document would carry, so
-    /// the issuer and the period are readable from the key itself.
+    /// the issuer and the period are readable from the key itself. A correction refiled for the same
+    /// period and country keeps that reference, exactly as a stored document does, and is not re-read.
     /// </summary>
     [Key]
     [MaxLength(32)]

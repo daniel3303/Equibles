@@ -346,6 +346,92 @@ public class EsefReportImportServiceTests
     }
 
     [Fact]
+    public async Task Import_AReportStillPastARaisedCeiling_HasItsRefusalRestamped()
+    {
+        // The only path that runs when the ceiling rises and the report is still too large. Left unwritten,
+        // the row keeps its old ceiling, never qualifies again, and the report is re-fetched every cycle,
+        // which is the defect this change exists to close.
+        var harness = await Harness.Create(Issuer("FR"));
+        harness.Context.Add(
+            new EsefOversizedReport
+            {
+                Reference = "529900S21EQ1BO4ESM68-20251231-FR",
+                SourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                CeilingBytes = EsefReportImportService.MaxReportBytes - 1,
+                RefusedAt = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            }
+        );
+        await harness.Context.SaveChangesAsync();
+        harness.Handler.OverstatedContentLength = 200_000_000;
+        harness.Handler.OverstatedPaths.Add(LatestFrenchReport);
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Context.ChangeTracker.Clear();
+        var refusal = await harness.Context.Set<EsefOversizedReport>().SingleAsync();
+        refusal.CeilingBytes.Should().Be(EsefReportImportService.MaxReportBytes);
+
+        harness.Handler.Requests.Clear();
+        await harness.Service.Import(CancellationToken.None);
+
+        harness
+            .Handler.Requests.Select(uri => uri.AbsolutePath)
+            .Should()
+            .NotContain(LatestFrenchReport);
+    }
+
+    [Fact]
+    public async Task Import_AFilingAlreadyRefused_DoesNotSpendTheCycleBudget()
+    {
+        // Skipping a remembered refusal costs no request, so charging it would cut real captures by one
+        // for every oversized report the ledger holds.
+        var harness = await Harness.CreateTwo(capturesPerCycle: 1);
+        harness.Context.Add(
+            new EsefOversizedReport
+            {
+                Reference = "529900S21EQ1BO4ESM68-20251231-FR",
+                SourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                CeilingBytes = EsefReportImportService.MaxReportBytes,
+                RefusedAt = DateTime.UtcNow,
+            }
+        );
+        await harness.Context.SaveChangesAsync();
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness
+            .Saved.Should()
+            .ContainSingle()
+            .Which.AccessionNumber.Should()
+            .Be("259400NFU8A8SBP6VC21-20251231-FR");
+    }
+
+    [Fact]
+    public async Task Import_AReportStoredUnderARaisedCeiling_LeavesNoRefusalBehind()
+    {
+        var harness = await Harness.Create(Issuer("FR"));
+        harness.Context.Add(
+            new EsefOversizedReport
+            {
+                Reference = "529900S21EQ1BO4ESM68-20251231-FR",
+                SourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                CeilingBytes = EsefReportImportService.MaxReportBytes - 1,
+                RefusedAt = DateTime.UtcNow,
+            }
+        );
+        await harness.Context.SaveChangesAsync();
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().ContainSingle();
+        harness.Context.ChangeTracker.Clear();
+        // A row saying the report was refused, beside the document that holds it, is evidence of nothing.
+        (await harness.Context.Set<EsefOversizedReport>().CountAsync())
+            .Should()
+            .Be(0);
+    }
+
+    [Fact]
     public async Task Import_AReportRefusedUnderALowerCeiling_IsTriedAgain()
     {
         // The row records the ceiling the report exceeded, never its size, which this host never states.
