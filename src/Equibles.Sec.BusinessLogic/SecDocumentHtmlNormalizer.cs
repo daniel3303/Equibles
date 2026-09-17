@@ -42,7 +42,15 @@ public class SecDocumentHtmlNormalizer : ISecDocumentHtmlNormalizer
             return string.Empty;
         }
 
-        var tempDoc = _parser.ParseDocument(filteredHtml);
+        return RunSteps(filteredHtml);
+    }
+
+    public string NormalizeFragment(string html) =>
+        string.IsNullOrWhiteSpace(html) ? string.Empty : RunSteps(html);
+
+    private string RunSteps(string html)
+    {
+        var tempDoc = _parser.ParseDocument(html);
 
         foreach (var step in _steps)
         {

@@ -311,8 +311,10 @@ public class XbrlFactExtractionService
         if (document == null)
             return false;
         var form = document.DocumentType;
+        var esef = form == DocumentType.EsefAnnualReport;
         if (
-            form != DocumentType.SixK
+            !esef
+            && form != DocumentType.SixK
             && form != DocumentType.SixKa
             && form != DocumentType.TwentyF
             && form != DocumentType.TwentyFa
@@ -327,6 +329,18 @@ public class XbrlFactExtractionService
             || conceptNamespace.Host != FinancialTaxonomyHost(fact.Taxonomy)
         )
             return false;
+
+        // A European annual report states its filer under ISO 17442 rather than as a CIK, so the same
+        // unqualified-context test is made against the issuer's LEI. The comparison is exact: an LEI is one
+        // fixed-width identifier with no leading-zero convention to trim.
+        if (esef)
+        {
+            var sourceLei = fact.ConsolidatedLei;
+            var issuerLei = document.Issuer?.LegalEntityIdentifier;
+            return !string.IsNullOrEmpty(sourceLei)
+                && !string.IsNullOrEmpty(issuerLei)
+                && string.Equals(sourceLei, issuerLei, StringComparison.OrdinalIgnoreCase);
+        }
 
         var sourceCik = fact.ConsolidatedCik;
         var issuerCik = document.Issuer?.Cik;

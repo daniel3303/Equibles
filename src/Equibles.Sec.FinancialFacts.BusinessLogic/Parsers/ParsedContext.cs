@@ -10,5 +10,8 @@ internal record struct ParsedContext(
     DateOnly Start,
     DateOnly End,
     List<ParsedXbrlDimension> Dimensions,
-    string ConsolidatedCik = null
+    string ConsolidatedCik = null,
+    // The same unqualified-context identity under the ISO 17442 scheme a European report states instead of a
+    // CIK. It sits beside the CIK rather than generalising it, so the SEC path is byte-identical.
+    string ConsolidatedLei = null
 );

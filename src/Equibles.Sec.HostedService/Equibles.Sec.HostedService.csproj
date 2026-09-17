@@ -17,6 +17,7 @@
     <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
     <ProjectReference Include="..\Equibles.Sec.BusinessLogic\Equibles.Sec.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Sec\Equibles.Integrations.Sec.csproj" />
+    <ProjectReference Include="..\Equibles.Integrations.XbrlFilings\Equibles.Integrations.XbrlFilings.csproj" />
     <ProjectReference Include="..\Equibles.CommonStocks.BusinessLogic\Equibles.CommonStocks.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.InsiderTrading.Repositories\Equibles.InsiderTrading.Repositories.csproj" />
     <ProjectReference Include="..\Equibles.InsiderTrading.BusinessLogic\Equibles.InsiderTrading.BusinessLogic.csproj" />

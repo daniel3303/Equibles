@@ -30,7 +30,7 @@ public static class SameOriginBinaryReader
         if (response.RequestMessage?.RequestUri is { } actual && !IsOnOrigin(origin, actual))
             throw new InvalidDataException($"{origin.Host} response left its official origin.");
         if (response.Content.Headers.ContentLength > maxBytes)
-            throw new InvalidDataException($"{origin.Host} response exceeds the capture limit.");
+            throw new SameOriginSizeException($"{origin.Host} response exceeds the capture limit.");
         await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var output = new MemoryStream();
         var buffer = new byte[16_384];
@@ -38,7 +38,7 @@ public static class SameOriginBinaryReader
         while ((read = await input.ReadAsync(buffer, cancellationToken)) > 0)
         {
             if (output.Length + read > maxBytes)
-                throw new InvalidDataException(
+                throw new SameOriginSizeException(
                     $"{origin.Host} response exceeds the capture limit."
                 );
             output.Write(buffer, 0, read);
@@ -57,3 +57,9 @@ public static class SameOriginBinaryReader
 }
 
 public sealed record SameOriginPayload(byte[] Bytes, string CharSet);
+
+// A body past the caller's cap, which is a property of the response rather than a fault in the source. It is
+// its own type so a caller can allow for an oversized body without also swallowing an off-origin address or a
+// redirect that left the origin, which are signals to re-verify the source. InvalidDataException is sealed,
+// so this sits beside it on IOException.
+public sealed class SameOriginSizeException(string message) : IOException(message);

@@ -113,6 +113,7 @@
     <ProjectReference Include="..\..\src\Equibles.Integrations.Euronext\Equibles.Integrations.Euronext.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Gleif\Equibles.Integrations.Gleif.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Esma\Equibles.Integrations.Esma.csproj" />
+    <ProjectReference Include="..\..\src\Equibles.Integrations.XbrlFilings\Equibles.Integrations.XbrlFilings.csproj" />
     <ProjectReference Include="..\..\src\Equibles.Integrations.Xetra\Equibles.Integrations.Xetra.csproj" />
     <ProjectReference Include="..\..\src\Equibles.EquityMarkets.Data\Equibles.EquityMarkets.Data.csproj" />
     <ProjectReference Include="..\..\src\Equibles.EquityMarkets.Repositories\Equibles.EquityMarkets.Repositories.csproj" />

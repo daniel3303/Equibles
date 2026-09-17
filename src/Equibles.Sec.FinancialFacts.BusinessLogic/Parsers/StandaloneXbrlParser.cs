@@ -167,13 +167,20 @@ public class StandaloneXbrlParser
             var unqualified =
                 !contextElement.Descendants(XName.Get("segment", XbrliNamespace)).Any()
                 && !contextElement.Descendants(XName.Get("scenario", XbrliNamespace)).Any();
+            var scheme = (string)identifier?.Attribute("scheme");
             var cik =
-                unqualified && (string)identifier?.Attribute("scheme") == "http://www.sec.gov/CIK"
+                unqualified && scheme == "http://www.sec.gov/CIK" ? identifier?.Value.Trim() : null;
+            // A European report states the same unqualified identity under the ISO 17442 scheme.
+            var lei =
+                unqualified && scheme == "http://standards.iso.org/iso/17442"
                     ? identifier?.Value.Trim()
                     : null;
             if (contexts.ContainsKey(id))
+            {
                 cik = null;
-            contexts[id] = new ParsedContext(isInstant, start, end, dimensions, cik);
+                lei = null;
+            }
+            contexts[id] = new ParsedContext(isInstant, start, end, dimensions, cik, lei);
         }
 
         return contexts;
@@ -337,6 +344,7 @@ public class StandaloneXbrlParser
             PeriodEnd = context.End,
             Dimensions = context.Dimensions,
             ConsolidatedCik = context.ConsolidatedCik,
+            ConsolidatedLei = context.ConsolidatedLei,
             Decimals = XbrlValueParser.ParseDecimals((string)element.Attribute("decimals")),
         };
         return true;

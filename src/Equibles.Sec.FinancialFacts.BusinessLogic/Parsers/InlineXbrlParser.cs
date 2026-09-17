@@ -318,14 +318,23 @@ public class InlineXbrlParser
             var unqualified =
                 !FindByLocalName(contextElement, "xbrli:segment").Any()
                 && !FindByLocalName(contextElement, "xbrli:scenario").Any();
+            var scheme = identifier?.GetAttribute("scheme");
             var cik =
-                unqualified && identifier?.GetAttribute("scheme") == "http://www.sec.gov/CIK"
+                unqualified && scheme == "http://www.sec.gov/CIK"
+                    ? identifier.TextContent?.Trim()
+                    : null;
+            // A European report states the same unqualified identity under the ISO 17442 scheme.
+            var lei =
+                unqualified && scheme == "http://standards.iso.org/iso/17442"
                     ? identifier.TextContent?.Trim()
                     : null;
             // Repeated IDs across concatenated exhibits cannot prove one source context.
             if (contexts.ContainsKey(id))
+            {
                 cik = null;
-            contexts[id] = new ParsedContext(isInstant, start, end, dimensions, cik);
+                lei = null;
+            }
+            contexts[id] = new ParsedContext(isInstant, start, end, dimensions, cik, lei);
         }
 
         return contexts;
@@ -495,6 +504,7 @@ public class InlineXbrlParser
             PeriodEnd = context.End,
             Dimensions = context.Dimensions,
             ConsolidatedCik = context.ConsolidatedCik,
+            ConsolidatedLei = context.ConsolidatedLei,
             Decimals = XbrlValueParser.ParseDecimals(element.GetAttribute("decimals")),
         };
         return true;
