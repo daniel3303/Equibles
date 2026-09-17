@@ -1,0 +1,8 @@
+# European filing index captures
+
+- Captured on 2026-09-17 with plain GETs (`Accept: application/vnd.api+json`, no cookies, no key) from `https://filings.xbrl.org/api/filings`, the JSON:API index the host publishes over the whole European corpus.
+- `filings-fr-page.json` is the unchanged reply of `?include=entity&filter[country]=FR&page[size]=3&page[number]=1`. It states `meta.count` 1179 for France and carries three filings with their `included` entity resources; the filer's LEI is the entity's `identifier`, never a fragment of the composite `fxo_id`.
+- `filings-ua-page.json` is the same call for Ukraine (`meta.count` 9782). Those rows are `UAIFRS`, not ESEF, and their entity identifiers are bare EDRPOU registry numbers rather than LEIs, so they are what the regime and identifier gates exist to refuse.
+- The index states no regime FIELD. The regime is the fourth-from-last segment of `fxo_id` (`{identifier}-{period}-{regime}-{country}-{index}`) and of the stored path beside it, which is why it is read from the end of the key: a Ukrainian identifier itself contains a hyphen.
+- The whole corpus was 25,912 filings that day. Germany and Ireland return `meta.count` 0 under every spelling, so neither Xetra nor Euronext Dublin is covered by this source.
+- `filings-one-issuer.json` is the unchanged reply of `?include=entity&filter[entity.identifier]=529900S21EQ1BO4ESM68&page[size]=20`, TotalEnergies. It states 8 filings: the same annual report filed in BOTH France and Great Britain for each of 2022, 2023, 2024 and 2025, every one with `error_count` 0. For the 2024 period the British filing was added first (11:53) and the French one later (12:06), so a rule that only took the earliest addition would pick the wrong country for a Paris-listed issuer.
