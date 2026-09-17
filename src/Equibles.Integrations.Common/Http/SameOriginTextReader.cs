@@ -27,7 +27,7 @@ public static class SameOriginTextReader
     }
 
     // The declared charset is honoured; an unknown or missing one reads as UTF-8.
-    private static string Decode(string charSet, byte[] bytes)
+    public static string Decode(string charSet, byte[] bytes)
     {
         var encoding = Encoding.UTF8;
         if (!string.IsNullOrWhiteSpace(charSet))

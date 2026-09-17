@@ -1,6 +1,7 @@
 using Equibles.CommonStocks.BusinessLogic;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.Integrations.Common.Http;
 using Equibles.Integrations.XbrlFilings;
 using Equibles.Integrations.XbrlFilings.Models;
 using Equibles.Sec.BusinessLogic;
@@ -42,12 +43,13 @@ public class EsefReportImportService(
     internal const int MaxIndexPages = 2_000;
 
     /// <summary>
-    /// The largest report this lane stores, equal to the extraction sweep's own parse ceiling. A report
-    /// past it yields no fact and the reader refuses it too, so storing it would only spend the issuer's
-    /// one accession on bytes nothing reads. It is skipped and counted instead, which leaves the issuer
+    /// The largest report this lane stores, equal to the extraction sweep's own parse ceiling: past it a
+    /// report yields no fact, so storing it would only spend the issuer's one accession on bytes nothing
+    /// reads. The fetch carries the same ceiling, so such a report is abandoned on its response headers
+    /// rather than downloaded, and it is counted as refused rather than stored, which leaves the issuer
     /// eligible again if that ceiling ever rises. Pinned equal to the extractor's by test.
     /// </summary>
-    internal const long MaxReportBytes = 50L * 1024 * 1024;
+    internal const int MaxReportBytes = 50 * 1024 * 1024;
 
     // Document.SourceUrl is 500 characters wide. A longer address would throw inside the save, be caught
     // as a per-issuer failure and be retried every cycle for ever, so it is refused before the fetch.
@@ -77,6 +79,8 @@ public class EsefReportImportService(
         foreach (var (lei, issuer) in issuers)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            // A refusal costs at most one response-headers exchange, so it is not charged against the budget;
+            // charging it would let a handful of unusable reports starve every issuer ordered after them.
             if (captured + failed >= budget)
                 break;
             if (!filings.TryGetValue(lei, out var candidates))
@@ -119,6 +123,12 @@ public class EsefReportImportService(
                     issuer.Id
                 );
             }
+            finally
+            {
+                // One scoped context serves the whole pass, so a failed save leaves its rows tracked and the
+                // next issuer's save would flush them outside any transaction. Each issuer starts clean.
+                documentRepository.ClearChangeTracker();
+            }
         }
 
         logger.LogInformation(
@@ -136,8 +146,8 @@ public class EsefReportImportService(
     }
 
     /// <summary>
-    /// The verified issuers this lane may capture for: a legal entity identifier to match the index on, and
-    /// no CIK. An issuer that also files with the SEC is left to that lane, whose facts a later-filed
+    /// The issuers this lane may capture for: a legal entity identifier to match the index on, and no CIK.
+    /// The current directory also carries US listings, which hold a CIK and are excluded by the same rule. An issuer that also files with the SEC is left to that lane, whose facts a later-filed
     /// European report would otherwise supersede on the readers' filed-date tie-break.
     /// </summary>
     private async Task<Dictionary<string, EsefCandidateIssuer>> LoadCandidateIssuers(
@@ -150,8 +160,7 @@ public class EsefReportImportService(
             .Select(issuer => new EsefCandidateIssuer(
                 issuer.Id,
                 issuer.LegalEntityIdentifier,
-                issuer.Presentation.Listing.MarketCountryCode,
-                issuer.FiscalYearEndMonth
+                issuer.Presentation.Listing.MarketCountryCode
             ))
             .ToListAsync(cancellationToken);
         var issuers = new Dictionary<string, EsefCandidateIssuer>(StringComparer.OrdinalIgnoreCase);
@@ -248,20 +257,27 @@ public class EsefReportImportService(
         if (issuer == null)
             return false;
 
-        var report = await client.GetReport(filing.ReportUrl, cancellationToken);
-        if (report.LongLength > MaxReportBytes)
+        SameOriginPayload payload;
+        try
+        {
+            payload = await client.GetReport(filing.ReportUrl, MaxReportBytes, cancellationToken);
+        }
+        // The ceiling is a property of the report, not a fault: the fetch abandons it on the response
+        // headers, so the refusal costs no download and the issuer stays eligible.
+        catch (InvalidDataException exception)
         {
             logger.LogWarning(
-                "Skipping the European annual report {Reference}: it is {Size} bytes, past the "
-                    + "{Limit}-byte ceiling the extraction sweep parses.",
+                exception,
+                "Skipping the European annual report {Reference}: it is past the {Limit}-byte ceiling "
+                    + "the extraction sweep parses.",
                 reference,
-                report.LongLength,
                 MaxReportBytes
             );
             return false;
         }
 
-        var html = System.Text.Encoding.UTF8.GetString(report);
+        var report = payload.Bytes;
+        var html = SameOriginTextReader.Decode(payload.CharSet, report);
         var content = EsefReportContent.Build(html, normalizer, converter);
         if (content.Length == 0)
         {
@@ -317,7 +333,6 @@ public class EsefReportImportService(
     internal record EsefCandidateIssuer(
         Guid Id,
         string LegalEntityIdentifier,
-        string MarketCountryCode,
-        int? FiscalYearEndMonth
+        string MarketCountryCode
     );
 }

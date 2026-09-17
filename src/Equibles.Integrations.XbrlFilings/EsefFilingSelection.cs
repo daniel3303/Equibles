@@ -1,3 +1,4 @@
+using System.Globalization;
 using Equibles.Core.Identity;
 using Equibles.Integrations.XbrlFilings.Models;
 
@@ -8,12 +9,16 @@ namespace Equibles.Integrations.XbrlFilings;
 // always yields the same choice and one period's facts are never counted twice.
 public static class EsefFilingSelection
 {
+    // Every part the filing's own key is built from, the country included: one issuer-period holds several
+    // countries' filings, so a row that states none cannot be told apart from its siblings and is not a
+    // filing this lane can choose.
     public static bool IsEsefWithLegalEntityIdentifier(XbrlFiling filing) =>
         filing != null
         && filing.Regime == XbrlFilingsParser.EsefRegime
         && InternationalSecurityIdentifiers.IsValidLei(filing.EntityIdentifier)
         && filing.PeriodEnd != null
-        && filing.ReportUrl != null;
+        && filing.ReportUrl != null
+        && filing.CountryCode is { Length: 2 };
 
     // The issuer's own market decides first: a Paris-listed issuer's French filing is the one its home
     // regulator received. A clean validation beats a flagged one, then the earliest addition, then the country
@@ -66,10 +71,11 @@ public static class EsefFilingSelection
             throw new InvalidDataException(
                 "Only an ESEF filing with an LEI has a filing reference."
             );
-        if (filing.CountryCode is not { Length: 2 })
-            throw new InvalidDataException(
-                "A filing reference needs the filing's two-letter country."
-            );
-        return $"{filing.EntityIdentifier}-{filing.PeriodEnd:yyyyMMdd}-{filing.CountryCode.ToUpperInvariant()}";
+        // The key is stored, so it is written in the invariant calendar: a Thai or Umm al-Qura host would
+        // otherwise spell the same period differently and the lane would re-capture it every cycle.
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{filing.EntityIdentifier}-{filing.PeriodEnd:yyyyMMdd}-{filing.CountryCode.ToUpperInvariant()}"
+        );
     }
 }

@@ -109,4 +109,31 @@ public class XbrlFilingsIndexTests
         url.Query.Should().Contain("page%5Bnumber%5D=3").And.Contain("page%5Bsize%5D=100");
         url.Query.Should().Contain("include=entity");
     }
+
+    // The caller's own ceiling reaches the fetch, so a report it could not use is abandoned rather than
+    // downloaded whole: the tail of this corpus runs to 125 MB.
+    [Fact]
+    public async Task GetReport_RefusesABodyPastTheCallersCeiling()
+    {
+        const string path = "/report.xhtml";
+        var client = new XbrlFilingsClient(
+            new HttpClient(
+                new EsefIndexTestHandler(
+                    new Dictionary<string, string> { [path] = new('a', 4_096) }
+                )
+            )
+        )
+        {
+            Pace = new Equibles.Integrations.Common.RateLimiter.RateLimiter(
+                1000,
+                TimeSpan.FromSeconds(1)
+            ),
+        };
+
+        var refuse = () => client.GetReport(new Uri(Origin, path), 64);
+        await refuse.Should().ThrowAsync<InvalidDataException>();
+
+        var read = await client.GetReport(new Uri(Origin, path), 8_192);
+        read.Bytes.Should().HaveCount(4_096);
+    }
 }

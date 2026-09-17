@@ -26,6 +26,7 @@ namespace Equibles.UnitTests.Esef;
 public class EsefReportImportServiceTests
 {
     private const string Lei = "529900S21EQ1BO4ESM68";
+    private const string SecondLei = "259400NFU8A8SBP6VC21";
     private const string LatestFrenchReport =
         "/529900S21EQ1BO4ESM68/2025-12-31/ESEF/FR/0/529900S21EQ1BO4ESM68-2025-12-31-1-fr/reports/529900S21EQ1BO4ESM68-2025-12-31-1-fr.xhtml";
     private const string LatestBritishReport =
@@ -181,8 +182,8 @@ public class EsefReportImportServiceTests
     // number. A report past it yields no fact and the reader refuses it too.
     [Fact]
     public void TheCaptureCeilingIsTheExtractionSweepsOwnParseCeiling() =>
-        EsefReportImportService
-            .MaxReportBytes.Should()
+        ((long)EsefReportImportService.MaxReportBytes)
+            .Should()
             .Be(
                 Equibles
                     .Sec
@@ -192,6 +193,62 @@ public class EsefReportImportServiceTests
                     .XbrlFactExtractionService
                     .MaxParseableEnvelopeBytes
             );
+
+    [Fact]
+    public async Task Import_LeavesNothingTrackedWhenAnIssuersDocumentCannotBeStored()
+    {
+        // The save tracks its rows before it commits, and one context serves the whole pass, so a failure
+        // that left them tracked would have the next issuer's save flush them outside any transaction.
+        var harness = await Harness.Create(Issuer("FR"), saveThrows: true);
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Context.ChangeTracker.Entries().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    public async Task Import_StopsAtTheCycleBudget(int budget, int expected)
+    {
+        var harness = await Harness.CreateTwo(capturesPerCycle: budget);
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().HaveCount(expected);
+    }
+
+    [Fact]
+    public async Task Import_CapturesEachIssuerTheIndexHoldsAFilingFor()
+    {
+        var harness = await Harness.CreateTwo();
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness
+            .Saved.Select(save => save.AccessionNumber)
+            .Should()
+            .BeEquivalentTo([
+                "529900S21EQ1BO4ESM68-20251231-FR",
+                "259400NFU8A8SBP6VC21-20251231-FR",
+            ]);
+    }
+
+    [Fact]
+    public async Task Import_ReadsEveryPageTheIndexSaysItHas()
+    {
+        // The real corpus is about 260 pages, so the pass must page through it rather than read the first
+        // and stop. The stated count is what ends it.
+        var harness = await Harness.CreateTwo(splitAcrossPages: true);
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness
+            .Handler.Requests.Select(uri => uri.Query)
+            .Should()
+            .Contain(query => query.Contains("page%5Bnumber%5D=2"));
+        harness.Saved.Should().HaveCount(2);
+    }
 
     [Fact]
     public async Task Import_AnIssuerWithNoFilingInTheIndex_IsNotAFailure()
@@ -204,6 +261,26 @@ public class EsefReportImportServiceTests
 
         harness.Saved.Should().BeEmpty();
         harness.Handler.Requests.Should().ContainSingle();
+    }
+
+    // Serves the index as one page or as one row a page, keeping the stated total, so the pass has to
+    // follow the page numbers to see every row.
+    private static List<string> SplitPages(string index, bool split)
+    {
+        if (!split)
+            return [index];
+        using var document = System.Text.Json.JsonDocument.Parse(index);
+        var root = document.RootElement;
+        var included = root.GetProperty("included").GetRawText();
+        var count = root.GetProperty("data").GetArrayLength();
+        return root.GetProperty("data")
+            .EnumerateArray()
+            .Select(row =>
+                $$"""
+                    {"meta":{"count":{{count}}},"data":[{{row.GetRawText()}}],"included":{{included}}}
+                    """
+            )
+            .ToList();
     }
 
     private static EquityIssuer Issuer(string marketCountry) =>
@@ -240,15 +317,42 @@ public class EsefReportImportServiceTests
         public List<SavedDocument> Saved { get; } = [];
         public byte[] ReportBytes { get; private init; }
 
+        // Two issuers over the derived two-issuer index; see TestAssets/Esef/README.md.
+        public static Task<Harness> CreateTwo(
+            int capturesPerCycle = 100,
+            bool splitAcrossPages = false
+        ) =>
+            Create(
+                Issuer("FR"),
+                capturesPerCycle,
+                second: Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "IZS",
+                    Name: "Izostal S.A.",
+                    LegalEntityIdentifier: "259400NFU8A8SBP6VC21",
+                    Isin: "PLIZSTL00013",
+                    MarketCountryCode: "FR",
+                    MarketIdentifierCode: "XPAR",
+                    IdentityState: EquityIdentityState.Verified,
+                    TradingCurrency: "EUR",
+                    QuoteUnitMultiplier: 1m
+                ),
+                splitAcrossPages: splitAcrossPages
+            );
+
         public static async Task<Harness> Create(
             EquityIssuer issuer,
             int capturesPerCycle = 100,
             bool saveThrows = false,
-            Func<string, string> rewriteIndex = null
+            Func<string, string> rewriteIndex = null,
+            EquityIssuer second = null,
+            bool splitAcrossPages = false
         )
         {
             var context = NewDb();
             context.Add(issuer);
+            if (second != null)
+                context.Add(second);
             await context.SaveChangesAsync();
 
             var index = File.ReadAllText(
@@ -256,7 +360,7 @@ public class EsefReportImportServiceTests
                     AppContext.BaseDirectory,
                     "TestAssets",
                     "Esef",
-                    "filings-one-issuer.json"
+                    second == null ? "filings-one-issuer.json" : "filings-two-issuers.json"
                 )
             );
             if (rewriteIndex != null)
@@ -270,18 +374,23 @@ public class EsefReportImportServiceTests
                 )
             );
             var reportText = System.Text.Encoding.UTF8.GetString(report);
-            var handler = new EsefIndexTestHandler(
-                new Dictionary<string, string>
-                {
-                    [
-                        XbrlFilingsClient
-                            .IndexUrl(1, EsefReportImportService.IndexPageSize)
-                            .PathAndQuery
-                    ] = index,
-                    [LatestFrenchReport] = reportText,
-                    [LatestBritishReport] = reportText,
-                }
-            );
+            var pages = SplitPages(index, splitAcrossPages);
+            var bodies = new Dictionary<string, string>
+            {
+                [LatestFrenchReport] = reportText,
+                [LatestBritishReport] = reportText,
+                [LatestFrenchReport.Replace(Lei, SecondLei)] = reportText,
+                [LatestBritishReport.Replace(Lei, SecondLei)] = reportText,
+            };
+            for (var page = 1; page <= pages.Count; page++)
+            {
+                bodies[
+                    XbrlFilingsClient
+                        .IndexUrl(page, EsefReportImportService.IndexPageSize)
+                        .PathAndQuery
+                ] = pages[page - 1];
+            }
+            var handler = new EsefIndexTestHandler(bodies);
             var client = new XbrlFilingsClient(new HttpClient(handler))
             {
                 Pace = new Equibles.Integrations.Common.RateLimiter.RateLimiter(
@@ -316,7 +425,13 @@ public class EsefReportImportServiceTests
                 .Returns(call =>
                 {
                     if (saveThrows)
+                    {
+                        // What the real save does before it commits, so a missing cleanup is visible.
+                        harness.Context.Add(
+                            new Equibles.Media.Data.Models.File { Name = "half-written.txt" }
+                        );
                         throw new InvalidOperationException("the document could not be stored");
+                    }
                     harness.Saved.Add(
                         new SavedDocument(
                             call.Arg<EquityIssuer>().Id,

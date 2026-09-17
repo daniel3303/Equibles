@@ -78,23 +78,26 @@ public class XbrlFilingsClient(HttpClient httpClient)
         return XbrlFilingsParser.Read(json, Origin);
     }
 
-    // The report is read at the address the index stated. A body past the cap throws rather than truncating,
-    // because a half-read report parses into a plausible but short set of facts.
-    public async Task<byte[]> GetReport(
+    // The report is read at the address the index stated, up to the caller's own ceiling so a report it
+    // could not use is abandoned on the response headers rather than downloaded whole. A body past the cap
+    // throws rather than truncating, because a half-read report parses into a plausible but short set of
+    // facts.
+    public async Task<SameOriginPayload> GetReport(
         Uri reportUrl,
+        int maxBytes = MaxReportBytes,
         CancellationToken cancellationToken = default
     )
     {
         ArgumentNullException.ThrowIfNull(reportUrl);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
         await Pace.WaitAsync(cancellationToken);
-        var payload = await SameOriginBinaryReader.Read(
+        return await SameOriginBinaryReader.Read(
             httpClient,
             Origin,
             reportUrl,
-            MaxReportBytes,
+            Math.Min(maxBytes, MaxReportBytes),
             cancellationToken
         );
-        return payload.Bytes;
     }
 
     private async Task<string> ReadText(

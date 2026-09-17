@@ -1,5 +1,8 @@
+using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using Equibles.Integrations.XbrlFilings;
 using Equibles.Integrations.XbrlFilings.Models;
+using Equibles.Sec.Data.Models;
 using FluentAssertions;
 
 namespace Equibles.UnitTests.Esef;
@@ -67,7 +70,8 @@ public class EsefFilingSelectionTests
             );
     }
 
-    // AccessionNumber holds 32 characters and this key is exactly 32, with nothing to spare.
+    // AccessionNumber holds 32 characters and this key is exactly 32, with nothing to spare. Read against
+    // the column's own declared width, so widening or narrowing it cannot pass unnoticed.
     [Fact]
     public void TheFilingReferenceFillsTheColumnExactly()
     {
@@ -76,7 +80,51 @@ public class EsefFilingSelectionTests
         );
 
         reference.Should().Be("529900S21EQ1BO4ESM68-20251231-FR");
-        reference.Length.Should().Be(EsefFilingSelection.FilingReferenceLength).And.Be(32);
+        reference
+            .Length.Should()
+            .Be(EsefFilingSelection.FilingReferenceLength)
+            .And.Be(ColumnWidth(nameof(Document.AccessionNumber)));
+    }
+
+    private static int ColumnWidth(string property) =>
+        typeof(Document)
+            .GetProperty(property)
+            .GetCustomAttributes(typeof(MaxLengthAttribute), false)
+            .Cast<MaxLengthAttribute>()
+            .Single()
+            .Length;
+
+    // A filing whose country the index leaves out cannot be told from its siblings, and its key cannot be
+    // built. It is refused as ineligible, so the reference is never asked for and the pass never faults.
+    [Fact]
+    public void AFilingWithNoStatedCountryIsNotEligible()
+    {
+        var countryless = OneIssuer().Select(filing => filing with { CountryCode = null }).ToList();
+
+        EsefFilingSelection.IsEsefWithLegalEntityIdentifier(countryless[0]).Should().BeFalse();
+        EsefFilingSelection.PickLatest(countryless, "FR").Should().BeNull();
+        EsefFilingSelection.PickForPeriod(countryless, "FR").Should().BeNull();
+    }
+
+    // The key is stored, so it must read the same on every host. A Buddhist-era calendar would otherwise
+    // spell 2025 as 2568 and the lane would re-capture the same report every cycle.
+    [Fact]
+    public void TheFilingReferenceIsTheSameUnderANonGregorianCalendar()
+    {
+        var latest = EsefFilingSelection.PickLatest(OneIssuer(), "FR");
+        var previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("th-TH");
+            EsefFilingSelection
+                .FilingReference(latest)
+                .Should()
+                .Be("529900S21EQ1BO4ESM68-20251231-FR");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
     }
 
     // The same issuer's two countries must not collapse to one reference, or picking one filing

@@ -8,8 +8,8 @@ namespace Equibles.Integrations.XbrlFilings;
 // the composite key, and every address is copied as stated.
 public static class XbrlFilingsParser
 {
-    // The index states no regime field; the regime is the fourth segment of the filing key the host builds,
-    // `{identifier}-{period}-{regime}-{country}-{index}`, and of the stored path beside it.
+    // The index states no regime field; the regime is named inside the filing key the host builds,
+    // `{identifier}-{period}-{regime}-{country}-{index}`, and in the stored path beside it.
     public const string EsefRegime = "ESEF";
 
     public static XbrlFilingPage Read(string json, Uri origin)
@@ -96,8 +96,9 @@ public static class XbrlFilingsParser
             ? Text(data, "id")
             : null;
 
-    // The key's fourth segment names the regime; the identifier ahead of it carries no hyphen, and both the
-    // period and the country are fixed-width, so the segment is read by position from the end of the key.
+    // The regime is the third hyphen-separated part from the END of the key. It is read from that end
+    // because the identifier ahead of it may itself carry a hyphen, while the country and the index after
+    // it are each one part.
     private static string Regime(string filingKey)
     {
         if (string.IsNullOrWhiteSpace(filingKey))
