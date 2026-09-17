@@ -78,10 +78,10 @@ public class XbrlFilingsClient(HttpClient httpClient)
         return XbrlFilingsParser.Read(json, Origin);
     }
 
-    // The report is read at the address the index stated, up to the caller's own ceiling so a report it
-    // could not use is abandoned on the response headers rather than downloaded whole. A body past the cap
-    // throws rather than truncating, because a half-read report parses into a plausible but short set of
-    // facts.
+    // The report is read at the address the index stated, up to the caller's own ceiling. A body past the
+    // cap throws rather than truncating, because a half-read report parses into a plausible but short set
+    // of facts. This host states no content length, so the ceiling is only reached after the whole body has
+    // been read; a caller that refuses reports on it must remember the refusal rather than repeat it.
     public async Task<SameOriginPayload> GetReport(
         Uri reportUrl,
         int maxBytes = MaxReportBytes,

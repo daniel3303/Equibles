@@ -297,6 +297,76 @@ public class EsefReportImportServiceTests
             QuoteUnitMultiplier: 1m
         );
 
+    [Fact]
+    public async Task Import_AReportPastTheCeiling_IsRememberedSoItsBytesAreNotFetchedAgain()
+    {
+        var harness = await Harness.Create(Issuer("FR"));
+        harness.Handler.OverstatedContentLength = 200_000_000;
+        harness.Handler.OverstatedPaths.Add(LatestFrenchReport);
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().BeEmpty();
+        harness.Context.ChangeTracker.Clear();
+        var refusal = await harness.Context.Set<EsefOversizedReport>().SingleAsync();
+        refusal.Reference.Should().Be("529900S21EQ1BO4ESM68-20251231-FR");
+        refusal.CeilingBytes.Should().Be(EsefReportImportService.MaxReportBytes);
+        refusal.SourceUrl.Should().Be("https://filings.xbrl.org" + LatestFrenchReport);
+
+        harness.Handler.Requests.Clear();
+        await harness.Service.Import(CancellationToken.None);
+
+        // The index is read again, because a later period would still be captured. The report's own
+        // address is not: the host states no length, so reaching that refusal again costs the download
+        // again, which is the whole reason the row exists.
+        harness.Handler.Requests.Should().NotBeEmpty();
+        harness
+            .Handler.Requests.Select(uri => uri.AbsolutePath)
+            .Should()
+            .NotContain(LatestFrenchReport);
+    }
+
+    [Fact]
+    public async Task Import_ARefusalSpendsTheCycleBudget()
+    {
+        // A refusal costs the whole download here, so it has to be charged; it is safe to charge only
+        // because it is remembered, so one report spends the budget once rather than every cycle.
+        var harness = await Harness.CreateTwo(capturesPerCycle: 1);
+        harness.Handler.OverstatedContentLength = 200_000_000;
+        harness.Handler.OverstatedPaths.Add(LatestFrenchReport);
+        harness.Handler.OverstatedPaths.Add(LatestFrenchReport.Replace(Lei, SecondLei));
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().BeEmpty();
+        harness
+            .Handler.Requests.Where(uri => uri.AbsolutePath.EndsWith(".xhtml"))
+            .Should()
+            .ContainSingle();
+    }
+
+    [Fact]
+    public async Task Import_AReportRefusedUnderALowerCeiling_IsTriedAgain()
+    {
+        // The row records the ceiling the report exceeded, never its size, which this host never states.
+        // Raising the ceiling therefore has to re-open every filing refused under a lower one.
+        var harness = await Harness.Create(Issuer("FR"));
+        harness.Context.Add(
+            new EsefOversizedReport
+            {
+                Reference = "529900S21EQ1BO4ESM68-20251231-FR",
+                SourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                CeilingBytes = EsefReportImportService.MaxReportBytes - 1,
+                RefusedAt = DateTime.UtcNow,
+            }
+        );
+        await harness.Context.SaveChangesAsync();
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().ContainSingle();
+    }
+
     private sealed record SavedDocument(
         Guid IssuerId,
         byte[] Content,
@@ -453,6 +523,7 @@ public class EsefReportImportServiceTests
                 client,
                 issuers,
                 new DocumentRepository(context),
+                new EsefOversizedReportRepository(context),
                 persistence,
                 new EquityIdentityManager(issuers, Substitute.For<IBus>()),
                 new SecDocumentHtmlNormalizer(),
@@ -486,6 +557,7 @@ public class EsefReportImportServiceTests
                 entity.Ignore(document => document.Images);
                 entity.Ignore(document => document.Artifacts);
             });
+            builder.Entity<EsefOversizedReport>();
             builder.Ignore<Equibles.Sec.Data.Models.Chunks.Chunk>();
             builder.Ignore<Equibles.Sec.Data.Models.Chunks.Embedding>();
         }

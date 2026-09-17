@@ -138,9 +138,8 @@ public class XbrlFilingsIndexTests
         read.Bytes.Should().HaveCount(4_096);
     }
 
-    // The refusal has to be decided on the response headers, or the tail of this corpus is downloaded in
-    // full before it is thrown away. A body well inside the ceiling that only STATES an oversized length
-    // can be refused by nothing else.
+    // A host that states its length is refused before its body is read. This one does not state one, so
+    // the check below is the cheap half of the contract rather than the one production takes.
     [Fact]
     public async Task GetReport_RefusesOnTheStatedLengthBeforeReadingTheBody()
     {
@@ -162,5 +161,32 @@ public class XbrlFilingsIndexTests
         var refuse = () => client.GetReport(new Uri(Origin, path), 1_024);
 
         await refuse.Should().ThrowAsync<SameOriginSizeException>();
+    }
+
+    // What production actually gets: the host answers chunked and states no length, so the ceiling is only
+    // reached by reading the body and a refusal costs the whole download. That is why the lane records a
+    // refusal instead of repeating it every cycle.
+    [Fact]
+    public async Task GetReport_WhenTheHostStatesNoLength_PaysForTheWholeBodyBeforeRefusing()
+    {
+        const string path = "/report.xhtml";
+        var handler = new EsefIndexTestHandler(
+            new Dictionary<string, string> { [path] = new('a', 4_096) }
+        )
+        {
+            OmitContentLength = true,
+        };
+        var client = new XbrlFilingsClient(new HttpClient(handler))
+        {
+            Pace = new Equibles.Integrations.Common.RateLimiter.RateLimiter(
+                1000,
+                TimeSpan.FromSeconds(1)
+            ),
+        };
+
+        var refuse = () => client.GetReport(new Uri(Origin, path), 64);
+
+        await refuse.Should().ThrowAsync<SameOriginSizeException>();
+        handler.BodyBytesRead.Should().BeGreaterThan(64);
     }
 }
