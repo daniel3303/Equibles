@@ -1116,7 +1116,7 @@ public class DocumentScraper : IDocumentScraper
                     filing.Items,
                     xbrl,
                     asFiledHtml,
-                    cancellationToken
+                    cancellationToken: cancellationToken
                 );
 
                 _logger.LogInformation(

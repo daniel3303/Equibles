@@ -84,6 +84,9 @@ builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FtdScraperOp
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.FormAdvScraperOptions>(
     builder.Configuration.GetSection("FormAdvScraper")
 );
+builder.Services.Configure<Equibles.Sec.HostedService.Configuration.EsefReportScraperOptions>(
+    builder.Configuration.GetSection("EsefReportScraper")
+);
 builder.Services.Configure<Equibles.Sec.HostedService.Configuration.XbrlCaptureOptions>(
     builder.Configuration.GetSection("XbrlCapture")
 );

@@ -22,7 +22,8 @@ public static class EsefFilingSelection
         IEnumerable<XbrlFiling> filings,
         string preferredCountryCode
     ) =>
-        filings?.Where(IsEsefWithLegalEntityIdentifier)
+        filings
+            ?.Where(IsEsefWithLegalEntityIdentifier)
             .OrderByDescending(filing =>
                 preferredCountryCode != null
                 && string.Equals(
@@ -62,9 +63,13 @@ public static class EsefFilingSelection
     {
         ArgumentNullException.ThrowIfNull(filing);
         if (!IsEsefWithLegalEntityIdentifier(filing))
-            throw new InvalidDataException("Only an ESEF filing with an LEI has a filing reference.");
+            throw new InvalidDataException(
+                "Only an ESEF filing with an LEI has a filing reference."
+            );
         if (filing.CountryCode is not { Length: 2 })
-            throw new InvalidDataException("A filing reference needs the filing's two-letter country.");
+            throw new InvalidDataException(
+                "A filing reference needs the filing's two-letter country."
+            );
         return $"{filing.EntityIdentifier}-{filing.PeriodEnd:yyyyMMdd}-{filing.CountryCode.ToUpperInvariant()}";
     }
 }

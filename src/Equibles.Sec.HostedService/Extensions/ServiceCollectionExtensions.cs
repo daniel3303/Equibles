@@ -1,5 +1,7 @@
+using System.Net;
 using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.Core.AutoWiring;
+using Equibles.Integrations.XbrlFilings;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +16,22 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.AutoWireServicesFrom<DocumentManager>();
         services.AutoWireServicesFrom<Equibles.Integrations.Sec.SecEdgarClient>();
+
+        // The European filing index and the reports it addresses. The client paces itself and never follows
+        // a redirect off its origin; the timeout is generous because one report ran to 125 MB.
+        services
+            .AddHttpClient<XbrlFilingsClient>(client =>
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Equibles/1.0");
+                client.Timeout = TimeSpan.FromMinutes(20);
+            })
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new HttpClientHandler
+                {
+                    AllowAutoRedirect = false,
+                    AutomaticDecompression = DecompressionMethods.All,
+                }
+            );
 
         services.AddScoped<IFilingProcessor, InsiderTradingFilingProcessor>();
         services.AddScoped<IFilingProcessor, Form144FilingProcessor>();
@@ -46,6 +64,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<NportFilingReprocessWorker>();
         services.AddHostedService<NportRealtimeWorker>();
         services.AddHostedService<FundSeriesRefreshWorker>();
+        services.AddHostedService<EsefReportScraperWorker>();
 
         return services;
     }

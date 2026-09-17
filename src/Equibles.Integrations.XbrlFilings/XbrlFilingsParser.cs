@@ -107,9 +107,9 @@ public static class XbrlFilingsParser
     }
 
     private static Uri Address(Uri origin, string stated) =>
-        string.IsNullOrWhiteSpace(stated)
-            ? null
-            : Uri.TryCreate(origin, stated, out var address) ? address : null;
+        string.IsNullOrWhiteSpace(stated) ? null
+        : Uri.TryCreate(origin, stated, out var address) ? address
+        : null;
 
     private static DateOnly? Date(string stated) =>
         DateOnly.TryParseExact(

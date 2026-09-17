@@ -36,6 +36,15 @@ public class XbrlFilingsClient(HttpClient httpClient)
                 + $"&page%5Bsize%5D={pageSize}&page%5Bnumber%5D={pageNumber}"
         );
 
+    // The whole corpus, unfiltered. A filing's country is where the report was FILED, which need not be the
+    // country of the market the issuer is listed on, so filtering by market country would miss an issuer that
+    // files elsewhere. The index states its own total, so the caller knows where to stop.
+    public static Uri IndexUrl(int pageNumber, int pageSize) =>
+        new(
+            Origin,
+            $"/api/filings?include=entity&page%5Bsize%5D={pageSize}&page%5Bnumber%5D={pageNumber}"
+        );
+
     public async Task<XbrlFilingPage> GetFilings(
         string countryCode,
         int pageNumber,
@@ -54,9 +63,27 @@ public class XbrlFilingsClient(HttpClient httpClient)
         return XbrlFilingsParser.Read(json, Origin);
     }
 
+    public async Task<XbrlFilingPage> GetFilings(
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var json = await ReadText(
+            IndexUrl(pageNumber, pageSize),
+            MaxIndexBytes,
+            IndexAccept,
+            cancellationToken
+        );
+        return XbrlFilingsParser.Read(json, Origin);
+    }
+
     // The report is read at the address the index stated. A body past the cap throws rather than truncating,
     // because a half-read report parses into a plausible but short set of facts.
-    public async Task<byte[]> GetReport(Uri reportUrl, CancellationToken cancellationToken = default)
+    public async Task<byte[]> GetReport(
+        Uri reportUrl,
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(reportUrl);
         await Pace.WaitAsync(cancellationToken);

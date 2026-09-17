@@ -84,6 +84,9 @@ public class DocumentPersistenceService : IDocumentPersistenceService
         string items = null,
         XbrlCaptureResult xbrl = null,
         AsFiledHtmlCaptureResult asFiledHtml = null,
+        // A document whose statements SEC never rendered says so here, so the capture lane that fetches
+        // those renderings never queues it. The default leaves an EDGAR filing for that lane to examine.
+        XbrlCaptureStatus reportedStatements = XbrlCaptureStatus.NotChecked,
         CancellationToken cancellationToken = default
     )
     {
@@ -107,6 +110,7 @@ public class DocumentPersistenceService : IDocumentPersistenceService
             Items = items,
             LineCount = lineCount,
             NormalizedContentVersion = Document.NormalizedContentBuilderVersion,
+            ReportedStatementsStatus = reportedStatements,
         };
 
         await ApplyXbrlCapture(document, xbrl ?? XbrlCaptureResult.NotChecked);

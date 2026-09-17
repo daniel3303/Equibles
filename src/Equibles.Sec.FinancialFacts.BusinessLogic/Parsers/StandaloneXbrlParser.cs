@@ -169,11 +169,12 @@ public class StandaloneXbrlParser
                 && !contextElement.Descendants(XName.Get("scenario", XbrliNamespace)).Any();
             var scheme = (string)identifier?.Attribute("scheme");
             var cik =
-                unqualified && scheme == "http://www.sec.gov/CIK"
+                unqualified && scheme == "http://www.sec.gov/CIK" ? identifier?.Value.Trim() : null;
+            // A European report states the same unqualified identity under the ISO 17442 scheme.
+            var lei =
+                unqualified && scheme == "http://standards.iso.org/iso/17442"
                     ? identifier?.Value.Trim()
                     : null;
-            // A European report states the same unqualified identity under the ISO 17442 scheme.
-            var lei = unqualified && scheme == "http://standards.iso.org/iso/17442" ? identifier?.Value.Trim() : null;
             if (contexts.ContainsKey(id))
             {
                 cik = null;
