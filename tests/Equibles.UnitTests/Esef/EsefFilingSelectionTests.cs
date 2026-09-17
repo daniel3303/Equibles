@@ -94,12 +94,19 @@ public class EsefFilingSelectionTests
             .Single()
             .Length;
 
-    // A filing whose country the index leaves out cannot be told from its siblings, and its key cannot be
-    // built. It is refused as ineligible, so the reference is never asked for and the pass never faults.
-    [Fact]
-    public void AFilingWithNoStatedCountryIsNotEligible()
+    // A filing whose country the index leaves out, or states in some other shape, cannot be told from its
+    // siblings and its key cannot be built. It is refused as ineligible, so the reference is never asked
+    // for and the pass never faults.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("F")]
+    [InlineData("FRA")]
+    public void AFilingWithoutATwoLetterCountryIsNotEligible(string country)
     {
-        var countryless = OneIssuer().Select(filing => filing with { CountryCode = null }).ToList();
+        var countryless = OneIssuer()
+            .Select(filing => filing with { CountryCode = country })
+            .ToList();
 
         EsefFilingSelection.IsEsefWithLegalEntityIdentifier(countryless[0]).Should().BeFalse();
         EsefFilingSelection.PickLatest(countryless, "FR").Should().BeNull();

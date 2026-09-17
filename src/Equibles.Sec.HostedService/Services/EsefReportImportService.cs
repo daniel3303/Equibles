@@ -147,7 +147,8 @@ public class EsefReportImportService(
 
     /// <summary>
     /// The issuers this lane may capture for: a legal entity identifier to match the index on, and no CIK.
-    /// The current directory also carries US listings, which hold a CIK and are excluded by the same rule. An issuer that also files with the SEC is left to that lane, whose facts a later-filed
+    /// The current directory also carries US listings; those are left to the SEC lane by the CIK rule, and
+    /// one whose CIK is not yet resolved is admitted here but matches nothing in a European index. An issuer that also files with the SEC is left to that lane, whose facts a later-filed
     /// European report would otherwise supersede on the readers' filed-date tie-break.
     /// </summary>
     private async Task<Dictionary<string, EsefCandidateIssuer>> LoadCandidateIssuers(
@@ -255,16 +256,25 @@ public class EsefReportImportService(
 
         var issuer = await issuerRepository.Get(candidate.Id);
         if (issuer == null)
+        {
+            logger.LogWarning(
+                "Skipping the European annual report {Reference}: issuer {IssuerId} is gone.",
+                reference,
+                candidate.Id
+            );
             return false;
+        }
 
         SameOriginPayload payload;
         try
         {
             payload = await client.GetReport(filing.ReportUrl, MaxReportBytes, cancellationToken);
         }
-        // The ceiling is a property of the report, not a fault: the fetch abandons it on the response
-        // headers, so the refusal costs no download and the issuer stays eligible.
-        catch (InvalidDataException exception)
+        // Only the ceiling, which is a property of the report rather than a fault: the fetch abandons it on
+        // the response headers, so the refusal costs no download and the issuer stays eligible. An
+        // off-origin address or a redirect off the origin stays a failure, because it is a reason to
+        // re-verify the source.
+        catch (SameOriginSizeException exception)
         {
             logger.LogWarning(
                 exception,

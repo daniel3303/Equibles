@@ -67,6 +67,10 @@ public static class EsefFilingSelection
     public static string FilingReference(XbrlFiling filing)
     {
         ArgumentNullException.ThrowIfNull(filing);
+        if (filing.CountryCode is not { Length: 2 })
+            throw new InvalidDataException(
+                "A filing reference needs the filing's two-letter country."
+            );
         if (!IsEsefWithLegalEntityIdentifier(filing))
             throw new InvalidDataException(
                 "Only an ESEF filing with an LEI has a filing reference."

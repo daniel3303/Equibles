@@ -9,6 +9,10 @@ internal sealed class EsefIndexTestHandler(IReadOnlyDictionary<string, string> b
 {
     public List<Uri> Requests { get; } = [];
 
+    // States a Content-Length larger than the body actually served, which is what tells a header pre-check
+    // apart from a cap applied while reading: only the pre-check can refuse a body this small.
+    public long? OverstatedContentLength { get; set; }
+
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken
@@ -20,10 +24,13 @@ internal sealed class EsefIndexTestHandler(IReadOnlyDictionary<string, string> b
             return Task.FromResult(
                 new HttpResponseMessage(HttpStatusCode.NotFound) { RequestMessage = request }
             );
+        var content = new StringContent(body);
+        if (OverstatedContentLength != null)
+            content.Headers.ContentLength = OverstatedContentLength;
         return Task.FromResult(
             new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(body),
+                Content = content,
                 RequestMessage = request,
             }
         );

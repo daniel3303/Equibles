@@ -1,3 +1,4 @@
+using Equibles.Integrations.Common.Http;
 using Equibles.Integrations.XbrlFilings;
 using Equibles.Integrations.XbrlFilings.Models;
 using FluentAssertions;
@@ -131,9 +132,35 @@ public class XbrlFilingsIndexTests
         };
 
         var refuse = () => client.GetReport(new Uri(Origin, path), 64);
-        await refuse.Should().ThrowAsync<InvalidDataException>();
+        await refuse.Should().ThrowAsync<SameOriginSizeException>();
 
         var read = await client.GetReport(new Uri(Origin, path), 8_192);
         read.Bytes.Should().HaveCount(4_096);
+    }
+
+    // The refusal has to be decided on the response headers, or the tail of this corpus is downloaded in
+    // full before it is thrown away. A body well inside the ceiling that only STATES an oversized length
+    // can be refused by nothing else.
+    [Fact]
+    public async Task GetReport_RefusesOnTheStatedLengthBeforeReadingTheBody()
+    {
+        const string path = "/report.xhtml";
+        var handler = new EsefIndexTestHandler(
+            new Dictionary<string, string> { [path] = new('a', 16) }
+        )
+        {
+            OverstatedContentLength = 200_000_000,
+        };
+        var client = new XbrlFilingsClient(new HttpClient(handler))
+        {
+            Pace = new Equibles.Integrations.Common.RateLimiter.RateLimiter(
+                1000,
+                TimeSpan.FromSeconds(1)
+            ),
+        };
+
+        var refuse = () => client.GetReport(new Uri(Origin, path), 1_024);
+
+        await refuse.Should().ThrowAsync<SameOriginSizeException>();
     }
 }
