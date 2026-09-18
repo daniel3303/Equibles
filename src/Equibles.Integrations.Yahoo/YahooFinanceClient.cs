@@ -440,7 +440,10 @@ public class YahooFinanceClient : IYahooFinanceClient
 
     // ── HTTP with retry (hybrid of FINRA's auth-retry and FRED's simple retry) ──
 
-    private async Task<string> SendWithRetry(string baseUrl)
+    // Protected so a derived client reuses this session, rate limiter and retry ladder. Both the
+    // limiter and the crumb cache are static, so a separate client class would open a second
+    // budget against the same host and block the lane that gets there first.
+    protected async Task<string> SendWithRetry(string baseUrl)
     {
         var (crumb, cookieHeader) = await EnsureSession();
 
