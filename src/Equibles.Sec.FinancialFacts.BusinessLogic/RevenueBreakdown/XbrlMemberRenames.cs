@@ -56,7 +56,7 @@ public static class XbrlMemberRenames
         }
 
         var parent = Enumerable.Range(0, members.Count).ToArray();
-        var contradicted = new List<(int, int)>();
+        var disproven = new List<(int, int)>();
         for (var i = 0; i < members.Count; i++)
         {
             for (var j = i + 1; j < members.Count; j++)
@@ -67,15 +67,17 @@ public static class XbrlMemberRenames
                         Union(parent, i, j);
                         break;
                     case Verdict.Contradicted:
-                        contradicted.Add((i, j));
+                    case Verdict.CoFiled:
+                        disproven.Add((i, j));
                         break;
                 }
             }
         }
 
-        // A contradicted pair that still landed in one group (through a bridging member)
-        // dissolves the whole group: the arithmetic cannot say which spelling is which.
-        var dissolved = contradicted
+        // A disproven pair that still landed in one group (through a bridging member)
+        // dissolves the whole group: two spellings tagged side by side, or stating
+        // different figures, cannot be one line however a third spelling matches both.
+        var dissolved = disproven
             .Where(pair => Find(parent, pair.Item1) == Find(parent, pair.Item2))
             .Select(pair => Find(parent, pair.Item1))
             .ToHashSet();
@@ -125,6 +127,7 @@ public static class XbrlMemberRenames
         Unproven,
         Proven,
         Contradicted,
+        CoFiled,
     }
 
     private static Verdict Judge(MemberEvidence a, MemberEvidence b)
@@ -132,7 +135,7 @@ public static class XbrlMemberRenames
         // Tagged side by side in one filing: two members, whatever their values say.
         if (a.FiledDates.Overlaps(b.FiledDates))
         {
-            return Verdict.Unproven;
+            return Verdict.CoFiled;
         }
         var matches = 0;
         foreach (var (period, value) in a.LatestByPeriod)

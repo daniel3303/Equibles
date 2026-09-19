@@ -256,6 +256,56 @@ public class RevenueBreakdownCoreMemberRenameTests
     }
 
     [Fact]
+    public void Unify_TwoCoFiledMembersNeverMergeThroughABridgingSpelling()
+    {
+        // A and B are tagged side by side in the FY2023 10-K with equal figures (a
+        // one-component subtotal); C alone in the FY2024 10-K equals both. C proves
+        // against each, but A and B are two members by construction, so the group
+        // dissolves and all three stay as tagged.
+        var rows = new List<DimensionalRevenueRow>
+        {
+            Row("x:AMember", Fy2023, Fy2022, 100m),
+            Row("x:AMember", Fy2023, Fy2023, 200m),
+            Row("x:BMember", Fy2023, Fy2022, 100m),
+            Row("x:BMember", Fy2023, Fy2023, 200m),
+            Row("x:CMember", Fy2024, Fy2022, 100m),
+            Row("x:CMember", Fy2024, Fy2023, 200m),
+            Row("x:CMember", Fy2024, Fy2024, 300m),
+        };
+
+        var unified = XbrlMemberRenames.Unify(rows);
+
+        unified.Select(r => r.Member).Distinct().Should().HaveCount(3);
+        unified.Should().BeEquivalentTo(rows);
+    }
+
+    [Fact]
+    public void Unify_AnAxisWiderThanTheMemberCapIsReturnedAsTagged()
+    {
+        var rows = Enumerable
+            .Range(0, XbrlMemberRenames.MaxMembers + 1)
+            .SelectMany(i =>
+                new[]
+                {
+                    Row($"x:Member{i}", Fy2023, Fy2022, 100m + i),
+                    Row($"x:Member{i}", Fy2023, Fy2023, 200m + i),
+                }
+            )
+            .Concat(
+                new[]
+                {
+                    Row("x:Renamed0", Fy2024, Fy2022, 100m),
+                    Row("x:Renamed0", Fy2024, Fy2023, 200m),
+                }
+            )
+            .ToList();
+
+        var unified = XbrlMemberRenames.Unify(rows);
+
+        unified.Should().BeEquivalentTo(rows, "the pairwise proof is not run past the cap");
+    }
+
+    [Fact]
     public void BuildSegmentMarginSeries_ARenameProvenOnRevenueAloneYieldsNoCell()
     {
         // Revenue proves the rename (two equal overlaps); operating income carries the
