@@ -13,7 +13,9 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic.RevenueBreakdown;
 /// filing (two members tagged side by side are two members), they overlap on at least
 /// <see cref="MinimumOverlappingPeriods"/> exact (start, end, unit) periods, every overlap
 /// states the same positive figure to the cent (a restated comparative repeats the number;
-/// a re-segmentation does not), and no overlap contradicts. One unequal overlap disproves
+/// a re-segmentation does not), and no overlap contradicts. A period one filing states
+/// twice with two figures is no evidence either way, so the verdict never depends on the
+/// order rows arrive in. One unequal overlap disproves
 /// the pair outright and dissolves any group it would have joined through a bridging
 /// member. Proven pairs union transitively; the representative is the latest-filed
 /// spelling, the same choice BuildAxisSeries makes for a fold group, so a rewritten
@@ -40,10 +42,7 @@ public static class XbrlMemberRenames
                 g.Key,
                 g.Select(r => r.FiledDate).ToHashSet(),
                 g.GroupBy(r => (r.PeriodStart, r.PeriodEnd, r.Unit))
-                    .ToDictionary(
-                        p => p.Key,
-                        p => p.OrderByDescending(r => r.FiledDate).First().Value
-                    ),
+                    .ToDictionary(p => p.Key, LatestStatedValue),
                 g.OrderByDescending(r => r.FiledDate)
                     .ThenByDescending(r => r.PeriodEnd)
                     .ThenBy(r => r.Member, StringComparer.Ordinal)
@@ -140,7 +139,11 @@ public static class XbrlMemberRenames
         var matches = 0;
         foreach (var (period, value) in a.LatestByPeriod)
         {
-            if (!b.LatestByPeriod.TryGetValue(period, out var other))
+            if (
+                value == null
+                || !b.LatestByPeriod.TryGetValue(period, out var other)
+                || other == null
+            )
             {
                 continue;
             }
@@ -176,12 +179,27 @@ public static class XbrlMemberRenames
         }
     }
 
+    // The figure a member's latest filing states for one period, or null when that
+    // filing states the period twice with different figures (a segment total tagged
+    // both with and without the consolidation qualifier): such a period is no
+    // evidence either way, which also keeps the verdict independent of row order.
+    private static decimal? LatestStatedValue(IEnumerable<DimensionalRevenueRow> period)
+    {
+        var latest = period.Max(r => r.FiledDate);
+        var values = period
+            .Where(r => r.FiledDate == latest)
+            .Select(r => r.Value)
+            .Distinct()
+            .ToList();
+        return values.Count == 1 ? values[0] : null;
+    }
+
     private sealed record MemberEvidence(
         string Fold,
         HashSet<DateOnly> FiledDates,
         Dictionary<
             (DateOnly? PeriodStart, DateOnly PeriodEnd, string Unit),
-            decimal
+            decimal?
         > LatestByPeriod,
         DimensionalRevenueRow Latest
     );

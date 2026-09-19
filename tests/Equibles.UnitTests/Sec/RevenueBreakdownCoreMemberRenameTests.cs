@@ -305,6 +305,57 @@ public class RevenueBreakdownCoreMemberRenameTests
         unified.Should().BeEquivalentTo(rows, "the pairwise proof is not run past the cap");
     }
 
+    // The FY2023 10-K states FY2022 Commercial twice, once with the consolidation
+    // qualifier and once without, with different figures. That period proves nothing
+    // and contradicts nothing; the two clean overlaps still prove the rename, and the
+    // answer is the same whichever row the query happened to hand over first.
+    [Fact]
+    public void Unify_APeriodOneFilingStatesTwiceWithTwoFiguresIsNoEvidenceEitherWay()
+    {
+        var rows = new List<DimensionalRevenueRow>
+        {
+            Row("pltr:CommercialMember", Fy2023.AddDays(50), Fy2022, 834_095_000m),
+            Row("pltr:CommercialMember", Fy2023.AddDays(50), Fy2022, 900_000_000m),
+            Row("pltr:CommercialMember", Fy2023.AddDays(50), Fy2023, 1_002_797_000m),
+            Row("pltr:CommercialMember", Fy2022.AddDays(50), Fy2021, 644_533_000m),
+            Row("pltr:CommercialSegmentMember", Fy2024.AddDays(50), Fy2021, 644_533_000m),
+            Row("pltr:CommercialSegmentMember", Fy2024.AddDays(50), Fy2022, 834_095_000m),
+            Row("pltr:CommercialSegmentMember", Fy2024.AddDays(50), Fy2023, 1_002_797_000m),
+            Row("pltr:CommercialSegmentMember", Fy2024.AddDays(50), Fy2024, 1_295_902_000m),
+        };
+        var reversed = Enumerable.Reverse(rows).ToList();
+
+        var forward = XbrlMemberRenames.Unify(rows);
+        var backward = XbrlMemberRenames.Unify(reversed);
+
+        forward.Select(r => r.Member).Distinct().Should().Equal("pltr:CommercialSegmentMember");
+        backward.Select(r => r.Member).Distinct().Should().Equal("pltr:CommercialSegmentMember");
+        forward.Should().HaveCount(rows.Count, "every row is returned, in its input order");
+        forward.Select(r => r.Value).Should().Equal(rows.Select(r => r.Value));
+    }
+
+    [Fact]
+    public void Unify_AnAmbiguousPeriodAloneProvesNothing()
+    {
+        var rows = new List<DimensionalRevenueRow>
+        {
+            Row("x:AMember", Fy2023, Fy2022, 100m),
+            Row("x:AMember", Fy2023, Fy2022, 120m),
+            Row("x:AMember", Fy2023, Fy2023, 200m),
+            Row("x:BMember", Fy2024, Fy2022, 100m),
+            Row("x:BMember", Fy2024, Fy2023, 200m),
+            Row("x:BMember", Fy2024, Fy2024, 300m),
+        };
+
+        var unified = XbrlMemberRenames.Unify(rows);
+
+        unified
+            .Select(r => r.Member)
+            .Distinct()
+            .Should()
+            .HaveCount(2, "FY2023 is the only clean overlap and one is not proof");
+    }
+
     [Fact]
     public void BuildSegmentMarginSeries_ARenameProvenOnRevenueAloneYieldsNoCell()
     {
