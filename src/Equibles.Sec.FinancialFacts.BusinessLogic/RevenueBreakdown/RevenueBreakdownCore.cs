@@ -538,7 +538,9 @@ public static class RevenueBreakdownCore
         // Pin the unit first (latest-filed fact's unit) so the reconciliation sum and the
         // consolidated total are always in the same currency.
         var unit = axisRows.OrderByDescending(r => r.FiledDate).First().Unit;
-        var inUnit = axisRows.Where(r => r.Unit == unit);
+        // Rename proof runs BEFORE reconciliation: ReconcileToTotal keeps each period's
+        // latest filing, which is exactly the cross-filing overlap the proof reads.
+        var inUnit = XbrlMemberRenames.Unify(axisRows.Where(r => r.Unit == unit).ToList());
         var current = ReconcileToTotal(inUnit, unit, totals);
         if (current.Count == 0)
         {
