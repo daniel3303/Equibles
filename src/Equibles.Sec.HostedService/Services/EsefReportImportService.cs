@@ -282,6 +282,10 @@ public class EsefReportImportService(
                     || filing.PeriodEnd > today
                     || (
                         filing.AddedAt.HasValue
+                        && DateOnly.FromDateTime(filing.AddedAt.Value) > today
+                    )
+                    || (
+                        filing.AddedAt.HasValue
                         && filing.PeriodEnd > DateOnly.FromDateTime(filing.AddedAt.Value)
                     )
                     || !wanted.Contains(filing.EntityIdentifier)
