@@ -280,6 +280,10 @@ public class EsefReportImportService(
                 if (
                     !EsefFilingSelection.IsEsefWithLegalEntityIdentifier(filing)
                     || filing.PeriodEnd > today
+                    || (
+                        filing.AddedAt.HasValue
+                        && filing.PeriodEnd > DateOnly.FromDateTime(filing.AddedAt.Value)
+                    )
                     || !wanted.Contains(filing.EntityIdentifier)
                 )
                     continue;

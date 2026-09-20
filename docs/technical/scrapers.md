@@ -4,6 +4,7 @@
 
 - ESEF capture matches source LEIs to verified issuers without a SEC CIK.
 - Future reporting periods in index metadata are rejected before selection; completed reports must not be masked by an erroneous future date.
+- A reporting period later than the index's stated receipt date remains invalid even after that period becomes historical.
 - Select one report per source-stated annual period, newest first, using the existing deterministic country and validation ordering.
 - Capture at most one missing period per issuer per cycle; issuers missing their latest report take priority over historical backfill.
 - Stored reports and remembered size refusals do not block earlier periods or consume download budget.
