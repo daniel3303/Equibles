@@ -104,6 +104,28 @@ public class EsefReportImportServiceTests
     }
 
     [Fact]
+    public async Task Import_FutureReceiptDateCannotBecomeAFilingDate()
+    {
+        var harness = await Harness.Create(
+            Issuer("FR"),
+            rewriteIndex: index => index.Replace("2026-04-07", "2099-04-07")
+        );
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness
+            .Saved.Should()
+            .ContainSingle()
+            .Which.ReportingForDate.Should()
+            .Be(new DateOnly(2024, 12, 31));
+        harness
+            .Saved.Should()
+            .OnlyContain(document =>
+                document.ReportingDate <= DateOnly.FromDateTime(DateTime.UtcNow)
+            );
+    }
+
+    [Fact]
     public async Task Import_ReportIndexedBeforeItsPeriodEndedCannotMaskCompletedReports()
     {
         var harness = await Harness.Create(
