@@ -137,10 +137,14 @@ public class ChunkRepository : BaseRepository<Chunk>
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            return await query
-                .OrderByDescending(c => EF.Functions.Score(c.Id))
-                .Take(maxResults)
-                .ToListAsync(cancellationToken);
+            return await LeaderOnlyScan(
+                scan =>
+                    query
+                        .OrderByDescending(c => EF.Functions.Score(c.Id))
+                        .Take(maxResults)
+                        .ToListAsync(scan),
+                cancellationToken
+            );
         }
         catch (Exception exception)
             when (exception is not OperationCanceledException
@@ -162,6 +166,44 @@ public class ChunkRepository : BaseRepository<Chunk>
         {
             DbContext.Database.SetCommandTimeout(originalTimeout);
         }
+    }
+
+    public const string LeaderOnlyScanSql = "SET LOCAL max_parallel_workers_per_gather = 0";
+
+    // Runs one @@@ statement on the leader alone: a pg_search parallel worker that aborts
+    // crash-restarts the whole Postgres, and a scoped search's semi-join bypasses
+    // paradedb.min_rows_per_worker. The owned transaction goes through the context's execution
+    // strategy because a retrying strategy refuses a user-initiated one, and it rolls back so
+    // SET LOCAL reverts; inside a caller's transaction the setting lasts until that one ends.
+    // The scan must materialize before it returns, because the transaction ends with the call.
+    public virtual async Task<T> LeaderOnlyScan<T>(
+        Func<CancellationToken, Task<T>> scan,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (DbContext == null || !DbContext.Database.IsNpgsql())
+            return await scan(cancellationToken);
+        if (DbContext.Database.CurrentTransaction != null)
+        {
+            await DbContext.Database.ExecuteSqlRawAsync(LeaderOnlyScanSql, cancellationToken);
+            return await scan(cancellationToken);
+        }
+
+        var strategy = DbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(
+            async operationCancellationToken =>
+            {
+                await using var transaction = await DbContext.Database.BeginTransactionAsync(
+                    operationCancellationToken
+                );
+                await DbContext.Database.ExecuteSqlRawAsync(
+                    LeaderOnlyScanSql,
+                    operationCancellationToken
+                );
+                return await scan(operationCancellationToken);
+            },
+            cancellationToken
+        );
     }
 
     // Bounded degrade for a SCOPED search whose ParadeDB pass timed out. A ticker or a document id
