@@ -60,6 +60,18 @@ public static class EsefFilingSelection
         );
     }
 
+    public static IReadOnlyList<XbrlFiling> PickHistory(
+        IEnumerable<XbrlFiling> filings,
+        string preferredCountryCode
+    ) =>
+        filings
+            ?.Where(IsEsefWithLegalEntityIdentifier)
+            .GroupBy(filing => filing.PeriodEnd)
+            .OrderByDescending(period => period.Key)
+            .Select(period => PickForPeriod(period, preferredCountryCode))
+            .ToList()
+        ?? [];
+
     // The filing key the store uses. `AccessionNumber` holds 32 characters and this is exactly 32: a
     // twenty-character identifier, an eight-digit period and a two-letter country, with two separators.
     public const int FilingReferenceLength = 32;

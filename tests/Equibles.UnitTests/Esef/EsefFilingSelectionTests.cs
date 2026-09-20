@@ -28,6 +28,32 @@ public class EsefFilingSelectionTests
             .Filings;
 
     [Fact]
+    public void HistorySelectsExactlyOneReportPerPeriodNewestFirst()
+    {
+        var history = EsefFilingSelection.PickHistory(OneIssuer(), "FR");
+
+        history.Should().HaveCount(4);
+        history
+            .Select(filing => filing.PeriodEnd)
+            .Should()
+            .OnlyHaveUniqueItems()
+            .And.BeInDescendingOrder();
+        history.Should().OnlyContain(filing => filing.CountryCode == "FR");
+        EsefFilingSelection
+            .PickHistory(OneIssuer().Reverse(), "FR")
+            .Select(filing => filing.FilingKey)
+            .Should()
+            .Equal(history.Select(filing => filing.FilingKey));
+    }
+
+    [Fact]
+    public void EmptyHistoryIsSafe()
+    {
+        EsefFilingSelection.PickHistory(null, "FR").Should().BeEmpty();
+        EsefFilingSelection.PickHistory([], "FR").Should().BeEmpty();
+    }
+
+    [Fact]
     public void OneIssuerPeriodReallyDoesHoldSeveralFilings()
     {
         OneIssuer()

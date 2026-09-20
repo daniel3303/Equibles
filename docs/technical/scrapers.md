@@ -1,5 +1,17 @@
 # Scrapers and Integrations
 
+## European annual report history
+
+- ESEF capture matches source LEIs to verified issuers without a SEC CIK.
+- Future reporting periods in index metadata are rejected before selection; completed reports must not be masked by an erroneous future date.
+- A reporting period later than the index's stated receipt date remains invalid even after that period becomes historical.
+- Select one report per source-stated annual period, newest first, using the existing deterministic country and validation ordering.
+- Capture at most one missing period per issuer per cycle; issuers missing their latest report take priority over historical backfill.
+- Stored reports and remembered size refusals do not block earlier periods or consume download budget.
+- Initialize missing fiscal-calendar metadata from the latest indexed annual period, never from an older backfill report.
+- Historical ingestion is recurring reconciliation: subsequent cycles discover missing periods, and a fully captured issuer makes no report requests.
+- Capturing an XBRL envelope queues existing financial-fact extraction; capture counts alone do not prove published financial coverage.
+
 How the `*.HostedService` workers ingest data, how the `Equibles.Integrations.*` HTTP clients talk to upstream APIs, and how the deduplication ledgers keep re-runs idempotent.
 
 ## Two-layer shape

@@ -76,7 +76,7 @@ public class EsefReportImportServiceTests
     }
 
     [Fact]
-    public async Task Import_WhenTheReportIsAlreadyStored_CapturesNothing()
+    public async Task Import_WhenTheLatestReportIsAlreadyStored_CapturesThePreviousPeriod()
     {
         var issuer = Issuer("FR");
         var harness = await Harness.Create(issuer);
@@ -95,9 +95,120 @@ public class EsefReportImportServiceTests
 
         await harness.Service.Import(CancellationToken.None);
 
-        harness.Saved.Should().BeEmpty();
-        // The index is still read: a later period would be captured on the same pass.
+        harness
+            .Saved.Should()
+            .ContainSingle()
+            .Which.AccessionNumber.Should()
+            .Be("529900S21EQ1BO4ESM68-20241231-FR");
         harness.Handler.Requests.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task Import_ReportIndexedBeforeItsPeriodEndedCannotMaskCompletedReports()
+    {
+        var harness = await Harness.Create(
+            Issuer("FR"),
+            rewriteIndex: index => index.Replace("2026-04-07", "2024-04-07")
+        );
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness
+            .Saved.Should()
+            .ContainSingle()
+            .Which.ReportingForDate.Should()
+            .Be(new DateOnly(2024, 12, 31));
+    }
+
+    [Fact]
+    public async Task Import_FutureIndexedPeriodCannotMaskCompletedAnnualReports()
+    {
+        var harness = await Harness.Create(
+            Issuer("FR"),
+            rewriteIndex: index => index.Replace("2025-12-31", "2099-12-31")
+        );
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness
+            .Saved.Should()
+            .ContainSingle()
+            .Which.ReportingForDate.Should()
+            .Be(new DateOnly(2024, 12, 31));
+        harness
+            .Handler.Requests.Should()
+            .NotContain(uri => uri.AbsolutePath.Contains("2099-12-31"));
+    }
+
+    [Fact]
+    public async Task Import_HistoryDrainsAndThenMakesNoReportRequests()
+    {
+        var issuer = Issuer("FR");
+        var harness = await Harness.Create(issuer);
+
+        for (var period = 0; period < 4; period++)
+        {
+            await harness.Service.Import(CancellationToken.None);
+            harness.Saved.Should().HaveCount(period + 1);
+            var captured = harness.Saved.Last();
+            harness.Context.Add(
+                new Document
+                {
+                    EquityIssuerId = issuer.Id,
+                    DocumentType = captured.DocumentType,
+                    AccessionNumber = captured.AccessionNumber,
+                    ReportingDate = captured.ReportingDate,
+                    ReportingForDate = captured.ReportingForDate,
+                    Content = new Equibles.Media.Data.Models.File
+                    {
+                        Name = captured.AccessionNumber + ".txt",
+                    },
+                }
+            );
+            await harness.Context.SaveChangesAsync();
+        }
+
+        harness.Handler.Requests.Clear();
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().HaveCount(4);
+        harness
+            .Saved.Select(document => document.ReportingForDate)
+            .Should()
+            .OnlyHaveUniqueItems()
+            .And.BeInDescendingOrder();
+        harness.Handler.Requests.Should().OnlyContain(uri => !uri.AbsolutePath.EndsWith(".xhtml"));
+    }
+
+    [Fact]
+    public async Task Import_RefusedLatestDoesNotLetHistorySetAnObsoleteFiscalCalendar()
+    {
+        var harness = await Harness.Create(
+            Issuer("FR"),
+            rewriteIndex: index => index.Replace("2024-12-31", "2024-09-30")
+        );
+        harness.Context.Add(
+            new EsefOversizedReport
+            {
+                Reference = "529900S21EQ1BO4ESM68-20251231-FR",
+                SourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                CeilingBytes = EsefReportImportService.MaxReportBytes,
+                RefusedAt = DateTime.UtcNow,
+            }
+        );
+        await harness.Context.SaveChangesAsync();
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness
+            .Saved.Should()
+            .ContainSingle()
+            .Which.ReportingForDate.Should()
+            .Be(new DateOnly(2024, 9, 30));
+        harness.Context.ChangeTracker.Clear();
+        var stored = await harness.Context.Set<EquityIssuer>().SingleAsync();
+        stored.FiscalYearEndMonth.Should().Be(12);
+        stored.FiscalYearEndDay.Should().Be(31);
     }
 
     [Fact]
@@ -216,6 +327,35 @@ public class EsefReportImportServiceTests
         await harness.Service.Import(CancellationToken.None);
 
         harness.Saved.Should().HaveCount(expected);
+    }
+
+    [Fact]
+    public async Task Import_MissingLatestReportTakesPriorityOverAnotherIssuersHistory()
+    {
+        var harness = await Harness.CreateTwo(capturesPerCycle: 1);
+        var issuer = await harness
+            .Context.Set<EquityIssuer>()
+            .SingleAsync(row => row.LegalEntityIdentifier == Lei);
+        harness.Context.Add(
+            new Document
+            {
+                EquityIssuerId = issuer.Id,
+                DocumentType = DocumentType.EsefAnnualReport,
+                AccessionNumber = "529900S21EQ1BO4ESM68-20251231-FR",
+                ReportingDate = new DateOnly(2026, 4, 7),
+                ReportingForDate = new DateOnly(2025, 12, 31),
+                Content = new Equibles.Media.Data.Models.File { Name = "latest.txt" },
+            }
+        );
+        await harness.Context.SaveChangesAsync();
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness
+            .Saved.Should()
+            .ContainSingle()
+            .Which.AccessionNumber.Should()
+            .Be("259400NFU8A8SBP6VC21-20251231-FR");
     }
 
     [Fact]
@@ -538,6 +678,12 @@ public class EsefReportImportServiceTests
                 [LatestFrenchReport.Replace(Lei, SecondLei)] = reportText,
                 [LatestBritishReport.Replace(Lei, SecondLei)] = reportText,
             };
+            foreach (
+                var filing in XbrlFilingsParser
+                    .Read(index, new Uri("https://filings.xbrl.org"))
+                    .Filings
+            )
+                bodies[filing.ReportUrl.PathAndQuery] = reportText;
             for (var page = 1; page <= pages.Count; page++)
             {
                 bodies[

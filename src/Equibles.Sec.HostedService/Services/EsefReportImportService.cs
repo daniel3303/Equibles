@@ -18,7 +18,7 @@ using Microsoft.Extensions.Options;
 namespace Equibles.Sec.HostedService.Services;
 
 /// <summary>
-/// Stores the latest European annual report of every verified issuer we hold, as a document carrying the
+/// Stores European annual report history for every verified issuer we hold, as documents carrying the
 /// report's own XBRL envelope. Nothing here extracts a fact: the extraction sweep selects any captured
 /// envelope, so storing the document is the whole of this lane's work.
 /// </summary>
@@ -81,7 +81,17 @@ public class EsefReportImportService(
         var refusedBefore = 0;
         var skipped = 0;
 
-        foreach (var (lei, issuer) in issuers)
+        var orderedIssuers = issuers.OrderBy(pair =>
+        {
+            if (!filings.TryGetValue(pair.Key, out var available))
+                return true;
+            var latest = EsefFilingSelection.PickLatest(available, pair.Value.MarketCountryCode);
+            if (latest == null)
+                return true;
+            var latestReference = EsefFilingSelection.FilingReference(latest);
+            return stored.Contains(latestReference) || refusals.Terminal.Contains(latestReference);
+        });
+        foreach (var (lei, issuer) in orderedIssuers)
         {
             cancellationToken.ThrowIfCancellationRequested();
             // A refusal is charged: the host states no content length, so reaching the ceiling costs the
@@ -94,26 +104,40 @@ public class EsefReportImportService(
                 withoutFiling++;
                 continue;
             }
-            var filing = EsefFilingSelection.PickLatest(candidates, issuer.MarketCountryCode);
-            if (filing == null)
+            var history = EsefFilingSelection.PickHistory(candidates, issuer.MarketCountryCode);
+            if (history.Count == 0)
             {
                 withoutFiling++;
                 continue;
             }
+            var filing = history.FirstOrDefault(candidate =>
+                !stored.Contains(EsefFilingSelection.FilingReference(candidate))
+                && !refusals.Terminal.Contains(EsefFilingSelection.FilingReference(candidate))
+            );
+            if (filing == null)
+            {
+                if (
+                    history.Any(candidate =>
+                        refusals.Terminal.Contains(EsefFilingSelection.FilingReference(candidate))
+                    )
+                )
+                    refusedBefore++;
+                else
+                    upToDate++;
+                continue;
+            }
             var reference = EsefFilingSelection.FilingReference(filing);
-            if (stored.Contains(reference))
-            {
-                upToDate++;
-                continue;
-            }
-            if (refusals.Terminal.Contains(reference))
-            {
-                refusedBefore++;
-                continue;
-            }
             try
             {
-                switch (await Capture(issuer, filing, reference, cancellationToken))
+                switch (
+                    await Capture(
+                        issuer,
+                        filing,
+                        history[0].PeriodEnd.Value,
+                        reference,
+                        cancellationToken
+                    )
+                )
                 {
                     case EsefCaptureOutcome.Stored:
                         captured++;
@@ -240,6 +264,7 @@ public class EsefReportImportService(
     {
         var wanted = new HashSet<string>(leis, StringComparer.OrdinalIgnoreCase);
         var matched = new Dictionary<string, List<XbrlFiling>>(StringComparer.OrdinalIgnoreCase);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var read = 0;
         var total = int.MaxValue;
         for (var page = 1; page <= MaxIndexPages && read < total; page++)
@@ -254,6 +279,11 @@ public class EsefReportImportService(
             {
                 if (
                     !EsefFilingSelection.IsEsefWithLegalEntityIdentifier(filing)
+                    || filing.PeriodEnd > today
+                    || (
+                        filing.AddedAt.HasValue
+                        && filing.PeriodEnd > DateOnly.FromDateTime(filing.AddedAt.Value)
+                    )
                     || !wanted.Contains(filing.EntityIdentifier)
                 )
                     continue;
@@ -280,6 +310,7 @@ public class EsefReportImportService(
     private async Task<EsefCaptureOutcome> Capture(
         EsefCandidateIssuer candidate,
         XbrlFiling filing,
+        DateOnly latestPeriodEnd,
         string reference,
         CancellationToken cancellationToken
     )
@@ -345,7 +376,7 @@ public class EsefReportImportService(
         // Before the document, not after. The extraction sweep selects any captured envelope and reads the
         // issuer fresh, so a document stored first could be labelled from a missing calendar; and a save
         // that then failed would leave a stored report whose issuer never gets stamped at all.
-        await StampFiscalYearEnd(issuer, periodEnd);
+        await StampFiscalYearEnd(issuer, latestPeriodEnd);
 
         await documentPersistence.Save(
             issuer,
