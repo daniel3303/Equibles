@@ -175,6 +175,7 @@ public class ChunkRepository : BaseRepository<Chunk>
     // paradedb.min_rows_per_worker. The owned transaction goes through the context's execution
     // strategy because a retrying strategy refuses a user-initiated one, and it rolls back so
     // SET LOCAL reverts; inside a caller's transaction the setting lasts until that one ends.
+    // The scan must materialize before it returns, because the transaction ends with the call.
     public virtual async Task<T> LeaderOnlyScan<T>(
         Func<CancellationToken, Task<T>> scan,
         CancellationToken cancellationToken = default
