@@ -5,6 +5,7 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.Repositories.Extensions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
 namespace Equibles.Sec.Repositories;
@@ -134,6 +135,7 @@ public class ChunkRepository : BaseRepository<Chunk>
         var timeoutSeconds = commandTimeoutSeconds ?? HybridSearchCommandTimeoutSeconds;
         var originalTimeout = DbContext.Database.GetCommandTimeout();
         DbContext.Database.SetCommandTimeout(timeoutSeconds);
+        await using var leaderOnly = await LeaderOnlyScan(cancellationToken);
         var stopwatch = Stopwatch.StartNew();
         try
         {
@@ -161,6 +163,47 @@ public class ChunkRepository : BaseRepository<Chunk>
         finally
         {
             DbContext.Database.SetCommandTimeout(originalTimeout);
+        }
+    }
+
+    public const string LeaderOnlyScanSql = "SET LOCAL max_parallel_workers_per_gather = 0";
+
+    // Every @@@ scan runs on the leader alone: a pg_search 0.24.0 parallel worker aborted
+    // mid-scan and crash-restarted the whole Postgres (2026-09-20), and a scoped search's
+    // semi-join bypasses paradedb.min_rows_per_worker, so this clamp is the only lever.
+    // A read-only scope: an owned transaction rolls back on dispose and SET LOCAL reverts
+    // with it; inside a caller's transaction the setting lasts until that one ends.
+    public virtual async Task<IAsyncDisposable> LeaderOnlyScan(
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (DbContext == null || !DbContext.Database.IsNpgsql())
+            return LeaderOnlyScope.Inert;
+        var ownedTransaction =
+            DbContext.Database.CurrentTransaction == null
+                ? await DbContext.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+        try
+        {
+            await DbContext.Database.ExecuteSqlRawAsync(LeaderOnlyScanSql, cancellationToken);
+        }
+        catch
+        {
+            if (ownedTransaction != null)
+                await ownedTransaction.DisposeAsync();
+            throw;
+        }
+        return new LeaderOnlyScope(ownedTransaction);
+    }
+
+    private sealed class LeaderOnlyScope(IDbContextTransaction ownedTransaction) : IAsyncDisposable
+    {
+        public static readonly LeaderOnlyScope Inert = new(null);
+
+        public async ValueTask DisposeAsync()
+        {
+            if (ownedTransaction != null)
+                await ownedTransaction.DisposeAsync();
         }
     }
 
