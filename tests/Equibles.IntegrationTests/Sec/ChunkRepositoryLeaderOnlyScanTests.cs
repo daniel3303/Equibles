@@ -13,10 +13,8 @@ namespace Equibles.IntegrationTests.Sec;
 
 /// <summary>
 /// Pins the leader-only BM25 scan: <see cref="ChunkRepository.HybridSearch"/> clamps
-/// <c>max_parallel_workers_per_gather</c> to zero for exactly the statement carrying the
-/// <c>@@@</c> predicate, and the clamp is gone again once the call returns. A pg_search
-/// parallel worker that aborts takes the whole Postgres down with it (2026-09-20), and the
-/// semi-join a ticker-scoped search compiles to is outside ParadeDB's own row-count guard.
+/// <c>max_parallel_workers_per_gather</c> to zero for the statement carrying <c>@@@</c>, on
+/// every execution strategy, and the clamp is gone again once the call returns.
 /// </summary>
 [Collection(ParadeDbCollection.Name)]
 public class ChunkRepositoryLeaderOnlyScanTests : ParadeDbMcpTestBase
@@ -35,6 +33,8 @@ public class ChunkRepositoryLeaderOnlyScanTests : ParadeDbMcpTestBase
         await using var instrumentedContext = Fixture.CreateDbContext(builder =>
             builder.AddInterceptors(interceptor)
         );
+        // One pinned session, so the read after the search provably sees the clamped connection.
+        await instrumentedContext.Database.OpenConnectionAsync();
         var sut = new ChunkRepository(instrumentedContext);
 
         var results = await sut.HybridSearch("services revenue", maxResults: 10, ticker: "AAPL");
@@ -58,6 +58,31 @@ public class ChunkRepositoryLeaderOnlyScanTests : ParadeDbMcpTestBase
         afterwards.Should().NotBe("0", "SET LOCAL must not outlive the scan");
     }
 
+    // The Portal's financial context retries on transient failures, and that strategy refuses a
+    // user-initiated transaction outside CreateExecutionStrategy().ExecuteAsync (see #5410).
+    [Fact]
+    public async Task HybridSearch_OnARetryingExecutionStrategy_StillSearches()
+    {
+        EquityIssuer apple = SeedStock("AAPL", "Apple Inc.", "0000320193");
+        SeedChunk(SeedDocument(apple), "Services revenue grew substantially this quarter.", "AAPL");
+        await DbContext.SaveChangesAsync();
+
+        var interceptor = new CapturingCommandInterceptor();
+        await using var retryingContext = Fixture.CreateDbContext(
+            configure: builder => builder.AddInterceptors(interceptor),
+            configureNpgsql: npgsql => npgsql.EnableRetryOnFailure()
+        );
+        var sut = new ChunkRepository(retryingContext);
+
+        var results = await sut.HybridSearch("services revenue", maxResults: 10, ticker: "AAPL");
+
+        results.Should().NotBeEmpty();
+        interceptor
+            .Commands.Should()
+            .Contain(c => c.Contains(ChunkRepository.LeaderOnlyScanSql, StringComparison.Ordinal));
+        retryingContext.Database.CurrentTransaction.Should().BeNull();
+    }
+
     [Fact]
     public async Task LeaderOnlyScan_InsideACallerTransaction_BorrowsItAndLeavesItOpen()
     {
@@ -65,17 +90,22 @@ public class ChunkRepositoryLeaderOnlyScanTests : ParadeDbMcpTestBase
         await using var transaction = await context.Database.BeginTransactionAsync();
         var sut = new ChunkRepository(context);
 
-        await using (await sut.LeaderOnlyScan())
-        {
-            var inside = await context
+        var inside = await sut.LeaderOnlyScan(scan =>
+            context
                 .Database.SqlQueryRaw<string>(
                     "SELECT current_setting('max_parallel_workers_per_gather') AS \"Value\""
                 )
-                .SingleAsync();
-            inside.Should().Be("0");
-        }
+                .SingleAsync(scan)
+        );
 
+        inside.Should().Be("0");
         context.Database.CurrentTransaction.Should().BeSameAs(transaction);
+        var afterwards = await context
+            .Database.SqlQueryRaw<string>(
+                "SELECT current_setting('max_parallel_workers_per_gather') AS \"Value\""
+            )
+            .SingleAsync();
+        afterwards.Should().Be("0", "a borrowed transaction keeps the setting until it ends");
     }
 
     private EquityIssuer SeedStock(string ticker, string name, string cik)

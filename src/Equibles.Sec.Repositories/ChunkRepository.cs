@@ -5,7 +5,6 @@ using Equibles.Sec.Data.Models;
 using Equibles.Sec.Data.Models.Chunks;
 using Equibles.Sec.Repositories.Extensions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
 namespace Equibles.Sec.Repositories;
@@ -135,14 +134,17 @@ public class ChunkRepository : BaseRepository<Chunk>
         var timeoutSeconds = commandTimeoutSeconds ?? HybridSearchCommandTimeoutSeconds;
         var originalTimeout = DbContext.Database.GetCommandTimeout();
         DbContext.Database.SetCommandTimeout(timeoutSeconds);
-        await using var leaderOnly = await LeaderOnlyScan(cancellationToken);
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            return await query
-                .OrderByDescending(c => EF.Functions.Score(c.Id))
-                .Take(maxResults)
-                .ToListAsync(cancellationToken);
+            return await LeaderOnlyScan(
+                scan =>
+                    query
+                        .OrderByDescending(c => EF.Functions.Score(c.Id))
+                        .Take(maxResults)
+                        .ToListAsync(scan),
+                cancellationToken
+            );
         }
         catch (Exception exception)
             when (exception is not OperationCanceledException
@@ -168,43 +170,39 @@ public class ChunkRepository : BaseRepository<Chunk>
 
     public const string LeaderOnlyScanSql = "SET LOCAL max_parallel_workers_per_gather = 0";
 
-    // Every @@@ scan runs on the leader alone: a pg_search 0.24.0 parallel worker aborted
-    // mid-scan and crash-restarted the whole Postgres (2026-09-20), and a scoped search's
-    // semi-join bypasses paradedb.min_rows_per_worker, so this clamp is the only lever.
-    // A read-only scope: an owned transaction rolls back on dispose and SET LOCAL reverts
-    // with it; inside a caller's transaction the setting lasts until that one ends.
-    public virtual async Task<IAsyncDisposable> LeaderOnlyScan(
+    // Runs one @@@ statement on the leader alone: a pg_search parallel worker that aborts
+    // crash-restarts the whole Postgres, and a scoped search's semi-join bypasses
+    // paradedb.min_rows_per_worker. The owned transaction goes through the context's execution
+    // strategy because a retrying strategy refuses a user-initiated one, and it rolls back so
+    // SET LOCAL reverts; inside a caller's transaction the setting lasts until that one ends.
+    public virtual async Task<T> LeaderOnlyScan<T>(
+        Func<CancellationToken, Task<T>> scan,
         CancellationToken cancellationToken = default
     )
     {
         if (DbContext == null || !DbContext.Database.IsNpgsql())
-            return LeaderOnlyScope.Inert;
-        var ownedTransaction =
-            DbContext.Database.CurrentTransaction == null
-                ? await DbContext.Database.BeginTransactionAsync(cancellationToken)
-                : null;
-        try
+            return await scan(cancellationToken);
+        if (DbContext.Database.CurrentTransaction != null)
         {
             await DbContext.Database.ExecuteSqlRawAsync(LeaderOnlyScanSql, cancellationToken);
+            return await scan(cancellationToken);
         }
-        catch
-        {
-            if (ownedTransaction != null)
-                await ownedTransaction.DisposeAsync();
-            throw;
-        }
-        return new LeaderOnlyScope(ownedTransaction);
-    }
 
-    private sealed class LeaderOnlyScope(IDbContextTransaction ownedTransaction) : IAsyncDisposable
-    {
-        public static readonly LeaderOnlyScope Inert = new(null);
-
-        public async ValueTask DisposeAsync()
-        {
-            if (ownedTransaction != null)
-                await ownedTransaction.DisposeAsync();
-        }
+        var strategy = DbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(
+            async operationCancellationToken =>
+            {
+                await using var transaction = await DbContext.Database.BeginTransactionAsync(
+                    operationCancellationToken
+                );
+                await DbContext.Database.ExecuteSqlRawAsync(
+                    LeaderOnlyScanSql,
+                    operationCancellationToken
+                );
+                return await scan(operationCancellationToken);
+            },
+            cancellationToken
+        );
     }
 
     // Bounded degrade for a SCOPED search whose ParadeDB pass timed out. A ticker or a document id
