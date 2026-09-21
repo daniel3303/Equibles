@@ -1,4 +1,5 @@
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.Data.Enums;
 
 namespace Equibles.Sec.FinancialFacts.Data;
 
@@ -9,6 +10,31 @@ namespace Equibles.Sec.FinancialFacts.Data;
 /// </summary>
 public static class FinancialFactSourcePriority
 {
+    public static bool IsAnnualPeriodicForm(DocumentType form) =>
+        form == DocumentType.TenK
+        || form == DocumentType.TenKa
+        || form == DocumentType.TwentyF
+        || form == DocumentType.TwentyFa
+        || form == DocumentType.FortyF
+        || form == DocumentType.FortyFa;
+
+    public static bool IsInterimPeriodicForm(DocumentType form) =>
+        form == DocumentType.TenQ || form == DocumentType.TenQa;
+
+    public static int StatementRank(DocumentType form, SecFiscalPeriod fiscalPeriod)
+    {
+        if (fiscalPeriod == SecFiscalPeriod.FullYear)
+        {
+            if (IsAnnualPeriodicForm(form))
+                return 0;
+            if (IsInterimPeriodicForm(form))
+                return 1;
+            return Rank(form) + 1;
+        }
+
+        return Rank(form);
+    }
+
     public static int Rank(DocumentType form)
     {
         if (

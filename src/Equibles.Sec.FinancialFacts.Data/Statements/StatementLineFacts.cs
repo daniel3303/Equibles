@@ -241,7 +241,7 @@ public static class StatementLineFacts
 
         return candidates
             .OrderByDescending(f => f.PeriodEnd)
-            .ThenBy(f => FinancialFactSourcePriority.Rank(f.Form))
+            .ThenBy(f => FinancialFactSourcePriority.StatementRank(f.Form, fiscalPeriod))
             .ThenByDescending(f => f.FiledDate)
             .ThenByDescending(f => f.AccessionNumber)
             .FirstOrDefault();
@@ -262,6 +262,55 @@ public static class StatementLineFacts
             .Select(g => new { ConceptId = g.Key, Fact = PickCurrentlyReported(g, fiscalPeriod) })
             .Where(x => x.Fact != null)
             .ToDictionary(x => x.ConceptId, x => x.Fact!);
+    }
+
+    /// <summary>
+    /// Removes a dimensionless full-year value reported by an interim filing when the annual
+    /// filing reports one different value for the exact concept, unit and span only through a
+    /// dimension-qualified context. Neither value proves a consolidated total, so statement
+    /// surfaces fail closed instead of publishing the later interim value as annual.
+    /// </summary>
+    public static List<FinancialFact> RejectAmbiguousInterimAnnualFacts(
+        IReadOnlyCollection<FinancialFact> renderableFacts,
+        IReadOnlyCollection<FinancialFact> allEvidence,
+        SecFiscalPeriod fiscalPeriod
+    )
+    {
+        if (fiscalPeriod != SecFiscalPeriod.FullYear)
+            return renderableFacts.ToList();
+
+        var rejected = renderableFacts
+            .Where(f =>
+                string.IsNullOrEmpty(f.DimensionsKey)
+                && FinancialFactSourcePriority.IsInterimPeriodicForm(f.Form)
+                && MeasuresGranularity(f, fiscalPeriod)
+            )
+            .Where(candidate =>
+            {
+                var annualEvidence = allEvidence
+                    .Where(f =>
+                        f.FinancialConceptId == candidate.FinancialConceptId
+                        && f.Unit == candidate.Unit
+                        && f.PeriodStart == candidate.PeriodStart
+                        && f.PeriodEnd == candidate.PeriodEnd
+                        && FinancialFactSourcePriority.IsAnnualPeriodicForm(f.Form)
+                    )
+                    .ToList();
+
+                if (annualEvidence.Any(f => string.IsNullOrEmpty(f.DimensionsKey)))
+                    return false;
+
+                var dimensionalValues = annualEvidence
+                    .Where(f => !string.IsNullOrEmpty(f.DimensionsKey))
+                    .Select(f => f.Value)
+                    .Distinct()
+                    .Take(2)
+                    .ToList();
+                return dimensionalValues.Count == 1 && dimensionalValues[0] != candidate.Value;
+            })
+            .ToHashSet();
+
+        return renderableFacts.Where(f => !rejected.Contains(f)).ToList();
     }
 
     /// <summary>
