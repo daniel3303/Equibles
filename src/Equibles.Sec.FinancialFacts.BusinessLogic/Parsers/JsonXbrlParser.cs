@@ -61,10 +61,11 @@ public class JsonXbrlParser
             if (parsed != null)
                 result.Add(parsed);
         }
+        var indexedPeriodEnd = requiredPeriodEnd.GetValueOrDefault();
         if (
             requiredPeriodEnd.HasValue
             && result.Any(fact =>
-                fact.ConsolidatedLei == requiredIssuer && fact.PeriodEnd > requiredPeriodEnd.Value
+                fact.ConsolidatedLei == requiredIssuer && fact.PeriodEnd > indexedPeriodEnd
             )
         )
             throw new InvalidDataException(
@@ -87,7 +88,7 @@ public class JsonXbrlParser
         if (
             requiredPeriodEnd.HasValue
             && !resolved.Any(fact =>
-                fact.ConsolidatedLei == requiredIssuer && fact.PeriodEnd == requiredPeriodEnd.Value
+                fact.ConsolidatedLei == requiredIssuer && fact.PeriodEnd == indexedPeriodEnd
             )
         )
             throw new InvalidDataException(
