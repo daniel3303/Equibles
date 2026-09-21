@@ -1,0 +1,37 @@
+{
+  "documentInfo": {
+    "documentType": "https://xbrl.org/2021/xbrl-json",
+    "features": { "xbrl:canonicalValues": true },
+    "namespaces": {
+      "ctt": "http://ctt.pt/20221231",
+      "ifrs-full": "http://xbrl.ifrs.org/taxonomy/2021-03-24/ifrs-full",
+      "iso4217": "http://www.xbrl.org/2003/iso4217",
+      "scheme": "http://standards.iso.org/iso/17442",
+      "xbrl": "https://xbrl.org/2021",
+      "xbrli": "http://www.xbrl.org/2003/instance"
+    },
+    "taxonomy": [ "http://ctt.pt/20221231/002367-2022-12-31.xsd" ]
+  },
+  "facts": {
+    "f-3": {
+      "value": "6327424",
+      "decimals": 0,
+      "dimensions": {
+        "concept": "ifrs-full:InvestmentPropertyCompleted",
+        "entity": "scheme:529900G4A1IKOKC22K56",
+        "period": "2022-01-01T00:00:00",
+        "unit": "iso4217:EUR"
+      }
+    },
+    "f-4": {
+      "value": "6183979",
+      "decimals": 0,
+      "dimensions": {
+        "concept": "ifrs-full:InvestmentPropertyCompleted",
+        "entity": "scheme:529900G4A1IKOKC22K56",
+        "period": "2023-01-01T00:00:00",
+        "unit": "iso4217:EUR"
+      }
+    }
+  }
+}

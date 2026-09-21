@@ -179,13 +179,25 @@ public class XbrlFactExtractionService
         {
             parsed = _standaloneParser.Parse(envelope);
         }
-        else
+        else if (document.XbrlType == XbrlType.JsonXbrl)
+        {
+            if (document.DocumentType != DocumentType.EsefAnnualReport)
+                throw new InvalidOperationException(
+                    "xBRL-JSON recovery requires an ESEF annual report."
+                );
+            parsed = new JsonXbrlParser().Parse(envelope);
+        }
+        else if (document.XbrlType is null or XbrlType.InlineIxbrl)
         {
             var result = _inlineParser.ParseEnvelope(envelope);
             parsed = result.Facts;
             // Before the numeric early-return: a filing whose numeric facts
             // are all API-covered still states the 12(b) table.
             await PersistCoverListings(document, result.CoverListings, cancellationToken);
+        }
+        else
+        {
+            throw new InvalidOperationException("Unsupported captured XBRL representation.");
         }
 
         var persistable = CollapseToNaturalKey(SelectPersistable(parsed, document));

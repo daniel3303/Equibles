@@ -21,4 +21,7 @@ public enum XbrlType
     /// </summary>
     [Display(Name = "Standalone XBRL")]
     StandaloneXbrl = 1,
+
+    [Display(Name = "xBRL-JSON")]
+    JsonXbrl = 2,
 }

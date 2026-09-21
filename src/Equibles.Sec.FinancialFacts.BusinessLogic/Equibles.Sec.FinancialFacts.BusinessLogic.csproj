@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="AngleSharp" />
+    <PackageReference Include="Newtonsoft.Json" />
     <PackageReference Include="Equibles.Core.AutoWiring" />
   </ItemGroup>
 

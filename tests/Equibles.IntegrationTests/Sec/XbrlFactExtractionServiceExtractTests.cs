@@ -349,6 +349,57 @@ public class XbrlFactExtractionServiceExtractTests : ParadeDbMcpTestBase
         consolidated.DocumentId.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("529900G4A1IKOKC22K56", 2)]
+    [InlineData("529900S21EQ1BO4ESM68", 0)]
+    public async Task Extract_CapturedJson_PersistsOnlyExactIssuerFacts(
+        string issuerLei,
+        int expected
+    )
+    {
+        var json = await System.IO.File.ReadAllTextAsync(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Esef",
+                "ctt-2022-json-excerpt.json"
+            )
+        );
+        var document = await SeedDocument(json);
+        document.DocumentType = DocumentType.EsefAnnualReport;
+        document.XbrlType = XbrlType.JsonXbrl;
+        document.ReportingForDate = new DateOnly(2022, 12, 31);
+        document.ReportingDate = new DateOnly(2023, 9, 5);
+        document.Issuer.Cik = null;
+        document.Issuer.LegalEntityIdentifier = issuerLei;
+        await DbContext.SaveChangesAsync();
+
+        (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(expected);
+        (await BuildSut().Extract(document, CancellationToken.None)).Should().Be(expected);
+
+        var facts = await DbContext
+            .Set<FinancialFact>()
+            .Where(fact => fact.EquityIssuerId == document.EquityIssuerId)
+            .OrderBy(fact => fact.PeriodEnd)
+            .ToListAsync();
+        facts.Should().HaveCount(expected);
+        if (expected == 0)
+            return;
+        facts[0].Value.Should().Be(6327424m);
+        facts[1].Value.Should().Be(6183979m);
+        facts[0].PeriodEnd.Should().Be(new DateOnly(2021, 12, 31));
+        facts[1].PeriodEnd.Should().Be(new DateOnly(2022, 12, 31));
+        facts
+            .Should()
+            .OnlyContain(fact =>
+                fact.Unit == "EUR"
+                && fact.Form == DocumentType.EsefAnnualReport
+                && fact.DocumentId == document.Id
+                && fact.DimensionsKey == ""
+                && fact.AccessionNumber == Accession
+            );
+    }
+
     private async Task<Document> SeedDocument(string envelope)
     {
         var stock = new EquityIssuer

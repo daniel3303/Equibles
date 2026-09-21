@@ -27,6 +27,8 @@ public class EsefReportImportServiceTests
 {
     private const string Lei = "529900S21EQ1BO4ESM68";
     private const string SecondLei = "259400NFU8A8SBP6VC21";
+    private const string LatestFrenchJson =
+        "/529900S21EQ1BO4ESM68/2025-12-31/ESEF/FR/0/529900S21EQ1BO4ESM68-2025-12-31-1-fr.json";
     private const string LatestFrenchReport =
         "/529900S21EQ1BO4ESM68/2025-12-31/ESEF/FR/0/529900S21EQ1BO4ESM68-2025-12-31-1-fr/reports/529900S21EQ1BO4ESM68-2025-12-31-1-fr.xhtml";
     private const string LatestBritishReport =
@@ -213,7 +215,9 @@ public class EsefReportImportServiceTests
             new EsefOversizedReport
             {
                 Reference = "529900S21EQ1BO4ESM68-20251231-FR",
-                SourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                SourceUrl = "https://filings.xbrl.org" + LatestFrenchJson,
+                HtmlSourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                HtmlCeilingBytes = EsefReportImportService.MaxReportBytes,
                 CeilingBytes = EsefReportImportService.MaxReportBytes,
                 RefusedAt = DateTime.UtcNow,
             }
@@ -552,7 +556,9 @@ public class EsefReportImportServiceTests
             new EsefOversizedReport
             {
                 Reference = "529900S21EQ1BO4ESM68-20251231-FR",
-                SourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                SourceUrl = "https://filings.xbrl.org" + LatestFrenchJson,
+                HtmlSourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                HtmlCeilingBytes = EsefReportImportService.MaxReportBytes,
                 CeilingBytes = EsefReportImportService.MaxReportBytes,
                 RefusedAt = DateTime.UtcNow,
             }
@@ -627,6 +633,189 @@ public class EsefReportImportServiceTests
         XbrlCaptureStatus ReportedStatements
     );
 
+    [Fact]
+    public async Task Import_OversizedHtml_RecoversSourceJsonOnTheNextCycleWithoutRefetchingHtml()
+    {
+        var json = JsonReport();
+        var harness = await Harness.Create(Issuer("FR"), jsonReport: json);
+        harness.Handler.OverstatedContentLength = 200_000_000;
+        harness.Handler.OverstatedPaths.Add(LatestFrenchReport);
+        await harness.Service.Import(CancellationToken.None);
+        harness.Saved.Should().BeEmpty();
+        harness.Handler.Requests.Clear();
+
+        await harness.Service.Import(CancellationToken.None);
+
+        var saved = harness.Saved.Should().ContainSingle().Subject;
+        saved.Xbrl.Type.Should().Be(XbrlType.JsonXbrl);
+        saved.Xbrl.RawBytes.Should().Equal(System.Text.Encoding.UTF8.GetBytes(json));
+        saved.SourceUrl.Should().Be("https://filings.xbrl.org" + LatestFrenchJson);
+        saved.Content.Should().BeEmpty();
+        saved.AccessionNumber.Should().Be("529900S21EQ1BO4ESM68-20251231-FR");
+        harness
+            .Handler.Requests.Select(uri => uri.AbsolutePath)
+            .Should()
+            .Contain(LatestFrenchJson)
+            .And.NotContain(LatestFrenchReport);
+        (await harness.Context.Set<EsefOversizedReport>().CountAsync()).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("malformed")]
+    [InlineData("wrong-issuer")]
+    [InlineData("wrong-period")]
+    [InlineData("comparative-only-period")]
+    [InlineData("conflicting-current-facts")]
+    public async Task Import_UnusableJson_PreservesRetryAndOriginalRefusal(string failure)
+    {
+        var json =
+            failure == "malformed"
+                ? "<html>unavailable</html>"
+                : JsonReport().Replace(Lei, SecondLei);
+        if (failure == "wrong-period")
+            json = JsonReport().Replace("2026-01-01T00:00:00", "2024-01-01T00:00:00");
+        if (failure == "comparative-only-period")
+            json = JsonReport().Replace("2025-01-01T00:00:00", "2027-01-01T00:00:00");
+        if (failure == "conflicting-current-facts")
+            json = JsonReport().Replace("2025-01-01T00:00:00", "2026-01-01T00:00:00");
+        var harness = await Harness.Create(Issuer("FR"), jsonReport: json);
+        await SeedHtmlRefusal(harness);
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().BeEmpty();
+        (await harness.Context.Set<EsefOversizedReport>().SingleAsync())
+            .SourceUrl.Should()
+            .EndWith(LatestFrenchReport);
+        harness
+            .Handler.Requests.Select(uri => uri.AbsolutePath)
+            .Should()
+            .Contain(LatestFrenchJson)
+            .And.NotContain(LatestFrenchReport);
+    }
+
+    [Fact]
+    public async Task Import_OversizedJson_RemembersTheRepresentationAndDoesNotFetchEitherAgain()
+    {
+        var harness = await Harness.Create(Issuer("FR"), jsonReport: JsonReport());
+        await SeedHtmlRefusal(harness);
+        harness.Handler.OverstatedContentLength = 200_000_000;
+        harness.Handler.OverstatedPaths.Add(LatestFrenchJson);
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().BeEmpty();
+        (await harness.Context.Set<EsefOversizedReport>().SingleAsync())
+            .SourceUrl.Should()
+            .EndWith(LatestFrenchJson);
+        harness.Handler.Requests.Clear();
+        await harness.Service.Import(CancellationToken.None);
+        harness
+            .Handler.Requests.Select(uri => uri.AbsolutePath)
+            .Should()
+            .NotContain(LatestFrenchJson)
+            .And.NotContain(LatestFrenchReport);
+    }
+
+    [Fact]
+    public async Task Import_ChangedJsonAddress_DoesNotForgetTheUnchangedHtmlRefusal()
+    {
+        var changedJson = LatestFrenchJson.Replace("-1-fr.json", "-2-fr.json");
+        var harness = await Harness.Create(
+            Issuer("FR"),
+            rewriteIndex: index => index.Replace(LatestFrenchJson, changedJson),
+            jsonReport: JsonReport()
+        );
+        harness.Context.Add(
+            new EsefOversizedReport
+            {
+                Reference = "529900S21EQ1BO4ESM68-20251231-FR",
+                SourceUrl = "https://filings.xbrl.org" + LatestFrenchJson,
+                CeilingBytes = EsefReportImportService.MaxReportBytes,
+                HtmlSourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                HtmlCeilingBytes = EsefReportImportService.MaxReportBytes,
+                RefusedAt = DateTime.UtcNow,
+            }
+        );
+        await harness.Context.SaveChangesAsync();
+
+        await harness.Service.Import(CancellationToken.None);
+
+        harness.Saved.Should().ContainSingle().Which.SourceUrl.Should().EndWith(changedJson);
+        harness
+            .Handler.Requests.Select(uri => uri.AbsolutePath)
+            .Should()
+            .Contain(changedJson)
+            .And.NotContain(LatestFrenchReport)
+            .And.NotContain(LatestFrenchJson);
+    }
+
+    [Fact]
+    public async Task Import_OversizedReplacementHtml_PreservesTheUnchangedJsonRefusal()
+    {
+        var changedHtml = LatestFrenchReport.Replace("-1-fr.xhtml", "-2-fr.xhtml");
+        var harness = await Harness.Create(
+            Issuer("FR"),
+            rewriteIndex: index => index.Replace(LatestFrenchReport, changedHtml),
+            jsonReport: JsonReport()
+        );
+        harness.Context.Add(
+            new EsefOversizedReport
+            {
+                Reference = "529900S21EQ1BO4ESM68-20251231-FR",
+                SourceUrl = "https://filings.xbrl.org" + LatestFrenchJson,
+                CeilingBytes = EsefReportImportService.MaxReportBytes,
+                HtmlSourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                HtmlCeilingBytes = EsefReportImportService.MaxReportBytes,
+                RefusedAt = DateTime.UtcNow,
+            }
+        );
+        await harness.Context.SaveChangesAsync();
+        harness.Handler.OverstatedContentLength = 200_000_000;
+        harness.Handler.OverstatedPaths.Add(changedHtml);
+
+        await harness.Service.Import(CancellationToken.None);
+
+        var refusal = await harness.Context.Set<EsefOversizedReport>().SingleAsync();
+        refusal.SourceUrl.Should().EndWith(LatestFrenchJson);
+        refusal.HtmlSourceUrl.Should().EndWith(changedHtml);
+        harness.Handler.Requests.Clear();
+        await harness.Service.Import(CancellationToken.None);
+        harness
+            .Handler.Requests.Select(uri => uri.AbsolutePath)
+            .Should()
+            .NotContain(LatestFrenchJson)
+            .And.NotContain(changedHtml)
+            .And.NotContain(LatestFrenchReport);
+    }
+
+    private static string JsonReport() =>
+        File.ReadAllText(
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "TestAssets",
+                    "Esef",
+                    "ctt-2022-json-excerpt.json"
+                )
+            )
+            .Replace("529900G4A1IKOKC22K56", Lei)
+            .Replace("2022-01-01T00:00:00", "2025-01-01T00:00:00")
+            .Replace("2023-01-01T00:00:00", "2026-01-01T00:00:00");
+
+    private static async Task SeedHtmlRefusal(Harness harness)
+    {
+        harness.Context.Add(
+            new EsefOversizedReport
+            {
+                Reference = "529900S21EQ1BO4ESM68-20251231-FR",
+                SourceUrl = "https://filings.xbrl.org" + LatestFrenchReport,
+                CeilingBytes = EsefReportImportService.MaxReportBytes,
+                RefusedAt = DateTime.UtcNow,
+            }
+        );
+        await harness.Context.SaveChangesAsync();
+    }
+
     private sealed class Harness
     {
         public EquiblesFinancialDbContext Context { get; private init; }
@@ -664,7 +853,8 @@ public class EsefReportImportServiceTests
             bool saveThrows = false,
             Func<string, string> rewriteIndex = null,
             EquityIssuer second = null,
-            bool splitAcrossPages = false
+            bool splitAcrossPages = false,
+            string jsonReport = null
         )
         {
             var context = NewDb();
@@ -705,7 +895,11 @@ public class EsefReportImportServiceTests
                     .Read(index, new Uri("https://filings.xbrl.org"))
                     .Filings
             )
+            {
                 bodies[filing.ReportUrl.PathAndQuery] = reportText;
+                if (jsonReport != null && filing.JsonUrl != null)
+                    bodies[filing.JsonUrl.PathAndQuery] = jsonReport;
+            }
             for (var page = 1; page <= pages.Count; page++)
             {
                 bodies[
