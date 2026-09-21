@@ -8,7 +8,15 @@
 - Future receipt dates are excluded before selection and cannot become stored filing dates.
 - Select one report per source-stated annual period, newest first, using the existing deterministic country and validation ordering.
 - Capture at most one missing period per issuer per cycle; issuers missing their latest report take priority over historical backfill.
-- Stored reports and remembered size refusals do not block earlier periods or consume download budget.
+- Stored reports and terminal size refusals do not block earlier periods or consume download budget.
+- An HTML size refusal makes the index's exact `json_url` eligible on the next cycle; the refused HTML is not downloaded again.
+- Both representations retain the 50 MiB ceiling and shared host pacing; a JSON size refusal closes that filing until its representation or ceiling changes.
+- Preserve the HTML URL and ceiling independently when recording a JSON refusal; a changed JSON URL must not redownload unchanged oversized HTML.
+- Require conflict-free facts at the indexed period and reject later supported issuer periods; a comparative alone cannot validate a misaddressed report.
+- JSON capture retains the original bytes and source URL, with no invented retrieval text; unsupported or mismatched issuer/period evidence stays retryable.
+- Structured recovery publishes only unqualified standard IFRS facts with an exact ISO 17442 issuer identity; dimensional, custom, unsupported numeric and timezone-bearing period shapes remain unavailable.
+- xBRL-JSON values are already scaled; `decimals` describes precision, and midnight instant/end timestamps map to the preceding inclusive calendar date.
+- Recovery is recurring reconciliation, not a one-time script; no extraction-version bump replays already captured HTML documents.
 - Initialize missing fiscal-calendar metadata from the latest indexed annual period, never from an older backfill report.
 - Historical ingestion is recurring reconciliation: subsequent cycles discover missing periods, and a fully captured issuer makes no report requests.
 - Capturing an XBRL envelope queues existing financial-fact extraction; capture counts alone do not prove published financial coverage.

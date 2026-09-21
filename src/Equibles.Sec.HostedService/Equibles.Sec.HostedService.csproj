@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Equibles.Core\Equibles.Core.csproj" />
     <ProjectReference Include="..\Equibles.Sec.BusinessLogic\Equibles.Sec.BusinessLogic.csproj" />
+    <ProjectReference Include="..\Equibles.Sec.FinancialFacts.BusinessLogic\Equibles.Sec.FinancialFacts.BusinessLogic.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.Sec\Equibles.Integrations.Sec.csproj" />
     <ProjectReference Include="..\Equibles.Integrations.XbrlFilings\Equibles.Integrations.XbrlFilings.csproj" />
     <ProjectReference Include="..\Equibles.CommonStocks.BusinessLogic\Equibles.CommonStocks.BusinessLogic.csproj" />

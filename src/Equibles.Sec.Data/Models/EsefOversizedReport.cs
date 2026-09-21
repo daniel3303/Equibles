@@ -28,5 +28,10 @@ public class EsefOversizedReport
     /// <summary>The ceiling in force when the report was refused, in bytes.</summary>
     public int CeilingBytes { get; set; }
 
+    [MaxLength(1000)]
+    public string HtmlSourceUrl { get; set; }
+
+    public int? HtmlCeilingBytes { get; set; }
+
     public DateTime RefusedAt { get; set; }
 }

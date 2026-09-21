@@ -6,6 +6,7 @@ using Equibles.Integrations.XbrlFilings;
 using Equibles.Integrations.XbrlFilings.Models;
 using Equibles.Sec.BusinessLogic;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 using Equibles.Sec.HostedService.Configuration;
 using Equibles.Sec.HostedService.Contracts;
 using Equibles.Sec.HostedService.Models;
@@ -89,7 +90,7 @@ public class EsefReportImportService(
             if (latest == null)
                 return true;
             var latestReference = EsefFilingSelection.FilingReference(latest);
-            return stored.Contains(latestReference) || refusals.Terminal.Contains(latestReference);
+            return stored.Contains(latestReference) || CaptureAddress(latest, refusals) == null;
         });
         foreach (var (lei, issuer) in orderedIssuers)
         {
@@ -112,15 +113,11 @@ public class EsefReportImportService(
             }
             var filing = history.FirstOrDefault(candidate =>
                 !stored.Contains(EsefFilingSelection.FilingReference(candidate))
-                && !refusals.Terminal.Contains(EsefFilingSelection.FilingReference(candidate))
+                && CaptureAddress(candidate, refusals) != null
             );
             if (filing == null)
             {
-                if (
-                    history.Any(candidate =>
-                        refusals.Terminal.Contains(EsefFilingSelection.FilingReference(candidate))
-                    )
-                )
+                if (history.Any(candidate => CaptureAddress(candidate, refusals) == null))
                     refusedBefore++;
                 else
                     upToDate++;
@@ -135,6 +132,7 @@ public class EsefReportImportService(
                         filing,
                         history[0].PeriodEnd.Value,
                         reference,
+                        CaptureAddress(filing, refusals),
                         cancellationToken
                     )
                 )
@@ -143,7 +141,7 @@ public class EsefReportImportService(
                         captured++;
                         // A report refused under a lower ceiling and stored under this one leaves a row
                         // that contradicts the document, so it is cleared rather than kept.
-                        if (refusals.Any.Contains(reference))
+                        if (refusals.ContainsKey(reference))
                             await ForgetOversized(reference);
                         break;
                     case EsefCaptureOutcome.Refused:
@@ -237,19 +235,43 @@ public class EsefReportImportService(
         return new HashSet<string>(references, StringComparer.OrdinalIgnoreCase);
     }
 
-    private async Task<RefusalSets> LoadRefusals(CancellationToken cancellationToken)
+    private async Task<Dictionary<string, EsefOversizedReport>> LoadRefusals(
+        CancellationToken cancellationToken
+    )
     {
-        var rows = await oversizedRepository.GetRefusals().ToListAsync(cancellationToken);
-        return new RefusalSets(
-            new HashSet<string>(
-                rows.Select(row => row.Reference),
-                StringComparer.OrdinalIgnoreCase
-            ),
-            new HashSet<string>(
-                rows.Where(row => row.CeilingBytes >= MaxReportBytes).Select(row => row.Reference),
-                StringComparer.OrdinalIgnoreCase
+        var rows = await oversizedRepository.GetAll().AsNoTracking().ToListAsync(cancellationToken);
+        return rows.ToDictionary(row => row.Reference, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static Uri CaptureAddress(
+        XbrlFiling filing,
+        IReadOnlyDictionary<string, EsefOversizedReport> refusals
+    )
+    {
+        var reference = EsefFilingSelection.FilingReference(filing);
+        if (!refusals.TryGetValue(reference, out var refusal))
+            return filing.ReportUrl;
+        var htmlRefused =
+            (
+                refusal.HtmlSourceUrl == filing.ReportUrl.ToString()
+                && refusal.HtmlCeilingBytes >= MaxReportBytes
             )
-        );
+            || (
+                refusal.SourceUrl == filing.ReportUrl.ToString()
+                && refusal.CeilingBytes >= MaxReportBytes
+            );
+        if (!htmlRefused)
+            return filing.ReportUrl;
+        if (
+            filing.JsonUrl == null
+            || filing.JsonUrl == filing.ReportUrl
+            || (
+                refusal.SourceUrl == filing.JsonUrl.ToString()
+                && refusal.CeilingBytes >= MaxReportBytes
+            )
+        )
+            return null;
+        return filing.JsonUrl;
     }
 
     /// <summary>
@@ -316,10 +338,12 @@ public class EsefReportImportService(
         XbrlFiling filing,
         DateOnly latestPeriodEnd,
         string reference,
+        Uri captureAddress,
         CancellationToken cancellationToken
     )
     {
-        var sourceUrl = filing.ReportUrl.ToString();
+        var sourceUrl = captureAddress.ToString();
+        var isJson = captureAddress == filing.JsonUrl && captureAddress != filing.ReportUrl;
         if (sourceUrl.Length > MaxSourceUrlLength)
         {
             logger.LogWarning(
@@ -346,7 +370,7 @@ public class EsefReportImportService(
         SameOriginPayload payload;
         try
         {
-            payload = await client.GetReport(filing.ReportUrl, MaxReportBytes, cancellationToken);
+            payload = await client.GetReport(captureAddress, MaxReportBytes, cancellationToken);
         }
         // Only the ceiling, which is a property of the report rather than a fault. An off-origin address or
         // a redirect off the origin stays a failure, because it is a reason to re-verify the source.
@@ -359,14 +383,23 @@ public class EsefReportImportService(
                 reference,
                 MaxReportBytes
             );
-            await RememberOversized(reference, sourceUrl);
+            await RememberOversized(reference, sourceUrl, isJson);
             return EsefCaptureOutcome.Refused;
         }
 
         var report = payload.Bytes;
         var html = SameOriginTextReader.Decode(payload.CharSet, report);
-        var content = EsefReportContent.Build(html, normalizer, converter);
-        if (content.Length == 0)
+        byte[] content;
+        if (isJson)
+        {
+            new JsonXbrlParser().Parse(html, candidate.LegalEntityIdentifier, filing.PeriodEnd);
+            content = [];
+        }
+        else
+        {
+            content = EsefReportContent.Build(html, normalizer, converter);
+        }
+        if (!isJson && content.Length == 0)
         {
             logger.LogWarning(
                 "The European annual report {Reference} is stored with no retrieval text: its readable "
@@ -393,7 +426,11 @@ public class EsefReportImportService(
             periodEnd,
             sourceUrl,
             reference,
-            xbrl: XbrlCaptureResult.Captured(XbrlType.InlineIxbrl, reference, report),
+            xbrl: XbrlCaptureResult.Captured(
+                isJson ? XbrlType.JsonXbrl : XbrlType.InlineIxbrl,
+                reference,
+                report
+            ),
             // A European report has no SEC rendering of its statements, so the capture lane that fetches
             // those is told there is nothing to fetch rather than left to discover it against EDGAR.
             reportedStatements: XbrlCaptureStatus.NotPresent,
@@ -407,7 +444,7 @@ public class EsefReportImportService(
     /// that ceiling stands. Written before the pass moves on, because one scoped context serves the whole
     /// pass and the next issuer clears the change tracker.
     /// </summary>
-    private async Task RememberOversized(string reference, string sourceUrl)
+    private async Task RememberOversized(string reference, string sourceUrl, bool isJson)
     {
         var existing = await oversizedRepository.Get(reference);
         if (existing == null)
@@ -418,6 +455,8 @@ public class EsefReportImportService(
                     Reference = reference,
                     SourceUrl = sourceUrl,
                     CeilingBytes = MaxReportBytes,
+                    HtmlSourceUrl = isJson ? null : sourceUrl,
+                    HtmlCeilingBytes = isJson ? null : MaxReportBytes,
                     RefusedAt = DateTime.UtcNow,
                 }
             );
@@ -425,8 +464,25 @@ public class EsefReportImportService(
         else
         {
             // Already tracked by the read above, so the change is saved without re-marking the row.
-            existing.SourceUrl = sourceUrl;
-            existing.CeilingBytes = MaxReportBytes;
+            var preserveJsonRefusal =
+                !isJson
+                && existing.HtmlSourceUrl != null
+                && existing.SourceUrl != existing.HtmlSourceUrl;
+            if (isJson && existing.HtmlSourceUrl == null)
+            {
+                existing.HtmlSourceUrl = existing.SourceUrl;
+                existing.HtmlCeilingBytes = existing.CeilingBytes;
+            }
+            else if (!isJson)
+            {
+                existing.HtmlSourceUrl = sourceUrl;
+                existing.HtmlCeilingBytes = MaxReportBytes;
+            }
+            if (!preserveJsonRefusal)
+            {
+                existing.SourceUrl = sourceUrl;
+                existing.CeilingBytes = MaxReportBytes;
+            }
             existing.RefusedAt = DateTime.UtcNow;
         }
         await oversizedRepository.SaveChanges();
@@ -485,10 +541,6 @@ public class EsefReportImportService(
         /// <summary>Nothing was fetched and nothing decided, so the next cycle looks at the filing again.</summary>
         Skipped,
     }
-
-    // Every refusal on record, and the subset refused at or above the ceiling now in force: the first
-    // decides whether a stored report leaves a stale row behind, the second whether to fetch at all.
-    private sealed record RefusalSets(HashSet<string> Any, HashSet<string> Terminal);
 
     internal record EsefCandidateIssuer(
         Guid Id,

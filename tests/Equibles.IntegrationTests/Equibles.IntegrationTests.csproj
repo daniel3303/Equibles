@@ -11,6 +11,11 @@
 
   <ItemGroup>
     <Content
+      Include="../Equibles.UnitTests/TestAssets/Esef/ctt-2022-json-excerpt.json"
+      Link="TestAssets/Esef/ctt-2022-json-excerpt.json"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
       Include="../Equibles.UnitTests/TestAssets/InsiderTrading/InvalidDates/oprx.xml"
       Link="TestAssets/oprx-invalid-dates.xml"
       CopyToOutputDirectory="PreserveNewest"
