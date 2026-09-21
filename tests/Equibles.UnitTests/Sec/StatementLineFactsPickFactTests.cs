@@ -1,6 +1,7 @@
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Data.Statements;
+using Equibles.Sec.Data.Models;
 
 namespace Equibles.UnitTests.Sec;
 
@@ -254,4 +255,94 @@ public class StatementLineFactsPickFactTests
             .Should()
             .BeNull("a cumulative fact must never appear as one discrete quarter");
     }
+
+    [Fact]
+    public void PickCurrentlyReported_FullYearPrefersAnnualFilingOverLaterInterimFiling()
+    {
+        var annual = AnnualFact(619m, DocumentType.TenK, "annual");
+        var interim = AnnualFact(319m, DocumentType.TenQ, "interim");
+        interim.FiledDate = annual.FiledDate.AddMonths(6);
+
+        StatementLineFacts
+            .PickCurrentlyReported([interim, annual], SecFiscalPeriod.FullYear)
+            .Should()
+            .BeSameAs(annual);
+    }
+
+    [Fact]
+    public void PickCurrentlyReported_FullYearPrefersInterimFilingOverLaterCurrentReport()
+    {
+        var interim = AnnualFact(319m, DocumentType.TenQ, "interim");
+        var currentReport = AnnualFact(999m, DocumentType.EightK, "current-report");
+        currentReport.FiledDate = interim.FiledDate.AddMonths(1);
+
+        StatementLineFacts
+            .PickCurrentlyReported([currentReport, interim], SecFiscalPeriod.FullYear)
+            .Should()
+            .BeSameAs(interim);
+    }
+
+    [Fact]
+    public void RejectAmbiguousInterimAnnualFacts_OneConflictingDimensionalAnnualValue_RejectsInterimValue()
+    {
+        var interim = AnnualFact(319m, DocumentType.TenQ, "interim");
+        var dimensionalAnnual = AnnualFact(619m, DocumentType.TenK, "annual-dimensional");
+        dimensionalAnnual.DimensionsKey = "dimension-key";
+
+        var result = StatementLineFacts.RejectAmbiguousInterimAnnualFacts(
+            [interim],
+            [interim, dimensionalAnnual],
+            SecFiscalPeriod.FullYear
+        );
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RejectAmbiguousInterimAnnualFacts_ConsolidatedAnnualValueExists_KeepsInterimEvidence()
+    {
+        var interim = AnnualFact(319m, DocumentType.TenQ, "interim");
+        var annual = AnnualFact(619m, DocumentType.TenK, "annual");
+
+        var result = StatementLineFacts.RejectAmbiguousInterimAnnualFacts(
+            [interim, annual],
+            [interim, annual],
+            SecFiscalPeriod.FullYear
+        );
+
+        result.Should().Equal(interim, annual);
+    }
+
+    [Fact]
+    public void RejectAmbiguousInterimAnnualFacts_MultipleDimensionalAnnualValues_KeepsInterimValue()
+    {
+        var interim = AnnualFact(319m, DocumentType.TenQ, "interim");
+        var first = AnnualFact(619m, DocumentType.TenK, "first");
+        first.DimensionsKey = "first-dimension";
+        var second = AnnualFact(300m, DocumentType.TenK, "second");
+        second.DimensionsKey = "second-dimension";
+
+        var result = StatementLineFacts.RejectAmbiguousInterimAnnualFacts(
+            [interim],
+            [interim, first, second],
+            SecFiscalPeriod.FullYear
+        );
+
+        result.Should().ContainSingle().Which.Should().BeSameAs(interim);
+    }
+
+    private static FinancialFact AnnualFact(decimal value, DocumentType form, string accession) =>
+        new()
+        {
+            FinancialConceptId = Guid.Parse("3d04a0cf-6b33-4efd-b76c-d8d824495a3b"),
+            Unit = "USD",
+            Value = value,
+            PeriodType = FactPeriodType.Duration,
+            PeriodStart = new DateOnly(2025, 1, 1),
+            PeriodEnd = new DateOnly(2025, 12, 31),
+            FiscalPeriod = SecFiscalPeriod.FullYear,
+            Form = form,
+            FiledDate = new DateOnly(2026, 2, 18),
+            AccessionNumber = accession,
+        };
 }

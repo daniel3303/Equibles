@@ -9,6 +9,7 @@ using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models.Responses;
 using Equibles.Sec.Data.Models;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
+using Equibles.Sec.FinancialFacts.Data;
 using Equibles.Sec.FinancialFacts.Data.Enums;
 using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.FinancialFacts.Repositories;
@@ -641,12 +642,7 @@ public class FinancialFactsImportService
     }
 
     internal static bool IsAnnualPeriodicForm(DocumentType form) =>
-        form == DocumentType.TenK
-        || form == DocumentType.TenKa
-        || form == DocumentType.TwentyF
-        || form == DocumentType.TwentyFa
-        || form == DocumentType.FortyF
-        || form == DocumentType.FortyFa;
+        FinancialFactSourcePriority.IsAnnualPeriodicForm(form);
 
     // The CIK set one facts import reads: primary first, then every attached
     // secondary. Distinct because the subsidiary-attach path writes SEC's value

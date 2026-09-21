@@ -156,9 +156,9 @@ public class FinancialStatementTools
                         )
                         : null;
 
-                var facts = balanceSheetDate is { } statedAt
+                var allEvidence = balanceSheetDate is { } statedAt
                     ? await _financialFactRepository
-                        .GetConsolidatedByIssuerId(stock.Id)
+                        .GetByIssuerId(stock.Id)
                         .Where(f =>
                             conceptIds.Contains(f.FinancialConceptId)
                             && f.PeriodEnd == statedAt
@@ -166,7 +166,7 @@ public class FinancialStatementTools
                         )
                         .ToListAsync()
                     : await _financialFactRepository
-                        .GetConsolidatedByIssuerId(stock.Id)
+                        .GetByIssuerId(stock.Id)
                         .Where(f =>
                             f.FiscalYear == selectedYear
                             && conceptIds.Contains(f.FinancialConceptId)
@@ -180,6 +180,13 @@ public class FinancialStatementTools
                             )
                         )
                         .ToListAsync();
+
+                var facts = allEvidence.Where(f => f.DimensionsKey == "").ToList();
+                facts = StatementLineFacts.RejectAmbiguousInterimAnnualFacts(
+                    facts,
+                    allEvidence,
+                    selectedPeriod
+                );
 
                 if (statementType != FinancialStatementType.BalanceSheet)
                 {
