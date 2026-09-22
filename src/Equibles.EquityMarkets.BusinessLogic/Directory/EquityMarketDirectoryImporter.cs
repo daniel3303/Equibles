@@ -3,6 +3,7 @@ using Equibles.CommonStocks.BusinessLogic.Directory;
 using Equibles.CommonStocks.Data.Models;
 using Equibles.CommonStocks.Repositories;
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Identity;
 using Equibles.EquityMarkets.Data.Catalog;
 using Equibles.EquityMarkets.Data.Models;
 using Equibles.EquityMarkets.Repositories;
@@ -100,6 +101,7 @@ public class EquityMarketDirectoryImporter(
                         scope.ServiceProvider,
                         source.SourceKey,
                         row,
+                        firds.Lei,
                         now,
                         cancellationToken
                     )
@@ -117,7 +119,20 @@ public class EquityMarketDirectoryImporter(
             {
                 var product = await source.Resolve(market, row, firds, attempt.Token);
                 var issuer = await gleifClient.GetIssuerForIsin(row.Isin, attempt.Token);
-                var input = CreateInput(market, source.SourceKey, row, product, firds, issuer);
+                var firdsIssuer =
+                    issuer.LegalEntityIdentifier == null
+                    && InternationalSecurityIdentifiers.IsValidLei(firds.Lei)
+                        ? await gleifClient.GetIssuerForLei(firds.Lei, attempt.Token)
+                        : null;
+                var input = CreateInput(
+                    market,
+                    source.SourceKey,
+                    row,
+                    product,
+                    firds,
+                    issuer,
+                    firdsIssuer
+                );
                 input.DirectorySnapshotId = snapshotId;
                 await identityImporter.ImportListing(input, attempt.Token);
                 result.Imported++;
@@ -166,12 +181,14 @@ public class EquityMarketDirectoryImporter(
         IServiceProvider services,
         string sourceKey,
         EquityMarketDirectoryRow row,
+        string firdsLei,
         DateTime now,
         CancellationToken cancellationToken
     )
     {
         var listings = services.GetRequiredService<EquityListingRepository>();
         var url = row.SourceUrl.AbsoluteUri;
+        var canResolveLei = InternationalSecurityIdentifiers.IsValidLei(firdsLei);
         var verified = await listings
             .GetAll()
             .AnyAsync(
@@ -181,6 +198,7 @@ public class EquityMarketDirectoryImporter(
                     && listing.MarketIdentifierCode == row.MarketIdentifierCode
                     && listing.Ticker == row.Symbol
                     && listing.Security.Isin == row.Isin
+                    && (!canResolveLei || listing.Security.Issuer.LegalEntityIdentifier != null)
                     && listing.IdentitySourceUrl == url,
                 cancellationToken
             );
@@ -200,7 +218,8 @@ public class EquityMarketDirectoryImporter(
         EquityMarketDirectoryRow row,
         EquityMarketDirectoryProduct product,
         FirdsInstrumentRecord firds,
-        GleifIssuerIdentity issuer
+        GleifIssuerIdentity issuer,
+        GleifIssuerIdentity firdsIssuer = null
     )
     {
         ArgumentNullException.ThrowIfNull(market);
@@ -208,6 +227,22 @@ public class EquityMarketDirectoryImporter(
         ArgumentNullException.ThrowIfNull(product);
         ArgumentNullException.ThrowIfNull(firds);
         ArgumentNullException.ThrowIfNull(issuer);
+        if (
+            firdsIssuer != null
+            && (
+                issuer.LegalEntityIdentifier != null
+                || issuer.RelatedIsins.Count != 0
+                || !InternationalSecurityIdentifiers.IsValidLei(firds.Lei)
+                || firdsIssuer.RequestedLei != firds.Lei
+                || firdsIssuer.LegalEntityIdentifier != firds.Lei
+                || firdsIssuer.RequestedIsin != null
+                || firdsIssuer.RelatedIsins.Count != 0
+            )
+        )
+            throw new InvalidDataException(
+                "FIRDS issuer recovery requires an exact independently confirmed LEI."
+            );
+        var confirmedIssuer = firdsIssuer ?? issuer;
         if (
             row.SourceUrl == null
             || product.SourceUrl != row.SourceUrl
@@ -218,17 +253,17 @@ public class EquityMarketDirectoryImporter(
                 "Directory identity sources disagree on the requested security."
             );
         if (
-            issuer.LegalEntityIdentifier != null
+            confirmedIssuer.LegalEntityIdentifier != null
             && (
-                issuer.EntityStatus != "ACTIVE"
-                || issuer.RegistrationStatus is not ("ISSUED" or "LAPSED")
+                confirmedIssuer.EntityStatus != "ACTIVE"
+                || confirmedIssuer.RegistrationStatus is not ("ISSUED" or "LAPSED")
             )
         )
             throw new InvalidDataException("GLEIF issuer is not a current legal identity.");
         if (
-            issuer.LegalEntityIdentifier != null
+            confirmedIssuer.LegalEntityIdentifier != null
             && firds.Lei != null
-            && issuer.LegalEntityIdentifier != firds.Lei
+            && confirmedIssuer.LegalEntityIdentifier != firds.Lei
         )
             throw new InvalidDataException("FIRDS and GLEIF disagree on the security's issuer.");
         var token = product.ReportedCurrency ?? row.ReportedCurrency;
@@ -237,9 +272,9 @@ public class EquityMarketDirectoryImporter(
         {
             Source = sourceKey,
             SourceIssuerIdentifier = product.SourceIssuerIdentifier,
-            IssuerName = issuer.LegalName ?? product.Name ?? row.Name,
-            LegalEntityIdentifier = issuer.LegalEntityIdentifier,
-            RelatedIsins = issuer.RelatedIsins,
+            IssuerName = confirmedIssuer.LegalName ?? product.Name ?? row.Name,
+            LegalEntityIdentifier = confirmedIssuer.LegalEntityIdentifier,
+            RelatedIsins = firdsIssuer == null ? issuer.RelatedIsins : [row.Isin],
             Isin = row.Isin,
             Ticker = row.Symbol,
             MarketIdentifierCode = row.MarketIdentifierCode,
@@ -268,6 +303,7 @@ public class EquityMarketDirectoryImporter(
                         firds.TerminationDate,
                     },
                     Issuer = issuer,
+                    FirdsIssuer = firdsIssuer,
                 }
             ),
         };
