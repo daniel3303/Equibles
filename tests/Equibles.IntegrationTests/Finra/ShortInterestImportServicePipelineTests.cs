@@ -74,7 +74,7 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
         var original = new ShortInterest
         {
             EquityListingId = _stock.Presentation.Listing.Id,
-            ListedTicker = "TESTI",
+            ListedTicker = "OLDI",
             SettlementDate = date,
             CurrentShortPosition = 100,
             PreviousShortPosition = 90,
@@ -111,6 +111,7 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
         await using var verify = Fixture.CreateDbContext();
         var row = await verify.Set<ShortInterest>().SingleAsync();
         row.Id.Should().Be(originalId);
+        row.ListedTicker.Should().Be("OLDI", "corrections preserve the original ticker evidence");
         row.CreationTime.Should().BeCloseTo(creationTime, TimeSpan.FromMilliseconds(1));
         row.CurrentShortPosition.Should().Be(200);
         row.PreviousShortPosition.Should().Be(120);

@@ -359,7 +359,6 @@ public class ShortInterestImportService
                 continue;
             }
 
-            current.ListedTicker = row.ListedTicker;
             current.CurrentShortPosition = row.CurrentShortPosition;
             current.PreviousShortPosition = row.PreviousShortPosition;
             current.ChangeInShortPosition = row.ChangeInShortPosition;
