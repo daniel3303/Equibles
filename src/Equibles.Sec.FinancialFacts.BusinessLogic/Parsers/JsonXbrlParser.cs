@@ -12,6 +12,8 @@ namespace Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
 public class JsonXbrlParser
 {
     private const string DocumentType = "https://xbrl.org/2021/xbrl-json";
+    private const string CandidateRecommendationDocumentType =
+        "https://xbrl.org/CR/2021-02-03/xbrl-json";
     private const string LeiNamespace = "http://standards.iso.org/iso/17442";
     private const string CurrencyNamespace = "http://www.xbrl.org/2003/iso4217";
     private const string InstanceNamespace = "http://www.xbrl.org/2003/instance";
@@ -44,7 +46,8 @@ public class JsonXbrlParser
             throw new JsonReaderException("Trailing content in xBRL-JSON report.");
         if (
             root["documentInfo"] is not JObject info
-            || Text(info["documentType"]) != DocumentType
+            || Text(info["documentType"])
+                is not (DocumentType or CandidateRecommendationDocumentType)
             || info["namespaces"] is not JObject namespaces
             || info["taxonomy"] is not JArray taxonomy
             || taxonomy.Count == 0
