@@ -299,7 +299,7 @@ public class InsiderTradingTools
         )]
             int maxResults = 30,
         [Description(
-            "Number of ranked insiders to skip before returning rows — pass the previous call's shown count to page past the maxResults cap (default: 0)"
+            "Number of ranked insiders to skip before returning rows — pass the previous call's shown count to page past the maxResults cap. Only page when that call returned maxResults rows; fewer rows means there are no more (default: 0)"
         )]
             int offset = 0
     )
@@ -654,7 +654,7 @@ public class InsiderTradingTools
         )]
             int maxResults = 10,
         [Description(
-            "Number of matches to skip before returning rows — pass the previous call's shown count to page past the maxResults cap (default: 0)"
+            "Number of matches to skip before returning rows — pass the previous call's shown count to page past the maxResults cap. Only page when that call returned maxResults rows; fewer rows means there are no more (default: 0)"
         )]
             int offset = 0
     )

@@ -326,7 +326,7 @@ public class ShortDataTools
         [Description("Maximum number of results to return (default: 50, max: 500)")]
             int maxResults = 50,
         [Description(
-            "Number of ranked results to skip before returning rows — pass the previous call's last row number to page past the maxResults cap (default: 0)"
+            "Number of ranked results to skip before returning rows — pass the previous call's last row number to page past the maxResults cap. Only page when that call returned maxResults rows; fewer rows means there are no more (default: 0)"
         )]
             int offset = 0,
         [Description(
@@ -504,7 +504,7 @@ public class ShortDataTools
         [Description("Maximum number of results to return (default: 50, max: 500)")]
             int maxResults = 50,
         [Description(
-            "Number of ranked results to skip before returning rows — pass the previous call's last row number to page past the maxResults cap (default: 0)"
+            "Number of ranked results to skip before returning rows — pass the previous call's last row number to page past the maxResults cap. Only page when that call returned maxResults rows; fewer rows means there are no more (default: 0)"
         )]
             int offset = 0,
         [Description(
@@ -830,7 +830,7 @@ public class ShortDataTools
         )]
             string ticker = null,
         [Description(
-            "Number of ranked results to skip before returning rows — pass the previous call's last rank to page past the maxResults cap (default: 0; ignored for a single-ticker lookup)"
+            "Number of ranked results to skip before returning rows — pass the previous call's last rank to page past the maxResults cap. Only page when that call returned maxResults rows; fewer rows means there are no more (default: 0; ignored for a single-ticker lookup)"
         )]
             int offset = 0
     )
