@@ -34,7 +34,7 @@ public class ShortInterestImportServiceFilteredFetchTests : ParadeDbMcpTestBase
     [Fact]
     public async Task Import_OnlySomeStocksMissing_UsesSymbolScopedFetch()
     {
-        var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+        var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-60);
 
         EquityIssuer have = Equibles.TestSupport.EquityIssuerSeed.Create(
             Cik: "0000000111",
@@ -105,7 +105,7 @@ public class ShortInterestImportServiceFilteredFetchTests : ParadeDbMcpTestBase
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Options.Create(
-                new WorkerOptions { TickersToSync = [], MinSyncDate = DateTime.UtcNow.AddDays(-30) }
+                new WorkerOptions { TickersToSync = [], MinSyncDate = DateTime.UtcNow.AddDays(-90) }
             )
         );
 

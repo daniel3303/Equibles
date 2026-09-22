@@ -19,6 +19,8 @@ namespace Equibles.Finra.HostedService.Services;
 public class ShortInterestImportService
 {
     private const int InsertBatchSize = 1000;
+    private const int FilteredSymbolLimit = 5000;
+    private const int CorrectionLookbackDays = 45;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ShortInterestImportService> _logger;
@@ -46,9 +48,6 @@ public class ShortInterestImportService
 
     public async Task Import(CancellationToken cancellationToken)
     {
-        // Above this, bulk-fetch all symbols (cheaper than a huge domainFilters payload with unknown API limits)
-        const int filteredFetchThreshold = 500;
-
         var tickerMap = await _tickerMapService.BuildNativeListed(
             _workerOptions.TickersToSync,
             cancellationToken,
@@ -135,7 +134,7 @@ public class ShortInterestImportService
         var allDates = new HashSet<DateOnly>(knownDates);
         allDates.UnionWith(newDates);
 
-        var datesToProcess = allDates.Where(d => d >= minDate).OrderBy(d => d).ToList();
+        var datesToProcess = allDates.Where(d => d >= minDate).OrderByDescending(d => d).ToList();
 
         if (datesToProcess.Count == 0)
         {
@@ -153,6 +152,9 @@ public class ShortInterestImportService
         var totalImported = 0;
         var datesSkipped = 0;
 
+        var correctionFloor = DateOnly
+            .FromDateTime(DateTime.UtcNow)
+            .AddDays(-CorrectionLookbackDays);
         foreach (var date in datesToProcess)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -163,7 +165,7 @@ public class ShortInterestImportService
                 compressedIndex,
                 reverseMap,
                 trackedListings,
-                filteredFetchThreshold,
+                correctionFloor,
                 cancellationToken
             );
 
@@ -187,7 +189,7 @@ public class ShortInterestImportService
         Dictionary<string, EquityListingReference> compressedIndex,
         Dictionary<Guid, List<string>> reverseMap,
         HashSet<Guid> trackedListings,
-        int filteredFetchThreshold,
+        DateOnly correctionFloor,
         CancellationToken cancellationToken
     )
     {
@@ -204,16 +206,13 @@ public class ShortInterestImportService
 
             var missingListings = trackedListings.Except(existingListings).ToHashSet();
 
-            if (missingListings.Count == 0)
+            var refreshCorrections = date >= correctionFloor;
+            if (missingListings.Count == 0 && !refreshCorrections)
                 return -1;
 
-            var records = await FetchMissingRecords(
-                date,
-                missingListings,
-                trackedListings,
-                reverseMap,
-                filteredFetchThreshold
-            );
+            var records = refreshCorrections
+                ? await _finraClient.GetShortInterest(date)
+                : await FetchMissingRecords(date, missingListings, trackedListings, reverseMap);
 
             if (records.Count == 0)
             {
@@ -236,7 +235,7 @@ public class ShortInterestImportService
                     )
                 )
                 .Where(x =>
-                    x.Listing is { } listing && missingListings.Contains(listing.EquityListingId)
+                    x.Listing is { } listing && trackedListings.Contains(listing.EquityListingId)
                 )
                 .Select(x => new ShortInterest
                 {
@@ -265,6 +264,10 @@ public class ShortInterestImportService
 
             return inserted;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Failed to fetch short interest for {Date}, skipping", date);
@@ -289,15 +292,10 @@ public class ShortInterestImportService
         DateOnly date,
         HashSet<Guid> missingListings,
         HashSet<Guid> trackedListings,
-        Dictionary<Guid, List<string>> reverseMap,
-        int filteredFetchThreshold
+        Dictionary<Guid, List<string>> reverseMap
     )
     {
-        var useBulkFetch =
-            missingListings.Count == trackedListings.Count
-            || missingListings.Count > filteredFetchThreshold;
-
-        if (useBulkFetch)
+        if (missingListings.Count == trackedListings.Count)
             return _finraClient.GetShortInterest(date);
 
         // Request every spelling FINRA may use for a class share ("BRK-B" is "BRKB" in this
@@ -310,7 +308,10 @@ public class ShortInterestImportService
             .SelectMany(FinraClassShareSymbols.RequestSpellings)
             .Distinct()
             .ToList();
-        return _finraClient.GetShortInterest(date, missingSymbols);
+        // Bound the actual filter, including class-share aliases, rather than listing count.
+        return missingSymbols.Count <= FilteredSymbolLimit
+            ? _finraClient.GetShortInterest(date, missingSymbols)
+            : _finraClient.GetShortInterest(date);
     }
 
     // Revalidate captured listing IDs before writing a batch from the source snapshot.
@@ -346,7 +347,24 @@ public class ShortInterestImportService
         if (validBatch.Count == 0)
             return;
 
-        repo.AddRange(validBatch);
+        var existing = await repo.GetBySettlementDate(date)
+            .Where(row => listingIds.Contains(row.EquityListingId))
+            .ToDictionaryAsync(row => row.EquityListingId, cancellationToken);
+        foreach (var row in validBatch)
+        {
+            if (!existing.TryGetValue(row.EquityListingId, out var current))
+            {
+                repo.Add(row);
+                existing.Add(row.EquityListingId, row);
+                continue;
+            }
+
+            current.CurrentShortPosition = row.CurrentShortPosition;
+            current.PreviousShortPosition = row.PreviousShortPosition;
+            current.ChangeInShortPosition = row.ChangeInShortPosition;
+            current.AverageDailyVolume = row.AverageDailyVolume;
+            current.DaysToCover = row.DaysToCover;
+        }
         await repo.SaveChanges();
     }
 }

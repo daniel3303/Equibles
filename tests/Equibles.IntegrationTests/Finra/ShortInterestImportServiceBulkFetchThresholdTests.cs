@@ -17,14 +17,7 @@ using Xunit;
 
 namespace Equibles.IntegrationTests.Finra;
 
-/// <summary>
-/// FetchMissingRecords picks bulk fetch when ALL tracked stocks are missing OR when the
-/// missing count exceeds the filtered-fetch threshold (500). The pipeline test covers the
-/// all-missing arm and the filtered-fetch test the small-subset arm; this pins the
-/// distinct second arm — more than 500 missing but NOT all — which must still bulk-fetch so
-/// a 500+ symbol query is never issued. 502 tracked, 501 missing isolates that arm (501 > 500
-/// yet 501 != 502), so dropping it would wrongly fall through to the symbol-scoped overload.
-/// </summary>
+/// <summary>Large historical gaps should use a bounded symbol filter instead of fetching the whole market.</summary>
 [Collection(ParadeDbCollection.Name)]
 public class ShortInterestImportServiceBulkFetchThresholdTests : ParadeDbMcpTestBase
 {
@@ -32,9 +25,9 @@ public class ShortInterestImportServiceBulkFetchThresholdTests : ParadeDbMcpTest
         : base(fixture) { }
 
     [Fact]
-    public async Task Import_MoreThanThresholdMissingButNotAll_UsesBulkFetch()
+    public async Task Import_501MissingListings_UsesFilteredFetch()
     {
-        var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+        var settlementDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-60);
 
         var stocks = new List<EquityIssuer>();
         for (var i = 0; i < 502; i++)
@@ -48,8 +41,7 @@ public class ShortInterestImportServiceBulkFetchThresholdTests : ParadeDbMcpTest
             );
         }
         DbContext.AddRange(stocks);
-        // Only the first stock has data for the date → 501 of 502 are missing: above the
-        // 500 threshold but a strict subset, so only the threshold arm makes the fetch bulk.
+        // Only the first stock has data: 501 missing listings fit in the expanded filter.
         DbContext.Add(
             new ShortInterest
             {
@@ -89,15 +81,18 @@ public class ShortInterestImportServiceBulkFetchThresholdTests : ParadeDbMcpTest
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Options.Create(
-                new WorkerOptions { TickersToSync = [], MinSyncDate = DateTime.UtcNow.AddDays(-30) }
+                new WorkerOptions { TickersToSync = [], MinSyncDate = DateTime.UtcNow.AddDays(-90) }
             )
         );
 
         await sut.Import(CancellationToken.None);
 
-        await finraClient.Received().GetShortInterest(settlementDate);
+        await finraClient.DidNotReceive().GetShortInterest(settlementDate);
         await finraClient
-            .DidNotReceive()
-            .GetShortInterest(Arg.Any<DateOnly>(), Arg.Any<IReadOnlyList<string>>());
+            .Received(1)
+            .GetShortInterest(
+                settlementDate,
+                Arg.Is<IReadOnlyList<string>>(symbols => symbols.Count == 501)
+            );
     }
 }
