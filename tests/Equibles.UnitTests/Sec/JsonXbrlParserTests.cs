@@ -18,6 +18,31 @@ public class JsonXbrlParserTests
         );
 
     [Fact]
+    public void Parse_CapturedCandidateRecommendationReport_PreservesSourceIdentityAndPeriod()
+    {
+        var source = File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "TestAssets",
+                "Esef",
+                "arkema-2020-json-excerpt.json"
+            )
+        );
+
+        var facts = new JsonXbrlParser().Parse(
+            source,
+            "9695000EHMS84KKP2785",
+            new DateOnly(2020, 12, 31)
+        );
+
+        facts.Should().ContainSingle();
+        facts[0].Value.Should().Be(7884000000m);
+        facts[0].ConsolidatedLei.Should().Be("9695000EHMS84KKP2785");
+        facts[0].Tag.Should().Be("RevenueFromContractsWithCustomers");
+        facts[0].PeriodEnd.Should().Be(new DateOnly(2020, 12, 31));
+    }
+
+    [Fact]
     public void Parse_CapturedCttFacts_PreservesValueIdentityAndInclusiveDate()
     {
         var facts = new JsonXbrlParser().Parse(Fixture);
@@ -37,6 +62,30 @@ public class JsonXbrlParserTests
                 && fact.Taxonomy == "ifrs-full"
                 && fact.Dimensions.Count == 0
             );
+    }
+
+    [Theory]
+    [InlineData("https://xbrl.org/2021/xbrl-json", true)]
+    [InlineData("https://xbrl.org/CR/2021-02-03/xbrl-json", true)]
+    [InlineData("https://xbrl.org/CR/2021-07-07/xbrl-json", false)]
+    public void Parse_DocumentType_AcceptsOnlySupportedPublishedVersions(
+        string documentType,
+        bool accepted
+    )
+    {
+        var root = JObject.Parse(Fixture);
+        root["documentInfo"]["documentType"] = documentType;
+        var parse = () =>
+            new JsonXbrlParser().Parse(
+                root.ToString(),
+                "529900G4A1IKOKC22K56",
+                new DateOnly(2022, 12, 31)
+            );
+
+        if (accepted)
+            parse().Should().ContainSingle(fact => fact.Value == 6183979m);
+        else
+            parse.Should().Throw<JsonReaderException>();
     }
 
     [Theory]

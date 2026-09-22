@@ -1,6 +1,7 @@
 # European filing index captures
 
 - `ctt-2022-json-excerpt.json` retains the source document metadata and unchanged facts `f-3`/`f-4` from `https://filings.xbrl.org/529900G4A1IKOKC22K56/2022-12-31/ESEF/PT/0/002367-2022-12-31.json`, captured on 2026-09-21; all other facts are omitted. The xBRL-JSON midnight instants correspond to the preceding calendar day, and `decimals` is precision, not a scaling factor.
+- `arkema-2020-json-excerpt.json` retains the source document metadata and unchanged first fact `fact_16961` from `https://filings.xbrl.org/9695000EHMS84KKP2785/2020-12-31/ESEF/FR/0/arkema-2021-12-31AR.json`, captured on 2026-09-22; all other facts are omitted. The report declares the published 2021-02-03 candidate-recommendation document type.
 
 - Captured on 2026-09-17 with plain GETs (`Accept: application/vnd.api+json`, no cookies, no key) from `https://filings.xbrl.org/api/filings`, the JSON:API index the host publishes over the whole European corpus.
 - `filings-fr-page.json` is the unchanged reply of `?include=entity&filter[country]=FR&page[size]=3&page[number]=1`. It states `meta.count` 1179 for France and carries three filings with their `included` entity resources; the filer's LEI is the entity's `identifier`, never a fragment of the composite `fxo_id`.
