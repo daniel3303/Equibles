@@ -67,6 +67,81 @@ public class ShortInterestImportServicePipelineTests : ParadeDbMcpTestBase
     }
 
     [Fact]
+    public async Task Import_RecentCompleteDate_UpdatesCorrectionWithoutDuplicatingIdentity()
+    {
+        await SeedStock();
+        var date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-14);
+        var original = new ShortInterest
+        {
+            EquityListingId = _stock.Presentation.Listing.Id,
+            ListedTicker = "TESTI",
+            SettlementDate = date,
+            CurrentShortPosition = 100,
+            PreviousShortPosition = 90,
+            ChangeInShortPosition = 10,
+            AverageDailyVolume = 50,
+            DaysToCover = 2,
+        };
+        DbContext.Add(original);
+        await DbContext.SaveChangesAsync();
+        var originalId = original.Id;
+        var creationTime = original.CreationTime;
+        DbContext.ChangeTracker.Clear();
+        var client = Substitute.For<IFinraClient>();
+        client
+            .GetShortInterestSettlementDatesAfter(Arg.Any<DateOnly>())
+            .Returns(new List<DateOnly>());
+        client
+            .GetShortInterest(date)
+            .Returns([
+                new ShortInterestRecord
+                {
+                    Symbol = "TESTI",
+                    CurrentShortPosition = 200,
+                    PreviousShortPosition = 120,
+                    ChangeInShortPosition = 80,
+                    AverageDailyVolume = 80,
+                    DaysToCover = 2.5m,
+                },
+            ]);
+
+        await BuildService(client).Import(CancellationToken.None);
+        await BuildService(client).Import(CancellationToken.None);
+
+        await using var verify = Fixture.CreateDbContext();
+        var row = await verify.Set<ShortInterest>().SingleAsync();
+        row.Id.Should().Be(originalId);
+        row.CreationTime.Should().BeCloseTo(creationTime, TimeSpan.FromMilliseconds(1));
+        row.CurrentShortPosition.Should().Be(200);
+        row.PreviousShortPosition.Should().Be(120);
+        row.ChangeInShortPosition.Should().Be(80);
+        row.AverageDailyVolume.Should().Be(80);
+        row.DaysToCover.Should().Be(2.5m);
+    }
+
+    [Fact]
+    public async Task Import_NewDates_RequestsNewestFirst()
+    {
+        await SeedStock();
+        var newer = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+        var older = newer.AddDays(-14);
+        var client = Substitute.For<IFinraClient>();
+        client.GetShortInterestSettlementDates().Returns([older, newer]);
+        var requested = new List<DateOnly>();
+        client
+            .GetShortInterest(Arg.Any<DateOnly>())
+            .Returns(call =>
+            {
+                requested.Add(call.Arg<DateOnly>());
+                return new List<ShortInterestRecord>();
+            });
+
+        await BuildService(client).Import(CancellationToken.None);
+
+        requested.Should().Equal(newer, older);
+    }
+
+    [Fact]
     public async Task Import_NewSettlementDateWithMissingStock_BulkFetchesAndPersists()
     {
         await SeedStock();
