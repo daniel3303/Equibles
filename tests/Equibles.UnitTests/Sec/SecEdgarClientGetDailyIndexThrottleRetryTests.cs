@@ -138,16 +138,18 @@ public class SecEdgarClientGetDailyIndexThrottleRetryTests
     }
 
     [Fact]
-    public async Task GetDailyIndex_NotFound_ReturnsEmpty()
+    public async Task GetDailyIndex_Weekend_ReturnsEmptyWithoutRequest()
     {
-        // Weekends typically 404 — unambiguously "no index for this date".
+        // A weekend index cannot be published, so it needs no SEC request.
         var handler = new SequencedHandler(() => new HttpResponseMessage(HttpStatusCode.NotFound));
         var sut = BuildClient(handler);
 
         var result = await sut.GetDailyIndex(new DateOnly(2020, 1, 4));
+        var filtered = await sut.GetDailyIndexForForms(new DateOnly(2020, 1, 4), ["13F"]);
 
         result.Should().BeEmpty();
-        handler.CallCount.Should().Be(1);
+        filtered.Should().BeEmpty();
+        handler.CallCount.Should().Be(0);
     }
 
     [Fact]

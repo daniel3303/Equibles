@@ -648,6 +648,11 @@ public class SecEdgarClient : ISecEdgarClient
         CancellationToken cancellationToken
     )
     {
+        // EDGAR does not publish a daily index on weekends. The submission feed
+        // remains the live path; this avoids a guaranteed missing-object request.
+        if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+            return null;
+
         var quarter = (date.Month - 1) / 3 + 1;
 
         // Use the pipe-delimited master index, not the space-padded form.idx:
@@ -669,7 +674,7 @@ public class SecEdgarClient : ISecEdgarClient
             cancellationToken
         );
 
-        // Weekends typically 404 — unambiguously "no index for this date".
+        // A missing index on another date can still return 404.
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             _logger.LogInformation("No daily index published for {Date:yyyy-MM-dd}", date);
