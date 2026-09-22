@@ -122,11 +122,12 @@ public class EquityMarketDirectoryImporterTests
         DbContextOptions<EquiblesFinancialDbContext> options,
         EquityMarketDirectoryRow row,
         DateTime capturedAt,
-        string ticker = null
+        string ticker = null,
+        string lei = Lei
     )
     {
         using var context = NewContext(options);
-        var issuer = new EquityIssuer { Name = row.Name, LegalEntityIdentifier = Lei };
+        var issuer = new EquityIssuer { Name = row.Name, LegalEntityIdentifier = lei };
         var security = new EquitySecurity { Issuer = issuer, Isin = row.Isin };
         issuer.Securities.Add(security);
         security.Listings.Add(
@@ -402,6 +403,66 @@ public class EquityMarketDirectoryImporterTests
         await harness
             .Identity.DidNotReceive()
             .ImportListing(Arg.Any<EquityDirectoryListingInput>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MissingLeiReopensRecentListingAndUsesExactFirdsRecovery()
+    {
+        var options = NewDbOptions();
+        await SeedFullImport(options);
+        await SeedFirds(options, "FR0000120271");
+        var row = Row("FR0000120271", "TTE");
+        await SeedVerifiedListing(options, row, DateTime.UtcNow.AddHours(-1), lei: null);
+        var harness = Build(options, row);
+        harness
+            .Gleif.GetIssuerForIsin(row.Isin, Arg.Any<CancellationToken>())
+            .Returns(new GleifIssuerIdentity { RequestedIsin = row.Isin });
+        harness
+            .Gleif.GetIssuerForLei(Lei, Arg.Any<CancellationToken>())
+            .Returns(
+                new GleifIssuerIdentity
+                {
+                    RequestedLei = Lei,
+                    LegalEntityIdentifier = Lei,
+                    EntityStatus = "ACTIVE",
+                    RegistrationStatus = "ISSUED",
+                }
+            );
+        var result = await harness.Importer.Import(Paris, CancellationToken.None);
+        result.Current.Should().Be(0);
+        result.Imported.Should().Be(1);
+        result.Failed.Should().Be(0);
+        await harness.Gleif.Received(1).GetIssuerForLei(Lei, Arg.Any<CancellationToken>());
+        await harness
+            .Identity.Received(1)
+            .ImportListing(
+                Arg.Is<EquityDirectoryListingInput>(input =>
+                    input.LegalEntityIdentifier == Lei
+                    && input.RelatedIsins.SequenceEqual(new[] { row.Isin })
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task PrimaryLookupFailureNeverFallsBackToAnotherIdentityRoute()
+    {
+        var options = NewDbOptions();
+        await SeedFullImport(options);
+        await SeedFirds(options, "FR0000120271");
+        var row = Row("FR0000120271", "TTE");
+        var harness = Build(options, row);
+        harness
+            .Gleif.GetIssuerForIsin(row.Isin, Arg.Any<CancellationToken>())
+            .Returns<Task<GleifIssuerIdentity>>(_ =>
+                throw new InvalidDataException("ambiguous identity")
+            );
+        var result = await harness.Importer.Import(Paris, CancellationToken.None);
+        result.Failed.Should().Be(1);
+        result.Imported.Should().Be(0);
+        await harness
+            .Gleif.DidNotReceive()
+            .GetIssuerForLei(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

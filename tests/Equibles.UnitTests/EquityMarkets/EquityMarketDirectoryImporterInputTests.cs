@@ -184,6 +184,100 @@ public class EquityMarketDirectoryImporterInputTests
     }
 
     [Fact]
+    public void ExactFirdsLeiConfirmedByGleifPreservesTheSeparateRelationshipEvidence()
+    {
+        var original = new GleifIssuerIdentity { RequestedIsin = Row().Isin };
+        var confirmed = new GleifIssuerIdentity
+        {
+            RequestedLei = Lei,
+            LegalEntityIdentifier = Lei,
+            LegalName = "TotalEnergies SE",
+            EntityStatus = "ACTIVE",
+            RegistrationStatus = "ISSUED",
+        };
+        var input = EquityMarketDirectoryImporter.CreateInput(
+            Paris,
+            "euronext",
+            Row(),
+            Product(),
+            Firds(),
+            original,
+            confirmed
+        );
+        input.LegalEntityIdentifier.Should().Be(Lei);
+        input.RelatedIsins.Should().Equal(Row().Isin);
+        original.RelatedIsins.Should().BeEmpty();
+        confirmed.RelatedIsins.Should().BeEmpty();
+        using var payload = JsonDocument.Parse(input.PayloadJson);
+        payload
+            .RootElement.GetProperty("Issuer")
+            .GetProperty("LegalEntityIdentifier")
+            .ValueKind.Should()
+            .Be(JsonValueKind.Null);
+        payload
+            .RootElement.GetProperty("FirdsIssuer")
+            .GetProperty("RequestedLei")
+            .GetString()
+            .Should()
+            .Be(Lei);
+        payload
+            .RootElement.GetProperty("Firds")
+            .GetProperty("Isin")
+            .GetString()
+            .Should()
+            .Be(Row().Isin);
+    }
+
+    [Theory]
+    [InlineData("conflicting-primary")]
+    [InlineData("different-request")]
+    [InlineData("different-lei")]
+    [InlineData("inactive")]
+    [InlineData("retired")]
+    [InlineData("related-securities")]
+    [InlineData("wrong-isin")]
+    [InlineData("invalid-firds")]
+    public void FirdsRecoveryCannotBypassIdentityOrCurrentEntityGuards(string scenario)
+    {
+        var original = new GleifIssuerIdentity { RequestedIsin = Row().Isin };
+        var confirmed = new GleifIssuerIdentity
+        {
+            RequestedLei = Lei,
+            LegalEntityIdentifier = Lei,
+            EntityStatus = "ACTIVE",
+            RegistrationStatus = "ISSUED",
+        };
+        var firds = Firds();
+        if (scenario == "conflicting-primary")
+            original.LegalEntityIdentifier = "213800AKSTYRLHY3X497";
+        if (scenario == "different-request")
+            confirmed.RequestedLei = "213800AKSTYRLHY3X497";
+        if (scenario == "different-lei")
+            confirmed.LegalEntityIdentifier = "213800AKSTYRLHY3X497";
+        if (scenario == "inactive")
+            confirmed.EntityStatus = "INACTIVE";
+        if (scenario == "retired")
+            confirmed.RegistrationStatus = "RETIRED";
+        if (scenario == "related-securities")
+            confirmed.RelatedIsins.Add("US89151E1091");
+        if (scenario == "wrong-isin")
+            original.RequestedIsin = "US89151E1091";
+        if (scenario == "invalid-firds")
+            firds.Lei = "invalid";
+        var create = () =>
+            EquityMarketDirectoryImporter.CreateInput(
+                Paris,
+                "euronext",
+                Row(),
+                Product(),
+                firds,
+                original,
+                confirmed
+            );
+        create.Should().Throw<InvalidDataException>();
+    }
+
+    [Fact]
     public void FirdsAndGleifDisagreeingOnTheIssuer_FailsTheRow()
     {
         var create = () =>

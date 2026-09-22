@@ -112,6 +112,51 @@ public class GleifIdentityClient
         return result;
     }
 
+    public virtual async Task<GleifIssuerIdentity> GetIssuerForLei(
+        string lei,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!InternationalSecurityIdentifiers.IsValidLei(lei))
+            throw new ArgumentException("A complete LEI is required.", nameof(lei));
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        var source = new Uri(Origin, "/api/v1/lei-records/" + Uri.EscapeDataString(lei));
+        var body = await Read(source, timeout.Token);
+        try
+        {
+            using var json = JsonDocument.Parse(body);
+            var record = json.RootElement.GetProperty("data");
+            var attributes = record.GetProperty("attributes");
+            if (
+                Text(record, "id") != lei
+                || Text(attributes, "lei") != lei
+                || Text(record, "type") != "lei-records"
+            )
+                throw new InvalidDataException("GLEIF did not confirm the requested LEI.");
+            var entity = attributes.GetProperty("entity");
+            return new GleifIssuerIdentity
+            {
+                RequestedLei = lei,
+                LegalEntityIdentifier = lei,
+                LegalName = Text(entity.GetProperty("legalName"), "name"),
+                Jurisdiction = Text(entity, "jurisdiction"),
+                EntityStatus = Text(entity, "status"),
+                RegistrationStatus = Text(attributes.GetProperty("registration"), "status"),
+                SourceUrl = source,
+                ResponseBodies = [body],
+            };
+        }
+        catch (Exception exception)
+            when (exception is KeyNotFoundException or InvalidOperationException or JsonException)
+        {
+            throw new InvalidDataException(
+                "GLEIF legal entity response has an invalid structure.",
+                exception
+            );
+        }
+    }
+
     private async Task ReadRelatedIsins(
         GleifIssuerIdentity result,
         Uri next,
