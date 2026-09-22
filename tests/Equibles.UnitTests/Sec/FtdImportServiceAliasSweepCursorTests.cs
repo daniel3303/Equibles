@@ -22,8 +22,9 @@ public class FtdImportServiceAliasSweepCursorTests
     [Theory]
     [InlineData(12, true, true)]
     [InlineData(4, true, false)]
-    [InlineData(4, false, true)]
-    public void SweepContinuationReflectsBothBatchSizeAndPartialFailure(
+    [InlineData(4, false, false)]
+    [InlineData(12, false, false)]
+    public void SweepContinuationRequiresAFullSuccessfulBatch(
         int fileCount,
         bool completedLast,
         bool expected
