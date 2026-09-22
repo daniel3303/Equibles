@@ -1288,8 +1288,8 @@ public class FtdImportService
     }
 
     internal static bool SweepHasBacklog(IReadOnlyList<string> requested, string lastCompleted) =>
-        !string.Equals(requested[^1], lastCompleted, StringComparison.Ordinal)
-        || requested.Count == AliasSweepFilesPerCycle;
+        requested.Count == AliasSweepFilesPerCycle
+        && string.Equals(requested[^1], lastCompleted, StringComparison.Ordinal);
 
     private const string AliasSweepCursorName = "Ftd.RetiredCusipSweep";
 
