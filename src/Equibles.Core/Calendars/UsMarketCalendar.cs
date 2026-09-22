@@ -4,7 +4,7 @@ namespace Equibles.Core.Calendars;
 /// NYSE trading-day calendar plus US Eastern time helpers. Pure and deterministic so the
 /// FINRA evening poller can decide "is the market open today, and is it past the close"
 /// without any external dependency or stored calendar. Models the regular full-day NYSE
-/// holiday closures; early-close half-days (e.g. the day after Thanksgiving) remain trading
+/// holiday closures and documented one-off closures; early-close half-days (e.g. the day after Thanksgiving) remain trading
 /// days because short-sale volume is still published for them.
 /// </summary>
 public static class UsMarketCalendar
@@ -78,6 +78,11 @@ public static class UsMarketCalendar
     public static bool IsNyseHoliday(DateOnly date)
     {
         var year = date.Year;
+
+        // National days of mourning for former Presidents George H. W. Bush and
+        // Jimmy Carter. NYSE and Nasdaq closed, so daily FINRA files do not exist.
+        if (date is { Year: 2018, Month: 12, Day: 5 } or { Year: 2025, Month: 1, Day: 9 })
+            return true;
 
         // New Year's Day: observed the following Monday when it falls on a Sunday. When it
         // falls on a Saturday the NYSE does NOT close the preceding Friday (Dec 31 stays a

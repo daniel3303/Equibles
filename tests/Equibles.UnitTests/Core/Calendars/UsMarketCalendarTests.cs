@@ -18,6 +18,12 @@ public class UsMarketCalendarTests
     [InlineData(2025, 3, 16, false)] // Sunday
     // Ordinary trading days.
     [InlineData(2025, 3, 12, true)] // Wednesday
+    [InlineData(2025, 1, 8, true)] // Before Carter national day of mourning
+    [InlineData(2025, 1, 9, false)] // Carter national day of mourning — exchanges closed
+    [InlineData(2025, 1, 10, true)] // After Carter national day of mourning
+    [InlineData(2018, 12, 4, true)] // Before Bush national day of mourning
+    [InlineData(2018, 12, 5, false)] // Bush national day of mourning — exchanges closed
+    [InlineData(2018, 12, 6, true)] // After Bush national day of mourning
     [InlineData(2021, 12, 31, true)] // Fri Dec 31 2021 — NYSE open (New Year's Sat is NOT observed)
     // Federal holidays the NYSE still trades on.
     [InlineData(2024, 10, 14, true)] // Columbus Day — open
