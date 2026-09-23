@@ -167,8 +167,8 @@ public class DocumentRepository : BaseRepository<Document>
     }
 
     /// <summary>
-    /// EDGAR documents whose stored Markdown predates the current normalization pipeline and
-    /// can be re-fetched safely. This is the single definition of the normalized-content
+    /// Documents whose stored Markdown predates the current normalization pipeline. EDGAR
+    /// sources can be re-fetched; inline ESEF sources replay their retained envelope. This is the single definition of the normalized-content
     /// backfill work-set.
     /// </summary>
     public IQueryable<Document> GetPendingNormalizedContent()
@@ -178,16 +178,29 @@ public class DocumentRepository : BaseRepository<Document>
                 d.NormalizedContentVersion < Document.NormalizedContentBuilderVersion
                 && d.NormalizedContentAttempts < Document.MaxNormalizedContentAttempts
                 && (
-                    (d.AccessionNumber != null && d.AccessionNumber != "")
-                    || (d.SourceUrl != null && d.SourceUrl.Contains("/Archives/edgar/data/"))
+                    (
+                        d.DocumentType == DocumentType.EsefAnnualReport
+                        && d.XbrlStatus == XbrlCaptureStatus.Captured
+                        && d.XbrlType == XbrlType.InlineIxbrl
+                        && d.XbrlContentId != null
+                    )
+                    || (
+                        d.Issuer.Cik != null
+                        && (
+                            (d.AccessionNumber != null && d.AccessionNumber != "")
+                            || (
+                                d.SourceUrl != null && d.SourceUrl.Contains("/Archives/edgar/data/")
+                            )
+                        )
+                        && d.DocumentType != DocumentType.EsefAnnualReport
+                    )
                 )
-                && d.Issuer.Cik != null
             );
     }
 
     /// <summary>
     /// Ordered normalized-content work set aligned with IX_Document_NormalizationBackfill.
-    /// The periodic stage drains 10-K/10-Q first; the all-types stage reuses the same order.
+    /// The periodic stage drains 10-K/10-Q/ESEF first; the all-types stage reuses the same order.
     /// </summary>
     public IQueryable<Document> GetOrderedPendingNormalizedContent(bool includeAllDocumentTypes)
     {
@@ -195,7 +208,9 @@ public class DocumentRepository : BaseRepository<Document>
         if (!includeAllDocumentTypes)
         {
             pending = pending.Where(d =>
-                d.DocumentType == DocumentType.TenK || d.DocumentType == DocumentType.TenQ
+                d.DocumentType == DocumentType.TenK
+                || d.DocumentType == DocumentType.TenQ
+                || d.DocumentType == DocumentType.EsefAnnualReport
             );
         }
 

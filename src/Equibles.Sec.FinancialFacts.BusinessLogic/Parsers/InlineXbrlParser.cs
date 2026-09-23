@@ -2,6 +2,7 @@ using System.Globalization;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using Equibles.Core.AutoWiring;
+using Equibles.Core.Documents;
 using Equibles.Sec.FinancialFacts.BusinessLogic.Models;
 
 namespace Equibles.Sec.FinancialFacts.BusinessLogic.Parsers;
@@ -85,7 +86,7 @@ public class InlineXbrlParser
         if (string.IsNullOrWhiteSpace(html))
             return new InlineXbrlParseResult();
 
-        var document = _parser.ParseDocument(html);
+        var document = _parser.ParseDocument(XhtmlCompatibility.ExpandEmptyElements(html));
         if (document?.DocumentElement == null)
             return new InlineXbrlParseResult();
 

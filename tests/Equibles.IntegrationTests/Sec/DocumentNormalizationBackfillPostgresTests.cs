@@ -209,6 +209,60 @@ public class DocumentNormalizationBackfillPostgresTests : ParadeDbMcpTestBase
         saved.ChunkedAt.Should().BeNull();
     }
 
+    [Fact]
+    public async Task Backfill_EsefReplacesOnlyDerivedContentAndFinishesItsQueueEntry()
+    {
+        var document = await SeedLegacyDocument("ESEF");
+        var original = GzipCompressor.Compress(
+            Encoding.UTF8.GetBytes(
+                "<html xmlns='http://www.w3.org/1999/xhtml'><head><title/></head><body><p>Retained annual report</p></body></html>"
+            )
+        );
+        document.DocumentType = DocumentType.EsefAnnualReport;
+        document.Issuer.Cik = null;
+        document.AccessionNumber = "esef:retained";
+        document.XbrlType = XbrlType.InlineIxbrl;
+        document.XbrlStatus = XbrlCaptureStatus.Captured;
+        document.XbrlContent = new Equibles.Media.Data.Models.File
+        {
+            Name = "original",
+            Extension = "gz",
+            ContentType = "application/gzip",
+            FileContent = new Equibles.Media.Data.Models.FileContent { Bytes = original },
+        };
+        document.ChunkedAt = DateTime.UtcNow;
+        DbContext.Add(document.XbrlContent);
+        await DbContext.SaveChangesAsync();
+        var originalId = document.XbrlContentId;
+        var oldTextId = document.ContentId;
+        DbContext.ChangeTracker.Clear();
+        var client = Substitute.For<ISecEdgarClient>();
+        var sut = BuildSut(client);
+
+        var result = await sut.Backfill(1);
+
+        result.Replaced.Should().Be(1);
+        await using var verify = Fixture.CreateDbContext();
+        var saved = await verify
+            .Set<Document>()
+            .Include(d => d.Content)
+                .ThenInclude(f => f.FileContent)
+            .Include(d => d.XbrlContent)
+                .ThenInclude(f => f.FileContent)
+            .SingleAsync(d => d.Id == document.Id);
+        saved.XbrlContentId.Should().Be(originalId);
+        saved.XbrlContent.FileContent.Bytes.Should().Equal(original);
+        saved.ContentId.Should().NotBe(oldTextId);
+        Encoding
+            .UTF8.GetString(saved.Content.FileContent.Bytes)
+            .Should()
+            .Contain("Retained annual report");
+        saved.ChunkedAt.Should().BeNull();
+        saved.NormalizedContentVersion.Should().Be(Document.NormalizedContentBuilderVersion);
+        (await sut.Backfill(1)).Processed.Should().Be(0);
+        await client.DidNotReceiveWithAnyArgs().GetDocumentContent(default, default, default);
+    }
+
     private async Task<Document> SeedLegacyDocument(string ticker, byte[] content = null)
     {
         EquityIssuer company = Equibles.TestSupport.EquityIssuerSeed.Create(

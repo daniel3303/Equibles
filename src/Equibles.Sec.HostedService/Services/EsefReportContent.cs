@@ -1,4 +1,5 @@
 using System.Text;
+using Equibles.Core.Documents;
 using Equibles.Sec.BusinessLogic;
 
 namespace Equibles.Sec.HostedService.Services;
@@ -84,7 +85,9 @@ public static class EsefReportContent
         var stripped = StripEmbeddedData(html);
         if (string.IsNullOrEmpty(stripped) || stripped.Length > MaxRetrievalHtmlChars)
             return [];
-        var normalized = normalizer.NormalizeFragment(stripped);
+        var normalized = normalizer.NormalizeFragment(
+            XhtmlCompatibility.ExpandEmptyElements(stripped)
+        );
         return Encoding.UTF8.GetBytes(converter.Convert(normalized) ?? string.Empty);
     }
 }
