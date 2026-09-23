@@ -66,11 +66,7 @@ public class ChunkRepositoryStatementTimeoutClassificationTests
         );
 
         Assert.True(
-            ChunkRepository.IsStatementTimeout(
-                readTimeout,
-                TimeSpan.FromSeconds(15),
-                BudgetSeconds
-            )
+            ChunkRepository.IsStatementTimeout(readTimeout, TimeSpan.FromSeconds(15), BudgetSeconds)
         );
     }
 

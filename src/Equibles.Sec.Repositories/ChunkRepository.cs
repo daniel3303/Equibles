@@ -336,12 +336,14 @@ public class ChunkRepository : BaseRepository<Chunk>
         {
             if (current is PostgresException { SqlState: PostgresErrorCodes.QueryCanceled })
                 return true;
-            if (current is NpgsqlException { InnerException: TimeoutException } readTimeout
+            if (
+                current is NpgsqlException { InnerException: TimeoutException } readTimeout
                 && readTimeout.Message.StartsWith(
                     "Exception while reading from stream",
                     StringComparison.Ordinal
                 )
-                && elapsed >= TimeSpan.FromSeconds(budgetSeconds))
+                && elapsed >= TimeSpan.FromSeconds(budgetSeconds)
+            )
                 return true;
             if (current is TimeoutException && withinBudgetWindow)
                 return true;
