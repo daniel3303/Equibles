@@ -207,6 +207,54 @@ public class DocumentScraperFilingTombstoneTests
         (await ctx.Set<FailedFilingIngest>().SingleAsync()).AttemptCount.Should().Be(1);
     }
 
+    // The scrape target list includes CIK issuers with no active U.S. presentation listing (an
+    // unlisted filer, or one mid-way through a ticker change). CreateDocument used to reload the
+    // issuer through the current-directory view, got null for them, and threw a
+    // NullReferenceException inside the persistence probe (WORX, production 2026-09-23).
+    [Fact]
+    public async Task IssuerWithoutPresentationListing_ReachesPersistenceWithTheIssuer()
+    {
+        await using var ctx = await SeedCompany(CreateContext());
+        var issuer = await ctx.Set<EquityIssuer>().Include(row => row.Presentation).SingleAsync();
+        ctx.Remove(issuer.Presentation);
+        await ctx.SaveChangesAsync();
+        var persistence = Substitute.For<IDocumentPersistenceService>();
+        persistence
+            .Exists(
+                Arg.Any<EquityIssuer>(),
+                Arg.Any<DocumentType>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
+            )
+            // The outer dedup probe misses, so the filing reaches CreateDocument, whose own
+            // re-check then finds it stored and stops before any download.
+            .Returns(false, true);
+        var scraper = BuildScraper(ctx, EdgarWithOneFiling(), persistence);
+
+        var result = await scraper.ScrapeDocuments();
+
+        result.Errors.Should().Be(0);
+        await persistence
+            .Received()
+            .Exists(
+                Arg.Is<EquityIssuer>(company => company != null && company.Id == issuer.Id),
+                DocumentType.TenK,
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Accession
+            );
+        await persistence
+            .DidNotReceive()
+            .Exists(
+                null,
+                Arg.Any<DocumentType>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<string>()
+            );
+    }
+
     public static TheoryData<Exception> TransientFailures =>
         new()
         {

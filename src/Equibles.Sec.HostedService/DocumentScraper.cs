@@ -1023,9 +1023,19 @@ public class DocumentScraper : IDocumentScraper
                 EquityIssuerRepository companyRepository =
                     scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
 
-                EquityIssuer company = await companyRepository.GetCurrentUsDirectoryIssuer(
-                    companyOutContext.Id
-                );
+                // Ingestion is keyed by CIK: an issuer with no active U.S. presentation listing is a
+                // scrape target too, so reload it by id, never through the current-directory view.
+                EquityIssuer company = await companyRepository.Get(companyOutContext.Id);
+                if (company == null)
+                {
+                    _logger.LogInformation(
+                        "Skipping filing {AccessionNumber} because issuer {CompanyId} (CIK {Cik}) was removed during the scrape",
+                        filing.AccessionNumber,
+                        companyOutContext.Id,
+                        companyOutContext.Cik
+                    );
+                    return false;
+                }
 
                 // The caller's dedup check runs OUTSIDE this retry pipeline, and
                 // Save commits its transaction before the post-commit publish.
