@@ -109,7 +109,7 @@ public class Document
     /// </summary>
     public const int NormalizedContentBuilderVersion = 1;
 
-    [MaxLength(500)]
+    [MaxLength(2000)]
     public string SourceUrl { get; set; }
 
     /// <summary>
