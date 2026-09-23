@@ -56,8 +56,16 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
     private readonly List<Chunk> _allChunks;
     private readonly List<Chunk> _scopedFallbackResults;
     private readonly Exception _scopedFallbackError;
+    private readonly List<Chunk> _reducedResults;
+    private readonly bool _reducedTimesOut;
+    private string _originalText;
 
     public List<int?> ConjunctiveBudgets { get; } = [];
+
+    // A disjunctive pass whose text differs from the caller's query is the shortened-query pass.
+    public List<string> ReducedTexts { get; } = [];
+
+    public List<int?> ReducedBudgets { get; } = [];
 
     public List<int?> DisjunctiveBudgets { get; } = [];
 
@@ -77,10 +85,14 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         List<Chunk> disjunctiveResults = null,
         List<Chunk> scopedFallbackResults = null,
         Exception scopedFallbackError = null,
-        List<Chunk> allChunks = null
+        List<Chunk> allChunks = null,
+        List<Chunk> reducedResults = null,
+        bool reducedTimesOut = false
     )
         : base(null)
     {
+        _reducedResults = reducedResults ?? [];
+        _reducedTimesOut = reducedTimesOut;
         _conjunctiveTimesOut = conjunctiveTimesOut;
         _disjunctiveTimesOut = disjunctiveTimesOut;
         _conjunctiveError = conjunctiveError;
@@ -105,6 +117,18 @@ internal sealed class TimeoutChunkRepository : ChunkRepository
         CancellationToken cancellationToken = default
     )
     {
+        _originalText ??= searchText;
+        if (!conjunctive && searchText != _originalText)
+        {
+            ReducedTexts.Add(searchText);
+            ReducedBudgets.Add(commandTimeoutSeconds);
+            if (_reducedTimesOut)
+                throw new ChunkSearchTimeoutException(
+                    "statement budget elapsed",
+                    new TimeoutException()
+                );
+            return Task.FromResult(_reducedResults);
+        }
         (conjunctive ? ConjunctiveBudgets : DisjunctiveBudgets).Add(commandTimeoutSeconds);
         if (conjunctive && _conjunctiveError != null)
             throw _conjunctiveError;

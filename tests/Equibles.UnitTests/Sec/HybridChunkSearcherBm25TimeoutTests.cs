@@ -291,6 +291,120 @@ public class HybridChunkSearcherBm25TimeoutTests
         );
     }
 
+    // Every full-length pass timed out on a long corpus-wide query: one more pass on the query's
+    // few most specific terms, on its own short budget, answers instead of failing the call.
+    [Fact]
+    public async Task AllPassesTimeout_LongUnscopedQuery_ShortenedPassCarriesTheResult()
+    {
+        var chunk = new Chunk { Id = Guid.NewGuid(), Content = "Alberta closure spend" };
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            disjunctiveTimesOut: true,
+            reducedResults: [chunk],
+            allChunks: [chunk]
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        var results = await searcher.Search(
+            "Alberta Energy Regulator mandatory closure spend requirement 2026",
+            5,
+            disjunctiveFallback: true
+        );
+
+        Assert.Equal(chunk.Id, Assert.Single(results).Id);
+        Assert.Equal("Alberta Energy Regulator 2026", Assert.Single(chunkRepository.ReducedTexts));
+        Assert.Equal(2, Assert.Single(chunkRepository.ReducedBudgets));
+    }
+
+    // The shortened query covers only part of the original, so its empty result proves nothing:
+    // the timeout must still surface rather than read as "the filings say nothing about this".
+    [Fact]
+    public async Task AllPassesTimeout_ShortenedPassEmpty_SurfacesTheTimeout()
+    {
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            disjunctiveTimesOut: true
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        await Assert.ThrowsAsync<ChunkSearchTimeoutException>(() =>
+            searcher.Search(
+                "discount to PDP PV-10 share price valuation",
+                5,
+                disjunctiveFallback: true
+            )
+        );
+        Assert.Single(chunkRepository.ReducedTexts);
+    }
+
+    [Fact]
+    public async Task AllPassesTimeout_ShortenedPassTimesOut_SurfacesTheTimeout()
+    {
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            disjunctiveTimesOut: true,
+            reducedTimesOut: true
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        await Assert.ThrowsAsync<ChunkSearchTimeoutException>(() =>
+            searcher.Search(
+                "discount to PDP PV-10 share price valuation",
+                5,
+                disjunctiveFallback: true
+            )
+        );
+    }
+
+    // A pass that answered, or a scoped fallback that answered, never pays for the extra pass.
+    [Fact]
+    public async Task HealthyOrScopedAnswer_NeverRunsTheShortenedPass()
+    {
+        var chunk = new Chunk
+        {
+            Id = Guid.NewGuid(),
+            Ticker = "TSM",
+            Content = "match",
+        };
+        var healthy = new TimeoutChunkRepository(conjunctiveResults: [chunk], allChunks: [chunk]);
+        await NewSearcher(healthy, new StubEmbeddingRepository([]))
+            .Search("discount to PDP PV-10 share price valuation", 5, disjunctiveFallback: true);
+        var scoped = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            scopedFallbackResults: [chunk],
+            allChunks: [chunk]
+        );
+        await NewSearcher(scoped, new StubEmbeddingRepository([]))
+            .Search(
+                "discount to PDP PV-10 share price valuation",
+                5,
+                ticker: "TSM",
+                disjunctiveFallback: true
+            );
+
+        Assert.Empty(healthy.ReducedTexts);
+        Assert.Empty(scoped.ReducedTexts);
+    }
+
+    // The shortened pass is an any-term pass, so a caller that asked for all-terms matching only
+    // (peer discovery, the global search provider) keeps the timeout instead of partial matches.
+    [Fact]
+    public async Task AllPassesTimeout_WithoutDisjunctiveOptIn_NeverRunsTheShortenedPass()
+    {
+        var chunk = new Chunk { Id = Guid.NewGuid(), Content = "partial match" };
+        var chunkRepository = new TimeoutChunkRepository(
+            conjunctiveTimesOut: true,
+            reducedResults: [chunk],
+            allChunks: [chunk]
+        );
+        var searcher = NewSearcher(chunkRepository, new StubEmbeddingRepository([]));
+
+        await Assert.ThrowsAsync<ChunkSearchTimeoutException>(() =>
+            searcher.Search("discount to PDP PV-10 share price valuation", 5)
+        );
+        Assert.Empty(chunkRepository.ReducedTexts);
+    }
+
     private static HybridChunkSearcher NewSearcher(
         ChunkRepository chunkRepository,
         EmbeddingRepository embeddingRepository

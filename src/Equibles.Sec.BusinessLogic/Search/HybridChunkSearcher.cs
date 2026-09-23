@@ -23,7 +23,9 @@ namespace Equibles.Sec.BusinessLogic.Search;
 /// semantic-only (the keyword passes timed out while the vector arm answered) — that trade is
 /// accepted deliberately: a somewhat weaker ranking beats an error, and the warning log is the
 /// trace. The pass after a timed-out pass runs on a tighter statement budget, so one search can
-/// never hold a connection for much more than a single full budget plus that reduced one.
+/// never hold a connection for much more than a single full budget plus that reduced one. When
+/// every full-length pass timed out, an opted-in search tries one last short-budget pass on the
+/// query's few most specific terms (<see cref="Bm25QueryReducer"/>).
 /// A search scoped to one ticker OR one document has a third leg the corpus-wide search cannot
 /// have: a bounded PostgreSQL full-text scan over that slice. When it answers, its proven matches
 /// are returned as they are — the arms that just failed under the same load are not re-tried.
@@ -64,13 +66,18 @@ public class HybridChunkSearcher
     // The timed-out pass warmed the index pages it died on (measured on the production
     // corpus: 6.2s cold vs 1.25s for the warm disjunctive pass), so a tighter budget
     // still lets the degrade succeed while bounding what one search can pin a database
-    // connection for — the pair can never burn more than one full budget plus this.
+    // connection for — the pair can never burn more than one full budget plus this (and the
+    // shortened-query pass below, if it runs).
     private const int DegradedPassTimeoutSeconds = 3;
 
     // Statement budget for a SCOPED first pass (ticker or document). A scoped search has the
     // bounded full-text fallback below it, so it can afford to give up sooner than a corpus-wide
-    // one, which has nothing to degrade to but the vector arm.
+    // one, which has only the vector arm and the shortened-query pass behind it.
     private const int ScopedPassTimeoutSeconds = 3;
+
+    // Statement budget for the shortened-query pass that runs only after every full-length
+    // pass has timed out: the keyword passes stay bounded at 10s unscoped and 11s scoped.
+    private const int ReducedPassTimeoutSeconds = 2;
 
     public async Task<List<Chunk>> Search(
         string query,
@@ -235,6 +242,50 @@ public class HybridChunkSearcher
                     "Disjunctive BM25 fallback timed out; keeping the conjunctive results"
                 );
                 bm25Timeout ??= exception;
+            }
+        }
+
+        // Every full-length pass timed out and nothing answered: retry once with the query cut
+        // to its few most specific terms, which reads far fewer posting lists. It is an any-term
+        // pass, so it runs only for callers that opted into the disjunctive fallback. Its hits
+        // cover part of the query, so an empty result still proves nothing and the timeout
+        // stays armed.
+        if (
+            disjunctiveFallback
+            && !scopedFallbackAnswered
+            && bm25.Count == 0
+            && bm25Timeout != null
+            && Bm25QueryReducer.Reduce(query) is { } reducedQuery
+        )
+        {
+            try
+            {
+                bm25 = (
+                    await _chunkRepository.HybridSearch(
+                        reducedQuery,
+                        bm25Limit,
+                        ticker,
+                        excludeTickers,
+                        documentId,
+                        documentTypes,
+                        startDate,
+                        endDate,
+                        conjunctive: false,
+                        commandTimeoutSeconds: ReducedPassTimeoutSeconds,
+                        cancellationToken: cancellationToken
+                    )
+                )
+                    .DistinctBy(chunk => chunk.Id)
+                    .ToList();
+                if (bm25.Count > 0)
+                    _logger.LogWarning(
+                        "BM25 passes timed out; answered from the shortened query {ReducedQuery}",
+                        reducedQuery
+                    );
+            }
+            catch (ChunkSearchTimeoutException exception)
+            {
+                _logger.LogWarning(exception, "Shortened-query BM25 pass timed out");
             }
         }
 

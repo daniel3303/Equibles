@@ -24,13 +24,14 @@ public class RagSearchTools
 {
     private const int MaxExcludedTickers = 25;
 
-    // A BM25 statement-budget timeout is the ONE search failure the caller can act on: the
-    // statement that ran out of budget warmed the index pages it died on, so the same call
-    // usually succeeds straight after. The executor's catch-all says "an error occurred", which
-    // a calling model reported back to us as an unactionable argument fault (production,
-    // 2026-09-02) — name the stall and ask for the retry instead.
-    private const string SearchTimedOutMessage =
-        "The search timed out before it could rank the excerpts. Retry the same call.";
+    // A BM25 statement-budget timeout is the one search failure the caller can act on, so name
+    // the stall instead of the executor's catch-all (production, 2026-09-02). A corpus-wide search
+    // has no bounded fallback, so a narrower call is what works; a scoped one already degraded.
+    internal const string UnscopedSearchTimedOutMessage =
+        "The search timed out before it could rank the excerpts. Narrow it with a ticker, or shorten the query to its 3-4 most specific terms, then retry.";
+
+    internal const string ScopedSearchTimedOutMessage =
+        "The search timed out before it could rank the excerpts. Retry the same call, or shorten the query to its 3-4 most specific terms.";
 
     // Attribute descriptions are compile-time constants, so they cannot enumerate types
     // registered at host startup (DocumentType.Register). They name the built-in filing
@@ -136,31 +137,35 @@ public class RagSearchTools
                     if (stock == null)
                         return McpToolExecutor.StockNotFound(ticker);
 
-                    chunks = await SearchOrTimeoutFault(() =>
-                        _ragManager.SearchRelevantChunksByCompany(
-                            query,
-                            stock.Presentation.Listing.Ticker,
-                            maxResults,
-                            parsedTypes,
-                            ToDateOnly(startDate),
-                            ToDateOnly(endDate),
-                            broadenSparseResults: true
-                        )
+                    chunks = await SearchOrTimeoutFault(
+                        () =>
+                            _ragManager.SearchRelevantChunksByCompany(
+                                query,
+                                stock.Presentation.Listing.Ticker,
+                                maxResults,
+                                parsedTypes,
+                                ToDateOnly(startDate),
+                                ToDateOnly(endDate),
+                                broadenSparseResults: true
+                            ),
+                        scoped: true
                     );
                 }
                 else
                 {
-                    chunks = await SearchOrTimeoutFault(() =>
-                        _ragManager.SearchRelevantChunks(
-                            query,
-                            maxResults,
-                            parsedTypes,
-                            ToDateOnly(startDate),
-                            ToDateOnly(endDate),
-                            parsedTickers,
-                            Math.Max(maxResultsPerCompany, 0),
-                            broadenSparseResults: true
-                        )
+                    chunks = await SearchOrTimeoutFault(
+                        () =>
+                            _ragManager.SearchRelevantChunks(
+                                query,
+                                maxResults,
+                                parsedTypes,
+                                ToDateOnly(startDate),
+                                ToDateOnly(endDate),
+                                parsedTickers,
+                                Math.Max(maxResultsPerCompany, 0),
+                                broadenSparseResults: true
+                            ),
+                        scoped: false
                     );
                 }
 
@@ -217,13 +222,15 @@ public class RagSearchTools
                     );
                 if (mode != "semantic")
                     return $"Unknown searchMode \"{searchMode}\" — pass 'semantic' (default) or 'exact'.";
-                var chunks = await SearchOrTimeoutFault(() =>
-                    _ragManager.SearchRelevantChunksByDocument(
-                        query,
-                        documentId,
-                        maxResults,
-                        broadenSparseResults: true
-                    )
+                var chunks = await SearchOrTimeoutFault(
+                    () =>
+                        _ragManager.SearchRelevantChunksByDocument(
+                            query,
+                            documentId,
+                            maxResults,
+                            broadenSparseResults: true
+                        ),
+                    scoped: true
                 );
 
                 if (chunks.Count == 0)
@@ -490,7 +497,10 @@ public class RagSearchTools
     // Turns a BM25 statement-budget timeout into a fault the caller can act on, keeping the
     // original exception attached so the recorded Errors row still shows what actually failed.
     // Every other failure keeps the executor's catch-all wording.
-    private static async Task<List<Chunk>> SearchOrTimeoutFault(Func<Task<List<Chunk>>> search)
+    internal static async Task<List<Chunk>> SearchOrTimeoutFault(
+        Func<Task<List<Chunk>>> search,
+        bool scoped
+    )
     {
         try
         {
@@ -498,7 +508,10 @@ public class RagSearchTools
         }
         catch (ChunkSearchTimeoutException exception)
         {
-            throw new McpToolFaultException(SearchTimedOutMessage, exception);
+            throw new McpToolFaultException(
+                scoped ? ScopedSearchTimedOutMessage : UnscopedSearchTimedOutMessage,
+                exception
+            );
         }
     }
 
