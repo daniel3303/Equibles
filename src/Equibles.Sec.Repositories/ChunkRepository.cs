@@ -317,11 +317,10 @@ public class ChunkRepository : BaseRepository<Chunk>
     // Npgsql surfaces its CommandTimeout-triggered cancellation either as the raw backend
     // error (PostgresException 57014 "canceling statement due to user request") or wrapped
     // in an NpgsqlException with a TimeoutException inside, depending on where in the read
-    // loop the cancel lands — walk the chain and match both shapes. The bare-TimeoutException
-    // shape is only trusted when the run actually lasted about the statement budget: a pool
-    // exhaustion or connect timeout carries the same TimeoutException but elapses on the
-    // connection-string timeout (15s default), and relabelling THAT as the statement budget
-    // would send the caller into a doomed degrade pass against a database it cannot reach.
+    // loop the cancel lands — walk the chain and match both shapes. EF's retry strategy can
+    // wrap a read timeout after more than one statement budget has elapsed, so a provider read
+    // timeout is still classified then. Other TimeoutException shapes are trusted only near the
+    // statement budget: pool exhaustion and connect timeouts use the connection-string timeout.
     // A caller-requested cancellation surfaces as OperationCanceledException (or trips the
     // token) and is excluded at the catch site.
     // internal: the classification rules are pinned by unit tests.
@@ -336,6 +335,13 @@ public class ChunkRepository : BaseRepository<Chunk>
         for (var current = exception; current != null; current = current.InnerException)
         {
             if (current is PostgresException { SqlState: PostgresErrorCodes.QueryCanceled })
+                return true;
+            if (current is NpgsqlException { InnerException: TimeoutException } readTimeout
+                && readTimeout.Message.StartsWith(
+                    "Exception while reading from stream",
+                    StringComparison.Ordinal
+                )
+                && elapsed >= TimeSpan.FromSeconds(budgetSeconds))
                 return true;
             if (current is TimeoutException && withinBudgetWindow)
                 return true;

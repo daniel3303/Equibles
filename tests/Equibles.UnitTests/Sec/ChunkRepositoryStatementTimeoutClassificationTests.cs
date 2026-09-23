@@ -55,6 +55,26 @@ public class ChunkRepositoryStatementTimeoutClassificationTests
     }
 
     [Fact]
+    public void WrappedReadTimeout_AfterRetryBudget_Classifies()
+    {
+        var readTimeout = new InvalidOperationException(
+            "An exception has been raised that is likely due to a transient failure.",
+            new NpgsqlException(
+                "Exception while reading from stream",
+                new TimeoutException("Timeout during reading attempt")
+            )
+        );
+
+        Assert.True(
+            ChunkRepository.IsStatementTimeout(
+                readTimeout,
+                TimeSpan.FromSeconds(15),
+                BudgetSeconds
+            )
+        );
+    }
+
+    [Fact]
     public void TimeoutException_LongAfterTheBudget_DoesNotClassify()
     {
         // The pool-exhaustion / connect-timeout shape: same TimeoutException inside, but
