@@ -48,6 +48,16 @@ public class NportFilingRepository : BaseRepository<NportFiling>
     }
 
     /// <summary>
+    /// The reported holding rows carrying one exact security ISIN, across all NPORT filings. A
+    /// foreign listing has no CUSIP, so its fund positions are identified by the ISIN the filer
+    /// stated; a null ISIN matches nothing.
+    /// </summary>
+    public IQueryable<NportHolding> GetHoldingsByIsin(string isin)
+    {
+        return DbContext.Set<NportHolding>().Where(h => isin != null && h.Isin == isin);
+    }
+
+    /// <summary>
     /// The reported holding rows carrying the stock's current CUSIP or any of its retired-CUSIP
     /// aliases (<see cref="EquityIssuerCusipAlias"/>), across all NPORT filings. After an issuer-level
     /// CUSIP change a fund keeps reporting the position under the old CUSIP — a laggard filer for a
