@@ -296,6 +296,163 @@ public class HouseDisclosureClientTests
     }
 
     [Fact]
+    public void ParseTransactionLinesWithShape_UnanchoredLineWithOneDate_IsRejected()
+    {
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "Microsoft Corp. (MSFT) Corrupt 04/01/2024 $15,001 - $50,000",
+                "Apple Inc. (AAPL) P 03/03/2024 03/05/2024 $1,001 - $15,000",
+            ],
+            "Nancy Pelosi",
+            FilingDate
+        );
+
+        result.Transactions.Should().ContainSingle();
+        result.Transactions[0].SourceRowIndex.Should().Be(1);
+        result.RejectedSourceRowCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_UnreadableRowAfterARow_IsRejectedNotGlued()
+    {
+        // A one-date line carrying an amount range is a row, not a wrapped fragment of the row
+        // above: gluing it would lose the trade and name Apple "Apple Inc. Microsoft Corp.".
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "Apple Inc. (AAPL) P 03/03/2024 03/05/2024 $1,001 - $15,000",
+                "Microsoft Corp. (MSFT) Corrupt 04/01/2024 $15,001 - $50,000",
+            ],
+            "Nancy Pelosi",
+            FilingDate
+        );
+
+        result.RejectedSourceRowCount.Should().Be(1);
+        var apple = result.Transactions.Should().ContainSingle().Subject;
+        apple.SourceRowIndex.Should().Be(0);
+        apple.Ticker.Should().Be("AAPL");
+        apple.AssetName.Should().NotContain("Microsoft");
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_WrappedNotificationDate_IsRejectedNotGlued()
+    {
+        // A row whose notification date wrapped has one date and its range on the anchor line:
+        // it is refused (and keeps its index) rather than read as part of another row.
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "Apple Inc. (AAPL) P 03/03/2024 $1,001 - $15,000",
+                "03/05/2024",
+                "Microsoft Corp. (MSFT) S 04/01/2024 04/03/2024 $15,001 - $50,000",
+            ],
+            "Nancy Pelosi",
+            FilingDate
+        );
+
+        result.RejectedSourceRowCount.Should().Be(1);
+        var msft = result.Transactions.Should().ContainSingle().Subject;
+        msft.SourceRowIndex.Should().Be(1);
+        msft.Ticker.Should().Be("MSFT");
+        msft.AssetName.Should().NotContain("Apple");
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_WrappedBondMaturityAndDatedDate_ContinuesTheRow()
+    {
+        // Real lines (filing 20012179): a bond's maturity AND dated date wrap below its row.
+        // Two dates with no amount range are asset text; counting them as a rejected row cut
+        // the name short and pushed every later row onto the next SourceRowIndex.
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "E*Trade Financial Corp VAR RT s 07/15/2019 08/10/2019 $1,001 - $15,000",
+                "gfedc",
+                "09/15/2166 DTD 12/06/2017 [Cs]",
+                "F IlINg s TATus : New",
+                "D EsCRIPTIoN : Corporate bond",
+                "HD supply Holdings, Inc. (HDs) P 07/25/2019 08/10/2019 $1,001 - $15,000",
+                "gfedc",
+                "[sT]",
+            ],
+            "Dean Phillips",
+            FilingDate
+        );
+
+        result.RejectedSourceRowCount.Should().Be(0);
+        result.Transactions.Should().HaveCount(2);
+        var bond = result.Transactions[0];
+        bond.AssetName.Should().Be("E*Trade Financial Corp VAR RT 09/15/2166 DTD 12/06/2017");
+        bond.AssetType.Should().Be("CS");
+        result.Transactions[1].SourceRowIndex.Should().Be(1);
+        result.Transactions[1].Ticker.Should().Be("HDS");
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_UnreadableRowWithTopBracketAmount_IsRejected()
+    {
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "Apple Inc. (AAPL) P 03/03/2024 03/05/2024 $1,001 - $15,000",
+                "Microsoft Corp. (MSFT) Corrupt 04/01/2024 04/02/2024 Over $50,000,000",
+            ],
+            "Nancy Pelosi",
+            FilingDate
+        );
+
+        result.RejectedSourceRowCount.Should().Be(1);
+        result
+            .Transactions.Should()
+            .ContainSingle()
+            .Which.AssetName.Should()
+            .NotContain("Microsoft");
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_BondSeriesEBeforeTheMarker_IsAPurchaseNotAnExchange()
+    {
+        // "Ser E 03/15/2035" is part of the bond's name. The row's own marker is the LAST one
+        // on the line and carries both dates; reading the series letter as an exchange would
+        // skip the purchase by policy and record the filing without it.
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "JT NY ST Dorm Auth Rev 5% Ser E 03/15/2035 [GS] P 03/03/2024 03/05/2024 $1,001 - $15,000",
+            ],
+            "Nancy Pelosi",
+            FilingDate
+        );
+
+        result.PolicySkippedRowCount.Should().Be(0);
+        result.RejectedSourceRowCount.Should().Be(0);
+        var bond = result.Transactions.Should().ContainSingle().Subject;
+        bond.TransactionType.Should().Be(CongressTransactionType.Purchase);
+        bond.TransactionDate.Should().Be(new DateOnly(2024, 3, 3));
+        bond.AssetName.Should().Be("NY ST Dorm Auth Rev 5% Ser E 03/15/2035");
+        bond.AssetType.Should().Be("GS");
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_WrappedBondSeriesELine_ContinuesTheRow()
+    {
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "JT NY ST Dorm Auth Rev 5% Ser P 03/03/2024 03/05/2024 $1,001 - $15,000",
+                "E 03/15/2035 [GS]",
+                "JT NVIDIA Corporation (NVDA) [ST] S 04/14/2023 05/10/2023 $15,001 - $50,000",
+            ],
+            "Nancy Pelosi",
+            FilingDate
+        );
+
+        result.PolicySkippedRowCount.Should().Be(0);
+        result.RejectedSourceRowCount.Should().Be(0);
+        result.Transactions.Should().HaveCount(2);
+        var bond = result.Transactions[0];
+        bond.TransactionType.Should().Be(CongressTransactionType.Purchase);
+        bond.AssetName.Should().Be("NY ST Dorm Auth Rev 5% Ser E 03/15/2035");
+        bond.AssetType.Should().Be("GS");
+        result.Transactions[1].SourceRowIndex.Should().Be(1);
+        result.Transactions[1].Ticker.Should().Be("NVDA");
+    }
+
+    [Fact]
     public void ParseTransactionLinesWithShape_SmallCapsFontRows_ParseInScrambledCase()
     {
         // Some official PDFs embed a small-caps font whose glyphs extract in scrambled case:
@@ -899,7 +1056,7 @@ public class HouseDisclosureClientTests
             .ProcessedFilings.Should()
             .ContainSingle()
             .Which.Should()
-            .Be(new ProcessedFiling(docId, new DateOnly(year, 2, 1), 1));
+            .Be(new ProcessedFiling(docId, new DateOnly(year, 2, 1), 1, RejectedRowCount: 1));
     }
 
     // A one-page PDF with the given lines of Helvetica text, one per row, so the geometry

@@ -95,7 +95,12 @@ public partial class HouseDisclosureClient
 
                         result.Transactions.AddRange(txns);
                         result.ProcessedFilings.Add(
-                            new ProcessedFiling(filing.DocId, filing.FilingDate, txns.Count)
+                            new ProcessedFiling(
+                                filing.DocId,
+                                filing.FilingDate,
+                                txns.Count,
+                                parsed.RejectedSourceRowCount
+                            )
                         );
                     }
                     catch (OperationCanceledException)
@@ -385,6 +390,10 @@ public partial class HouseDisclosureClient
         DateOnly filingDate
     ) => ParseTransactionLinesWithShape(rawLines, memberName, filingDate).Transactions;
 
+    // Row-index invariant: every row-shaped line takes the next SourceRowIndex whether it is
+    // parsed, rejected or policy-skipped, and trades upsert on (kind, SourceId, SourceRowIndex)
+    // without ever deleting. A later parser may turn a rejected row into a parsed one, but must
+    // not change WHICH lines count as rows, or every later index lands on another stored trade.
     internal static HousePtrParseResult ParseTransactionLinesWithShape(
         IReadOnlyList<string> rawLines,
         string memberName,
@@ -420,8 +429,8 @@ public partial class HouseDisclosureClient
             if (IsFieldLabelLine(lines[i]))
                 continue;
 
-            var anchor = TransactionAnchorRegex().Match(lines[i]);
-            if (!anchor.Success)
+            var anchor = FindTransactionAnchor(lines[i]);
+            if (anchor == null)
             {
                 if (LooksLikeMalformedTransactionRow(lines[i]))
                 {
@@ -481,7 +490,15 @@ public partial class HouseDisclosureClient
     }
 
     private static bool IsPolicySkippedTransactionType(string marker) =>
-        string.Equals(marker.Trim(), "E", StringComparison.OrdinalIgnoreCase);
+        string.Equals(marker.Trim(), "E", StringComparison.Ordinal);
+
+    // The LAST anchor on the line: an asset name can itself end in a marker and a date (a bond
+    // "Ser E 03/15/2035"), and the row's own marker always follows the asset text.
+    private static Match FindTransactionAnchor(string line)
+    {
+        var matches = TransactionAnchorRegex().Matches(line);
+        return matches.Count == 0 ? null : matches[^1];
+    }
 
     private static string FindSubholding(IReadOnlyList<string> lines, int start)
     {
@@ -536,12 +553,19 @@ public partial class HouseDisclosureClient
         PtrHeaderTokens.Count(token => line.Contains(token, StringComparison.OrdinalIgnoreCase))
         >= 3;
 
-    // A filed row prints its transaction AND notification dates on the anchor line, so a line
-    // with two dates and no anchor is a row the parser could not read. A single date is a
-    // wrapped asset fragment — a bond's maturity ("Due 10/1/2033 [GS]") wraps below its row —
-    // and must keep flowing into that row's name.
+    // A filed row prints its dates AND the start of its amount range ("$15,001 -") on the
+    // anchor line, so a dated line with a range start and no anchor is a row the parser could
+    // not read. A dated line without one is a wrapped bond name that continues its row: a
+    // maturity ("Due 10/1/2033 [GS] $50,000", only the upper bound wraps) or a maturity plus a
+    // dated date ("09/15/2166 DTD 12/06/2017 [Cs]"), which carries two dates of its own.
     private static bool LooksLikeMalformedTransactionRow(string line) =>
-        !IsFieldLabelLine(line) && DateTokenRegex().Count(line) >= 2;
+        !IsFieldLabelLine(line)
+        && DateTokenRegex().IsMatch(line)
+        && AmountRangeStartRegex().IsMatch(line);
+
+    // "$15,001 -", the top bracket "$50,000,001 +", or "Over $50,000,000".
+    [GeneratedRegex(@"\$\s*[\d,]+(?:\.\d+)?\s*[-+]|\b(?i:over)\s*\$")]
+    private static partial Regex AmountRangeStartRegex();
 
     private static bool IsFieldLabelLine(string line) => FieldLabelRegex().IsMatch(line);
 
@@ -703,14 +727,13 @@ public partial class HouseDisclosureClient
     private static partial Regex LeadingFilingIdRegex();
 
     // The transaction-type marker (P, S, S (partial), S (full), or E for an exchange, which is
-    // skipped by policy) immediately followed by its transaction date — the anchor identifying
-    // the line that starts a transaction row. Group 1 = type, group 2 = MM/DD/YYYY date.
-    // Case-insensitive: some official PDFs embed a small-caps font whose glyphs extract in
-    // scrambled case ("s (partial) 03/22/2019", owner "sP", ticker "(aaPl)"), and every row of
-    // such a filing was refused as malformed when the marker was matched in upper case only.
+    // skipped by policy) followed by the transaction AND notification dates — the anchor that
+    // starts a transaction row. Requiring both dates keeps an asset name ending in a marker and
+    // one date ("Ser E 03/15/2035") from reading as a row. Group 1 = type, group 2 = the
+    // transaction date. The sale marker also matches "s": a small-caps font in some official
+    // PDFs extracts it in lower case ("s (partial) 03/22/2019"); every other letter is exact.
     [GeneratedRegex(
-        @"(?<=\s|^)(S \(partial\)|S \(full\)|S|P|E)\s+(\d{2}/\d{2}/\d{4})",
-        RegexOptions.IgnoreCase
+        @"(?<=\s|^)([Ss] \((?i:partial|full)\)|[Ss]|P|E)\s+(\d{2}/\d{2}/\d{4})\s+\d{1,2}/\d{1,2}/\d{4}"
     )]
     private static partial Regex TransactionAnchorRegex();
 
