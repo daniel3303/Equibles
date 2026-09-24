@@ -6,6 +6,9 @@ using Equibles.Congress.HostedService.Models;
 using Equibles.Congress.HostedService.Services;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.Fonts.Standard14Fonts;
+using UglyToad.PdfPig.Writer;
 
 namespace Equibles.UnitTests.Congress;
 
@@ -263,20 +266,121 @@ public class HouseDisclosureClientTests
     }
 
     [Fact]
-    public void ParseTransactionLinesWithShape_UnanchoredLineWithOneDate_IsRejected()
+    public void ParseTransactionLinesWithShape_WrappedMaturityDateWithOneDate_ContinuesTheRow()
     {
+        // A bond's maturity wraps below its row ("Due" / "10/1/2033 [GS]"). A filed row prints
+        // TWO dates on its anchor line, so a single date is a continuation, not a rejected row
+        // — treating it as one dropped the asset-type code and shifted every later row index.
         var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
             [
-                "Microsoft Corp. (MSFT) Corrupt 04/01/2024 $15,001 - $50,000",
-                "Apple Inc. (AAPL) P 03/03/2024 03/05/2024 $1,001 - $15,000",
+                "JT Illinois Housing Dev Auth 1.9%; Due P 04/14/2023 05/10/2023 $1,001 - $15,000",
+                "10/1/2033 [GS]",
+                "F      S     : New",
+                "S          O : Morgan Stanley Trust Account",
+                "JT NVIDIA Corporation (NVDA) [ST] P 04/14/2023 05/10/2023 $15,001 -",
+                "$50,000",
             ],
-            "Nancy Pelosi",
+            "Jonathan Jackson",
             FilingDate
         );
 
-        result.Transactions.Should().ContainSingle();
-        result.Transactions[0].SourceRowIndex.Should().Be(1);
-        result.RejectedSourceRowCount.Should().Be(1);
+        result.RejectedSourceRowCount.Should().Be(0);
+        result.Transactions.Should().HaveCount(2);
+        var bond = result.Transactions[0];
+        bond.SourceRowIndex.Should().Be(0);
+        bond.AssetName.Should().Be("Illinois Housing Dev Auth 1.9%; Due 10/1/2033");
+        bond.AssetType.Should().Be("GS");
+        bond.Subholding.Should().Be("Morgan Stanley Trust Account");
+        result.Transactions[1].SourceRowIndex.Should().Be(1);
+        result.Transactions[1].AmountTo.Should().Be(50_000);
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_SmallCapsFontRows_ParseInScrambledCase()
+    {
+        // Some official PDFs embed a small-caps font whose glyphs extract in scrambled case:
+        // the marker ("s (partial)"), the owner ("sP"), the ticker ("(aaPl)") and the labels
+        // ("F IlINg s TaTus :", "D EsCRIPTIoN :"). Every row of such a filing used to be
+        // refused as malformed, and a label carrying a date used to count as a rejected row.
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "sP apple Inc. (aaPl) [sT] s (partial) 03/22/2019 04/03/2019 $1,001 - $15,000",
+                "gfedcb",
+                "F IlINg s TaTus : New",
+                "D EsCRIPTIoN : redeemed partial call payout 5.75%, 11/01/2024",
+                "sP Methanex Corporation (MEoH) P 05/09/2019 06/04/2019 $1,001 - $15,000",
+                "gfedc",
+                "[sT]",
+                "F IlINg s TaTus : New",
+                "S UbHOLDINg O F : Sara Jacobs Trust U/A DTD 09/01/2009 > Merrill Lynch",
+            ],
+            "Earl Blumenauer",
+            FilingDate
+        );
+
+        result.RejectedSourceRowCount.Should().Be(0);
+        result.Transactions.Should().HaveCount(2);
+
+        var sale = result.Transactions[0];
+        sale.SourceRowIndex.Should().Be(0);
+        sale.TransactionType.Should().Be(CongressTransactionType.Sale);
+        sale.OwnerType.Should().Be("SP");
+        sale.Ticker.Should().Be("AAPL");
+        sale.AssetType.Should().Be("ST");
+        sale.AssetName.Should().Be("apple Inc. (aaPl)");
+        sale.TransactionDate.Should().Be(new DateOnly(2019, 3, 22));
+
+        var purchase = result.Transactions[1];
+        purchase.SourceRowIndex.Should().Be(1);
+        purchase.Ticker.Should().Be("MEOH");
+        purchase.AssetType.Should().Be("ST");
+        purchase.AssetName.Should().Be("Methanex Corporation (MEoH)");
+        purchase.Subholding.Should().Be("Sara Jacobs Trust U/A DTD 09/01/2009 > Merrill Lynch");
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_ExchangeRow_IsSkippedByPolicyAndKeepsItsRowIndex()
+    {
+        // "E" is a filed exchange, a row with no trade type of ours (the Senate parser skips
+        // "Exchange" the same way). It is not a parse failure, and it takes a row index so a
+        // parser that later reads exchanges cannot shift the rows after it.
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "2000063452 SP Brookfield Infrastructure E 04/03/2020 04/11/2020 $15,001 -",
+                "Partners LP Class A $50,000",
+                "(BIPC) [ST]",
+                "F ILINg S TATuS : Amended",
+                "S uBHOLDINg O F : Neuberger Berman - Traditional IRA",
+                "D ESCRIPTION : I exchanged Brookfield Partnership earlier this day for this stock.",
+                "SP Tapestry, Inc. (TPR) [ST] P 05/15/2019 06/04/2019 $1,001 - $15,000",
+            ],
+            "Alan S. Lowenthal",
+            FilingDate
+        );
+
+        result.RejectedSourceRowCount.Should().Be(0);
+        result.PolicySkippedRowCount.Should().Be(1);
+        var tx = result.Transactions.Should().ContainSingle().Subject;
+        tx.Ticker.Should().Be("TPR");
+        tx.SourceRowIndex.Should().Be(1);
+    }
+
+    [Fact]
+    public void ParseTransactionLinesWithShape_ScrambledCaseReprintedHeader_IsScrubbedFromTheRow()
+    {
+        var result = HouseDisclosureClient.ParseTransactionLinesWithShape(
+            [
+                "SP Tapestry, Inc. (TPR) [ST] P 05/15/2019 06/04/2019 $1,001 - $15,000",
+                "gfedc iD owner asset transaction Date notification amount cap. type Date gains > $200?",
+                "F ILINg S TATuS : New",
+            ],
+            "Alan S. Lowenthal",
+            FilingDate
+        );
+
+        var tx = result.Transactions.Should().ContainSingle().Subject;
+        tx.AssetName.Should().Be("Tapestry, Inc. (TPR)");
+        tx.AmountTo.Should().Be(15_000);
     }
 
     // ---- end-to-end against real PTR PDFs (page-geometry reconstruction) ----
@@ -322,6 +426,107 @@ public class HouseDisclosureClientTests
         tx.OwnerType.Should().BeNull();
         tx.Ticker.Should().BeNull();
         tx.TransactionType.Should().Be(CongressTransactionType.Purchase);
+    }
+
+    [Fact]
+    public void ParsePtrPdf_RealSmallCapsFontFiling_ParsesEveryRow()
+    {
+        // Blumenauer 2019 (DocID 20011791): the small-caps font renders "s (partial)" markers
+        // and "F IlINg s TaTus :" labels. Production refused this filing every cycle for years
+        // because half its rows read as malformed, and sibling filings with only "P" rows were
+        // stored with the scrambled label glued onto the asset name.
+        var bytes = File.ReadAllBytes(FixturePath("house-ptr-small-caps-font.pdf"));
+
+        var result = HouseDisclosureClient.ParsePtrPdfWithShape(
+            bytes,
+            "Earl Blumenauer",
+            new DateOnly(2019, 6, 4)
+        );
+
+        result.HasExtractableText.Should().BeTrue();
+        result.RejectedSourceRowCount.Should().Be(0);
+        result.PolicySkippedRowCount.Should().Be(0);
+        result.Transactions.Should().HaveCount(8);
+        result
+            .Transactions.Where(t => t.Ticker != null)
+            .Select(t => t.Ticker)
+            .Should()
+            .BeEquivalentTo(["STAY", "MEOH", "TPR", "XRX"]);
+        result.Transactions.Should().OnlyContain(t => t.OwnerType == "SP");
+        result
+            .Transactions.Count(t => t.TransactionType == CongressTransactionType.Sale)
+            .Should()
+            .Be(4);
+        result
+            .Transactions.Should()
+            .OnlyContain(
+                t => !t.AssetName.Contains("TaTus", StringComparison.OrdinalIgnoreCase),
+                "the scrambled filing-status label is row metadata, never part of the name"
+            );
+        result.Transactions.Select(t => t.SourceRowIndex).Should().Equal(0, 1, 2, 3, 4, 5, 6, 7);
+    }
+
+    [Fact]
+    public void ParsePtrPdf_RealExchangeOnlyFiling_IsSkippedByPolicyNotRejected()
+    {
+        // Lowenthal 2020 (DocID 20016428): two "E" rows and nothing else.
+        var bytes = File.ReadAllBytes(FixturePath("house-ptr-exchange-rows.pdf"));
+
+        var result = HouseDisclosureClient.ParsePtrPdfWithShape(
+            bytes,
+            "Alan S. Lowenthal",
+            new DateOnly(2020, 4, 18)
+        );
+
+        result.HasExtractableText.Should().BeTrue();
+        result.Transactions.Should().BeEmpty();
+        result.RejectedSourceRowCount.Should().Be(0);
+        result.PolicySkippedRowCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void ParsePtrPdf_RealWrappedMaturityDateFiling_KeepsTheBondRowWhole()
+    {
+        // Jackson 2023 (DocID 20022795): ten rows, one a municipal bond whose "Due 10/1/2033
+        // [GS]" wraps onto its own line. That fragment used to be counted as a rejected row,
+        // which refused the whole filing.
+        var bytes = File.ReadAllBytes(FixturePath("house-ptr-wrapped-maturity-date.pdf"));
+
+        var result = HouseDisclosureClient.ParsePtrPdfWithShape(
+            bytes,
+            "Jonathan Jackson",
+            new DateOnly(2023, 5, 12)
+        );
+
+        result.RejectedSourceRowCount.Should().Be(0);
+        result.Transactions.Should().HaveCount(10);
+        var bond = result.Transactions.Single(t => t.AssetName.Contains("Illinois Housing"));
+        bond.AssetName.Should().EndWith("Due 10/1/2033");
+        bond.AssetType.Should().Be("GS");
+        bond.Subholding.Should().Be("Morgan Stanley Trust Account");
+        result
+            .Transactions.Select(t => t.Ticker)
+            .Should()
+            .BeEquivalentTo([null, "AME", "BHF", "BHF", "DE", null, "NVDA", "PH", "UNH", "V"]);
+    }
+
+    [Fact]
+    public void ParsePtrPdf_RealScannedPaperFiling_HasNoExtractableText()
+    {
+        // A paper PTR scanned by the Clerk (seven-digit DocID) opens as a valid PDF with no
+        // text layer at all — the one deterministic signal that separates it from an
+        // electronic filing the parser failed on.
+        var bytes = File.ReadAllBytes(FixturePath("house-ptr-scanned-paper.pdf"));
+
+        var result = HouseDisclosureClient.ParsePtrPdfWithShape(
+            bytes,
+            "Scanned Member",
+            new DateOnly(2026, 1, 1)
+        );
+
+        result.HasExtractableText.Should().BeFalse();
+        result.Transactions.Should().BeEmpty();
+        result.RejectedSourceRowCount.Should().Be(0);
     }
 
     private static string FixturePath(string fileName) =>
@@ -579,12 +784,138 @@ public class HouseDisclosureClientTests
 
         result.Transactions.Should().BeEmpty();
         result.IsComplete.Should().BeFalse();
+        result
+            .ProcessedFilings.Should()
+            .BeEmpty("an unreadable download is retried, never recorded");
         handler
             .Requests.Should()
             .Contain(
                 r => r.Contains($"ptr-pdfs/{year}/{docId}.pdf"),
                 "the corrupt PDF must have been fetched before its parse failure was scoped"
             );
+    }
+
+    [Theory]
+    [InlineData("house-ptr-scanned-paper.pdf")]
+    [InlineData("house-ptr-exchange-rows.pdf")]
+    public async Task GetRecentTransactions_DeterministicNoRowVerdict_IsRecordedAsProcessed(
+        string fixture
+    )
+    {
+        // A scanned paper report and an exchange-only report both yield no trades, and both
+        // verdicts are deterministic — re-reading the same bytes cannot change them — so the
+        // filing is recorded with zero items and the cycle stays complete. Before this the
+        // per-filing catch left them unrecorded and production re-downloaded 1,330 such filings
+        // every cycle, and the House 2019 archive partition could never complete.
+        const int year = 2025;
+        const string docId = "20251234";
+        var xml = $"""
+            <FinancialDisclosures>
+              <Member>
+                <Prefix>Hon.</Prefix>
+                <First>Jane</First>
+                <Last>Doe</Last>
+                <FilingType>P</FilingType>
+                <StateDst>CA01</StateDst>
+                <Year>{year}</Year>
+                <FilingDate>2/1/{year}</FilingDate>
+                <DocID>{docId}</DocID>
+              </Member>
+            </FinancialDisclosures>
+            """;
+        var zipBytes = BuildZipWithSingleEntry($"{year}FD.xml", xml);
+        var handler = new UrlRoutingHandler(
+            zipBytes,
+            pdfBytes: await File.ReadAllBytesAsync(FixturePath(fixture))
+        );
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
+
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 31),
+            new HashSet<string>(),
+            CancellationToken.None
+        );
+
+        result.Transactions.Should().BeEmpty();
+        result.IsComplete.Should().BeTrue();
+        result
+            .ProcessedFilings.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new ProcessedFiling(docId, new DateOnly(year, 2, 1), 0));
+    }
+
+    [Fact]
+    public async Task GetRecentTransactions_FilingWithARejectedRow_RecordsTheRowsItCouldRead()
+    {
+        // A row the parser cannot read is a deterministic loss: the recognized rows are stored,
+        // the filing is recorded, and only a parser version bump re-reads it. Refusing the whole
+        // filing (the v6 rule) discarded its good rows every cycle and never recovered the bad one.
+        const int year = 2025;
+        const string docId = "20255678";
+        var xml = $"""
+            <FinancialDisclosures>
+              <Member>
+                <Prefix>Hon.</Prefix>
+                <First>Jane</First>
+                <Last>Doe</Last>
+                <FilingType>P</FilingType>
+                <StateDst>CA01</StateDst>
+                <Year>{year}</Year>
+                <FilingDate>2/1/{year}</FilingDate>
+                <DocID>{docId}</DocID>
+              </Member>
+            </FinancialDisclosures>
+            """;
+        var zipBytes = BuildZipWithSingleEntry($"{year}FD.xml", xml);
+        var handler = new UrlRoutingHandler(
+            zipBytes,
+            pdfBytes: BuildTextPdf(
+                "Apple Inc. (AAPL) P 03/03/2024 03/05/2024 $1,001 - $15,000",
+                "Brokerage: Microsoft Corp. (MSFT) Corrupt 04/01/2024 04/02/2024 $15,001 - $50,000"
+            )
+        );
+        using var httpClient = new HttpClient(handler);
+        var sut = new HouseDisclosureClient(
+            httpClient,
+            Substitute.For<ILogger<HouseDisclosureClient>>()
+        );
+
+        var result = await sut.GetRecentTransactions(
+            new DateOnly(year, 1, 1),
+            new DateOnly(year, 12, 31),
+            new HashSet<string>(),
+            CancellationToken.None
+        );
+
+        result.IsComplete.Should().BeTrue();
+        result.Transactions.Should().ContainSingle().Which.Ticker.Should().Be("AAPL");
+        result
+            .ProcessedFilings.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new ProcessedFiling(docId, new DateOnly(year, 2, 1), 1));
+    }
+
+    // A one-page PDF with the given lines of Helvetica text, one per row, so the geometry
+    // line reconstruction sees exactly those lines.
+    private static byte[] BuildTextPdf(params string[] lines)
+    {
+        var builder = new PdfDocumentBuilder();
+        var page = builder.AddPage(612, 792);
+        var font = builder.AddStandard14Font(Standard14Font.Helvetica);
+        var y = 700d;
+        foreach (var line in lines)
+        {
+            page.AddText(line, 9, new PdfPoint(40, y), font);
+            y -= 14;
+        }
+        return builder.Build();
     }
 
     [Fact]

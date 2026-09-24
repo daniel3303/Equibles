@@ -51,7 +51,11 @@ public class CongressionalTradeSyncService
     // v6: reopens filings whose rows carried a filing-status-only inline metadata suffix
     // ("... F S: New" with no subholding field) — earlier parses stored it inside AssetName,
     // and the replay's repair deletes those polluted twins once the cleaned rows arrive.
-    private const int CurrentTradeParserVersion = 6;
+    // v7: the House parser reads the small-caps font (scrambled-case markers and labels), keeps
+    // a wrapped maturity date in its row, skips exchange rows by policy, and records every
+    // deterministic verdict — reopening the filings v6 refused every cycle and the stored rows
+    // whose names still carry the scrambled "F ILING S TATUS : New" suffix.
+    private const int CurrentTradeParserVersion = 7;
     private const int ReprocessPerCycleLimit = 1_000;
 
     public async Task SyncAll(CancellationToken ct)
