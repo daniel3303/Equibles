@@ -187,5 +187,12 @@ public class HoldingsScraperWorkerTryProcessDataSetTests : ParadeDbMcpTestBase
             .AsNoTracking()
             .AnyAsync(p => p.FileName == FileName, CancellationToken.None);
         exists.Should().BeFalse();
+        (
+            await DbContext
+                .Set<ProcessedDataSet>()
+                .AnyAsync(p => p.FileName == ProcessedDataSet.RealtimeReplayPendingFileName)
+        )
+            .Should()
+            .BeTrue("replay intent must survive even an incomplete bulk import");
     }
 }

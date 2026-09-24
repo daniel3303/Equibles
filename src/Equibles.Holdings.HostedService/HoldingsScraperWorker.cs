@@ -138,6 +138,10 @@ public class HoldingsScraperWorker : BaseScraperWorker
         if (failedDataSets.Count > 0)
             await RetryFailedDataSets(failedDataSets, minReportDate, stoppingToken);
 
+        // Bulk files contain older captures than the live filings already in the store.
+        // Reapply their later tail only after the entire oldest-first bulk pass has finished.
+        await ApplyPendingRealtimeReplay(stoppingToken);
+
         // Revise mis-published filed values, heal abandoned zero-value rows (publish the filed
         // figure) and reset implausible derivations for honest repricing. Bounded per cycle;
         // self-terminating once the backlog drains. Runs BEFORE the pending recalculation so a
@@ -196,6 +200,7 @@ public class HoldingsScraperWorker : BaseScraperWorker
         var realRows = rows.Where(r =>
                 r.FileName != Holdings.Data.Models.ProcessedDataSet.BackfillGuardFileName
                 && r.FileName != Holdings.Data.Models.ProcessedDataSet.RescanPendingFileName
+                && r.FileName != Holdings.Data.Models.ProcessedDataSet.RealtimeReplayPendingFileName
             )
             .ToList();
 
@@ -249,6 +254,53 @@ public class HoldingsScraperWorker : BaseScraperWorker
             "Applied queued CUSIP-identity rescan: cleared {DataSets} quarterly data set marker(s) and {Filings} open-season realtime accession(s)",
             realRows.Count,
             clearedFilings
+        );
+    }
+
+    internal async Task ApplyPendingRealtimeReplay(CancellationToken cancellationToken)
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var dataSets = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
+        await using var transaction = await dataSets.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
+        var rows = await dataSets.GetAll().ToListAsync(cancellationToken);
+        var pending = rows.FirstOrDefault(r =>
+            r.FileName == Holdings.Data.Models.ProcessedDataSet.RealtimeReplayPendingFileName
+        );
+        if (pending == null)
+            return;
+
+        var latestBulkEnd = rows.Where(r =>
+                r.ParserVersion >= Holdings.Data.Models.ProcessedDataSet.CurrentParserVersion
+            )
+            .Select(r => Holdings13FRealtimeWorker.ParseDataSetEndDate(r.FileName))
+            .Where(d => d.HasValue)
+            .Max();
+        var replayFrom =
+            latestBulkEnd?.AddDays(1)
+            ?? DateOnly.FromDateTime(_workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1));
+        var states = scope.ServiceProvider.GetRequiredService<RealtimeSweepStateRepository>();
+        await states.Rewind(
+            Holdings13FRealtimeWorker.WorkerStateName,
+            replayFrom,
+            cancellationToken
+        );
+        var filings = scope.ServiceProvider.GetRequiredService<ProcessedFilingRepository>();
+        var since = replayFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        await filings
+            .GetAll()
+            .Where(f => f.CreationTime >= since)
+            .ExecuteDeleteAsync(cancellationToken);
+        dataSets.Delete(pending);
+        await dataSets.SaveChanges();
+        await transaction.CommitAsync(cancellationToken);
+
+        scope.ServiceProvider.GetRequiredService<HoldingsRealtimeReplaySignal>().RequestReplay();
+        Logger.LogInformation(
+            "Bulk replay finished; reopened realtime filings from {From:yyyy-MM-dd}",
+            replayFrom
         );
     }
 
@@ -483,6 +535,11 @@ public class HoldingsScraperWorker : BaseScraperWorker
                     fileName,
                     cancellationToken
                 );
+                // Persist intent before any amendment delete/upsert, even if the import fails
+                // or the process stops before a completion marker can be written.
+                await scope
+                    .ServiceProvider.GetRequiredService<ProcessedDataSetRepository>()
+                    .QueueRealtimeReplay(cancellationToken);
                 var result = await importService.ImportDataSet(
                     archive,
                     minReportDate,

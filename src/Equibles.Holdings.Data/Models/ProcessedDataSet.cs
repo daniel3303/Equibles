@@ -23,6 +23,10 @@ public class ProcessedDataSet
     // events arriving mid-walk coalesce into one queued rescan for the next one.
     public const string RescanPendingFileName = "__rescan-pending__";
 
+    // Written before a bulk import can replace holdings; survives a worker restart until
+    // the completed bulk pass reopens the newer realtime filings.
+    public const string RealtimeReplayPendingFileName = "__realtime-replay-pending__";
+
     /// <summary>
     /// The 13F import pipeline's current parser version. Bump this when a
     /// parser fix must re-apply to already-imported data: the scraper treats

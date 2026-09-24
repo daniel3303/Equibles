@@ -38,6 +38,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Replay newer realtime filings after each bulk holdings pass so historical archives cannot leave later amendments replaced by older captures. Persist replay intent before import and recover it after restarts.
+
 - Resolve moved 13F archives from the SEC published catalog after a legacy download returns 404, instead of treating a directory move as an unpublished quarter.
 
 - Identity-triggered 13F replays now rewind the realtime scan along with its processed-filings ledger, including unpublished bulk-archive gaps; concurrent scans cannot acknowledge the newly requested replay.

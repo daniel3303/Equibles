@@ -52,6 +52,20 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         _configuration = configuration;
     }
 
+    protected override async Task WaitForNextCycle(
+        TimeSpan interval,
+        CancellationToken stoppingToken
+    )
+    {
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var signal = scope.ServiceProvider.GetRequiredService<HoldingsRealtimeReplaySignal>();
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var requested = signal.WaitAsync(wait.Token);
+        var elapsed = Task.Delay(interval, wait.Token);
+        await Task.WhenAny(requested, elapsed);
+        await wait.CancelAsync();
+    }
+
     protected override bool ValidateConfiguration() =>
         ValidateSecContactEmail(
             _configuration,
