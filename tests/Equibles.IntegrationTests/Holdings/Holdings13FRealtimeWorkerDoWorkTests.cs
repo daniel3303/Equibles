@@ -137,6 +137,8 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
                     .Returns(new ProcessedDataSetRepository(ctx));
                 sp.GetService(typeof(ProcessedFilingRepository))
                     .Returns(new ProcessedFilingRepository(ctx));
+                sp.GetService(typeof(HoldingsImportFailureRepository))
+                    .Returns(new HoldingsImportFailureRepository(ctx));
                 sp.GetService(typeof(RealtimeSweepStateRepository))
                     .Returns(new RealtimeSweepStateRepository(ctx));
                 var importService = new HoldingsImportService(
@@ -155,6 +157,16 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
                     Substitute.For<ILogger<Realtime13FIngestionService>>()
                 );
                 sp.GetService(typeof(Realtime13FIngestionService)).Returns(ingestion);
+                sp.GetService(typeof(HoldingsImportRecoveryService))
+                    .Returns(
+                        new HoldingsImportRecoveryService(
+                            new HoldingsImportFailureRepository(ctx),
+                            new InstitutionalHoldingRepository(ctx),
+                            edgarClient,
+                            ingestion,
+                            Substitute.For<ILogger<HoldingsImportRecoveryService>>()
+                        )
+                    );
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;

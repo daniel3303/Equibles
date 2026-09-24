@@ -311,9 +311,7 @@ public class HoldingsImportServiceTests
         // (count, IsComplete:false) and leaves the data set unprocessed so
         // a later cycle backfills it once CUSIPs exist. Marking it complete
         // here (the old behavior) permanently locked the data set out of
-        // retry. The structural NoInfoTable case still returns true (it
-        // won't change on re-download); a swap regression between the two
-        // would corrupt ProcessedDataSet bookkeeping in opposite directions.
+        // retry. Missing required archive sections remain retryable too.
         var submissionTsv =
             "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
             + "13F-HR\tACC-001\t2024-10-15\t2024-09-30\t0001234567\n";

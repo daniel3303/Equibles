@@ -34,6 +34,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
 
     private readonly WorkerOptions _workerOptions;
     private readonly IConfiguration _configuration;
+    private DateTime? _nextRecoveryAt;
 
     protected override string WorkerName => "13F real-time ingestion";
     protected override TimeSpan SleepInterval => TimeSpan.FromHours(6);
@@ -59,6 +60,14 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     {
         await using var scope = ScopeFactory.CreateAsyncScope();
         var signal = scope.ServiceProvider.GetRequiredService<HoldingsRealtimeReplaySignal>();
+        if (_nextRecoveryAt.HasValue)
+        {
+            var untilRecovery = _nextRecoveryAt.Value - DateTime.UtcNow;
+            if (untilRecovery < TimeSpan.FromMinutes(1))
+                untilRecovery = TimeSpan.FromMinutes(1);
+            if (untilRecovery < interval)
+                interval = untilRecovery;
+        }
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         var requested = signal.WaitAsync(wait.Token);
         var elapsed = Task.Delay(interval, wait.Token);
@@ -80,6 +89,14 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         await using var scope = ScopeFactory.CreateAsyncScope();
+        await scope
+            .ServiceProvider.GetRequiredService<HoldingsImportRecoveryService>()
+            .Recover(minReportDate, stoppingToken);
+        _nextRecoveryAt = await scope
+            .ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>()
+            .GetAll()
+            .Where(row => row.ResolvedAt == null)
+            .MinAsync(row => (DateTime?)row.NextAttemptAt, stoppingToken);
         var stateRepo = scope.ServiceProvider.GetRequiredService<RealtimeSweepStateRepository>();
         var ingestionService =
             scope.ServiceProvider.GetRequiredService<Realtime13FIngestionService>();

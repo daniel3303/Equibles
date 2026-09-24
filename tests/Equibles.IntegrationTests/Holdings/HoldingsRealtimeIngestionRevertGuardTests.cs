@@ -81,6 +81,8 @@ public class HoldingsRealtimeIngestionRevertGuardTests : IAsyncLifetime
                     .Returns(new InstitutionalHoldingRepository(ctx));
                 sp.GetService(typeof(ProcessedFilingRepository))
                     .Returns(new ProcessedFilingRepository(ctx));
+                sp.GetService(typeof(HoldingsImportFailureRepository))
+                    .Returns(new HoldingsImportFailureRepository(ctx));
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;

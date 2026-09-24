@@ -79,6 +79,8 @@ public class HoldingsRealtimeIngestionZeroHoldingsSkipTests : IAsyncLifetime
                     .Returns(new InstitutionalHoldingRepository(ctx));
                 sp.GetService(typeof(ProcessedFilingRepository))
                     .Returns(new ProcessedFilingRepository(ctx));
+                sp.GetService(typeof(HoldingsImportFailureRepository))
+                    .Returns(new HoldingsImportFailureRepository(ctx));
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;
@@ -87,7 +89,7 @@ public class HoldingsRealtimeIngestionZeroHoldingsSkipTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task IngestRecentFilings_NonAmendmentWithNoParseableHoldings_SkippedWithNoSideEffects()
+    public async Task IngestRecentFilings_NonAmendmentWithNoParseableHoldings_RemainsDurablyRetryable()
     {
         var edgar = Substitute.For<ISecEdgarClient>();
         edgar
@@ -170,6 +172,11 @@ public class HoldingsRealtimeIngestionZeroHoldingsSkipTests : IAsyncLifetime
         );
 
         count.FilingsImported.Should().Be(0);
+        count.EarliestFailedDate.Should().NotBeNull();
+        using (var failureCheck = FreshContext())
+            (await failureCheck.Set<HoldingsImportFailure>().SingleAsync())
+                .Reason.Should()
+                .Be(HoldingsImportFailureReason.UnreadableSource);
 
         using var verify = FreshContext();
         (await verify.Set<InstitutionalHolding>().AnyAsync()).Should().BeFalse();

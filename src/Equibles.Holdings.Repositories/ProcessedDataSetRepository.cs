@@ -10,10 +10,16 @@ public class ProcessedDataSetRepository : BaseRepository<ProcessedDataSet>
         : base(dbContext) { }
 
     public virtual Task QueueRealtimeReplay(CancellationToken cancellationToken) =>
+        QueueMarker(ProcessedDataSet.RealtimeReplayPendingFileName, cancellationToken);
+
+    public Task QueueCoverageAudit(CancellationToken cancellationToken) =>
+        QueueMarker(ProcessedDataSet.CoverageAuditPendingFileName, cancellationToken);
+
+    private Task QueueMarker(string fileName, CancellationToken cancellationToken) =>
         DbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""
             INSERT INTO "ProcessedDataSet" ("Id", "FileName", "SubmissionCount", "ParserVersion", "CreationTime")
-            VALUES ({Guid.NewGuid()}, {ProcessedDataSet.RealtimeReplayPendingFileName}, 0, 0, clock_timestamp())
+            VALUES ({Guid.NewGuid()}, {fileName}, 0, 0, clock_timestamp())
             ON CONFLICT ("FileName") DO NOTHING
             """,
             cancellationToken

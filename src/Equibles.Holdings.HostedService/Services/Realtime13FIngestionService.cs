@@ -74,6 +74,18 @@ public class Realtime13FIngestionService
             cancellationToken
         );
 
+        await using var failureScope = _scopeFactory.CreateAsyncScope();
+        var failures =
+            failureScope.ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>();
+        var pendingRows = await failures
+            .GetAll()
+            .Where(row => row.ResolvedAt == null)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var retryFrom = pendingRows
+            .GroupBy(row => row.Cik)
+            .ToDictionary(group => group.Key, group => group.Min(row => row.FilingDate));
+
         // Sort chronologically so originals are always imported before their
         // amendments — HandleAmendments in the import pipeline deletes prior
         // holdings for the same holder+period before inserting the amendment.
@@ -91,7 +103,13 @@ public class Realtime13FIngestionService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (alreadyProcessed.Contains(entry.AccessionNumber))
+            if (
+                alreadyProcessed.Contains(entry.AccessionNumber)
+                && !(
+                    retryFrom.TryGetValue(entry.Cik.TrimStart('0'), out var retryDate)
+                    && entry.DateFiled >= retryDate
+                )
+            )
             {
                 _logger.LogDebug(
                     "Skipping already-processed filing {Accession}",
@@ -101,6 +119,10 @@ public class Realtime13FIngestionService
             }
 
             var outcome = await ImportEntry(entry, minReportDate, cancellationToken);
+            if (outcome is EntryImportOutcome.Failed or EntryImportOutcome.Incomplete)
+            {
+                retryFrom[entry.Cik.TrimStart('0')] = entry.DateFiled;
+            }
             if (outcome == EntryImportOutcome.Failed)
             {
                 // Hold the watermark back to this day so the filing is re-swept
@@ -117,6 +139,9 @@ public class Realtime13FIngestionService
                 return new RealtimeIngestionResult(totalImported, entry.DateFiled);
             totalImported++;
         }
+
+        // Daily indexes can be incomplete even when every discovered filing imports.
+        // Only complete company-tail recovery may resolve durable failure records.
 
         _logger.LogInformation(
             "13F real-time ingestion cycle complete: {Count} filings imported",
@@ -136,7 +161,7 @@ public class Realtime13FIngestionService
     /// filing whose rows are already present is a no-op. Returns the number of
     /// filings that imported with holdings.
     /// </summary>
-    public async Task<int> IngestSpecificFilings(
+    public virtual async Task<int> IngestSpecificFilings(
         IReadOnlyCollection<EdgarDailyIndexEntry> entries,
         DateOnly minReportDate,
         CancellationToken cancellationToken
@@ -161,17 +186,18 @@ public class Realtime13FIngestionService
             imported++;
         }
 
+        // A caller may supply only a subset of the manager's filings. Recovery owns
+        // resolution after verifying and importing the complete later filing tail.
         return imported;
     }
 
     private enum EntryImportOutcome
     {
-        // Parse/validation rejected it (wrong period, no parseable holdings) —
-        // nothing to record and nothing to retry.
+        // Source confirms the filing is outside the configured history boundary.
         Skipped,
 
         // Imported but the service flagged it incomplete (retry-later, e.g. CUSIPs
-        // not seeded). Bounded by the trailing re-sweep window; not watermark-held.
+        // not seeded). A durable record keeps it retryable outside the sweep window.
         Incomplete,
 
         // The import threw, or a non-amendment original imported "complete" yet
@@ -195,6 +221,16 @@ public class Realtime13FIngestionService
     {
         var filing = await TryParseAndValidateEntry(entry, minReportDate, cancellationToken);
         if (filing == null)
+        {
+            await RecordFailure(
+                entry,
+                null,
+                HoldingsImportFailureReason.UnreadableSource,
+                cancellationToken
+            );
+            return EntryImportOutcome.Failed;
+        }
+        if (filing.PeriodOfReport < minReportDate)
             return EntryImportOutcome.Skipped;
 
         _logger.LogInformation(
@@ -229,17 +265,35 @@ public class Realtime13FIngestionService
                 entry.AccessionNumber,
                 entry.Cik
             );
+            await RecordFailure(
+                entry,
+                filing.PeriodOfReport,
+                HoldingsImportFailureReason.ImportFailed,
+                cancellationToken
+            );
             return EntryImportOutcome.Failed;
         }
 
-        // IsComplete=false is the import service's "retry later" contract (e.g.
-        // NoTrackedStocks until CUSIPs seed) — recording it here would consume
-        // the filing forever (EquiblesCommercial#2850). It deliberately does
-        // NOT hold the watermark back: a filing whose issuers never seed a
-        // CUSIP would wedge the sweep, so its retry is bounded by the trailing
-        // window instead — and the quarterly bulk import reconciles it anyway.
+        if (importResult.ConflictedFilings.Count > 0)
+        {
+            await RecordFailure(
+                entry,
+                filing.PeriodOfReport,
+                HoldingsImportFailureReason.IdentityConflict,
+                cancellationToken
+            );
+            return EntryImportOutcome.Failed;
+        }
         if (!importResult.IsComplete)
+        {
+            await RecordFailure(
+                entry,
+                filing.PeriodOfReport,
+                HoldingsImportFailureReason.Incomplete,
+                cancellationToken
+            );
             return EntryImportOutcome.Incomplete;
+        }
 
         // A non-amendment original that imported "complete" yet inserted zero
         // holdings is suspect: recording it would consume the filing forever even
@@ -254,10 +308,36 @@ public class Realtime13FIngestionService
                 entry.AccessionNumber,
                 entry.Cik
             );
+            await RecordFailure(
+                entry,
+                filing.PeriodOfReport,
+                HoldingsImportFailureReason.EmptyImport,
+                cancellationToken
+            );
             return EntryImportOutcome.Failed;
         }
 
         return EntryImportOutcome.Imported;
+    }
+
+    private async Task RecordFailure(
+        EdgarDailyIndexEntry entry,
+        DateOnly? reportDate,
+        HoldingsImportFailureReason reason,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        await scope
+            .ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>()
+            .Record(
+                entry.AccessionNumber,
+                entry.Cik.TrimStart('0'),
+                entry.DateFiled,
+                reportDate,
+                reason,
+                cancellationToken
+            );
     }
 
     private async Task<Parsed13FFiling> TryParseAndValidateEntry(
@@ -280,9 +360,6 @@ public class Realtime13FIngestionService
                 );
                 return null;
             }
-
-            if (filing.PeriodOfReport < minReportDate)
-                return null;
 
             return filing;
         }

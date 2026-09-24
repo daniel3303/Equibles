@@ -92,9 +92,9 @@ public class HoldingsImportService
         await ParseSummaryPages(context, cancellationToken);
         var cusipResult = await BuildCusipMapping(context, cancellationToken);
         if (cusipResult == CusipMappingOutcome.NoInfoTable)
-            // Structural: a missing INFOTABLE.tsv won't appear on re-download —
-            // terminal, mark processed so we don't loop on a broken archive.
-            return new ImportResult(submissionCount, IsComplete: true);
+            // A malformed publication is not evidence of an empty quarter. Keep it
+            // retryable so a corrected archive can recover without clearing a false success.
+            return new ImportResult(submissionCount, IsComplete: false);
         if (cusipResult == CusipMappingOutcome.NoTrackedStocks)
             // No tracked stock mapped — typically a cold start where the FTD
             // scraper hasn't seeded CUSIPs yet. NOT terminal: leave the data
@@ -108,6 +108,11 @@ public class HoldingsImportService
         await HandleAmendments(context, cancellationToken);
         var holdingsResult = await StreamAndInsertHoldings(context, cancellationToken);
         await FlushFilingOtherManagers(context, cancellationToken);
+        await RecordConflictedFilings(
+            context,
+            holdingsResult.ConflictedAccessions,
+            cancellationToken
+        );
         if (holdingsResult.SkippedStaleParent)
         {
             // CompanySync replaced at least one mapped CommonStock after the CUSIP lookup. Keep
@@ -123,16 +128,70 @@ public class HoldingsImportService
         }
         await SyncFilingSummaries(context, cancellationToken);
         await PublishAffectedQuartersAsync(context, cancellationToken);
-        // A conflicted filing is reported, not retried: its stored identity cannot resolve itself,
-        // so leaving the data set unprocessed would re-run every other filing in it every cycle
-        // and never get further. The set counts as processed with that filing's rows left as they
-        // were, and the caller raises the conflict so the stored rows get repaired.
+        // Conflicted accessions remain in the durable recovery queue. The archive can
+        // finish without forcing every unaffected filing through another full replay.
         return new ImportResult(
             submissionCount,
             IsComplete: true,
             InsertedHoldings: holdingsResult.Inserted,
             ConflictedFilings: holdingsResult.ConflictedAccessions
         );
+    }
+
+    internal async Task<ImportContext> ReadCoverageContext(
+        ZipArchive archive,
+        DateOnly minReportDate,
+        CancellationToken cancellationToken
+    )
+    {
+        var context = new ImportContext
+        {
+            TsvParser = new TsvParser(),
+            Archive = archive,
+            MinReportDate = minReportDate,
+        };
+        var parsed = await ParseSubmissions(context, cancellationToken);
+        if (parsed == null || !await ParseCoverPages(context, cancellationToken))
+            throw new InvalidDataException("The SEC archive is missing required filing metadata.");
+        DeduplicateSubmissions(context);
+        if (await BuildCusipMapping(context, cancellationToken) != CusipMappingOutcome.Mapped)
+            throw new InvalidDataException(
+                "The SEC archive could not be reconciled to tracked securities."
+            );
+        return context;
+    }
+
+    private async Task RecordConflictedFilings(
+        ImportContext context,
+        IReadOnlyList<string> accessions,
+        CancellationToken cancellationToken
+    )
+    {
+        if (accessions.Count == 0)
+            return;
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var failures = scope.ServiceProvider.GetRequiredService<HoldingsImportFailureRepository>();
+        foreach (var accession in accessions)
+        {
+            var submission = context.Submissions[accession];
+            if (submission.FormType.ToHoldingsFilingType() != FilingType.Form13F)
+                continue;
+            if (!TryParseDateOnly(submission.FilingDate, out var filed))
+                throw new InvalidDataException(
+                    $"Conflicted filing {accession} has no valid filing date; archive remains retryable."
+                );
+            DateOnly? report = TryParseDateOnly(submission.PeriodOfReport, out var parsed)
+                ? parsed
+                : null;
+            await failures.Record(
+                accession,
+                submission.Cik,
+                filed,
+                report,
+                HoldingsImportFailureReason.IdentityConflict,
+                cancellationToken
+            );
+        }
     }
 
     // Bulk data sets routinely import many quarters at once, so group submissions

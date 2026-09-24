@@ -159,6 +159,12 @@ public class HoldingsScraperWorker : BaseScraperWorker
         // Restamp FilingType on filing rollup rows written before the column existed. Self-
         // terminating like the pass above.
         await BackfillFilingRollupTypes(stoppingToken);
+
+        // A successful import marker is not proof that every tracked source position survived.
+        await using (var auditScope = ScopeFactory.CreateAsyncScope())
+            await auditScope
+                .ServiceProvider.GetRequiredService<HoldingsArchiveCoverageService>()
+                .AuditLatest(minReportDate, stoppingToken);
     }
 
     /// <summary>
