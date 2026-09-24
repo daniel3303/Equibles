@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Equibles.Core.AutoWiring" />
+    <PackageReference Include="HtmlAgilityPack" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="FlexLabs.EntityFrameworkCore.Upsert" />

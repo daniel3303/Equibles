@@ -1,5 +1,7 @@
 using System.IO.Compression;
+using System.Net;
 using System.Reflection;
+using System.Text;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Integrations.Sec.Contracts;
 using Microsoft.Extensions.Logging;
@@ -9,6 +11,160 @@ namespace Equibles.UnitTests.Holdings;
 
 public class HoldingsDataSetClientTests
 {
+    [Fact]
+    public async Task DownloadDataSet_Legacy404_FollowsThePublishedCatalogLink()
+    {
+        const string fileName = "01jun2026-31aug2026_form13f.zip";
+        const string publishedUrl =
+            "https://www.sec.gov/files/datastandardsinnovation/data/form-13f-data-sets/" + fileName;
+        var sec = Substitute.For<ISecEdgarClient>();
+        sec.DownloadStream(
+                "https://www.sec.gov/files/structureddata/data/form-13f-data-sets/" + fileName
+            )
+            .Returns<Stream>(_ =>
+                throw new HttpRequestException("Not found", null, HttpStatusCode.NotFound)
+            );
+        // Trimmed SEC catalog capture, 2026-09-24; preserve the published href verbatim.
+        const string catalog = """
+            <td headers="view-field-display-title-table-column" class="views-field views-field-field-display-title">  <a href="/files/datastandardsinnovation/data/form-13f-data-sets/01jun2026-31aug2026_form13f.zip" download>2026 June July August 13F</a>
+            </td>
+            """;
+        sec.DownloadStream(HoldingsDataSetClient.CatalogUrl)
+            .Returns(_ => new MemoryStream(Encoding.UTF8.GetBytes(catalog)));
+        using var bytes = new MemoryStream();
+        using (var archive = new ZipArchive(bytes, ZipArchiveMode.Create, leaveOpen: true))
+            archive.CreateEntry("SUBMISSION.tsv");
+        sec.DownloadStream(publishedUrl).Returns(_ => new MemoryStream(bytes.ToArray()));
+        var client = new HoldingsDataSetClient(
+            sec,
+            Substitute.For<ILogger<HoldingsDataSetClient>>()
+        );
+
+        using var result = await client.DownloadDataSet(fileName, CancellationToken.None);
+
+        result.Entries.Should().ContainSingle().Which.Name.Should().Be("SUBMISSION.tsv");
+        await sec.Received(1).DownloadStream(publishedUrl);
+    }
+
+    [Theory]
+    [InlineData("catalog")]
+    [InlineData("published")]
+    [InlineData("legacy")]
+    public async Task DownloadDataSet_PublishedResource404_IsAnErrorRatherThanUnpublished(
+        string failure
+    )
+    {
+        const string fileName = "2023q4_form13f.zip";
+        const string legacy =
+            "https://www.sec.gov/files/structureddata/data/form-13f-data-sets/" + fileName;
+        const string published = "https://www.sec.gov/new/" + fileName;
+        var sec = Substitute.For<ISecEdgarClient>();
+        sec.DownloadStream(legacy)
+            .Returns<Stream>(_ =>
+                throw new HttpRequestException("Not found", null, HttpStatusCode.NotFound)
+            );
+        if (failure == "catalog")
+            sec.DownloadStream(HoldingsDataSetClient.CatalogUrl)
+                .Returns<Stream>(_ =>
+                    throw new HttpRequestException("Not found", null, HttpStatusCode.NotFound)
+                );
+        sec.DownloadStream(published)
+            .Returns<Stream>(_ =>
+                throw new HttpRequestException("Not found", null, HttpStatusCode.NotFound)
+            );
+        if (failure != "catalog")
+            sec.DownloadStream(HoldingsDataSetClient.CatalogUrl)
+                .Returns(_ => new MemoryStream(
+                    Encoding.UTF8.GetBytes(
+                        $"<a href='{(failure == "legacy" ? legacy : published)}'>archive</a>"
+                    )
+                ));
+        var client = new HoldingsDataSetClient(
+            sec,
+            Substitute.For<ILogger<HoldingsDataSetClient>>()
+        );
+
+        var download = () => client.DownloadDataSet(fileName, CancellationToken.None);
+
+        await download.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [Fact]
+    public async Task DownloadDataSet_ValidCatalogWithoutRequestedPeriod_RemainsUnpublished()
+    {
+        var sec = Substitute.For<ISecEdgarClient>();
+        sec.DownloadStream(
+                "https://www.sec.gov/files/structureddata/data/form-13f-data-sets/2023q4_form13f.zip"
+            )
+            .Returns<Stream>(_ =>
+                throw new HttpRequestException("Not found", null, HttpStatusCode.NotFound)
+            );
+        sec.DownloadStream(HoldingsDataSetClient.CatalogUrl)
+            .Returns(_ => new MemoryStream(
+                Encoding.UTF8.GetBytes("<a href='/files/2023q3_form13f.zip'>Q3</a>")
+            ));
+        var client = new HoldingsDataSetClient(
+            sec,
+            Substitute.For<ILogger<HoldingsDataSetClient>>()
+        );
+
+        var download = () => client.DownloadDataSet("2023q4_form13f.zip", CancellationToken.None);
+
+        (await download.Should().ThrowAsync<HttpRequestException>())
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.NotFound);
+    }
+
+    [Theory]
+    [InlineData("/files/datastandardsinnovation/data/form-13f-data-sets/2023q4_form13f.zip")]
+    [InlineData(
+        "https://www.sec.gov/files/structureddata/data/form-13f-data-sets/2023q4_form13f.zip"
+    )]
+    public void ResolvePublishedUrl_UsesExactRelativeOrAbsoluteLink(string href)
+    {
+        HoldingsDataSetClient
+            .ResolvePublishedUrl($"<a href='{href}'>archive</a>", "2023q4_form13f.zip")
+            .Should()
+            .Be(new Uri(new Uri(HoldingsDataSetClient.CatalogUrl), href).AbsoluteUri);
+    }
+
+    [Theory]
+    [InlineData("https://other.test/2023q4_form13f.zip")]
+    [InlineData("http://www.sec.gov/2023q4_form13f.zip")]
+    [InlineData("https://www.sec.gov:8443/2023q4_form13f.zip")]
+    [InlineData("https://user@www.sec.gov/2023q4_form13f.zip")]
+    [InlineData("https://www.sec.gov/2023q4_form13f.zip.exe")]
+    public void ResolvePublishedUrl_RejectsUntrustedOrNonArchiveLinks(string href)
+    {
+        var read = () =>
+            HoldingsDataSetClient.ResolvePublishedUrl(
+                $"<a href='{href}'>archive</a>",
+                "2023q4_form13f.zip"
+            );
+        read.Should().Throw<InvalidDataException>();
+    }
+
+    [Fact]
+    public void ResolvePublishedUrl_DistinguishesUnpublishedFromMalformedCatalog()
+    {
+        HoldingsDataSetClient
+            .ResolvePublishedUrl("<a href='/files/2023q3_form13f.zip'>Q3</a>", "2023q4_form13f.zip")
+            .Should()
+            .BeNull();
+        var invalid = () =>
+            HoldingsDataSetClient.ResolvePublishedUrl(
+                "<html>temporarily unavailable</html>",
+                "2023q4_form13f.zip"
+            );
+        invalid.Should().Throw<InvalidDataException>();
+        var conflicting = () =>
+            HoldingsDataSetClient.ResolvePublishedUrl(
+                "<a href='/old/2023q4_form13f.zip'>one</a><a href='/new/2023q4_form13f.zip'>two</a>",
+                "2023q4_form13f.zip"
+            );
+        conflicting.Should().Throw<InvalidDataException>();
+    }
+
     [Fact]
     public async Task DownloadDataSet_ProducedStream_BuildsRequestUrlFromBaseAndOpensReturnedStreamAsZipArchive()
     {
