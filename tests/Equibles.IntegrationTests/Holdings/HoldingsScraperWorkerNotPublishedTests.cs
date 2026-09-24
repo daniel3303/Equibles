@@ -1,5 +1,6 @@
 using System.Net;
 using System.Reflection;
+using System.Text;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
 using Equibles.Errors.BusinessLogic;
@@ -19,8 +20,8 @@ namespace Equibles.IntegrationTests.Holdings;
 
 /// <summary>
 /// Pins <c>TryProcessDataSet</c>'s "not published yet" arm. The SEC releases each
-/// quarterly data set well after the period closes, so a 404 means the file is not
-/// filed yet — not a failure. The worker must return success (so the caller neither
+/// quarterly data set well after the period closes; a legacy 404 plus its absence
+/// from a valid official catalog means unpublished rather than failed. The worker must return success (so the caller neither
 /// records a failure nor raises a permanent-failure alarm) and must NOT burn its
 /// retry attempts on a file that cannot appear within the cycle; the unprocessed
 /// file is naturally retried on the next cycle.
@@ -76,10 +77,17 @@ public class HoldingsScraperWorkerNotPublishedTests : ParadeDbMcpTestBase
     {
         var secEdgar = Substitute.For<ISecEdgarClient>();
         secEdgar
-            .DownloadStream(Arg.Any<string>())
+            .DownloadStream(Arg.Is<string>(url => url != HoldingsDataSetClient.CatalogUrl))
             .Returns<Task<Stream>>(_ =>
                 throw new HttpRequestException("not found", null, HttpStatusCode.NotFound)
             );
+        secEdgar
+            .DownloadStream(HoldingsDataSetClient.CatalogUrl)
+            .Returns(_ => new MemoryStream(
+                Encoding.UTF8.GetBytes(
+                    "<a href='/files/01sep2025-30nov2025_form13f.zip'>Previous archive</a>"
+                )
+            ));
         var dataSetClient = new HoldingsDataSetClient(
             secEdgar,
             Substitute.For<ILogger<HoldingsDataSetClient>>()
@@ -112,7 +120,10 @@ public class HoldingsScraperWorkerNotPublishedTests : ParadeDbMcpTestBase
         var result = await (Task<bool>)
             method.Invoke(worker, [FileName, new DateOnly(2024, 1, 1), CancellationToken.None]);
 
-        result.Should().BeTrue("a 404 means the data set is not published yet, not a failure");
-        await secEdgar.Received(1).DownloadStream(Arg.Any<string>());
+        result
+            .Should()
+            .BeTrue("the official catalog confirms that the archive is not published yet");
+        await secEdgar.Received(1).DownloadStream(HoldingsDataSetClient.CatalogUrl);
+        await secEdgar.Received(1).DownloadStream(Arg.Is<string>(url => url.EndsWith(FileName)));
     }
 }

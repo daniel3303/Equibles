@@ -2,10 +2,12 @@ using System.IO.Compression;
 using System.Reflection;
 using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
+using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Models;
 using Equibles.Holdings.HostedService.Services;
+using Equibles.Holdings.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
@@ -29,8 +31,12 @@ public class HoldingsBulkBatchPacingTests
         importer.ReceivedPause.Should().Be(TimeSpan.Zero);
     }
 
-    [Fact]
-    public async Task QuarterlyWorker_ForwardsConfiguredPause()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task QuarterlyWorker_ForwardsConfiguredPauseOnlyAfterDurableReplayIntent(
+        bool queueFails
+    )
     {
         var importer = new RecordingHoldingsImportService();
         var secClient = Substitute.For<ISecEdgarClient>();
@@ -40,6 +46,12 @@ public class HoldingsBulkBatchPacingTests
             Substitute.For<ILogger<HoldingsDataSetClient>>()
         );
         var provider = Substitute.For<IServiceProvider>();
+        var replay = Substitute.For<ProcessedDataSetRepository>((EquiblesFinancialDbContext)null!);
+        if (queueFails)
+            replay
+                .QueueRealtimeReplay(Arg.Any<CancellationToken>())
+                .Returns(_ => throw new InvalidOperationException("Cannot persist replay intent"));
+        provider.GetService(typeof(ProcessedDataSetRepository)).Returns(replay);
         provider.GetService(typeof(HoldingsDataSetClient)).Returns(dataSetClient);
         provider.GetService(typeof(HoldingsImportService)).Returns(importer);
         var scope = Substitute.For<IServiceScope>();
@@ -73,8 +85,9 @@ public class HoldingsBulkBatchPacingTests
                 ["2026q1_form13f.zip", new DateOnly(2026, 1, 1), CancellationToken.None]
             )!;
 
-        result.Should().BeTrue();
-        importer.ReceivedPause.Should().Be(TimeSpan.FromMilliseconds(250));
+        result.Should().Be(!queueFails);
+        importer.ReceivedPause.Should().Be(queueFails ? null : TimeSpan.FromMilliseconds(250));
+        await replay.Received(1).QueueRealtimeReplay(Arg.Any<CancellationToken>());
     }
 
     [Fact]

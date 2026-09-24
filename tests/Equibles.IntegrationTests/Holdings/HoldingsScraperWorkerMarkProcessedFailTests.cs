@@ -96,10 +96,20 @@ public class HoldingsScraperWorkerMarkProcessedFailTests : ParadeDbMcpTestBase
         disposedCtx.Dispose();
 
         var scopeFactory = ServiceScopeSubstitute.Create(
-            (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(disposedCtx)),
+            (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(DbContext)),
             (typeof(HoldingsDataSetClient), BuildDataSetClient(zip)),
             (typeof(HoldingsImportService), BuildImporter())
         );
+
+        // Queueing durable replay intent must succeed before import starts; fail only
+        // the later completion-marker scope to keep exercising MarkAsProcessed's catch.
+        var importScope = scopeFactory.CreateScope();
+        var failedScope = ServiceScopeSubstitute
+            .Create(
+                (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(disposedCtx))
+            )
+            .CreateScope();
+        scopeFactory.CreateScope().Returns(importScope, failedScope);
 
         var config = Substitute.For<IConfiguration>();
         config["Sec:ContactEmail"].Returns("test@example.com");
