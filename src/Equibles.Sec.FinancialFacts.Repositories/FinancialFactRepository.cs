@@ -39,7 +39,9 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     /// <inheritdoc cref="GetConsolidatedByIssuerId"/>
     public IQueryable<FinancialFact> GetConsolidatedByIssuerIds(IReadOnlyCollection<Guid> issuerIds)
     {
-        return WithoutByNatureCostOfSales(GetByIssuerIds(issuerIds).Where(f => f.DimensionsKey == ""));
+        return WithoutByNatureCostOfSales(
+            GetByIssuerIds(issuerIds).Where(f => f.DimensionsKey == "")
+        );
     }
 
     // Sheet dating reads spans, not a cost line, so it skips the cost-of-sales gate and keeps
@@ -53,7 +55,9 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     /// Drops an IFRS <c>CostOfSales</c> fact unless the same filing states a function-of-expense
     /// line for the same period, since only that presentation (IAS 1.103) makes it the whole cost of revenue.
     /// </summary>
-    private IQueryable<FinancialFact> WithoutByNatureCostOfSales(IQueryable<FinancialFact> consolidated)
+    private IQueryable<FinancialFact> WithoutByNatureCostOfSales(
+        IQueryable<FinancialFact> consolidated
+    )
     {
         // Excluded ids are one hashed subplan over the scoped cost-of-sales rows, so no read
         // joins the concept table per fact.
@@ -85,7 +89,8 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
         return consolidated.Where(f => !byNature.Contains(f.Id));
     }
 
-    protected virtual IQueryable<FinancialConcept> GetConcepts() => DbContext.Set<FinancialConcept>();
+    protected virtual IQueryable<FinancialConcept> GetConcepts() =>
+        DbContext.Set<FinancialConcept>();
 
     private const string IfrsCostOfSalesTag = "CostOfSales";
 

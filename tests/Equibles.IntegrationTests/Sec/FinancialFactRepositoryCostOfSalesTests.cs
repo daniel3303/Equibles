@@ -27,7 +27,13 @@ public class FinancialFactRepositoryCostOfSalesTests(ParadeDbFixture fixture)
         DbContext.AddRange(issuer, costOfSales, expenseByNature, administrative, usCostOfRevenue);
         await DbContext.SaveChangesAsync();
 
-        FinancialFact Fact(FinancialConcept concept, string accession, decimal value, DateOnly? start = null, string dimension = "") =>
+        FinancialFact Fact(
+            FinancialConcept concept,
+            string accession,
+            decimal value,
+            DateOnly? start = null,
+            string dimension = ""
+        ) =>
             new()
             {
                 EquityIssuerId = issuer.Id,
@@ -82,11 +88,20 @@ public class FinancialFactRepositoryCostOfSalesTests(ParadeDbFixture fixture)
         single.Should().BeEquivalentTo(expected);
         batch.Should().BeEquivalentTo(expected);
         // The raw fact itself stays stored; only the consolidated statement read drops it.
-        (await repository.GetByIssuerId(issuer.Id).CountAsync(f => f.FinancialConceptId == costOfSales.Id))
+        (
+            await repository
+                .GetByIssuerId(issuer.Id)
+                .CountAsync(f => f.FinancialConceptId == costOfSales.Id)
+        )
             .Should()
             .Be(3);
     }
 
     private static FinancialConcept Concept(FactTaxonomy taxonomy, string tag) =>
-        new() { Taxonomy = taxonomy, Tag = tag, Label = tag };
+        new()
+        {
+            Taxonomy = taxonomy,
+            Tag = tag,
+            Label = tag,
+        };
 }
