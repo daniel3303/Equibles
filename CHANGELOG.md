@@ -39,7 +39,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Fixed
 
 - Wikidata website lookups now retry a throttled (429) or overloaded (5xx) query service a bounded number of times, honouring its `Retry-After`; a persistent outage raises `WikidataUnavailableException`, which website discovery treats as `WebsiteSourceUnavailableException`, a warning that retries the batch next cycle instead of an Errors row.
-
 - Present an issuer by its filed common stock when SEC's ticker file lists a warrant, unit, right, preferred series or note first (HeartBeam lists BEATW before BEAT). The override needs the issuer's own 12(b) titles to classify both symbols; an unclassified symbol never displaces SEC's order.
 - Replay newer realtime filings after each bulk holdings pass so historical archives cannot leave later amendments replaced by older captures. Persist replay intent before import and recover it after restarts.
 
