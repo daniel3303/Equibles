@@ -38,6 +38,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Wikidata website lookups now retry a throttled (429) or overloaded (5xx) query service a bounded number of times, honouring its `Retry-After`; a persistent outage raises `WikidataUnavailableException`, which website discovery treats as `WebsiteSourceUnavailableException`, a warning that retries the batch next cycle instead of an Errors row.
+
 - Replay newer realtime filings after each bulk holdings pass so historical archives cannot leave later amendments replaced by older captures. Persist replay intent before import and recover it after restarts.
 
 - Resolve moved 13F archives from the SEC published catalog after a legacy download returns 404, instead of treating a directory move as an unpublished quarter.

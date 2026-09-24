@@ -63,7 +63,8 @@ public class WebsiteDiscoveryServiceTests
         IEnumerable<IWebsiteSource> sources,
         HttpStatusCode probeStatus = HttpStatusCode.OK,
         int? batchSize = null,
-        IBus bus = null
+        IBus bus = null,
+        IServiceScopeFactory errorScopes = null
     )
     {
         var stealth = Substitute.For<IStealthBrowserClient>();
@@ -81,7 +82,7 @@ public class WebsiteDiscoveryServiceTests
             sources,
             probe,
             new ErrorReporter(
-                Substitute.For<IServiceScopeFactory>(),
+                errorScopes ?? Substitute.For<IServiceScopeFactory>(),
                 Substitute.For<ILogger<ErrorReporter>>()
             ),
             Substitute.For<ILogger<WebsiteDiscoveryService>>(),
@@ -223,6 +224,29 @@ public class WebsiteDiscoveryServiceTests
         reloadedMiss
             .WebsiteCheckedAt.Should()
             .BeNull("a stock unanswered while a source errored deserves a clean retry next cycle");
+    }
+
+    [Fact]
+    public async Task UnavailableSource_FallsThrough_WithoutAnErrorRow_AndSkipsTheMissStamp()
+    {
+        var options = NewDbOptions();
+        EquityIssuer found = await SeedStock(options, "AAA");
+        EquityIssuer missed = await SeedStock(options, "BBB");
+        var throttled = new UnavailableSource(priority: 10);
+        var working = new StubSource(
+            20,
+            new Dictionary<string, string> { ["AAA"] = "www.aaa.com" }
+        );
+        var errorScopes = Substitute.For<IServiceScopeFactory>();
+
+        await BuildSut(options, [throttled, working], errorScopes: errorScopes)
+            .Import(CancellationToken.None);
+
+        (await Reload(options, found.Id)).Website.Should().Be("https://www.aaa.com");
+        (await Reload(options, missed.Id))
+            .WebsiteCheckedAt.Should()
+            .BeNull("a stock unanswered during an outage retries next cycle");
+        errorScopes.DidNotReceive().CreateScope();
     }
 
     [Fact]
@@ -383,6 +407,24 @@ public class WebsiteDiscoveryServiceTests
             IReadOnlyList<WebsiteSourceStock> stocks,
             CancellationToken cancellationToken
         ) => throw new InvalidOperationException("source backend down");
+    }
+
+    private sealed class UnavailableSource : IWebsiteSource
+    {
+        public UnavailableSource(int priority) => Priority = priority;
+
+        public int Priority { get; }
+
+        public string Name => "unavailable";
+
+        public Task<IReadOnlyDictionary<Guid, string>> FindWebsites(
+            IReadOnlyList<WebsiteSourceStock> stocks,
+            CancellationToken cancellationToken
+        ) =>
+            throw new WebsiteSourceUnavailableException(
+                "throttled",
+                new HttpRequestException("429")
+            );
     }
 
     private sealed class FixedStatusHandler : HttpMessageHandler

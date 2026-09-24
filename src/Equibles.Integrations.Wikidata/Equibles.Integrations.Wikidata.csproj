@@ -6,6 +6,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Equibles.UnitTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Equibles.Integrations.Common\Equibles.Integrations.Common.csproj" />
   </ItemGroup>
 </Project>

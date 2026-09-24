@@ -1,7 +1,10 @@
+using System.Net;
 using Equibles.CommonStocks.BusinessLogic.Websites;
 using Equibles.CommonStocks.HostedService.Services;
+using Equibles.Integrations.Wikidata;
 using Equibles.Integrations.Wikidata.Contracts;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace Equibles.UnitTests.CommonStocks;
@@ -10,10 +13,33 @@ namespace Equibles.UnitTests.CommonStocks;
 /// Contract: <c>WikidataWebsiteSource</c> queries the client by the stocks' CIKs,
 /// and by LEI for the CIK-less issuers that carry one, and maps the answers back
 /// to stock ids; stocks with neither key are skipped without a query, and an
-/// empty batch never hits the client.
+/// empty batch never hits the client. A Wikidata outage surfaces as the discovery
+/// lane's transient <c>WebsiteSourceUnavailableException</c>.
 /// </summary>
 public class WikidataWebsiteSourceTests
 {
+    [Fact]
+    public async Task WikidataOutage_SurfacesAsSourceUnavailable()
+    {
+        var stock = new WebsiteSourceStock(Guid.NewGuid(), "AAPL", "320193");
+        var client = Substitute.For<IWikidataClient>();
+        client
+            .GetOfficialWebsitesByCik(
+                Arg.Any<IReadOnlyCollection<string>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(
+                new WikidataUnavailableException(HttpStatusCode.TooManyRequests, "throttled")
+            );
+
+        var act = () =>
+            new WikidataWebsiteSource(client).FindWebsites([stock], CancellationToken.None);
+
+        (
+            await act.Should().ThrowAsync<WebsiteSourceUnavailableException>()
+        ).WithInnerException<WikidataUnavailableException>();
+    }
+
     [Fact]
     public async Task AnswersAreKeyedBackToStockIds()
     {
