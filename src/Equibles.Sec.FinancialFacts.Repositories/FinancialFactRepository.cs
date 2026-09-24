@@ -33,14 +33,79 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     /// </summary>
     public IQueryable<FinancialFact> GetConsolidatedByIssuerId(Guid issuerId)
     {
-        return GetByIssuerId(issuerId).Where(f => f.DimensionsKey == "");
+        return WithoutByNatureCostOfSales(ConsolidatedByIssuerId(issuerId));
     }
 
     /// <inheritdoc cref="GetConsolidatedByIssuerId"/>
     public IQueryable<FinancialFact> GetConsolidatedByIssuerIds(IReadOnlyCollection<Guid> issuerIds)
     {
-        return GetByIssuerIds(issuerIds).Where(f => f.DimensionsKey == "");
+        return WithoutByNatureCostOfSales(
+            GetByIssuerIds(issuerIds).Where(f => f.DimensionsKey == "")
+        );
     }
+
+    // Sheet dating reads spans, not a cost line, so it skips the cost-of-sales gate and keeps
+    // its index-friendly predicate.
+    private IQueryable<FinancialFact> ConsolidatedByIssuerId(Guid issuerId)
+    {
+        return GetByIssuerId(issuerId).Where(f => f.DimensionsKey == "");
+    }
+
+    /// <summary>
+    /// Drops an IFRS <c>CostOfSales</c> fact unless the same filing states a function-of-expense
+    /// line for the same period, since only that presentation (IAS 1.103) makes it the whole cost of revenue.
+    /// </summary>
+    private IQueryable<FinancialFact> WithoutByNatureCostOfSales(
+        IQueryable<FinancialFact> consolidated
+    )
+    {
+        // Excluded ids are one hashed subplan over the scoped cost-of-sales rows, so no read
+        // joins the concept table per fact.
+        var concepts = GetConcepts();
+        var costOfSalesIds = concepts
+            .Where(c => c.Taxonomy == FactTaxonomy.IfrsFull && c.Tag == IfrsCostOfSalesTag)
+            .Select(c => c.Id);
+        var functionOfExpenseIds = concepts
+            .Where(c =>
+                c.Taxonomy == FactTaxonomy.IfrsFull && IfrsFunctionOfExpenseTags.Contains(c.Tag)
+            )
+            .Select(c => c.Id);
+        // The proof stays correlated only; repeating the issuer list in it steers Postgres to the
+        // slower concept/period index.
+        var all = GetAll();
+        var byNature = consolidated
+            .Where(c => costOfSalesIds.Contains(c.FinancialConceptId))
+            .Where(c =>
+                !all.Any(p =>
+                    p.EquityIssuerId == c.EquityIssuerId
+                    && p.AccessionNumber == c.AccessionNumber
+                    && p.PeriodStart == c.PeriodStart
+                    && p.PeriodEnd == c.PeriodEnd
+                    && p.DimensionsKey == ""
+                    && functionOfExpenseIds.Contains(p.FinancialConceptId)
+                )
+            )
+            .Select(c => c.Id);
+        return consolidated.Where(f => !byNature.Contains(f.Id));
+    }
+
+    protected virtual IQueryable<FinancialConcept> GetConcepts() =>
+        DbContext.Set<FinancialConcept>();
+
+    private const string IfrsCostOfSalesTag = "CostOfSales";
+
+    // Lines only a function-of-expense income statement carries.
+    private static readonly string[] IfrsFunctionOfExpenseTags =
+    [
+        "GrossProfit",
+        "DistributionCosts",
+        "AdministrativeExpense",
+        "SellingGeneralAndAdministrativeExpense",
+        "SellingExpense",
+        "SalesAndMarketingExpense",
+        "GeneralAndAdministrativeExpense",
+        "OtherExpenseByFunction",
+    ];
 
     /// <summary>
     /// The period's own consolidated flow facts that measure the requested granularity, the
@@ -55,7 +120,7 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
         IReadOnlyCollection<Guid> flowConceptIds
     )
     {
-        return GetConsolidatedByIssuerId(issuerId)
+        return ConsolidatedByIssuerId(issuerId)
             .Where(f =>
                 f.FiscalYear == fiscalYear
                 && f.FiscalPeriod == fiscalPeriod
@@ -79,7 +144,7 @@ public class FinancialFactRepository : BaseRepository<FinancialFact>
     {
         var from = date.AddDays(-toleranceDays);
         var to = date.AddDays(toleranceDays);
-        return GetConsolidatedByIssuerId(issuerId)
+        return ConsolidatedByIssuerId(issuerId)
             .Where(f =>
                 conceptIds.Contains(f.FinancialConceptId)
                 && f.PeriodEnd == f.PeriodStart
