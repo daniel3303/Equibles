@@ -63,7 +63,7 @@ public class DividendToolsTests : ParadeDbMcpTestBase
     }
 
     [Fact]
-    public async Task GetDividendHistory_ReturnsNewestFirstWithSource()
+    public async Task GetDividendHistory_ReturnsNewestFirstWithoutProvenance()
     {
         EquityIssuer stock = await SeedStock();
         await SeedDividend(stock, new DateOnly(2025, 2, 10), 0.25m);
@@ -73,7 +73,9 @@ public class DividendToolsTests : ParadeDbMcpTestBase
 
         result.Should().Contain("Declared cash dividends for Apple Inc. (AAPL), newest first:");
         result.IndexOf("2025-05-12").Should().BeLessThan(result.IndexOf("2025-02-10"));
-        result.Should().Contain("$0.26 | External");
+        result.Should().Contain("2025-05-12 | $0.26");
+        result.Should().NotContain("External");
+        result.Should().NotContain("| Source");
     }
 
     [Fact]
