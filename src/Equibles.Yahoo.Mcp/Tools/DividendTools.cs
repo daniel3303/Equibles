@@ -35,7 +35,7 @@ public class DividendTools
 
     [McpServerTool(Name = "GetDividendHistory", Title = "Dividend History", ReadOnly = true)]
     [Description(
-        "Get a company's stored declared cash dividends newest first. Each row gives the ex-dividend date, cash amount per share in USD, and source. Date filters apply to the ex-dividend date. Future ex-dates can appear after a dividend is declared. Dividend records are issuer-level and available only through the company's current primary ticker; a secondary share class is never assumed to have the same dividend."
+        "Get a company's stored declared cash dividends newest first. Each row gives the ex-dividend date and cash amount per share in USD. Date filters apply to the ex-dividend date. Future ex-dates can appear after a dividend is declared. Dividend records are issuer-level and available only through the company's current primary ticker; a secondary share class is never assumed to have the same dividend."
     )]
     public Task<string> GetDividendHistory(
         [Description("Current primary stock ticker (e.g., AAPL, MSFT).")] string ticker,
@@ -100,13 +100,13 @@ public class DividendTools
 
                 var result = MarkdownTable.Start(
                     $"Declared cash dividends for {MarkdownTable.EscapeCell(stock.Name)} ({MarkdownTable.EscapeCell(stock.Presentation.Listing.Ticker)}), newest first:",
-                    "Ex-Date | Amount Per Share | Source",
-                    "--------|------------------|-------"
+                    "Ex-Date | Amount Per Share",
+                    "--------|-----------------"
                 );
                 result.AppendRows(
                     dividends,
                     dividend =>
-                        $"{McpFormat.Invariant(dividend.ExDate, "yyyy-MM-dd")} | ${McpFormat.Price(dividend.AmountPerShare)} | {dividend.Source}"
+                        $"{McpFormat.Invariant(dividend.ExDate, "yyyy-MM-dd")} | ${McpFormat.Price(dividend.AmountPerShare)}"
                 );
 
                 var pagingNote = McpOutput.PagedTruncationNote(dividends.Count, total, offset);
