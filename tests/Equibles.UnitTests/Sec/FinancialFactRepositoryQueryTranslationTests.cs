@@ -118,6 +118,45 @@ public class FinancialFactRepositoryQueryTranslationTests
         where.Should().NotContain(" OR ");
     }
 
+    [Fact]
+    public void GetConsolidated_GatesIfrsCostOfSalesOnSameFilingFunctionOfExpenseEvidence()
+    {
+        using var ctx = CreateContext();
+        var repository = new FinancialFactRepository(ctx);
+
+        foreach (
+            var sql in new[]
+            {
+                repository.GetConsolidatedByIssuerId(Stock.Id).ToQueryString(),
+                repository.GetConsolidatedByIssuerIds([Stock.Id]).ToQueryString(),
+            }
+        )
+        {
+            var where = WhereClause(sql);
+            where.Should().Contain("'CostOfSales'");
+            where.Should().Contain("f.\"Id\" NOT IN (", "the excluded ids are one hashed subplan");
+            where.Should().Contain("NOT EXISTS (", "the evidence is a sibling fact, loaded in SQL");
+            where.Should().MatchRegex(@"\.""AccessionNumber"" = \w+\.""AccessionNumber""", "only the same filing proves it");
+            where.Should().MatchRegex(@"\.""PeriodStart"" = \w+\.""PeriodStart""");
+            where.Should().MatchRegex(@"\.""PeriodEnd"" = \w+\.""PeriodEnd""");
+            where.Should().NotContain(" OR ", "a per-row OR joined the concept table and ran 35 s on prod");
+            foreach (
+                var tag in new[]
+                {
+                    "GrossProfit",
+                    "DistributionCosts",
+                    "AdministrativeExpense",
+                    "SellingGeneralAndAdministrativeExpense",
+                    "SellingExpense",
+                    "SalesAndMarketingExpense",
+                    "GeneralAndAdministrativeExpense",
+                    "OtherExpenseByFunction",
+                }
+            )
+                where.Should().Contain($"'{tag}'");
+        }
+    }
+
     // The predicate alone: the projection lists every column, stamp included.
     private static string WhereClause(string sql)
     {
