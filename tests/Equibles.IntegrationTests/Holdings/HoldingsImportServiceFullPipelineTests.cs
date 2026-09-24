@@ -944,12 +944,9 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
     // ── Resilience / parser-branch coverage ─────────────────────────────
 
     [Fact]
-    public async Task ImportDataSet_ArchiveMissingInfoTable_CompletesEmptyWithoutHoldings()
+    public async Task ImportDataSet_ArchiveMissingInfoTable_RemainsRetryableWithoutHoldings()
     {
-        // BuildCusipMapping's "INFOTABLE.tsv not found" guard (zero-hit): an
-        // archive with submissions but no holdings table is treated as
-        // complete-but-empty (IsComplete=true so the worker marks it processed
-        // and never retries forever), persisting zero holdings — not a crash.
+        // Missing required source data cannot become a permanent success marker.
         var submission =
             "SUBMISSIONTYPE\tACCESSION_NUMBER\tFILING_DATE\tPERIODOFREPORT\tCIK\n"
             + "13F-HR\tACC-001\t2024-10-15\t2024-09-30\t0001067983\n";
@@ -969,7 +966,7 @@ public class HoldingsImportServiceFullPipelineTests : IAsyncLifetime
             CancellationToken.None
         );
 
-        result.IsComplete.Should().BeTrue();
+        result.IsComplete.Should().BeFalse();
         result.SubmissionCount.Should().Be(1);
         using var verify = FreshContext();
         (await verify.Set<InstitutionalHolding>().CountAsync()).Should().Be(0);

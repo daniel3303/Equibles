@@ -27,6 +27,8 @@ public class ProcessedDataSet
     // the completed bulk pass reopens the newer realtime filings.
     public const string RealtimeReplayPendingFileName = "__realtime-replay-pending__";
 
+    public const string CoverageAuditPendingFileName = "__source-coverage-pending__";
+
     /// <summary>
     /// The 13F import pipeline's current parser version. Bump this when a
     /// parser fix must re-apply to already-imported data: the scraper treats

@@ -88,7 +88,20 @@ public class HoldingsScraperWorkerDoWorkCycleTests : ParadeDbMcpTestBase
             (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(DbContext)),
             (typeof(HoldingsDataSetClient), ThrowingDataSetClient()),
             (typeof(HoldingsImportService), BuildImporter()),
-            (typeof(InstitutionalHolderRepository), new InstitutionalHolderRepository(DbContext))
+            (typeof(InstitutionalHolderRepository), new InstitutionalHolderRepository(DbContext)),
+            (
+                typeof(HoldingsArchiveCoverageService),
+                new HoldingsArchiveCoverageService(
+                    BuildImporter(),
+                    ThrowingDataSetClient(),
+                    new ProcessedDataSetRepository(DbContext),
+                    new InstitutionalHolderRepository(DbContext),
+                    new InstitutionalHoldingRepository(DbContext),
+                    new HoldingsImportFailureRepository(DbContext),
+                    new HoldingsRealtimeReplaySignal(),
+                    Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
+                )
+            )
         );
 
         var config = Substitute.For<IConfiguration>();
@@ -112,7 +125,16 @@ public class HoldingsScraperWorkerDoWorkCycleTests : ParadeDbMcpTestBase
             BindingFlags.NonPublic | BindingFlags.Instance
         );
 
-        await (Task)doWork.Invoke(worker, [CancellationToken.None]);
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            (Task)doWork.Invoke(worker, [CancellationToken.None])
+        );
+        (
+            await DbContext
+                .Set<ProcessedDataSet>()
+                .AnyAsync(row => row.FileName == ProcessedDataSet.CoverageAuditPendingFileName)
+        )
+            .Should()
+            .BeTrue("an unreadable source audit must retain its incomplete-coverage warning");
 
         // Backfill seeded every file except the latest as already-processed.
         var processedCount = await DbContext

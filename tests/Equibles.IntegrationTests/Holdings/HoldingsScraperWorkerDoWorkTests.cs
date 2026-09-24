@@ -3,6 +3,7 @@ using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
 using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService;
+using Equibles.Holdings.HostedService.Services;
 using Equibles.Holdings.Repositories;
 using Equibles.IntegrationTests.Helpers;
 using Microsoft.EntityFrameworkCore;
@@ -48,7 +49,20 @@ public class HoldingsScraperWorkerDoWorkTests : ParadeDbMcpTestBase
         // registered → its own catch swallows, proving the cycle is resilient).
         var scopeFactory = ServiceScopeSubstitute.Create(
             (typeof(ProcessedDataSetRepository), new ProcessedDataSetRepository(DbContext)),
-            (typeof(InstitutionalHolderRepository), new InstitutionalHolderRepository(DbContext))
+            (typeof(InstitutionalHolderRepository), new InstitutionalHolderRepository(DbContext)),
+            (
+                typeof(HoldingsArchiveCoverageService),
+                new HoldingsArchiveCoverageService(
+                    null,
+                    null,
+                    new ProcessedDataSetRepository(DbContext),
+                    null,
+                    null,
+                    null,
+                    new HoldingsRealtimeReplaySignal(),
+                    Substitute.For<ILogger<HoldingsArchiveCoverageService>>()
+                )
+            )
         );
 
         var worker = new HoldingsScraperWorker(

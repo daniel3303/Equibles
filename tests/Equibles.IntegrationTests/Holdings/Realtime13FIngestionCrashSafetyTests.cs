@@ -83,6 +83,8 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
                     .Returns(new InstitutionalHoldingRepository(ctx));
                 sp.GetService(typeof(ProcessedFilingRepository))
                     .Returns(new ProcessedFilingRepository(ctx));
+                sp.GetService(typeof(HoldingsImportFailureRepository))
+                    .Returns(new HoldingsImportFailureRepository(ctx));
                 sp.GetService(typeof(RealtimeSweepStateRepository))
                     .Returns(new RealtimeSweepStateRepository(ctx));
                 var scope = Substitute.For<IServiceScope>();
@@ -127,6 +129,138 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             DateFiled = new DateOnly(2024, 11, 20),
             AccessionNumber = "ACC-ORIG",
         };
+
+    [Fact]
+    public async Task PartialIndexSweep_PreservesRecoveryUntilProcessedAmendmentReplays()
+    {
+        var original = Entry();
+        var amendment = new EdgarDailyIndexEntry
+        {
+            FormType = "13F-HR/A",
+            CompanyName = "BIG FUND",
+            Cik = Cik,
+            DateFiled = original.DateFiled.AddDays(1),
+            AccessionNumber = "ACC-AMEND",
+        };
+        using (var seed = FreshContext())
+        {
+            seed.Add(
+                Equibles.TestSupport.EquityIssuerSeed.Create(
+                    Id: Guid.NewGuid(),
+                    Ticker: "AAPL",
+                    Name: "Apple Inc",
+                    Cik: "0000320193",
+                    Cusip: Cusip
+                )
+            );
+            seed.Add(new ProcessedFiling { AccessionNumber = amendment.AccessionNumber });
+            await seed.SaveChangesAsync();
+            await new HoldingsImportFailureRepository(seed).Record(
+                original.AccessionNumber,
+                Cik,
+                original.DateFiled,
+                new DateOnly(2024, 9, 30),
+                HoldingsImportFailureReason.Incomplete,
+                CancellationToken.None
+            );
+        }
+        var missingAmendmentDay = true;
+        var edgar = Substitute.For<ISecEdgarClient>();
+        edgar
+            .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                if (call.ArgAt<DateOnly>(0) == amendment.DateFiled)
+                {
+                    if (missingAmendmentDay)
+                        throw new IOException("Index unavailable");
+                    return new List<EdgarDailyIndexEntry> { amendment };
+                }
+                return new List<EdgarDailyIndexEntry> { original };
+            });
+        edgar
+            .GetFilingArtifactNames(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(["primary_doc.xml", "infotable.xml"]);
+        edgar
+            .GetDocumentFileBytes(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(call =>
+                Encoding.UTF8.GetBytes(
+                    call.ArgAt<string>(2) == "primary_doc.xml"
+                        ? PrimaryDoc()
+                            .Replace(
+                                "<isAmendment>false</isAmendment>",
+                                call.ArgAt<string>(1) == "ACC-AMEND"
+                                    ? "<isAmendment>true</isAmendment><amendmentType>RESTATEMENT</amendmentType>"
+                                    : "<isAmendment>false</isAmendment>"
+                            )
+                        : InfoTable()
+                            .Replace("1000", call.ArgAt<string>(1) == "ACC-AMEND" ? "2000" : "1000")
+                )
+            );
+        var scopes = CreateScopeFactory();
+        var prices = Substitute.For<IStockPriceProvider>();
+        prices
+            .GetClosingPrices(
+                Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new Dictionary<(Guid, string, DateOnly), decimal>());
+        var importer = new HoldingsImportService(
+            scopes,
+            Substitute.For<ILogger<HoldingsImportService>>(),
+            Options.Create(new WorkerOptions()),
+            prices,
+            Substitute.For<MassTransit.IBus>()
+        );
+        var ingestion = new Realtime13FIngestionService(
+            edgar,
+            new Filing13FXmlParser(),
+            new Realtime13FArchiveBuilder(),
+            importer,
+            scopes,
+            Substitute.For<ILogger<Realtime13FIngestionService>>()
+        );
+        var first = await ingestion.IngestRecentFilings(
+            amendment.DateFiled,
+            2,
+            new DateOnly(2024, 1, 1),
+            CancellationToken.None
+        );
+        first.EarliestFailedDate.Should().Be(amendment.DateFiled);
+        using (var verify = FreshContext())
+            (await verify.Set<HoldingsImportFailure>().SingleAsync()).ResolvedAt.Should().BeNull();
+        missingAmendmentDay = false;
+        await ingestion.IngestRecentFilings(
+            amendment.DateFiled,
+            2,
+            new DateOnly(2024, 1, 1),
+            CancellationToken.None
+        );
+        using (var verify = FreshContext())
+        {
+            var position = await verify.Set<InstitutionalHolding>().SingleAsync();
+            position.Shares.Should().Be(2000);
+            position.AccessionNumber.Should().Be(amendment.AccessionNumber);
+            (await verify.Set<HoldingsImportFailure>().SingleAsync()).ResolvedAt.Should().BeNull();
+        }
+        // Importing an explicit subset is not evidence that the whole tail is complete either.
+        await ingestion.IngestSpecificFilings(
+            [original],
+            new DateOnly(2024, 1, 1),
+            CancellationToken.None
+        );
+        using (var verify = FreshContext())
+            (await verify.Set<HoldingsImportFailure>().SingleAsync()).ResolvedAt.Should().BeNull();
+    }
 
     [Theory]
     [InlineData(false)]
