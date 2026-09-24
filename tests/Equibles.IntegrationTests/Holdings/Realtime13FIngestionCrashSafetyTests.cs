@@ -6,6 +6,7 @@ using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
 using Equibles.Data;
 using Equibles.Holdings.Data.Models;
+using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Holdings.Repositories;
 using Equibles.Integrations.Sec.Contracts;
@@ -82,6 +83,8 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
                     .Returns(new InstitutionalHoldingRepository(ctx));
                 sp.GetService(typeof(ProcessedFilingRepository))
                     .Returns(new ProcessedFilingRepository(ctx));
+                sp.GetService(typeof(RealtimeSweepStateRepository))
+                    .Returns(new RealtimeSweepStateRepository(ctx));
                 var scope = Substitute.For<IServiceScope>();
                 scope.ServiceProvider.Returns(sp);
                 return scope;
@@ -125,8 +128,12 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             AccessionNumber = "ACC-ORIG",
         };
 
-    [Fact]
-    public async Task IngestRecentFilings_ImportFailsMidSweep_DoesNotRecordLedgerSoNextSweepRetries()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IngestRecentFilings_ImportFailsOrResetWins_DoesNotRecordLedgerSoRestartRetries(
+        bool resetDuringImport
+    )
     {
         using (var seed = FreshContext())
         {
@@ -172,6 +179,19 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
 
         var scopeFactory = CreateScopeFactory();
 
+        await using var progressContext = FreshContext();
+        var progress = new RealtimeSweepStateRepository(progressContext);
+        await progress.SaveProgress(
+            Holdings13FRealtimeWorker.WorkerStateName,
+            null,
+            new DateOnly(2024, 11, 25),
+            CancellationToken.None
+        );
+        var originalState = await progress
+            .GetByWorker(Holdings13FRealtimeWorker.WorkerStateName)
+            .AsNoTracking()
+            .SingleAsync();
+
         // The import path resolves closing prices; throw on the FIRST sweep so
         // ImportDataSet fails mid-flight, then succeed on every later call.
         var prices = Substitute.For<IStockPriceProvider>();
@@ -181,17 +201,26 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
                 Arg.Any<IEnumerable<(Guid, string, DateOnly)>>(),
                 Arg.Any<CancellationToken>()
             )
-            .Returns(ci =>
+            .Returns(async ci =>
             {
                 if (Interlocked.Increment(ref priceCalls) == 1)
-                    throw new InvalidOperationException("price service unavailable");
+                {
+                    if (!resetDuringImport)
+                        throw new InvalidOperationException("price service unavailable");
+                    await using var reset = FreshContext();
+                    await new RealtimeSweepStateRepository(reset).Rewind(
+                        Holdings13FRealtimeWorker.WorkerStateName,
+                        new DateOnly(2024, 10, 1),
+                        CancellationToken.None
+                    );
+                }
 
                 var dict = new Dictionary<(Guid, string, DateOnly), decimal>();
                 foreach (
                     var (id, ticker, date) in ci.ArgAt<IEnumerable<(Guid, string, DateOnly)>>(0)
                 )
                     dict[(id, ticker, date)] = 100m;
-                return Task.FromResult(dict);
+                return dict;
             });
 
         var importService = new HoldingsImportService(
@@ -215,12 +244,16 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
 
         // Sweep 1 — the import blows up. The sweep survives, the ledger MUST stay
         // empty, and the failed filing's date must hold the watermark back.
+        using var stoppedSweep = new CancellationTokenSource();
         var firstSweep = await ingestion.IngestRecentFilings(
             today,
             1,
             minReportDate,
-            CancellationToken.None
+            stoppedSweep.Token,
+            originalState
         );
+        // Stop before any worker-level progress save or cleanup can run.
+        stoppedSweep.Cancel();
         firstSweep.FilingsImported.Should().Be(0, "the only filing in the window failed to import");
         firstSweep
             .EarliestFailedDate.Should()
@@ -242,7 +275,11 @@ public class Realtime13FIngestionCrashSafetyTests : IAsyncLifetime
             today,
             1,
             minReportDate,
-            CancellationToken.None
+            CancellationToken.None,
+            await progress
+                .GetByWorker(Holdings13FRealtimeWorker.WorkerStateName)
+                .AsNoTracking()
+                .SingleAsync()
         );
 
         imported.FilingsImported.Should().Be(1);

@@ -1,3 +1,4 @@
+using System.Data;
 using System.Net;
 using Equibles.Core.Configuration;
 using Equibles.Errors.BusinessLogic;
@@ -181,6 +182,10 @@ public class HoldingsScraperWorker : BaseScraperWorker
         await using var scope = ScopeFactory.CreateAsyncScope();
         var dataSets = scope.ServiceProvider.GetRequiredService<ProcessedDataSetRepository>();
 
+        await using var transaction = await dataSets.CreateTransaction(
+            IsolationLevel.ReadCommitted,
+            cancellationToken
+        );
         var rows = await dataSets.GetAll().ToListAsync(cancellationToken);
         var pending = rows.FirstOrDefault(r =>
             r.FileName == Holdings.Data.Models.ProcessedDataSet.RescanPendingFileName
@@ -193,6 +198,25 @@ public class HoldingsScraperWorker : BaseScraperWorker
                 && r.FileName != Holdings.Data.Models.ProcessedDataSet.RescanPendingFileName
             )
             .ToList();
+
+        var seasonStartDate = Holdings13FRealtimeWorker.LatestQuarterEnd(
+            DateOnly.FromDateTime(DateTime.UtcNow)
+        );
+        var latestBulkEnd = realRows
+            .Select(r => Holdings13FRealtimeWorker.ParseDataSetEndDate(r.FileName))
+            .Where(d => d.HasValue)
+            .Max();
+        // A still-unpublished archive can straddle a calendar-quarter rollover.
+        var replayFrom =
+            latestBulkEnd.HasValue && latestBulkEnd.Value < seasonStartDate
+                ? latestBulkEnd.Value.AddDays(1)
+                : seasonStartDate;
+        var states = scope.ServiceProvider.GetRequiredService<RealtimeSweepStateRepository>();
+        await states.Rewind(
+            Holdings13FRealtimeWorker.WorkerStateName,
+            replayFrom,
+            cancellationToken
+        );
 
         dataSets.Delete(pending);
         foreach (var row in realRows)
@@ -213,13 +237,13 @@ public class HoldingsScraperWorker : BaseScraperWorker
 
         var processedFilings =
             scope.ServiceProvider.GetRequiredService<ProcessedFilingRepository>();
-        var seasonStart = Holdings13FRealtimeWorker
-            .LatestQuarterEnd(DateOnly.FromDateTime(DateTime.UtcNow))
-            .ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var seasonStart = replayFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var clearedFilings = await processedFilings
             .GetAll()
             .Where(f => f.CreationTime >= seasonStart)
             .ExecuteDeleteAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
 
         Logger.LogInformation(
             "Applied queued CUSIP-identity rescan: cleared {DataSets} quarterly data set marker(s) and {Filings} open-season realtime accession(s)",

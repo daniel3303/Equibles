@@ -77,6 +77,9 @@ public class HoldingsScraperWorkerApplyPendingCusipRescanTests : IAsyncLifetime
         provider
             .GetService(typeof(ProcessedFilingRepository))
             .Returns(new ProcessedFilingRepository(ctx));
+        provider
+            .GetService(typeof(RealtimeSweepStateRepository))
+            .Returns(new RealtimeSweepStateRepository(ctx));
         scope.ServiceProvider.Returns(provider);
         return scope;
     }
@@ -199,5 +202,129 @@ public class HoldingsScraperWorkerApplyPendingCusipRescanTests : IAsyncLifetime
         await using var verify = _fixture.CreateDbContext();
         var dataSets = await verify.Set<ProcessedDataSet>().Select(r => r.FileName).ToListAsync();
         dataSets.Should().ContainSingle().Which.Should().Be(ProcessedDataSet.BackfillGuardFileName);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Apply_RewindsBeyondTrailingWindow_AndStaleSweepCannotOverwrite(bool coldStart)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var season = Holdings13FRealtimeWorker.LatestQuarterEnd(today);
+        // The last published bulk archive leaves a gap spanning a quarter rollover.
+        var bulkEnd = season.AddMonths(-3);
+        var fileName =
+            $"01jan{bulkEnd.Year}-{bulkEnd.ToString("ddMMMyyyy", System.Globalization.CultureInfo.InvariantCulture).ToLowerInvariant()}_form13f.zip";
+        await using var oldSweep = _fixture.CreateDbContext();
+        var oldRepo = new RealtimeSweepStateRepository(oldSweep);
+        if (!coldStart)
+            await oldRepo.SaveProgress(
+                Holdings13FRealtimeWorker.WorkerStateName,
+                null,
+                today,
+                CancellationToken.None
+            );
+        var staleState = await oldRepo
+            .GetByWorker(Holdings13FRealtimeWorker.WorkerStateName)
+            .SingleOrDefaultAsync();
+
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<ProcessedDataSet>()
+                .AddRange(
+                    new ProcessedDataSet { FileName = ProcessedDataSet.RescanPendingFileName },
+                    new ProcessedDataSet { FileName = fileName }
+                );
+            seed.Set<ProcessedFiling>()
+                .AddRange(
+                    new ProcessedFiling
+                    {
+                        AccessionNumber = "gap-filing",
+                        CreationTime = bulkEnd
+                            .AddDays(2)
+                            .ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                    },
+                    new ProcessedFiling
+                    {
+                        AccessionNumber = "covered-filing",
+                        CreationTime = bulkEnd.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                    }
+                );
+            seed.Set<RealtimeSweepState>()
+                .Add(
+                    new RealtimeSweepState
+                    {
+                        WorkerName = "Holdings13DGRealtime",
+                        SweptThrough = today,
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+
+        await BuildWorker().ApplyPendingCusipRescan(CancellationToken.None);
+        (
+            await oldRepo.SaveProgress(
+                Holdings13FRealtimeWorker.WorkerStateName,
+                staleState,
+                today,
+                CancellationToken.None
+            )
+        )
+            .Should()
+            .Be(0);
+
+        await using var verify = _fixture.CreateDbContext();
+        var state = await verify
+            .Set<RealtimeSweepState>()
+            .SingleAsync(s => s.WorkerName == Holdings13FRealtimeWorker.WorkerStateName);
+        state.SweptThrough.Should().Be(bulkEnd.AddDays(1));
+        (
+            await new RealtimeSweepStateRepository(verify).SaveProgress(
+                Holdings13FRealtimeWorker.WorkerStateName,
+                state,
+                today,
+                CancellationToken.None
+            )
+        )
+            .Should()
+            .Be(1);
+
+        Holdings13FRealtimeWorker
+            .ComputeWindowStart(today, state.SweptThrough, 14, 0)
+            .Should()
+            .Be(bulkEnd.AddDays(1));
+        (await verify.Set<ProcessedFiling>().Select(f => f.AccessionNumber).ToListAsync())
+            .Should()
+            .Equal("covered-filing");
+        (
+            await verify
+                .Set<RealtimeSweepState>()
+                .SingleAsync(s => s.WorkerName == "Holdings13DGRealtime")
+        )
+            .SweptThrough.Should()
+            .Be(today);
+    }
+
+    [Fact]
+    public async Task Apply_DoesNotAdvanceAnAlreadyLaggingSweep()
+    {
+        var oldDate = new DateOnly(2020, 1, 1);
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<ProcessedDataSet>()
+                .Add(new ProcessedDataSet { FileName = ProcessedDataSet.RescanPendingFileName });
+            seed.Set<RealtimeSweepState>()
+                .Add(
+                    new RealtimeSweepState
+                    {
+                        WorkerName = Holdings13FRealtimeWorker.WorkerStateName,
+                        SweptThrough = oldDate,
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+        await BuildWorker().ApplyPendingCusipRescan(CancellationToken.None);
+        await using var verify = _fixture.CreateDbContext();
+        (await verify.Set<RealtimeSweepState>().SingleAsync()).SweptThrough.Should().Be(oldDate);
     }
 }

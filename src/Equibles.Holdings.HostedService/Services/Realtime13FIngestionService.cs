@@ -1,3 +1,4 @@
+using System.Data;
 using System.Text;
 using Equibles.Core.AutoWiring;
 using Equibles.Holdings.Data.Models;
@@ -53,7 +54,8 @@ public class Realtime13FIngestionService
         DateOnly today,
         int lookbackDays,
         DateOnly minReportDate,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        RealtimeSweepState sweepState = null
     )
     {
         var (entries, earliestFailedDate) = await DiscoverEntries(
@@ -111,7 +113,8 @@ public class Realtime13FIngestionService
             if (outcome != EntryImportOutcome.Imported)
                 continue;
 
-            await RecordProcessed([entry.AccessionNumber], cancellationToken);
+            if (!await RecordProcessed([entry.AccessionNumber], cancellationToken, sweepState))
+                return new RealtimeIngestionResult(totalImported, entry.DateFiled);
             totalImported++;
         }
 
@@ -366,16 +369,34 @@ public class Realtime13FIngestionService
         return await LoadProcessedSet(repo, accessionNumbers, cancellationToken);
     }
 
-    private async Task RecordProcessed(
+    internal async Task<bool> RecordProcessed(
         IReadOnlyCollection<string> accessionNumbers,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        RealtimeSweepState sweepState = null
     )
     {
         if (accessionNumbers.Count == 0)
-            return;
+            return true;
 
         await using var scope = _scopeFactory.CreateAsyncScope();
         var repo = scope.ServiceProvider.GetRequiredService<ProcessedFilingRepository>();
+
+        await using var transaction =
+            sweepState == null
+                ? null
+                : await repo.CreateTransaction(IsolationLevel.ReadCommitted, cancellationToken);
+        if (sweepState != null)
+        {
+            // Serialize only the completion write with identity resets, never the SEC request.
+            var states = scope.ServiceProvider.GetRequiredService<RealtimeSweepStateRepository>();
+            var current = await states.Lock(sweepState.Id, cancellationToken);
+            if (
+                current == null
+                || current.UpdatedAt != sweepState.UpdatedAt
+                || current.SweptThrough != sweepState.SweptThrough
+            )
+                return false;
+        }
 
         // Re-check inside the write scope: a parallel sweep (or the quarterly
         // worker) may have recorded some of these between discovery and now.
@@ -388,6 +409,9 @@ public class Realtime13FIngestionService
         }
 
         await repo.SaveChanges();
+        if (transaction != null)
+            await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
     private static async Task<HashSet<string>> LoadProcessedSet(
