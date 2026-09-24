@@ -13,7 +13,7 @@ using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Messaging.Contracts.CommonStocks;
 using Equibles.Sec.FinancialFacts.BusinessLogic;
-using Equibles.Sec.FinancialFacts.Repositories;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -119,6 +119,14 @@ public class CompanySyncService : ICompanySyncService
                     normalizedTickers,
                     state.FiledSecurityTypesByCik.GetValueOrDefault(canonicalCik)
                 );
+                // A filed-type override never contests another issuer's primary: SEC order then stands.
+                var secOrderTicker = UsPresentationTicker.Choose(normalizedTickers, null);
+                if (
+                    primaryTicker != secOrderTicker
+                    && state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var holder)
+                    && CikNormalizer.Canonicalize(holder.Cik) != canonicalCik
+                )
+                    primaryTicker = secOrderTicker;
                 if (string.IsNullOrEmpty(primaryTicker))
                 {
                     _logger.LogWarning(
@@ -222,9 +230,7 @@ public class CompanySyncService : ICompanySyncService
             await commonStockRepository.GetUsPrimaryTickers().ToListAsync()
         ).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var filedSecurityTypesByCik = await LoadFiledSecurityTypes(
-            scope.ServiceProvider.GetRequiredService<IssuerSecurityRegistrationRepository>()
-        );
+        var filedSecurityTypesByCik = await LoadFiledSecurityTypes(dbContext);
 
         return new StockSyncState
         {
@@ -244,10 +250,11 @@ public class CompanySyncService : ICompanySyncService
     // Canonical CIK -> normalized filed symbol -> the issuer's own 12(b) classification.
     private static async Task<
         Dictionary<string, IReadOnlyDictionary<string, ListedSecurityType>>
-    > LoadFiledSecurityTypes(IssuerSecurityRegistrationRepository registrationRepository)
+    > LoadFiledSecurityTypes(DbContext dbContext)
     {
-        var rows = await registrationRepository
-            .GetAll()
+        var rows = await dbContext
+            .Set<IssuerSecurityRegistration>()
+            .AsNoTracking()
             .Select(row => new
             {
                 row.Issuer.Cik,
