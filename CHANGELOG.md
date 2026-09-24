@@ -38,6 +38,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Resolve moved 13F archives from the SEC published catalog after a legacy download returns 404, instead of treating a directory move as an unpublished quarter.
+
 - Identity-triggered 13F replays now rewind the realtime scan along with its processed-filings ledger, including unpublished bulk-archive gaps; concurrent scans cannot acknowledge the newly requested replay.
 
 - A European annual report past the capture ceiling is remembered instead of being fetched again every cycle. The filing index's host serves reports chunked and states no content length, so the ceiling can only be reached by reading that many bytes and the refusal costs that transfer rather than a response-headers exchange, as four comments and a test claimed; nothing recorded the refusal, so the first production cycle refused 47 reports beside its 100 captures and would have refused the same ones every night against a nonprofit host. `EsefOversizedReport` records the refusal against the ceiling it was made under, so the filing is skipped with no request at all while that ceiling stands, re-opens if the ceiling rises, and has its row cleared if it is then stored. A refusal is now charged against the per-cycle budget, which is safe only because it happens once. Migration `AddEsefOversizedReport` is additive.

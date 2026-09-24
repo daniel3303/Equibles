@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.IO.Compression;
+using System.Net;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Sec.Contracts;
+using HtmlAgilityPack;
 
 namespace Equibles.Holdings.HostedService.Services;
 
@@ -10,6 +12,9 @@ public class HoldingsDataSetClient
 {
     private const string BaseUrl =
         "https://www.sec.gov/files/structureddata/data/form-13f-data-sets";
+
+    internal const string CatalogUrl =
+        "https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets";
 
     // SEC switched the 13F data-set filename scheme from {year}q{quarter} to
     // period ranges starting with the 2024 publications.
@@ -35,12 +40,98 @@ public class HoldingsDataSetClient
         var url = $"{BaseUrl}/{fileName}";
         _logger.LogInformation("Downloading 13F data set: {Url}", url);
 
-        await using var stream = await _secEdgarClient.DownloadStream(url);
+        await using var stream = await DownloadArchive(fileName, url, cancellationToken);
         var memoryStream = new MemoryStream();
         await stream.CopyToAsync(memoryStream, cancellationToken);
         memoryStream.Position = 0;
 
         return new ZipArchive(memoryStream, ZipArchiveMode.Read);
+    }
+
+    private async Task<Stream> DownloadArchive(
+        string fileName,
+        string legacyUrl,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return await _secEdgarClient.DownloadStream(legacyUrl);
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode == HttpStatusCode.NotFound)
+        {
+            // The SEC can move a new archive without redirecting the historical directory.
+            await using var catalog = await DownloadPublishedResource(CatalogUrl);
+            using var reader = new StreamReader(catalog);
+            var publishedUrl = ResolvePublishedUrl(
+                await reader.ReadToEndAsync(cancellationToken),
+                fileName
+            );
+            if (publishedUrl == null)
+                throw;
+            if (publishedUrl == legacyUrl)
+                throw new InvalidDataException(
+                    "SEC lists an archive whose download returned 404.",
+                    exception
+                );
+            _logger.LogInformation("Following published SEC data-set link: {Url}", publishedUrl);
+            return await DownloadPublishedResource(publishedUrl);
+        }
+    }
+
+    private async Task<Stream> DownloadPublishedResource(string url)
+    {
+        try
+        {
+            return await _secEdgarClient.DownloadStream(url);
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode == HttpStatusCode.NotFound)
+        {
+            // A broken catalog or advertised download is an error, not an unpublished period.
+            throw new InvalidDataException(
+                "Published SEC 13F resource returned 404: " + url,
+                exception
+            );
+        }
+    }
+
+    internal static string ResolvePublishedUrl(string html, string fileName)
+    {
+        var document = new HtmlDocument();
+        document.LoadHtml(html);
+        var anchors = document.DocumentNode.SelectNodes("//a[@href]");
+        var published = (anchors?.AsEnumerable() ?? [])
+            .Select(a => HtmlEntity.DeEntitize(a.GetAttributeValue("href", "")))
+            .Select(href => Uri.TryCreate(new Uri(CatalogUrl), href, out var uri) ? uri : null)
+            .Where(uri =>
+                uri != null
+                && uri.Scheme == Uri.UriSchemeHttps
+                && uri.Host == "www.sec.gov"
+                && uri.IsDefaultPort
+                && uri.UserInfo.Length == 0
+                && uri.AbsolutePath.EndsWith("_form13f.zip", StringComparison.OrdinalIgnoreCase)
+            )
+            .Select(uri => uri.AbsoluteUri)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (published.Count == 0)
+            throw new InvalidDataException("SEC 13F catalog contains no published archive links.");
+        var matches = published
+            .Where(url =>
+                Path.GetFileName(new Uri(url).AbsolutePath)
+                    .Equals(fileName, StringComparison.Ordinal)
+            )
+            .ToList();
+        return matches.Count switch
+        {
+            0 => null,
+            1 => matches[0],
+            _ => throw new InvalidDataException(
+                "SEC 13F catalog contains conflicting archive links."
+            ),
+        };
     }
 
     /// <summary>
