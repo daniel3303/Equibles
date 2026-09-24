@@ -12,6 +12,8 @@ using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.Messaging.Contracts.CommonStocks;
+using Equibles.Sec.FinancialFacts.BusinessLogic;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -113,9 +115,18 @@ public class CompanySyncService : ICompanySyncService
                     .Where(ticker => ticker != null)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
-                var primaryTicker = normalizedTickers.FirstOrDefault(ticker =>
-                    ticker.Length <= TickerNormalizer.MaxPrimaryLength
+                var primaryTicker = UsPresentationTicker.Choose(
+                    normalizedTickers,
+                    state.FiledSecurityTypesByCik.GetValueOrDefault(canonicalCik)
                 );
+                // A filed-type override never contests another issuer's primary: SEC order then stands.
+                var secOrderTicker = UsPresentationTicker.Choose(normalizedTickers, null);
+                if (
+                    primaryTicker != secOrderTicker
+                    && state.PrimaryTickerToStock.TryGetValue(primaryTicker, out var holder)
+                    && CikNormalizer.Canonicalize(holder.Cik) != canonicalCik
+                )
+                    primaryTicker = secOrderTicker;
                 if (string.IsNullOrEmpty(primaryTicker))
                 {
                     _logger.LogWarning(
@@ -219,6 +230,8 @@ public class CompanySyncService : ICompanySyncService
             await commonStockRepository.GetUsPrimaryTickers().ToListAsync()
         ).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        var filedSecurityTypesByCik = await LoadFiledSecurityTypes(dbContext);
+
         return new StockSyncState
         {
             SecCiks = secCiks,
@@ -227,10 +240,45 @@ public class CompanySyncService : ICompanySyncService
             ExistingPrimaryTickers = existingPrimaryTickers,
             PrimaryTickerToStock = primaryTickerToStock,
             SecondaryCikToParent = secondaryCikToParent,
+            FiledSecurityTypesByCik = filedSecurityTypesByCik,
             CommonStockRepository = commonStockRepository,
             CommonStockManager = commonStockManager,
             DbContext = dbContext,
         };
+    }
+
+    // Canonical CIK -> normalized filed symbol -> the issuer's own 12(b) classification.
+    private static async Task<
+        Dictionary<string, IReadOnlyDictionary<string, ListedSecurityType>>
+    > LoadFiledSecurityTypes(DbContext dbContext)
+    {
+        var rows = await dbContext
+            .Set<IssuerSecurityRegistration>()
+            .AsNoTracking()
+            .Select(row => new
+            {
+                row.Issuer.Cik,
+                row.TradingSymbol,
+                row.Title,
+            })
+            .ToListAsync();
+        var result = new Dictionary<string, IReadOnlyDictionary<string, ListedSecurityType>>(
+            StringComparer.Ordinal
+        );
+        foreach (var byCik in rows.GroupBy(row => CikNormalizer.Canonicalize(row.Cik)))
+        {
+            if (byCik.Key == null)
+                continue;
+            var types = new Dictionary<string, ListedSecurityType>(StringComparer.Ordinal);
+            foreach (var row in byCik)
+            {
+                var identity = TickerNormalizer.NormalizeIdentity(row.TradingSymbol);
+                if (identity != null)
+                    types[identity] = ListedSecurityClassifier.Classify(row.Title);
+            }
+            result[byCik.Key] = types;
+        }
+        return result;
     }
 
     private async Task UpdateExistingStock(
@@ -1129,6 +1177,10 @@ public class CompanySyncService : ICompanySyncService
         public HashSet<string> ExistingPrimaryTickers { get; init; }
         public Dictionary<string, EquityIssuer> PrimaryTickerToStock { get; init; }
         public Dictionary<string, EquityIssuer> SecondaryCikToParent { get; init; }
+        public Dictionary<
+            string,
+            IReadOnlyDictionary<string, ListedSecurityType>
+        > FiledSecurityTypesByCik { get; init; } = [];
         public EquityIssuerRepository CommonStockRepository { get; init; }
         public EquityIdentityManager CommonStockManager { get; init; }
         public DbContext DbContext { get; init; }
