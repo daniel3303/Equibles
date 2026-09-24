@@ -552,83 +552,17 @@ public class HoldingsImportService
             );
         }
 
-        var securityClaims = await query
-            .SelectMany(issuer => issuer.Securities)
-            .Where(security => security.Cusip != null && uniqueCusipsList.Contains(security.Cusip))
-            .Select(security => new
-            {
-                security.Id,
-                security.EquityIssuerId,
-                security.Cusip,
-                PrimarySecurityId = (Guid?)security.Issuer.Presentation.Listing.EquitySecurityId,
-                UsTickers = security
-                    .Listings.Where(listing => listing.MarketCountryCode == "US")
-                    .Select(listing => listing.Ticker)
-                    .Distinct()
-                    .ToList(),
-            })
-            .ToListAsync(cancellationToken);
-
-        // Retired CUSIPs must keep resolving: after an issuer-level CUSIP change,
-        // laggard filers reference the old CUSIP for a quarter or two and every
-        // historical data set does forever. Map the union of current CUSIPs and
-        // aliases, with the current CUSIP winning a collision — otherwise a
-        // re-import (the backfill a CUSIP change itself triggers) would drop
-        // old-CUSIP lines wherever a restatement amendment rebuilds a quarter.
-        var stockIdsQuery = query.Select(cs => cs.Id);
-        var cusipAliases = await stockRepo
-            .GetCusipAliases()
-            .Where(a =>
-                uniqueCusipsList.Contains(a.Cusip) && stockIdsQuery.Contains(a.EquityIssuerId)
-            )
-            .Select(a => new { a.EquityIssuerId, a.Cusip })
-            .ToListAsync(cancellationToken);
-
-        // The filer's OTHER listed securities (sibling share classes, units) carry their own
-        // CUSIPs. They resolve to the same filer row but keep the listed ticker: the class is
-        // part of the position's identity, and the exact price series it must be valued from.
-        var listedCusips = await stockRepo
-            .GetListedCusips()
-            .Where(l =>
-                uniqueCusipsList.Contains(l.Cusip) && stockIdsQuery.Contains(l.EquityIssuerId)
-            )
-            .Select(l => new
-            {
-                l.EquityIssuerId,
-                l.ListedTicker,
-                l.Cusip,
-            })
-            .ToListAsync(cancellationToken);
-
-        // Precedence on a collision (defended against at write time, kept coherent here):
-        // the primary CUSIP wins over a retired alias, which wins over a listing claim —
-        // EXCEPT when a CUSIP is claimed as both an alias and a listing. An alias maps to
-        // the primary series and a listing to a different security, so preferring either
-        // silently merges two securities' positions; the CUSIP is dropped instead (its
-        // lines accrue as unmapped) until the write-time guards converge the tables.
-        var cusipMapping = new Dictionary<string, CusipTarget>(StringComparer.OrdinalIgnoreCase);
-        foreach (var listed in listedCusips)
-        {
-            var listedTicker = string.IsNullOrWhiteSpace(listed.ListedTicker)
-                ? null
-                : listed.ListedTicker;
-            cusipMapping[listed.Cusip] = new CusipTarget(listed.EquityIssuerId, listedTicker);
-        }
-        var listedClaims = new HashSet<string>(
-            listedCusips.Select(l => l.Cusip),
-            StringComparer.OrdinalIgnoreCase
+        // Retired CUSIPs must keep resolving: after an issuer-level CUSIP change, laggard filers
+        // reference the old CUSIP for a quarter or two and every historical data set does forever.
+        // Sibling classes resolve through listing claims and keep their listed ticker.
+        var claims = await HoldingCusipResolution.Load(
+            stockRepo,
+            query,
+            uniqueCusipsList,
+            cancellationToken
         );
         var contested = new List<string>();
-        foreach (var alias in cusipAliases)
-        {
-            if (listedClaims.Contains(alias.Cusip))
-            {
-                contested.Add(alias.Cusip);
-                cusipMapping.Remove(alias.Cusip);
-                continue;
-            }
-            cusipMapping[alias.Cusip] = new CusipTarget(alias.EquityIssuerId, null);
-        }
+        var cusipMapping = HoldingCusipResolution.Resolve(claims, contested);
         if (contested.Count > 0)
         {
             _logger.LogWarning(
@@ -638,27 +572,8 @@ public class HoldingsImportService
                 string.Join(", ", contested)
             );
         }
-        // A retained security keeps its CUSIP after the issuer chooses a different presentation.
-        // Ambiguous securities or venue symbols cannot be assigned to the current primary.
-        foreach (
-            var claims in securityClaims.GroupBy(
-                claim => claim.Cusip,
-                StringComparer.OrdinalIgnoreCase
-            )
-        )
-        {
-            cusipMapping.Remove(claims.Key);
-            if (claims.Count() != 1)
-                continue;
-            var security = claims.Single();
-            if (security.Id == security.PrimarySecurityId)
-                cusipMapping[security.Cusip] = new CusipTarget(security.EquityIssuerId, null);
-            else if (security.UsTickers.Count == 1)
-                cusipMapping[security.Cusip] = new CusipTarget(
-                    security.EquityIssuerId,
-                    security.UsTickers[0]
-                );
-        }
+        var cusipAliases = claims.Aliases;
+        var listedCusips = claims.Listed;
 
         _logger.LogInformation(
             "Mapped {Count} CUSIPs to tracked stocks ({AliasCount} retired aliases, {ListedCount} secondary listings, out of {Total} in data set)",

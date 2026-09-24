@@ -254,6 +254,7 @@ public class HoldingsModuleConfiguration : Equibles.Data.IFinancialModule
         builder.Entity<ProcessedDataSet>();
         builder.Entity<ProcessedFiling>();
         builder.Entity<HoldingsImportFailure>();
+        builder.Entity<HoldingLabelConvergenceState>();
         builder.Entity<InstitutionalFiling>();
         builder.Entity<RealtimeSweepState>();
         builder.Entity<FundScore>();
