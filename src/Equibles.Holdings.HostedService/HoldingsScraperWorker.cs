@@ -102,6 +102,9 @@ public class HoldingsScraperWorker : BaseScraperWorker
     {
         await ApplyPendingCusipRescan(stoppingToken);
 
+        // Before the walk, so a replay finds each stored position under its current label.
+        await ConvergeHoldingLabels(stoppingToken);
+
         await BackfillHolderClassifications(stoppingToken);
 
         var startDate = _workerOptions.MinSyncDate ?? new DateTime(2020, 1, 1);
@@ -308,6 +311,22 @@ public class HoldingsScraperWorker : BaseScraperWorker
             "Bulk replay finished; reopened realtime filings from {From:yyyy-MM-dd}",
             replayFrom
         );
+    }
+
+    private async Task ConvergeHoldingLabels(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var convergence =
+                scope.ServiceProvider.GetRequiredService<HoldingLabelConvergenceService>();
+            await convergence.Converge(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Maintenance, not ingestion: the import still runs under the retained labels.
+            Logger.LogWarning(exception, "Holding label convergence pass failed");
+        }
     }
 
     private async Task BackfillFilingRollupTypes(CancellationToken cancellationToken)
