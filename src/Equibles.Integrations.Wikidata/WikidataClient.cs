@@ -1,6 +1,8 @@
+using System.Net;
 using System.Text.RegularExpressions;
 using Equibles.Core.AutoWiring;
 using Equibles.Integrations.Common.RateLimiter;
+using Equibles.Integrations.Common.Retry;
 using Equibles.Integrations.Wikidata.Contracts;
 using Equibles.Integrations.Wikidata.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +46,13 @@ public partial class WikidataClient : IWikidataClient
         timeWindow: TimeSpan.FromSeconds(60)
     );
 
+    // WDQS answers 429 (with Retry-After) and 502/503/504 while its backends are overloaded.
+    // Two retries ride out a brief blip; a longer outage is left to the caller's next cycle.
+    private const int MaxAttempts = 3;
+
+    // A Retry-After beyond this is not waited out inside one discovery batch.
+    private static readonly TimeSpan MaxRetryWait = TimeSpan.FromSeconds(60);
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<WikidataClient> _logger;
 
@@ -52,6 +61,11 @@ public partial class WikidataClient : IWikidataClient
         _httpClient = httpClient;
         _logger = logger;
     }
+
+    // Seams for tests: the shared limiter and the real clock are process-wide.
+    internal IRateLimiter Limiter { get; init; } = RateLimiter;
+
+    internal Func<TimeSpan, CancellationToken, Task> Delay { get; init; } = Task.Delay;
 
     public Task<IReadOnlyDictionary<string, string>> GetOfficialWebsitesByCik(
         IReadOnlyCollection<string> ciks,
@@ -144,21 +158,67 @@ public partial class WikidataClient : IWikidataClient
             + $"VALUES ?key {{ {values} }} "
             + $"?item wdt:{property} ?key ; wdt:P856 ?website . }}";
 
-        await RateLimiter.WaitAsync();
+        var url = $"{Endpoint}?query={Uri.EscapeDataString(sparql)}";
+        for (var attempt = 1; ; attempt++)
+        {
+            await Limiter.WaitAsync(cancellationToken);
 
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"{Endpoint}?query={Uri.EscapeDataString(sparql)}"
-        );
-        request.Headers.Accept.ParseAdd("application/sparql-results+json");
-        request.Headers.UserAgent.ParseAdd(UserAgent);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Accept.ParseAdd("application/sparql-results+json");
+            request.Headers.UserAgent.ParseAdd(UserAgent);
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (IsTransient(response.StatusCode))
+            {
+                var wait = RetryWait(response, attempt);
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                    Limiter.PauseFor(wait);
+                if (attempt >= MaxAttempts || wait > MaxRetryWait)
+                    throw new WikidataUnavailableException(
+                        response.StatusCode,
+                        $"Wikidata query service answered {(int)response.StatusCode} after "
+                            + $"{attempt} attempt(s); retry after {wait.TotalSeconds:0}s"
+                    );
 
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        var parsed = JsonConvert.DeserializeObject<SparqlResultsResponse>(json);
-        return parsed?.Results?.Bindings ?? [];
+                _logger.LogWarning(
+                    "Wikidata answered {Status}; retrying in {Delay} (attempt {Attempt} of {Max})",
+                    (int)response.StatusCode,
+                    wait,
+                    attempt,
+                    MaxAttempts
+                );
+                await Delay(wait, cancellationToken);
+                continue;
+            }
+
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            var parsed = JsonConvert.DeserializeObject<SparqlResultsResponse>(json);
+            return parsed?.Results?.Bindings ?? [];
+        }
+    }
+
+    private static bool IsTransient(HttpStatusCode status) =>
+        status
+            is HttpStatusCode.TooManyRequests
+                or HttpStatusCode.InternalServerError
+                or HttpStatusCode.BadGateway
+                or HttpStatusCode.ServiceUnavailable
+                or HttpStatusCode.GatewayTimeout;
+
+    // The service's own Retry-After wins; without one, the shared exponential backoff applies.
+    private static TimeSpan RetryWait(HttpResponseMessage response, int attempt)
+    {
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is { } delta)
+            return delta < TimeSpan.Zero ? TimeSpan.Zero : delta;
+        if (retryAfter?.Date is { } date)
+        {
+            var untilDate = date - DateTimeOffset.UtcNow;
+            return untilDate < TimeSpan.Zero ? TimeSpan.Zero : untilDate;
+        }
+        return RetryBackoff.Exponential(attempt - 1);
     }
 
     [GeneratedRegex("^[A-Z0-9]{20}$")]

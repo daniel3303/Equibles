@@ -1,4 +1,5 @@
 using Equibles.CommonStocks.BusinessLogic.Websites;
+using Equibles.Integrations.Wikidata;
 using Equibles.Integrations.Wikidata.Contracts;
 
 namespace Equibles.CommonStocks.HostedService.Services;
@@ -26,6 +27,21 @@ public class WikidataWebsiteSource : IWebsiteSource
     public string Name => "Wikidata";
 
     public async Task<IReadOnlyDictionary<Guid, string>> FindWebsites(
+        IReadOnlyList<WebsiteSourceStock> stocks,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return await Resolve(stocks, cancellationToken);
+        }
+        catch (WikidataUnavailableException ex)
+        {
+            throw new WebsiteSourceUnavailableException(ex.Message, ex);
+        }
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, string>> Resolve(
         IReadOnlyList<WebsiteSourceStock> stocks,
         CancellationToken cancellationToken
     )

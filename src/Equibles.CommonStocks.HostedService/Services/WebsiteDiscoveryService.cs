@@ -103,6 +103,18 @@ public class WebsiteDiscoveryService : IImporter
             {
                 throw;
             }
+            catch (WebsiteSourceUnavailableException ex)
+            {
+                // A throttled or overloaded backend is an expected outage, not a fault:
+                // its stocks fall through and retry next cycle without an Errors row.
+                anySourceFailed = true;
+                _logger.LogWarning(
+                    "Website source {Source} unavailable this batch: {Reason}",
+                    source.Name,
+                    ex.Message
+                );
+                continue;
+            }
             catch (Exception ex)
             {
                 // A failing source must not block the less-authoritative ones —
