@@ -75,6 +75,7 @@ public class DividendToolsTests : ParadeDbMcpTestBase
         result.IndexOf("2025-05-12").Should().BeLessThan(result.IndexOf("2025-02-10"));
         result.Should().Contain("2025-05-12 | $0.26");
         result.Should().NotContain("External");
+        result.Should().NotContain("| Source");
     }
 
     [Fact]
