@@ -107,6 +107,11 @@ public class SecModuleConfiguration : Equibles.Data.IFinancialModule
                 .HasDatabaseName("IX_NportHolding_CusipFiling")
                 .IncludeProperties(h => h.NportFilingId)
                 .IsCreatedConcurrently();
+            // Foreign securities carry no CUSIP, so a fund's position in them is found by ISIN.
+            b.HasIndex(h => h.Isin)
+                .HasDatabaseName("IX_NportHolding_IsinFiling")
+                .IncludeProperties(h => h.NportFilingId)
+                .IsCreatedConcurrently();
         });
         builder.Entity<ProcessedNportFiling>();
         builder

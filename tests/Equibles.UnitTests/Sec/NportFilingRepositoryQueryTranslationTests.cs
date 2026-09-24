@@ -60,6 +60,33 @@ public class NportFilingRepositoryQueryTranslationTests
     }
 
     [Fact]
+    public void GetHoldingsByIsin_TranslatesToAPlainEqualityTheIsinIndexServes()
+    {
+        using var ctx = CreateContext();
+        var repository = new NportFilingRepository(ctx);
+
+        var flat = System.Text.RegularExpressions.Regex.Replace(
+            repository.GetHoldingsByIsin("PTCTT0AM0001").ToQueryString(),
+            @"\s+",
+            " "
+        );
+
+        flat.Should().Contain("n.\"Isin\" = @isin");
+        flat.ToUpperInvariant().Should().NotContain(" OR ");
+    }
+
+    [Fact]
+    public void GetHoldingsByIsin_WithNoIsin_MatchesNothing()
+    {
+        using var ctx = CreateContext();
+        var repository = new NportFilingRepository(ctx);
+
+        var flat = repository.GetHoldingsByIsin(null).ToQueryString().ToUpperInvariant();
+
+        flat.Should().Contain("WHERE FALSE");
+    }
+
+    [Fact]
     public void GetNarrowedBelowReportedCount_TranslatesTheHoldingCountComparisonToSql()
     {
         using var ctx = CreateContext();
