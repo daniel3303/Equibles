@@ -30,7 +30,7 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     private const int TrailingReSweepDays = 14;
 
     // Identifies this worker's row in RealtimeSweepState.
-    private const string WorkerStateName = "Holdings13FRealtime";
+    internal const string WorkerStateName = "Holdings13FRealtime";
 
     private readonly WorkerOptions _workerOptions;
     private readonly IConfiguration _configuration;
@@ -82,6 +82,17 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
             TrailingReSweepDays,
             firstRunLookbackDays
         );
+        // Every accession completion needs a durable version, including the first sweep.
+        if (state == null)
+        {
+            await stateRepo.SaveProgress(WorkerStateName, null, windowStart, stoppingToken);
+            state = await stateRepo
+                .GetByWorker(WorkerStateName)
+                .AsNoTracking()
+                .SingleAsync(stoppingToken);
+            if (state.SweptThrough < windowStart)
+                windowStart = state.SweptThrough;
+        }
         var lookbackDays = today.DayNumber - windowStart.DayNumber + 1;
 
         Logger.LogInformation(
@@ -94,13 +105,26 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
             today,
             lookbackDays,
             minReportDate,
-            stoppingToken
+            stoppingToken,
+            state
         );
 
         // Advance the watermark only past days that swept cleanly: a throttled or
         // failed day holds it back so the gap is re-swept next cycle.
         var newWatermark = ComputeNextWatermark(today, result.EarliestFailedDate);
-        await SaveWatermark(stateRepo, state, newWatermark);
+        var saved = await stateRepo.SaveProgress(
+            WorkerStateName,
+            state,
+            newWatermark,
+            stoppingToken
+        );
+        if (saved == 0)
+        {
+            Logger.LogInformation(
+                "13F sweep progress superseded by a concurrent identity rescan; replay remains pending"
+            );
+            return;
+        }
 
         Logger.LogInformation(
             "13F real-time ingestion cycle complete: {Count} filings processed, swept through {Watermark:yyyy-MM-dd}",
@@ -146,32 +170,6 @@ public class Holdings13FRealtimeWorker : BaseScraperWorker
     /// </summary>
     internal static DateOnly ComputeNextWatermark(DateOnly today, DateOnly? earliestFailedDate) =>
         earliestFailedDate.HasValue ? earliestFailedDate.Value.AddDays(-1) : today;
-
-    private static async Task SaveWatermark(
-        RealtimeSweepStateRepository repo,
-        RealtimeSweepState existing,
-        DateOnly sweptThrough
-    )
-    {
-        if (existing == null)
-        {
-            repo.Add(
-                new RealtimeSweepState
-                {
-                    WorkerName = WorkerStateName,
-                    SweptThrough = sweptThrough,
-                    UpdatedAt = DateTime.UtcNow,
-                }
-            );
-        }
-        else
-        {
-            existing.SweptThrough = sweptThrough;
-            existing.UpdatedAt = DateTime.UtcNow;
-        }
-
-        await repo.SaveChanges();
-    }
 
     /// <summary>
     /// Computes how many days of EDGAR daily index to sweep by finding the

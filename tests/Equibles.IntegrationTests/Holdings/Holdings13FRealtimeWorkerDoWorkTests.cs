@@ -2,12 +2,14 @@ using Equibles.Core.Configuration;
 using Equibles.Core.Contracts;
 using Equibles.Data;
 using Equibles.Errors.BusinessLogic;
+using Equibles.Holdings.Data.Models;
 using Equibles.Holdings.HostedService;
 using Equibles.Holdings.HostedService.Services;
 using Equibles.Holdings.Repositories;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Integrations.Sec.Models;
 using Equibles.IntegrationTests.Helpers;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -81,13 +83,45 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
         public Task InvokeDoWork(CancellationToken ct) => DoWork(ct);
     }
 
-    [Fact]
-    public async Task DoWork_EmptyDailyIndexAcrossLookbackWindow_CompletesWithZeroFilings()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DoWork_EmptyDailyIndex_PreservesConcurrentReset(bool concurrentReset)
     {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            if (concurrentReset)
+            {
+                seed.Set<RealtimeSweepState>()
+                    .Add(
+                        new RealtimeSweepState
+                        {
+                            WorkerName = Holdings13FRealtimeWorker.WorkerStateName,
+                            SweptThrough = today,
+                        }
+                    );
+                await seed.SaveChangesAsync();
+            }
+        }
+        var resetApplied = false;
         var edgarClient = Substitute.For<ISecEdgarClient>();
         edgarClient
             .GetDailyIndex(Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
-            .Returns(new List<EdgarDailyIndexEntry>());
+            .Returns(async _ =>
+            {
+                if (concurrentReset && !resetApplied)
+                {
+                    resetApplied = true;
+                    await using var reset = _fixture.CreateDbContext();
+                    await new RealtimeSweepStateRepository(reset).Rewind(
+                        Holdings13FRealtimeWorker.WorkerStateName,
+                        today.AddDays(-90),
+                        CancellationToken.None
+                    );
+                }
+                return new List<EdgarDailyIndexEntry>();
+            });
 
         IServiceScopeFactory scopeFactory = null!;
         scopeFactory = Substitute.For<IServiceScopeFactory>();
@@ -101,6 +135,8 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
                 sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(ProcessedDataSetRepository))
                     .Returns(new ProcessedDataSetRepository(ctx));
+                sp.GetService(typeof(ProcessedFilingRepository))
+                    .Returns(new ProcessedFilingRepository(ctx));
                 sp.GetService(typeof(RealtimeSweepStateRepository))
                     .Returns(new RealtimeSweepStateRepository(ctx));
                 var importService = new HoldingsImportService(
@@ -140,6 +176,20 @@ public class Holdings13FRealtimeWorkerDoWorkTests : IAsyncLifetime
 
         await worker.InvokeDoWork(CancellationToken.None);
 
-        logger.Messages.Should().Contain(m => m.Contains("13F real-time ingestion cycle complete"));
+        await using var verify = _fixture.CreateDbContext();
+        var state = await verify.Set<RealtimeSweepState>().SingleAsync();
+        if (concurrentReset)
+        {
+            state.SweptThrough.Should().Be(today.AddDays(-90));
+            (await verify.Set<ProcessedFiling>().CountAsync()).Should().Be(0);
+            logger.Messages.Should().Contain(m => m.Contains("replay remains pending"));
+        }
+        else
+        {
+            state.SweptThrough.Should().Be(today);
+            logger
+                .Messages.Should()
+                .Contain(m => m.Contains("13F real-time ingestion cycle complete"));
+        }
     }
 }
