@@ -1768,45 +1768,24 @@ public class FtdImportService
     }
 
     /// <summary>
-    /// Returns a presentation CUSIP that belongs to a retired sibling class to that class. The
-    /// presentation's own ticker already has its SEC-stated CUSIP as a listed claim, and the retired
-    /// listing's SEC-stated CUSIP is the one the presentation holds, so the two designations swap.
-    /// Reads stored evidence only: a fully delisted issuer never reappears in a live replay month.
+    /// Returns a presentation CUSIP to the retired sibling class the SEC states it for, swapping in
+    /// the presentation ticker's own listed CUSIP. Reads stored evidence only, because a fully
+    /// delisted issuer never reappears in a live replay month.
     /// </summary>
     public async Task<int> ReconcileRetiredSiblingCusips(CancellationToken cancellationToken)
     {
         try
         {
             using var scope = _scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
             EquityIssuerRepository stockRepo =
                 scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
-            EquityIdentityManager stockManager =
-                scope.ServiceProvider.GetRequiredService<EquityIdentityManager>();
-
-            var candidates = await dbContext
-                .Set<EquityListingCusipEvidence>()
-                .Where(evidence =>
-                    evidence.Issuer.Presentation != null
-                    && evidence.Issuer.Presentation.Listing.MarketCountryCode == "US"
-                    && evidence.ListedTicker == evidence.Issuer.Presentation.Listing.Ticker
-                    && evidence.Issuer.Presentation.Listing.Security.Cusip != null
-                    && evidence.Cusip != evidence.Issuer.Presentation.Listing.Security.Cusip
-                )
-                .Select(evidence => new
-                {
-                    evidence.EquityIssuerId,
-                    evidence.ListedTicker,
-                    Cusip = evidence.Issuer.Presentation.Listing.Security.Cusip,
-                    OwnCusip = evidence.Cusip,
-                })
-                .ToListAsync(cancellationToken);
+            var candidates = await LoadRetiredSiblingCandidates(stockRepo, cancellationToken);
             if (candidates.Count == 0)
                 return 0;
 
             var cusips = candidates.Select(candidate => candidate.Cusip).Distinct().ToList();
-            var retiredClaims = await dbContext
-                .Set<EquityListingRetirementEvidence>()
+            var retiredClaims = await stockRepo
+                .GetDelistedListings()
                 .Where(listing =>
                     (listing.Cusip != null && cusips.Contains(listing.Cusip))
                     || listing.HistoricalCusipBackfillCandidates.Any(staged =>
@@ -1821,8 +1800,8 @@ public class FtdImportService
                 ))
                 .ToListAsync(cancellationToken);
             var registrations = await LoadRegistrations(
-                dbContext,
-                candidates.Select(candidate => candidate.EquityIssuerId).Distinct().ToList(),
+                scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>(),
+                candidates.Select(candidate => candidate.EquityIssuerId).ToList(),
                 cancellationToken
             );
 
@@ -1831,30 +1810,21 @@ public class FtdImportService
             {
                 var retiredTicker = ResolveRetiredSiblingTicker(
                     candidate.EquityIssuerId,
-                    candidate.ListedTicker,
+                    candidate.Ticker,
                     candidate.Cusip,
                     retiredClaims,
                     registrations.GetValueOrDefault(candidate.EquityIssuerId, [])
                 );
-                if (retiredTicker == null)
-                    continue;
-
-                var stock = await stockRepo
-                    .GetAll()
-                    .SingleAsync(
-                        issuer => issuer.Id == candidate.EquityIssuerId,
+                if (
+                    retiredTicker != null
+                    && await ReturnCusipToRetiredSibling(
+                        scope.ServiceProvider,
+                        candidate,
+                        retiredTicker,
                         cancellationToken
-                    );
-                if (await stockManager.SetCusip(stock, candidate.OwnCusip, retiredTicker))
-                {
-                    _logger.LogInformation(
-                        "Returned CUSIP {Cusip} from {Ticker} to its retired sibling {Sibling}",
-                        candidate.Cusip,
-                        candidate.ListedTicker,
-                        retiredTicker
-                    );
+                    )
+                )
                     reconciled++;
-                }
             }
             return reconciled;
         }
@@ -1875,6 +1845,84 @@ public class FtdImportService
         }
     }
 
+    internal sealed record RetiredSiblingCandidate(
+        Guid EquityIssuerId,
+        string Ticker,
+        string Cusip,
+        string OwnCusip
+    );
+
+    // A presentation ticker with several listed CUSIPs states no single own CUSIP, so it abstains.
+    private static async Task<List<RetiredSiblingCandidate>> LoadRetiredSiblingCandidates(
+        EquityIssuerRepository stockRepo,
+        CancellationToken cancellationToken
+    )
+    {
+        var rows = await stockRepo
+            .GetListedCusips()
+            .Where(evidence =>
+                evidence.Issuer.Presentation != null
+                && evidence.Issuer.Presentation.Listing.MarketCountryCode == "US"
+                && evidence.ListedTicker == evidence.Issuer.Presentation.Listing.Ticker
+                && evidence.Issuer.Presentation.Listing.Security.Cusip != null
+                && evidence.Cusip != evidence.Issuer.Presentation.Listing.Security.Cusip
+            )
+            .Select(evidence => new RetiredSiblingCandidate(
+                evidence.EquityIssuerId,
+                evidence.ListedTicker,
+                evidence.Issuer.Presentation.Listing.Security.Cusip,
+                evidence.Cusip
+            ))
+            .ToListAsync(cancellationToken);
+        return rows.GroupBy(row => row.EquityIssuerId)
+            .Where(group => group.Count() == 1)
+            .Select(group => group.Single())
+            .ToList();
+    }
+
+    private async Task<bool> ReturnCusipToRetiredSibling(
+        IServiceProvider services,
+        RetiredSiblingCandidate candidate,
+        string retiredTicker,
+        CancellationToken cancellationToken
+    )
+    {
+        EquityIssuerRepository stockRepo = services.GetRequiredService<EquityIssuerRepository>();
+        EquityIdentityManager stockManager = services.GetRequiredService<EquityIdentityManager>();
+        var stock = await stockRepo
+            .GetAll()
+            .SingleAsync(issuer => issuer.Id == candidate.EquityIssuerId, cancellationToken);
+        // The decision was made on the candidate snapshot; a presentation that moved since abstains.
+        var presentation = stock.Presentation?.Listing;
+        if (
+            presentation?.Ticker != candidate.Ticker
+            || !string.Equals(
+                presentation.Security.Cusip,
+                candidate.Cusip,
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+            return false;
+
+        if (await stockManager.SetCusip(stock, candidate.OwnCusip, retiredTicker))
+        {
+            _logger.LogInformation(
+                "Returned CUSIP {Cusip} from {Ticker} to its retired sibling {Sibling}",
+                candidate.Cusip,
+                candidate.Ticker,
+                retiredTicker
+            );
+            return true;
+        }
+        _logger.LogWarning(
+            "CUSIP {Cusip} on {Ticker} belongs to retired sibling {Sibling}, but the identity write refused the swap",
+            candidate.Cusip,
+            candidate.Ticker,
+            retiredTicker
+        );
+        return false;
+    }
+
     internal sealed record RetiredCusipClaim(
         Guid EquityIssuerId,
         string ListedTicker,
@@ -1883,7 +1931,8 @@ public class FtdImportService
     );
 
     // Exactly one retired listing may state the CUSIP, as its seeded value or its sole staged
-    // candidate, and it must share a 12(b) cover page with the presentation ticker.
+    // candidate, sharing a 12(b) cover page with the presentation ticker. The ambiguity flag is not
+    // read: the inactive seeder also sets it for exactly this held-by-a-sibling conflict.
     internal static string ResolveRetiredSiblingTicker(
         Guid issuerId,
         string presentationTicker,

@@ -572,16 +572,18 @@ public class EquityIdentityManager
             )
             .Select(security => security.Id)
             .ToListAsync();
-        if (
-            holderIds.Count > 0
-            && !await TryReleaseSiblingCusip(
+        EquitySecurity releasedHolder = null;
+        if (holderIds.Count > 0)
+        {
+            releasedHolder = await FindReleasableSibling(
                 commonStock,
                 holderIds,
                 normalizedCusip,
                 releasedSiblingTicker
-            )
-        )
-            return false;
+            );
+            if (releasedHolder == null)
+                return false;
+        }
 
         var previousCusip = commonStock.Presentation.Listing.Security.Cusip;
         var claims = await GetCusipClaims(normalizedCusip);
@@ -630,6 +632,9 @@ public class EquityIdentityManager
             await StageRetiredCusip(commonStock, previousCusip);
         }
 
+        // Released only after every refusal, so a refused call leaves no pending change behind.
+        if (releasedHolder != null)
+            releasedHolder.Cusip = null;
         commonStock.Presentation.Listing.Security.Cusip = normalizedCusip;
 
         await _commonStockRepository.SaveChanges();
@@ -676,7 +681,7 @@ public class EquityIdentityManager
 
     // The sibling keeps its identity through its own listed-CUSIP claim, so releasing the wrongly
     // held CUSIP never leaves that class unresolvable.
-    private async Task<bool> TryReleaseSiblingCusip(
+    private async Task<EquitySecurity> FindReleasableSibling(
         EquityIssuer commonStock,
         IReadOnlyCollection<Guid> holderIds,
         string normalizedCusip,
@@ -685,7 +690,7 @@ public class EquityIdentityManager
     {
         var siblingTicker = releasedSiblingTicker?.Trim().ToUpperInvariant();
         if (siblingTicker == null || holderIds.Count != 1)
-            return false;
+            return null;
         var holder = commonStock.Securities.SingleOrDefault(security =>
             security.Id == holderIds.Single()
         );
@@ -704,7 +709,7 @@ public class EquityIdentityManager
                 StringComparison.OrdinalIgnoreCase
             )
         )
-            return false;
+            return null;
 
         var siblingClaims = await _commonStockRepository
             .GetListedCusips()
@@ -715,10 +720,9 @@ public class EquityIdentityManager
             .Select(listing => listing.Cusip.ToUpper())
             .ToListAsync();
         if (siblingClaims.Count != 1 || siblingClaims[0] == normalizedCusip)
-            return false;
+            return null;
 
-        holder.Cusip = null;
-        return true;
+        return holder;
     }
 
     private async Task<bool> TryStageExactListingPromotion(
@@ -745,7 +749,11 @@ public class EquityIdentityManager
                     && nativeListing.Id != commonStock.Presentation.EquityListingId
                     && (
                         nativeListing.IsDirectoryListed
-                        || retiredTickers.Contains(nativeListing.Ticker.ToUpperInvariant())
+                        || (
+                            retiredTickers.Contains(nativeListing.Ticker.ToUpperInvariant())
+                            && nativeListing.EquitySecurityId
+                                != commonStock.Presentation.Listing.EquitySecurityId
+                        )
                     )
                 )
                 .Select(nativeListing => nativeListing.Ticker)
