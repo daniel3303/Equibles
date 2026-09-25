@@ -57,6 +57,7 @@ public class FtdImportServiceRecordListedCusipsTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(EquityIssuerRepository))
                     .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(EquityIdentityManager))

@@ -11,6 +11,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Errors.Data.Models;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.Sec.Data.Models;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.HostedService.Models;
 using Equibles.Sec.Repositories;
 using Equibles.Worker;
@@ -1569,6 +1570,12 @@ public class FtdImportService
             })
             .ToListAsync(cancellationToken);
 
+        var registrations = await LoadRegistrations(
+            scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>(),
+            stocks.Select(stock => stock.Id).ToList(),
+            cancellationToken
+        );
+
         var seeded = 0;
         foreach (EquityIssuer stock in stocks)
         {
@@ -1616,7 +1623,19 @@ public class FtdImportService
             // published (outbox) — lets Holdings backfill any 13F data
             // sets processed before this stock had a CUSIP (or while it
             // still carried the retired one, kept as an alias).
-            if (await stockManager.SetCusip(stock, resolved.Cusip, displacedTicker))
+            var releasedSiblingTicker = ResolveReleasedSiblingTicker(
+                stock,
+                resolved.Cusip,
+                registrations.GetValueOrDefault(stock.Id, [])
+            );
+            if (
+                await stockManager.SetCusip(
+                    stock,
+                    resolved.Cusip,
+                    displacedTicker,
+                    releasedSiblingTicker
+                )
+            )
             {
                 AddOwner(resolved.Cusip, stock.Id);
                 seeded++;
@@ -1718,6 +1737,234 @@ public class FtdImportService
             })
             .GroupBy(observation => observation.StockId)
             .ToDictionary(group => group.Key, group => group.ToList());
+    }
+
+    // A sibling security holding the presentation's CUSIP is released only when the SEC registered
+    // both tickers on one 12(b) cover page, which a renamed predecessor never shares.
+    internal static string ResolveReleasedSiblingTicker(
+        EquityIssuer stock,
+        string cusip,
+        IReadOnlyCollection<(string Symbol, string Accession)> registrations
+    )
+    {
+        var holders = stock
+            .Securities.Where(security =>
+                security.Id != stock.Presentation.Listing.EquitySecurityId
+                && string.Equals(security.Cusip, cusip, StringComparison.OrdinalIgnoreCase)
+            )
+            .ToList();
+        if (holders.Count != 1)
+            return null;
+        var tickers = holders[0]
+            .Listings.Where(listing => listing.MarketCountryCode == "US")
+            .Select(listing => listing.Ticker.ToUpperInvariant())
+            .Distinct()
+            .ToList();
+        return
+            tickers.Count == 1
+            && RegisteredTogether(registrations, stock.Presentation.Listing.Ticker, tickers[0])
+            ? tickers[0]
+            : null;
+    }
+
+    /// <summary>
+    /// Returns a presentation CUSIP that belongs to a retired sibling class to that class. The
+    /// presentation's own ticker already has its SEC-stated CUSIP as a listed claim, and the retired
+    /// listing's SEC-stated CUSIP is the one the presentation holds, so the two designations swap.
+    /// Reads stored evidence only: a fully delisted issuer never reappears in a live replay month.
+    /// </summary>
+    public async Task<int> ReconcileRetiredSiblingCusips(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<EquiblesFinancialDbContext>();
+            EquityIssuerRepository stockRepo =
+                scope.ServiceProvider.GetRequiredService<EquityIssuerRepository>();
+            EquityIdentityManager stockManager =
+                scope.ServiceProvider.GetRequiredService<EquityIdentityManager>();
+
+            var candidates = await dbContext
+                .Set<EquityListingCusipEvidence>()
+                .Where(evidence =>
+                    evidence.Issuer.Presentation != null
+                    && evidence.Issuer.Presentation.Listing.MarketCountryCode == "US"
+                    && evidence.ListedTicker == evidence.Issuer.Presentation.Listing.Ticker
+                    && evidence.Issuer.Presentation.Listing.Security.Cusip != null
+                    && evidence.Cusip != evidence.Issuer.Presentation.Listing.Security.Cusip
+                )
+                .Select(evidence => new
+                {
+                    evidence.EquityIssuerId,
+                    evidence.ListedTicker,
+                    Cusip = evidence.Issuer.Presentation.Listing.Security.Cusip,
+                    OwnCusip = evidence.Cusip,
+                })
+                .ToListAsync(cancellationToken);
+            if (candidates.Count == 0)
+                return 0;
+
+            var cusips = candidates.Select(candidate => candidate.Cusip).Distinct().ToList();
+            var retiredClaims = await dbContext
+                .Set<EquityListingRetirementEvidence>()
+                .Where(listing =>
+                    (listing.Cusip != null && cusips.Contains(listing.Cusip))
+                    || listing.HistoricalCusipBackfillCandidates.Any(staged =>
+                        cusips.Contains(staged)
+                    )
+                )
+                .Select(listing => new RetiredCusipClaim(
+                    listing.EquityIssuerId,
+                    listing.ListedTicker,
+                    listing.Cusip,
+                    listing.HistoricalCusipBackfillCandidates
+                ))
+                .ToListAsync(cancellationToken);
+            var registrations = await LoadRegistrations(
+                dbContext,
+                candidates.Select(candidate => candidate.EquityIssuerId).Distinct().ToList(),
+                cancellationToken
+            );
+
+            var reconciled = 0;
+            foreach (var candidate in candidates)
+            {
+                var retiredTicker = ResolveRetiredSiblingTicker(
+                    candidate.EquityIssuerId,
+                    candidate.ListedTicker,
+                    candidate.Cusip,
+                    retiredClaims,
+                    registrations.GetValueOrDefault(candidate.EquityIssuerId, [])
+                );
+                if (retiredTicker == null)
+                    continue;
+
+                var stock = await stockRepo
+                    .GetAll()
+                    .SingleAsync(
+                        issuer => issuer.Id == candidate.EquityIssuerId,
+                        cancellationToken
+                    );
+                if (await stockManager.SetCusip(stock, candidate.OwnCusip, retiredTicker))
+                {
+                    _logger.LogInformation(
+                        "Returned CUSIP {Cusip} from {Ticker} to its retired sibling {Sibling}",
+                        candidate.Cusip,
+                        candidate.ListedTicker,
+                        retiredTicker
+                    );
+                    reconciled++;
+                }
+            }
+            return reconciled;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error returning CUSIPs to retired sibling listings");
+            await _errorReporter.Report(
+                ErrorSource.FtdScraper,
+                "FtdImport.ReconcileRetiredSiblingCusips",
+                ex,
+                null
+            );
+            return 0;
+        }
+    }
+
+    internal sealed record RetiredCusipClaim(
+        Guid EquityIssuerId,
+        string ListedTicker,
+        string Cusip,
+        List<string> Candidates
+    );
+
+    // Exactly one retired listing may state the CUSIP, as its seeded value or its sole staged
+    // candidate, and it must share a 12(b) cover page with the presentation ticker.
+    internal static string ResolveRetiredSiblingTicker(
+        Guid issuerId,
+        string presentationTicker,
+        string displacedCusip,
+        IEnumerable<RetiredCusipClaim> claims,
+        IReadOnlyCollection<(string Symbol, string Accession)> registrations
+    )
+    {
+        var stating = claims
+            .Where(claim =>
+                string.Equals(claim.Cusip, displacedCusip, StringComparison.OrdinalIgnoreCase)
+                || claim.Candidates.Contains(displacedCusip, StringComparer.OrdinalIgnoreCase)
+            )
+            .ToList();
+        if (stating.Count != 1)
+            return null;
+        var claim = stating[0];
+        var attested =
+            claim.Cusip != null
+                ? string.Equals(claim.Cusip, displacedCusip, StringComparison.OrdinalIgnoreCase)
+                : claim.Candidates.Count == 1;
+        return
+            attested
+            && claim.EquityIssuerId == issuerId
+            && !string.Equals(
+                claim.ListedTicker,
+                presentationTicker,
+                StringComparison.OrdinalIgnoreCase
+            )
+            && RegisteredTogether(registrations, presentationTicker, claim.ListedTicker)
+            ? claim.ListedTicker.ToUpperInvariant()
+            : null;
+    }
+
+    // Two symbols on one 12(b) cover page are distinct classes registered together, never a
+    // renamed predecessor and its successor.
+    internal static bool RegisteredTogether(
+        IEnumerable<(string Symbol, string Accession)> registrations,
+        string first,
+        string second
+    )
+    {
+        var firstIdentity = TickerNormalizer.NormalizeIdentity(first);
+        var secondIdentity = TickerNormalizer.NormalizeIdentity(second);
+        if (firstIdentity == null || secondIdentity == null || firstIdentity == secondIdentity)
+            return false;
+        var accessionsBySymbol = registrations
+            .Where(registration => !string.IsNullOrWhiteSpace(registration.Accession))
+            .ToLookup(
+                registration => TickerNormalizer.NormalizeIdentity(registration.Symbol),
+                registration => registration.Accession
+            );
+        return accessionsBySymbol[firstIdentity]
+            .Intersect(accessionsBySymbol[secondIdentity])
+            .Any();
+    }
+
+    private static async Task<
+        Dictionary<Guid, List<(string Symbol, string Accession)>>
+    > LoadRegistrations(
+        EquiblesFinancialDbContext dbContext,
+        IReadOnlyCollection<Guid> issuerIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var rows = await dbContext
+            .Set<IssuerSecurityRegistration>()
+            .AsNoTracking()
+            .Where(row => issuerIds.Contains(row.EquityIssuerId))
+            .Select(row => new
+            {
+                row.EquityIssuerId,
+                row.TradingSymbol,
+                row.AccessionNumber,
+            })
+            .ToListAsync(cancellationToken);
+        return rows.GroupBy(row => row.EquityIssuerId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(row => (row.TradingSymbol, row.AccessionNumber)).ToList()
+            );
     }
 
     private static string ResolveDisplacedListedTicker(
