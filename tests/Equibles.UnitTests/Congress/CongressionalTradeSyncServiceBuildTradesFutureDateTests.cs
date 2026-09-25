@@ -64,33 +64,8 @@ public class CongressionalTradeSyncServiceBuildTradesFutureDateTests
         return (stock, member);
     }
 
-    // A trade is always disclosed after it happens, so the transaction date can never be after
-    // the filing date. A source typo (e.g. year 3031) that violates this must be dropped, not
-    // stored — otherwise it sorts to the top of the member's newest-first trade history.
-    [Fact]
-    public void BuildTrades_TransactionDateAfterFilingDate_SkipsTrade()
-    {
-        var sut = CreateSut();
-        var (stock, member) = Fixtures();
-        var tx = new DisclosureTransaction
-        {
-            MemberName = member.Name,
-            Ticker = stock.Presentation.Listing.Ticker,
-            AssetName = "International Business Machines Corporation (IBM)",
-            TransactionType = CongressTransactionType.Purchase,
-            OwnerType = "SP",
-            TransactionDate = new DateOnly(3031, 4, 30),
-            FilingDate = new DateOnly(2021, 5, 3),
-            AmountFrom = 1001,
-            AmountTo = 15000,
-        };
-
-        var trades = InvokeBuildTrades(sut, tx, stock, member);
-
-        trades.Should().BeEmpty();
-    }
-
-    // A normal trade (disclosed on or after the transaction) is still built.
+    // Rows dated after their filing are dropped earlier, in ProcessTransactions (see the
+    // integration tests); BuildTrades builds every row it is given. A normal trade (disclosed on or after the transaction) is still built.
     [Fact]
     public void BuildTrades_TransactionDateOnOrBeforeFilingDate_BuildsTrade()
     {
