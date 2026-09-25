@@ -9,6 +9,7 @@ using Equibles.Errors.BusinessLogic;
 using Equibles.Integrations.Sec.Contracts;
 using Equibles.IntegrationTests.Helpers;
 using Equibles.Messaging.Contracts.CommonStocks;
+using Equibles.Sec.FinancialFacts.Data.Models;
 using Equibles.Sec.HostedService.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -82,6 +83,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(EquityIssuerRepository))
                     .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(EquityIdentityManager))
@@ -466,6 +468,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(EquityIssuerRepository))
                     .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(EquityIdentityManager))
@@ -1003,6 +1006,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(EquityIssuerRepository))
                     .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(EquityIdentityManager))
@@ -1167,6 +1171,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
             {
                 var ctx = FreshContext();
                 var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(EquityIssuerRepository))
                     .Returns(new EquityIssuerRepository(ctx));
                 sp.GetService(typeof(EquityIdentityManager))
@@ -1217,6 +1222,345 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
         (await verify.Set<EquityIssuerCusipAlias>().AnyAsync()).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task SeedCusips_CoRegisteredSiblingHoldsPresentationCusip_ReturnsItToPresentation()
+    {
+        var (stock, unit) = await SeedLaunchOne(sharedCoverPage: true);
+        var bus = Substitute.For<IBus>();
+
+        var seeded = await InvokeSeedCusips(
+            CreateSut(bus),
+            BuildRecords(("LPAA", "G5S86M100", new DateOnly(2026, 8, 14))),
+            new Dictionary<string, Guid> { ["LPAA"] = stock.Id }
+        );
+
+        seeded.Should().Be(1);
+        using var verify = FreshContext();
+        var securities = await verify
+            .Set<EquitySecurity>()
+            .Where(security => security.EquityIssuerId == stock.Id)
+            .ToDictionaryAsync(security => security.Id, security => security.Cusip);
+        securities[stock.Presentation.Listing.EquitySecurityId].Should().Be("G5S86M100");
+        securities[unit.Id].Should().BeNull();
+        var evidence = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        (evidence.ListedTicker, evidence.Cusip).Should().Be(("LPAAU", "G5S86M118"));
+        (await verify.Set<EquityIssuerCusipAlias>().AnyAsync()).Should().BeFalse();
+        await bus.Received(1)
+            .Publish(
+                Arg.Is<StockCusipChanged>(e =>
+                    e.CommonStockId == stock.Id && e.Cusip == "G5S86M100"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task SeedCusips_SiblingHoldsPresentationCusipWithoutSharedCoverPage_LeavesItAlone()
+    {
+        var (stock, unit) = await SeedLaunchOne(sharedCoverPage: false);
+
+        var seeded = await InvokeSeedCusips(
+            CreateSut(Substitute.For<IBus>()),
+            BuildRecords(("LPAA", "G5S86M100", new DateOnly(2026, 8, 14))),
+            new Dictionary<string, Guid> { ["LPAA"] = stock.Id }
+        );
+
+        seeded.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<EquitySecurity>().SingleAsync(security => security.Id == unit.Id))
+            .Cusip.Should()
+            .Be("G5S86M100");
+        (
+            await verify
+                .Set<EquitySecurity>()
+                .SingleAsync(security => security.Id == stock.Presentation.Listing.EquitySecurityId)
+        )
+            .Cusip.Should()
+            .BeNull();
+    }
+
+    [Fact]
+    public async Task ReconcileRetiredSiblingCusips_CoRegisteredRetiredClass_SwapsDesignations()
+    {
+        var stock = await SeedLibertyBroadband(sharedCoverPage: true);
+        var bus = Substitute.For<IBus>();
+
+        var reconciled = await CreateSut(bus).ReconcileRetiredSiblingCusips(CancellationToken.None);
+
+        reconciled.Should().Be(1);
+        using var verify = FreshContext();
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("530307305");
+        var evidence = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        (evidence.ListedTicker, evidence.Cusip).Should().Be(("LBRDA", "530307107"));
+        (await verify.Set<EquityIssuerCusipAlias>().AnyAsync()).Should().BeFalse();
+        await bus.Received(1)
+            .Publish(
+                Arg.Is<StockCusipChanged>(e =>
+                    e.CommonStockId == stock.Id
+                    && e.PreviousCusip == "530307107"
+                    && e.Cusip == "530307305"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    // A retired ticker never registered beside the presentation may be its renamed predecessor,
+    // whose CUSIP is the same security's history rather than a sibling class.
+    [Fact]
+    public async Task ReconcileRetiredSiblingCusips_RetiredTickerNotCoRegistered_LeavesDesignationsAlone()
+    {
+        await SeedLibertyBroadband(sharedCoverPage: false);
+
+        var reconciled = await CreateSut(Substitute.For<IBus>())
+            .ReconcileRetiredSiblingCusips(CancellationToken.None);
+
+        reconciled.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("530307107");
+        var evidence = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        (evidence.ListedTicker, evidence.Cusip).Should().Be(("LBRDK", "530307305"));
+    }
+
+    [Fact]
+    public async Task SeedCusips_SiblingWithoutItsOwnListedCusip_KeepsWhatItHolds()
+    {
+        var (stock, unit) = await SeedLaunchOne(sharedCoverPage: true, siblingHasOwnCusip: false);
+
+        var seeded = await InvokeSeedCusips(
+            CreateSut(Substitute.For<IBus>()),
+            BuildRecords(("LPAA", "G5S86M100", new DateOnly(2026, 8, 14))),
+            new Dictionary<string, Guid> { ["LPAA"] = stock.Id }
+        );
+
+        seeded.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<EquitySecurity>().SingleAsync(security => security.Id == unit.Id))
+            .Cusip.Should()
+            .Be("G5S86M100");
+    }
+
+    // A refused call must leave nothing pending, or the next stock's save in the same scope
+    // commits the release without its checks.
+    [Fact]
+    public async Task SetCusip_RefusedAfterQualifyingRelease_LeavesNoPendingReleaseForTheNextWrite()
+    {
+        var (stock, unit) = await SeedLaunchOne(sharedCoverPage: true);
+        EquityIssuer other = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "ZZZ",
+            Name: "Unrelated Corp",
+            Cik: "999"
+        );
+        EquityIssuer aliasOwner = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "YYY",
+            Name: "Alias Owner Corp",
+            Cik: "998"
+        );
+        await using (var seed = _fixture.CreateDbContext())
+        {
+            seed.Set<EquityIssuer>().AddRange(other, aliasOwner);
+            seed.Set<EquityIssuerCusipAlias>()
+                .Add(
+                    new EquityIssuerCusipAlias
+                    {
+                        EquityIssuerId = aliasOwner.Id,
+                        Cusip = "G5S86M100",
+                    }
+                );
+            await seed.SaveChangesAsync();
+        }
+        var ctx = FreshContext();
+        var repository = new EquityIssuerRepository(ctx);
+        var manager = new EquityIdentityManager(repository, Substitute.For<IBus>());
+
+        var refused = await manager.SetCusip(
+            await repository.GetAll().SingleAsync(issuer => issuer.Id == stock.Id),
+            "G5S86M100",
+            null,
+            "LPAAU"
+        );
+        var written = await manager.SetCusip(
+            await repository.GetAll().SingleAsync(issuer => issuer.Id == other.Id),
+            "123456789"
+        );
+
+        refused.Should().BeFalse();
+        written.Should().BeTrue();
+        using var verify = FreshContext();
+        (await verify.Set<EquitySecurity>().SingleAsync(security => security.Id == unit.Id))
+            .Cusip.Should()
+            .Be("G5S86M100");
+    }
+
+    [Fact]
+    public async Task ReconcileRetiredSiblingCusips_RunTwice_SwapsOnce()
+    {
+        await SeedLibertyBroadband(sharedCoverPage: true);
+        var sut = CreateSut(Substitute.For<IBus>());
+
+        (await sut.ReconcileRetiredSiblingCusips(CancellationToken.None)).Should().Be(1);
+        (await sut.ReconcileRetiredSiblingCusips(CancellationToken.None)).Should().Be(0);
+
+        using var verify = FreshContext();
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("530307305");
+        var evidence = await verify.Set<EquityListingCusipEvidence>().SingleAsync();
+        (evidence.ListedTicker, evidence.Cusip).Should().Be(("LBRDA", "530307107"));
+    }
+
+    // The inactive seeder flags this exact held-by-a-sibling conflict as ambiguous, so the flag
+    // cannot veto the correction.
+    [Fact]
+    public async Task ReconcileRetiredSiblingCusips_StagedCandidateFlaggedByTheConflict_StillSwaps()
+    {
+        await SeedLibertyBroadband(sharedCoverPage: true, stagedAmbiguous: true);
+
+        var reconciled = await CreateSut(Substitute.For<IBus>())
+            .ReconcileRetiredSiblingCusips(CancellationToken.None);
+
+        reconciled.Should().Be(1);
+        using var verify = FreshContext();
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("530307305");
+    }
+
+    [Fact]
+    public async Task ReconcileRetiredSiblingCusips_PresentationTickerWithTwoListedCusips_Abstains()
+    {
+        await SeedLibertyBroadband(sharedCoverPage: true, secondOwnCusip: "530307404");
+
+        var reconciled = await CreateSut(Substitute.For<IBus>())
+            .ReconcileRetiredSiblingCusips(CancellationToken.None);
+
+        reconciled.Should().Be(0);
+        using var verify = FreshContext();
+        (await verify.Set<EquityIssuer>().SingleAsync())
+            .Presentation.Listing.Security.Cusip.Should()
+            .Be("530307107");
+        (await verify.Set<EquityListingCusipEvidence>().CountAsync()).Should().Be(2);
+    }
+
+    private async Task<(EquityIssuer Stock, EquitySecurity Unit)> SeedLaunchOne(
+        bool sharedCoverPage,
+        bool siblingHasOwnCusip = true
+    )
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "LPAA",
+            Name: "Launch One Acquisition Corp",
+            Cik: "2034266",
+            SecondaryTickers: ["LPAAU"]
+        );
+        var unit = stock
+            .Securities.SelectMany(security => security.Listings)
+            .Single(listing => listing.Ticker == "LPAAU")
+            .Security;
+        unit.Cusip = "G5S86M100";
+        await using var seed = _fixture.CreateDbContext();
+        seed.Set<EquityIssuer>().Add(stock);
+        if (siblingHasOwnCusip)
+            seed.Set<EquityListingCusipEvidence>()
+                .Add(
+                    new EquityListingCusipEvidence
+                    {
+                        EquityIssuerId = stock.Id,
+                        ListedTicker = "LPAAU",
+                        Cusip = "G5S86M118",
+                    }
+                );
+        seed.Set<IssuerSecurityRegistration>()
+            .AddRange(
+                Registration(stock.Id, "LPAA", "0001213900-26-088467"),
+                Registration(
+                    stock.Id,
+                    "LPAAU",
+                    sharedCoverPage ? "0001213900-26-088467" : "0001213900-25-000001"
+                )
+            );
+        await seed.SaveChangesAsync();
+        return (stock, unit);
+    }
+
+    private async Task<EquityIssuer> SeedLibertyBroadband(
+        bool sharedCoverPage,
+        bool stagedAmbiguous = false,
+        string secondOwnCusip = null
+    )
+    {
+        EquityIssuer stock = Equibles.TestSupport.EquityIssuerSeed.Create(
+            Ticker: "LBRDK",
+            Name: "Liberty Broadband Corp",
+            Cik: "1611983",
+            Cusip: "530307107",
+            SecondaryTickers: ["LBRDA"]
+        );
+        var seriesA = stock
+            .Securities.SelectMany(security => security.Listings)
+            .Single(listing => listing.Ticker == "LBRDA");
+        seriesA.Active = false;
+        seriesA.IsDirectoryListed = false;
+        seriesA.DelistedOn = new DateOnly(2026, 8, 21);
+        await using var seed = _fixture.CreateDbContext();
+        seed.Set<EquityIssuer>().Add(stock);
+        seed.Set<EquityListingRetirementEvidence>()
+            .Add(
+                new EquityListingRetirementEvidence
+                {
+                    EquityIssuerId = stock.Id,
+                    ListedTicker = "LBRDA",
+                    DelistedOn = new DateOnly(2026, 8, 21),
+                    HistoricalCusipBackfillCandidates = ["530307107"],
+                    HistoricalCusipBackfillCandidateOn = new DateOnly(2026, 6, 4),
+                    HistoricalCusipBackfillAmbiguous = stagedAmbiguous,
+                }
+            );
+        if (secondOwnCusip != null)
+            seed.Set<EquityListingCusipEvidence>()
+                .Add(
+                    new EquityListingCusipEvidence
+                    {
+                        EquityIssuerId = stock.Id,
+                        ListedTicker = "LBRDK",
+                        Cusip = secondOwnCusip,
+                    }
+                );
+        seed.Set<EquityListingCusipEvidence>()
+            .Add(
+                new EquityListingCusipEvidence
+                {
+                    EquityIssuerId = stock.Id,
+                    ListedTicker = "LBRDK",
+                    Cusip = "530307305",
+                }
+            );
+        seed.Set<IssuerSecurityRegistration>()
+            .Add(Registration(stock.Id, "LBRDK", "0001140361-26-033932"));
+        if (sharedCoverPage)
+            seed.Set<IssuerSecurityRegistration>()
+                .Add(Registration(stock.Id, "LBRDA", "0001140361-26-033932"));
+        await seed.SaveChangesAsync();
+        return stock;
+    }
+
+    private static IssuerSecurityRegistration Registration(
+        Guid issuerId,
+        string symbol,
+        string accession
+    ) =>
+        new()
+        {
+            EquityIssuerId = issuerId,
+            TradingSymbol = symbol,
+            Title = "Class shares",
+            AccessionNumber = accession,
+            FiledDate = new DateOnly(2026, 8, 14),
+        };
+
     private FtdImportService CreateSut(IBus bus)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
@@ -1227,6 +1571,7 @@ public class FtdImportServiceSeedCusipsUpdatesChangedCusipTests : IAsyncLifetime
                 var ctx = FreshContext();
                 EquityIssuerRepository repository = new EquityIssuerRepository(ctx);
                 var sp = Substitute.For<IServiceProvider>();
+                sp.GetService(typeof(EquiblesFinancialDbContext)).Returns(ctx);
                 sp.GetService(typeof(EquityIssuerRepository)).Returns(repository);
                 sp.GetService(typeof(EquityListingRepository))
                     .Returns(new EquityListingRepository(ctx));
