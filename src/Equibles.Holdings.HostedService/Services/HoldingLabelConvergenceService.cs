@@ -45,6 +45,15 @@ public class HoldingLabelConvergenceService
         /// </summary>
         public List<string> LiveTickers { get; init; } = [];
 
+        /// <summary>Every US ticker of the issuer, trading or retired.</summary>
+        public List<string> UsTickers { get; init; } = [];
+
+        /// <summary>
+        /// Non-presentation tickers no CUSIP resolves to any more, so rows stored under them carry a
+        /// CUSIP that was moved to another class; set by <see cref="MarkVacatedTickers"/>.
+        /// </summary>
+        public List<string> VacatedTickers { get; set; } = [];
+
         /// <summary>Retired US tickers on the issuer's other securities.</summary>
         public List<string> RetiredSiblingTickers { get; init; } = [];
 
@@ -137,6 +146,11 @@ public class HoldingLabelConvergenceService
                     )
                     .Select(listing => listing.Ticker)
                     .ToList(),
+                UsTickers = issuer
+                    .Securities.SelectMany(security => security.Listings)
+                    .Where(listing => listing.MarketCountryCode == "US")
+                    .Select(listing => listing.Ticker)
+                    .ToList(),
                 RetiredSiblingTickers = issuer
                     .Securities.Where(security =>
                         security.Id != issuer.Presentation.Listing.EquitySecurityId
@@ -191,21 +205,58 @@ public class HoldingLabelConvergenceService
             .Order(StringComparer.Ordinal)
             .ToList();
 
+    internal static void MarkVacatedTickers(
+        CandidateIssuer issuer,
+        IEnumerable<string> resolvingTickers
+    )
+    {
+        var claimed = resolvingTickers.ToHashSet(StringComparer.Ordinal);
+        issuer.VacatedTickers = issuer
+            .UsTickers.Where(ticker =>
+                !string.Equals(ticker, issuer.PresentationTicker, StringComparison.Ordinal)
+                && !claimed.Contains(ticker)
+            )
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+    }
+
     private static string RetiredCusipKey(string ticker, string cusip) =>
         $"{ticker}|{cusip.Trim().ToUpperInvariant()}";
 
-    // Only primary rows and presentation-ticker rows can move, and both filters are conditions on
-    // the unique index, so an issuer holding millions of sibling-labelled rows is never heap-read.
+    // The label filter is a condition on the unique index, so only the rows it selects are heap-read.
     internal static IQueryable<StoredLabel> BuildStoredLabelQuery(
         EquiblesFinancialDbContext dbContext,
         Guid issuerId,
         string listedTicker
     ) =>
-        dbContext
-            .Set<InstitutionalHolding>()
-            .Where(holding =>
-                holding.EquityIssuerId == issuerId && holding.ListedTicker == listedTicker
-            )
+        GroupLabels(
+            dbContext
+                .Set<InstitutionalHolding>()
+                .Where(holding =>
+                    holding.EquityIssuerId == issuerId && holding.ListedTicker == listedTicker
+                )
+        );
+
+    // Only vacated tickers are read, so an issuer whose classes all keep a CUSIP, such as a trust
+    // listing hundreds of funds, never has its sibling-labelled rows heap-read.
+    internal static IQueryable<StoredLabel> BuildVacatedLabelQuery(
+        EquiblesFinancialDbContext dbContext,
+        Guid issuerId,
+        IReadOnlyCollection<string> vacatedTickers
+    ) =>
+        GroupLabels(
+            dbContext
+                .Set<InstitutionalHolding>()
+                .Where(holding =>
+                    holding.EquityIssuerId == issuerId
+                    && holding.ListedTicker != null
+                    && vacatedTickers.Contains(holding.ListedTicker)
+                )
+        );
+
+    private static IQueryable<StoredLabel> GroupLabels(IQueryable<InstitutionalHolding> holdings) =>
+        holdings
             .GroupBy(holding => new
             {
                 holding.EquityIssuerId,
@@ -222,7 +273,7 @@ public class HoldingLabelConvergenceService
 
     /// <summary>
     /// Decides which stored labels move. Sibling moves come first, so a primary row vacates its key
-    /// before a presentation-ticker row of the same position claims it.
+    /// before a vacated sibling's or a presentation-ticker row of the same position claims it.
     /// </summary>
     internal static List<Relabel> Plan(
         IEnumerable<StoredLabel> labels,
@@ -231,6 +282,7 @@ public class HoldingLabelConvergenceService
     )
     {
         var siblingMoves = new List<Relabel>();
+        var vacatedMoves = new List<Relabel>();
         var primaryMoves = new List<Relabel>();
         foreach (var label in labels)
         {
@@ -247,19 +299,7 @@ public class HoldingLabelConvergenceService
 
             if (label.ListedTicker == null)
             {
-                if (
-                    resolvesHere
-                    && resolved != null
-                    && !string.Equals(resolved, presentation, StringComparison.Ordinal)
-                    && issuer.PresentationIdentified
-                    && (
-                        issuer.LiveTickers.Contains(resolved, StringComparer.Ordinal)
-                        || issuer.AdmittedRetiredCusips.Contains(
-                            RetiredCusipKey(resolved, label.Cusip),
-                            StringComparer.Ordinal
-                        )
-                    )
-                )
+                if (resolvesHere && resolved != null && CanMoveOnto(issuer, resolved, label.Cusip))
                     siblingMoves.Add(
                         new Relabel(label.EquityIssuerId, label.Cusip, null, resolved, label.Count)
                     );
@@ -279,9 +319,43 @@ public class HoldingLabelConvergenceService
                     )
                 );
             }
+            else if (
+                issuer.VacatedTickers.Contains(label.ListedTicker, StringComparer.Ordinal)
+                && resolvesHere
+                && !string.Equals(resolved, label.ListedTicker, StringComparison.Ordinal)
+                && (
+                    resolved == null
+                        ? issuer.PresentationIdentified
+                        : CanMoveOnto(issuer, resolved, label.Cusip)
+                )
+            )
+            {
+                vacatedMoves.Add(
+                    new Relabel(
+                        label.EquityIssuerId,
+                        label.Cusip,
+                        label.ListedTicker,
+                        resolved,
+                        label.Count
+                    )
+                );
+            }
         }
-        return [.. siblingMoves, .. primaryMoves];
+        return [.. siblingMoves, .. vacatedMoves, .. primaryMoves];
     }
+
+    // A sibling label needs a settled presentation and a class still trading, or a retired class
+    // the archive and the cover page both prove, since a renamed predecessor shares a CUSIP prefix.
+    private static bool CanMoveOnto(CandidateIssuer issuer, string ticker, string cusip) =>
+        !string.Equals(ticker, issuer.PresentationTicker, StringComparison.Ordinal)
+        && issuer.PresentationIdentified
+        && (
+            issuer.LiveTickers.Contains(ticker, StringComparer.Ordinal)
+            || issuer.AdmittedRetiredCusips.Contains(
+                RetiredCusipKey(ticker, cusip),
+                StringComparer.Ordinal
+            )
+        );
 
     /// <summary>
     /// The identity an issuer's labels are judged against: its presentation, its trading listings
@@ -302,6 +376,8 @@ public class HoldingLabelConvergenceService
         };
         if (issuer.AdmittedRetiredCusips.Count > 0)
             parts.Add("retired:" + string.Join(",", issuer.AdmittedRetiredCusips));
+        if (issuer.VacatedTickers.Count > 0)
+            parts.Add("vacated:" + string.Join(",", issuer.VacatedTickers));
         foreach (
             var cusip in claimedCusips
                 .Select(cusip => cusip.ToUpperInvariant())
@@ -337,6 +413,11 @@ public class HoldingLabelConvergenceService
             cancellationToken
         );
         var mapping = HoldingCusipResolution.Resolve(claims, []);
+        var resolvingTickers = mapping
+            .Values.Where(target => target.ListedTicker != null)
+            .ToLookup(target => target.CommonStockId, target => target.ListedTicker);
+        foreach (var candidate in candidates)
+            MarkVacatedTickers(candidate, resolvingTickers[candidate.Id]);
         var claimedCusips = claims
             .Listed.Select(claim => (claim.EquityIssuerId, claim.Cusip))
             .Concat(claims.Aliases.Select(claim => (claim.EquityIssuerId, claim.Cusip)))
@@ -385,6 +466,15 @@ public class HoldingLabelConvergenceService
                                     dbContext,
                                     issuer.Id,
                                     issuer.PresentationTicker
+                                )
+                                .ToListAsync(cancellationToken)
+                        );
+                    if (issuer.VacatedTickers.Count > 0)
+                        labels.AddRange(
+                            await BuildVacatedLabelQuery(
+                                    dbContext,
+                                    issuer.Id,
+                                    issuer.VacatedTickers
                                 )
                                 .ToListAsync(cancellationToken)
                         );
@@ -611,6 +701,15 @@ public class HoldingLabelConvergenceService
             cusips,
             cancellationToken
         );
-        return Fingerprint(issuer, cusips, HoldingCusipResolution.Resolve(claims, []));
+        var mapping = HoldingCusipResolution.Resolve(claims, []);
+        MarkVacatedTickers(
+            issuer,
+            mapping
+                .Values.Where(target =>
+                    target.CommonStockId == issuerId && target.ListedTicker != null
+                )
+                .Select(target => target.ListedTicker)
+        );
+        return Fingerprint(issuer, cusips, mapping);
     }
 }
