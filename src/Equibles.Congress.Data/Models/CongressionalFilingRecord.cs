@@ -7,10 +7,12 @@ namespace Equibles.Congress.Data.Models;
 /// <summary>
 /// Marks one source filing as fully ingested so sync cycles never re-download
 /// it. A row is written only after the filing was fetched, parsed and its data
-/// committed (or it was skipped by a deterministic policy, e.g. a scanned
-/// paper filing) — fetch and parse failures are never recorded, so those
-/// filings keep retrying until they succeed. Deleting rows forces a re-ingest
-/// of the matching filings on the next cycle.
+/// committed. Fetch failures (a missing or unreadable file) are never recorded,
+/// so those filings keep retrying; every verdict a parser reaches on readable
+/// bytes is deterministic (a scanned paper filing, rows it cannot read, an
+/// exchange it skips by policy) and IS recorded at the parser version that
+/// reached it, because re-reading the same bytes with the same parser cannot
+/// change the answer. A parser version bump reopens them, as does deleting rows.
 /// </summary>
 [Index(nameof(Kind), nameof(SourceId), IsUnique = true)]
 public class CongressionalFilingRecord
@@ -27,8 +29,9 @@ public class CongressionalFilingRecord
 
     public DateOnly FilingDate { get; set; }
 
-    // Transactions or schedule lines the filing yielded; 0 also covers
-    // policy-skipped filings (scanned paper reports, candidate reports).
+    // Transactions or schedule lines the filing yielded; 0 also covers policy-skipped
+    // filings (scanned paper reports, candidate reports, exchange-only reports) and a
+    // readable filing whose rows the parser of that version could not read.
     public int ItemCount { get; set; }
 
     /// <summary>
