@@ -143,9 +143,13 @@ public class DocumentNormalizationBackfillService
             try
             {
                 var normalizedContent = await BuildContent(document, cancellationToken);
+                // An ESEF report too large to retrieve has no text by design, exactly as the importer stores it.
                 if (
-                    normalizedContent.Length == 0
-                    || string.IsNullOrWhiteSpace(Encoding.UTF8.GetString(normalizedContent))
+                    document.DocumentType != DocumentType.EsefAnnualReport
+                    && (
+                        normalizedContent.Length == 0
+                        || string.IsNullOrWhiteSpace(Encoding.UTF8.GetString(normalizedContent))
+                    )
                 )
                     throw new InvalidOperationException(
                         $"Normalization produced no content for document {document.Id}."

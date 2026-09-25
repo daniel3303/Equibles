@@ -231,6 +231,33 @@ public class DocumentNormalizationBackfillServiceTests : IDisposable
         _fileManager.DidNotReceive().DeleteFile(document.XbrlContent);
     }
 
+    [Fact]
+    public async Task Backfill_EsefWithNoRetrievableText_ReplacesStaleContentWithAnEmptyBody()
+    {
+        var document = SeedEsef();
+        var emptyEnvelope = GzipCompressor.Compress([]);
+        _fileManager
+            .OpenRead(document.XbrlContent)
+            .Returns(_ => new MemoryStream(emptyEnvelope, writable: false));
+        _fileManager.GetContent(document.Content).Returns("Source: Register.\n\n"u8.ToArray());
+
+        var result = await BuildSut().Backfill(batchSize: 10);
+
+        result.Replaced.Should().Be(1);
+        result.Failed.Should().Be(0);
+        document.NormalizedContentAttempts.Should().Be(0);
+        await _persistenceService
+            .Received(1)
+            .ReplaceContent(
+                Arg.Is<Document>(d =>
+                    d.Id == document.Id
+                    && d.NormalizedContentVersion == Document.NormalizedContentBuilderVersion
+                ),
+                Arg.Is<byte[]>(b => b.Length == 0),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
     [Theory]
     [InlineData(XbrlType.JsonXbrl, XbrlCaptureStatus.Captured)]
     [InlineData(XbrlType.InlineIxbrl, XbrlCaptureStatus.NotChecked)]
