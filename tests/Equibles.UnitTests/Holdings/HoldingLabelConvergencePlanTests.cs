@@ -452,6 +452,78 @@ public class HoldingLabelConvergencePlanTests
             .BeEmpty();
     }
 
+    private static CandidateIssuer ThreeClasses(params string[] admittedRetiredCusips)
+    {
+        var issuer = new CandidateIssuer
+        {
+            Id = Issuer,
+            PresentationTicker = "SRG",
+            PresentationIdentified = true,
+            LiveTickers = ["SRG", "SRG-PA", "SRG-PB"],
+            UsTickers = ["SRG", "SRG-PA", "SRG-PB", "SRGR"],
+            AdmittedRetiredCusips = [.. admittedRetiredCusips],
+        };
+        MarkVacatedTickers(issuer, ["SRG-PB", "SRGR"]);
+        return issuer;
+    }
+
+    [Fact]
+    public void Plan_VacatedSiblingRowUnderALiveSiblingsCusip_MovesOntoIt()
+    {
+        Plan(
+                [Label("81752R308", "SRG-PA")],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = ThreeClasses() },
+                Mapping(("81752R308", Issuer, "SRG-PB"))
+            )
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new Relabel(Issuer, "81752R308", "SRG-PA", "SRG-PB", 1));
+    }
+
+    // A retired ticker may be the same security renamed, so it needs the archive and cover-page proof.
+    [Fact]
+    public void Plan_VacatedSiblingRowUnderAnUnprovenRetiredTicker_StaysPut()
+    {
+        Plan(
+                [Label("81752R407", "SRG-PA")],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = ThreeClasses() },
+                Mapping(("81752R407", Issuer, "SRGR"))
+            )
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void Plan_VacatedSiblingRowUnderAnAdmittedRetiredPair_MovesOntoIt()
+    {
+        Plan(
+                [Label("81752R407", "SRG-PA")],
+                new Dictionary<Guid, CandidateIssuer> { [Issuer] = ThreeClasses("SRGR|81752R407") },
+                Mapping(("81752R407", Issuer, "SRGR"))
+            )
+            .Should()
+            .ContainSingle()
+            .Which.ToTicker.Should()
+            .Be("SRGR");
+    }
+
+    // A primary row moving onto a sibling must vacate its key before a vacated row claims it.
+    [Fact]
+    public void Plan_PrimaryToSiblingMovesComeBeforeVacatedMoves()
+    {
+        var moves = Plan(
+            [Label("81752R100", "SRG-PA"), Label("81752R308", null)],
+            new Dictionary<Guid, CandidateIssuer> { [Issuer] = ThreeClasses() },
+            Mapping(("81752R100", Issuer, null), ("81752R308", Issuer, "SRG-PB"))
+        );
+
+        moves
+            .Select(move => (move.FromTicker, move.ToTicker))
+            .Should()
+            .Equal((null, "SRG-PB"), ("SRG-PA", null));
+    }
+
     [Fact]
     public void MarkVacatedTickers_SkipsThePresentationAndEveryClaimedTicker()
     {
