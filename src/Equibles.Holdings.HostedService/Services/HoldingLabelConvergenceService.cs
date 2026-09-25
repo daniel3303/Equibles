@@ -284,20 +284,38 @@ public class HoldingLabelConvergenceService
             cancellationToken.ThrowIfCancellationRequested();
             var issuers = batch.ToDictionary(entry => entry.Issuer.Id, entry => entry.Issuer);
             var labels = new List<StoredLabel>();
+            var unsettled = new HashSet<Guid>();
             foreach (var issuer in issuers.Values)
             {
-                labels.AddRange(
-                    await BuildStoredLabelQuery(dbContext, issuer.Id, null)
-                        .ToListAsync(cancellationToken)
-                );
-                if (issuer.PresentationTicker != null)
+                try
+                {
                     labels.AddRange(
-                        await BuildStoredLabelQuery(dbContext, issuer.Id, issuer.PresentationTicker)
+                        await BuildStoredLabelQuery(dbContext, issuer.Id, null)
                             .ToListAsync(cancellationToken)
                     );
+                    if (issuer.PresentationTicker != null)
+                        labels.AddRange(
+                            await BuildStoredLabelQuery(
+                                    dbContext,
+                                    issuer.Id,
+                                    issuer.PresentationTicker
+                                )
+                                .ToListAsync(cancellationToken)
+                        );
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // A failed read leaves this issuer for the next cycle, never the rest of the pass.
+                    labels.RemoveAll(label => label.EquityIssuerId == issuer.Id);
+                    unsettled.Add(issuer.Id);
+                    _logger.LogWarning(
+                        ex,
+                        "Stored label read failed for issuer {IssuerId}; retrying next cycle",
+                        issuer.Id
+                    );
+                }
             }
             var batchQuarters = new HashSet<DateOnly>();
-            var unsettled = new HashSet<Guid>();
             var fingerprints = batch.ToDictionary(
                 entry => entry.Issuer.Id,
                 entry => entry.Fingerprint
