@@ -193,7 +193,7 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
     [InlineData("438516106", null, false, false, false, 0)]
     [InlineData("438516205", "RETAINED", false, false, false, 0)]
     [InlineData("999999999", null, false, false, false, 1)]
-    [InlineData("438516205", null, true, false, false, 1)]
+    [InlineData("438516205", null, true, false, false, 0)]
     [InlineData("438516205", null, false, true, false, 1)]
     [InlineData("438516205", null, false, false, true, 1)]
     public async Task Audit_MergedSourceCusips_RequiresOneGroundedObservationPerSecurity(
@@ -229,12 +229,20 @@ public class HoldingsArchiveCoverageTests(ParadeDbFixture fixture) : IAsyncLifet
             db.Add(Position(issuer.Id, holder.Id, "438516106", "RETAINED"));
         await db.SaveChangesAsync();
 
-        await AuditArchive(
-            db,
-            "13F-HR\toriginal\t19-AUG-2026\t30-JUN-2026\t1948780\n",
-            "original\tN\t\tMerged source manager\n",
-            "original\t438516205\tSH\t\t264131\noriginal\t438516106\tSH\t\t4569\n"
-        );
+        var audit = () =>
+            AuditArchive(
+                db,
+                "13F-HR\toriginal\t19-AUG-2026\t30-JUN-2026\t1948780\n",
+                "original\tN\t\tMerged source manager\n",
+                "original\t438516205\tSH\t\t264131\noriginal\t438516106\tSH\t\t4569\n"
+            );
+        if (duplicateObservation)
+            await audit
+                .Should()
+                .ThrowAsync<InvalidDataException>()
+                .WithMessage("*ambiguous retained security identities*");
+        else
+            await audit();
         (await db.Set<HoldingsImportFailure>().CountAsync()).Should().Be(expectedFailures);
         (await db.Set<InstitutionalHolding>().FirstAsync())
             .Shares.Should()

@@ -106,6 +106,7 @@ public class HoldingsArchiveCoverageService(
         var checkedFilings = 0;
         var missingFilings = 0;
         var laterFilings = 0;
+        var ambiguousFilings = 0;
 
         async Task Check()
         {
@@ -157,6 +158,7 @@ public class HoldingsArchiveCoverageService(
             );
             var matched = new HashSet<Guid>();
             var complete = true;
+            var ambiguous = false;
             foreach (var (key, cusips) in expected)
             {
                 // NEW HOLDINGS replaces overlapping persistence keys, but leaves the rest of
@@ -173,12 +175,21 @@ public class HoldingsArchiveCoverageService(
                 var matches = cusips
                     .SelectMany(cusip => actual[(key.Issuer, cusip, key.Shares, key.Option)])
                     .ToList();
-                if (matches.Count != 1 || !matched.Add(matches[0].Id))
+                if (matches.Count > 1 || (matches.Count == 1 && !matched.Add(matches[0].Id)))
+                    ambiguous = true;
+                if (matches.Count != 1)
                     complete = false;
                 else if (cusips.Count > 1 && matches[0].Shares != expectedShares[key])
                     // Presence of just one source leg does not prove that the importer combined
                     // the group. Unknown or altered counts remain pending for investigation.
                     complete = false;
+            }
+            // Replaying a group that now resolves two retained securities to one key could
+            // combine their shares. Identity repair must precede any ordinary recovery.
+            if (ambiguous)
+            {
+                ambiguousFilings++;
+                return;
             }
             if (complete)
                 return;
@@ -242,6 +253,11 @@ public class HoldingsArchiveCoverageService(
             missingFilings,
             laterFilings
         );
+        if (ambiguousFilings > 0)
+            throw new InvalidDataException(
+                $"13F source coverage remains incomplete: {ambiguousFilings} filing(s) have "
+                    + "ambiguous retained security identities and require identity reconciliation before replay."
+            );
     }
 
     private readonly record struct PositionKey(
